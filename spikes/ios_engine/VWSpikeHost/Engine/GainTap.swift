@@ -87,6 +87,10 @@ final class GainTapProbe {
           tap, numberFrames, bufferListInOut, flagsOut, &range, &provided)
         numberFramesOut.pointee = provided
         guard status == noErr else {
+          // Production rule: never hand on an unfilled buffer (it would be garbage or NaN).
+          for buffer in UnsafeMutableAudioBufferListPointer(bufferListInOut) {
+            if let data = buffer.mData { memset(data, 0, Int(buffer.mDataByteSize)) }
+          }
           probe.record(
             Call(
               start: .invalid, duration: .invalid, requested: Int(numberFrames), provided: 0,
@@ -177,12 +181,33 @@ struct AudioCompositionSpec {
     var left: [Float]
     var status: AVAssetReader.Status
     var error: Error?
+    /// True when `copyNextSampleBuffer` stopped returning within the watchdog timeout (the read
+    /// was cancelled; `left` holds what had arrived).
+    var hung = false
+  }
+
+  private final class Accumulator {
+    let lock = NSLock()
+    var left: [Float] = []
+    func append(_ xs: [Float]) {
+      lock.lock()
+      left += xs
+      lock.unlock()
+    }
+    var snapshot: [Float] {
+      lock.lock()
+      defer { lock.unlock() }
+      return left
+    }
   }
 
   /// Reads the mixed composition through AVAssetReaderAudioMixOutput as interleaved Float32
-  /// 48 kHz stereo and returns the left-channel samples with the reader's final status.
+  /// 48 kHz stereo and returns the left-channel samples with the reader's final status. The read
+  /// runs on a worker queue under a watchdog: iOS 26 can block in `copyNextSampleBuffer` forever
+  /// on scaled ranges (IOS-01 finding), which would otherwise hang the whole test run.
   static func readMix(
-    _ comp: AVComposition, mix: AVAudioMix, algorithm: AVAudioTimePitchAlgorithm = .spectral
+    _ comp: AVComposition, mix: AVAudioMix, algorithm: AVAudioTimePitchAlgorithm = .spectral,
+    timeout: TimeInterval = 20
   ) throws -> MixRead {
     let reader = try AVAssetReader(asset: comp)
     let output = AVAssetReaderAudioMixOutput(
@@ -200,21 +225,35 @@ struct AudioCompositionSpec {
     output.audioTimePitchAlgorithm = algorithm
     reader.add(output)
     reader.startReading()
-    var left: [Float] = []
-    while let sample = output.copyNextSampleBuffer() {
-      guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
-      let length = CMBlockBufferGetDataLength(block)
-      var floats = [Float](repeating: 0, count: length / MemoryLayout<Float>.size)
-      floats.withUnsafeMutableBytes { raw in
-        _ = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: raw.baseAddress!)
+    let acc = Accumulator()
+    let done = DispatchSemaphore(value: 0)
+    DispatchQueue.global(qos: .userInitiated).async {
+      while let sample = output.copyNextSampleBuffer() {
+        guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
+        let length = CMBlockBufferGetDataLength(block)
+        var floats = [Float](repeating: 0, count: length / MemoryLayout<Float>.size)
+        floats.withUnsafeMutableBytes { raw in
+          _ = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: raw.baseAddress!)
+        }
+        var left: [Float] = []
+        left.reserveCapacity(floats.count / 2)
+        var i = 0
+        while i < floats.count {
+          left.append(floats[i])
+          i += 2
+        }
+        acc.append(left)
       }
-      var i = 0
-      while i < floats.count {
-        left.append(floats[i])
-        i += 2
-      }
+      // Keep the reader alive until copyNextSampleBuffer has returned: releasing it while this
+      // thread is still blocked inside a cancelled read crashed the test host.
+      withExtendedLifetime(reader) { done.signal() }
     }
-    return MixRead(left: left, status: reader.status, error: reader.error)
+    if done.wait(timeout: .now() + timeout) == .timedOut {
+      reader.cancelReading()
+      _ = done.wait(timeout: .now() + 5)
+      return MixRead(left: acc.snapshot, status: reader.status, error: reader.error, hung: true)
+    }
+    return MixRead(left: acc.snapshot, status: reader.status, error: reader.error)
   }
 
   /// RMS level (dB) of `x[a s, b s)` at 48 kHz; nil when the range is not inside `x`.

@@ -12,7 +12,9 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:hardwareAccelerated="true"
-        android:requestLegacyExternalStorage="true">
+        android:requestLegacyExternalStorage="true"
+        android:dataExtractionRules="@xml/vwish_data_extraction_rules"
+        android:fullBackupContent="@xml/vwish_backup_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"

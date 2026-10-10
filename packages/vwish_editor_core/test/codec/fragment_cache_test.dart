@@ -108,11 +108,11 @@ void main() {
   });
 
   group('budget (2,000 items)', () {
-    final base = decoratedRandomProject(11, const RandomProjectSpec(items: 2000));
+    final base = decoratedRandomProject(11, const RandomProjectSpec(items: 2100));
     final count = base.index.itemCount;
 
-    test('the benchmark project has about 2,000 items', () {
-      expect(count, inInclusiveRange(1800, 2600));
+    test('the benchmark project has at least 2,000 items', () {
+      expect(count, inInclusiveRange(2000, 2600));
     });
 
     test('incremental re-encode after a one-item edit ≤ 3 ms', () {

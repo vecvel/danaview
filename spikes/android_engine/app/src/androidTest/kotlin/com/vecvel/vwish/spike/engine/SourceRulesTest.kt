@@ -83,7 +83,9 @@ class SourceRulesTest {
 
     /**
      * Same rule in CompositionPlayer. Each offset is a full-length single-item sequence (the only
-     * secondary shape the player plays, see PlayerTopologyTest); frames 0..2 are checked by exact seeks.
+     * secondary shape the player plays, see PlayerTopologyTest). Multi-sequence seeks fail in
+     * Media3 1.11.1 (R1), so the composition plays from 0 and a composition-level probe checks
+     * every composited frame (frames 0..2 carry the clip-start case).
      */
     @Test
     fun epsilonRule_player_vn16() {
@@ -91,6 +93,7 @@ class SourceRulesTest {
         val times = TestMedia.videoSampleTimesUs(src)
         val results = JSONArray()
         var mismatches = 0
+        var startFramesChecked = 0
         for (group in offsets.toList().chunked(3)) {
             val layers = group.mapIndexed { idx, off ->
                 val i = 30 + idx * 41
@@ -98,26 +101,28 @@ class SourceRulesTest {
             }
             val plan = SpikePlan(Scenarios.W, Scenarios.H, 30, 30, 60, layers)
             val store = ParamStore(plan.gridFps).apply { loadFrom(plan) }
-            val c = mapper.build(plan, store, Scenarios.videoClock(30, MapperOptions(epsilon = EpsilonMode.SNAP_TO_RULE_FRAME, includeAudio = false)))
             val regions = Scenarios.regions(*(1..layers.size).toList().toIntArray())
+            val probe = ProbeEffect(plan.canvasW, plan.canvasH, plan.bgRgb(), regions)
+            val c = mapper.build(plan, store, Scenarios.videoClock(30, MapperOptions(epsilon = EpsilonMode.SNAP_TO_RULE_FRAME, includeAudio = false, probe = probe)))
             PlayerHarness(ctx, plan.canvasW, plan.canvasH).use { h ->
-                h.readRows = Scenarios.rowsFor(regions)
                 h.load(c)
                 h.awaitReady()
-                for (k in listOf(2L, 1L, 0L)) {
-                    val t0 = System.nanoTime()
-                    val got = h.seekAndAwait(GridTimingTest.seekMs(k, plan.fps), 15_000) { GridTime.frameIndexNearest(it.ptsUs, plan.fps) == k }
-                        ?: error("seek to $k not acked")
-                    val img = h.awaitImage(t0, 5000) { it.timestampNs == got.first.releaseTimeNs } ?: h.awaitImage(t0, 2000)
-                        ?: error("no image for k=$k")
-                    val mm = Scenarios.checkFrame(plan, k, Scenarios.readImage(img, regions, plan.bgRgb()), times, (1..layers.size).toList())
-                    mismatches += mm.size
-                    results.put(JSONObject().put("offsets", JSONArray(group)).put("k", k).put("mismatches", JSONArray(mm)))
-                }
+                // The probe is not cleared: frame 0 is composited while preparing.
+                h.playToEnd(plan.durUs / 1000 + 20_000)
             }
+            val check = Scenarios.check(plan, probe.frames.toList(), times, (1..layers.size).toList())
+            val startKs = probe.frames.map { GridTime.frameIndexNearest(it.ptsUs, plan.fps) }.filter { it in 0L..2L }.toSet()
+            startFramesChecked += startKs.size
+            mismatches += check.mismatches.size
+            results.put(JSONObject().put("offsets", JSONArray(group)).put("startFramesComposited", JSONArray(startKs.sorted())).put("barcode", check.json()))
         }
-        Results.write("VN16_epsilon_player", JSONObject().put("mode", "SNAP_TO_RULE_FRAME").put("source", src).put("checks", results).put("mismatches", mismatches))
+        Results.write(
+            "VN16_epsilon_player",
+            JSONObject().put("mode", "SNAP_TO_RULE_FRAME").put("source", src).put("checks", results)
+                .put("startFramesChecked", startFramesChecked).put("mismatches", mismatches),
+        )
         assertEquals(results.toString(), 0, mismatches)
+        assertTrue("clip-start frames 0..2 composited in every group: $results", startFramesChecked == 3 * results.length())
     }
 
     // ---------------------------------------------------------------- V-N5, V-N6

@@ -71,7 +71,7 @@ void main() {
     await store.append(keyOf(1), chunk(1, 180, 360, ['also kept']), unitStartUs: 0);
     final f = store.fileFor(keyOf(1));
     final text = f.readAsStringSync();
-    f.writeAsStringSync(text + '{"chunk":2,"startUs":360000000,"endUs":540000000,"segments":[{"startUs":3600'); // no newline
+    f.writeAsStringSync('$text{"chunk":2,"startUs":360000000,"endUs":540000000,"segments":[{"startUs":3600'); // no newline
     final r = (await store.replay(keyOf(1)))!;
     expect(r.chunks.length, 2);
     expect(r.resumeFromUs, 360000000);

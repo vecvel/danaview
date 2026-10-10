@@ -69,21 +69,30 @@ class PackingTest {
         .filter { !it.isEncoder && it.supportedTypes.any { t -> t.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
         .maxOfOrNull { it.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).maxSupportedInstances } ?: -1
 
+    /**
+     * Transformer export of the six-lane case per configuration, with the gap fill AND-08 adopts
+     * (transparent image items at the output fps, AND-01 V-N18 finding) and, for packed_2, with
+     * Media3 `addGap` for comparison (recorded, not asserted).
+     */
     @Test
     fun sixLanePip_export_vn25() {
         val runs = JSONArray()
-        for ((name, slotOf) in configs) {
+        val variants = configs.map { Triple(it.first, it.second, GapFill.TRANSPARENT_IMAGE) } +
+            configs.filter { it.first == "packed_2" }.map { Triple(it.first, it.second, GapFill.GAP) }
+        for ((name, slotOf, gapFill) in variants) {
             val plan = plan(slotOf)
             val store = ParamStore(plan.gridFps).apply { loadFrom(plan) }
             val probe = ProbeEffect(plan.canvasW, plan.canvasH, plan.bgRgb(), lanes())
-            val c = mapper.build(plan, store, MapperOptions(probe = probe, includeAudio = false, epsilon = EpsilonMode.SNAP_TO_RULE_FRAME))
-            val json = JSONObject().put("config", name).put("visualSequences", plan.visualSequenceCount)
+            val c = mapper.build(plan, store, MapperOptions(probe = probe, includeAudio = false, epsilon = EpsilonMode.SNAP_TO_RULE_FRAME, gapFill = gapFill))
+            val json = JSONObject().put("config", name).put("gapFill", gapFill.name).put("visualSequences", plan.visualSequenceCount)
             SystemProbe().use { sp ->
                 try {
-                    val o = ExportHarness(ctx).export(c, File(TestMedia.outDir, "pip_$name.mp4"), timeoutSec = 600)
+                    val o = ExportHarness(ctx).export(c, File(TestMedia.outDir, "pip_${name}_$gapFill.mp4"), timeoutSec = 600)
                     val mm = mismatches(plan, probe.frames.toList())
+                    val badKs = mm.map { it.substringAfter("k=").substringBefore(" ").toLong() }.toSortedSet()
                     json.put("exported", true).put("wallMs", o.wallMs).put("realtimeFactor", plan.durUs / 1000.0 / o.wallMs)
-                        .put("frames", o.result.videoFrameCount).put("mismatches", mm.size).put("firstMismatches", Results.arr(mm.take(6)))
+                        .put("frames", o.result.videoFrameCount).put("mismatches", mm.size).put("badFrames", JSONArray(badKs.toList()))
+                        .put("firstMismatches", Results.arr(mm.take(6)))
                 } catch (e: Throwable) {
                     json.put("exported", false).put("error", e.toString()).put("cause", e.cause?.toString() ?: "")
                 }
@@ -92,18 +101,19 @@ class PackingTest {
             runs.put(json)
         }
         Results.write("VN25_pip_export", JSONObject().put("avcDecoderMaxInstances", avcMaxInstances()).put("runs", runs))
-        val byName = (0 until runs.length()).associate { runs.getJSONObject(it).getString("config") to runs.getJSONObject(it) }
-        for (packed in listOf("packed_1", "packed_2")) {
-            val r = byName.getValue(packed)
+        for (i in 0 until runs.length()) {
+            val r = runs.getJSONObject(i)
+            if (r.getString("gapFill") != GapFill.TRANSPARENT_IMAGE.name) continue
             assertTrue(r.toString(), r.getBoolean("exported"))
             assertEquals(r.toString(), 0, r.getInt("mismatches"))
         }
     }
 
     /**
-     * Player footprint: prepare + exact seek, then 2 s of playback. Every configuration has item
-     * transitions or gaps in secondary sequences, so playback stalls (PlayerTopologyTest); the
-     * prepared footprint (one ExoPlayer + decoder per sequence) is what the measurement is for.
+     * Player footprint: prepare, then 2 s of playback from 0 (multi-sequence seeks fail in Media3
+     * 1.11.1, R1). Every configuration has item transitions or gaps in secondary sequences, so
+     * playback stalls at the first one (PlayerTopologyTest); the prepared footprint (one ExoPlayer
+     * + decoder per sequence) is what the measurement is for.
      */
     @Test
     fun sixLanePip_playerFootprint_vn25() {
@@ -120,8 +130,6 @@ class PackingTest {
                         h.load(c)
                         h.awaitReady()
                         json.put("prepareMs", (System.nanoTime() - t0) / 1e6)
-                        val seek = h.seekAndAwait(GridTimingTest.seekMs(30, 30), 10_000) { GridTime.frameIndexNearest(it.ptsUs, 30) == 30L }
-                        json.put("exactSeekMs", seek?.second ?: -1.0)
                         val t1 = System.nanoTime()
                         h.run { h.player.play() }
                         Thread.sleep(2000)

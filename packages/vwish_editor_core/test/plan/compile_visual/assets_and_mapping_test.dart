@@ -108,7 +108,7 @@ void main() {
       expect(m.x(1080), 1263.75);
       expect(m.letterboxed, isTrue);
       expect(m.contentClip, const CanvasMask(cx: 960, cy: 540, w: 607.5, h: 1080));
-      expect(m.blurScale, 1); // 0.5625 · 1080 / 1080 … the short side shrinks with the content
+      expect(m.blurScale, 0.5625); // 0.5625 · 1080 / 1080: the short side shrinks with the content
     });
 
     test('blur keeps its size relative to the project canvas and never exceeds 1×', () {

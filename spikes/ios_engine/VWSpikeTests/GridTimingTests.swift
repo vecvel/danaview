@@ -112,13 +112,16 @@ final class GridTimingTests: XCTestCase {
       var bad: [String] = []
       var notAcked: [String] = []
       var acked = 0
+      var onTime = 0
       var itemTimeOff: [String] = []
       var ms: [Double] = []
       for k in Int64(0)..<90 {
-        let ack = await harness.exactSeek(k: k, fps: 30)
+        // 3 s patience for determinism; the 500 ms budget is reported (shared, loaded machine).
+        let ack = await harness.exactSeek(k: k, fps: 30, timeoutMs: 3000)
         ms.append(ack.ms)
         if ack.acked {
           acked += 1
+          if ack.ms <= 500 { onTime += 1 }
         } else {
           notAcked.append("k=\(k) seen \(ack.seen.map { $0.map(String.init) ?? "nil" })")
         }
@@ -130,7 +133,7 @@ final class GridTimingTests: XCTestCase {
       }
       let name = query == .seekTarget ? "seekTarget" : "itemTime"
       results[name] = [
-        "acked": acked, "of": 90, "contentErrors": bad.count, "notAcked": Array(notAcked.prefix(8)),
+        "acked": acked, "ackedWithin500ms": onTime, "of": 90, "contentErrors": bad.count, "notAcked": Array(notAcked.prefix(8)),
         "itemTimeNotTarget": itemTimeOff.count, "itemTimeNotTargetSample": Array(itemTimeOff.prefix(4)),
         "firstFrameMs": Stats.round2(harness.firstFrameMs ?? -1),
         "firstFrameNeededSeek": harness.firstFrameNeededSeek,

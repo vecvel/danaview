@@ -22,7 +22,7 @@ final class TextureAndRedrawTests: XCTestCase {
     CVMetalTextureCacheCreate(nil, nil, device, nil, &cache)
     let textureCache = try XCTUnwrap(cache)
     for k in [Int64(10), 75, 140, 200] {
-      let ack = await harness.exactSeek(k: k, fps: 30)
+      let ack = await harness.exactSeek(k: k, fps: 30, timeoutMs: 3000)
       let b = try XCTUnwrap(ack.buffer)
       harness.bridge.push(b)
       // copyPixelBuffer hands out the very same CVPixelBuffer (+1), no conversion.
@@ -55,7 +55,7 @@ final class TextureAndRedrawTests: XCTestCase {
     let harness = PlayerHarness(built: built)
     try await harness.waitReady()
     let k: Int64 = 100  // base + PiP active
-    let ack = await harness.exactSeek(k: k, fps: 30)
+    let ack = await harness.exactSeek(k: k, fps: 30, timeoutMs: 3000)
     XCTAssertTrue(ack.acked)
     let compositor = try XCTUnwrap(built.state.compositor)
     let plan = built.state.plan
@@ -125,7 +125,7 @@ final class TextureAndRedrawTests: XCTestCase {
     built.state.setParams(look: .identity, blur: 0)
     let harness = PlayerHarness(built: built)
     try await harness.waitReady()
-    let ack = await harness.exactSeek(k: 5, fps: 30)
+    let ack = await harness.exactSeek(k: 5, fps: 30, timeoutMs: 3000)
     XCTAssertTrue(ack.acked)
     let record = try XCTUnwrap(built.state.log.all.last { $0.k == 5 })
     let fmt = try XCTUnwrap(record.sourceFormats["hlg"])

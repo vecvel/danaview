@@ -7,7 +7,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 
+#include "vw_registry.h"
 #include "vw_whisper.h"
 #include "vw_wav.h"
 #include "whisper.h"
@@ -109,7 +111,10 @@ int32_t VadModel::load(const std::string &path, int32_t n_threads) {
   whisper_vad_context_params cparams = whisper_vad_default_context_params();
   cparams.n_threads = std::max(1, n_threads);
   cparams.use_gpu = false;
-  ctx_ = whisper_vad_init_from_file_with_params(path.c_str(), cparams);
+  {
+    std::lock_guard<std::mutex> lock(whisper_init_mutex());
+    ctx_ = whisper_vad_init_from_file_with_params(path.c_str(), cparams);
+  }
   return ctx_ != nullptr ? VW_OK : VW_ERR_VAD_MODEL;
 }
 

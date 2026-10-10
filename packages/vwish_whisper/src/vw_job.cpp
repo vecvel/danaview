@@ -125,6 +125,11 @@ class Runner {
 
   bool cancelled() const { return j_->cancel.load(std::memory_order_relaxed); }
 
+  whisper_state *init_state() {
+    std::lock_guard<std::mutex> lock(whisper_init_mutex());
+    return whisper_init_state(ctx_);
+  }
+
   template <typename F>
   auto timed(F &&f) -> decltype(f()) {
     {
@@ -175,7 +180,12 @@ class Runner {
     p.offset_ms = 0;
     p.duration_ms = 0;
     p.translate = false;
-    p.no_context = false;
+    // whisper keeps its rolling text context (prompt_past) in the whisper_state across calls. Clearing it
+    // at the start of every chunk (no_context) keeps chunks independent of earlier calls, so a chunk
+    // redone after pause(abort) decodes exactly like an uninterrupted run; cross-chunk context comes
+    // only from the explicit carry prompt below. Inside a chunk, whisper still rolls context between
+    // its 30 s windows.
+    p.no_context = true;
     p.no_timestamps = false;
     p.single_segment = false;
     p.print_special = false;
@@ -246,7 +256,7 @@ class Runner {
     }
     if (cancelled()) return VW_ERR_CANCELLED;
     if (chunks.empty()) return VW_OK;
-    state_ = whisper_init_state(ctx_);
+    state_ = init_state();
     if (state_ == nullptr) return VW_ERR_OOM;
     if (c.vad_enabled) {
       rc = vad_.load(c.vad_model_path, j_->threads_requested.load());
@@ -461,7 +471,7 @@ class Runner {
       j_->threads_in_use = j_->threads_requested.load();
     }
     const int32_t threads = j_->threads_in_use;
-    state_ = whisper_init_state(ctx_);
+    state_ = init_state();
     if (state_ == nullptr) return VW_ERR_OOM;
     j_->phase.store(VW_PHASE_ENCODING);
     rc = timed([&] {

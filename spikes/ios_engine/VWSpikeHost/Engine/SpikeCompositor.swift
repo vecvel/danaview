@@ -19,6 +19,56 @@ final class SpikeCompositor: NSObject, AVVideoCompositing {
 
   static let device: MTLDevice = MTLCreateSystemDefaultDevice()!
 
+  /// IOS-01 experiment switch (iOS 18.2 simulator two-layer finding): when set, every source
+  /// buffer is first copied (CPU) into a fresh IOSurface buffer before Core Image reads it.
+  nonisolated(unsafe) static var copySourcesBeforeRender = false
+  /// IOS-01 finding (production path): wrap source buffers as Metal textures
+  /// (CVMetalTextureCache, no copy) and build the CIImage from the MTLTexture. With
+  /// `CIImage(cvPixelBuffer:)` the iOS 18.2 simulator rendered the lower layer black whenever two
+  /// decoded sources were composited (101/200 exact seeks wrong); this path is 200/200 on 18.2 and
+  /// 26. `false` = the direct path (kept for the diagnostic test).
+  nonisolated(unsafe) static var sourcesViaMetalTextureCache = true
+  static let textureCache: CVMetalTextureCache = {
+    var c: CVMetalTextureCache?
+    CVMetalTextureCacheCreate(nil, nil, device, nil, &c)
+    return c!
+  }()
+
+  /// CIImage for a source buffer per the experiment switches; `keepAlive` holds the
+  /// CVMetalTexture until the render has completed.
+  static func sourceImage(_ buffer: CVPixelBuffer, keepAlive: inout [AnyObject]) -> CIImage {
+    if sourcesViaMetalTextureCache {
+      var tex: CVMetalTexture?
+      let w = CVPixelBufferGetWidth(buffer)
+      let h = CVPixelBufferGetHeight(buffer)
+      if CVMetalTextureCacheCreateTextureFromImage(nil, textureCache, buffer, nil, .bgra8Unorm, w, h, 0, &tex)
+        == kCVReturnSuccess, let t = tex, let mtl = CVMetalTextureGetTexture(t),
+        let img = CIImage(mtlTexture: mtl, options: [.colorSpace: NSNull()])
+      {
+        keepAlive.append(t)
+        // Metal textures are top-left origin; Core Image is bottom-left.
+        return img.transformed(by: CGAffineTransform(scaleX: 1, y: -1).translatedBy(x: 0, y: -CGFloat(h)))
+      }
+    }
+    return CIImage(cvPixelBuffer: buffer, options: [.colorSpace: NSNull()])
+  }
+
+  static func cpuCopy(_ src: CVPixelBuffer) -> CVPixelBuffer {
+    let w = CVPixelBufferGetWidth(src)
+    let h = CVPixelBufferGetHeight(src)
+    let dst = Pixels.makeBGRA(width: w, height: h)
+    CVPixelBufferLockBaseAddress(src, .readOnly)
+    CVPixelBufferLockBaseAddress(dst, [])
+    let sb = CVPixelBufferGetBytesPerRow(src)
+    let db = CVPixelBufferGetBytesPerRow(dst)
+    if let s = CVPixelBufferGetBaseAddress(src), let d = CVPixelBufferGetBaseAddress(dst) {
+      for y in 0..<h { memcpy(d + y * db, s + y * sb, min(sb, db)) }
+    }
+    CVPixelBufferUnlockBaseAddress(dst, [])
+    CVPixelBufferUnlockBaseAddress(src, .readOnly)
+    return dst
+  }
+
   /// Loaded once per process; nil means V-N9 failed (the kernel tests report why).
   static let kernels: SpikeKernels? = try? SpikeKernels()
 
@@ -104,7 +154,7 @@ final class SpikeCompositor: NSObject, AVVideoCompositing {
     var transfers: [String: String] = [:]
     for layer in active {
       if let id = state.trackIDBySeq[layer.seq], let buffer = request.sourceFrame(byTrackID: id) {
-        sources[layer.id] = buffer
+        sources[layer.id] = Self.copySourcesBeforeRender ? Self.cpuCopy(buffer) : buffer
         formats[layer.id] = CVPixelBufferGetPixelFormatType(buffer)
         let tf = CVBufferCopyAttachment(buffer, kCVImageBufferTransferFunctionKey, nil)
         transfers[layer.id] = tf.map { "\($0)" } ?? "nil"
@@ -134,15 +184,16 @@ final class SpikeCompositor: NSObject, AVVideoCompositing {
   /// Composites `layers` (bottom → top) onto the opaque background with colour management off.
   static func renderComposite(
     context: CIContext, plan: SpikePlan, layers: [SpikePlan.Layer], sources: [String: CVPixelBuffer],
-    look: SpikeLook, blur: Float, size: CGSize, into out: CVPixelBuffer
+    look: SpikeLook, blur: Float, size: CGSize, into out: CVPixelBuffer, useKernels: Bool = true
   ) throws {
     let scale = size.width / CGFloat(plan.canvas.w)
     var image = CIImage(color: CIColor(red: 0, green: 0, blue: 0)).cropped(
       to: CGRect(origin: .zero, size: size))
+    var keepAlive: [AnyObject] = []
     for layer in layers {
       guard let buffer = sources[layer.id] else { continue }
-      var img = CIImage(cvPixelBuffer: buffer, options: [.colorSpace: NSNull()])
-      if let kernels = kernels {
+      var img = sourceImage(buffer, keepAlive: &keepAlive)
+      if useKernels, let kernels = kernels {
         img = kernels.applyLook(img, look)
         if blur > 0 { img = kernels.applyBlur(img, sigma: blur) }
       }
@@ -159,6 +210,10 @@ final class SpikeCompositor: NSObject, AVVideoCompositing {
     dest.colorSpace = nil
     let task = try context.startTask(toRender: image, to: dest)
     _ = try task.waitUntilCompleted()
+    withExtendedLifetime(keepAlive) {}
+    // Release the cache's hold on the decoder's IOSurfaces right away; otherwise the decoder's
+    // buffer pool can run dry and seeks stall.
+    if !keepAlive.isEmpty { CVMetalTextureCacheFlush(textureCache, 0) }
   }
 
   // MARK: Redraw-from-cache (paused param patches, transients, editing modes, look stills)

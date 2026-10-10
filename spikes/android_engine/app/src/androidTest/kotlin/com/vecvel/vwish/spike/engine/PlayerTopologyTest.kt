@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
  * Findings (AND-01.md "R1"): any item→item, gap→item or item→gap transition inside a
  * *secondary* sequence stalls video at the boundary while the clock keeps running; an image item
  * as sequence 0 (the ARCH clock band) never lets the player reach STATE_ENDED; the same
- * transitions in the *primary* sequence play.
+ * transitions in the *primary* sequence play; no exact seek renders with MultipleInputVideoGraph.
  */
 @RunWith(AndroidJUnit4::class)
 class PlayerTopologyTest {
@@ -148,39 +148,43 @@ class PlayerTopologyTest {
     }
 
     /**
-     * A seek past a secondary boundary renders the frame behind it, and playback from there ends:
-     * only playing *through* a secondary boundary stalls.
+     * Seeking past a secondary boundary does not get around the stall: with MultipleInputVideoGraph
+     * no paused seek renders the requested frame and playback does not resume afterwards
+     * (SeekDiagnosticsTest.compositionPlayerSeekIsolation has the minimal reproduction).
      */
     @Test
-    fun secondaryItemTransition_seekPastBoundary_renders() {
+    fun secondaryItemTransition_seekPastBoundary_fails() {
         val plan = twoItems
         val store = ParamStore(plan.gridFps).apply { loadFrom(plan) }
         val probe = ProbeEffect(plan.canvasW, plan.canvasH, plan.bgRgb(), Scenarios.regions(1))
         val c = mapper.build(plan, store, videoClock.copy(probe = probe))
-        val times = TestMedia.videoSampleTimesUs("barcode_30.mp4")
-        PlayerHarness(ctx, plan.canvasW, plan.canvasH).use { h ->
-            h.load(c)
-            h.awaitReady()
-            val k = 40L
-            val t0 = System.nanoTime()
-            val got = h.seekAndAwait(GridTimingTest.seekMs(k, plan.fps), 10_000) { GridTime.frameIndexNearest(it.ptsUs, plan.fps) == k }
-            val f = probe.frames.filter { it.wallNs >= t0 && GridTime.frameIndexNearest(it.ptsUs, plan.fps) == k }.maxByOrNull { it.wallNs }
-            val mm = if (f == null) listOf("no probe frame") else Scenarios.checkFrame(plan, k, f.regions, times, listOf(1))
-            probe.clear()
-            val ended = h.playToEnd(plan.durUs / 1000 + 15_000)
-            val maxK = GridTime.frameIndexNearest(probe.frames.maxOfOrNull { it.ptsUs } ?: -1, plan.fps)
-            val json = JSONObject().put("variant", "secondary_seek_past_boundary").put("seekAcked", got != null)
-                .put("seekLatencyMs", got?.second ?: -1.0).put("frameMismatches", Results.arr(mm))
-                .put("endedAfterPlayFromSeek", ended).put("maxComposedK", maxK)
-            Results.write("R1_secondary_seek_past_boundary", json)
-            assertTrue(json.toString(), got != null && mm.isEmpty())
-            assertTrue(json.toString(), ended && maxK == 59L)
+        var got: Pair<RenderedFrame, Double>? = null
+        var ended = false
+        var maxK = -1L
+        var error: String? = null
+        try {
+            PlayerHarness(ctx, plan.canvasW, plan.canvasH).use { h ->
+                h.load(c)
+                h.awaitReady()
+                val k = 40L
+                got = h.seekAndAwait(GridTimingTest.seekMs(k, plan.fps), 10_000) { GridTime.frameIndexNearest(it.ptsUs, plan.fps) == k }
+                probe.clear()
+                ended = h.playToEnd(plan.durUs / 1000 + 10_000)
+                maxK = GridTime.frameIndexNearest(probe.frames.maxOfOrNull { it.ptsUs } ?: -1, plan.fps)
+            }
+        } catch (t: Throwable) {
+            error = generateSequence(t) { it.cause }.take(4).joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message}" }
         }
+        val json = JSONObject().put("variant", "secondary_seek_past_boundary").put("seekAcked", got != null)
+            .put("seekLatencyMs", got?.second ?: -1.0).put("endedAfterPlayFromSeek", ended).put("maxComposedK", maxK)
+            .put("error", error ?: JSONObject.NULL)
+        Results.write("R1_secondary_seek_past_boundary", json)
+        assertFalse("seek past a secondary boundary now works: R1 may be a go, rerun AND-01: $json", got != null && ended)
     }
 
     /**
-     * Exact seeks with the ARCH image clock band vs the video clock band on a playable
-     * single-item composition: records acks and player errors (AND-01 "Clock band").
+     * Exact seeks with the ARCH image clock band vs the video clock band on a single-item
+     * composition: with MultipleInputVideoGraph neither acks a single seek (R1).
      */
     @Test
     fun clockBandKinds_exactSeeks() {
@@ -194,17 +198,19 @@ class PlayerTopologyTest {
                 PlayerHarness(ctx, plan.canvasW, plan.canvasH).use { h ->
                     h.load(mapper.build(plan, store, options))
                     h.awaitReady()
-                    for (k in listOf(45L, 7L, 52L, 1L, 30L, 59L, 12L, 40L, 2L, 33L)) {
-                        if (h.seekAndAwait(GridTimingTest.seekMs(k, plan.fps), 10_000) { GridTime.frameIndexNearest(it.ptsUs, plan.fps) == k } != null) acked++
+                    for (k in listOf(45L, 7L, 52L, 1L, 30L)) {
+                        if (h.seekAndAwait(GridTimingTest.seekMs(k, plan.fps), 3_000) { GridTime.frameIndexNearest(it.ptsUs, plan.fps) == k } != null) acked++
                     }
                 }
             } catch (t: Throwable) {
                 error = generateSequence(t) { it.cause }.take(4).joinToString(" <- ") { "${it.javaClass.simpleName}: ${it.message}" }
             }
-            out.put(name, JSONObject().put("seeks", 10).put("acked", acked).put("error", error ?: JSONObject.NULL))
+            out.put(name, JSONObject().put("seeks", 5).put("acked", acked).put("error", error ?: JSONObject.NULL))
         }
         Results.write("R1_clock_band_seeks", out)
-        assertEquals(out.toString(), 10, out.getJSONObject("video").getInt("acked"))
+        for (name in listOf("image", "video")) {
+            assertEquals("multi-sequence seeks now ack ($name): R1 may be a go, rerun AND-01: $out", 0, out.getJSONObject(name).getInt("acked"))
+        }
     }
 
     @Test

@@ -45,6 +45,8 @@ class PlayerHarness(
      * true: Media3's default late-drop policy (performance runs).
      */
     dropLateInput: Boolean = false,
+    /** false: CompositionPlayer's default video graph (diagnostics only; ARCH uses MultipleInputVideoGraph). */
+    multipleInputVideoGraph: Boolean = true,
     configure: (CompositionPlayer.Builder) -> Unit = {},
 ) : AutoCloseable {
     private val thread = HandlerThread("spike-player").apply { start() }
@@ -80,14 +82,16 @@ class PlayerHarness(
         run {
             val b = CompositionPlayer.Builder(context)
                 .setLooper(thread.looper)
-                .setVideoGraphFactory(
+                .experimentalSetEnableReplayableCache(replayableCache)
+            if (multipleInputVideoGraph) {
+                b.setVideoGraphFactory(
                     MultipleInputVideoGraph.Factory(
                         DefaultVideoFrameProcessor.Factory.Builder()
                             .setSdrWorkingColorSpace(DefaultVideoFrameProcessor.WORKING_COLOR_SPACE_ORIGINAL)
                             .build(),
                     ),
                 )
-                .experimentalSetEnableReplayableCache(replayableCache)
+            }
             if (!dropLateInput) b.experimentalSetLateThresholdToDropInputUs(androidx.media3.common.C.TIME_UNSET)
             configure(b)
             player = b.build()
@@ -149,7 +153,11 @@ class PlayerHarness(
     fun state(): Int = run { player.playbackState }
 
     /** Detaches the player from the ImageReader surface (paused-renderer hand-off, D-36). */
-    fun detachSurface() = run { player.clearVideoSurface() }
+    fun detachSurface() = run {
+        // CompositionPlayer 1.11.1 checkArgument(output == current output): the no-arg
+        // clearVideoSurface() passes null and throws IllegalArgumentException (AND-01 finding).
+        player.clearVideoSurface(reader.surface)
+    }
 
     /** Reattaches the ImageReader surface to the player. */
     fun attachSurface() = run { player.setVideoSurface(reader.surface, Size(width, height)) }
@@ -176,6 +184,26 @@ class PlayerHarness(
         val f = awaitRendered(t0, timeoutMs, predicate) ?: return null
         return f to (f.wallNs - t0) / 1e6
     }
+
+    /**
+     * Plays from the current position until a frame with index >= [k] (at [fps]) is rendered, then
+     * pauses. Multi-sequence compositions cannot seek in Media3 1.11.1 (R1, SeekDiagnosticsTest),
+     * so player tests reach a paused frame this way. Returns the paused frame (the last one rendered
+     * after the pause settled), or null if no frame >= [k] came within [timeoutMs].
+     */
+    fun playUntilFrame(k: Long, fps: Int, timeoutMs: Long): RenderedFrame? {
+        val t0 = System.nanoTime()
+        run { player.play() }
+        val reached = awaitRendered(t0, timeoutMs) { GridTime.frameIndexNearest(it.ptsUs, fps) >= k }
+        run { player.pause() }
+        if (reached == null) return null
+        Thread.sleep(400)
+        return rendered.filter { it.wallNs >= t0 }.maxByOrNull { it.ptsUs }
+    }
+
+    /** The ImageReader image of a rendered frame (matched by release time), or the newest image after [sinceNs]. */
+    fun imageOf(frame: RenderedFrame, sinceNs: Long): ReaderImage? =
+        images.lastOrNull { it.timestampNs == frame.releaseTimeNs } ?: images.lastOrNull { it.wallNs >= sinceNs }
 
     fun positionMs(): Long = run { player.currentPosition }
 

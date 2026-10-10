@@ -31,3 +31,52 @@ final class CompositeCommand extends EditCommand {
   @override
   String toString() => 'CompositeCommand($label, $commands)';
 }
+
+/// A command that replaces the project with the result of [edit] (tests of the framework only:
+/// post-step validation, exception handling and limits on arbitrary edits). Lanes [edit] returns
+/// as different objects count as changed; pool, settings and markers are adopted as returned.
+///
+/// Production code never uses it: every user edit is a named command of a group part.
+@visibleForTesting
+final class RawEditCommand extends EditCommand {
+  /// Creates a raw edit labelled [label].
+  const RawEditCommand(this.label, this.edit);
+
+  @override
+  final String label;
+
+  /// The edit: the working project in, the edited project out (may throw).
+  final EditProject Function(EditProject project) edit;
+
+  @override
+  void _apply(_Draft d) {
+    final before = d.snapshot();
+    final next = edit(before);
+    if (identical(next, before)) return;
+    final old = {for (final t in d.tracks) t.id: t};
+    final ids = {for (final t in next.tracks) t.id};
+    for (final t in next.tracks) {
+      final o = old[t.id];
+      if (o == null) d.created.add(t.id);
+      if (!identical(o, t)) {
+        d.changed.add(t.id);
+        for (final i in t.items) {
+          if (o == null || !o.items.contains(i)) d.affected.add(i.id);
+        }
+      }
+    }
+    for (final id in old.keys) {
+      if (!ids.contains(id)) d.changed.add(id);
+    }
+    d.tracks
+      ..clear()
+      ..addAll(next.tracks);
+    d.pool = next.pool;
+    d.settings = next.settings;
+    d.markers = next.markers;
+    d._invalidate();
+  }
+
+  @override
+  String toString() => 'RawEditCommand($label)';
+}

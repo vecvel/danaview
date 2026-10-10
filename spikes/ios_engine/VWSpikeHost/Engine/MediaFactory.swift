@@ -143,7 +143,11 @@ enum MediaFactory {
 
   /// Float32 stereo 48 kHz sine (WAV) at `dbfs`.
   @discardableResult
-  static func tone(name: String, hz: Double, dbfs: Double, seconds: Double) throws -> URL {
+  /// `gaps`: source times (s) where the tone is silent for `gapSeconds` (timing markers for the
+  /// V-N21 seam-alignment check).
+  static func tone(
+    name: String, hz: Double, dbfs: Double, seconds: Double, gaps: [Double] = [], gapSeconds: Double = 0.040
+  ) throws -> URL {
     let out = url(name)
     if FileManager.default.fileExists(atPath: out.path) { return out }
     let rate = 48_000.0
@@ -168,13 +172,38 @@ enum MediaFactory {
       let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(n))!
       buf.frameLength = AVAudioFrameCount(n)
       for i in 0..<n {
-        let v = amp * Float(sin(2 * Double.pi * hz * Double(written + i) / rate))
+        let t = Double(written + i) / rate
+        let silent = gaps.contains { t >= $0 && t < $0 + gapSeconds }
+        let v = silent ? 0 : amp * Float(sin(2 * Double.pi * hz * t))
         buf.floatChannelData![0][i] = v
         buf.floatChannelData![1][i] = v
       }
       try file.write(from: buf)
       written += n
     }
+    return out
+  }
+
+  /// AAC-LC 48 kHz stereo copy of a PCM file (the common real-world audio source format).
+  static func toneAAC(name: String, source: URL) throws -> URL {
+    let out = url(name)
+    if FileManager.default.fileExists(atPath: out.path) { return out }
+    let input = try AVAudioFile(forReading: source)
+    let tmp = url(name + ".partial.m4a")
+    try? FileManager.default.removeItem(at: tmp)
+    let file = try AVAudioFile(
+      forWriting: tmp,
+      settings: [
+        AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48_000, AVNumberOfChannelsKey: 2,
+        AVEncoderBitRateKey: 192_000,
+      ], commonFormat: .pcmFormatFloat32, interleaved: false)
+    let buf = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: 4800)!
+    while input.framePosition < input.length {
+      try input.read(into: buf)
+      if buf.frameLength == 0 { break }
+      try file.write(from: buf)
+    }
+    try FileManager.default.moveItem(at: tmp, to: out)
     return out
   }
 

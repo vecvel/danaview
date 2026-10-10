@@ -1,0 +1,5 @@
+- [Windows Android lane](windows-android-lane.md) — THIS machine builds the editor's Android lane; branch editor-android; read docs/editor/handoff first
+- [Two-machine split](two-machine-split.md) — Mac does iOS + everything else, Windows laptop does the Android lane; branches editor-wip / editor-android and gates
+- [Video editor build](video-editor-build.md) — docs/editor plan, owner defaults, whisper.cpp vendored, workflow/resume approach and run history (Mac paths)
+- [No Claude co-author](no-claude-coauthor.md) — commits carry no Claude Co-Authored-By trailer (owner request)
+- [iOS simulator testing quirks](ios-simulator-testing-quirks.md) — Mac only: tap duration 0.1, no parallel tap+screenshot, flutter attach for VM eval

@@ -84,4 +84,9 @@ void debug_live_objects(int64_t *models, int64_t *jobs) {
   if (jobs != nullptr) *jobs = r.live_jobs.load();
 }
 
+std::mutex &whisper_init_mutex() {
+  static std::mutex *mu = new std::mutex();  // never destroyed (detached loaders may outlive statics)
+  return *mu;
+}
+
 }  // namespace vw

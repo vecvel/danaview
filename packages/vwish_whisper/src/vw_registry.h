@@ -54,6 +54,12 @@ class Registry {
 /// Test/diagnostic accessor for the live counters.
 void debug_live_objects(int64_t *models, int64_t *jobs);
 
+/// Serializes whisper.cpp's context/state/VAD initialisation across threads. Those paths write
+/// process-wide ggml state without synchronisation (whisper_backend_init -> ggml_log_set, ggml_time_init),
+/// which ThreadSanitizer reports when two jobs or a job and a model loader start at the same time.
+/// Held only around whisper_init_* calls, never around inference. Never destroyed.
+std::mutex &whisper_init_mutex();
+
 }  // namespace vw
 
 #endif  // VW_REGISTRY_H

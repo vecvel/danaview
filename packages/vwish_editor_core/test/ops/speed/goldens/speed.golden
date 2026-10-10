@@ -1,0 +1,262 @@
+== speed 2x ripples the lane, the linked audio follows the same spec
+-- command: Change speed | SetSpeed(it_a, ConstantSpeed(2.0), maintainPitch: null, ripple: null)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,30) md_video src[0,2000000) x2.0 detached link=ln_a
+  it_b [30,90) md_video src[10000000,12000000)
+  it_c [120,180) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,30) md_video src[0,2000000) x2.0 audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au, it_b, it_c
+-- changed lanes: tr_main, tr_orig
+
+== speed 0.5x on a linked clip grows both and ripples the lanes
+-- command: Change speed | SetSpeed(it_a, ConstantSpeed(0.5), maintainPitch: null, ripple: null)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,120) md_video src[0,2000000) x0.5 detached link=ln_a
+  it_b [120,180) md_video src[10000000,12000000)
+  it_c [210,270) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,120) md_video src[0,2000000) x0.5 audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au, it_b, it_c
+-- changed lanes: tr_main, tr_orig
+
+== speed set from the audio partner changes the video too
+-- command: Change speed | SetSpeed(it_a_au, ConstantSpeed(1.5), maintainPitch: null, ripple: null)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,40) md_video src[0,2000001) x1.5 detached link=ln_a
+  it_b [40,100) md_video src[10000000,12000000)
+  it_c [130,190) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,40) md_video src[0,2000001) x1.5 audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au, it_b, it_c
+-- changed lanes: tr_main, tr_orig
+
+== speed 0.5x without ripple clamps at the next clip
+-- command: Change speed | SetSpeed(it_a, ConstantSpeed(0.5), maintainPitch: null, ripple: null)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,1000000) x0.5 detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,1000000) x0.5 audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au
+-- changed lanes: tr_main, tr_orig
+-- notices: trimmedToFit {it_a, it_a_au}
+-- clamped to: [0,60)
+
+== speed 2x without ripple leaves a gap
+-- command: Change speed | SetSpeed(it_c, ConstantSpeed(2.0), maintainPitch: null, ripple: null)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,180) md_video2 src[0,2000000) x2.0
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+
+== speed explicit ripple:false overrides the project mode
+-- command: Change speed | SetSpeed(it_c, ConstantSpeed(2.0), maintainPitch: null, ripple: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,180) md_video2 src[0,2000000) x2.0
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+
+== speed 0.5x of the last clip grows freely without ripple
+-- command: Change speed | SetSpeed(it_c, ConstantSpeed(0.5), maintainPitch: null, ripple: null)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,270) md_video2 src[0,2000000) x0.5
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+
+== speed ramp montage
+-- command: Change speed | SetSpeed(it_v, Instance of 'SpeedRamp', maintainPitch: null, ripple: null)
+-- before
+tr_main video main
+  it_v [0,150) md_video src[0,5000000)
+  it_n [150,180) md_video src[0,1000000)
+-- after
+tr_main video main
+  it_v [0,145) md_video src[0,5005840) ramp(0.000:1.0 0.200:0.3 0.400:3.0 0.600:0.3 0.800:3.0 1.000:1.0)
+  it_n [145,175) md_video src[0,1000000)
+-- affected: it_n, it_v
+-- changed lanes: tr_main
+
+== speed ramp flashIn
+-- command: Change speed | SetSpeed(it_v, Instance of 'SpeedRamp', maintainPitch: null, ripple: null)
+-- before
+tr_main video main
+  it_v [0,150) md_video src[0,5000000)
+  it_n [150,180) md_video src[0,1000000)
+-- after
+tr_main video main
+  it_v [0,129) md_video src[0,5003417) ramp(0.000:8.0 0.200:1.0 1.000:1.0)
+  it_n [129,159) md_video src[0,1000000)
+-- affected: it_n, it_v
+-- changed lanes: tr_main
+
+== speed keys scale with the clip
+-- command: Change speed | SetSpeed(it_v, ConstantSpeed(2.0), maintainPitch: null, ripple: null)
+-- before
+tr_main video main
+  it_v [0,100) md_video src[0,3333334) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0,90f=4.0}
+  it_n [100,130) md_video src[0,1000000)
+-- after
+tr_main video main
+  it_v [0,50) md_video src[0,3333334) x2.0 keys{transform.scale@0f=1.0,15f=2.0,30f=3.0,45f=4.0}
+  it_n [50,80) md_video src[0,1000000)
+-- affected: it_n, it_v
+-- changed lanes: tr_main
+
+== speed near the end of the media loses a frame instead of overrunning it
+-- command: Change speed | SetSpeed(it_s, ConstantSpeed(0.75), maintainPitch: null, ripple: null)
+-- before
+tr_main video main
+  it_s [0,30) md_short src[0,1000000)
+-- after
+tr_main video main
+  it_s [0,39) md_short src[0,975000) x0.75
+-- affected: it_s
+-- changed lanes: tr_main
+
+== speed pulls sourceIn back when the clip sits at the end of the media
+-- command: Change speed | SetSpeed(it_s, ConstantSpeed(0.75), maintainPitch: null, ripple: null)
+-- before
+tr_main video main
+  it_s [0,30) md_video2 src[9000000,10000000)
+-- after
+tr_main video main
+  it_s [0,40) md_video2 src[8999999,10000000) x0.75
+-- affected: it_s
+-- changed lanes: tr_main
+
+== speed pitch only
+-- command: Change speed | SetSpeed(it_a, ConstantSpeed(1.0), maintainPitch: false, ripple: null)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au
+-- changed lanes: tr_main, tr_orig
+
+== speed unchanged is a no-op
+-- command: Change speed | SetSpeed(it_a, ConstantSpeed(1.0), maintainPitch: null, ripple: null)
+-- before: standard()
+-- noop
+
+== speed on a locked lane
+-- command: Change speed | SetSpeed(it_c, ConstantSpeed(2.0), maintainPitch: null, ripple: null)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)
+
+== speed blocked: the partner lane is locked
+-- command: Change speed | SetSpeed(it_a, ConstantSpeed(2.0), maintainPitch: null, ripple: null)
+-- before
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+tr_orig audio locked role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+-- rejected: TrackLocked(tr_orig)
+
+== speed on an image
+-- command: Change speed | SetSpeed(it_p1, ConstantSpeed(2.0), maintainPitch: null, ripple: null)
+-- before: standard()
+-- rejected: UnsupportedForKind(image)
+
+== speed on text
+-- command: Change speed | SetSpeed(it_t1, ConstantSpeed(2.0), maintainPitch: null, ripple: null)
+-- before: standard()
+-- rejected: UnsupportedForKind(text)
+
+== speed above 10x
+-- command: Change speed | SetSpeed(it_c, ConstantSpeed(10.5), maintainPitch: null, ripple: null)
+-- before: standard()
+-- rejected: InvalidValue(speed)
+
+== speed below 0.1x
+-- command: Change speed | SetSpeed(it_c, ConstantSpeed(0.05), maintainPitch: null, ripple: null)
+-- before: standard()
+-- rejected: InvalidValue(speed)
+
+== speed unknown item
+-- command: Change speed | SetSpeed(it_nope, ConstantSpeed(2.0), maintainPitch: null, ripple: null)
+-- before: standard()
+-- rejected: ItemNotFound(it_nope)
+
+== speed leaves a link partner that does not share the time map alone
+-- command: Change speed | SetSpeed(it_a, ConstantSpeed(2.0), maintainPitch: null, ripple: null)
+-- before
+tr_main video main
+  it_a [0,30) md_video src[0,1000000) link=ln_a
+  it_b [30,60) md_video src[0,1000000)
+tr_other video
+  it_o [0,60) md_video2 src[0,2000000) link=ln_a
+-- after
+tr_main video main
+  it_a [0,15) md_video src[0,1000000) x2.0 link=ln_a
+  it_b [15,45) md_video src[0,1000000)
+unchanged: tr_other
+-- affected: it_a, it_b
+-- changed lanes: tr_main
+
+== speed ripple blocked: a moved clip's partner would hit an item of its lane
+-- command: Change speed | SetSpeed(it_a, ConstantSpeed(0.5), maintainPitch: null, ripple: null)
+-- before
+tr_main video main
+  it_a [0,30) md_video src[0,1000000)
+  it_b [30,60) md_video src[0,1000000) link=ln_b
+tr_orig audio role=original
+  it_b_au [30,60) md_video src[0,1000000) audio link=ln_b
+  it_x [65,95) md_music src[0,1000000) audio
+-- rejected: RippleBlockedByLinkedItem(it_b_au)

@@ -1,0 +1,1741 @@
+== marker: add in the middle keeps the list sorted
+-- command: Add marker | AddMarker(2000000, "Middle")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker new0 @60f "Middle" color=3
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: add before every marker
+-- command: Add marker | AddMarker(0, "")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker new0 @0f "" color=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: add after every marker
+-- command: Add marker | AddMarker(10000000, "")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+marker new0 @300f "" color=0 note="Fin"
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: add at the time of another marker keeps both, in order
+-- command: Add marker | AddMarker(3000000, "Twin")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker new0 @90f "Twin" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: time is quantized to the nearest frame
+-- command: Add marker | AddMarker(2012000, "")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker new0 @60f "" color=0
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: name and note are trimmed; a blank note is none
+-- command: Add marker | AddMarker(2000000, "  Chorus  ")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker new0 @60f "Chorus" color=0
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: add to an empty project
+-- command: Add marker | AddMarker(500000, "First")
+-- before
+v video main
+-- after
+unchanged: v
+-- affected: 
+-- changed lanes: 
+-- details
+lane v video [main] items=0
+marker new0 @15f "First" color=0
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: negative time
+-- command: Add marker | AddMarker(-1, "")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(time)
+
+== marker: beyond 24 hours
+-- command: Add marker | AddMarker(86400000001, "")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(time)
+
+== marker: colour out of the palette
+-- command: Add marker | AddMarker(2000000, "")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(colorIndex)
+
+== marker: negative colour
+-- command: Add marker | AddMarker(2000000, "")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(colorIndex)
+
+== marker: name too long
+-- command: Add marker | AddMarker(2000000, "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(name)
+
+== marker: note too long
+-- command: Add marker | AddMarker(2000000, "")
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(note)
+
+== marker: rename
+-- command: Edit marker | UpdateMarker(mk1, time: null, name: Opening, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Opening" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: recolour
+-- command: Edit marker | UpdateMarker(mk2, time: null, name: null, colorIndex: 4)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=4
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: set a note
+-- command: Edit marker | UpdateMarker(mk2, time: null, name: null, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0 note="Check audio"
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: clear a note
+-- command: Edit marker | UpdateMarker(mk1, time: null, name: null, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: a blank note clears it
+-- command: Edit marker | UpdateMarker(mk1, time: null, name: null, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: move past the next marker re-sorts
+-- command: Move marker | UpdateMarker(mk1, time: 4000000, name: null, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk2 @90f "" color=0
+marker mk1 @120f "Intro" color=2 note="Start here"
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: move to the start
+-- command: Move marker | UpdateMarker(mk3, time: 0, name: null, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk3 @0f "Outro" color=5
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: move is quantized
+-- command: Move marker | UpdateMarker(mk2, time: 3342334, name: null, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @100f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: several fields at once
+-- command: Edit marker | UpdateMarker(mk2, time: 1500000, name: Beat, colorIndex: 1)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @45f "Beat" color=1 note="drop"
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: nothing changes: no-op
+-- command: Edit marker | UpdateMarker(mk1, time: null, name: null, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- noop
+
+== marker: same values: no-op
+-- command: Edit marker | UpdateMarker(mk1, time: 1000000, name: Intro, colorIndex: 2)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- noop
+
+== marker: missing marker
+-- command: Edit marker | UpdateMarker(nope, time: null, name: x, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: ItemNotFound(nope)
+
+== marker: update with a negative time
+-- command: Move marker | UpdateMarker(mk1, time: -33334, name: null, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(time)
+
+== marker: update with a bad colour
+-- command: Edit marker | UpdateMarker(mk1, time: null, name: null, colorIndex: 9)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(colorIndex)
+
+== marker: update with a long name
+-- command: Edit marker | UpdateMarker(mk1, time: null, name: nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(name)
+
+== marker: update with a note that is not text
+-- command: Edit marker | UpdateMarker(mk1, time: null, name: null, colorIndex: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(note)
+
+== marker: delete
+-- command: Delete marker | DeleteMarker(mk2)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff000000
+
+== marker: delete missing
+-- command: Delete marker | DeleteMarker(nope)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: ItemNotFound(nope)
+
+== project: canvas: aspect only
+-- command: Canvas | SetCanvas(aspect: 9:16, baseShortSide: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(9:16, 1080x1920) rate=30 fps background=solid ff000000
+
+== project: canvas: base short side only
+-- command: Canvas | SetCanvas(aspect: null, baseShortSide: 2160)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 3840x2160) rate=30 fps background=solid ff000000
+
+== project: canvas: both
+-- command: Canvas | SetCanvas(aspect: 1:1, baseShortSide: 720)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(1:1, 720x720) rate=30 fps background=solid ff000000
+
+== project: canvas: 4:5
+-- command: Canvas | SetCanvas(aspect: 4:5, baseShortSide: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(4:5, 1080x1350) rate=30 fps background=solid ff000000
+
+== project: canvas: custom ratio inside 1:4 .. 4:1
+-- command: Canvas | SetCanvas(aspect: 239:100, baseShortSide: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(239:100, 2582x1080) rate=30 fps background=solid ff000000
+
+== project: canvas: same canvas is a no-op
+-- command: Canvas | SetCanvas(aspect: 16:9, baseShortSide: 1080)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- noop
+
+== project: canvas: nothing given is a no-op
+-- command: Canvas | SetCanvas(aspect: null, baseShortSide: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- noop
+
+== project: canvas: ratio too wide
+-- command: Canvas | SetCanvas(aspect: 5:1, baseShortSide: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(aspect)
+
+== project: canvas: ratio too tall
+-- command: Canvas | SetCanvas(aspect: 1:5, baseShortSide: null)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(aspect)
+
+== project: canvas: unsupported short side
+-- command: Canvas | SetCanvas(aspect: null, baseShortSide: 1000)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(baseShortSide)
+
+== project: canvas: zero short side
+-- command: Canvas | SetCanvas(aspect: null, baseShortSide: 0)
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(baseShortSide)
+
+== project: background: solid
+-- command: Background | SetBackground(Instance of 'SolidBackground')
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff336699
+
+== project: background: the alpha is ignored (made opaque)
+-- command: Background | SetBackground(Instance of 'SolidBackground')
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=solid ff336699
+
+== project: background: blur of the main lane
+-- command: Background | SetBackground(Instance of 'BlurOfMainBackground')
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=blur 0.6
+
+== project: background: same is a no-op
+-- command: Background | SetBackground(Instance of 'SolidBackground')
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- noop
+
+== project: background: blur 0 and 1 are fine
+-- command: Background | SetBackground(Instance of 'BlurOfMainBackground')
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- after
+unchanged: v_main, v2, v3, ov1, ov2, t1, s1, a_orig, a_music, a_fx
+-- affected: 
+-- changed lanes: 
+-- details
+lane v_main video [main] items=2
+lane v2 video items=2
+lane v3 video items=0
+lane ov1 overlay items=1
+lane ov2 overlay [locked] items=1
+lane t1 text items=1
+lane s1 subtitle items=1
+lane a_orig audio role=original items=1
+lane a_music audio "Score" role=music items=1
+lane a_fx audio role=effects items=0
+marker mk1 @30f "Intro" color=2 note="Start here"
+marker mk2 @90f "" color=0
+marker mk3 @150f "Outro" color=5
+settings canvas=CanvasSpec(16:9, 1920x1080) rate=30 fps background=blur 1.0
+
+== project: background: blur above 1
+-- command: Background | SetBackground(Instance of 'BlurOfMainBackground')
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(radius)
+
+== project: background: blur below 0
+-- command: Background | SetBackground(Instance of 'BlurOfMainBackground')
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(radius)
+
+== project: background: blur NaN
+-- command: Background | SetBackground(Instance of 'BlurOfMainBackground')
+-- before
+v_main video main
+  a [0,60) md_video src[0,2000000) detached link=ln_a
+  b [60,120) md_video src[0,2000000)
+v2 video
+  c [0,60) md_video src[10000000,12000000)
+  d [60,120) md_video src[10000000,12000000)
+  ~ t_cd c|d crossDissolve 12f
+v3 video
+ov1 overlay
+  o1 [0,30) md_image src[0,1000000)
+ov2 overlay locked
+  o2 [0,30) md_image src[0,1000000)
+t1 text
+  x [0,30) text "Title"
+s1 subtitle
+  q [0,30) cue "Hello"
+a_orig audio role=original
+  au [0,60) md_video src[0,2000000) audio link=ln_a
+a_music audio role=music
+  m [0,90) md_music src[0,3000000) audio
+a_fx audio role=effects
+-- rejected: InvalidValue(radius)

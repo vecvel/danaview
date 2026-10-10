@@ -42,13 +42,16 @@ import kotlin.math.abs
 
 /**
  * AND-01 prototype of the AND-16 contingency engine (ARCH §13.3 "Contingency", D-36), built
- * because CompositionPlayer 1.11.1 stalls at secondary-sequence boundaries (R1 no-go):
- * one [ExoPlayer] per packing slot renders into a [SurfaceTexture] (OES texture); a frame clock at
- * the project fps (Choreographer on the preview thread) decides the output frame k, schedules the
- * slot players from the plan (gaps and gating follow the plan, not Media3), latches each slot's
- * texture and composites bottom → top with the place shader and the straight-alpha blend onto
- * the output surface (the SurfaceProducer stand-in). Drift > ½ frame is corrected by seeking the
- * late player (at most once per [correctionCooldownMs]). Audio slots are not prototyped.
+ * because CompositionPlayer 1.11.1 stalls at secondary-sequence boundaries (R1 no-go).
+ * Per packing slot, two decks (an [ExoPlayer] rendering into its own PRIVATE [ImageReader] whose
+ * HardwareBuffers are imported as OES textures): one plays the current layer, the other pre-rolls
+ * the next layer paused at its first frame. A frame clock at the project fps (Choreographer on the
+ * preview thread) decides the output frame k; the players run [leadFrames] ahead of it, so each
+ * deck's queue already holds the rule frame of k when k is composited. Gaps and gating follow the
+ * plan, not Media3. Each slot's rule frame is latched and composited bottom → top with the place
+ * shader and the straight-alpha blend onto the output surface (the SurfaceProducer stand-in).
+ * Drift > 1 frame is corrected by seeking the late player (at most once per
+ * [correctionCooldownMs]). Audio slots are not prototyped.
  *
  * Everything (EGL, GL, players' application looper, Choreographer) runs on one preview thread.
  */
@@ -59,26 +62,57 @@ class ContingencyEngineProto(
     private val regions: List<ProbeRegion>,
     private val frameSource: FrameSource = FrameSource.IMAGE_READER,
     private val correctionCooldownMs: Long = 1000,
+    /**
+     * Slot players run this many output frames ahead of the compositor clock; their frames wait in
+     * the slot's ImageReader queue (IMAGE_READER only). 0 = players and compositor on one clock.
+     */
+    private val leadFrames: Int = 2,
+    /**
+     * Two decks (player + ImageReader + OES texture) per slot: while one plays item i, the other
+     * pre-rolls item i + 1 paused at its first frame, so a cut never waits for a seek.
+     * false = one player per slot that seeks at every item change.
+     */
+    private val standby: Boolean = true,
+    /**
+     * Never show a slot frame other than its rule frame: an output frame whose slot frames are
+     * late is not drawn (it becomes a dropped frame). false = draw the latest frame available.
+     */
+    private val holdLateFrames: Boolean = true,
 ) : AutoCloseable {
     /** Where a slot player's decoded frames land. */
     enum class FrameSource {
-        /** One [SurfaceTexture] per slot: only the newest frame can be latched. */
+        /** One [SurfaceTexture] per deck: only the newest frame can be latched. */
         SURFACE_TEXTURE,
 
         /**
-         * One [ImageReader] (PRIVATE, GPU-sampled) per slot: several decoded frames are held and the
+         * One [ImageReader] (PRIVATE, GPU-sampled) per deck: several decoded frames are held and the
          * one whose pts is the output frame's rule frame is imported (HardwareBuffer → EGLImage → OES).
          */
         IMAGE_READER,
     }
 
-    data class SlotStats(val seq: Int, var seeks: Int = 0, var driftCorrections: Int = 0, var latched: Int = 0, var behind: Int = 0, var ahead: Int = 0)
+    data class SlotStats(
+        val seq: Int,
+        var seeks: Int = 0,
+        var prerolls: Int = 0,
+        var driftCorrections: Int = 0,
+        var latched: Int = 0,
+        var behind: Int = 0,
+        var ahead: Int = 0,
+        var staleImages: Int = 0,
+        var metadataCallbacks: Int = 0,
+        var imagesAcquired: Int = 0,
+    )
 
     data class Result(
         val ended: Boolean,
         val wallMs: Double,
         val composedFrames: Int,
         val skippedFrames: Int,
+        /** Composite attempts deferred because a slot's rule frame was late ([holdLateFrames]). */
+        val heldAttempts: Int,
+        /** Output frames dropped because a slot's rule frame had already passed (or never came). */
+        val missedFrames: Int,
         val compositeMs: List<Double>,
         val slots: List<SlotStats>,
     )
@@ -89,9 +123,11 @@ class ContingencyEngineProto(
     /** Composited output frames as probe readings (pts = P(k)). */
     val frames = ConcurrentLinkedQueue<ProbeFrame>()
 
-    private inner class Slot(val seq: Int) {
-        val layers = plan.layersOf(seq)
-        val clipStart = LongArray(layers.size)
+    /** Source pts of a released frame, tagged with the deck epoch it was rendered in. */
+    private data class Tag(val epoch: Int, val pts: Long)
+
+    /** One player with its own frame queue and texture; positioned on one layer at a time. */
+    private inner class Deck(val slot: Slot, index: Int) {
         val tex: Int
         val st: SurfaceTexture?
         val reader: ImageReader?
@@ -101,12 +137,15 @@ class ContingencyEngineProto(
         var bound: Image? = null
         var boundEglImage = 0L
         val player: ExoPlayer
-        val ptsByRelease = ConcurrentHashMap<Long, Long>()
+        val ptsByRelease = ConcurrentHashMap<Long, Tag>()
         @Volatile var pending = 0
+        /** Bumped on every reposition; frames released before it are stale. */
+        @Volatile var epoch = 0
         var latchedPts = Long.MIN_VALUE
         var lastCorrectionMs = 0L
+        /** Layer index this deck is positioned on, or -1 (after prepare, deck 0 sits on layer 0's first frame). */
+        var assigned = if (index == 0) 0 else -1
         val texMatrix = FloatArray(16)
-        val stats = SlotStats(seq)
 
         init {
             val ids = IntArray(1)
@@ -127,40 +166,45 @@ class ContingencyEngineProto(
             }
             player = ExoPlayer.Builder(context).setLooper(thread.looper).build()
             player.setSeekParameters(SeekParameters.EXACT)
+            // Never roll into the next playlist item: the other deck owns it.
+            player.pauseAtEndOfMediaItems = true
             player.setVideoSurface(surface)
             player.setVideoFrameMetadataListener { pts, releaseNs, _, _ ->
-                ptsByRelease[releaseNs] = pts
+                slot.stats.metadataCallbacks++
+                ptsByRelease[releaseNs] = Tag(epoch, pts)
                 if (ptsByRelease.size > 512) ptsByRelease.keys.sorted().take(256).forEach { ptsByRelease.remove(it) }
             }
-            val mapper = SpikeCompositionMapper(context)
-            val items = layers.mapIndexed { i, l ->
-                val (start, end) = mapper.clipping(plan, l, EpsilonMode.SNAP_TO_RULE_FRAME)
-                clipStart[i] = start
-                MediaItem.Builder().setUri(Uri.parse(l.uri))
-                    .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionUs(start).setEndPositionUs(end).build())
-                    .build()
+            player.addListener(object : Player.Listener {
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    lastError = "${error.errorCodeName}: ${generateSequence<Throwable>(error) { it.cause }.last().let { "${it.javaClass.simpleName} ${it.message}" }}"
+                }
+            })
+            player.setMediaItems(slot.items)
+            // The standby deck prepares (and takes a decoder) only when it first pre-rolls.
+            if (index == 0) player.prepare()
+        }
+
+        /** Last player error (diagnostics). */
+        var lastError: String? = null
+
+        /** Seeks to layer [i] at item position [ms] (exact); drops queued frames of the old position. */
+        fun position(i: Int, ms: Long) {
+            // ExoPlayer ignores a seek to the position it is paused at (no new frame would come):
+            // keep the frame it already rendered there.
+            if (assigned == i && !player.playWhenReady && player.currentMediaItemIndex == i && player.currentPosition == ms) {
+                return
             }
-            player.setMediaItems(items)
-            player.prepare()
+            epoch++
+            if (player.playbackState == Player.STATE_IDLE) player.prepare()
+            player.seekTo(i, ms)
+            assigned = i
+            queue.forEach { it.close() }
+            queue.clear()
         }
 
-        /** Layer index active at plan time [t], or -1. */
-        fun activeAt(t: Long): Int = layers.indexOfFirst {
-            t >= GridTime.timeOfFrame(it.k0, plan.gridFps) && t < GridTime.timeOfFrame(it.k1, plan.gridFps)
-        }
+        private fun tagOf(releaseNs: Long): Tag? = ptsByRelease[releaseNs]?.takeIf { it.epoch == epoch }
 
-        fun nextAfter(t: Long): Int = layers.indexOfFirst { GridTime.timeOfFrame(it.k0, plan.gridFps) > t }
-
-        /** Source time of layer [i] at plan time [t]. */
-        fun sourceAt(i: Int, t: Long): Long {
-            val l = layers[i]
-            return l.srcStartUs + ((t - GridTime.timeOfFrame(l.k0, plan.gridFps)) * l.speed.toDouble()).toLong()
-        }
-
-        /** Item position (ms) of layer [i] at plan time [t]. */
-        fun positionMs(i: Int, t: Long): Long = ((sourceAt(i, t) - clipStart[i]) / 1000).coerceAtLeast(0)
-
-        /** IMAGE_READER: acquires queued images while one slot stays free for the bound image. */
+        /** IMAGE_READER: acquires queued images (stale ones are closed) while one slot stays free for the bound image. */
         fun pull() {
             val r = reader ?: return
             while (queue.size + (if (bound != null) 1 else 0) < MAX_IMAGES - 1) {
@@ -169,11 +213,17 @@ class ContingencyEngineProto(
                 } catch (e: IllegalStateException) {
                     null
                 } ?: return
+                slot.stats.imagesAcquired++
+                if (tagOf(img.timestamp) == null) {
+                    img.close()
+                    slot.stats.staleImages++
+                    continue
+                }
                 queue.addLast(img)
             }
         }
 
-        private fun ptsOf(img: Image): Long? = ptsByRelease[img.timestamp]
+        private fun ptsOf(img: Image): Long? = tagOf(img.timestamp)?.pts
 
         private fun bind(img: Image) {
             val hb = img.hardwareBuffer ?: return
@@ -186,17 +236,17 @@ class ContingencyEngineProto(
             bound = img
             boundEglImage = egl
             latchedPts = ptsOf(img) ?: latchedPts
-            stats.latched++
+            slot.stats.latched++
         }
 
-        /** Shows the newest available frame (paused / seeking / gated). */
+        /** Shows the newest available frame (paused / seeking / idle deck). */
         fun latchNewest() {
             if (st != null) {
                 while (pending > 0) {
                     st.updateTexImage()
                     pending--
-                    stats.latched++
-                    latchedPts = ptsByRelease[st.timestamp] ?: latchedPts
+                    slot.stats.latched++
+                    latchedPts = tagOf(st.timestamp)?.pts ?: latchedPts
                 }
                 return
             }
@@ -212,8 +262,8 @@ class ContingencyEngineProto(
                 while (pending > 0 && (latchedPts == Long.MIN_VALUE || latchedPts < expectedPts - halfFrameUs)) {
                     st.updateTexImage()
                     pending--
-                    stats.latched++
-                    latchedPts = ptsByRelease[st.timestamp] ?: latchedPts
+                    slot.stats.latched++
+                    latchedPts = tagOf(st.timestamp)?.pts ?: latchedPts
                 }
             } else {
                 pull()
@@ -227,7 +277,14 @@ class ContingencyEngineProto(
                 }
                 pull()
             }
-            if (latchedPts < expectedPts - halfFrameUs) stats.behind++ else if (latchedPts > expectedPts + halfFrameUs) stats.ahead++
+            if (latchedPts < expectedPts - halfFrameUs) slot.stats.behind++ else if (latchedPts > expectedPts + halfFrameUs) slot.stats.ahead++
+        }
+
+        /** True when the deck's frames are already past [expectedPts]: its rule frame will not come any more. */
+        fun passed(expectedPts: Long, halfFrameUs: Long): Boolean {
+            if (latchedPts != Long.MIN_VALUE && latchedPts > expectedPts + halfFrameUs) return true
+            val headPts = queue.firstOrNull()?.let { ptsOf(it) } ?: return false
+            return headPts > expectedPts + halfFrameUs
         }
 
         /** Texture coordinate matrix: SurfaceTexture's own, or a y flip for HardwareBuffer images (row 0 = top). */
@@ -249,6 +306,53 @@ class ContingencyEngineProto(
         }
     }
 
+    /** One packing slot (visual sequence): its layers as one clipped playlist, played by 1 or 2 decks. */
+    private inner class Slot(val seq: Int) {
+        val layers = plan.layersOf(seq)
+        val clipStart = LongArray(layers.size)
+        val stats = SlotStats(seq)
+        val items: List<MediaItem>
+        val decks: List<Deck>
+
+        init {
+            val mapper = SpikeCompositionMapper(context)
+            items = layers.mapIndexed { i, l ->
+                val (start, end) = mapper.clipping(plan, l, EpsilonMode.SNAP_TO_RULE_FRAME)
+                clipStart[i] = start
+                MediaItem.Builder().setUri(Uri.parse(l.uri))
+                    .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setStartPositionUs(start).setEndPositionUs(end).build())
+                    .build()
+            }
+            decks = List(if (standby) 2 else 1) { Deck(this, it) }
+        }
+
+        fun deckFor(i: Int): Deck = decks[i % decks.size]
+
+        /** Layer index active at plan time [t], or -1. */
+        fun activeAt(t: Long): Int = layers.indexOfFirst {
+            t >= GridTime.timeOfFrame(it.k0, plan.gridFps) && t < GridTime.timeOfFrame(it.k1, plan.gridFps)
+        }
+
+        fun nextAfter(t: Long): Int = layers.indexOfFirst { GridTime.timeOfFrame(it.k0, plan.gridFps) > t }
+
+        fun startsAfter(i: Int, t: Long): Boolean = GridTime.timeOfFrame(layers[i].k0, plan.gridFps) > t
+
+        /** Source time of layer [i] at plan time [t]. */
+        fun sourceAt(i: Int, t: Long): Long {
+            val l = layers[i]
+            return l.srcStartUs + ((t - GridTime.timeOfFrame(l.k0, plan.gridFps)) * l.speed.toDouble()).toLong()
+        }
+
+        /** Rule frame (ARCH §11.5) of layer [i] at plan time [t]. */
+        fun ruleAt(i: Int, t: Long): Long =
+            SpikeCompositionMapper.Companion.SourceFrameTimes.ruleFramePts(context, layers[i].uri, sourceAt(i, t))
+
+        /** Item position (ms) of layer [i] at plan time [t]. */
+        fun positionMs(i: Int, t: Long): Long = ((sourceAt(i, t) - clipStart[i]) / 1000).coerceAtLeast(0)
+
+        fun release() = decks.forEach { it.release() }
+    }
+
     private var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
     private var eglSurface: EGLSurface = EGL14.EGL_NO_SURFACE
@@ -261,6 +365,11 @@ class ContingencyEngineProto(
     private var wall0Ns = 0L
     private var lastK = -1L
     private var skipped = 0
+    private var held = 0
+    private var missed = 0
+    /** First reasons a frame was held (diagnostics). */
+    val holdReasons = ArrayList<String>()
+    private val framePeriodNs get() = 1_000_000_000L / plan.fps
     private var composed = 0
     private val compositeMs = ArrayList<Double>()
     private var ended = false
@@ -309,31 +418,59 @@ class ContingencyEngineProto(
 
     private val halfFrameUs get() = 500_000L / plan.fps
 
-    /** Pre-rolls every slot for plan time [t] (paused) and waits until all players are READY. */
+    /** How far the slot players run ahead of the compositor clock (µs). */
+    private val leadUs get() = if (frameSource == FrameSource.IMAGE_READER) leadFrames * 1_000_000L / plan.fps else 0L
+
+    /** Next layer of [s] after the one at player time (or the next one after a gap), or -1. */
+    private fun nextLayer(s: Slot, ip: Int, tp: Long): Int =
+        if (ip >= 0) (ip + 1).takeIf { it < s.layers.size } ?: -1 else s.nextAfter(tp)
+
+    /** Pre-rolls every slot for plan time [t] (paused) and waits until all positioned decks are READY. */
     private fun preroll(t: Long, timeoutMs: Long) {
         onThread {
             for (s in slots) {
-                val i = s.activeAt(t).takeIf { it >= 0 }
-                val target = i ?: s.nextAfter(t)
-                s.player.playWhenReady = false
-                if (target >= 0) {
-                    s.player.seekTo(target, if (i != null) s.positionMs(i, t) else 0)
+                s.decks.forEach { it.player.playWhenReady = false }
+                val ip = s.activeAt(t)
+                if (ip >= 0) {
+                    s.deckFor(ip).position(ip, s.positionMs(ip, t))
                     s.stats.seeks++
                 }
+                // Standby decks pre-roll later, inside the window (schedule), so the start is not a
+                // burst of 2 × slots seeks.
             }
         }
         val end = SystemClock.elapsedRealtime() + timeoutMs
         while (SystemClock.elapsedRealtime() < end) {
-            if (onThread { slots.all { it.player.playbackState == Player.STATE_READY || it.player.playbackState == Player.STATE_ENDED } }) return
+            // Only the decks that show t0 must be ready; standby decks finish pre-rolling while playing.
+            val ready = onThread {
+                slots.all { s ->
+                    val ip = s.activeAt(t)
+                    ip < 0 || s.deckFor(ip).player.playbackState.let { it == Player.STATE_READY || it == Player.STATE_ENDED }
+                }
+            }
+            if (ready) return
             Thread.sleep(10)
         }
-        error("slots not ready after $timeoutMs ms")
+        val states = onThread {
+            slots.joinToString { s -> "seq${s.seq}:" + s.decks.joinToString("/") { d -> "${d.assigned}@${d.player.playbackState}" } }
+        }
+        error("slots not ready after $timeoutMs ms ($states)")
+    }
+
+    /** Per-deck state for diagnostics. */
+    fun debugState(): String = onThread {
+        slots.joinToString(" | ") { s ->
+            "seq${s.seq} md=${s.stats.metadataCallbacks} acq=${s.stats.imagesAcquired} stale=${s.stats.staleImages} " +
+                s.decks.joinToString("/") { d -> "[on ${d.assigned} st=${d.player.playbackState} pos=${d.player.currentPosition} q=${d.queue.size} b=${d.bound != null} l=${d.latchedPts} e=${d.epoch} err=${d.lastError}]" }
+        }
     }
 
     /** Plays from output frame [fromK] to the end on the frame clock; returns when ended or after [timeoutMs]. */
     fun play(fromK: Long, timeoutMs: Long): Result {
         val t0 = GridTime.timeOfFrame(fromK, plan.fps)
-        preroll(t0, 20_000)
+        preroll(t0, 60_000)
+        Thread.sleep(300)
+        holdReasons += "after preroll: " + debugState()
         val latch = CountDownLatch(1)
         val started = System.nanoTime()
         onThread {
@@ -342,81 +479,165 @@ class ContingencyEngineProto(
             compositeMs.clear()
             composed = 0
             skipped = 0
+            held = 0
+            missed = 0
             ended = false
             lastK = fromK - 1
             startT = t0
-            wall0Ns = System.nanoTime()
+            // The players start now at t0; the compositor clock reaches t0 one lead later.
+            wall0Ns = System.nanoTime() + leadUs * 1000
             playing = true
-            schedule(t0)
+            schedule(t0 - leadUs, t0)
             Choreographer.getInstance().postFrameCallback(tick)
         }
         latch.await(timeoutMs, TimeUnit.MILLISECONDS)
         return onThread {
             playing = false
-            slots.forEach { it.player.pause() }
-            Result(ended, (System.nanoTime() - started) / 1e6, composed, skipped, compositeMs.toList(), slots.map { it.stats.copy() })
+            slots.forEach { s -> s.decks.forEach { it.player.pause() } }
+            Result(ended, (System.nanoTime() - started) / 1e6, composed, skipped, held, missed, compositeMs.toList(), slots.map { it.stats.copy() })
         }
     }
 
     private val tick = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             if (!playing) return
-            val t = startT + (System.nanoTime() - wall0Ns) / 1000
-            if (t >= plan.durUs) {
+            val now = System.nanoTime()
+            val tc = startT + (now - wall0Ns) / 1000
+            if (tc >= plan.durUs) {
+                skipped += (plan.durFrames - 1 - lastK).toInt().coerceAtLeast(0)
                 ended = true
                 playing = false
                 endLatch?.countDown()
                 return
             }
-            val k = GridTime.frameIndexOf(t, plan.fps)
-            schedule(t)
-            if (k != lastK) {
-                if (k > lastK + 1) skipped += (k - lastK - 1).toInt()
-                composite(k)
-                lastK = k
+            schedule(tc, tc + leadUs)
+            if (tc >= startT) {
+                val k = GridTime.frameIndexOf(tc, plan.fps)
+                if (k > lastK) {
+                    // A held frame is retried on the next vsync while the clock runs on; when the
+                    // clock reaches k + 1 first, k is dropped (counted in skippedFrames).
+                    val r = composite(k, holdLateFrames)
+                    when {
+                        r == DRAWN -> {
+                            if (k > lastK + 1) skipped += (k - lastK - 1).toInt()
+                            lastK = k
+                        }
+                        r == MISSED -> {
+                            // A slot's rule frame will not come (its deck already passed it): the
+                            // frame is dropped (the previous output frame stays on screen).
+                            skipped += (k - lastK).toInt()
+                            missed++
+                            lastK = k
+                        }
+                    }
+                }
             }
             Choreographer.getInstance().postFrameCallback(this)
         }
     }
 
-    /** Drives the slot players for plan time [t] (gaps, item changes, drift > ½ frame). */
-    private fun schedule(t: Long) {
+    /**
+     * Drives the decks: the layer at player time [tp] plays on its deck (seeking only when the deck
+     * is not already on it, or drifts > 1 frame), the next layer pre-rolls paused on the other deck
+     * unless that deck still feeds the compositor at [tc]; every other deck pauses.
+     */
+    private fun schedule(tc: Long, tp: Long) {
         val nowMs = SystemClock.elapsedRealtime()
         for (s in slots) {
-            val i = s.activeAt(t)
-            if (i >= 0) {
-                val want = s.positionMs(i, t)
+            val ic = s.activeAt(tc)
+            val ip = s.activeAt(tp)
+            var playingDeck: Deck? = null
+            if (ip >= 0) {
+                val d = s.deckFor(ip)
+                playingDeck = d
+                val want = s.positionMs(ip, tp)
                 when {
-                    s.player.currentMediaItemIndex != i -> {
-                        s.player.seekTo(i, want)
+                    d.assigned != ip || d.player.currentMediaItemIndex != ip -> {
+                        d.position(ip, want)
                         s.stats.seeks++
-                        s.lastCorrectionMs = nowMs
+                        d.lastCorrectionMs = nowMs
                     }
-                    s.player.playbackState == Player.STATE_READY && s.player.isPlaying &&
-                        abs(s.player.currentPosition - want) * 1000 > halfFrameUs * 2 &&
-                        nowMs - s.lastCorrectionMs > correctionCooldownMs -> {
-                        s.player.seekTo(i, want)
+                    d.player.playbackState == Player.STATE_READY && d.player.isPlaying &&
+                        abs(d.player.currentPosition - want) * 1000 > halfFrameUs * 2 &&
+                        nowMs - d.lastCorrectionMs > correctionCooldownMs -> {
+                        d.position(ip, want)
                         s.stats.driftCorrections++
-                        s.lastCorrectionMs = nowMs
+                        d.lastCorrectionMs = nowMs
                     }
                 }
-                s.player.playWhenReady = true
-            } else {
-                if (s.player.playWhenReady) s.player.playWhenReady = false
-                val next = s.nextAfter(t)
-                if (next >= 0 && (s.player.currentMediaItemIndex != next || s.player.currentPosition > 0)) {
-                    s.player.seekTo(next, 0)
-                    s.stats.seeks++
+                if (!d.player.playWhenReady) d.player.playWhenReady = true
+            }
+            val next = nextLayer(s, ip, tp)
+            var standbyDeck: Deck? = null
+            if (next >= 0) {
+                val d = s.deckFor(next)
+                if (d !== playingDeck) {
+                    standbyDeck = d
+                    val dueIn = GridTime.timeOfFrame(s.layers[next].k0, plan.gridFps) - tp
+                    if (d.assigned != next && (ic < 0 || d.assigned != ic) && dueIn <= PREROLL_WINDOW_US) {
+                        d.player.playWhenReady = false
+                        d.position(next, 0)
+                        s.stats.prerolls++
+                    }
                 }
+            }
+            for (d in s.decks) {
+                if (d === playingDeck) continue
+                val feeding = ic >= 0 && d.assigned == ic
+                if (!feeding && d.player.playWhenReady) d.player.playWhenReady = false
+                if (d === standbyDeck && d.assigned == next && d.player.playWhenReady) d.player.playWhenReady = false
             }
         }
     }
 
-    /** Composites output frame [k] from the latched slot textures and reads the probe rows. */
-    private fun composite(k: Long) {
+    /**
+     * Composites output frame [k] from the latched deck textures and reads the probe rows.
+     * With [hold], a frame for which some active slot has not latched its rule frame yet is not
+     * drawn (returns false; the frame clock moves on, so a late frame becomes a dropped frame,
+     * never a wrong one).
+     */
+    private fun composite(k: Long, hold: Boolean = false): Int {
         val started = System.nanoTime()
         val tk = GridTime.timeOfFrame(k, plan.fps)
         val pts = GridTime.platformTimeOfFrame(k, plan.fps)
+        // 1. Latch every slot's rule frame (bottom → top), draining idle decks.
+        val draws = ArrayList<Pair<Deck, LayerParams>>()
+        var allExact = true
+        var anyPassed = false
+        for (s in slots.asReversed()) { // bottom sequence first; sequence 1 is the top
+            val i = s.activeAt(tk)
+            val d = if (i >= 0) s.deckFor(i) else null
+            for (other in s.decks) {
+                if (other === d) continue
+                // A deck holding an upcoming layer keeps its queue (its first frames); idle decks drain.
+                if (other.assigned >= 0 && s.startsAfter(other.assigned, tk)) other.pull() else other.latchNewest()
+            }
+            if (d == null || i < 0) continue
+            val p = store.activeAt(s.seq, pts, plan.fps) ?: continue
+            if (d.assigned != i) {
+                allExact = false
+                if (hold && holdReasons.size < 12) holdReasons += "k=$k seq${s.seq} deck on ${d.assigned}, layer $i active"
+                continue
+            }
+            val rule = s.ruleAt(i, tk)
+            d.latchFor(rule, halfFrameUs)
+            if (d.latchedPts != rule) {
+                allExact = false
+                if (d.passed(rule, halfFrameUs)) anyPassed = true
+                if (hold && holdReasons.size < 12) {
+                    holdReasons += "k=$k seq${s.seq} rule=$rule latched=${d.latchedPts} queue=${d.queue.size} pos=${d.player.currentPosition} " +
+                        "state=${d.player.playbackState} pwr=${d.player.playWhenReady} stale=${s.stats.staleImages}"
+                }
+            }
+            if (d.latchedPts == Long.MIN_VALUE) continue
+            draws += d to p
+        }
+        if (hold && !allExact) {
+            if (anyPassed) return MISSED
+            held++
+            return WAIT
+        }
+        // 2. Draw.
         GLES20.glViewport(0, 0, plan.canvasW, plan.canvasH)
         val bg = plan.bgRgb()
         GLES20.glDisable(GLES20.GL_BLEND)
@@ -424,19 +645,10 @@ class ContingencyEngineProto(
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES30.glBlendFuncSeparate(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA, GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
-        for (s in slots.asReversed()) { // bottom sequence first; sequence 1 is the top
-            val i = s.activeAt(tk)
-            if (i < 0) {
-                s.latchNewest()
-                continue
-            }
-            val p = store.activeAt(s.seq, pts, plan.fps) ?: continue
-            val rule = SpikeCompositionMapper.Companion.SourceFrameTimes.ruleFramePts(context, s.layers[i].uri, s.sourceAt(i, tk))
-            s.latchFor(rule, halfFrameUs)
-            if (s.latchedPts == Long.MIN_VALUE) continue
+        for ((d, p) in draws) {
             program.use()
-            program.setSamplerTexIdUniform("uTex", s.tex, 0)
-            program.setFloatsUniform("uTexMatrix", s.matrix())
+            program.setSamplerTexIdUniform("uTex", d.tex, 0)
+            program.setFloatsUniform("uTexMatrix", d.matrix())
             program.setFloatsUniform("uRect", floatArrayOf(p.rect[0] / plan.canvasW, p.rect[1] / plan.canvasH, p.rect[2] / plan.canvasW, p.rect[3] / plan.canvasH))
             program.setFloatsUniform("uTint", p.tint)
             program.setFloatUniform("uAlpha", p.alpha)
@@ -444,7 +656,7 @@ class ContingencyEngineProto(
             // GlProgram binds by the reported sampler type; the emulator's GLES translator reports
             // samplerExternalOES as sampler2D, so bind the OES target explicitly (AND-01 finding).
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, s.tex)
+            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, d.tex)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         }
         val readings = HashMap<String, RegionReading>()
@@ -460,6 +672,7 @@ class ContingencyEngineProto(
         composed++
         compositeMs += (System.nanoTime() - started) / 1e6
         frames.add(ProbeFrame(pts, System.nanoTime(), readings))
+        return DRAWN
     }
 
     private fun readRow(y: Int): (Int) -> Int {
@@ -484,25 +697,27 @@ class ContingencyEngineProto(
         val tk = GridTime.timeOfFrame(k, plan.fps)
         val targets = onThread {
             slots.map { s ->
+                s.decks.forEach { it.player.playWhenReady = false }
                 val i = s.activeAt(tk)
-                s.player.playWhenReady = false
                 if (i >= 0) {
-                    val rule = SpikeCompositionMapper.Companion.SourceFrameTimes.ruleFramePts(context, s.layers[i].uri, s.sourceAt(i, tk))
-                    s.player.seekTo(i, (rule - s.clipStart[i]) / 1000)
+                    val d = s.deckFor(i)
+                    val rule = s.ruleAt(i, tk)
+                    // Exact seek shows the first frame at or after the position (V-N18), so floor to ms.
+                    d.position(i, (rule - s.clipStart[i]) / 1000)
                     s.stats.seeks++
-                    rule
+                    d to rule
                 } else {
-                    Long.MIN_VALUE
+                    null
                 }
             }
         }
         val end = SystemClock.elapsedRealtime() + timeoutMs
         while (SystemClock.elapsedRealtime() < end) {
             val done = onThread {
-                slots.withIndex().all { (j, s) ->
-                    val want = targets[j]
-                    s.latchNewest()
-                    want == Long.MIN_VALUE || s.latchedPts == want
+                targets.all { t ->
+                    if (t == null) return@all true
+                    t.first.latchNewest()
+                    t.first.latchedPts == t.second
                 }
             }
             if (done) {
@@ -534,8 +749,15 @@ class ContingencyEngineProto(
     }
 
     companion object {
-        /** Images held per slot (one bound + up to MAX_IMAGES − 2 queued). */
-        const val MAX_IMAGES = 6
+        /** A standby deck pre-rolls its next layer when that layer starts within this window (µs). */
+        private const val PREROLL_WINDOW_US = 1_000_000L
+
+        private const val DRAWN = 0
+        private const val WAIT = 1
+        private const val MISSED = 2
+
+        /** Images held per deck (one bound + up to MAX_IMAGES − 2 queued). */
+        const val MAX_IMAGES = 8
 
         /** Column-major y flip: (s, t) → (s, 1 − t). */
         val FLIP_Y = floatArrayOf(1f, 0f, 0f, 0f, 0f, -1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 1f, 0f, 1f)

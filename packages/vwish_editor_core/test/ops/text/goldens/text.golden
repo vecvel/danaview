@@ -1,0 +1,212 @@
+== add text goes to a new text lane when the only lane is busy
+-- command: Add text | AddText(1000000, text: Text, duration: null, track: null)
+-- before: standard()
+-- after
+tr_#1 text
+  it_#1 [30,120) text "Text"
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {it_#1} primary it_#1
+-- preview creates: text@3
+
+== add text uses the free text lane
+-- command: Add text | AddText(2000000, text: Hello, duration: null, track: null)
+-- before: standard()
+-- after
+tr_txt text
+  it_t1 [0,45) text "Title"
+  it_#1 [60,150) text "Hello"
+unchanged: tr_main, tr_ov1, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_txt
+-- selection: {it_#1} primary it_#1
+
+== add text prefers the topmost free lane
+-- command: Add text | AddText(333334, text: Text, duration: null, track: null)
+-- before
+tr_main video main
+  it_v [0,300) md_video src[0,10000000)
+tr_t1 text
+tr_t2 text
+-- after
+tr_t2 text
+  it_#1 [10,100) text "Text"
+unchanged: tr_main, tr_t1
+-- affected: it_#1
+-- changed lanes: tr_t2
+-- selection: {it_#1} primary it_#1
+
+== add text falls back to the lower free lane
+-- command: Add text | AddText(2000000, text: Text, duration: 1000000, track: null)
+-- before
+tr_main video main
+  it_v [0,300) md_video src[0,10000000)
+tr_t1 text
+  it_a [0,60) text "Title"
+tr_t2 text
+  it_b [30,90) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+-- after
+tr_t1 text
+  it_a [0,60) text "Title"
+  it_#1 [60,90) text "Text"
+unchanged: tr_main, tr_t2, tr_sub
+-- affected: it_#1
+-- changed lanes: tr_t1
+-- selection: {it_#1} primary it_#1
+
+== add text with every lane busy creates a lane on top
+-- command: Add text | AddText(333334, text: Text, duration: null, track: null)
+-- before
+tr_main video main
+  it_v [0,300) md_video src[0,10000000)
+tr_t1 text
+  it_a [0,90) text "Title"
+tr_t2 text
+  it_b [0,90) text "Title"
+-- after
+tr_#1 text
+  it_#1 [10,100) text "Text"
+unchanged: tr_main, tr_t1, tr_t2
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {it_#1} primary it_#1
+-- preview creates: text@3
+
+== add text skips a locked lane
+-- command: Add text | AddText(3333334, text: Text, duration: null, track: null)
+-- before
+tr_main video main
+  it_v [0,300) md_video src[0,10000000)
+tr_t1 text
+  it_a [0,60) text "Title"
+tr_t2 text locked
+  it_b [30,90) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+-- after
+tr_t1 text
+  it_a [0,60) text "Title"
+  it_#1 [100,190) text "Text"
+unchanged: tr_main, tr_t2, tr_sub
+-- affected: it_#1
+-- changed lanes: tr_t1
+-- selection: {it_#1} primary it_#1
+
+== add text with policy reject and no room
+-- command: Add text | AddText(1333334, text: Text, duration: null, track: null)
+-- before
+tr_main video main
+  it_v [0,300) md_video src[0,10000000)
+tr_t1 text
+  it_a [0,60) text "Title"
+tr_t2 text
+  it_b [30,90) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+-- rejected: NoRoom()
+
+== add text on an explicit busy lane moves to the nearest free one
+-- command: Add text | AddText(1333334, text: Text, duration: null, track: tr_t1)
+-- before
+tr_main video main
+  it_v [0,300) md_video src[0,10000000)
+tr_t1 text
+  it_a [0,60) text "Title"
+tr_t2 text
+  it_b [30,90) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+-- after
+tr_#1 text
+  it_#1 [40,130) text "Text"
+unchanged: tr_main, tr_t1, tr_t2, tr_sub
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- notices: placedOnOtherLane {it_#1}
+-- selection: {it_#1} primary it_#1
+-- preview creates: text@3
+
+== add text with a style
+-- command: Add text | AddText(3333334, text: Big, duration: null, track: null)
+-- before: standard()
+-- after
+tr_txt text
+  it_t1 [0,45) text "Title"
+  it_#1 [100,190) text "Big"
+unchanged: tr_main, tr_ov1, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_txt
+-- selection: {it_#1} primary it_#1
+
+== add empty text
+-- command: Add text | AddText(3333334, text:   , duration: null, track: null)
+-- before: standard()
+-- rejected: EmptyText()
+
+== add text with a bad size
+-- command: Add text | AddText(3333334, text: Text, duration: null, track: null)
+-- before: standard()
+-- rejected: InvalidValue(text.fontSize)
+
+== set text
+-- command: Edit text | SetText(it_t1)
+-- before: standard()
+-- after
+tr_txt text
+  it_t1 [0,45) text "Another title"
+unchanged: tr_main, tr_ov1, tr_sub, tr_orig, tr_music
+-- affected: it_t1
+-- changed lanes: tr_txt
+
+== set blank text
+-- command: Edit text | SetText(it_t1)
+-- before: standard()
+-- rejected: EmptyText()
+
+== set text on a cue
+-- command: Edit text | SetText(it_s1)
+-- before: standard()
+-- rejected: UnsupportedForKind(subtitle)
+
+== set text style
+-- command: Change text style | SetTextStyle([it_t1])
+-- before: standard()
+-- after
+tr_txt text
+  it_t1 [0,45) text "Title"
+unchanged: tr_main, tr_ov1, tr_sub, tr_orig, tr_music
+-- affected: it_t1
+-- changed lanes: tr_txt
+
+== set text style out of range
+-- command: Change text style | SetTextStyle([it_t1])
+-- before: standard()
+-- rejected: InvalidValue(text.letterSpacing)
+
+== set text animation fits in + out to the duration
+-- command: Change text animation | SetTextAnimation([it_t1])
+-- before: standard()
+-- after
+tr_txt text
+  it_t1 [0,45) text "Title" anim typewriter:30f/fade:15f
+unchanged: tr_main, tr_ov1, tr_sub, tr_orig, tr_music
+-- affected: it_t1
+-- changed lanes: tr_txt
+
+== set text animation with a typewriter out
+-- command: Change text animation | SetTextAnimation([it_t1])
+-- before: standard()
+-- rejected: InvalidValue(outKind)
+
+== text commands on a locked lane
+-- command: Edit text | SetText(it_t)
+-- before
+tr_txt text locked
+  it_t [0,30) text "Title"
+-- rejected: TrackLocked(tr_txt)

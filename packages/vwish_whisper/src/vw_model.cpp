@@ -62,7 +62,7 @@ bool file_looks_like_ggml(const std::string &path, int32_t *status, const char *
 
 bool has_gpu_device() {
   for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
-    const ggml_backend_dev_type type = ggml_backend_dev_type(ggml_backend_dev_get(i));
+    const enum ggml_backend_dev_type type = ggml_backend_dev_type(ggml_backend_dev_get(i));
     if (type == GGML_BACKEND_DEVICE_TYPE_GPU || type == GGML_BACKEND_DEVICE_TYPE_IGPU) return true;
   }
   return false;
@@ -77,6 +77,7 @@ whisper_context *init_ctx(const LoadRequest &req, bool use_gpu) {
     cp.dtw_aheads_preset = static_cast<whisper_alignment_heads_preset>(req.dtw_preset);
     cp.flash_attn = false;  // DTW needs the attention weights
   }
+  std::lock_guard<std::mutex> lock(whisper_init_mutex());
   return whisper_init_from_file_with_params_no_state(req.path.c_str(), cp);
 }
 

@@ -153,4 +153,44 @@ final class KernelTests: XCTestCase {
     }
     Metrics.record("V-N22.softwareRenderer", results)
   }
+  /// Two-layer composite offline (no AVFoundation): a 1080p base and a 720p PiP rendered by the
+  /// compositor's own composite function into a half-size output, with and without the custom
+  /// kernels, on the Metal and the software context. Isolates the iOS 18.2 simulator finding
+  /// (base layer black whenever the PiP is present) from the playback path.
+  func testTwoLayerCompositeVariants() throws {
+    let plan = SeekCase.plan()
+    let k: Int64 = 100
+    let t = Grid.timeOfFrame(k, fps: 30)
+    let layers = plan.activeLayers(at: t)
+    XCTAssertEqual(layers.map(\.id), ["base", "pip"])
+    let base = Pixels.makeBGRA(width: 1920, height: 1080)
+    Barcode.draw(into: base, frame: 100, clip: 1, color: (200, 90, 40))
+    let pip = Pixels.makeBGRA(width: 1280, height: 720)
+    Barcode.draw(into: pip, frame: 83, clip: 2, color: (40, 160, 220))
+    var results: [String: String] = [:]
+    var failures: [String] = []
+    for (ctxName, ctx) in [("metal", SpikeCompositor.makeContext()), ("software", SpikeCompositor.makeContext(software: true))] {
+      // A Metal-texture CIImage needs the Metal context; the software context reads buffers.
+      SpikeCompositor.sourcesViaMetalTextureCache = ctxName == "metal"
+      defer { SpikeCompositor.sourcesViaMetalTextureCache = true }
+      for useKernels in [true, false] {
+        for size in [CGSize(width: 960, height: 540), CGSize(width: 1920, height: 1080)] {
+          let out = Pixels.makeBGRA(width: Int(size.width), height: Int(size.height))
+          try SpikeCompositor.renderComposite(
+            context: ctx, plan: plan, layers: layers, sources: ["base": base, "pip": pip],
+            look: .identity, blur: 0, size: size, into: out, useKernels: useKernels)
+          let errs = Expectation.check(
+            out, plan: plan, k: k, sourceFps: ["a": 30, "b": 25], clipOf: SeekCase.clipOf)
+          // Expectation derives the source frame from the plan; compare only readability here.
+          let baseRect = CGRect(origin: .zero, size: size)
+          let decoded = Barcode.decode(out, rect: baseRect).map { "\($0)" } ?? "unreadable"
+          let name = "\(ctxName).kernels=\(useKernels).\(Int(size.width))"
+          results[name] = decoded
+          if decoded != "clip 1 frame 100" { failures.append("\(name): base \(decoded); \(errs.prefix(1))") }
+        }
+      }
+    }
+    Metrics.record("composite.twoLayerOffline", results)
+    XCTAssertEqual(failures, [])
+  }
 }

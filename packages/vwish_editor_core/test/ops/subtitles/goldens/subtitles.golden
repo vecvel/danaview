@@ -1,0 +1,3444 @@
+== add: free space after the last cue
+-- command: Add caption | AddCue(5000000, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+  it_#1 [150,210) cue "New cue"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s1
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+  [150,210) manual "New cue"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: default length is 2 s
+-- command: Add caption | AddCue(6666667, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+  it_#1 [200,260) cue "Two seconds"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s1
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+  [200,260) manual "Two seconds"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: shrinks to the next cue (15 frames)
+-- command: Add caption | AddCue(2500000, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  it_#1 [75,90) cue "Short"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s1
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [75,90) manual "Short"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: free span between cues is shorter than 2 s
+-- command: Add caption | AddCue(2000000, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  it_#1 [60,90) cue "Between"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s1
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [60,90) manual "Between"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: explicit length
+-- command: Add caption | AddCue(5000000, track: tr_s1, duration: 1000000)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+  it_#1 [150,180) cue "One second"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s1
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+  [150,180) manual "One second"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: at is quantized to the nearest frame
+-- command: Add caption | AddCue(5007000, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+  it_#1 [150,210) cue "Quantized"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s1
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+  [150,210) manual "Quantized"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: line breaks are normalized and text trimmed
+-- command: Add caption | AddCue(5000000, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+  it_#1 [150,210) cue "one
+two
+three"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s1
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+  [150,210) manual "one\ntwo\nthree"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: inline markup is kept
+-- command: Add caption | AddCue(5000000, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+  it_#1 [150,210) cue "<i>Soft</i> and <b>loud</b>"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s1
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+  [150,210) manual "<i>Soft</i> and <b>loud</b>"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: no lane: topmost unlocked with room
+-- command: Add caption | AddCue(6666667, track: null, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+  it_#1 [200,260) cue "Top lane"
+unchanged: tr_main, tr_txt, tr_s1, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s2
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+  [200,260) manual "Top lane"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: no lane: a lane without room is skipped
+-- command: Add caption | AddCue(2166667, track: null, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  it_#1 [65,90) cue "Elsewhere"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s1
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [65,90) manual "Elsewhere"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: no lane: no room on any unlocked lane creates one
+-- command: Add caption | AddCue(333334, track: null, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_#1 subtitle
+  it_#1 [10,70) cue "New lane"
+unchanged: tr_main, tr_txt, tr_s1, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {it_#1} primary it_#1
+-- preview creates: subtitle@5
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+lane new3 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [10,70) manual "New lane"
+
+== add: no room anywhere: a new subtitle lane
+-- command: Add caption | AddCue(333334, track: null, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+-- after
+tr_#1 subtitle
+  it_#1 [10,70) cue "New lane"
+unchanged: tr_main, tr_txt, tr_s1
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {it_#1} primary it_#1
+-- preview creates: subtitle@3
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane new1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [10,70) manual "New lane"
+
+== add: no subtitle lane at all creates one
+-- command: Add caption | AddCue(333334, track: null, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+-- after
+tr_#1 subtitle
+  it_#1 [10,70) cue "First cue"
+unchanged: tr_main
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {it_#1} primary it_#1
+-- preview creates: subtitle@1
+-- cues
+lane new0 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [10,70) manual "First cue"
+
+== add: inside a cue
+-- command: Add caption | AddCue(1333334, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: NoRoom()
+
+== add: exactly where the next cue starts
+-- command: Add caption | AddCue(3000000, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: NoRoom()
+
+== add: right after a cue ends
+-- command: Add caption | AddCue(4000000, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+  it_#1 [120,180) cue "After"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_s1
+-- selection: {it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+  [120,180) manual "After"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== add: empty text
+-- command: Add caption | AddCue(5000000, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: EmptyText()
+
+== add: negative time
+-- command: Add caption | AddCue(-1, track: tr_s1, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(at)
+
+== add: zero length
+-- command: Add caption | AddCue(5000000, track: tr_s1, duration: 0)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(duration)
+
+== add: locked lane
+-- command: Add caption | AddCue(5000000, track: tr_sl, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: TrackLocked(tr_sl)
+
+== add: not a subtitle lane
+-- command: Add caption | AddCue(5000000, track: tr_txt, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: IncompatibleTrack(tr_txt)
+
+== add: missing lane
+-- command: Add caption | AddCue(5000000, track: tr_zz, duration: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: ItemNotFound(tr_zz)
+
+== text: change text
+-- command: Edit caption | SetCueText(c1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello there"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c1
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello there"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== text: line breaks and markup
+-- command: Edit caption | SetCueText(c1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Line <i>one</i>
+Line <b>two</b>"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c1
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Line <i>one</i>\nLine <b>two</b>"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== text: same text is a no-op
+-- command: Edit caption | SetCueText(c1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== text: generated cue becomes edited
+-- command: Edit caption | SetCueText(g1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s2 subtitle
+  g1 [0,30) cue "Fixed it"
+  g2 [45,75) cue "Generated two"
+unchanged: tr_main, tr_txt, tr_s1, tr_sl
+-- affected: g1
+-- changed lanes: tr_s2
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated edited "Fixed it"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== text: already edited stays edited
+-- command: Edit caption | SetCueText(g2)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Fixed again"
+unchanged: tr_main, tr_txt, tr_s1, tr_sl
+-- affected: g2
+-- changed lanes: tr_s2
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Fixed again"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== text: same text on a generated cue stays unedited
+-- command: Edit caption | SetCueText(g1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== text: whitespace only
+-- command: Edit caption | SetCueText(c1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: EmptyText()
+
+== text: markup only
+-- command: Edit caption | SetCueText(c1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: EmptyText()
+
+== text: empty
+-- command: Edit caption | SetCueText(c1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: EmptyText()
+
+== text: missing cue
+-- command: Edit caption | SetCueText(nope)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: ItemNotFound(nope)
+
+== text: a text item
+-- command: Edit caption | SetCueText(x)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: UnsupportedForKind(text)
+
+== text: a video clip
+-- command: Edit caption | SetCueText(v)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: UnsupportedForKind(clip)
+
+== text: locked lane
+-- command: Edit caption | SetCueText(l1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: TrackLocked(tr_sl)
+
+== range: extend the end into free space
+-- command: Retime caption | SetCueRange(c3, 3000000, 5000000, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,150) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,150) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== range: trim the start
+-- command: Retime caption | SetCueRange(c3, 3333334, 4000000, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [100,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [100,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== range: move both edges
+-- command: Retime caption | SetCueRange(c3, 4333334, 5333334, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [130,160) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [130,160) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== range: touching the neighbour is fine
+-- command: Retime caption | SetCueRange(c3, 2000000, 4000000, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [60,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [60,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== range: values are quantized to the nearest frame
+-- command: Retime caption | SetCueRange(c3, 3045334, 4021334, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [91,121) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [91,121) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== range: unchanged is a no-op
+-- command: Retime caption | SetCueRange(c3, 3000000, 4000000, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== range: end overlaps the next cue
+-- command: Retime caption | SetCueRange(c2, 1000000, 3333334, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: WouldOverlap(tr_s1, [90,100))
+
+== range: start overlaps the previous cue
+-- command: Retime caption | SetCueRange(c2, 666667, 2000000, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: WouldOverlap(tr_s1, [20,30))
+
+== range: clamp: end stops at the next cue
+-- command: Retime caption | SetCueRange(c2, 1000000, 3333334, clamp: true)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,90) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c2
+-- changed lanes: tr_s1
+-- clamped to: [30,90)
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,90) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== range: clamp: start stops at the previous cue
+-- command: Retime caption | SetCueRange(c2, 666667, 2000000, clamp: true)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== range: clamp: start stops at zero
+-- command: Retime caption | SetCueRange(c1, -333334, 1000000, clamp: true)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== range: negative start
+-- command: Retime caption | SetCueRange(c1, -333334, 1000000, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(start)
+
+== range: end before start
+-- command: Retime caption | SetCueRange(c3, 3333334, 3000000, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: BelowMinDuration()
+
+== range: zero length
+-- command: Retime caption | SetCueRange(c3, 3333334, 3333334, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: BelowMinDuration()
+
+== range: clamp: end moved before start becomes one frame
+-- command: Retime caption | SetCueRange(c3, 3333334, 3166667, clamp: true)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [100,101) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3
+-- changed lanes: tr_s1
+-- clamped to: [100,101)
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [100,101) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== range: clamp: start moved after end stops one frame short
+-- command: Retime caption | SetCueRange(c3, 4166667, 4000000, clamp: true)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [119,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3
+-- changed lanes: tr_s1
+-- clamped to: [119,120)
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [119,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== range: clamp: both neighbours leave no frame
+-- command: Retime caption | SetCueRange(b, 1033334, 1000000, clamp: true)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,30) cue "A"
+  b [30,31) cue "B"
+  c [31,61) cue "C"
+-- rejected: BelowMinDuration()
+
+== range: generated cue becomes edited by a timing edit
+-- command: Retime caption | SetCueRange(g1, 0, 1333334, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s2 subtitle
+  g1 [0,40) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+unchanged: tr_main, tr_txt, tr_s1, tr_sl
+-- affected: g1
+-- changed lanes: tr_s2
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,40) generated edited "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== range: a text item
+-- command: Retime caption | SetCueRange(x, 0, 333334, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: UnsupportedForKind(text)
+
+== range: locked lane
+-- command: Retime caption | SetCueRange(l1, 0, 333334, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: TrackLocked(tr_sl)
+
+== range: missing cue
+-- command: Retime caption | SetCueRange(nope, 0, 333334, clamp: false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: ItemNotFound(nope)
+
+== split: with a text cursor
+-- command: Split caption | SplitCue(c1, 500000, textSplit: 5)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,15) cue "Hello"
+  it_#1 [15,30) cue "world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c1, it_#1
+-- changed lanes: tr_s1
+-- selection: {c1, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,15) manual "Hello"
+  [15,30) manual "world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== split: cursor after the space
+-- command: Split caption | SplitCue(c1, 500000, textSplit: 6)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,15) cue "Hello"
+  it_#1 [15,30) cue "world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c1, it_#1
+-- changed lanes: tr_s1
+-- selection: {c1, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,15) manual "Hello"
+  [15,30) manual "world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== split: no cursor: the word boundary nearest the middle
+-- command: Split caption | SplitCue(c1, 500000, textSplit: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,15) cue "Hello"
+  it_#1 [15,30) cue "world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c1, it_#1
+-- changed lanes: tr_s1
+-- selection: {c1, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,15) manual "Hello"
+  [15,30) manual "world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== split: no cursor: one word splits the middle grapheme
+-- command: Split caption | SplitCue(c3, 3500000, textSplit: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,105) cue "Th"
+  it_#1 [105,120) cue "ird"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3, it_#1
+-- changed lanes: tr_s1
+-- selection: {c3, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,105) manual "Th"
+  [105,120) manual "ird"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== split: no cursor: a line break is the boundary
+-- command: Split caption | SplitCue(a, 1000000, textSplit: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,60) cue "Short top
+A much longer second line here"
+-- after
+tr_s1 subtitle
+  a [0,30) cue "Short top
+A much longer"
+  it_#1 [30,60) cue "second line here"
+unchanged: tr_main
+-- affected: a, it_#1
+-- changed lanes: tr_s1
+-- selection: {a, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Short top\nA much longer"
+  [30,60) manual "second line here"
+
+== split: markup open across the cut is closed and reopened
+-- command: Split caption | SplitCue(a, 1000000, textSplit: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,60) cue "<i>one two three four</i>"
+-- after
+tr_s1 subtitle
+  a [0,30) cue "<i>one two</i>"
+  it_#1 [30,60) cue "<i>three four</i>"
+unchanged: tr_main
+-- affected: a, it_#1
+-- changed lanes: tr_s1
+-- selection: {a, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "<i>one two</i>"
+  [30,60) manual "<i>three four</i>"
+
+== split: nested markup across the cut
+-- command: Split caption | SplitCue(a, 1000000, textSplit: 15)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,60) cue "<b>bold <i>both words</i> bold</b> tail"
+-- after
+tr_s1 subtitle
+  a [0,30) cue "<b>bold <i>both</i></b>"
+  it_#1 [30,60) cue "<b><i>words</i> bold</b> tail"
+unchanged: tr_main
+-- affected: a, it_#1
+-- changed lanes: tr_s1
+-- selection: {a, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "<b>bold <i>both</i></b>"
+  [30,60) manual "<b><i>words</i> bold</b> tail"
+
+== split: CJK without spaces splits the middle
+-- command: Split caption | SplitCue(a, 1000000, textSplit: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,60) cue "你好，世界朋友"
+-- after
+tr_s1 subtitle
+  a [0,30) cue "你好，"
+  it_#1 [30,60) cue "世界朋友"
+unchanged: tr_main
+-- affected: a, it_#1
+-- changed lanes: tr_s1
+-- selection: {a, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "你好，"
+  [30,60) manual "世界朋友"
+
+== split: a ZWJ emoji is never cut
+-- command: Split caption | SplitCue(a, 1000000, textSplit: 5)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,60) cue "ab👨‍👩‍👧‍👦cd"
+-- after
+tr_s1 subtitle
+  a [0,30) cue "ab"
+  it_#1 [30,60) cue "👨‍👩‍👧‍👦cd"
+unchanged: tr_main
+-- affected: a, it_#1
+-- changed lanes: tr_s1
+-- selection: {a, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "ab"
+  [30,60) manual "👨‍👩‍👧‍👦cd"
+
+== split: generated cue: both halves are edited
+-- command: Split caption | SplitCue(g1, 500000, textSplit: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s2 subtitle
+  g1 [0,15) cue "Generated"
+  it_#1 [15,30) cue "one"
+  g2 [45,75) cue "Generated two"
+unchanged: tr_main, tr_txt, tr_s1, tr_sl
+-- affected: g1, it_#1
+-- changed lanes: tr_s2
+-- selection: {g1, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,15) generated edited "Generated"
+  [15,30) generated edited "one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== split: split time is floored to its frame start
+-- command: Split caption | SplitCue(c1, 520000, textSplit: 5)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,15) cue "Hello"
+  it_#1 [15,30) cue "world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c1, it_#1
+-- changed lanes: tr_s1
+-- selection: {c1, it_#1} primary it_#1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,15) manual "Hello"
+  [15,30) manual "world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== split: at the cue start
+-- command: Split caption | SplitCue(c1, 0, textSplit: 5)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: NothingAtTime(0f)
+
+== split: at the cue end
+-- command: Split caption | SplitCue(c1, 1000000, textSplit: 5)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: NothingAtTime(30f)
+
+== split: outside the cue
+-- command: Split caption | SplitCue(c1, 2666667, textSplit: 5)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: NothingAtTime(80f)
+
+== split: cursor at 0
+-- command: Split caption | SplitCue(c1, 500000, textSplit: 0)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(textSplit)
+
+== split: cursor at the end
+-- command: Split caption | SplitCue(c1, 500000, textSplit: 11)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(textSplit)
+
+== split: cursor past the end
+-- command: Split caption | SplitCue(c1, 500000, textSplit: 50)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(textSplit)
+
+== split: a half would be empty (cursor after trailing space)
+-- command: Split caption | SplitCue(a, 1000000, textSplit: 5)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,60) cue "Word   "
+-- rejected: EmptyText()
+
+== split: a single grapheme cannot split
+-- command: Split caption | SplitCue(a, 1000000, textSplit: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,60) cue "X"
+-- rejected: EmptyText()
+
+== split: locked lane
+-- command: Split caption | SplitCue(l1, 500000, textSplit: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: TrackLocked(tr_sl)
+
+== split: a text item
+-- command: Split caption | SplitCue(x, 500000, textSplit: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: UnsupportedForKind(text)
+
+== split: missing cue
+-- command: Split caption | SplitCue(nope, 500000, textSplit: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: ItemNotFound(nope)
+
+== merge: two touching cues: space when short
+-- command: Merge captions | MergeCues({c1, c2})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,60) cue "Hello world Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c1, c2
+-- changed lanes: tr_s1
+-- selection: {c1} primary c1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,60) manual "Hello world Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== merge: a gap is absorbed
+-- command: Merge captions | MergeCues({c2, c3})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,120) cue "Second one Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c2, c3
+-- changed lanes: tr_s1
+-- selection: {c2} primary c2
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,120) manual "Second one Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== merge: three cues
+-- command: Merge captions | MergeCues({c1, c2, c3})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,120) cue "Hello world Second one Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c1, c2, c3
+-- changed lanes: tr_s1
+-- selection: {c1} primary c1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,120) manual "Hello world Second one Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== merge: long result joins with a line break
+-- command: Merge captions | MergeCues({a, b})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,30) cue "This first line is fairly long already"
+  b [30,60) cue "and the second one too"
+-- after
+tr_s1 subtitle
+  a [0,60) cue "This first line is fairly long already
+and the second one too"
+unchanged: tr_main
+-- affected: a, b
+-- changed lanes: tr_s1
+-- selection: {a} primary a
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,60) manual "This first line is fairly long already\nand the second one too"
+
+== merge: a cue that already has a line break
+-- command: Merge captions | MergeCues({a, b})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,30) cue "one
+two"
+  b [30,60) cue "three"
+-- after
+tr_s1 subtitle
+  a [0,60) cue "one
+two
+three"
+unchanged: tr_main
+-- affected: a, b
+-- changed lanes: tr_s1
+-- selection: {a} primary a
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,60) manual "one\ntwo\nthree"
+
+== merge: markup stays
+-- command: Merge captions | MergeCues({a, b})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,30) cue "<i>soft</i>"
+  b [30,60) cue "<b>loud</b>"
+-- after
+tr_s1 subtitle
+  a [0,60) cue "<i>soft</i> <b>loud</b>"
+unchanged: tr_main
+-- affected: a, b
+-- changed lanes: tr_s1
+-- selection: {a} primary a
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,60) manual "<i>soft</i> <b>loud</b>"
+
+== merge: generated cues: result is edited
+-- command: Merge captions | MergeCues({a, b})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_s1 subtitle
+  a [0,30) cue "one"
+  b [30,60) cue "two"
+-- after
+tr_s1 subtitle
+  a [0,60) cue "one two"
+unchanged: tr_main
+-- affected: a, b
+-- changed lanes: tr_s1
+-- selection: {a} primary a
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,60) generated edited "one two"
+
+== merge: not consecutive: another cue lies between
+-- command: Merge captions | MergeCues({c1, c3})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: NotAdjacent()
+
+== merge: different lanes
+-- command: Merge captions | MergeCues({c1, g1})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: NotAdjacent()
+
+== merge: only one cue
+-- command: Merge captions | MergeCues({c1})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(cues)
+
+== merge: no cues
+-- command: Merge captions | MergeCues({})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(cues)
+
+== merge: a non-cue
+-- command: Merge captions | MergeCues({c1, x})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: UnsupportedForKind(text)
+
+== merge: missing cue
+-- command: Merge captions | MergeCues({c1, nope})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: ItemNotFound(nope)
+
+== merge: locked lane
+-- command: Merge captions | MergeCues({a, b})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_sl subtitle locked
+  a [0,30) cue "one"
+  b [30,60) cue "two"
+-- rejected: TrackLocked(tr_sl)
+
+== delete: one cue
+-- command: Delete caption | DeleteCues({c2})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c2
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== delete: several cues over two lanes in one command
+-- command: Delete captions | DeleteCues({c1, c3, g2})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c2 [30,60) cue "Second one"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+unchanged: tr_main, tr_txt, tr_sl
+-- affected: c1, c3, g2
+-- changed lanes: tr_s1, tr_s2
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [30,60) manual "Second one"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== delete: every cue of a lane leaves the lane
+-- command: Delete captions | DeleteCues({c1, c2, c3})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c1, c2, c3
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== delete: nothing selected is a no-op
+-- command: Delete captions | DeleteCues({})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== delete: a non-cue
+-- command: Delete caption | DeleteCues({x})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: UnsupportedForKind(text)
+
+== delete: one locked cue refuses all
+-- command: Delete captions | DeleteCues({c1, l1})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: TrackLocked(tr_sl)
+
+== delete: missing cue
+-- command: Delete captions | DeleteCues({c1, nope})
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: ItemNotFound(nope)
+
+== shift: whole lane +2.5 s
+-- command: Shift captions | ShiftCues(tr_s1, 2500000, range: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [75,105) cue "Hello world"
+  c2 [105,135) cue "Second one"
+  c3 [165,195) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c1, c2, c3
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [75,105) manual "Hello world"
+  [105,135) manual "Second one"
+  [165,195) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== shift: whole lane -1 s (first cue at 0 stops it)
+-- command: Shift captions | ShiftCues(tr_s1, -1000000, range: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== shift: whole lane -2.5 s from a lane that starts later
+-- command: Shift captions | ShiftCues(tr_s1, -2500000, range: null)
+-- before
+tr_main video main
+  v [0,600) md_video src[0,20000000)
+tr_s1 subtitle
+  a [120,150) cue "A"
+  b [150,180) cue "B"
+  c [300,330) cue "C"
+-- after
+tr_s1 subtitle
+  a [45,75) cue "A"
+  b [75,105) cue "B"
+  c [225,255) cue "C"
+unchanged: tr_main
+-- affected: a, b, c
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [45,75) manual "A"
+  [75,105) manual "B"
+  [225,255) manual "C"
+
+== shift: whole lane -5 s clamps at 0 with a notice
+-- command: Shift captions | ShiftCues(tr_s1, -5000000, range: null)
+-- before
+tr_main video main
+  v [0,600) md_video src[0,20000000)
+tr_s1 subtitle
+  a [60,90) cue "A"
+  b [100,130) cue "B"
+-- after
+tr_s1 subtitle
+  a [0,30) cue "A"
+  b [40,70) cue "B"
+unchanged: tr_main
+-- affected: a, b
+-- changed lanes: tr_s1
+-- notices: shiftClampedAtZero x60
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "A"
+  [40,70) manual "B"
+
+== shift: range: only the cues that start inside
+-- command: Shift captions | ShiftCues(tr_s1, 1000000, range: TimeRange(2000000, 6666667))
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [120,150) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [120,150) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== shift: range: the shifted cue would hit the one that stays
+-- command: Shift captions | ShiftCues(tr_s1, 2000000, range: TimeRange(0, 1033334))
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: WouldOverlap(tr_s1, [90,120))
+
+== shift: range: moving left into the gap
+-- command: Shift captions | ShiftCues(tr_s1, -1000000, range: TimeRange(2666667, 6666667))
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [60,90) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [60,90) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== shift: range without cues is a no-op
+-- command: Shift captions | ShiftCues(tr_s1, 1000000, range: TimeRange(6666667, 10000000))
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== shift: delta is quantized to whole frames
+-- command: Shift captions | ShiftCues(tr_s1, 20000, range: TimeRange(2666667, 6666667))
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [91,121) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: c3
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [91,121) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== shift: delta below half a frame is a no-op
+-- command: Shift captions | ShiftCues(tr_s1, 10000, range: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== shift: zero delta is a no-op
+-- command: Shift captions | ShiftCues(tr_s1, 0, range: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== shift: generated cues become edited
+-- command: Shift captions | ShiftCues(tr_s2, 1000000, range: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s2 subtitle
+  g1 [30,60) cue "Generated one"
+  g2 [75,105) cue "Generated two"
+unchanged: tr_main, tr_txt, tr_s1, tr_sl
+-- affected: g1, g2
+-- changed lanes: tr_s2
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [30,60) generated edited "Generated one"
+  [75,105) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== shift: locked lane
+-- command: Shift captions | ShiftCues(tr_sl, 1000000, range: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: TrackLocked(tr_sl)
+
+== shift: not a subtitle lane
+-- command: Shift captions | ShiftCues(tr_txt, 1000000, range: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: IncompatibleTrack(tr_txt)
+
+== shift: missing lane
+-- command: Shift captions | ShiftCues(tr_zz, 1000000, range: null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: ItemNotFound(tr_zz)
+
+== settings: style
+-- command: Caption style | SetSubtitleStyle(tr_s1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: 
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=3 size=60.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== settings: style: font size too small
+-- command: Caption style | SetSubtitleStyle(tr_s1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(fontSizePt)
+
+== settings: style: font size too large
+-- command: Caption style | SetSubtitleStyle(tr_s1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(fontSizePt)
+
+== settings: style: font size NaN
+-- command: Caption style | SetSubtitleStyle(tr_s1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(fontSizePt)
+
+== settings: style: max lines 0
+-- command: Caption style | SetSubtitleStyle(tr_s1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(maxLines)
+
+== settings: style: max lines 4
+-- command: Caption style | SetSubtitleStyle(tr_s1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(maxLines)
+
+== settings: style: max width 0
+-- command: Caption style | SetSubtitleStyle(tr_s1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(maxWidth)
+
+== settings: style: max width above 1
+-- command: Caption style | SetSubtitleStyle(tr_s1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(maxWidth)
+
+== settings: style: same style is a no-op
+-- command: Caption style | SetSubtitleStyle(tr_s1)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== settings: style on a generated lane keeps its provenance and cue flags
+-- command: Caption style | SetSubtitleStyle(tr_s2)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+unchanged: tr_main, tr_txt, tr_s1, tr_sl
+-- affected: 
+-- changed lanes: tr_s2
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== settings: style: locked lane
+-- command: Caption style | SetSubtitleStyle(tr_sl)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: TrackLocked(tr_sl)
+
+== settings: style: text lane
+-- command: Caption style | SetSubtitleStyle(tr_txt)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: IncompatibleTrack(tr_txt)
+
+== settings: position top
+-- command: Caption position | SetSubtitlePosition(tr_s1, Instance of 'TopSubtitlePosition')
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: 
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=top lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== settings: position custom
+-- command: Caption position | SetSubtitlePosition(tr_s1, Instance of 'CustomSubtitlePosition')
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: 
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=true pos=y=0.25 lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== settings: position custom below 0
+-- command: Caption position | SetSubtitlePosition(tr_s1, Instance of 'CustomSubtitlePosition')
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(position)
+
+== settings: position custom above 1
+-- command: Caption position | SetSubtitlePosition(tr_s1, Instance of 'CustomSubtitlePosition')
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(position)
+
+== settings: position same is a no-op
+-- command: Caption position | SetSubtitlePosition(tr_s1, Instance of 'BottomSubtitlePosition')
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== settings: burn-in off
+-- command: Do not burn in captions | SetBurnIn(tr_s1, false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: 
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=null burn=false pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== settings: burn-in same is a no-op
+-- command: Burn in captions | SetBurnIn(tr_s1, true)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== settings: burn-in on a locked lane
+-- command: Do not burn in captions | SetBurnIn(tr_sl, false)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: TrackLocked(tr_sl)
+
+== settings: language
+-- command: Caption language | SetSubtitleLanguage(tr_s1, pt-BR)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: 
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=pt-BR burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== settings: language trimmed
+-- command: Caption language | SetSubtitleLanguage(tr_s1,  fr )
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+unchanged: tr_main, tr_txt, tr_s2, tr_sl
+-- affected: 
+-- changed lanes: tr_s1
+-- cues
+lane tr_s1 "" lang=fr burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== settings: language cleared
+-- command: Caption language | SetSubtitleLanguage(tr_s2, null)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+unchanged: tr_main, tr_txt, tr_s1, tr_sl
+-- affected: 
+-- changed lanes: tr_s2
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== settings: language blank clears
+-- command: Caption language | SetSubtitleLanguage(tr_s2,   )
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+unchanged: tr_main, tr_txt, tr_s1, tr_sl
+-- affected: 
+-- changed lanes: tr_s2
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+
+== settings: language not a tag
+-- command: Caption language | SetSubtitleLanguage(tr_s1, english language)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(language)
+
+== settings: language same is a no-op
+-- command: Caption language | SetSubtitleLanguage(tr_s2, en)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- noop
+
+== settings: language on a video lane
+-- command: Caption language | SetSubtitleLanguage(tr_main, en)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: IncompatibleTrack(tr_main)

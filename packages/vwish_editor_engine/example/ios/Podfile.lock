@@ -1,0 +1,22 @@
+PODS:
+  - Flutter (1.0.0)
+  - vwish_editor_engine (1.1.0):
+    - Flutter
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - vwish_editor_engine (from `.symlinks/plugins/vwish_editor_engine/ios`)
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  vwish_editor_engine:
+    :path: ".symlinks/plugins/vwish_editor_engine/ios"
+
+SPEC CHECKSUMS:
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  vwish_editor_engine: 40396885cf506cc5a12d6d29358c7dfe32dafa70
+
+PODFILE CHECKSUM: 686a5aa6ce2a7ac826b850ab0ac1fe7aaccea838
+
+COCOAPODS: 1.16.2

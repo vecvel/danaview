@@ -52,6 +52,12 @@ final class StoreRoots {
   /// `<cache>/vwish/editor/work` (temporary job outputs, picks, drops).
   String get workDir => p.join(editorCache, 'work');
 
+  /// `<cache>/vwish/editor/work/picks`: native clones of picker results (ARCH §9.1).
+  String get picksDir => p.join(workDir, 'picks');
+
+  /// `<cache>/vwish/editor/work/drops`: copies of externally dropped files (D-18).
+  String get dropsDir => p.join(workDir, 'drops');
+
   /// `Documents/Exports` (the only directory `DocumentsExportWriter` writes to).
   String get documentsExportsDir => p.join(documents, 'Exports');
 

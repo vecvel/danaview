@@ -208,8 +208,9 @@ class CompositorContractTest {
             h.load(c)
             h.awaitReady()
             val t0 = System.nanoTime()
-            val got = h.seekAndAwait(GridTimingTest.seekMs(10, 30), 15_000) { GridTime.frameIndexNearest(it.ptsUs, 30) == 10L } ?: error("no frame")
-            val img = h.awaitImage(t0, 5000) { it.timestampNs == got.first.releaseTimeNs } ?: h.awaitImage(t0, 3000) ?: error("no image")
+            // Played to frame 10 and paused (multi-sequence seeks fail in Media3 1.11.1, R1).
+            val got = h.playUntilFrame(10, 30, 15_000) ?: error("no frame")
+            val img = h.imageOf(got, t0) ?: error("no image")
             val (json, bad) = alphaJson(listOf(Scenarios.readImage(img, alphaRegions, plan.bgRgb())))
             Results.write("VN04_alpha_player", json)
             assertEquals(json.toString(), 0, bad)

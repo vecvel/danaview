@@ -307,7 +307,7 @@ void main() {
       final cues = segment(input, context(language: 'ar'));
       final out = cues.map((c) => c.text.replaceAll('\n', ' ')).join(' ');
       expect(out, text);
-      expect(RegExp('[‎‏‪-‮⁦-⁩]').hasMatch(out), isFalse);
+      expect(RegExp('[\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]').hasMatch(out), isFalse);
     });
   });
 

@@ -129,6 +129,9 @@ final class LatencyProbe: NSObject, FlutterTexture {
       "textureLatencyMsP50": round2(median(textureLatency)),
       "textureLatencyMsP95": round2(percentile(textureLatency, 95)),
       "destination": Self.destination,
+      // AVPlayer's item clock already includes the route's output latency (the item time mapped
+      // to a host time is what is audible then); recorded to show its size on this route.
+      "audioSessionOutputLatencyMs": round2(AVAudioSession.sharedInstance().outputLatency * 1000),
     ]
     if let c = nextCompensation { compensation = c }
     return result
