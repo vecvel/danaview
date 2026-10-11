@@ -59,6 +59,25 @@ final class GainTap {
         return _envelope
     }
 
+    /// How many render calls of this controller's taps were handed a range start more than 1 ms
+    /// away from where the previous call ended (or an invalid range after the first call). In the
+    /// export reader (no seeks) this marks the iOS 26 failure mode where the taps receive
+    /// non-composition ranges and the read goes wrong; IOS-12 redoes such a read (ARCH §14.2). In
+    /// AVPlayer every seek also counts, so preview ignores it.
+    var rangeDiscontinuities: Int {
+        os_unfair_lock_lock(lock)
+        defer { os_unfair_lock_unlock(lock) }
+        return _rangeDiscontinuities
+    }
+
+    private var _rangeDiscontinuities = 0
+
+    fileprivate func noteRangeDiscontinuity() {
+        os_unfair_lock_lock(lock)
+        _rangeDiscontinuities += 1
+        os_unfair_lock_unlock(lock)
+    }
+
     /// Atomically replaces the envelope (gain-only patch). Every tap of this controller blends to it
     /// over `swapBlendSeconds` from its next render call; the item is not rebuilt.
     func swapEnvelope(_ envelope: TapEnvelope) {
@@ -184,6 +203,9 @@ final class GainTapRenderState {
     /// composition µs (nil = continue from the previous call). Any interleaving; Float32 or Int16.
     func process(_ bufferList: UnsafeMutablePointer<AudioBufferList>, frames: Int, startUs: Double?) {
         guard frames > 0 else { return }
+        if let expected = nextUs, startUs.map({ abs($0 - expected) > 1_000 }) ?? true {
+            controller.noteRangeDiscontinuity()
+        }
         let t0 = startUs ?? nextUs ?? 0
         let step = 1_000_000 / sampleRate
         nextUs = t0 + Double(frames) * step

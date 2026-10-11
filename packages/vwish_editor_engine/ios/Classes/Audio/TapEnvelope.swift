@@ -15,9 +15,16 @@
 // Ramp-seam option (review issue 21): when speed-ramp audio alternates across two composition
 // tracks (IOS-08), each track's envelope carries the seams it touches (`withSeamCrossfades`). A seam
 // at time s is a 5 ms equal-power crossfade centred on s: the outgoing side is multiplied by
-// cos(π·x/2), the incoming side by sin(π·x/2), x = (t − (s − 2.5 ms)) / 5 ms; the factor is 1 outside
-// every window. IOS-08 extends the outgoing segment 2.5 ms past the seam and starts the incoming one
-// 2.5 ms before it, so both tracks carry audio across the whole window.
+// cos(π·x/2), the incoming side by sin(π·x/2), x = (t − (s − 2.5 ms)) / 5 ms. The seams also say where
+// the track is meant to be heard: from the start (or an incoming window) to the next outgoing window
+// (or the end). Everywhere else the track is SILENCED (factor 0), because IOS-18 measured on iOS 26.5:
+// - a `.timeDomain` time-stretched segment keeps sounding after its composition range ends (its
+//   overlap-add tail: +5 ms at 1.25×, +8–11 ms at 1.6×, +16 ms at 2×), which would otherwise leak
+//   past the outgoing window at full level;
+// - the reader hands the tap ranges about one sample off the rendered position (V-N21: ≤ 0.04 ms),
+//   so the first sample of an incoming segment fell before its window (a −15 dBFS click).
+// IOS-08 extends the outgoing segment 2.5 ms past the seam and starts the incoming one 2.5 ms before
+// it, so both tracks carry audio across the whole window. Elsewhere the factor is 1.
 
 import Foundation
 
@@ -48,6 +55,8 @@ final class TapEnvelope {
     let gains: [Double]
     /// Seam crossfades sorted by time.
     let seams: [Seam]
+    /// Where the seams make the track silent ([a, b) µs, sorted).
+    private let silentUs: [(Double, Double)]
 
     /// Envelope from [tUs, g] keys (sorted by time with a stable sort if they are not).
     init(keys: [(tUs: Int64, g: Double)], seams: [Seam] = []) {
@@ -57,6 +66,7 @@ final class TapEnvelope {
         timesUs = sorted.map { Double($0.tUs) }
         gains = sorted.map { $0.g.isFinite ? $0.g : 0 }
         self.seams = seams.sorted { $0.timeUs < $1.timeUs }
+        silentUs = Self.silentIntervals(self.seams)
     }
 
     /// Envelope from the plan's JSON `gain` array (`[[tUs, g], …]`, ARCH §11.2). Entries that are
@@ -74,6 +84,7 @@ final class TapEnvelope {
         self.timesUs = timesUs
         self.gains = gains
         self.seams = seams
+        silentUs = Self.silentIntervals(seams)
     }
 
     /// The seams of composition track [track] (0 or 1) when ramp segment k (k = 0…n) lives on
@@ -102,19 +113,48 @@ final class TapEnvelope {
         return gains[lo] + (gains[hi] - gains[lo]) * (tUs - timesUs[lo]) / (timesUs[hi] - timesUs[lo])
     }
 
-    /// The product of every seam crossfade factor at [tUs] (1 outside the windows).
+    /// The product of every seam factor at [tUs]: 0 where the seams say the track is silent, the
+    /// equal-power curve inside the windows, else 1.
     func seamFactor(atUs tUs: Double) -> Double {
         guard !seams.isEmpty else { return 1 }
-        let half = Double(Self.seamCrossfadeUs) / 2
+        for (a, b) in silentUs where tUs >= a && tUs < b { return 0 }
         var f = 1.0
         for seam in seams {
             let s = Double(seam.timeUs)
-            if tUs < s - half { break }
-            if tUs >= s + half { continue }
-            let x = (tUs - (s - half)) / Double(Self.seamCrossfadeUs)
-            f *= seam.edge == .outgoing ? cos(Double.pi * x / 2) : sin(Double.pi * x / 2)
+            if tUs < s - Self.halfUs { break }
+            f *= Self.windowFactor(seam, tUs)
         }
         return f
+    }
+
+    private static let halfUs = Double(seamCrossfadeUs) / 2
+
+    /// One seam's window factor at [tUs] (1 outside [s − 2.5 ms, s + 2.5 ms)).
+    private static func windowFactor(_ seam: Seam, _ tUs: Double) -> Double {
+        let s = Double(seam.timeUs)
+        guard tUs >= s - halfUs, tUs < s + halfUs else { return 1 }
+        let x = (tUs - (s - halfUs)) / Double(seamCrossfadeUs)
+        return seam.edge == .outgoing ? cos(Double.pi * x / 2) : sin(Double.pi * x / 2)
+    }
+
+    /// The [a, b) µs intervals where the seams make this track silent: before the first incoming
+    /// window (when the track starts with one), between an outgoing window and the next incoming
+    /// window, and after a final outgoing window.
+    private static func silentIntervals(_ seams: [Seam]) -> [(Double, Double)] {
+        var out: [(Double, Double)] = []
+        var silentFrom: Double? = seams.first?.edge == .incoming ? -.infinity : nil
+        for seam in seams {
+            let s = Double(seam.timeUs)
+            switch seam.edge {
+            case .outgoing:
+                silentFrom = s + halfUs
+            case .incoming:
+                if let from = silentFrom, s - halfUs > from { out.append((from, s - halfUs)) }
+                silentFrom = nil
+            }
+        }
+        if let from = silentFrom { out.append((from, .infinity)) }
+        return out
     }
 
     /// The full multiplier at composition time [tUs]: envelope × seam factor.
@@ -166,17 +206,20 @@ final class TapEnvelope {
         }
         guard !seams.isEmpty else { return }
         let endUs = startUs + Double(count) * step
-        let half = Double(Self.seamCrossfadeUs) / 2
         for seam in seams {
             let s = Double(seam.timeUs)
-            if s - half >= endUs { break }
-            if s + half <= startUs { continue }
+            if s - Self.halfUs >= endUs { break }
+            if s + Self.halfUs <= startUs { continue }
             for i in 0..<count {
                 let t = startUs + Double(i) * step
-                guard t >= s - half, t < s + half else { continue }
-                let x = (t - (s - half)) / Double(Self.seamCrossfadeUs)
-                let f = seam.edge == .outgoing ? cos(Double.pi * x / 2) : sin(Double.pi * x / 2)
-                out[i] *= Float(f)
+                guard t >= s - Self.halfUs, t < s + Self.halfUs else { continue }
+                out[i] *= Float(Self.windowFactor(seam, t))
+            }
+        }
+        for (a, b) in silentUs where a < endUs && b > startUs {
+            for i in 0..<count {
+                let t = startUs + Double(i) * step
+                if t >= a && t < b { out[i] = 0 }
             }
         }
     }

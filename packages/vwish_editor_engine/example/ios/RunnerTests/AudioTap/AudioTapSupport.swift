@@ -119,6 +119,14 @@ enum AudioTapSupport {
         return (composition, mix, Array(assets.values))
     }
 
+    /// `build` that also hands back [taps] (for `readValidated`).
+    static func buildWithTaps(
+        tracks: [[Segment]], taps: [GainTap], algorithm: AVAudioTimePitchAlgorithm = .timeDomain
+    ) async throws -> (AVMutableComposition, AVMutableAudioMix, [AVURLAsset], [GainTap]) {
+        let (c, m, a) = try await build(tracks: tracks, taps: taps, algorithm: algorithm)
+        return (c, m, a, taps)
+    }
+
     // MARK: - Reading
 
     struct MixRead {
@@ -196,21 +204,25 @@ enum AudioTapSupport {
     /// comes back bad, as IOS-12 does (ARCH §14.2): on the iOS 26.5 simulator some reads hand the
     /// taps non-composition ranges and return silence from the start. A read is bad when it hung, is
     /// shorter than [expectFrames], has a NaN, is silent overall (< −60 dBFS), or has a silent 100 ms
-    /// window inside [audible] frame ranges. Returns the first good read (or the last bad one) and
-    /// the number of reads it took.
+    /// window inside [audible] frame ranges, or when one of its taps reported a range discontinuity
+    /// (`GainTap.rangeDiscontinuities`). [make] returns the composition, the mix, the assets to keep
+    /// alive and the taps. Returns the first good read (or the last bad one) and the number of reads.
     static func readValidated(
-        expectFrames: Int, audible: [Range<Int>] = [], attempts: Int = 3,
+        expectFrames: Int, audible: [Range<Int>] = [], attempts: Int = 4,
         algorithm: AVAudioTimePitchAlgorithm = .timeDomain, timeout: TimeInterval = 30,
-        make: () async throws -> (AVMutableComposition, AVMutableAudioMix, [AVURLAsset])
+        make: () async throws -> (AVMutableComposition, AVMutableAudioMix, [AVURLAsset], [GainTap])
     ) async throws -> (read: MixRead, reads: Int) {
         var last: MixRead?
         for attempt in 1...attempts {
-            let (comp, mix, assets) = try await make()
+            let (comp, mix, assets, taps) = try await make()
             let read = try readMix(comp, mix: mix, algorithm: algorithm, timeout: timeout)
-            withExtendedLifetime(assets) {}
+            _ = withExtendedLifetime(assets) {}
             last = read
-            if isGood(read, expectFrames: expectFrames, audible: audible) { return (read, attempt) }
-            print("IOS-18 bad read \(attempt)/\(attempts): hung=\(read.hung) frames=\(read.frames) status=\(read.status.rawValue)")
+            let jumps = taps.map(\.rangeDiscontinuities).reduce(0, +)
+            if jumps == 0, isGood(read, expectFrames: expectFrames, audible: audible) { return (read, attempt) }
+            print(
+                "IOS-18 bad read \(attempt)/\(attempts): hung=\(read.hung) frames=\(read.frames) "
+                    + "status=\(read.status.rawValue) rangeJumps=\(jumps) good=\(isGood(read, expectFrames: expectFrames, audible: audible))")
         }
         return (try XCTUnwrap(last), attempts)
     }

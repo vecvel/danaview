@@ -43,7 +43,7 @@ final class GainTapReaderTests: XCTestCase {
             let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: maxI + 1) {
                 meter = GainTapMeter()
                 let tap = GainTap(envelope: TapEnvelope(planGain: AudioTapSupport.keys(env["keys"])), meter: meter)
-                return try await AudioTapSupport.build(
+                return try await AudioTapSupport.buildWithTaps(
                     tracks: [[.init(source: dc, t0: 0, t1: endUs, s0: 0, s1: endUs)]], taps: [tap])
             }
             print("IOS-18 vectors \(name): \(reads) read(s)")
@@ -86,7 +86,7 @@ final class GainTapReaderTests: XCTestCase {
             let (read, count) = try await AudioTapSupport.readValidated(
                 expectFrames: 4 * 48_000 - 2_400, audible: [0..<(4 * 48_000 - 4_800)]
             ) {
-                try await AudioTapSupport.build(tracks: [segments], taps: [GainTap(envelope: TapEnvelope(planGain: [[0, gain]]))])
+                try await AudioTapSupport.buildWithTaps(tracks: [segments], taps: [GainTap(envelope: TapEnvelope(planGain: [[0, gain]]))])
             }
             print("IOS-18 boost \(gain): \(count) read(s)")
             XCTAssertFalse(read.hung)
@@ -143,7 +143,7 @@ final class GainTapReaderTests: XCTestCase {
         }
         let frames = try XCTUnwrap(c["frames"] as? Int)
         let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: frames, audible: [0..<frames]) {
-            try await AudioTapSupport.build(tracks: tracks, taps: gains.map { GainTap(envelope: TapEnvelope(planGain: $0)) })
+            try await AudioTapSupport.buildWithTaps(tracks: tracks, taps: gains.map { GainTap(envelope: TapEnvelope(planGain: $0)) })
         }
         XCTAssertFalse(read.hung)
         let windowSamples = try XCTUnwrap(c["windowSamples"] as? Int)
@@ -197,7 +197,7 @@ final class GainTapReaderTests: XCTestCase {
         let (read, reads) = try await AudioTapSupport.readValidated(
             expectFrames: 9_600, audible: [0..<9_600], algorithm: .varispeed, timeout: 15
         ) {
-            try await AudioTapSupport.build(
+            try await AudioTapSupport.buildWithTaps(
                 tracks: [segments], taps: [GainTap(envelope: TapEnvelope(planGain: gain))], algorithm: .varispeed)
         }
         print("IOS-18 varispeed_2x: \(reads) read(s)")

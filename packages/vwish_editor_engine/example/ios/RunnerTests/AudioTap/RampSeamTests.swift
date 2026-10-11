@@ -75,7 +75,7 @@ final class RampSeamTests: XCTestCase {
             return .init(source: tone, t0: s.t0, t1: s.t1, s0: s.s0, s1: s.s1)
         }
         let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: expectFrames, audible: [0..<expectFrames]) {
-            try await AudioTapSupport.build(tracks: [segs], taps: [GainTap()])
+            try await AudioTapSupport.buildWithTaps(tracks: [segs], taps: [GainTap()])
         }
         print("IOS-18 ramp single-track: \(reads) read(s)")
         XCTAssertFalse(read.hung)
@@ -98,7 +98,7 @@ final class RampSeamTests: XCTestCase {
             TapEnvelope.unity.withSeamCrossfades(TapEnvelope.alternatingSeams(boundariesUs: boundariesUs, track: track))
         }
         let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: expectFrames, audible: [0..<expectFrames]) {
-            try await AudioTapSupport.build(tracks: tracks, taps: envelopes.map { GainTap(envelope: $0) })
+            try await AudioTapSupport.buildWithTaps(tracks: tracks, taps: envelopes.map { GainTap(envelope: $0) })
         }
         print("IOS-18 ramp crossfade: \(reads) read(s)")
         XCTAssertFalse(read.hung)

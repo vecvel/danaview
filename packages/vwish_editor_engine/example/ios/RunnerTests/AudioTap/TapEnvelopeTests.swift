@@ -161,10 +161,25 @@ final class TapEnvelopeTests: XCTestCase {
         let seam: Int64 = 1_000_000
         let out = TapEnvelope.unity.withSeamCrossfades([.init(timeUs: seam, edge: .outgoing)])
         let inc = TapEnvelope(planGain: [[0, 1]]).withSeamCrossfades([.init(timeUs: seam, edge: .incoming)])
+        // The seams also say where the track sounds: an outgoing-only track is silent after its
+        // window, an incoming-only track before its window; elsewhere the factor is 1.
+        XCTAssertEqual(out.gain(atUs: 0), 1, accuracy: 1e-12)
         XCTAssertEqual(out.gain(atUs: 997_499), 1, accuracy: 1e-12)
-        XCTAssertEqual(inc.gain(atUs: 997_499), 1, accuracy: 1e-12)  // outside the window the factor is 1
-        XCTAssertEqual(out.gain(atUs: 997_500), 1, accuracy: 1e-12)
+        XCTAssertEqual(out.gain(atUs: 1_002_500), 0, accuracy: 1e-12)
+        XCTAssertEqual(out.gain(atUs: 5_000_000), 0, accuracy: 1e-12)
+        XCTAssertEqual(inc.gain(atUs: 0), 0, accuracy: 1e-12)
+        XCTAssertEqual(inc.gain(atUs: 997_499), 0, accuracy: 1e-12)
         XCTAssertEqual(inc.gain(atUs: 997_500), 0, accuracy: 1e-12)
+        XCTAssertEqual(inc.gain(atUs: 1_002_500), 1, accuracy: 1e-12)
+        XCTAssertEqual(inc.gain(atUs: 5_000_000), 1, accuracy: 1e-12)
+        // A middle track (out at 1 s, back in at 2 s) is silent between the two windows only.
+        let mid = TapEnvelope.unity.withSeamCrossfades([.init(timeUs: 2_000_000, edge: .incoming), .init(timeUs: seam, edge: .outgoing)])
+        XCTAssertEqual(mid.gain(atUs: 500_000), 1, accuracy: 1e-12)
+        XCTAssertEqual(mid.gain(atUs: 1_002_499), cos(Double.pi / 2 * 4_999 / 5_000), accuracy: 1e-9)
+        XCTAssertEqual(mid.gain(atUs: 1_500_000), 0, accuracy: 1e-12)
+        XCTAssertEqual(mid.gain(atUs: 1_997_499), 0, accuracy: 1e-12)
+        XCTAssertEqual(mid.gain(atUs: 2_000_000), sqrt(0.5), accuracy: 1e-9)
+        XCTAssertEqual(mid.gain(atUs: 2_500_000), 1, accuracy: 1e-12)
         XCTAssertEqual(out.gain(atUs: Double(seam)), sqrt(0.5), accuracy: 1e-9)
         XCTAssertEqual(inc.gain(atUs: Double(seam)), sqrt(0.5), accuracy: 1e-9)
         var t = 997_500.0
@@ -175,11 +190,15 @@ final class TapEnvelopeTests: XCTestCase {
             t += 1_000_000 / 48_000
         }
         // The render path agrees with the scalar path across the window.
-        let n = 480
-        var buf = [Float](repeating: 0, count: n)
-        out.fill(&buf, count: n, startUs: 995_000, sampleRate: 48_000)
-        for i in 0..<n {
-            XCTAssertEqual(Double(buf[i]), out.gain(atUs: 995_000 + Double(i) * 1_000_000 / 48_000), accuracy: 1e-6)
+        let n = 960
+        for e in [out, inc, mid] {
+            for start in [990_000.0, 1_995_000] {
+                var buf = [Float](repeating: 0, count: n)
+                e.fill(&buf, count: n, startUs: start, sampleRate: 48_000)
+                for i in 0..<n {
+                    XCTAssertEqual(Double(buf[i]), e.gain(atUs: start + Double(i) * 1_000_000 / 48_000), accuracy: 1e-6)
+                }
+            }
         }
         // Seams multiply the plan envelope.
         let boosted = TapEnvelope(planGain: [[0, 2]]).withSeamCrossfades([.init(timeUs: seam, edge: .outgoing)])
