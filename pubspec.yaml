@@ -28,6 +28,10 @@ dependencies:
     path: packages/vwish_platform
   vwish_features:
     path: packages/vwish_features
+  vwish_editor:
+    path: packages/vwish_editor
+  vwish_editor_engine:
+    path: packages/vwish_editor_engine
 
   # Native Playback Engine Bindings
   media_kit: ^1.1.10
@@ -45,6 +49,8 @@ dependencies:
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   flutter_lints: ^3.0.0
 

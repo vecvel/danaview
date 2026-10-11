@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:vwish_editor/vwish_editor.dart';
 import 'package:vwish_features/vwish_features.dart';
 
 String folderLocation(String path) => '/folder?path=${Uri.encodeQueryComponent(path)}';
@@ -7,6 +9,37 @@ String folderLocation(String path) => '/folder?path=${Uri.encodeQueryComponent(p
 String playlistLocation(String name) => '/playlist/${Uri.encodeComponent(name)}';
 
 String settingsLocation(SettingsDestination destination) => '/settings/${destination.path}';
+
+/// The Projects screen of the video editor (ARCH §17.1).
+const projectsLocation = '/projects';
+
+/// The editor's settings, an explicit child of `/settings` (not a [SettingsDestination] value).
+const editorSettingsLocation = '/settings/editor';
+
+/// The editor on [id], seeking exactly to [initialPlayhead] (µs) on open (ARCH §17.1).
+String editorLocation(ProjectId id, {TimeUs? initialPlayhead}) {
+  final path = '/editor/${Uri.encodeComponent(id)}';
+  return initialPlayhead == null ? path : '$path?t=$initialPlayhead';
+}
+
+/// Opens the Projects screen (Home edit button, Settings › Storage "Open projects").
+void openProjects(BuildContext context) => context.push(projectsLocation);
+
+/// Whether the editor is reachable: iOS/Android with `VWISH_EDITOR` (D-17, D-31) and wired by
+/// `EditorBootstrap` (a failed wiring hides it like an unsupported platform).
+bool editorReachable(BuildContext context) {
+  if (!EditorAvailability.showsEntryPoints) return false;
+  final container = ProviderScope.containerOf(context, listen: false);
+  return container.read(editorRuntimeProvider) != null;
+}
+
+String? _editorGate(BuildContext context, GoRouterState state) => editorReachable(context) ? null : '/';
+
+/// The `t` query parameter (µs, non-negative), or null.
+TimeUs? _initialPlayheadOf(GoRouterState state) {
+  final t = int.tryParse(state.uri.queryParameters['t'] ?? '');
+  return t == null || t < 0 ? null : t;
+}
 
 void _back(BuildContext context) => context.canPop() ? context.pop() : context.go('/');
 
@@ -43,6 +76,7 @@ GoRouter createAppRouter() => GoRouter(
             onOpenFolder: (path) => context.push(folderLocation(path)),
             onOpenPlaylist: (name) => context.push(playlistLocation(name)),
             onOpenSettings: () => context.push('/settings'),
+            onOpenEditor: editorReachable(context) ? () => openProjects(context) : null,
           ),
           routes: [
             GoRoute(
@@ -51,6 +85,7 @@ GoRouter createAppRouter() => GoRouter(
               builder: (context, state) => VwishSettingsScreen(
                 onBack: () => _back(context),
                 onNavigate: (destination) => context.push(settingsLocation(destination)),
+                onOpenEditorSettings: editorReachable(context) ? () => context.push(editorSettingsLocation) : null,
               ),
               routes: [
                 for (final destination in SettingsDestination.values)
@@ -58,7 +93,38 @@ GoRouter createAppRouter() => GoRouter(
                     path: destination.path,
                     builder: (context, state) => _settingsPage(context, destination),
                   ),
+                GoRoute(
+                  path: 'editor',
+                  name: 'editorSettings',
+                  redirect: _editorGate,
+                  builder: (context, state) => EditorSettingsScreen(onBack: () => _back(context)),
+                ),
               ],
+            ),
+            GoRoute(
+              path: 'projects',
+              name: 'projects',
+              redirect: _editorGate,
+              builder: (context, state) => ProjectsScreen(
+                onBack: () => _back(context),
+                onOpenProject: (id, {initialPlayhead}) => context.push(editorLocation(id, initialPlayhead: initialPlayhead)),
+                onManageStorage: () => context.push(settingsLocation(SettingsDestination.storage)),
+              ),
+            ),
+            GoRoute(
+              path: 'editor/:projectId',
+              name: 'editor',
+              redirect: _editorGate,
+              builder: (context, state) {
+                final id = ProjectId(state.pathParameters['projectId']!);
+                return EditorScreen(
+                  key: ValueKey(id),
+                  projectId: id,
+                  initialPlayhead: _initialPlayheadOf(state),
+                  onClose: () => _back(context),
+                  onOpenProjects: () => context.go(projectsLocation),
+                );
+              },
             ),
             GoRoute(
               path: 'player',
