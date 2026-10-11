@@ -59,7 +59,8 @@ class DropTarget(private val ctx: EngineContext) {
     /** Called after each drop's copies finished and its permissions were released (tests). */
     internal var onDropHandled: ((DropMsg?) -> Unit)? = null
 
-    private val listener = View.OnDragListener { view, event -> onDrag(view, event) }
+    /** The drag listener installed on the view (tests deliver ENTERED to it directly). */
+    internal val listener = View.OnDragListener { view, event -> onDrag(view, event) }
 
     private val lifecycle = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityResumed(activity: Activity) {

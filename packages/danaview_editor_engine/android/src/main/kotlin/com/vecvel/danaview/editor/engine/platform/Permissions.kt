@@ -67,6 +67,8 @@ class Permissions(private val ctx: EngineContext) {
         if (!started) done.succeed(false)
     }
 
-    private fun notificationsGranted(): Boolean =
+    /** Whether POST_NOTIFICATIONS is granted (API 33+; a seam for tests). */
+    internal var notificationsGranted: () -> Boolean = {
         ctx.appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    }
 }

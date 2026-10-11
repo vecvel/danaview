@@ -115,7 +115,8 @@ class MediaAccess(private val ctx: EngineContext) {
         } catch (e: UnsupportedOperationException) {
             // A provider without query support: size from the descriptor below.
         }
-        if (size == null) {
+        // No size, or 0 (FileProvider reports 0 for a file that is gone): ask the descriptor.
+        if (size == null || size == 0L) {
             size = try {
                 lengthOf(parsed) ?: return null
             } catch (e: FileNotFoundException) {
