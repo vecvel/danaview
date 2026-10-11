@@ -49,4 +49,28 @@ class MemorySignalsTest {
             assertEquals(SignalKindMsg.MEMORY_WARNING, it.signal!!.kind)
         }
     }
+
+    @Test
+    fun nothingHappensBeforeTheEngineIsInitialized() {
+        val trace = Trace()
+        val main = FakeMain(trace)
+        val hub = EventHub(main)
+        val trims = mutableListOf<CacheTrimLevelMsg>()
+        var initialized = false
+        val signals = MemorySignals(hub, { initialized }) { trims.add(it) }
+
+        signals.onTrimMemory(15)
+        signals.onTrimMemory(80)
+        main.drain()
+        val events = mutableListOf<EngineEventMsg>()
+        main.onMain { hub.attach(EngineEventSink { events.add(it) }) }
+        assertEquals("no trims before initialize", emptyList<CacheTrimLevelMsg>(), trims)
+        assertEquals("no memory warning buffered for the first listener", emptyList<EngineEventMsg>(), events)
+
+        initialized = true
+        signals.onTrimMemory(15)
+        main.drain()
+        assertEquals(listOf(CacheTrimLevelMsg.MEMORY_PRESSURE), trims)
+        assertEquals(1, events.size)
+    }
 }

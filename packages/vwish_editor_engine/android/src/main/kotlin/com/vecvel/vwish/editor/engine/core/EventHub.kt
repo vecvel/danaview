@@ -7,16 +7,21 @@
 //   progress, exportProgress (per job) <= 4 Hz
 //   recorderLevel (per recording)      20 Hz
 //
-// Rate-limited events are coalesced, never lost at the end: an event inside the interval replaces
-// the pending one and is delivered when the interval ends (trailing edge). A terminal job event
-// (jobDone, or failure with a jobId) first flushes that job's pending event, then is delivered at
-// once. Everything else (preview events, session failures, interruptions, signals, drops, lease
-// expiry) passes immediately.
+// The rules match the Dart router (event_router.dart, ENG-01):
+// - Rate-limited samples are coalesced, never lost at the end: a sample inside the interval
+//   replaces the pending one and is delivered when the interval ends (trailing edge).
+// - A sample that changes state passes at once and supersedes the pending one (clock: seq, playing
+//   or rate; exportProgress: phase, backgrounded, pausedInBackground, warnings, or reaching 1;
+//   progress: reaching 1). A pending sample never differs in state from the last delivered one, so
+//   superseding it loses no state.
+// - Every other event (preview events, failures, jobDone, interruptions, lease expiry) passes at
+//   once, after the pending samples of its route (sessionId / jobId), so order is kept. A terminal
+//   job event (jobDone, or failure with a jobId) also resets that job's rate state.
 //
 // With no listener (before Dart subscribes, during a hot restart, or with the activity destroyed)
 // non-rate-limited events are kept in a bounded buffer and replayed to the next listener; stale
-// clock/progress/level samples are dropped. `hasListener` tells AND-12 whether a job completed
-// detached (D-39).
+// clock/progress/level samples are dropped, and only the latest signal of each kind is kept.
+// `hasListener` tells AND-12 whether a job completed detached (D-39).
 
 package com.vecvel.vwish.editor.engine.core
 
@@ -52,6 +57,7 @@ class EventHub(
     private val sinks = LinkedHashSet<EngineEventSink>()
     private val buffer = ArrayDeque<EngineEventMsg>()
     private val lastSent = HashMap<String, Long>()
+    private val lastEvent = HashMap<String, EngineEventMsg>()
     private val pending = HashMap<String, Pending>()
 
     @Volatile private var listenerCount = 0
@@ -129,21 +135,28 @@ class EventHub(
     private fun dispatch(event: EngineEventMsg) {
         val interval = intervalOf(event)
         if (interval == null) {
-            if (isTerminal(event)) flushPendingOf(event.jobId)
+            // Order is kept: the route's pending samples go first.
+            val terminal = isTerminal(event)
+            event.sessionId?.let { flushPendingOf(it, reset = false) }
+            event.jobId?.let { flushPendingOf(it, reset = terminal) }
             deliver(event, bufferIfNoListener = true)
             return
         }
         val key = keyOf(event)
         val now = main.nowMs()
         val waiting = pending[key]
-        if (waiting != null) {
-            waiting.event = event
+        val last = lastSent[key]
+        if (last == null || now - last >= interval || isStateChange(waiting?.event ?: lastEvent[key], event)) {
+            // A pending sample is older than [event] and superseded by it.
+            if (waiting != null) {
+                pending.remove(key)
+                waiting.task.cancel()
+            }
+            send(key, event, now)
             return
         }
-        val last = lastSent[key]
-        if (last == null || now - last >= interval) {
-            lastSent[key] = now
-            deliver(event, bufferIfNoListener = false)
+        if (waiting != null) {
+            waiting.event = event
             return
         }
         val delay = interval - (now - last)
@@ -156,24 +169,37 @@ class EventHub(
     private fun firePending(key: String, holder: Pending) {
         if (pending[key] !== holder) return
         pending.remove(key)
-        lastSent[key] = main.nowMs()
-        deliver(holder.event, bufferIfNoListener = false)
+        send(key, holder.event, main.nowMs())
     }
 
-    private fun flushPendingOf(jobId: String?) {
-        if (jobId == null) return
-        val keys = pending.keys.filter { it.endsWith("|$jobId") }
+    private fun send(key: String, event: EngineEventMsg, now: Long) {
+        lastSent[key] = now
+        lastEvent[key] = event
+        deliver(event, bufferIfNoListener = false)
+    }
+
+    /** Delivers the pending samples of route [id]; with [reset] (terminal job event) forgets its rate state. */
+    private fun flushPendingOf(id: String, reset: Boolean) {
+        val keys = pending.keys.filter { routeOf(it) == id }
         for (key in keys) {
             val holder = pending.remove(key) ?: continue
             holder.task.cancel()
-            deliver(holder.event, bufferIfNoListener = false)
+            send(key, holder.event, main.nowMs())
         }
-        lastSent.keys.removeAll { it.endsWith("|$jobId") }
+        if (reset) {
+            lastSent.keys.removeAll { routeOf(it) == id }
+            lastEvent.keys.removeAll { routeOf(it) == id }
+        }
     }
 
     private fun deliver(event: EngineEventMsg, bufferIfNoListener: Boolean) {
         if (sinks.isEmpty()) {
             if (bufferIfNoListener) {
+                // A signal describes the current state: keep only the latest of each kind.
+                val signalKind = event.signal?.kind
+                if (event.kind == EngineEventKindMsg.SIGNAL && signalKind != null) {
+                    buffer.removeAll { it.kind == EngineEventKindMsg.SIGNAL && it.signal?.kind == signalKind }
+                }
                 if (buffer.size >= bufferCapacity) buffer.removeFirst()
                 buffer.addLast(event)
             }
@@ -193,6 +219,31 @@ class EventHub(
         event.jobId != null && (event.kind == EngineEventKindMsg.JOB_DONE || event.kind == EngineEventKindMsg.FAILURE)
 
     private fun keyOf(event: EngineEventMsg): String = "${event.kind.name}|${event.sessionId ?: event.jobId ?: ""}"
+
+    private fun routeOf(key: String): String = key.substringAfter('|')
+
+    /** Whether [next] changes state relative to [previous] (then it is never delayed). */
+    private fun isStateChange(previous: EngineEventMsg?, next: EngineEventMsg): Boolean {
+        if (previous == null) return true
+        return when (next.kind) {
+            EngineEventKindMsg.CLOCK -> {
+                val a = previous.clock ?: return true
+                val b = next.clock ?: return false
+                a.seq != b.seq || a.playing != b.playing || a.rate != b.rate
+            }
+            EngineEventKindMsg.EXPORT_PROGRESS -> {
+                val a = previous.exportProgress ?: return true
+                val b = next.exportProgress ?: return false
+                a.phase != b.phase ||
+                    a.backgrounded != b.backgrounded ||
+                    a.pausedInBackground != b.pausedInBackground ||
+                    a.warnings.size != b.warnings.size ||
+                    b.fraction >= 1.0
+            }
+            EngineEventKindMsg.PROGRESS -> (next.progress ?: 0.0) >= 1.0
+            else -> false
+        }
+    }
 
     companion object {
         /** Events kept while no listener is attached. */
