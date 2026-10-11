@@ -100,6 +100,10 @@ enum AudioTapSupport {
                 let loaded = try await asset.loadTracks(withMediaType: .audio)
                 let source = try XCTUnwrap(loaded.first)
                 let src = CMTimeRange(start: cm(s.s0), end: cm(s.s1))
+                let end = track.segments.isEmpty ? .zero : track.timeRange.end
+                if CMTimeCompare(cm(s.t0), end) > 0 {
+                    track.insertEmptyTimeRange(CMTimeRange(start: end, end: cm(s.t0)))
+                }
                 try track.insertTimeRange(src, of: source, at: cm(s.t0))
                 if s.s1 - s.s0 != s.t1 - s.t0 {
                     track.scaleTimeRange(CMTimeRange(start: cm(s.t0), duration: src.duration), toDuration: CMTimeSubtract(cm(s.t1), cm(s.t0)))

@@ -66,7 +66,8 @@ EngineEventMsg progressEvent(String jobId, double progress) =>
     EngineEventMsg(kind: EngineEventKindMsg.progress, jobId: jobId, progress: progress);
 
 /// A `jobDone` event for job [jobId].
-EngineEventMsg doneEvent(String jobId, JobResultMsg result) => EngineEventMsg(kind: EngineEventKindMsg.jobDone, jobId: jobId, jobDone: result);
+EngineEventMsg doneEvent(String jobId, JobResultMsg result) =>
+    EngineEventMsg(kind: EngineEventKindMsg.jobDone, jobId: jobId, jobDone: result);
 
 /// A `failure` event for job [jobId].
 EngineEventMsg failureEvent(String jobId, String code, {bool retryable = false, String message = ''}) => EngineEventMsg(

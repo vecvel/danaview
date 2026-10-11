@@ -834,7 +834,7 @@ packages:
     source: path
     version: "1.1.0"
   vwish_editor_core:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       path: "packages/vwish_editor_core"
       relative: true
@@ -848,7 +848,7 @@ packages:
     source: path
     version: "1.1.0"
   vwish_editor_engine_api:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       path: "packages/vwish_editor_engine_api"
       relative: true

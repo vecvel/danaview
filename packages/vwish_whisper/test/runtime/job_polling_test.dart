@@ -58,7 +58,11 @@ final class _Harness {
 final class _Recorder {
   _Recorder(WhisperJob job) {
     job.updates.listen(updates.add, onDone: () => closed = true);
-    job.result.then((r) => result = r, onError: (Object e) => error = e);
+    job.result.then<void>((r) {
+      result = r;
+    }, onError: (Object e) {
+      error = e;
+    });
   }
 
   final List<WhisperJobUpdate> updates = [];

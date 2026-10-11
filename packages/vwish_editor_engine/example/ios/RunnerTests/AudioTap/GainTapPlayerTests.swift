@@ -42,10 +42,12 @@ final class GainTapPlayerTests: XCTestCase {
         XCTAssertEqual(item.status, .readyToPlay)
         player.play()
         var ranDuring = false
+        var measuring = false
         // Skip the first 150 ms of ramp-up before measuring.
         while item.currentTime().seconds < seconds, Date() < deadline.addingTimeInterval(seconds + 5) {
             let t = item.currentTime().seconds
-            if t > 0.15, !meter.accumulating {
+            if t > 0.15, !measuring {
+                measuring = true
                 meter.resetLevels()
                 meter.accumulating = true
             }
@@ -79,31 +81,26 @@ final class GainTapPlayerTests: XCTestCase {
         XCTAssertTrue(boost.failures.isEmpty, "GetSourceAudio failed: \(boost.failures)")
     }
 
-    /// A gain-only patch while playing: the envelope swaps under the running item and the tap's
-    /// output level follows (+6.02 dB after the blend), with no new item or tap.
+    /// A gain-only patch while playing: the envelope swaps under the running item (no new item or
+    /// tap) and the tap's output follows: +6.02 dB once the 40 ms blend is done. The tap runs
+    /// 150–280 ms ahead of the item clock, so the swap is heard with that delay in preview.
     func testLiveEnvelopeSwapReachesRunningTap() async throws {
-        var swappedAtCall = 0
+        var callsAtSwap = 0
         let (tap, meter) = try await play(envelope: TapEnvelope(planGain: [[0, 1]]), seconds: 1.6) { tap, meter in
-            swappedAtCall = meter.calls.count
-            tap.swapEnvelope(TapEnvelope(planGain: [[0, 2]]))
             meter.accumulating = false
-        }
-        XCTAssertGreaterThan(swappedAtCall, 0)
-        XCTAssertEqual(tap.envelope.gains, [2])
-        // Measure a fresh window well after the blend: replay the remaining calls' level.
-        let after = meter.calls.count - swappedAtCall
-        XCTAssertGreaterThan(after, 5, "tap stopped after the swap")
-        let (_, check) = try await play(envelope: TapEnvelope(planGain: [[0, 1]]), seconds: 1.4) { tap, meter in
+            callsAtSwap = meter.calls.count
             tap.swapEnvelope(TapEnvelope(planGain: [[0, 2]]))
-            // The tap runs 150–280 ms ahead of the item clock: start measuring once the blend is done.
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
                 meter.resetLevels()
                 meter.accumulating = true
             }
-            meter.accumulating = false
         }
-        let l = check.levels
+        XCTAssertGreaterThan(callsAtSwap, 0)
+        XCTAssertGreaterThan(meter.calls.count - callsAtSwap, 5, "tap stopped after the swap")
+        XCTAssertEqual(tap.envelope.gains, [2])
+        let l = meter.levels
         XCTAssertGreaterThan(l.samples, 4_800)
         XCTAssertEqual(l.postDb - l.preDb, 6.0206, accuracy: 0.1)
+        XCTAssertTrue(meter.failures.isEmpty)
     }
 }

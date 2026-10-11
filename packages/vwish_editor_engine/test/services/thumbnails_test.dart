@@ -5,7 +5,6 @@
 // a late native reply), typed failures.
 
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -99,7 +98,9 @@ void main() {
   });
 
   test('every request gets a distinct id', () async {
-    final ids = {for (var i = 0; i < 20; i++) (source.request(_req(i), priority: ThumbPriority.prefetch) as MobileThumbnailHandle).requestId};
+    final ids = {
+      for (var i = 0; i < 20; i++) (source.request(_req(i), priority: ThumbPriority.prefetch) as MobileThumbnailHandle).requestId
+    };
     expect(ids, hasLength(20));
   });
 

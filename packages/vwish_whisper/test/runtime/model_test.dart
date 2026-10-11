@@ -18,7 +18,11 @@ const _req = WhisperTranscribeRequest(wavPath: 'a.wav', language: 'en', threads:
 
 final class _Load {
   _Load(Future<WhisperModel> f) {
-    f.then((m) => model = m, onError: (Object e) => error = e);
+    f.then<void>((m) {
+      model = m;
+    }, onError: (Object e) {
+      error = e;
+    });
   }
 
   WhisperModel? model;
@@ -149,7 +153,9 @@ void main() {
     // A released lease cannot start jobs.
     final stale = model.transcribe(_req);
     Object? err;
-    unawaited(stale.result.then<void>((_) {}, onError: (Object e) => err = e));
+    unawaited(stale.result.then<void>((_) {}, onError: (Object e) {
+      err = e;
+    }));
     await tester.pump();
     expect(err, isA<WhisperException>());
     await finish(tester);
