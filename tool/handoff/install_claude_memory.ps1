@@ -16,12 +16,12 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = $RepoRoot.TrimEnd('\', '/')
 $source = Join-Path $RepoRoot 'docs\editor\handoff\claude-memory'
 if (-not (Test-Path $source)) {
-  throw "Notes not found at $source. Run this from the danaview_player repo on branch editor-wip or editor-android."
+  throw "Notes not found at $source. Run this from the danaview repo on branch editor-wip or editor-android."
 }
 
 # Claude Code names a project's folder after its path, with every character that isn't
-# a letter or digit replaced by '-', e.g. C:\Users\me\Desktop\danaview_player ->
-# C--Users-me-Desktop-danaview-player.
+# a letter or digit replaced by '-', e.g. C:\Users\me\Desktop\danaview ->
+# C--Users-me-Desktop-danaview.
 $configDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
 $projects = Join-Path $configDir 'projects'
 $name = $RepoRoot -replace '[^A-Za-z0-9]', '-'

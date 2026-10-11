@@ -3,7 +3,7 @@
 > **Release:** Danaview 1.1.0, "Editor". **Date:** 2026-10-07. **Baseline:** `main` @ `19cae59`, Flutter 3.44.2, Dart 3.12.2, Xcode 26.6, AGP 9.0.1, Kotlin 2.3.20.
 > **Status:** approved by the lead architect; revised 2026-10-08 after the architecture review (decisions D-35 to D-44; resolutions listed in `BUILD_PLAN.md` §11). Implementation follows `docs/editor/BUILD_PLAN.md`.
 > **Authority:** this document wins over `BUILD_PLAN.md`, and both win over the area designs in `docs/editor/design/` (`domain.md`, `native.md`, `ux.md`, `ai.md`). The area designs remain the detailed reference for anything this document doesn't restate; §2 lists every point where they disagreed and how it was settled. Later changes to this file are made only by tickets marked **[INTEGRATION]**.
-> **Corrections to the brief, confirmed in the repo:** the iOS bundle id and the Android `applicationId`/namespace are both `com.vecvel.danaview` (not `com.vecvel.danaviewplayer` / `com.vecvel.danaview_player`). Android `minSdk = flutter.minSdkVersion`, which is **24** in Flutter 3.44.2, not 21. The iOS deployment target is 13.0 today and this release raises it to 15.0 (§3).
+> **Corrections to the brief, confirmed in the repo:** the iOS bundle id and the Android `applicationId`/namespace are both `com.vecvel.danaview` (not `com.vecvel.danaviewplayer` / `com.vecvel.danaview`). Android `minSdk = flutter.minSdkVersion`, which is **24** in Flutter 3.44.2, not 21. The iOS deployment target is 13.0 today and this release raises it to 15.0 (§3).
 
 ---
 

@@ -736,7 +736,7 @@ No git commands were run.
 - Fuzz-ready generators: `randomSpeedCommand` and `withStills` in test/ops/speed/speed_fuzz_test.dart. The SetProperty random run is at the end of property_commands_test.dart.
 - Seeded `SeededIdGenerator` ids must stay far from `randomProject`'s seed (I used 900000+).
 
-**Verification:** In /Users/besaoct/Desktop/danaview_player/packages/danaview_editor_core, `dart analyze lib test/ops/speed test/ops/property test/ops/text` reports "No issues found!". `dart test test/ops/speed test/ops/property test/ops/text` finished "+321: All tests passed!". A full `dart test` of the package finished "+2974: All tests passed!". No native build was required for these tickets.
+**Verification:** In /Users/besaoct/Desktop/danaview/packages/danaview_editor_core, `dart analyze lib test/ops/speed test/ops/property test/ops/text` reports "No issues found!". `dart test test/ops/speed test/ops/property test/ops/text` finished "+321: All tests passed!". A full `dart test` of the package finished "+2974: All tests passed!". No native build was required for these tickets.
 
 ### CORE-15, CORE-16, CORE-17, CORE-18
 

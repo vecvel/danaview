@@ -69,7 +69,7 @@
 | Brief said | Repo says | Impact |
 |---|---|---|
 | iOS bundle id `com.vecvel.danaviewplayer` | `com.vecvel.danaview` (`project.pbxproj`) | Plugin bundle IDs and log subsystems use `com.vecvel.danaview.whisper`. |
-| Android applicationId `com.vecvel.danaview_player`, minSdk 21 | `com.vecvel.danaview`; `minSdk = flutter.minSdkVersion` = **24** in Flutter 3.44.2 (`FlutterExtension.kt`); NDK `28.2.13676358` | NDK r28 links with 16 KB page alignment by default. minSdk ≥ 23 means native libs are not extracted by default, which rules out ggml's directory-scanning `GGML_BACKEND_DL`. |
+| Android applicationId `com.vecvel.danaview`, minSdk 21 | `com.vecvel.danaview`; `minSdk = flutter.minSdkVersion` = **24** in Flutter 3.44.2 (`FlutterExtension.kt`); NDK `28.2.13676358` | NDK r28 links with 16 KB page alignment by default. minSdk ≥ 23 means native libs are not extracted by default, which rules out ggml's directory-scanning `GGML_BACKEND_DL`. |
 | (n/a) | AGP 9.0.1, Kotlin 2.3.20, `android.builtInKotlin=false`, `android.newDsl=false` | The plugin's Gradle file applies `kotlin-android` explicitly. |
 | (n/a) | Flutter 3.44 enables **Swift Package Manager by default**; the app runs **hybrid** (SPM plus CocoaPods for media_kit) | The `plugin_ffi` template is CocoaPods-only. v1 ships a podspec; `Package.swift` is a deferred ticket (AI-D2). |
 | (n/a) | No `cmake` on the dev Mac; the Android SDK has CMake 3.22.1 | The iOS xcframework build needs `brew install cmake` (≥ 3.28, matching upstream's check). Android uses the SDK's CMake. |

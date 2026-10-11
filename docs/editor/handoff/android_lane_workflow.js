@@ -32,9 +32,9 @@ export const meta = {
  *
  * RUN
  *   Workflow({
- *     scriptPath: 'C:/dev/danaview_player/docs/editor/handoff/android_lane_workflow.js',
+ *     scriptPath: 'C:/dev/danaview/docs/editor/handoff/android_lane_workflow.js',
  *     args: {
- *       root: 'C:/dev/danaview_player',                     // required: repo root, forward slashes
+ *       root: 'C:/dev/danaview',                     // required: repo root, forward slashes
  *       landed: ['ENG-09', 'API-04'],                    // Mac tickets merged into this tree
  *       preloaded: {},                                   // finished groups, see RESUME
  *       // optional: only: ['ai-android'], maxParallel: 1, review: true
@@ -42,7 +42,7 @@ export const meta = {
  *   })
  *
  * ARGS
- *   root         Required. Absolute repo root on this machine, e.g. 'C:/dev/danaview_player'.
+ *   root         Required. Absolute repo root on this machine, e.g. 'C:/dev/danaview'.
  *   landed       Ticket ids merged into this working tree from editor-wip, plus owner tokens.
  *                ENG-09, API-04 and AI-03 are done and always counted. Gates still to come:
  *                ENG-06 (every AND group), ENG-02 (and-m3-preview), ENG-03 (and-m4-services) and
@@ -128,7 +128,7 @@ function parseMaybeJson(value, name) {
 
 const A = parseMaybeJson(args, '') || {}
 if (!A.root || typeof A.root !== 'string') {
-  throw new Error("android_lane_workflow: args.root is required (absolute repo root with forward slashes), e.g. Workflow({scriptPath: '<repo>/docs/editor/handoff/android_lane_workflow.js', args: {root: 'C:/dev/danaview_player', landed: ['ENG-09', 'API-04'], preloaded: {}}})")
+  throw new Error("android_lane_workflow: args.root is required (absolute repo root with forward slashes), e.g. Workflow({scriptPath: '<repo>/docs/editor/handoff/android_lane_workflow.js', args: {root: 'C:/dev/danaview', landed: ['ENG-09', 'API-04'], preloaded: {}}})")
 }
 const ROOT = A.root.replace(/\\/g, '/').replace(/\/+$/, '')
 
@@ -213,7 +213,7 @@ function ownsText(tickets) {
 // ---------- context for every agent ----------
 
 const CONTEXT = `
-You are an engineer on Danaview Player (Flutter 3.44.2 / Dart 3.12 monorepo at ${ROOT}) working the ANDROID LANE on the owner's WINDOWS laptop (32 GB RAM, no Xcode). We are building a production video editor for iOS + Android per the FINAL docs:
+You are an engineer on Danaview (Flutter 3.44.2 / Dart 3.12 monorepo at ${ROOT}) working the ANDROID LANE on the owner's WINDOWS laptop (32 GB RAM, no Xcode). We are building a production video editor for iOS + Android per the FINAL docs:
 - ${ROOT}/docs/editor/ARCHITECTURE.md (source of truth; decisions D-1..D-45; D-43(e) signed off by the owner 2026-10-11, D-45 render-preview cache and multi-pass export; read only the sections your tickets cite)
 - ${ROOT}/docs/editor/BUILD_PLAN.md (§1 how to work a ticket, §2 ownership rules, §5 dependency index, §6 ticket bodies with acceptance criteria, §7 shared/integration file register)
 - ${ROOT}/docs/editor/spikes/AND-01.md (Android spike: verdict, measurements, what ENG-06 applies, rules carried into the AND tickets; read it before any AND ticket)

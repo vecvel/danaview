@@ -145,23 +145,23 @@ git config --global core.longpaths true
 git config --global user.name  "<same as on the Mac>"
 git config --global user.email "<same as on the Mac>"
 mkdir -p /c/dev && cd /c/dev
-git clone --branch editor-wip https://github.com/vecvel/danaview.git danaview_player
-cd danaview_player
+git clone --branch editor-wip https://github.com/vecvel/danaview.git danaview
+cd danaview
 test -f .gitattributes && git status --short   # prints nothing
 git switch -c editor-android                   # if origin/editor-android exists already: git switch editor-android
 git push -u origin editor-android              # the first push opens a GitHub sign-in window; the owner signs in
 ```
 
 - Clone only after the Mac has pushed the hand-off commit. That commit adds `.gitattributes`, `docs/editor/handoff/` and `tool/handoff/`. If `test -f .gitattributes` fails, the clone is too early.
-- Keep the folder `C:\dev\danaview_player`. Claude's notes folder name comes from this path (A8).
+- Keep the folder `C:\dev\danaview`. Claude's notes folder name comes from this path (A8).
 - If `git status` shows modified files right after cloning, Git converted the line endings. Delete the folder, check the settings, and clone again (P2).
 
 ### A7. Signing files (USB, optional)
 
 Skip this unless you later want Windows release builds of the root app. Lane work doesn't need them. If you do, copy two files from the Mac:
 
-- `android/key.properties` to `C:\dev\danaview_player\android\key.properties`
-- `android/app/release.jks` to `C:\dev\danaview_player\android\app\release.jks`
+- `android/key.properties` to `C:\dev\danaview\android\key.properties`
+- `android/app/release.jks` to `C:\dev\danaview\android\app\release.jks`
 
 Then check that Git ignores them. `git check-ignore -v android/key.properties android/app/release.jks` must print two rules from `android/.gitignore`, and `git status --short` must stay empty.
 
@@ -171,19 +171,19 @@ Lane work doesn't need them: without them, release builds of the app use the deb
 
 ### A8. Claude's notes
 
-1. In the Claude app, open the Code tab, open `C:\dev\danaview_player` once, then close that session.
-2. In PowerShell, in `C:\dev\danaview_player`, run:
+1. In the Claude app, open the Code tab, open `C:\dev\danaview` once, then close that session.
+2. In PowerShell, in `C:\dev\danaview`, run:
    ```powershell
    powershell -ExecutionPolicy Bypass -File tool\handoff\install_claude_memory.ps1
    ```
-   The script copies `docs/editor/handoff/claude-memory/*.md` into `%USERPROFILE%\.claude\projects\C--dev-danaview-player\memory\`. The folder name is the repo path with every character that isn't a letter or digit replaced by `-`. Notes already in that folder are backed up first.
+   The script copies `docs/editor/handoff/claude-memory/*.md` into `%USERPROFILE%\.claude\projects\C--dev-danaview\memory\`. The folder name is the repo path with every character that isn't a letter or digit replaced by `-`. Notes already in that folder are backed up first.
 3. Start a new Code session in the same folder and paste the first message from README.md.
 
 If Claude reports that it can't find Git Bash, set the user variable `CLAUDE_CODE_GIT_BASH_PATH=C:\Program Files\Git\bin\bash.exe` and restart the app.
 
 ---
 
-## Part B: Smoke checks (Claude runs them in Git Bash from `/c/dev/danaview_player`)
+## Part B: Smoke checks (Claude runs them in Git Bash from `/c/dev/danaview`)
 
 Run them in order and stop at the first failure. Ask the owner before installing anything.
 
@@ -323,12 +323,12 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 **P4. Paths with spaces, non-ASCII letters, OneDrive or a second drive.** Blocker.
 - **Symptom:** Gradle, CMake or NDK path errors, native link errors, random "file in use" errors, or Flutter's `ERROR_INVALID_FUNCTION` when linking plugins.
 - **Cause:** NDK and CMake command lines break on unquoted spaces. AI-04's linker version script `packages/danaview_whisper/src/dv_exports.map` is one example. OneDrive syncs and locks `build/` folders. Flutter's plugin links need the same drive.
-- **Fix:** use `C:\dev\flutter` and `C:\dev\danaview_player`, keep the SDK path free of spaces, and do the A5 extra step if your user folder has a space or a non-English letter.
+- **Fix:** use `C:\dev\flutter` and `C:\dev\danaview`, keep the SDK path free of spaces, and do the A5 extra step if your user folder has a space or a non-English letter.
 
 **P5. Long paths.** Risk.
 - **Symptom:** git reports "Filename too long". CMake warns or fails about object paths. aapt2 or `flutter clean` can't create or delete files.
 - **Cause:** Gradle intermediates get very deep. On the Mac, one file under `packages/danaview_editor_engine/example/build/danaview_editor_engine/.transforms/…/bundleLibRuntimeToDirDebug_global-synthetics/…` sits 360 characters below the repo root, and Windows' classic limit is 260 for the whole path. Java (Gradle, D8, Kotlin) handles long paths itself; native tools may not. The longest tracked path is 138 characters, so checkout itself is fine.
-- **Fix:** `core.longpaths true` (A6), LongPathsEnabled (A4.3) and the short root `C:\dev\danaview_player`. If a tool still fails, report the path. Don't move the repo deeper.
+- **Fix:** `core.longpaths true` (A6), LongPathsEnabled (A4.3) and the short root `C:\dev\danaview`. If a tool still fails, report the path. Don't move the repo deeper.
 
 ### C2. Mac-only (hand these to the Mac)
 

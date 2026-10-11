@@ -54,7 +54,7 @@
 
 | Item | Value | Source |
 |---|---|---|
-| Repo app ids | iOS bundle `com.vecvel.danaview`; Android `applicationId`/namespace `com.vecvel.danaview` (the brief said `danaviewplayer` / `danaview_player`) | `project.pbxproj`, `app/build.gradle.kts` [VERIFIED] |
+| Repo app ids | iOS bundle `com.vecvel.danaview`; Android `applicationId`/namespace `com.vecvel.danaview` (the brief said `danaviewplayer` / `danaview`) | `project.pbxproj`, `app/build.gradle.kts` [VERIFIED] |
 | Android toolchain | AGP 9.0.1, Kotlin 2.3.20, Gradle 9.1, Java 17, compileSdk/targetSdk 36, `minSdk = flutter.minSdkVersion` = **24** (`FlutterExtension.kt`) | repo + Flutter SDK [VERIFIED] |
 | iOS toolchain | deployment 13.0, Swift 5.0, CocoaPods 1.16.2 (media_kit pods) **plus** SPM (`FlutterGeneratedPluginSwiftPackage` present), `UIBackgroundModes=[audio]` | repo [VERIFIED] |
 | Manifest today | `FOREGROUND_SERVICE` (no type-specific permission), no `RECORD_AUDIO`, no `POST_NOTIFICATIONS`, no services | `AndroidManifest.xml` [VERIFIED] |

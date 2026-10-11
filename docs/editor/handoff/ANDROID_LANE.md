@@ -14,7 +14,7 @@ The laptop builds the Android half of the editor's native engine inside the `dan
    - **API 29 and API 34 AVDs** (`Pixel_API_29`, `Pixel_API_34`). AND-02 checks GLES 3 on API 29, and AND-12 tests the export service on API 29, 34 and 35.
    - **A tablet AVD** (`Pixel_Tablet_API_35`), for AND-15's manual drag test from the Files app.
    - **An ffmpeg build with libx264 and libx265**, for test media.
-   - **The clone at `C:\dev\danaview_player`** (WINDOWS_SETUP A6). Claude's notes folder name comes from that path, and a short path avoids Windows path-length limits.
+   - **The clone at `C:\dev\danaview`** (WINDOWS_SETUP A6). Claude's notes folder name comes from that path, and a short path avoids Windows path-length limits.
 2. **Carry the gates between machines.**
    - Tell the Windows session when each of these lands on `editor-wip`: ENG-06, ENG-02, ENG-03, ENG-04. (ENG-09 and API-04 are already done.)
    - Tell the Mac session each time Windows reports a ticket pushed, so it can merge `editor-android`.

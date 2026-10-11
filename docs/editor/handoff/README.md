@@ -22,8 +22,8 @@ Windows can't build or test iOS: Xcode only runs on macOS.
 
 ## Owner checklist (Windows laptop)
 
-1. Follow [WINDOWS_SETUP.md](WINDOWS_SETUP.md) Part A (A1–A8). That covers installing the tools and the Claude app, setting Git to keep LF line endings, cloning to `C:\dev\danaview_player`, creating the `editor-android` branch and installing Claude's notes. The signing files (A7) are optional: lane work doesn't need them.
-2. Start a new Code session in `C:\dev\danaview_player` and paste the first message below. Claude runs the smoke checks (Part B) and tells you if anything is missing.
+1. Follow [WINDOWS_SETUP.md](WINDOWS_SETUP.md) Part A (A1–A8). That covers installing the tools and the Claude app, setting Git to keep LF line endings, cloning to `C:\dev\danaview`, creating the `editor-android` branch and installing Claude's notes. The signing files (A7) are optional: lane work doesn't need them.
+2. Start a new Code session in `C:\dev\danaview` and paste the first message below. Claude runs the smoke checks (Part B) and tells you if anything is missing.
 
 Both machines share one Claude usage limit. The split removes the memory bottleneck, not the usage limit.
 
@@ -34,7 +34,7 @@ You are the Windows Android-lane builder for the Danaview video editor.
 Read docs/editor/handoff/README.md, ANDROID_LANE.md, WINDOWS_SETUP.md and BUILD_STATE.md first.
 Run the smoke checks (WINDOWS_SETUP.md Part B) and fix anything missing in the toolchain (tell me before installing anything).
 Then build the lane tickets whose gates are met, using docs/editor/handoff/android_lane_workflow.js
-(args: root = 'C:/dev/danaview_player', landed = ['ENG-09', 'API-04'] plus any of ENG-06, ENG-02, ENG-03, ENG-04 I tell you have landed).
+(args: root = 'C:/dev/danaview', landed = ['ENG-09', 'API-04'] plus any of ENG-06, ENG-02, ENG-03, ENG-04 I tell you have landed).
 Work on branch editor-android; commit each finished ticket as "feat(editor): <TICKET> <title>" with no co-author trailer and push.
 Tell me after each ticket lands so the Mac can merge it. Use a workflow for the build.
 ```
