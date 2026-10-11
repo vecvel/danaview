@@ -29,13 +29,13 @@ object ShaderSources {
     /** Shared helpers prepended to every fragment shader. */
     const val COMMON = "dv_common.glsl"
 
-    /** LayerLookEffect: crop, footprint resample, chroma + spill, grade, LUT. */
+    /** LayerLookEffect: crop, footprint resample, chroma + spill, grade, LUT; with DV_REVEAL the sprite raster pass. */
     const val LOOK = "dv_look.glsl"
 
     /** SeparableBlurEffect: one Gaussian direction. */
     const val BLUR = "dv_blur.glsl"
 
-    /** LayerPlaceEffect and (with DV_SPRITE) SpriteBandEffect. */
+    /** LayerPlaceEffect, and the placement pass of SpriteBandEffect. */
     const val PLACE = "dv_place.glsl"
 
     /** The programs of the effects package. */
@@ -52,8 +52,8 @@ object ShaderSources {
         /** Placement of a layer raster or solid onto the canvas. */
         PLACE(ShaderSources.PLACE, emptyList(), false),
 
-        /** Placement of a sprite with its reveal map. */
-        SPRITE(ShaderSources.PLACE, listOf("DV_SPRITE"), false),
+        /** A sprite resampled onto its layer raster with the reveal map (SpriteBandEffect pass 1). */
+        SPRITE_RASTER(LOOK, listOf("DV_REVEAL"), false),
     }
 
     /** Every file the programs read. */

@@ -7,10 +7,12 @@
 //   blur  (dv_blur.glsl):  σ = blur·0.03·min(W, H) plan-canvas px, converted to raster px;
 //   place (dv_place.glsl): inverse placement matrix (render px → base-local px), sharpen,
 //                          vignette, item mask, opacity, canvas masks, 1 px antialiased edge;
-//   sprite (dv_place.glsl with DV_SPRITE): the same placement over the sprite with its reveal map.
+//   sprite (dv_look.glsl with DV_REVEAL, then dv_place.glsl): the sprite resampled onto its
+//                          raster with the reveal map, then placed like a picture raster.
 // It mirrors API-03's reference renderer (packages/danaview_editor_engine_api, ReferenceRenderer
-// and RenderMath): a layer raster at round(base·|s|·renderScale) px ("footprint" sizing),
-// box-filtered by ≤ 8×8 bilinear taps per texel; the Media3 effects instead size the raster once in
+// and RenderMath): a layer raster at round(base·|s|·renderScale) px ("footprint" sizing; sprites
+// always), box-filtered by ≤ 8×8 bilinear taps per texel, then placed with one bilinear sample per
+// output pixel; the Media3 effects instead size a picture raster once in
 // `configure` for the layer's largest animated scale (ARCH §13.3: min(source, render size ÷ (item
 // scale × max animated scale)) so 4K sources downscale first without softening keyframed zooms),
 // and the place pass averages the minified raster over each output pixel. Interpretations of
@@ -214,7 +216,7 @@ data class PlaceFrame(
     /** Render px per local px (|s|·kx, |s|·ky). */
     val pxPerLocalX: Double,
     val pxPerLocalY: Double,
-    /** The reference raster size round(base·|s|·renderScale) (sharpen step, sprite footprint). */
+    /** The reference raster size round(base·|s|·renderScale) (sharpen step, sprite raster size). */
     val refRasterW: Int,
     val refRasterH: Int,
     val sharpenGain: Double,
@@ -238,15 +240,17 @@ data class PlaceFrame(
     /** Edge AA scale: render px per local px (min of both axes). */
     val edgeScale: Double get() = min(pxPerLocalX, pxPerLocalY)
 
-    /** Footprint taps when a [texW] × [texH] raster is minified by the placement (1..8). */
-    fun placeTaps(texW: Int, texH: Int): Int {
-        val rx = texW / (baseW * pxPerLocalX)
-        val ry = texH / (baseH * pxPerLocalY)
-        return LayerFrames.taps(max(rx, ry))
+    /**
+     * Footprint taps per axis when a [rasterW] × [rasterH] raster is minified by the placement:
+     * `round(raster px per output px)` in 1..8. A raster at footprint size (ratio ≈ 1, the reference
+     * renderer's case) is sampled once, bilinearly; a raster sized for a larger animated scale
+     * (Media3 `configure`) is averaged over each output pixel.
+     */
+    fun placeTaps(rasterW: Int, rasterH: Int): Int {
+        val r = max(rasterW / (baseW * pxPerLocalX), rasterH / (baseH * pxPerLocalY))
+        if (!r.isFinite()) return LayerFrames.MAX_TAPS
+        return floor(r + 0.5).toInt().coerceIn(1, LayerFrames.MAX_TAPS)
     }
-
-    /** Sprite px per reference raster texel for a [texW] × [texH] sprite texture. */
-    fun spriteFootprint(texW: Int, texH: Int): Pair<Double, Double> = Pair(texW.toDouble() / refRasterW, texH.toDouble() / refRasterH)
 
     override fun equals(other: Any?): Boolean = other is PlaceFrame && other.inverse == inverse && other.baseW == baseW && other.baseH == baseH &&
         other.opacity == opacity && other.canvasMasks == canvasMasks && other.mask == mask && other.solid.contentEquals(solid)

@@ -30,6 +30,7 @@ import android.opengl.EGL14
 import android.opengl.EGLContext
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
+import com.vecvel.danaview.editor.engine.plan.PlanMaskShape
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.EnumMap
@@ -182,6 +183,30 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
         val external = source.target == SourceTexture.EXTERNAL_OES
         val sh = program(if (external) ShaderSources.Program.LOOK_EXTERNAL else ShaderSources.Program.LOOK_2D)
         sh.use()
+        setLookUniforms(sh, source, look, lut, look.rasterH)
+        drawQuad()
+    }
+
+    /**
+     * dv_look with DV_REVEAL (SpriteBandEffect pass 1): [sprite] resampled onto a [rasterW] ×
+     * [rasterH] raster (each texel the average of ≤ 8 × 8 taps over its sprite footprint, a tap
+     * dropped when its glyph ≥ [revealShown]), premultiplied, into the TOP-LEFT [rasterW] × [rasterH]
+     * px of the bound framebuffer of height [targetHeight]. The caller sets the viewport to
+     * `(0, targetHeight − rasterH, rasterW, rasterH)`.
+     */
+    fun drawSpriteRaster(sprite: SpriteTexture, rasterW: Int, rasterH: Int, targetHeight: Int, revealShown: Double?) {
+        val sh = program(ShaderSources.Program.SPRITE_RASTER)
+        sh.use()
+        val stepX = sprite.width.toDouble() / rasterW
+        val stepY = sprite.height.toDouble() / rasterH
+        val look = LookFrame(rasterW, rasterH, 0.0, 0.0, stepX, stepY, LayerFrames.taps(stepX), LayerFrames.taps(stepY), null, null, null, 0.0, false)
+        setLookUniforms(sh, SourceTexture(sprite.color, sprite.width, sprite.height, premultiplied = true), look, null, targetHeight)
+        sh.sampler("uGlyphs", 2, GLES20.GL_TEXTURE_2D, sprite.glyphs)
+        if (revealShown != null && sprite.hasGlyphs) sh.f2("uReveal", 1f, revealShown.toFloat()) else sh.f2("uReveal", 0f, 0f)
+        drawQuad()
+    }
+
+    private fun setLookUniforms(sh: GlShader, source: SourceTexture, look: LookFrame, lut: LutTexture?, outHeight: Int) {
         GLES20.glDisable(GLES20.GL_BLEND)
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
         sh.sampler("uTex", 0, source.target, source.id)
@@ -189,7 +214,7 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
         sh.f2("uSrcSize", source.width.toFloat(), source.height.toFloat())
         sh.f1("uSrcPremultiplied", if (source.premultiplied) 1f else 0f)
         sh.f4("uCrop", look.cropX0.toFloat(), look.cropY0.toFloat(), look.stepX.toFloat(), look.stepY.toFloat())
-        sh.f2("uOutSize", look.rasterW.toFloat(), look.rasterH.toFloat())
+        sh.f2("uOutSize", look.rasterW.toFloat(), outHeight.toFloat())
         sh.f2("uTaps", look.tapsX.toFloat(), look.tapsY.toFloat())
         val ch = look.chroma
         if (ch != null) {
@@ -218,7 +243,6 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
             sh.f1("uLutI", 0f)
         }
         sh.f1("uMatte", if (look.matte) 1f else 0f)
-        drawQuad()
     }
 
     /** One dv_blur direction from [texture] ([width] × [height]) into the bound framebuffer of the same size. */
@@ -235,68 +259,38 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
     }
 
     /**
-     * dv_place of the layer raster [texture] ([texW] × [texH], premultiplied; ignored for solids)
-     * into the bound [renderW] × [renderH] framebuffer; [blend] composites onto it instead of
-     * overwriting.
+     * dv_place of the layer raster [texture] ([texW] × [texH], premultiplied; the raster fills its
+     * top-left [rasterW] × [rasterH] px; ignored for solids) into the bound [renderW] × [renderH]
+     * framebuffer; [blend] composites onto it instead of overwriting.
      */
-    fun drawPlace(texture: Int, texW: Int, texH: Int, place: PlaceFrame, renderW: Int, renderH: Int, blend: Boolean = false) {
+    fun drawPlace(
+        texture: Int,
+        texW: Int,
+        texH: Int,
+        place: PlaceFrame,
+        renderW: Int,
+        renderH: Int,
+        blend: Boolean = false,
+        rasterW: Int = texW,
+        rasterH: Int = texH,
+    ) {
         val sh = program(ShaderSources.Program.PLACE)
         sh.use()
         setSourceOverBlend(blend)
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
         val solid = place.solid
-        val tw = if (solid != null) 1 else texW
-        val th = if (solid != null) 1 else texH
+        val rw = if (solid != null) 1 else rasterW
+        val rh = if (solid != null) 1 else rasterH
         sh.sampler("uTex", 0, GLES20.GL_TEXTURE_2D, if (solid != null) 0 else texture)
-        setPlaceCommon(sh, place, tw, th, renderW, renderH)
-        val taps = if (solid != null) 1 else place.placeTaps(tw, th)
-        sh.f4("uSample", (tw / place.baseW).toFloat(), (th / place.baseH).toFloat(), taps.toFloat(), taps.toFloat())
-        if (solid != null) {
-            sh.f1("uSolidOn", 1f)
-            sh.f4("uSolid", solid[0], solid[1], solid[2], solid[3])
-        } else {
-            sh.f1("uSolidOn", 0f)
-        }
-        sh.f1("uSharpen", if (solid != null) 0f else place.sharpenGain.toFloat())
-        sh.f2("uSharpStep", place.sharpStepX.toFloat(), place.sharpStepY.toFloat())
-        sh.f2("uVignette", if (solid != null) 0f else place.vignette.toFloat(), place.aspect.toFloat())
-        val m = place.mask
-        if (m != null && solid == null) {
-            sh.f4("uMaskA", m.cx.toFloat(), m.cy.toFloat(), m.hx.toFloat(), m.hy.toFloat())
-            sh.f4("uMaskB", m.cos.toFloat(), m.sin.toFloat(), m.radius.toFloat(), m.feather.toFloat())
-            sh.f4("uMaskC", if (m.shape == com.vecvel.danaview.editor.engine.plan.PlanMaskShape.RECT) 1f else 2f, m.op.toFloat(), if (m.inv) 1f else 0f, 0f)
-        } else {
-            sh.f4("uMaskC", 0f, 1f, 0f, 0f)
-        }
-        drawQuad()
-        if (blend) setSourceOverBlend(false)
-    }
-
-    /** dv_place with DV_SPRITE: [sprite] placed with [place] (reveal from [PlaceFrame.revealShown]). */
-    fun drawSprite(sprite: SpriteTexture, place: PlaceFrame, renderW: Int, renderH: Int, blend: Boolean = false) {
-        val sh = program(ShaderSources.Program.SPRITE)
-        sh.use()
-        setSourceOverBlend(blend)
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
-        sh.sampler("uTex", 0, GLES20.GL_TEXTURE_2D, sprite.color)
-        sh.sampler("uGlyphs", 1, GLES20.GL_TEXTURE_2D, sprite.glyphs)
-        setPlaceCommon(sh, place, sprite.width, sprite.height, renderW, renderH)
-        val (fx, fy) = place.spriteFootprint(sprite.width, sprite.height)
-        sh.f4("uSample", (sprite.width / place.baseW).toFloat(), (sprite.height / place.baseH).toFloat(), LayerFrames.taps(fx).toFloat(), LayerFrames.taps(fy).toFloat())
-        sh.f2("uTapStep", fx.toFloat(), fy.toFloat())
-        val shown = place.revealShown
-        if (shown != null && sprite.hasGlyphs) sh.f2("uReveal", 1f, shown.toFloat()) else sh.f2("uReveal", 0f, 0f)
-        drawQuad()
-        if (blend) setSourceOverBlend(false)
-    }
-
-    private fun setPlaceCommon(sh: GlShader, place: PlaceFrame, texW: Int, texH: Int, renderW: Int, renderH: Int) {
-        val inv = place.inverse
-        sh.f2("uTexSize", texW.toFloat(), texH.toFloat())
+        sh.f2("uTexSize", (if (solid != null) 1 else texW).toFloat(), (if (solid != null) 1 else texH).toFloat())
+        sh.f2("uRasterSize", rw.toFloat(), rh.toFloat())
         sh.f2("uOutSize", renderW.toFloat(), renderH.toFloat())
+        val inv = place.inverse
         sh.f4("uInv", inv.a.toFloat(), inv.b.toFloat(), inv.c.toFloat(), inv.d.toFloat())
         sh.f2("uInvT", inv.tx.toFloat(), inv.ty.toFloat())
         sh.f2("uBase", place.baseW.toFloat(), place.baseH.toFloat())
+        val taps = if (solid != null) 1 else place.placeTaps(rw, rh)
+        sh.f4("uSample", (rw / place.baseW).toFloat(), (rh / place.baseH).toFloat(), taps.toFloat(), 0f)
         sh.f1("uOpacity", place.opacity.toFloat())
         sh.f2("uCanvasPerRender", place.canvasPerRenderX.toFloat(), place.canvasPerRenderY.toFloat())
         val n = place.canvasMasks.size
@@ -312,6 +306,25 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
         }
         sh.f1("uCmCount", n.toFloat())
         sh.f2("uAa", if (place.antialias) 1f else 0f, place.edgeScale.toFloat())
+        if (solid != null) {
+            sh.f1("uSolidOn", 1f)
+            sh.f4("uSolid", solid[0], solid[1], solid[2], solid[3])
+        } else {
+            sh.f1("uSolidOn", 0f)
+        }
+        sh.f1("uSharpen", if (solid != null) 0f else place.sharpenGain.toFloat())
+        sh.f2("uSharpStep", place.sharpStepX.toFloat(), place.sharpStepY.toFloat())
+        sh.f2("uVignette", if (solid != null) 0f else place.vignette.toFloat(), place.aspect.toFloat())
+        val m = place.mask
+        if (m != null && solid == null) {
+            sh.f4("uMaskA", m.cx.toFloat(), m.cy.toFloat(), m.hx.toFloat(), m.hy.toFloat())
+            sh.f4("uMaskB", m.cos.toFloat(), m.sin.toFloat(), m.radius.toFloat(), m.feather.toFloat())
+            sh.f4("uMaskC", if (m.shape == PlanMaskShape.RECT) 1f else 2f, m.op.toFloat(), if (m.inv) 1f else 0f, 0f)
+        } else {
+            sh.f4("uMaskC", 0f, 1f, 0f, 0f)
+        }
+        drawQuad()
+        if (blend) setSourceOverBlend(false)
     }
 
     private fun drawQuad() {

@@ -191,14 +191,13 @@ class RenderMathVectorsGlTest {
                             programs.drawPlace(0, 1, 1, identityPlace(w.toDouble(), h.toDouble(), w, h).copy(solid = solid), w, h, blend = true)
                         }
                         "spriteReveal" -> {
-                            gotPremultiplied = false
                             val glyphs = p.getJSONArray("glyphs")
                             val rgba = ByteArray(w * h * 4) { (input[it].coerceIn(0f, 1f) * 255f + 0.5f).toInt().toByte() }
                             val img = VspriteImage(w, h, 1f, rgba, ShortArray(w * h) { glyphs.getInt(it).toShort() })
                             val s = SpriteTexture.upload(img, programs.caps.maxTextureSize).also { sprite = it }
                             val reveal = if (p.isNull("reveal")) null else floor(p.getDouble("reveal"))
                             target.bind()
-                            programs.drawSprite(s, identityPlace(w.toDouble(), h.toDouble(), w, h).copy(revealShown = reveal), w, h, blend = false)
+                            programs.drawSpriteRaster(s, w, h, h, reveal)
                         }
                         else -> error("unknown stage $stage")
                     }

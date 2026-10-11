@@ -2,8 +2,8 @@
 //
 // LayerRenderer: one layer through the whole effect chain outside Media3 (ARCH §13.3: AND-17's
 // LayerCompositorGl / PausedFrameRenderer and AND-16's compositor reuse the same shaders):
-// look → (blur H → blur V) → place for media and image layers, place for solids, sprite for
-// sprites, into a canvas-render-size target, overwriting it or blending onto it. Intermediate
+// look → (blur H → blur V) → place for media and image layers, place for solids, sprite raster →
+// place for sprites, into a canvas-render-size target, overwriting it or blending onto it. Intermediate
 // rasters come from a small pool of RGBA8 targets (the format of Media3's effect textures, so the
 // paused frame and the player's frame quantize alike). GlAssetTextures caches LUT and sprite
 // textures of plan assets per GL context. Both are confined to their GL thread and release every
@@ -77,11 +77,20 @@ class LayerRenderer(val programs: ShaderPrograms) {
                 programs.drawPlace(0, 1, 1, frame.place, renderW, renderH, blend)
             }
             PlanLayerKind.SPRITE -> {
-                bindOutput()
-                if (sprite != null) {
-                    programs.drawSprite(sprite, frame.place, renderW, renderH, blend)
-                } else if (!blend) {
-                    programs.clearTransparent()
+                if (sprite == null) {
+                    bindOutput()
+                    if (!blend) programs.clearTransparent()
+                } else {
+                    val p = frame.place
+                    val raster = obtain(p.refRasterW, p.refRasterH)
+                    try {
+                        raster.bind()
+                        programs.drawSpriteRaster(sprite, raster.width, raster.height, raster.height, p.revealShown)
+                        bindOutput()
+                        programs.drawPlace(raster.texture, raster.width, raster.height, p, renderW, renderH, blend)
+                    } finally {
+                        recycle(raster)
+                    }
                 }
             }
             PlanLayerKind.MEDIA, PlanLayerKind.IMAGE -> {

@@ -4,6 +4,8 @@
 // outW x outH raster (uTaps.x x uTaps.y bilinear taps per texel, the API-03 reference renderer's
 // footprint supersampling), then chroma key + spill, grade and LUT run on the straight colour.
 // Output: premultiplied RGBA, GL-oriented (framebuffer row 0 = bottom of the image).
+// With DV_REVEAL it is the first pass of SpriteBandEffect: the sprite resampled onto its layer
+// raster with the reveal map applied per tap (API-03 reference renderer, ARCH 11.6 "Sprite").
 // The external-texture variant (HardwareBuffer / SurfaceTexture frames) is assembled by
 // ShaderSources, which rewrites the uTex declaration below; this file names no external sampler
 // type at all because the emulator's GLES encoder scans shader text for it, ignoring #ifdef.
@@ -24,6 +26,18 @@ uniform sampler2D uLut;        // N tiles of N x N (red across, green down) in a
 uniform vec4 uLutInfo;         // N, tiles per row, texture width, texture height
 uniform float uLutI;           // intensity; 0 = no LUT
 uniform float uMatte;          // 1 = show the keyed alpha as opaque grey (matte editing mode)
+#ifdef DV_REVEAL
+uniform sampler2D uGlyphs;     // sprite glyph order per texel: luminance = high byte, alpha = low byte
+uniform vec2 uReveal;          // animated reveal on, glyphs shown = floor(reveal)
+
+// Glyph id of the source texel containing sourcePx (nearest, clamped).
+float dvGlyph(vec2 sourcePx) {
+  vec2 g = clamp(floor(sourcePx), vec2(0.0), uSrcSize - 1.0);
+  vec2 tc = (uSrcXform * vec3((g + 0.5) / uSrcSize, 1.0)).xy;
+  vec4 v = texture2D(uGlyphs, tc);
+  return floor(v.r * 255.0 + 0.5) * 256.0 + floor(v.a * 255.0 + 0.5);
+}
+#endif
 
 vec4 dvSource(vec2 sourcePx) {
   vec2 tc = (uSrcXform * vec3(sourcePx / uSrcSize, 1.0)).xy;
@@ -83,28 +97,32 @@ void main() {
       for (int sx = 0; sx < 8; sx++) {
         if (float(sx) < uTaps.x) {
           vec2 o = (vec2(float(sx), float(sy)) + 0.5) / uTaps;
-          acc += dvSource(uCrop.xy + (ij + o) * uCrop.zw);
+          vec2 p = uCrop.xy + (ij + o) * uCrop.zw;
+          vec4 tap = dvSource(p);
+#ifdef DV_REVEAL
+          // A tap is kept iff its glyph < floor(reveal); dropped taps count as transparent.
+          if (uReveal.x > 0.5 && !(dvGlyph(p) < uReveal.y)) tap = vec4(0.0);
+#endif
+          acc += tap;
         }
       }
     }
   }
   acc /= uTaps.x * uTaps.y;
-  if (!(acc.a > 0.0)) {
-    gl_FragColor = uMatte > 0.5 ? vec4(0.0, 0.0, 0.0, 1.0) : vec4(0.0);
-    return;
+  // No early returns (see dv_place.glsl): transparent texels stay zero.
+  vec4 outColor = vec4(0.0);
+  float a = 0.0;
+  if (acc.a > 0.0) {
+    vec3 c = acc.rgb / acc.a;
+    a = acc.a;
+    if (uChromaOn > 0.5) {
+      vec4 keyed = dvChroma(c, a);
+      c = keyed.rgb;
+      a = keyed.a;
+    }
+    if (uGradeOn > 0.5) c = dvGrade(c);
+    if (uLutI > 0.0) c = mix(c, dvLut(c), uLutI);
+    outColor = vec4(c * a, a);
   }
-  vec3 c = acc.rgb / acc.a;
-  float a = acc.a;
-  if (uChromaOn > 0.5) {
-    vec4 keyed = dvChroma(c, a);
-    c = keyed.rgb;
-    a = keyed.a;
-  }
-  if (uGradeOn > 0.5) c = dvGrade(c);
-  if (uLutI > 0.0) c = mix(c, dvLut(c), uLutI);
-  if (uMatte > 0.5) {
-    gl_FragColor = vec4(vec3(a), 1.0);
-    return;
-  }
-  gl_FragColor = vec4(c * a, a);
+  gl_FragColor = uMatte > 0.5 ? vec4(vec3(a), 1.0) : outColor;
 }

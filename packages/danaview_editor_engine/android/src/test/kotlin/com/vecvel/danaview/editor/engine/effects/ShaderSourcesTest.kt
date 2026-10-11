@@ -47,8 +47,14 @@ class ShaderSourcesTest {
     fun assemblyOrdersExtensionDefinesCommonBody() {
         val ext = ShaderSources.fragmentSource(ShaderSources.Program.LOOK_EXTERNAL, read)
         assertTrue(ext.startsWith("#extension GL_OES_EGL_image_external : require\n// OWNER: AND-09"))
-        val sprite = ShaderSources.fragmentSource(ShaderSources.Program.SPRITE, read)
-        assertTrue(sprite.startsWith("#define DV_SPRITE 1\n// OWNER: AND-09"))
+        val sprite = ShaderSources.fragmentSource(ShaderSources.Program.SPRITE_RASTER, read)
+        assertTrue(sprite.startsWith("#define DV_REVEAL 1\n// OWNER: AND-09"))
+        // GLSL ES 1.00 shaders that loop after an early return were miscompiled on the emulator.
+        for (p in ShaderSources.Program.values()) {
+            val src = ShaderSources.fragmentSource(p, read)
+            val main = src.substring(src.indexOf("void main()"))
+            assertFalse("$p main has no return", Regex("""\breturn\b""").containsMatchIn(main.replace(Regex("//[^\n]*"), "")))
+        }
         val look = ShaderSources.fragmentSource(ShaderSources.Program.LOOK_2D, read)
         assertTrue(look.indexOf("dvSmooth") < look.indexOf("void main"))
         assertTrue(look.contains("uniform sampler2D uTex;"))
@@ -92,13 +98,13 @@ class ShaderSourcesTest {
 
     @Test
     fun everyUniformIsDeclaredAndSet() {
-        val common = setIn("setPlaceCommon")
+        val look = setIn("setLookUniforms")
         val cases = mapOf(
-            ShaderSources.Program.LOOK_2D to setIn("drawLook"),
-            ShaderSources.Program.LOOK_EXTERNAL to setIn("drawLook"),
+            ShaderSources.Program.LOOK_2D to setIn("drawLook") + look,
+            ShaderSources.Program.LOOK_EXTERNAL to setIn("drawLook") + look,
+            ShaderSources.Program.SPRITE_RASTER to setIn("drawSpriteRaster") + look,
             ShaderSources.Program.BLUR to setIn("drawBlur"),
-            ShaderSources.Program.PLACE to setIn("drawPlace") + common,
-            ShaderSources.Program.SPRITE to setIn("drawSprite") + common,
+            ShaderSources.Program.PLACE to setIn("drawPlace"),
         )
         for ((program, set) in cases) {
             val decl = declared(program)
