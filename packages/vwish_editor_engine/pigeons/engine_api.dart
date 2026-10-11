@@ -1,4 +1,6 @@
-// OWNER: ENG-01 (then ENG-06, which freezes the surface after the IOS-01/AND-01 spikes, D-42)
+// OWNER: ENG-06 [INTEGRATION] (defined by ENG-01). FROZEN 2026-10-11 after the IOS-01 and AND-01
+// spikes (D-42): neither spike needed a message change (IOS-01.md §3, AND-01.md §6.5); ENG-06 only
+// amended the capability docs below. Later changes need a new lead-approved [INTEGRATION] ticket.
 //
 // Pigeon surface of the editor engine plugin (ARCH §12.6). Regenerate from the package root with
 //
@@ -222,7 +224,9 @@ class CapabilitiesMsg {
   /// D-14 cap 1: 2 | 3 | 4 | 6.
   int maxConcurrentVideoLayers;
 
-  /// D-14 cap 2: Android 3 | 4 | 6 | 8 (AND-01), iOS 16.
+  /// D-14 cap 2: Android 2 | 3 | 4 | 6 by tier (AND-01 V-N25; the AND-16 preview engine needs two
+  /// decoders per slot, so each value is further capped at (codec maxSupportedInstances - 2) / 2);
+  /// iOS 16.
   int maxVisualSequences;
 
   /// `GL_MAX_TEXTURE_SIZE` on Android, 16384 on iOS.
@@ -235,6 +239,8 @@ class CapabilitiesMsg {
   bool voiceRecording;
   bool proxiesRecommended;
   bool holdFrame;
+  /// Export rates above the source rate are honoured (true on both platforms; Android: AND-01
+  /// V-N15, the clock band repeats an adjacent source frame).
   bool fpsUpconversion;
   bool externalDrop;
   double minSpeed;

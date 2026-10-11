@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- OWNER: ENG-08 (then ENG-06 [INTEGRATION], frozen; D-42)
+<!-- OWNER: ENG-06 [INTEGRATION] (written by ENG-08). FROZEN 2026-10-11 (D-42): later changes need a
+     new lead-approved [INTEGRATION] ticket.
+     ENG-06 applied AND-01 §6.4 ("UnsafeOptInUsageError at error severity for the UnstableApi and
+     ExperimentalApi opt-ins") as the configuration below, NOT as the spike's literal snippet: the
+     spike's <option name="opt-in" .../> is a project-wide opt-in that disables the check (see below),
+     so the spike's "0 errors" proved nothing about missing opt-ins; this file's negative fixture does.
      Media3 1.11.1 marks UnstableApi and ExperimentalApi with androidx.annotation.RequiresOptIn(ERROR),
      so every use must sit under an opt-in. Each Media3 file starts with
          @file:OptIn(UnstableApi::class, ExperimentalApi::class)

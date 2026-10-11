@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- OWNER: AI-05. Privacy manifest of the vwish_whisper pod (ai.md §4.4, ARCH V-A13).
+     DiskSpace E174.1: DeviceProfiler.freeDiskBytes reads volumeAvailableCapacityForImportantUsage to
+     check there is room for a model download or a transcription before starting it.
+     Nothing else is declared (V-A13, decided 2026-10-11): whisper.cpp/ggml and the shim use
+     clock_gettime(CLOCK_MONOTONIC), sysctlbyname (CPU brand / perf-core count), fopen/fseeko/ftello
+     and libc++'s std::filesystem::status (file existence/type, no timestamps), none of which is a
+     required-reason API; the built binaries reference no stat/fstat/statfs/getattrlist/
+     mach_absolute_time/systemUptime/UserDefaults symbols (nm -um on WhisperCore.xcframework and on
+     the pod's vwish_whisper.framework).
+     No tracking, no collected data: audio and transcripts never leave the device. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

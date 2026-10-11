@@ -1,4 +1,5 @@
-// OWNER: ENG-01 (then ENG-06, which freezes it after the spikes, D-42)
+// OWNER: ENG-06 [INTEGRATION] (written by ENG-01). FROZEN 2026-10-11 after the IOS-01/AND-01 spikes
+// (D-42; no change was needed). Later changes need a new lead-approved [INTEGRATION] ticket.
 //
 // The iOS + Android editor engine over the Pigeon surface (ARCH §12, §12.6). The engine root
 // calls (initialize, capabilities, compatibility, probe, freeBytes, trimCaches, signals) are

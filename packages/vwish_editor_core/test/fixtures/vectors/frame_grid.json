@@ -2,7 +2,7 @@
   "schema": 1,
   "generatedBy": "packages/vwish_editor_core/tool/gen_frame_vectors.dart",
   "rule": "plan time of frame k = ceil(k*1e6/fps); platform time tau -> k = round(tau*fps/1e6); P(k) = round(k*1e6/fps); evaluate at timeOfFrame(k) (ARCH §5, D-35)",
-  "androidSeekMsRounding": null,
+  "androidSeekMsRounding": "floor",
   "rates": [
     {
       "fps": 24,
