@@ -11,11 +11,19 @@
 // compositor blend, at the golden's size. Sources are the manifest's decoded PNG frames (the video
 // frame shown is the greatest PTS ≤ s + 500 µs, ARCH §11.5), images, sprites (premultiplied on load,
 // 16-bit glyph maps) and .vlut tables. Edge pixels: pixels within 1 px of a hard geometric boundary
-// of a drawn layer (its box, an item mask or canvas mask with zero feather), found by 4 × 4
-// supersampling each pixel; the reference has no antialiasing and ours has a 1 px AA edge.
-// Two raster sizings run: FOOTPRINT (round(base·|s|·renderScale), the reference's own rule; the
-// paused-frame path) and MAX_SCALE (Media3 `configure`: the layer's largest animated scale, the
-// place pass averaging the minified raster).
+// of a drawn layer (its box, an item mask or canvas mask with zero feather): a pixel whose 5 × 5
+// sample grid INCLUDING its four corners is not all on one side of a boundary, dilated by 1 px (a
+// straight boundary crossing a pixel always separates two of its corners); the reference has no
+// antialiasing and ours has a 1 px AA edge.
+// Two paths run:
+// - FOOTPRINT: LayerRenderer (AND-17's paused-frame / compositor path), rasters at
+//   round(base·|s|·renderScale), GL compositor blend;
+// - MAX_SCALE: the Media3 effect chain through EffectPasses, the exact code the GlEffect programs
+//   run, on effect-sized RGBA8 textures: LayerLookEffect's configured texture (the layer's largest
+//   footprint, from the live LayerBinding like Media3's `configure`), the optional
+//   SeparableBlurEffect texture, LayerPlaceEffect's canvas-render-size straight-alpha output;
+//   each layer's output is read back and blended premultiplied source-over on the CPU in double
+//   precision like DefaultVideoCompositor does in 8-bit GL.
 
 package com.vecvel.danaview.editor.engine.effects
 
@@ -26,6 +34,7 @@ import com.vecvel.danaview.editor.engine.harness.TestFixtures
 import com.vecvel.danaview.editor.engine.plan.CanvasMask
 import com.vecvel.danaview.editor.engine.plan.LayerParams
 import com.vecvel.danaview.editor.engine.plan.ParamSnapshot
+import com.vecvel.danaview.editor.engine.plan.PlanAsset
 import com.vecvel.danaview.editor.engine.plan.PlanLayer
 import com.vecvel.danaview.editor.engine.plan.PlanLayerKind
 import com.vecvel.danaview.editor.engine.plan.PlanMaskShape
@@ -39,6 +48,7 @@ import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.hypot
@@ -68,6 +78,7 @@ class ParityGoldensGlTest {
         return env.run {
             val programs = ShaderPrograms.acquire(GlTestEnv.shaders)
             val renderer = LayerRenderer(programs)
+            val chain = Media3ChainEmulation()
             val results = ArrayList<FrameResult>()
             for (g in 0 until goldens.length()) {
                 val golden = goldens.getJSONObject(g)
@@ -80,6 +91,7 @@ class ParityGoldensGlTest {
                 val sources = golden.getJSONObject("sources")
                 val frames = golden.getJSONArray("frames")
                 val luts = HashMap<String, LutTexture>()
+                val snapshot = AtomicReference(ParamSnapshot.of(plan))
                 val sprites = HashMap<String, SpriteTexture>()
                 val target = GlTarget.rgba8(w, h)
                 try {
@@ -90,6 +102,8 @@ class ParityGoldensGlTest {
                         assertEquals("$name k=$k frame time", plan.canvas.outputGrid.timeOfFrame(k.toLong()), t)
                         target.bind()
                         programs.clearOpaque(plan.canvas.bg)
+                        val composite = if (sizing == RasterSizing.MAX_SCALE) ParityMetrics.unit(GlTestEnv.readRgba8(w, h)) else null
+                        val pts = plan.canvas.outputGrid.platformTimeOfFrame(k.toLong())
                         val edgeFrames = ArrayList<Pair<LayerParams, PlaceFrame>>()
                         for (layer in plan.layers.sortedWith(PlanValidator::compareLayers)) {
                             if (!layer.covers(t)) continue
@@ -134,31 +148,32 @@ class ParityGoldensGlTest {
                                     }
                                     PlanLayerKind.SOLID -> Unit
                                 }
-                                val fixed = if ((layer.kind == PlanLayerKind.MEDIA || layer.kind == PlanLayerKind.IMAGE) && sizing == RasterSizing.MAX_SCALE) {
-                                    LayerFrames.rasterSize(RasterSizing.MAX_SCALE, p.base, max(ParamSnapshot.maxScale(layer), abs(p.xf.s)), p.crop, srcW, srcH, geometry, programs.caps.maxTextureSize)
-                                } else {
-                                    null
-                                }
-                                val frame = LayerFrames.frame(
-                                    p, geometry, programs.caps.maxTextureSize, srcW, srcH, sizing, ParamSnapshot.maxScale(layer), fixed,
-                                    reveal = asset?.reveal == true,
-                                ) ?: continue
-                                val lutAsset = frame.look?.lutAsset
-                                val lut = lutAsset?.let { id ->
-                                    luts.getOrPut(id) {
-                                        val src = sources.getJSONObject(id)
-                                        LutTexture.upload(LutTable.decode(bytes(src.getString("vlut"))), programs.caps.isEs3)
+                                val lutOf = { a: PlanAsset ->
+                                    luts.getOrPut(a.uri) {
+                                        val id = plan.assets.entries.first { it.value == a }.key
+                                        LutTexture.upload(LutTable.decode(bytes(sources.getJSONObject(id).getString("vlut"))), programs.caps.isEs3)
                                     }
                                 }
-                                val source = if (srcTex != 0) SourceTexture(srcTex, srcW, srcH) else null
-                                renderer.draw(frame, source, lut, sprite, target, w, h, blend = true)
-                                edgeFrames += p to frame.place
+                                if (composite != null) {
+                                    // The Media3 chain, through the live binding (pts = P(k)).
+                                    val binding = LayerBinding.of(snapshot, null, layer.id)
+                                    chain.draw(programs, layer, binding, pts, geometry, srcTex, srcW, srcH, sprite, lutOf, composite, w, h)
+                                    edgeFrames += p to LayerFrames.place(p, geometry, programs.caps.maxTextureSize)!!
+                                } else {
+                                    val frame = LayerFrames.frame(
+                                        p, geometry, programs.caps.maxTextureSize, srcW, srcH, sizing, reveal = asset?.reveal == true,
+                                    ) ?: continue
+                                    val lut = frame.look?.lutAsset?.let { plan.assets[it] }?.let(lutOf)
+                                    val source = if (srcTex != 0) SourceTexture(srcTex, srcW, srcH) else null
+                                    renderer.draw(frame, source, lut, sprite, target, w, h, blend = true)
+                                    edgeFrames += p to frame.place
+                                }
                             } finally {
                                 if (srcTex != 0) GlResources.deleteTexture(srcTex)
                             }
                         }
                         target.bind()
-                        val got = ParityMetrics.unit(GlTestEnv.readRgba8(w, h))
+                        val got = composite ?: ParityMetrics.unit(GlTestEnv.readRgba8(w, h))
                         val want = png(fr.getString("png"))
                         check(want.width == w && want.height == h && want.channels == 3) { "$name golden size" }
                         val wantUnit = DoubleArray(want.samples.size) { want.samples[it] / 255.0 }
@@ -174,6 +189,7 @@ class ParityGoldensGlTest {
                 }
             }
             renderer.release()
+            chain.release()
             programs.release()
             results
         }
@@ -208,7 +224,7 @@ class ParityGoldensGlTest {
     /** Pixels within 1 px of a hard boundary of a drawn layer (file header). */
     private fun edgeMask(layers: List<Pair<LayerParams, PlaceFrame>>, w: Int, h: Int): BooleanArray {
         val edge = BooleanArray(w * h)
-        val n = 4
+        val n = 5
         for ((p, place) in layers) {
             val inv = place.inverse
             val mask = place.mask?.takeIf { it.feather == 0.0 && it.op > 0 }
@@ -217,8 +233,8 @@ class ParityGoldensGlTest {
                 var first: Int? = null
                 var varies = false
                 for (sy in 0 until n) for (sx in 0 until n) {
-                    val px = x + (sx + 0.5) / n
-                    val py = y + (sy + 0.5) / n
+                    val px = x + sx / (n - 1.0)
+                    val py = y + sy / (n - 1.0)
                     val (lx, ly) = inv.apply(px, py)
                     var bits = if (lx >= 0 && lx < place.baseW && ly >= 0 && ly < place.baseH) 1 else 0
                     if (mask != null) {
@@ -273,7 +289,7 @@ class ParityGoldensGlTest {
     fun goldensMatchWithFootprintRasters() = verify(RasterSizing.FOOTPRINT)
 
     @Test
-    fun goldensMatchWithMedia3MaxScaleRasters() = verify(RasterSizing.MAX_SCALE)
+    fun goldensMatchThroughTheMedia3EffectPasses() = verify(RasterSizing.MAX_SCALE)
 
     companion object {
         private const val TAG = "AND09.goldens"

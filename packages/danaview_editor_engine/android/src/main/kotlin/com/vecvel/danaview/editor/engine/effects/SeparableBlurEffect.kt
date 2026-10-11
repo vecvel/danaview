@@ -5,13 +5,13 @@
 // blurs at some time (static or animated detail.blur > 0, AND-08 `needsBlur`). Per frame
 // σ = blur·0.03·min(W, H) plan-canvas px is converted to the look raster's px through the layer's
 // current scale and the render scale (LayerFrames.blur); below 0.5 reference px the frame is
-// copied unchanged. Horizontal pass into an internal RGBA8 target, vertical pass into Media3's
-// output (premultiplied in and out). A gated frame is one clear.
+// copied unchanged. It works on the top-left footprint raster LayerLookEffect drew
+// (EffectPasses): horizontal pass into an internal RGBA8 target, vertical pass into Media3's output
+// (premultiplied in and out). A gated frame is one clear.
 
 package com.vecvel.danaview.editor.engine.effects
 
 import android.content.Context
-import android.opengl.GLES20
 import androidx.annotation.OptIn
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.Size
@@ -31,45 +31,24 @@ class SeparableBlurEffect(
         private val programs = ShaderPrograms.acquire(context)
         private var w = 1
         private var h = 1
-        private var tmp: GlTarget? = null
+        private val tmp = ScratchTarget()
 
         override fun configure(inputWidth: Int, inputHeight: Int): Size {
             programs.checkThread()
             w = inputWidth
             h = inputHeight
-            tmp?.let { if (it.width != w || it.height != h) { it.release(); tmp = null } }
             return Size(w, h)
         }
 
         override fun shouldClearTextureBuffer(): Boolean = false
 
         override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
-            programs.checkThread()
-            val b = e.binding.resolve(presentationTimeUs)
-            val place = b?.let { LayerFrames.place(it.params, e.geometry, programs.caps.maxTextureSize) }
-            if (b == null || place == null) {
-                programs.clearTransparent()
-                return
-            }
-            val blur = LayerFrames.blur(b.params, place, w, h, e.geometry, e.geometry.canvasW, e.geometry.canvasH)
-            if (blur == null) {
-                programs.drawBlur(inputTexId, w, h, true, GaussianKernel.of(0.0))
-                return
-            }
-            val out = GlResources.currentFramebuffer()
-            val viewport = GlResources.currentViewport()
-            val t = tmp ?: GlTarget.rgba8(w, h).also { tmp = it }
-            t.bind()
-            programs.drawBlur(inputTexId, w, h, true, blur.x)
-            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, out)
-            GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
-            programs.drawBlur(t.texture, w, h, false, blur.y)
+            EffectPasses.blur(programs, e.binding.resolve(presentationTimeUs), e.geometry, inputTexId, w, h, tmp)
         }
 
         override fun release() {
             super.release()
-            tmp?.release()
-            tmp = null
+            tmp.release()
             programs.release()
         }
     }

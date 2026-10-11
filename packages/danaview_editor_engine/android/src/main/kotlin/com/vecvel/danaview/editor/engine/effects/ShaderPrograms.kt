@@ -178,12 +178,16 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
         }
     }
 
-    /** dv_look into the bound [look].rasterW × rasterH framebuffer. */
-    fun drawLook(source: SourceTexture, look: LookFrame, lut: LutTexture?) {
+    /**
+     * dv_look: the [look].rasterW × rasterH layer raster into the top-left of the bound framebuffer
+     * of height [targetHeight] (default: exactly the raster). The caller sets the viewport to
+     * `(0, targetHeight − rasterH, rasterW, rasterH)` (a whole-target viewport when they match).
+     */
+    fun drawLook(source: SourceTexture, look: LookFrame, lut: LutTexture?, targetHeight: Int = look.rasterH) {
         val external = source.target == SourceTexture.EXTERNAL_OES
         val sh = program(if (external) ShaderSources.Program.LOOK_EXTERNAL else ShaderSources.Program.LOOK_2D)
         sh.use()
-        setLookUniforms(sh, source, look, lut, look.rasterH)
+        setLookUniforms(sh, source, look, lut, targetHeight)
         drawQuad()
     }
 
@@ -245,32 +249,32 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
         sh.f1("uMatte", if (look.matte) 1f else 0f)
     }
 
-    /** One dv_blur direction from [texture] ([width] × [height]) into the bound framebuffer of the same size. */
-    fun drawBlur(texture: Int, width: Int, height: Int, horizontal: Boolean, kernel: GaussianKernel) {
+    /**
+     * One dv_blur direction over the top-left [rasterW] × [rasterH] raster of [texture]
+     * ([width] × [height]; reads clamped to the raster = clamp-to-edge) into the top-left of the
+     * bound framebuffer of height [targetHeight]. The caller sets the viewport to that raster
+     * (defaults: the whole texture into a target of the same size).
+     */
+    fun drawBlur(
+        texture: Int,
+        width: Int,
+        height: Int,
+        horizontal: Boolean,
+        kernel: GaussianKernel,
+        rasterW: Int = width,
+        rasterH: Int = height,
+        targetHeight: Int = height,
+    ) {
         val sh = program(ShaderSources.Program.BLUR)
         sh.use()
         GLES20.glDisable(GLES20.GL_BLEND)
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
         sh.sampler("uTex", 0, GLES20.GL_TEXTURE_2D, texture)
         sh.f2("uTexSize", width.toFloat(), height.toFloat())
+        sh.f2("uRasterSize", rasterW.toFloat(), rasterH.toFloat())
+        sh.f1("uOutHeight", targetHeight.toFloat())
         sh.f2("uDir", if (horizontal) 1f else 0f, if (horizontal) 0f else 1f)
         sh.f3("uKernel", kernel.sigma.toFloat(), kernel.radius.toFloat(), kernel.step.toFloat())
-        drawQuad()
-    }
-
-    /**
-     * dv_look over a premultiplied GL-oriented [texture] ([texW] × [texH], the whole texture):
-     * box-resampled to an [outW] × [outH] raster (≤ 8 × 8 taps per texel) in the top-left of the
-     * bound framebuffer of height [targetHeight]. Used to bring a Media3 raster sized for a larger
-     * animated scale down to the reference raster before the detail and place passes.
-     */
-    fun drawResample(texture: Int, texW: Int, texH: Int, outW: Int, outH: Int, targetHeight: Int) {
-        val sh = program(ShaderSources.Program.LOOK_2D)
-        sh.use()
-        val stepX = texW.toDouble() / outW
-        val stepY = texH.toDouble() / outH
-        val look = LookFrame(outW, outH, 0.0, 0.0, stepX, stepY, LayerFrames.taps(stepX), LayerFrames.taps(stepY), null, null, null, 0.0, false)
-        setLookUniforms(sh, SourceTexture(texture, texW, texH, premultiplied = true), look, null, targetHeight)
         drawQuad()
     }
 

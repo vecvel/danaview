@@ -2,12 +2,13 @@
 // OWNER: AND-09
 
 // LayerLookEffect (ARCH §13.3 "GL effects", dv_look.glsl): the first effect of a media or image
-// item. `configure` sizes the layer raster once: RasterSizing.MAX_SCALE = min(source crop,
-// round(base·maxScale·renderScale)), so 4K sources are downscaled first without softening
-// keyframed zooms; RasterSizing.SOURCE (look stills through FrameExtractor) keeps the crop at
-// source resolution. drawFrame resolves the layer at the frame (LayerBinding, D-35); a gated frame
-// is one clear. Output: premultiplied RGBA of the layer raster (crop, chroma + spill, grade, LUT;
-// matte flag for the matte editing mode).
+// item. `configure` sizes the texture once: RasterSizing.MAX_SCALE = the layer's largest footprint
+// round(base·maxScale·renderScale), so 4K sources are downscaled first without softening keyframed
+// zooms, and each frame draws its own footprint raster into the top-left (EffectPasses);
+// RasterSizing.SOURCE (look stills through FrameExtractor) keeps the crop at source resolution.
+// drawFrame resolves the layer at the frame (LayerBinding, D-35); a gated frame is one clear.
+// Output: premultiplied RGBA of the layer raster (crop, chroma + spill, grade, LUT; matte flag for
+// the matte editing mode).
 
 package com.vecvel.danaview.editor.engine.effects
 
@@ -44,21 +45,9 @@ class LayerLookEffect(
             programs.checkThread()
             srcW = inputWidth
             srcH = inputHeight
-            val b = e.binding.current()
-            val size = if (b == null) {
-                Pair(inputWidth, inputHeight)
-            } else {
-                LayerFrames.rasterSize(
-                    e.sizing,
-                    b.params.base,
-                    maxOf(e.binding.maxScale, kotlin.math.abs(b.params.xf.s)),
-                    e.options.cropOverride ?: b.params.crop,
-                    inputWidth,
-                    inputHeight,
-                    e.geometry,
-                    programs.caps.maxTextureSize,
-                )
-            }
+            val size = EffectPasses.lookOutputSize(
+                e.binding.current(), e.binding.maxScale, e.sizing, e.options, inputWidth, inputHeight, e.geometry, programs.caps.maxTextureSize,
+            )
             outW = size.first
             outH = size.second
             return Size(outW, outH)
@@ -67,15 +56,10 @@ class LayerLookEffect(
         override fun shouldClearTextureBuffer(): Boolean = false
 
         override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
-            programs.checkThread()
-            val b = e.binding.resolve(presentationTimeUs)
-            if (b == null || (e.sizing != RasterSizing.SOURCE && LayerFrames.place(b.params, e.geometry, programs.caps.maxTextureSize, e.options) == null)) {
-                programs.clearTransparent()
-                return
-            }
-            val look = LayerFrames.look(b.params, srcW, srcH, outW, outH, e.options)
-            val lut = look.lutAsset?.let { b.plan.assets[it] }?.let { textures.lut(it) }
-            programs.drawLook(SourceTexture(inputTexId, srcW, srcH), look, lut)
+            EffectPasses.look(
+                programs, e.binding.resolve(presentationTimeUs), e.sizing, e.options, e.geometry, textures::lut,
+                inputTexId, srcW, srcH, outW, outH,
+            )
         }
 
         override fun release() {

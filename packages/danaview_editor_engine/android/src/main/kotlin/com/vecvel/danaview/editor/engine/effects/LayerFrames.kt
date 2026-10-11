@@ -12,10 +12,10 @@
 // It mirrors API-03's reference renderer (packages/danaview_editor_engine_api, ReferenceRenderer
 // and RenderMath): a layer raster at round(base·|s|·renderScale) px ("footprint" sizing; sprites
 // always), box-filtered by ≤ 8×8 bilinear taps per texel, then placed with one bilinear sample per
-// output pixel; the Media3 effects instead size a picture raster once in
-// `configure` for the layer's largest animated scale (ARCH §13.3: min(source, render size ÷ (item
-// scale × max animated scale)) so 4K sources downscale first without softening keyframed zooms),
-// and the place pass averages the minified raster over each output pixel. Interpretations of
+// output pixel. The Media3 effects allocate their texture once in `configure` for the layer's
+// largest animated footprint (ARCH §13.3: 4K sources downscale first, keyframed zooms never soften)
+// and draw each frame's footprint raster into its top-left ([chainRaster], EffectPasses), so both
+// paths produce the reference raster. Interpretations of
 // API-03 are kept (vectors/README.md): blur and sharpen work on premultiplied colour, a missing
 // `base` is the canvas (or sprite) size, `bg` alpha is ignored.
 
@@ -47,7 +47,10 @@ enum class RasterSizing {
     /** `round(base·|s|·renderScale)` at the frame's own scale (API-03 reference; paused frames). */
     FOOTPRINT,
 
-    /** `min(source crop, round(base·maxScale·renderScale))`, fixed per item (Media3 `configure`). */
+    /**
+     * Media3 `configure`: the largest footprint `round(base·maxScale·renderScale)`, fixed per item;
+     * each frame draws its own footprint into the top-left of it ([LayerFrames.chainRaster]).
+     */
     MAX_SCALE,
 
     /** The crop at source resolution (look stills, no placement). */
@@ -239,13 +242,6 @@ data class PlaceFrame(
     /** Whether the raster pass (sharpen, vignette, item mask) runs. */
     val needsDetail: Boolean get() = sharpenGain > 0 || vignette > 0 || mask != null
 
-    /**
-     * Whether a [rasterW] × [rasterH] raster is first resampled to the reference raster size: it is
-     * larger than the reference in some axis (a Media3 raster sized for a larger animated scale).
-     */
-    fun needsResample(rasterW: Int, rasterH: Int): Boolean =
-        (rasterW > refRasterW || rasterH > refRasterH) && (rasterW != refRasterW || rasterH != refRasterH)
-
     override fun equals(other: Any?): Boolean = other is PlaceFrame && other.inverse == inverse && other.baseW == baseW && other.baseH == baseH &&
         other.opacity == opacity && other.canvasMasks == canvasMasks && other.mask == mask && other.solid.contentEquals(solid)
 
@@ -331,7 +327,8 @@ object LayerFrames {
     /**
      * The look raster size of a media/image layer with [base], [scale] (|xf.s| at the frame, or the
      * largest animated scale for [RasterSizing.MAX_SCALE]) and [crop] of a [sourceW] × [sourceH]
-     * source.
+     * source. FOOTPRINT and MAX_SCALE are the footprint at [scale] (the source is no cap: §11.6
+     * sharpens at render resolution); SOURCE is the crop at source resolution.
      */
     fun rasterSize(
         sizing: RasterSizing,
@@ -346,17 +343,22 @@ object LayerFrames {
         val cropW = (crop.r - crop.l) * sourceW
         val cropH = (crop.b - crop.t) * sourceH
         return when (sizing) {
-            RasterSizing.FOOTPRINT -> Pair(
+            RasterSizing.FOOTPRINT, RasterSizing.MAX_SCALE -> Pair(
                 rasterSide(base.w * abs(scale) * geometry.kx, maxTextureSize),
                 rasterSide(base.h * abs(scale) * geometry.ky, maxTextureSize),
-            )
-            RasterSizing.MAX_SCALE -> Pair(
-                min(rasterSide(base.w * abs(scale) * geometry.kx, maxTextureSize), rasterSide(cropW, maxTextureSize)),
-                min(rasterSide(base.h * abs(scale) * geometry.ky, maxTextureSize), rasterSide(cropH, maxTextureSize)),
             )
             RasterSizing.SOURCE -> Pair(rasterSide(cropW, maxTextureSize), rasterSide(cropH, maxTextureSize))
         }
     }
+
+    /**
+     * The raster a Media3 effect chain draws at a frame inside its [texW] × [texH] texture (the
+     * size LayerLookEffect configured): the frame's footprint [PlaceFrame.refRasterW] ×
+     * [PlaceFrame.refRasterH] in the top-left, capped by the texture (only reached when a patch
+     * raised the scale above the configured maximum).
+     */
+    fun chainRaster(place: PlaceFrame, texW: Int, texH: Int): Pair<Int, Int> =
+        Pair(min(place.refRasterW, texW).coerceAtLeast(1), min(place.refRasterH, texH).coerceAtLeast(1))
 
     /** Chroma uniforms of [chroma] (ARCH §11.6 Chroma key). */
     fun chroma(chroma: PlanChroma): ChromaUniforms {
@@ -485,8 +487,8 @@ object LayerFrames {
 
     /**
      * The whole frame of one layer: [sourceW] × [sourceH] is the media/image source (ignored for
-     * solids and sprites); [fixedRaster] is the raster size Media3 configured (MAX_SCALE), else the
-     * raster is sized by [sizing].
+     * solids and sprites). FOOTPRINT and MAX_SCALE give the same raster (a Media3 chain draws the
+     * frame's footprint, [chainRaster]); SOURCE keeps the crop at source resolution.
      */
     fun frame(
         p: LayerParams,
@@ -495,8 +497,6 @@ object LayerFrames {
         sourceW: Int = 0,
         sourceH: Int = 0,
         sizing: RasterSizing = RasterSizing.FOOTPRINT,
-        maxScale: Double = abs(p.xf.s),
-        fixedRaster: Pair<Int, Int>? = null,
         reveal: Boolean = false,
         options: LayerFrameOptions = LayerFrameOptions(),
     ): LayerFrame? {
@@ -510,16 +510,7 @@ object LayerFrames {
             PlanLayerKind.MEDIA, PlanLayerKind.IMAGE -> {
                 require(sourceW > 0 && sourceH > 0) { "source size unknown" }
                 val crop = options.cropOverride ?: p.crop
-                val (rw, rh) = fixedRaster ?: rasterSize(
-                    sizing,
-                    p.base,
-                    if (sizing == RasterSizing.MAX_SCALE) max(maxScale, abs(p.xf.s)) else abs(p.xf.s),
-                    crop,
-                    sourceW,
-                    sourceH,
-                    geometry,
-                    maxTextureSize,
-                )
+                val (rw, rh) = rasterSize(sizing, p.base, abs(p.xf.s), crop, sourceW, sourceH, geometry, maxTextureSize)
                 val look = look(p, sourceW, sourceH, rw, rh, options)
                 LayerFrame(p.kind, p.id, look, blur(p, place, rw, rh, geometry, geometry.canvasW, geometry.canvasH), place)
             }

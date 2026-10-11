@@ -2,8 +2,7 @@
 //
 // LayerRenderer: one layer through the whole effect chain outside Media3 (ARCH §13.3: AND-17's
 // LayerCompositorGl / PausedFrameRenderer and AND-16's compositor reuse the same shaders):
-// look → (blur H → blur V) → (resample to the reference raster when the raster is larger) →
-// (detail: sharpen, vignette, mask) → place for media and image layers, place for solids, sprite
+// look → (blur H → blur V) → (detail: sharpen, vignette, mask) → place for media and image layers, place for solids, sprite
 // raster → place for sprites, into a canvas-render-size target, overwriting it or blending onto it. Intermediate
 // rasters come from a small pool of RGBA8 targets (the format of Media3's effect textures, so the
 // paused frame and the player's frame quantize alike). GlAssetTextures caches LUT and sprite
@@ -111,12 +110,6 @@ class LayerRenderer(val programs: ShaderPrograms) {
                         programs.drawBlur(tmp.texture, tmp.width, tmp.height, false, blur.y)
                     }
                     val p = frame.place
-                    if (p.needsResample(raster.width, raster.height)) {
-                        val small = obtain(p.refRasterW, p.refRasterH).also { used += it }
-                        small.bind()
-                        programs.drawResample(raster.texture, raster.width, raster.height, small.width, small.height, small.height)
-                        raster = small
-                    }
                     if (p.needsDetail) {
                         val detail = obtain(raster.width, raster.height).also { used += it }
                         detail.bind()
