@@ -13,7 +13,8 @@
 //   whether a decoder takes 10-bit HEVC/VP9/AV1. Also answers "is there a decoder for this Format".
 // - GL (`GlInfo`): an EGL14 pbuffer context with EGL_CONTEXT_CLIENT_VERSION 3 (V-N7); with it,
 //   GL_MAX_TEXTURE_SIZE and whether GL_EXT_YUV_target is exported (needed by Media3's OpenGL HDR
-//   tone map, AND-01 V-N5).
+//   tone map, AND-01 V-N5). The one-time probe runs on the vwish-gl lane (ARCH §18.1) whichever
+//   lane asks first; callers wait up to GL_PROBE_TIMEOUT_MS and the result is cached.
 // - Thermal: PowerManager.OnThermalStatusChangedListener (API 29+) -> ctx.events.signal(thermal)
 //   with the same mapping as vwish_whisper's AI-06 (NONE/LIGHT nominal, MODERATE fair, SEVERE
 //   serious, CRITICAL and worse critical). Started by Capabilities once the editor is supported.
@@ -47,7 +48,13 @@ import com.vecvel.vwish.editor.engine.pigeon.DeviceTierMsg
 import com.vecvel.vwish.editor.engine.pigeon.SignalKindMsg
 import com.vecvel.vwish.editor.engine.pigeon.SignalMsg
 import com.vecvel.vwish.editor.engine.pigeon.ThermalLevelMsg
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executor
+import java.util.concurrent.FutureTask
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.ceil
 
 /** One codec of the device (from MediaCodecList). */
@@ -392,6 +399,7 @@ object ThermalLevels {
 class DeviceProfile(private val ctx: EngineContext) {
     @Volatile private var cachedCodecs: CodecInventory? = null
     @Volatile private var cachedGl: GlInfo? = null
+    private val glProbe = AtomicReference<FutureTask<GlInfo>?>()
     @Volatile private var thermalListener: Any? = null
     private val thermalLock = Any()
     private var lastThermal: ThermalLevelMsg = ThermalLevelMsg.NOMINAL
@@ -401,9 +409,39 @@ class DeviceProfile(private val ctx: EngineContext) {
         cachedCodecs ?: CodecInventory.load().also { cachedCodecs = it }
     }
 
-    /** GL facts (probed once on the calling thread; never call on a thread with a current EGL context it must keep). */
-    fun gl(): GlInfo = cachedGl ?: synchronized(this) {
-        cachedGl ?: (if (Build.VERSION.SDK_INT >= MIN_EDITOR_API) safeGlProbe() else GlInfo.NONE).also { cachedGl = it }
+    /**
+     * GL facts, probed once on the vwish-gl lane (never on the caller's io/compat/job lane) and cached.
+     * Callers wait up to [GL_PROBE_TIMEOUT_MS]; on a timeout they get [GlInfo.NONE] uncached and the
+     * probe still finishes and caches later. No lock is held while waiting, so a GL-lane task that
+     * calls back into the profile cannot deadlock with a waiter.
+     */
+    fun gl(): GlInfo {
+        cachedGl?.let { return it }
+        if (Build.VERSION.SDK_INT < MIN_EDITOR_API) return GlInfo.NONE.also { cachedGl = it }
+        val lane = ctx.threads.gl
+        if (lane.isCurrentThread()) return safeGlProbe().also { cachedGl = it }
+        val task = glProbe.get() ?: FutureTask { safeGlProbe().also { cachedGl = it } }.let { fresh ->
+            if (!glProbe.compareAndSet(null, fresh)) return@let glProbe.get() ?: return gl()
+            try {
+                lane.execute(fresh)
+            } catch (e: RejectedExecutionException) {
+                glProbe.compareAndSet(fresh, null)
+                return GlInfo.NONE
+            }
+            fresh
+        }
+        return try {
+            task.get(GL_PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        } catch (e: TimeoutException) {
+            Log.w(EngineContext.TAG, "GL probe timed out on vwish-gl")
+            if (!task.isDone) glProbe.compareAndSet(task, null)
+            GlInfo.NONE
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            GlInfo.NONE
+        } catch (e: ExecutionException) {
+            GlInfo.NONE
+        }
     }
 
     /** HDR tone-mapping facts of this device. */
@@ -480,5 +518,8 @@ class DeviceProfile(private val ctx: EngineContext) {
     companion object {
         /** The editor's API gate (ARCH §3.2). */
         const val MIN_EDITOR_API = 29
+
+        /** How long a caller waits for the one-time GL probe on vwish-gl. */
+        const val GL_PROBE_TIMEOUT_MS = 5_000L
     }
 }

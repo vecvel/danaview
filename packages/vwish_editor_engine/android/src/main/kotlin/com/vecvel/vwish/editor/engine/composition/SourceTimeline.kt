@@ -1,5 +1,5 @@
-// OWNER: AND-08
 @file:OptIn(UnstableApi::class, ExperimentalApi::class)
+// OWNER: AND-08
 
 // Source facts the mapper needs (ARCH §11.5, §13.3 "Items"; AND-01 V-N16, §6.7):
 // - the rule frame of a source time s: the video sample with the greatest PTS ≤ s + 500 µs (PTS on

@@ -1,3 +1,4 @@
+@file:OptIn(UnstableApi::class, ExperimentalApi::class)
 // OWNER: AND-05
 //
 // ProxyRegistry and ProxyJob's pure parts on the JVM: status by fingerprint (file, tracked job
@@ -8,9 +9,12 @@
 package com.vecvel.vwish.editor.engine.proxy
 
 import android.content.ContextWrapper
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.ColorInfo
 import androidx.media3.common.Format
+import androidx.media3.common.util.ExperimentalApi
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.ExportException
 import com.vecvel.vwish.editor.engine.core.CodecEntry

@@ -1,5 +1,5 @@
-// OWNER: AND-08
 @file:OptIn(UnstableApi::class, ExperimentalApi::class)
+// OWNER: AND-08
 
 // Sample-exact gain envelope of one audio segment (ARCH §11.6 Audio row, D-37) for Media3's
 // `GainProcessor`: `gain(t)` is linear between the plan's `[tUs, g]` keys (0–2, i.e. up to

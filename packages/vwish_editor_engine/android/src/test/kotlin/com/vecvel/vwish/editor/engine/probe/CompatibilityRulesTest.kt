@@ -1,13 +1,17 @@
+@file:OptIn(UnstableApi::class, ExperimentalApi::class)
 // OWNER: AND-02
 //
 // Compatibility verdicts with injected codecs and tone-mapping facts (ARCH §15, AND-01 V-N5).
 
 package com.vecvel.vwish.editor.engine.probe
 
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.ColorInfo
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.ExperimentalApi
+import androidx.media3.common.util.UnstableApi
 import com.vecvel.vwish.editor.engine.core.CodecInventory
 import com.vecvel.vwish.editor.engine.core.ToneMappingSupport
 import com.vecvel.vwish.editor.engine.media.Compatibility

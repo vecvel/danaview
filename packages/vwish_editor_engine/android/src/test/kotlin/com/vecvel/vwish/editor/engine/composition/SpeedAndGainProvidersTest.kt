@@ -1,5 +1,5 @@
-// OWNER: AND-08
 @file:OptIn(UnstableApi::class, ExperimentalApi::class)
+// OWNER: AND-08
 
 // SegmentSpeedProvider and KeyframedGainProvider (ARCH §13.3 "Items", §11.6 Audio, D-35, D-37):
 // - every fitted item integrates to its P(k)-anchored duration EXACTLY under Media3 1.11.1's own

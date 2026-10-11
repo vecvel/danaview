@@ -94,7 +94,11 @@ class ThumbnailService(private val ctx: EngineContext) {
 
     private val lock = Any()
     private val queue = ThumbnailQueue<Request>({ it.priority }, { it.sequence })
-    private val running = HashMap<String, Request>()
+    /**
+     * Renders on a worker, keyed by their unique sequence number (not the request id): a render whose
+     * id was reused stays counted until its thread returns, so at most [MAX_RENDERS] ever run.
+     */
+    private val running = HashMap<Long, Request>()
     private val sequence = AtomicLong()
     private val workers: ExecutorService by lazy {
         ThreadPoolExecutor(MAX_RENDERS, MAX_RENDERS, 30, TimeUnit.SECONDS, LinkedBlockingQueue()) { r ->
@@ -123,7 +127,7 @@ class ThumbnailService(private val ctx: EngineContext) {
         }
         val entry = Request(requestId, request, priority, sequence.incrementAndGet(), done)
         synchronized(lock) {
-            running[requestId]?.let { previous -> cancelEntry(previous) }
+            running.values.filter { it.id == requestId }.forEach(::cancelEntry)
             queue.removeIf { it.id == requestId }?.complete(Result.failure(cancelledError()))
             queue.add(entry)
         }
@@ -133,7 +137,7 @@ class ThumbnailService(private val ctx: EngineContext) {
     /** Cancels the pending tile [requestId]. Unknown ids are ignored. */
     fun cancel(requestId: String) {
         val pending = synchronized(lock) {
-            running[requestId]?.let { cancelEntry(it) }
+            running.values.filter { it.id == requestId }.forEach(::cancelEntry)
             queue.removeIf { it.id == requestId }
         }
         pending?.complete(Result.failure(cancelledError()))
@@ -154,7 +158,7 @@ class ThumbnailService(private val ctx: EngineContext) {
             val next = synchronized(lock) {
                 if (running.size >= MAX_RENDERS) return
                 val request = queue.poll() ?: return
-                running[request.id] = request
+                running[request.sequence] = request
                 request
             }
             workers.execute { render(next) }
@@ -177,7 +181,7 @@ class ThumbnailService(private val ctx: EngineContext) {
             val error = if (request.cancelled.get()) cancelledError() else EngineErrors.from(t).withFingerprint(request.message.media.fingerprint)
             request.complete(Result.failure(error))
         } finally {
-            synchronized(lock) { if (running[request.id] === request) running.remove(request.id) }
+            synchronized(lock) { running.remove(request.sequence) }
             scheduleIdleSweep()
             pump()
         }

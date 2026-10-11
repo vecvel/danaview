@@ -1,5 +1,5 @@
-// OWNER: AND-08
 @file:OptIn(UnstableApi::class, ExperimentalApi::class)
+// OWNER: AND-08
 
 // CompositionMapper on the JVM (ARCH §13.3, §5 rule 3, D-35, D-38; AND-01 §6.7):
 // - every contract plan maps; every sequence lasts durUs; every item and gap boundary is P(k);

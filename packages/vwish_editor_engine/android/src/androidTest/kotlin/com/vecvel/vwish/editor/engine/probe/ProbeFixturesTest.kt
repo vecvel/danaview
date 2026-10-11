@@ -1,3 +1,4 @@
+@file:OptIn(UnstableApi::class, ExperimentalApi::class)
 // OWNER: AND-02
 //
 // Probe fields against the ENG-05 manifest on the device/emulator, for every fixture (including
@@ -6,7 +7,10 @@
 package com.vecvel.vwish.editor.engine.probe
 
 import android.util.Log
+import androidx.annotation.OptIn
 import androidx.core.content.FileProvider
+import androidx.media3.common.util.ExperimentalApi
+import androidx.media3.common.util.UnstableApi
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.vecvel.vwish.editor.engine.core.CodecInventory
 import com.vecvel.vwish.editor.engine.core.EngineContext

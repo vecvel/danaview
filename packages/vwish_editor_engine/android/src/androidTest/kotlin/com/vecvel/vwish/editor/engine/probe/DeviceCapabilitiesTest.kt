@@ -4,12 +4,21 @@
 // AVD), GL_MAX_TEXTURE_SIZE, the capabilities and compatibility through the engine context with
 // the <= 300 ms budget, and the thermal signal plumbing. Emulator numbers are logged under the tag
 // VwishProbeTest (they are emulator measurements, not device numbers).
+//
+// The GLES 3 criterion on API 29: the default checks only agree with the GLES version the image
+// declares, which passes on a GLES 2 image too. The API 29 run therefore passes
+// -Pandroid.testInstrumentationRunnerArguments.requireGles3=true, which makes the probe and the
+// editor gate assert GLES 3. The Pixel_API_29 AVD only exposes GLES 3 when booted with
+// `-feature GLESDynamicVersion` (without it the guest is capped at GLES 2.0).
 
 package com.vecvel.vwish.editor.engine.probe
 
 import android.os.Build
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.vecvel.vwish.editor.engine.core.DeviceProfile
+import com.vecvel.vwish.editor.engine.core.LaneSpec
 import com.vecvel.vwish.editor.engine.core.Capabilities
 import com.vecvel.vwish.editor.engine.core.EngineContext
 import com.vecvel.vwish.editor.engine.core.EngineThreads
@@ -56,6 +65,10 @@ class DeviceCapabilitiesTest {
         (TestFixtures.targetContext.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager)
             .deviceConfigurationInfo.reqGlEsVersion
 
+    /** `requireGles3=true` (instrumentation argument): this run must have GLES 3 (the API 29 criterion). */
+    private val requireGles3: Boolean =
+        InstrumentationRegistry.getArguments().getString("requireGles3")?.toBoolean() == true
+
     @Test
     fun gles3ContextAndMaxTextureSize() {
         val gl = GlInfo.probe()
@@ -68,9 +81,33 @@ class DeviceCapabilitiesTest {
         // The check agrees with the GLES version the system declares (ro.opengles.version): an
         // image that only offers GLES 2.0 must answer gles3_missing, never a false positive.
         assertEquals("an EGL context with GLES 3.0 (V-N7)", declared >= 0x30000, gl.gles3)
+        if (requireGles3) {
+            assertTrue("requireGles3: the image declares GLES 3 (0x${Integer.toHexString(declared)})", declared >= 0x30000)
+            assertTrue("requireGles3: a GLES 3.0 EGL context", gl.gles3)
+        }
         if (gl.gles3) assertTrue("GL_MAX_TEXTURE_SIZE read: ${gl.maxTextureSize}", gl.maxTextureSize >= 2048)
         // The probe leaves no context current on this thread.
         assertEquals(android.opengl.EGL14.EGL_NO_CONTEXT, android.opengl.EGL14.eglGetCurrentContext())
+    }
+
+    @Test
+    fun glProbeRunsOnTheGlLane() {
+        // The one-time probe runs on vwish-gl, whichever lane asks first (here vwish-io), and is cached.
+        val threads = EngineThreads.android()
+        val local = EngineContext(TestFixtures.targetContext.applicationContext, threads)
+        try {
+            val profile = DeviceProfile(local)
+            assertFalse(threads.started().any { it.spec == LaneSpec.GL })
+            val result = AtomicReference<GlInfo>()
+            val latch = CountDownLatch(1)
+            threads.io.execute { result.set(profile.gl()); latch.countDown() }
+            assertTrue(latch.await(30, TimeUnit.SECONDS))
+            assertTrue("the probe started the vwish-gl lane", threads.started().any { it.spec == LaneSpec.GL })
+            assertEquals(GlInfo.probe(), result.get())
+            assertTrue("cached", profile.gl() === result.get())
+        } finally {
+            threads.shutdown()
+        }
     }
 
     @Test
@@ -91,6 +128,7 @@ class DeviceCapabilitiesTest {
                 "proxies=${caps.proxiesRecommended}",
         )
         assertEquals(Capabilities.compute(snapshot), caps)
+        if (requireGles3) assertTrue("requireGles3: the editor gate passes with GLES 3 (${caps.unsupportedReason})", caps.supported)
         if (declaredGlesVersion() < 0x30000) {
             // An image without GLES 3 (e.g. an API 29 AVD whose emulator caps the guest at GLES 2.0).
             assertFalse(caps.supported)

@@ -1,5 +1,5 @@
-// OWNER: AND-08
 @file:OptIn(UnstableApi::class, ExperimentalApi::class)
+// OWNER: AND-08
 
 // Layer gating (ARCH §13.3 "Compositing"): DefaultVideoCompositor only blends (input 0 on top,
 // straight alpha, AND-01 V-N1/V-N4); input ids are sequence indices and pts are composition times

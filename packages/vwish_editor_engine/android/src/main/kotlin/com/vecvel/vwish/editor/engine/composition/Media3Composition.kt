@@ -1,5 +1,5 @@
-// OWNER: AND-08
 @file:OptIn(UnstableApi::class, ExperimentalApi::class)
+// OWNER: AND-08
 
 // CompositionSpec → Media3 Transformer `Composition` (ARCH §13.3; AND-01: GO for Transformer
 // export). Sequences keep the spec's index order (compositor input id = sequence index, V-N1) and

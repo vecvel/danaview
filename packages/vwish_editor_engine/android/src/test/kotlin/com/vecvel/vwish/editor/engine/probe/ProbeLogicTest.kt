@@ -1,3 +1,4 @@
+@file:OptIn(UnstableApi::class, ExperimentalApi::class)
 // OWNER: AND-02
 //
 // Pure probe logic: container sniffing (on the ENG-05 fixture bytes), frame-rate/VFR measurement
@@ -5,10 +6,13 @@
 
 package com.vecvel.vwish.editor.engine.probe
 
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.ColorInfo
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.ExperimentalApi
+import androidx.media3.common.util.UnstableApi
 import com.vecvel.vwish.editor.engine.core.GlInfo
 import com.vecvel.vwish.editor.engine.core.ThermalLevels
 import com.vecvel.vwish.editor.engine.harness.FixtureTree

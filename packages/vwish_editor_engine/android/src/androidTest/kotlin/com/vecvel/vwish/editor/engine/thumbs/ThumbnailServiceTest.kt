@@ -1,3 +1,4 @@
+@file:OptIn(UnstableApi::class, ExperimentalApi::class)
 // OWNER: AND-03
 //
 // ThumbnailService on the emulator with the ENG-05 fixtures: every strip cell's barcode equals the
@@ -12,6 +13,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaExtractor
 import android.util.Log
+import androidx.annotation.OptIn
+import androidx.media3.common.util.ExperimentalApi
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.inspector.MediaExtractorCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.vecvel.vwish.editor.engine.core.EngineContext
@@ -268,6 +272,62 @@ class ThumbnailServiceTest {
         val error = result.get().exceptionOrNull()
         assertTrue("cancelled or rendered before the cancel", error == null || (error as EngineException).code == EngineErrorCode.cancelled)
         busy.forEach { assertTrue(it.await(60, TimeUnit.SECONDS)) }
+    }
+
+    @Test
+    fun reusedIdKeepsTheReplacedRenderCountedUntilItReturns() {
+        // A render whose id is reused is cancelled but keeps its worker until its next frame. It must
+        // stay counted: with it and its replacement running, a later request waits in the priority
+        // queue (at most two renders, two decoder instances) instead of being handed to a worker.
+        val dup = "dup-${ids.incrementAndGet()}"
+        val x = "bg-${ids.incrementAndGet()}"
+        val z = "vis-${ids.incrementAndGet()}"
+        val holdOld = CountDownLatch(1)
+        val holdNew = CountDownLatch(1)
+        val oldBlocked = CountDownLatch(1)
+        val newBlocked = CountDownLatch(1)
+        val dupFrames = AtomicInteger()
+        val order = java.util.Collections.synchronizedList(ArrayList<String>())
+        service.onFrameDecoded = { requestId, index ->
+            when (requestId) {
+                dup -> if (index == 0) {
+                    if (dupFrames.incrementAndGet() == 1) {
+                        oldBlocked.countDown()
+                        holdOld.await(30, TimeUnit.SECONDS)
+                    } else {
+                        newBlocked.countDown()
+                        holdNew.await(30, TimeUnit.SECONDS)
+                    }
+                }
+                x, z -> if (index == 0) order.add(requestId)
+            }
+        }
+        val answers = CountDownLatch(4)
+        val results = java.util.concurrent.ConcurrentHashMap<String, Result<ThumbnailTileMsg>>()
+        fun submit(key: String, id: String, req: ThumbnailRequestMsg, priority: ThumbPriorityMsg) =
+            service.requestTile(id, req, priority) { results[key] = it; answers.countDown() }
+        try {
+            submit("old", dup, request("frame_counter_720p48.mp4", 900, 0, 240, "fp-dup-old"), ThumbPriorityMsg.VISIBLE)
+            assertTrue("old render reached its first frame", oldBlocked.await(30, TimeUnit.SECONDS))
+            submit("new", dup, request("frame_counter_720p24.mp4", 900, 0, 240, "fp-dup-new"), ThumbPriorityMsg.VISIBLE)
+            assertTrue("replacement render reached its first frame", newBlocked.await(30, TimeUnit.SECONDS))
+            submit("x", x, request("frame_counter_720p25.mp4", 900, 0, 240, "fp-dup-x"), ThumbPriorityMsg.BACKGROUND)
+            submit("z", z, request("frame_counter_720p60.mp4", 900, 0, 240, "fp-dup-z"), ThumbPriorityMsg.VISIBLE)
+            holdOld.countDown()
+            val deadline = System.nanoTime() + 30_000_000_000
+            while (order.isEmpty() && System.nanoTime() < deadline) Thread.sleep(20)
+            Thread.sleep(1000)
+            assertEquals("only the visible request took the freed worker while the replacement still ran", listOf(z), order.toList())
+            holdNew.countDown()
+            assertTrue("all four answered", answers.await(60, TimeUnit.SECONDS))
+            assertEquals(EngineErrorCode.cancelled, (results["old"]!!.exceptionOrNull() as EngineException).code)
+            listOf("new", "x", "z").forEach { assertTrue("$it rendered", results[it]!!.isSuccess) }
+            assertEquals(listOf(z, x), order.toList())
+        } finally {
+            holdOld.countDown()
+            holdNew.countDown()
+            service.onFrameDecoded = null
+        }
     }
 
     @Test
