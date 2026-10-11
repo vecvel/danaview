@@ -166,7 +166,9 @@ void main() {
     const eventChannel = EventChannel('test/whisper/events');
     tester.binding.defaultBinaryMessenger.setMockStreamHandler(
       eventChannel,
-      MockStreamHandler.inline(onListen: (args, sink) => events.stream.listen(sink.success)),
+      MockStreamHandler.inline(onListen: (args, sink) {
+        events.stream.listen(sink.success);
+      }),
     );
     rt = NativeWhisperRuntime(
       bindings: fake,

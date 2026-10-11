@@ -18,6 +18,7 @@ final class GainTapPlayerTests: XCTestCase {
 
     /// Plays [seconds] of tone_1khz (1× then 2× segments) through a GainTap; [during] runs at about
     /// 0.6 s of item time. Returns the meter.
+    @MainActor
     private func play(
         envelope: TapEnvelope, seconds: Double, during: ((GainTap, GainTapMeter) -> Void)? = nil
     ) async throws -> (GainTap, GainTapMeter) {
@@ -63,6 +64,7 @@ final class GainTapPlayerTests: XCTestCase {
         return (tap, meter)
     }
 
+    @MainActor
     func testBoost200PctMeasuresPlus6dBInAVPlayer() async throws {
         let (_, unity) = try await play(envelope: TapEnvelope(planGain: [[0, 1]]), seconds: 1.8)
         let (_, boost) = try await play(envelope: TapEnvelope(planGain: [[0, 2]]), seconds: 1.8)
@@ -84,6 +86,7 @@ final class GainTapPlayerTests: XCTestCase {
     /// A gain-only patch while playing: the envelope swaps under the running item (no new item or
     /// tap) and the tap's output follows: +6.02 dB once the 40 ms blend is done. The tap runs
     /// 150–280 ms ahead of the item clock, so the swap is heard with that delay in preview.
+    @MainActor
     func testLiveEnvelopeSwapReachesRunningTap() async throws {
         var callsAtSwap = 0
         let (tap, meter) = try await play(envelope: TapEnvelope(planGain: [[0, 1]]), seconds: 1.6) { tap, meter in

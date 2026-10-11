@@ -96,7 +96,7 @@ enum SegmentConcat {
         let bytes = SegmentedWriter.fileSize(output)
         return Result(
             frames: feed.frames, durationUs: checkpoint.endUs - checkpoint.startUs, bytes: bytes,
-            peakDiskBytes: max(feed.peakDiskBytes, bytes + SegmentedWriter.directorySize(directory)),
+            peakDiskBytes: max(feed.peakDiskBytes, bytes + SegmentedWriter.directorySize(directory, excluding: output)),
             reencodedSegments: feed.reencoded)
     }
 
@@ -241,7 +241,7 @@ enum SegmentConcat {
         }
 
         private func measure() {
-            let bytes = SegmentedWriter.directorySize(directory) + SegmentedWriter.fileSize(output)
+            let bytes = SegmentedWriter.directorySize(directory, excluding: output) + SegmentedWriter.fileSize(output)
             peakDiskBytes = max(peakDiskBytes, bytes)
         }
     }

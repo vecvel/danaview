@@ -87,7 +87,7 @@ final class TapEnvelopeTests: XCTestCase {
         for i in 0..<a.count { maxDiff = max(maxDiff, abs(a[i] - b[i])) }
         XCTAssertLessThan(maxDiff, 1e-6)
         let late = AudioTapSupport.renderDirect(
-            tap: GainTap(envelope: TapEnvelope(planGain: keys)), input: { _ in 0.25 }, frames: 10, startUs: 1_500_000)
+            tap: GainTap(envelope: TapEnvelope(planGain: keys)), input: { _ in 0.25 }, frames: 10, startUs: 500_000)
         XCTAssertEqual(Double(late[0]), 0.25 * 1.5, accuracy: 1e-6)
     }
 
@@ -264,7 +264,7 @@ final class TapEnvelopeTests: XCTestCase {
         }
         XCTAssertEqual(Double(l[0]), 0.5, accuracy: 1e-6)
         XCTAssertEqual(Double(r[0]), -0.5, accuracy: 1e-6)
-        XCTAssertEqual(Double(l[4_799]), 0.5 + 4_799.0 / 96_000, accuracy: 1e-6)
+        XCTAssertEqual(Double(l[4_799]), 0.5 + 4_799.0 / 48_000, accuracy: 1e-6)
         XCTAssertEqual(state.nextUs ?? 0, 600_000, accuracy: 1e-6)
     }
 }

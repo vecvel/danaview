@@ -49,6 +49,8 @@ struct SegmentEncodeSettings: Codable, Equatable {
     /// reconcile DTS across segment boundaries.
     var allowFrameReordering: Bool = false
     var container: Container = .mp4
+    /// `AVVideoProfileLevelKey` override; nil = H.264 High / HEVC Main AutoLevel.
+    var profileLevel: String?
     /// AAC settings of the whole-duration audio file, nil without audio.
     var audio: Audio?
 
@@ -70,8 +72,8 @@ struct SegmentEncodeSettings: Codable, Equatable {
         if let frames = maxKeyFrameIntervalFrames { compression[AVVideoMaxKeyFrameIntervalKey] = frames }
         if let seconds = maxKeyFrameIntervalSeconds { compression[AVVideoMaxKeyFrameIntervalDurationKey] = seconds }
         switch codec {
-        case .h264: compression[AVVideoProfileLevelKey] = AVVideoProfileLevelH264HighAutoLevel
-        case .hevc: compression[AVVideoProfileLevelKey] = kVTProfileLevel_HEVC_Main_AutoLevel as String
+        case .h264: compression[AVVideoProfileLevelKey] = profileLevel ?? AVVideoProfileLevelH264HighAutoLevel
+        case .hevc: compression[AVVideoProfileLevelKey] = profileLevel ?? (kVTProfileLevel_HEVC_Main_AutoLevel as String)
         }
         return [
             AVVideoCodecKey: codec == .h264 ? AVVideoCodecType.h264 : AVVideoCodecType.hevc,

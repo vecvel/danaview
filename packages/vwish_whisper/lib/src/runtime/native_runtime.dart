@@ -75,6 +75,7 @@ final class NativeWhisperRuntime implements WhisperRuntime {
 
   final Map<_ModelKey, _ModelEntry> _models = {};
   StreamSubscription<WhisperDeviceEvent>? _deviceSub;
+  bool _deviceListening = false;
   final Set<NativeWhisperJob> _jobs = {};
   bool _disposed = false;
 
@@ -117,7 +118,9 @@ final class NativeWhisperRuntime implements WhisperRuntime {
       } catch (_) {
         return Future.error(const WhisperException(WhisperErrorKind.internal, 'vw_model_load'));
       }
-      if (handle == 0) return Future.error(exceptionOf(VwStatus.invalidArg, 'model load'));
+      if (handle == 0) {
+        return Future.error(const WhisperException(WhisperErrorKind.modelLoadFailed, 'model load: VW_ERR_INVALID_ARG'));
+      }
       entry = _ModelEntry(key, handle);
       _models[key] = entry;
       final e = entry;
@@ -212,9 +215,15 @@ final class NativeWhisperRuntime implements WhisperRuntime {
   }
 
   void _listenToDevice() {
-    _deviceSub ??= device.events.listen((event) {
-      if (event is MemoryWarning) unawaited(releaseIdleModels());
-    });
+    if (_deviceListening) return;
+    _deviceListening = true;
+    _deviceSub = device.events.listen(
+      (event) {
+        if (event is MemoryWarning) unawaited(releaseIdleModels());
+      },
+      // A finished stream (no plugin) needs no cancel; cancelling a done subscription is avoided.
+      onDone: () => _deviceSub = null,
+    );
   }
 
   WhisperJob _startJob(_ModelEntry e, VwJobParams params) {
@@ -258,8 +267,9 @@ final class NativeWhisperRuntime implements WhisperRuntime {
       e.waiters.clear();
       _releaseNow(e);
     }
-    await _deviceSub?.cancel();
+    final sub = _deviceSub;
     _deviceSub = null;
+    if (sub != null) unawaited(sub.cancel());
   }
 }
 

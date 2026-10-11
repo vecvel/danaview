@@ -192,6 +192,42 @@ enum AudioTapSupport {
         return MixRead(interleaved: acc.snapshot, status: reader.status, hung: false)
     }
 
+    /// Builds and reads a composition, redoing the read (fresh composition, mix and taps) when it
+    /// comes back bad, as IOS-12 does (ARCH §14.2): on the iOS 26.5 simulator some reads hand the
+    /// taps non-composition ranges and return silence from the start. A read is bad when it hung, is
+    /// shorter than [expectFrames], has a NaN, is silent overall (< −60 dBFS), or has a silent 100 ms
+    /// window inside [audible] frame ranges. Returns the first good read (or the last bad one) and
+    /// the number of reads it took.
+    static func readValidated(
+        expectFrames: Int, audible: [Range<Int>] = [], attempts: Int = 3,
+        algorithm: AVAudioTimePitchAlgorithm = .timeDomain, timeout: TimeInterval = 30,
+        make: () async throws -> (AVMutableComposition, AVMutableAudioMix, [AVURLAsset])
+    ) async throws -> (read: MixRead, reads: Int) {
+        var last: MixRead?
+        for attempt in 1...attempts {
+            let (comp, mix, assets) = try await make()
+            let read = try readMix(comp, mix: mix, algorithm: algorithm, timeout: timeout)
+            withExtendedLifetime(assets) {}
+            last = read
+            if isGood(read, expectFrames: expectFrames, audible: audible) { return (read, attempt) }
+            print("IOS-18 bad read \(attempt)/\(attempts): hung=\(read.hung) frames=\(read.frames) status=\(read.status.rawValue)")
+        }
+        return (try XCTUnwrap(last), attempts)
+    }
+
+    static func isGood(_ read: MixRead, expectFrames: Int, audible: [Range<Int>]) -> Bool {
+        guard !read.hung, read.frames >= expectFrames, !read.interleaved.contains(where: { $0.isNaN }) else { return false }
+        if rmsDb(read, channel: 0, 0, read.frames) < -60 && rmsDb(read, channel: 1, 0, read.frames) < -60 { return false }
+        for range in audible {
+            var a = range.lowerBound
+            while a + 4_800 <= min(range.upperBound, read.frames) {
+                if rmsDb(read, channel: 0, a, a + 4_800) < -60 && rmsDb(read, channel: 1, a, a + 4_800) < -60 { return false }
+                a += 4_800
+            }
+        }
+        return true
+    }
+
     // MARK: - Levels
 
     static func db(_ g: Double) -> Double { 20 * log10(g) }

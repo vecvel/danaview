@@ -39,12 +39,14 @@ final class GainTapReaderTests: XCTestCase {
             let samples = env["samples"] as? [[String: Any]] ?? []
             let maxI = samples.compactMap { $0["i"] as? Int }.max() ?? 0
             let endUs = (Double(maxI) + 4_800) * 1_000_000 / 48_000
-            let meter = GainTapMeter()
-            let tap = GainTap(envelope: TapEnvelope(planGain: AudioTapSupport.keys(env["keys"])), meter: meter)
-            let (comp, mix, assets) = try await AudioTapSupport.build(
-                tracks: [[.init(source: dc, t0: 0, t1: endUs, s0: 0, s1: endUs)]], taps: [tap])
-            let read = try AudioTapSupport.readMix(comp, mix: mix)
-            withExtendedLifetime(assets) {}
+            var meter = GainTapMeter()
+            let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: maxI + 1) {
+                meter = GainTapMeter()
+                let tap = GainTap(envelope: TapEnvelope(planGain: AudioTapSupport.keys(env["keys"])), meter: meter)
+                return try await AudioTapSupport.build(
+                    tracks: [[.init(source: dc, t0: 0, t1: endUs, s0: 0, s1: endUs)]], taps: [tap])
+            }
+            print("IOS-18 vectors \(name): \(reads) read(s)")
             XCTAssertFalse(read.hung, name)
             XCTAssertEqual(read.status, .completed, name)
             XCTAssertGreaterThan(read.frames, maxI, name)
@@ -81,10 +83,12 @@ final class GainTapReaderTests: XCTestCase {
         ]
         var reads: [Double: AudioTapSupport.MixRead] = [:]
         for gain in [1.0, 2.0] {
-            let (comp, mix, assets) = try await AudioTapSupport.build(
-                tracks: [segments], taps: [GainTap(envelope: TapEnvelope(planGain: [[0, gain]]))])
-            let read = try AudioTapSupport.readMix(comp, mix: mix)
-            withExtendedLifetime(assets) {}
+            let (read, count) = try await AudioTapSupport.readValidated(
+                expectFrames: 4 * 48_000 - 2_400, audible: [0..<(4 * 48_000 - 4_800)]
+            ) {
+                try await AudioTapSupport.build(tracks: [segments], taps: [GainTap(envelope: TapEnvelope(planGain: [[0, gain]]))])
+            }
+            print("IOS-18 boost \(gain): \(count) read(s)")
             XCTAssertFalse(read.hung)
             XCTAssertGreaterThanOrEqual(read.frames, 4 * 48_000 - 2_400)
             reads[gain] = read
@@ -130,16 +134,17 @@ final class GainTapReaderTests: XCTestCase {
         let plan = try XCTUnwrap(c["plan"] as? [String: Any])
         let audio = try XCTUnwrap(plan["audio"] as? [[String: Any]])
         var tracks: [[AudioTapSupport.Segment]] = []
-        var taps: [GainTap] = []
+        var gains: [[[Double]]] = []
         for seg in audio {
             let url = try XCTUnwrap(files[try XCTUnwrap(seg["asset"] as? String)])
             let map = AudioTapSupport.keys(seg["map"])
             tracks.append(map.map { .init(source: url, t0: $0[0], t1: $0[1], s0: $0[2], s1: $0[3]) })
-            taps.append(GainTap(envelope: TapEnvelope(planGain: AudioTapSupport.keys(seg["gain"]))))
+            gains.append(AudioTapSupport.keys(seg["gain"]))
         }
-        let (comp, mix, assets) = try await AudioTapSupport.build(tracks: tracks, taps: taps)
-        let read = try AudioTapSupport.readMix(comp, mix: mix)
-        withExtendedLifetime(assets) {}
+        let frames = try XCTUnwrap(c["frames"] as? Int)
+        let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: frames, audible: [0..<frames]) {
+            try await AudioTapSupport.build(tracks: tracks, taps: gains.map { GainTap(envelope: TapEnvelope(planGain: $0)) })
+        }
         XCTAssertFalse(read.hung)
         let windowSamples = try XCTUnwrap(c["windowSamples"] as? Int)
         let windows = try XCTUnwrap(c["windows"] as? [[NSNumber]])
@@ -167,7 +172,7 @@ final class GainTapReaderTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(compared, 300)
-        print("IOS-18 three_lane_reference: \(compared) windows, worst |Δ| = \(worst) dB")
+        print("IOS-18 three_lane_reference: \(compared) windows, worst |Δ| = \(worst) dB, \(reads) read(s)")
     }
 
     // MARK: - pitch: false
@@ -188,10 +193,14 @@ final class GainTapReaderTests: XCTestCase {
         // Pad with 1× audio after the case so the reader's tail does not fall inside the windows.
         var segments: [AudioTapSupport.Segment] = map.map { .init(source: url, t0: $0[0], t1: $0[1], s0: $0[2], s1: $0[3]) }
         segments.append(.init(source: url, t0: 200_000, t1: 400_000, s0: 400_000, s1: 600_000))
-        let (comp, mix, assets) = try await AudioTapSupport.build(
-            tracks: [segments], taps: [GainTap(envelope: TapEnvelope(planGain: AudioTapSupport.keys(seg["gain"])))], algorithm: .varispeed)
-        let read = try AudioTapSupport.readMix(comp, mix: mix, algorithm: .varispeed, timeout: 15)
-        withExtendedLifetime(assets) {}
+        let gain = AudioTapSupport.keys(seg["gain"])
+        let (read, reads) = try await AudioTapSupport.readValidated(
+            expectFrames: 9_600, audible: [0..<9_600], algorithm: .varispeed, timeout: 15
+        ) {
+            try await AudioTapSupport.build(
+                tracks: [segments], taps: [GainTap(envelope: TapEnvelope(planGain: gain))], algorithm: .varispeed)
+        }
+        print("IOS-18 varispeed_2x: \(reads) read(s)")
         XCTAssertFalse(read.hung, "varispeed read hung over a scaled range")
         let windowSamples = try XCTUnwrap(c["windowSamples"] as? Int)
         let windows = try XCTUnwrap(c["windows"] as? [[NSNumber]])

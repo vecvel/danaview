@@ -445,14 +445,18 @@ final class SegmentedWriter {
         ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
     }
 
-    /// Bytes of every regular file below [directory].
-    static func directorySize(_ directory: URL) -> Int64 {
+    /// Bytes of every regular file below [directory] ([excluding] one file, e.g. an output that
+    /// lives inside it).
+    static func directorySize(_ directory: URL, excluding: URL? = nil) -> Int64 {
+        let skip = excluding?.standardizedFileURL.resolvingSymlinksInPath().path
         guard let enumerator = FileManager.default.enumerator(
             at: directory, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]) else { return 0 }
         var total: Int64 = 0
         for case let url as URL in enumerator {
             let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
-            if values?.isRegularFile == true { total += Int64(values?.fileSize ?? 0) }
+            if values?.isRegularFile == true, url.standardizedFileURL.resolvingSymlinksInPath().path != skip {
+                total += Int64(values?.fileSize ?? 0)
+            }
         }
         return total
     }

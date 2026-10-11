@@ -79,8 +79,8 @@ final class _JobCell {
 
 /// A [WhisperJob] over a native `vw_job`.
 final class NativeWhisperJob implements WhisperJob {
-  /// Starts [params] on [model] and polls it. [onEnded] runs once, after the terminal state was
-  /// observed (or the start failed), before [result] completes.
+  /// Starts [params] on [model] and polls it. [onEnded] runs once, synchronously when the
+  /// terminal state was observed (or the start failed); [result] completes after [updates] closed.
   NativeWhisperJob.start({
     required VwBindings bindings,
     required int model,
@@ -358,12 +358,15 @@ final class NativeWhisperJob implements WhisperJob {
     _finalizer.detach(_cell);
     unawaited(_cell.free());
     _onEnded?.call(this);
-    if (error != null) {
-      _result.completeError(error);
-    } else {
-      _result.complete(result);
-    }
-    unawaited(_updates.close());
+    // The result completes once every update (and the done event) reached the listeners, so a
+    // caller awaiting [result] has seen the whole stream.
+    unawaited(_updates.close().whenComplete(() {
+      if (error != null) {
+        _result.completeError(error);
+      } else {
+        _result.complete(result);
+      }
+    }));
   }
 
   /// Stops polling and frees the native job without waiting for a terminal state (runtime

@@ -36,6 +36,8 @@ final class RampSeamTests: XCTestCase {
         return (Double(k) * Self.segmentUs, Double(k + 1) * Self.segmentUs, s0, s0 + rate * Self.segmentUs, rate)
     }
 
+    private var expectFrames: Int { Int(Double(Self.speeds.count) * Self.segmentUs * 48_000 / 1_000_000) - 480 }
+
     private var boundariesUs: [Int64] { (1..<Self.speeds.count).map { Int64(Double($0) * Self.segmentUs) } }
 
     struct SeamReport {
@@ -72,9 +74,10 @@ final class RampSeamTests: XCTestCase {
             let s = segment(k)
             return .init(source: tone, t0: s.t0, t1: s.t1, s0: s.s0, s1: s.s1)
         }
-        let (comp, mix, assets) = try await AudioTapSupport.build(tracks: [segs], taps: [GainTap()])
-        let read = try AudioTapSupport.readMix(comp, mix: mix)
-        withExtendedLifetime(assets) {}
+        let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: expectFrames, audible: [0..<expectFrames]) {
+            try await AudioTapSupport.build(tracks: [segs], taps: [GainTap()])
+        }
+        print("IOS-18 ramp single-track: \(reads) read(s)")
         XCTAssertFalse(read.hung)
         return read
     }
@@ -91,12 +94,13 @@ final class RampSeamTests: XCTestCase {
             tracks[k % 2].append(
                 .init(source: tone, t0: s.t0 - pre, t1: s.t1 + post, s0: s.s0 - pre * s.rate, s1: s.s1 + post * s.rate))
         }
-        let taps = (0..<2).map { track in
-            GainTap(envelope: TapEnvelope.unity.withSeamCrossfades(TapEnvelope.alternatingSeams(boundariesUs: boundariesUs, track: track)))
+        let envelopes = (0..<2).map { track in
+            TapEnvelope.unity.withSeamCrossfades(TapEnvelope.alternatingSeams(boundariesUs: boundariesUs, track: track))
         }
-        let (comp, mix, assets) = try await AudioTapSupport.build(tracks: tracks, taps: taps)
-        let read = try AudioTapSupport.readMix(comp, mix: mix)
-        withExtendedLifetime(assets) {}
+        let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: expectFrames, audible: [0..<expectFrames]) {
+            try await AudioTapSupport.build(tracks: tracks, taps: envelopes.map { GainTap(envelope: $0) })
+        }
+        print("IOS-18 ramp crossfade: \(reads) read(s)")
         XCTAssertFalse(read.hung)
         return read
     }

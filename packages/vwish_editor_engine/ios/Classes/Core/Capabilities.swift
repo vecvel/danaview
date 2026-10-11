@@ -238,7 +238,7 @@ final class Capabilities: CapabilitiesProviding {
                 allocator: nil, valueOut: UnsafeMutableRawPointer(pointer))
         }
         guard read == noErr, let flag = value else { return true }
-        return (flag as? Bool) ?? CFBooleanGetValue((flag as! CFBoolean))
+        return (flag as? Bool) ?? true
     }
 
     /// Creates a session and encodes one black frame at the size; true when a frame came out.

@@ -114,11 +114,15 @@ struct DeviceProfile: Equatable {
         }
     }
 
-    /// Nominal RAM from the reported physical memory: devices report up to ~0.45 GiB less than
-    /// their nominal size (2 GB -> ~1.9 GiB, 3 GB -> ~2.8 GiB, 4 GB -> ~3.7 GiB, 8 GB -> ~7.5 GiB).
+    /// Nominal RAM sizes Apple ships.
+    static let nominalSizes = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 64]
+
+    /// Nominal RAM from the reported physical memory: devices report less than their nominal size
+    /// (2 GB -> ~1.9 GiB, 3 GB -> ~2.8 GiB, 4 GB -> ~3.7 GiB, 8 GB -> ~7.4 GiB), so the smallest
+    /// shipped size at or above the reported amount.
     static func nominalGB(physicalBytes: UInt64) -> Int {
         let gib = Double(physicalBytes) / 1_073_741_824
-        return max(1, Int((gib - 0.45).rounded(.up)))
+        return nominalSizes.first { Double($0) >= gib - 0.01 } ?? Int(gib.rounded(.up))
     }
 
     /// Apple chip generation from the model identifier. iPhone majors map to A(major + 1) from
