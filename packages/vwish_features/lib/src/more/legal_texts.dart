@@ -3,7 +3,8 @@ library;
 
 const String vwishCopyright = 'Copyright © 2026 vecvel. All rights reserved.';
 
-const String legalEffectiveDate = '3 October 2026';
+/// Bumped to the release date of the version that ships the video editor (INT-05).
+const String legalEffectiveDate = '11 October 2026';
 
 /// A paragraph, or a bulleted list when [bullets] is set.
 class LegalBlock {
@@ -51,7 +52,8 @@ class LegalDocumentText {
 const LegalDocumentText privacyPolicyText = LegalDocumentText(
   title: 'Privacy Policy',
   summary: 'Vwish keeps everything on your device. There are no accounts, no analytics, no ads and no '
-      'tracking, and nothing you watch or type is sent to us.',
+      'tracking, and nothing you watch, edit or type is sent to us. The only extra download is the optional '
+      'speech model for Auto captions, and only after you agree.',
   contactPrompt: 'Questions about this policy?',
   sections: [
     LegalSection('Who we are', [
@@ -75,6 +77,23 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
         LegalBullet(
           'Your profile, if you choose to fill it in: name, email address, phone number and date of birth. '
           'Every field is optional.',
+        ),
+        LegalBullet(
+          'On iPhone, iPad and Android, video editing projects: your edits and the files the editor makes for '
+          'them, such as voice recordings, freeze frames, reversed clips, optimized copies for smoother editing, '
+          'thumbnails and audio waveforms. Projects refer to your original videos, photos and music where they '
+          'are. Editing never changes, moves, renames or deletes your originals. On Android, video editing '
+          'projects are not included in device backups.',
+        ),
+        LegalBullet(
+          'On iPhone, iPad and Android, videos and photos you add to a project from your photo library, and files '
+          "you drop into the editor, are copied into Vwish's own storage so the project keeps working. Deleting a "
+          'project removes copies no other project uses.',
+        ),
+        LegalBullet(
+          'On iPhone, iPad and Android, if you use Auto captions: the speech model you downloaded, and the text '
+          'transcribed from your videos so captions can be adjusted later without transcribing again. They are '
+          'never uploaded.',
         ),
       ]),
       LegalBlock.paragraph(
@@ -111,17 +130,43 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
           'quality level, to see whether the link responds and what it serves. Only a small part of a file '
           'is downloaded.',
         ),
+        LegalBullet(
+          lead: 'Speech model for Auto captions',
+          'On iPhone, iPad and Android, only if you choose to create captions automatically, and only after you '
+          'agree, Vwish downloads a speech recognition model (about 31 to 181 MB, depending on the quality you '
+          'pick) from Hugging Face (huggingface.co), which delivers it through its download network on hf.co. '
+          'The request contains only the model\'s file name. No video, audio, captions or personal data are '
+          'sent. Hugging Face sees the usual details of the connection, such as your IP address, and handles them '
+          'under its own policies. After the download, captions are created entirely on your device, even when '
+          'you are offline.',
+        ),
       ]),
       LegalBlock.paragraph(
-        'Files on your device that you play, inspect or browse are read on your device and are never uploaded.',
+        'Files on your device that you play, edit, inspect, export or browse are processed on your device and '
+        'are never uploaded.',
       ),
     ]),
     LegalSection('Files and permissions', [
       LegalBlock.paragraph(
-        'Vwish reads only the files and folders you choose to open or add to your library, and on phones and '
-        "tablets the videos you place in its own folder. It doesn't scan the rest of your storage, and it never "
-        'changes, moves or deletes your videos.',
+        'Vwish reads only the files and folders you choose to open, add to your library or add to a project, and '
+        "on phones and tablets the videos you place in its own folder. It doesn't scan the rest of your storage, "
+        'and it never changes, moves or deletes your videos, photos or music.',
       ),
+      LegalBlock.bullets([
+        LegalBullet(
+          lead: 'Photo library',
+          'On iPhone, iPad and Android, when you add photos or videos to a project, Vwish receives only the items you pick. When you save an '
+          "export to Photos or your gallery, Vwish adds that video and doesn't read the rest of your library.",
+        ),
+        LegalBullet(
+          lead: 'Microphone',
+          'On iPhone, iPad and Android, used only while you record a voiceover in the editor. Recordings stay in that project on your device.',
+        ),
+        LegalBullet(
+          lead: 'Notifications (Android)',
+          'Used only to show export and caption progress while Vwish is in the background, if you allow it.',
+        ),
+      ]),
     ]),
     LegalSection('Your choices', [
       LegalBlock.bullets([
@@ -129,6 +174,14 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
         LegalBullet(
           'Clear your watch history and resume points from Continue watching on Home, or manage saved data in '
           'Settings › Storage & history.',
+        ),
+        LegalBullet(
+          "On iPhone, iPad and Android, delete video editing projects in the editor's Projects screen. This "
+          'removes the project and the files made for it, never your originals.',
+        ),
+        LegalBullet(
+          'On iPhone, iPad and Android, delete the Auto captions speech model, and clear editor thumbnails, waveforms and optimized copies, in '
+          'Settings › Storage & history or Settings › Video editor.',
         ),
         LegalBullet(
           'On phones and tablets, uninstalling Vwish removes everything it stored, and on Android so does '
@@ -182,23 +235,40 @@ const LegalDocumentText termsOfUseText = LegalDocumentText(
     ]),
     LegalSection('Your content', [
       LegalBlock.paragraph(
-        'Vwish plays the files and streams you choose. You are responsible for the content you open with it and '
-        "for having the rights to access and play that content. vecvel doesn't provide, host or endorse any "
-        'content you play.',
+        'Vwish plays and edits the files and streams you choose. You are responsible for the content you open, '
+        'edit and publish with it, and for having the rights to the footage, music, images and fonts you use. '
+        "vecvel doesn't provide, host or endorse any content you play or create.",
       ),
       LegalBlock.paragraph(
         "Don't use Vwish to break the law, to infringe anyone's rights, or to disrupt the services you stream "
         'from or test against.',
       ),
     ]),
+    LegalSection('Editing and exports', [
+      LegalBlock.paragraph(
+        'On iPhone, iPad and Android, the video editor never changes your original files; exports are new files. '
+        'Keep your own backups of projects and exports you care about. Export presets named after YouTube, '
+        'Instagram or TikTok are conveniences and are not made or endorsed by those services.',
+      ),
+    ]),
+    LegalSection('Auto captions', [
+      LegalBlock.paragraph(
+        'On iPhone, iPad and Android, automatically created captions may contain mistakes. Review them before you '
+        'publish or share a video.',
+      ),
+    ]),
     LegalSection('Trademarks', [
-      LegalBlock.paragraph('"Vwish", "vecvel" and associated logos are trademarks of vecvel.'),
+      LegalBlock.paragraph(
+        '"Vwish", "vecvel" and associated logos are trademarks of vecvel. YouTube, Instagram and TikTok are '
+        'trademarks of their respective owners.',
+      ),
     ]),
     LegalSection('No warranty', [
       LegalBlock.paragraph(
         'The app is provided "as is", without warranty of any kind, express or implied, including the warranties '
         'of merchantability, fitness for a particular purpose and non-infringement. Results from the built-in '
-        'tools, such as speed test measurements and data usage estimates, are approximate.',
+        'tools, such as speed test measurements and data usage estimates, export size estimates and '
+        'automatically created captions, are approximate.',
       ),
     ]),
     LegalSection('Limitation of liability', [
