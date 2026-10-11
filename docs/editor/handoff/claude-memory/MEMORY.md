@@ -1,5 +1,9 @@
-- [Windows Android lane](windows-android-lane.md) — THIS machine builds the editor's Android lane; branch editor-android; read docs/editor/handoff first
+- [Windows Android lane](windows-android-lane.md) — THIS machine builds the Android lane; repo C:\dev\danaview, editor-android @ 5be9d36, next AND-06/07/09, workflow args
 - [Two-machine split](two-machine-split.md) — Mac does iOS + everything else, Windows laptop does the Android lane; branches editor-wip / editor-android and gates
 - [Video editor build](video-editor-build.md) — docs/editor plan, owner defaults, whisper.cpp vendored, workflow/resume approach and run history (Mac paths)
 - [No Claude co-author](no-claude-coauthor.md) — commits carry no Claude Co-Authored-By trailer (owner request)
 - [iOS simulator testing quirks](ios-simulator-testing-quirks.md) — Mac only: tap duration 0.1, no parallel tap+screenshot, flutter attach for VM eval
+- [Windows machine state](windows-machine-state.md) — what is installed here; source ~/danaview_env.sh first; media_kit jar curl workaround for APK builds
+- [D-43e sign-off](d43e-signoff.md) — owner signed the AND-16 plan 2026-10-11; AND-18/AND-19 added; D-43E is no longer a gate
+- [Android lane progress](android-lane-progress.md) — READ FIRST on resume: head 5be9d36, next tickets + run args, Mac gates, danaview_wip_* backup loop
+- [Danaview rename](danaview-rename.md) — rename DONE 2026-10-11 (danaview_* packages, com.vecvel.danaview); what was kept; VS Build Tools installed
