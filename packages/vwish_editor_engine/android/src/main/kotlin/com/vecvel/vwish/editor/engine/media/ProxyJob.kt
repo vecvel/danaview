@@ -16,7 +16,8 @@
 //   API 35 emulator). With the decoders production picks (no override), the proxy loses source
 //   frames of the ENG-05 B-pyramid fixtures: frame 1 of vfr_720p.mp4 on the API 35 emulator, and
 //   frames 1-5 on the API 29 emulator with both OMX decoders, including OMX.google.h264.decoder,
-//   the software decoder real API 29 phones ship too. Every delivered frame keeps its source
+//   the software decoder real API 29 phones ship too (measured 2026-10-11: 138/143 frames with the
+//   default choice and with software first). Every delivered frame keeps its source
 //   timestamp. To be compared against Media3 1.11.1's B-pyramid handling with and without
 //   clipping and decode-only flags; frame-exactness of the production decoder path on a real API
 //   29 device and on a mid-tier device is deferred (QA-04). If it reproduces on hardware, prefer

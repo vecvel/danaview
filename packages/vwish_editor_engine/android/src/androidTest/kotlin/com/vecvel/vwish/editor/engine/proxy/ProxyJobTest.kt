@@ -16,10 +16,11 @@
 // drops a B-frame), so the criterion "proxy PTS equal on the VFR fixture" is met ONLY with software
 // decoders on the API 35 emulator. defaultDecodersKeepTimestamps runs the production decoder choice:
 // it checks that no delivered frame changes its timestamp and bounds the loss measured on API 35
-// (frame 1); it is not evidence of frame-exactness. On the API 29 emulator the production path
-// loses frames 1-5 (both OMX decoders), so that bound fails there: see ProxyJob.kt "KNOWN
-// LIMITATION" (deferred to a real API 29 device and a mid-tier device, QA-04). Timings are
-// emulator numbers.
+// (frame 1); it is not evidence of frame-exactness. On the API 29 emulator both decoder choices
+// lose frames 1-5 of vfr_720p.mp4 (both OMX decoders; measured 2026-10-11: this test and
+// vfrProxyKeepsEverySourcePresentationTime fail there with 138/143 frames), so the AND-05 PTS
+// criterion is met on the API 35 emulator only: see ProxyJob.kt "KNOWN LIMITATION" (deferred to
+// a real API 29 device and a mid-tier device, QA-04). Timings are emulator numbers.
 
 package com.vecvel.vwish.editor.engine.proxy
 
