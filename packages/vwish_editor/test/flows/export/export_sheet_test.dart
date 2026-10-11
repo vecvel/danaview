@@ -431,6 +431,7 @@ void main() {
       final job = await rig.startExport(tester);
       await rig.finishJob(tester, job, bytes: 2500000);
       expect(find.text('Saved to Gallery'), findsOneWidget);
+      debugPrint(find.byType(Text).evaluate().map((e) => (e.widget as Text).data).toList().toString());
       expect(find.text(ExportStrings.fileInfo(0, '0:05')), findsOneWidget, reason: 'the engine result: size and duration under the title');
       expect(_key('export-share'), findsOneWidget);
       expect(_key('export-save-files'), findsOneWidget);
