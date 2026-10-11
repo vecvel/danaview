@@ -110,10 +110,20 @@ enum ItemProviderImport {
         guard var name = suggested?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else {
             return sanitize(file.lastPathComponent)
         }
-        if !ext.isEmpty && (name as NSString).pathExtension.lowercased() != ext.lowercased() {
+        if !ext.isEmpty && !sameFileType((name as NSString).pathExtension, ext) {
             name += "." + ext
         }
         return sanitize(name)
+    }
+
+    /// Whether two extensions name the same file type (`jpg`/`jpeg`, `MOV`/`mov`, `tif`/`tiff`).
+    static func sameFileType(_ a: String, _ b: String) -> Bool {
+        let a = a.lowercased(), b = b.lowercased()
+        if a == b { return true }
+        guard !a.isEmpty, !b.isEmpty, let typeA = UTType(filenameExtension: a), let typeB = UTType(filenameExtension: b),
+            !typeA.isDynamic, !typeB.isDynamic
+        else { return false }
+        return typeA == typeB
     }
 
     /// A single safe path component (no separators, NUL or leading dots; at most 200 UTF-8 bytes).

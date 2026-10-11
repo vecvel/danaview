@@ -431,8 +431,7 @@ void main() {
       final job = await rig.startExport(tester);
       await rig.finishJob(tester, job, bytes: 2500000);
       expect(find.text('Saved to Gallery'), findsOneWidget);
-      debugPrint(find.byType(Text).evaluate().map((e) => (e.widget as Text).data).toList().toString());
-      expect(find.text(ExportStrings.fileInfo(0, '0:05')), findsOneWidget, reason: 'the engine result: size and duration under the title');
+      expect(find.text(ExportStrings.fileInfo(0, '0:04')), findsOneWidget, reason: 'the engine result: size and duration under the title');
       expect(_key('export-share'), findsOneWidget);
       expect(_key('export-save-files'), findsOneWidget);
       expect(_key('export-save-library'), findsNothing, reason: 'already in the Gallery');
@@ -674,11 +673,18 @@ void main() {
       await rig.pump(tester, surface: surface);
       await rig.openSheet(tester);
       await rig.tapKey(tester, 'export-preset-tiktok');
+      // The aspect notice belongs to the preset: Custom has no target aspect and drops it.
+      expectNoOverflow(tester);
+      expectOwnerUiRules(tester);
+      await tester.ensureVisible(_key('export-change-aspect'));
+      await tester.pump();
+      expectInside(tester, _key('export-change-aspect'));
       await rig.tapKey(tester, 'export-edit');
       await rig.tapKey(tester, 'export-bitrate-custom');
       expectNoOverflow(tester);
       expectOwnerUiRules(tester);
-      for (final k in ['export-start', 'export-change-aspect', 'export-bitrate-slider', 'export-keep-copy']) {
+      for (final k in ['export-start', 'export-bitrate-slider', 'export-keep-copy']) {
+        expect(_key(k), findsOneWidget, reason: k);
         await tester.ensureVisible(_key(k));
         await tester.pump();
         expectInside(tester, _key(k));

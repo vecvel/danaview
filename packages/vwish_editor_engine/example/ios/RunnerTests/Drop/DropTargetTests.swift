@@ -117,7 +117,8 @@ final class DropTargetTests: XCTestCase {
             XCTAssertEqual(item.origin, .drop)
             XCTAssertTrue(item.isTemporaryCopy)
             XCTAssertNil(item.bookmark)
-            XCTAssertEqual((item.displayName as NSString).pathExtension, source.pathExtension)
+            let ext = (item.displayName as NSString).pathExtension
+            XCTAssertTrue(ItemProviderImport.sameFileType(ext, source.pathExtension), "\(ext) vs \(source.pathExtension)")
             let copy = try XCTUnwrap(URL(string: item.uri))
             XCTAssertEqual(copy.deletingLastPathComponent().deletingLastPathComponent().resolvingSymlinksInPath().path, drops)
             XCTAssertEqual(try Data(contentsOf: copy), try Data(contentsOf: source))

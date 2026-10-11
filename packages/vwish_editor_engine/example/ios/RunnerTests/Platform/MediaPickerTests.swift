@@ -92,7 +92,11 @@ final class MediaPickerTests: XCTestCase {
             done.fulfill()
         }
         wait(for: [done], timeout: 20)
-        XCTAssertEqual(items.map { ($0.displayName as NSString).pathExtension.lowercased() }, ["jpg", "mp4"])
+        // The system may hand the temp file over as `.jpeg`; any extension of the same type is fine.
+        let extensions = items.map { ($0.displayName as NSString).pathExtension }
+        XCTAssertEqual(extensions.count, 2)
+        XCTAssertTrue(ItemProviderImport.sameFileType(extensions.first ?? "", "jpg"), "\(extensions)")
+        XCTAssertTrue(ItemProviderImport.sameFileType(extensions.last ?? "", "mp4"), "\(extensions)")
     }
 
     func testClassifyKinds() throws {
@@ -122,6 +126,8 @@ final class MediaPickerTests: XCTestCase {
         XCTAssertEqual(ItemProviderImport.displayName(suggested: "IMG_1", file: URL(fileURLWithPath: "/t/x.MOV")), "IMG_1.MOV")
         XCTAssertEqual(ItemProviderImport.displayName(suggested: "a.mov", file: URL(fileURLWithPath: "/t/x.mov")), "a.mov")
         XCTAssertEqual(ItemProviderImport.displayName(suggested: nil, file: URL(fileURLWithPath: "/t/x.mov")), "x.mov")
+        XCTAssertEqual(ItemProviderImport.displayName(suggested: "IMG_2.jpg", file: URL(fileURLWithPath: "/t/x.jpeg")), "IMG_2.jpg")
+        XCTAssertEqual(ItemProviderImport.displayName(suggested: "IMG_3.png", file: URL(fileURLWithPath: "/t/x.jpeg")), "IMG_3.png.jpeg")
     }
 
     func testCloneIntoWorkMakesAnIndependentCopy() throws {

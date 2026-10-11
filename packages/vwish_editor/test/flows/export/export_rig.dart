@@ -55,7 +55,7 @@ MediaAsset videoAsset(String id, {int width = 1920, int height = 1080}) => Media
       addedAt: DateTime.utc(2026, 10, 1),
     );
 
-/// A project named "My video": an image clip (0-5 s), optionally a text item and a captions track
+/// A project named "My video": an image clip (0-4 s), optionally a text item and a captions track
 /// ("Captions (Spanish)", `es`) with [cues] cues; [empty] has no clips at all.
 EditProject exportProject(
   FakeProjectRepository repo, {

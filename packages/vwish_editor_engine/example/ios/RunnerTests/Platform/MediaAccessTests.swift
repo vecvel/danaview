@@ -56,6 +56,7 @@ final class MediaAccessTests: XCTestCase {
     func testQuickHashReadsOnlyBothEnds() throws {
         // A 32 MiB sparse file hashes quickly and equals the head/tail formula.
         let url = fixture.roots.support.appendingPathComponent("media/big.bin")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: url.path, contents: Data("head".utf8))
         let handle = try FileHandle(forWritingTo: url)
         try handle.truncate(atOffset: 32 << 20)
