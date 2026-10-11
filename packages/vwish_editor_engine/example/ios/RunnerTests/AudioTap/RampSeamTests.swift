@@ -119,7 +119,10 @@ final class RampSeamTests: XCTestCase {
             "IOS-18 ramp seams: single-track \(singleText); "
                 + "crossfade floor \(crossfade.floor) seams \(crossfade.seams) worst excess \(crossfade.worstExcessDb) dBFS")
         // The fallback must always pass, so IOS-08 can use it.
-        XCTAssertTrue(crossfade.passes, "crossfade option: seam transient \(crossfade.worstExcessDb) dBFS above the tone")
+        XCTAssertTrue(
+            crossfade.passes,
+            "crossfade option: seam transient \(crossfade.worstExcessDb) dBFS above the tone "
+                + "(floor \(crossfade.floor), seams \(crossfade.seams))")
         // AC: the single-track layout passes, or the crossfade option is enabled (and passing).
         XCTAssertTrue(
             TapEnvelope.rampSeamCrossfadesEnabled || single?.passes == true,

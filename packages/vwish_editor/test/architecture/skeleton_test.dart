@@ -88,6 +88,8 @@ void main() {
       final files = dir.listSync(recursive: true).whereType<File>().toList();
       if (files.isEmpty) problems.add('$path ($ticket) is empty');
       for (final f in files) {
+        // Generated binaries (assets/looks/*.vlut, UX-24) carry no header.
+        if (f.path.endsWith('.vlut')) continue;
         final header = _ownerHeader(f.readAsStringSync());
         if (header != null && header != ticket) problems.add('${f.path}: OWNER $header, BUILD_PLAN says $ticket');
       }

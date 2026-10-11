@@ -72,9 +72,12 @@ final class GainTapPlayerTests: XCTestCase {
         let b = boost.levels
         XCTAssertGreaterThan(u.samples, 48_000)
         XCTAssertGreaterThan(b.samples, 48_000)
-        // The tap input is the source level (−15.01 dBFS RMS): nothing attenuates before the tap.
-        XCTAssertEqual(u.preDb, -15.01, accuracy: 0.5)
-        XCTAssertEqual(b.preDb, -15.01, accuracy: 0.5)
+        // The tap input is the source level (−15.01 dBFS RMS): nothing attenuates before the tap
+        // (the player volume 0.05 would show as −26 dB). ±1 dB: the `.timeDomain` 2× segment and
+        // the metered span move the input RMS by up to ~0.5 dB under load (−15.52 seen 2026-10-11);
+        // the gain itself is asserted per run to ±0.01 / ±0.1 dB below.
+        XCTAssertEqual(u.preDb, -15.01, accuracy: 1.0)
+        XCTAssertEqual(b.preDb, -15.01, accuracy: 1.0)
         XCTAssertEqual(u.postDb - u.preDb, 0, accuracy: 0.01)
         XCTAssertEqual(b.postDb - b.preDb, 6.0206, accuracy: 0.1)
         // 200% vs 100% across the two runs, normalised by their input levels: the two plays meter

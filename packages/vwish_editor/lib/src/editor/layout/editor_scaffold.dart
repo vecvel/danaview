@@ -34,6 +34,7 @@ import '../../debug/rebuild_counters.dart';
 import '../inspector/inspector_dock.dart';
 import '../inspector/inspector_host.dart';
 import '../preview/preview_region.dart';
+import '../timeline/timeline_drop_target.dart';
 import '../timeline/timeline_view.dart';
 import '../toolbar/tool_rail.dart';
 import '../toolbar/tool_strip.dart';
@@ -163,7 +164,7 @@ class _EditorScaffoldState extends ConsumerState<EditorScaffold> {
 
     region(EditorRegion.preview, const PreviewRegion());
     region(EditorRegion.transport, transport);
-    region(EditorRegion.timeline, const TimelineView());
+    region(EditorRegion.timeline, const TimelineDropTarget(child: TimelineView()));
     region(EditorRegion.toolStrip, const ToolStrip());
     region(EditorRegion.rail, const ToolRail());
     region(
