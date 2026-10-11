@@ -1,6 +1,0 @@
-import 'package:flutter/foundation.dart';
-import 'package:vwish_editor_core/model.dart';
-import 'package:vwish_whisper/vwish_whisper.dart';
-
-/// Mentions StatelessWidget only in a comment and in a 'extends StatelessWidget' string.
-class TranscriptionService extends ChangeNotifier {}

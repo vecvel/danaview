@@ -1,4 +1,4 @@
-# Vwish Editor: Domain Model, Editing Operations, Persistence and RenderPlan
+# Danaview Editor: Domain Model, Editing Operations, Persistence and RenderPlan
 
 > **Area:** the pure-Dart editing core. It covers the timeline model, time math, editing commands, undo/redo, validation, keyframe and geometry evaluation, project storage (autosave, recovery, migration), media management (import policy, fingerprints, missing media, relink, garbage collection), SRT/VTT and `.cube` codecs, and the platform-neutral **RenderPlan** and **ExportSettings** that the native engines consume.
 > **Status:** design draft for the Editor release. This document contains no production code. Dart, Swift and Kotlin snippets are interface sketches.
@@ -11,7 +11,7 @@
 
 ## 0. Decisions at a glance
 
-1. **New package `packages/vwish_editor_core`, pure Dart.** It has no Flutter import, so every model, command, codec and compiler runs in isolates and under `dart test`. Dependencies: `meta`, `collection`, `crypto`, `path`, `characters`. File I/O (`dart:io`) is confined to `lib/src/store/`, and a test enforces that.
+1. **New package `packages/danaview_editor_core`, pure Dart.** It has no Flutter import, so every model, command, codec and compiler runs in isolates and under `dart test`. Dependencies: `meta`, `collection`, `crypto`, `path`, `characters`. File I/O (`dart:io`) is confined to `lib/src/store/`, and a test enforces that.
 2. **Time is an integer count of microseconds (`TimeUs = int`) with a rational `FrameRate`.** Every timeline edge sits exactly on the project frame grid, where frame *k* starts at `ceil(k·10⁶·den/num)` µs. Source times are not quantized to the project grid. The compiler adds a fixed +500 µs sampling bias to video source maps, so both engines pick the same source frame using their default "latest PTS ≤ t" rule (§3).
 3. **The model is immutable and shares structure.** Unchanged `Track` and item instances stay `identical` across commands. Item lists are copy-on-write per track. There is no persistent-collection dependency: a 500-item lane copies 500 pointers, which takes microseconds.
 4. **The media pool lives outside the timeline subtree.** History snapshots cover `Timeline` (settings, tracks, markers). Pool additions (imports, recordings, derived assets) are *sticky*: undo never removes media from the bin. Pool changes that the user should be able to undo (relink, remove from project) are recorded as `PoolDelta`s inside the history entry.
@@ -20,7 +20,7 @@
 7. **Overlap policy:** two items on one lane never overlap. A non-ripple move, paste or insert into occupied space goes to the nearest free lane of the same kind, and a new lane is created if none is free (ux.md Q8). Ripple affects the edited lanes plus their linked partners.
 8. **Transitions are centered on the cut and use handles.** Timeline positions don't change. The RenderPlan has **no transition primitive**. The compiler *lowers* every transition, fade, text animation, speed ramp, dip color and blurred background into extended layers, piecewise-linear keyframes, masks and solid layers. Engines implement one animation primitive (linear keyframes) and a small fixed effect set, so preview and export can't drift between iOS and Android (§12).
 9. **Text layout belongs to Flutter, not the engines [DECISION, answers ux.md Q3].** The preview draws text and subtitle layers in a Flutter overlay above the native texture. This is valid because text and subtitles are always the top compositing bands (§4.3). For export, the same layout code rasterizes PNG sprites, and the plan references them. The plan still carries the full `TextLayoutSpec`, so a native text renderer can be added later without a schema change.
-10. **Transport: the RenderPlan is versioned JSON (UTF-8 bytes) carried inside the engine's typed control API (Pigeon recommended).** The JSON Schema in `vwish_editor_core/schema/` is the single contract. A shared fixture corpus is decoded by the Dart, Swift and Kotlin contract tests (§12.9).
+10. **Transport: the RenderPlan is versioned JSON (UTF-8 bytes) carried inside the engine's typed control API (Pigeon recommended).** The JSON Schema in `danaview_editor_core/schema/` is the single contract. A shared fixture corpus is decoded by the Dart, Swift and Kotlin contract tests (§12.9).
 11. **A project is a bundle under Application Support, never under `Documents`.** The file is a two-line format: a header line (schema, sizes, SHA-256) followed by a body line. Writes go to a temp file, then fsync, rotate `.bak`, and rename. Autosave writes a two-slot journal. Manual, exit and background saves write the main file. Crash recovery means a journal newer than the main file. Migrations are pure functions on raw JSON, with a backup taken first.
 12. **Originals are never modified, moved, renamed or deleted.** Every delete goes through one `OwnedFileDeleter`, which canonicalizes paths and refuses anything outside the editor roots or any asset whose ownership is `external`. App-owned picker temp copies move into a content-addressed managed store that projects share. iOS Files and Android documents are referenced in place, through bookmarks or persisted URI grants. Mark-and-sweep GC reclaims unreferenced copies and grants.
 13. **Desktop later, with no core changes.** Nothing in the core is mobile-specific. Platform specifics sit behind `MediaAccessPort`, which the engine package implements, and the RenderPlan is engine-neutral.
@@ -29,14 +29,14 @@
 
 ## 1. Scope and ground truth
 
-**This area owns:** `vwish_editor_core` (all of it), the project file format, the RenderPlan JSON Schema and its fixtures, the export presets table, and the Android backup-rules XML, co-owned with the Android area.
+**This area owns:** `danaview_editor_core` (all of it), the project file format, the RenderPlan JSON Schema and its fixtures, the export presets table, and the Android backup-rules XML, co-owned with the Android area.
 **It does not own:** widgets and Riverpod controllers (ux.md), native rendering, decoding, picking and jobs (engine docs), or whisper and segmentation (ai.md).
 
 | Fact [VERIFIED in repo] | Where | Consequence |
 |---|---|---|
-| `vwish_domain` is pure Dart (only `meta`); `vwish_data` depends on Flutter (`path_provider`, and `debugPrint` in `MediaInspector`) | `packages/*/pubspec.yaml` | The core must not depend on `vwish_data`. Store roots are injected as plain paths that the app builds from `AppStorage`. |
-| `MediaIdentityService.computeQuickHash` = sha1(first 64 KB + last 64 KB + `:size`) | `vwish_data/lib/src/scanner/media_identity.dart` | The same algorithm becomes `MediaFingerprint.quickHash`, reimplemented in core and tested for equality, so player, editor and AI caches agree. |
-| `AppStorage.appDataDirectory` = `getApplicationSupportDirectory()`; the cache dir is `getTemporaryDirectory()` | `vwish_data/lib/src/storage/app_storage.dart` | Roots: `<support>/vwish/editor/` and `<cache>/vwish/editor/`. ai.md uses `vwish/speech/`. |
+| `danaview_domain` is pure Dart (only `meta`); `danaview_data` depends on Flutter (`path_provider`, and `debugPrint` in `MediaInspector`) | `packages/*/pubspec.yaml` | The core must not depend on `danaview_data`. Store roots are injected as plain paths that the app builds from `AppStorage`. |
+| `MediaIdentityService.computeQuickHash` = sha1(first 64 KB + last 64 KB + `:size`) | `danaview_data/lib/src/scanner/media_identity.dart` | The same algorithm becomes `MediaFingerprint.quickHash`, reimplemented in core and tested for equality, so player, editor and AI caches agree. |
+| `AppStorage.appDataDirectory` = `getApplicationSupportDirectory()`; the cache dir is `getTemporaryDirectory()` | `danaview_data/lib/src/storage/app_storage.dart` | Roots: `<support>/danaview/editor/` and `<cache>/danaview/editor/`. ai.md uses `danaview/speech/`. |
 | `LibraryStorage` moves only the app's own temp picker copies into `Documents/Imported`; `Documents` is the "On This Device" library | `library_storage.dart` | Files under `Documents` are the **user's library = originals**. The editor references them through `AppRelativeLocator` and never moves them. Editor files never go into `Documents`. |
 | `LibraryStorage.resolveStoredPath` rebases absolute paths after an iOS container UUID change | same | Avoided by design: app-internal files are stored as root-relative paths. |
 | Android `MainActivity.copyContentUriToCache` copies incoming `content://` files into the cache; iOS `AppDelegate` calls `startAccessingSecurityScopedResource` for in-place opens | `MainActivity.kt`, `AppDelegate.swift` | Player "Edit" can see a cache copy (Android), which must be copied into the managed store because the cache is purgeable, or an in-place URL (iOS), which gets a bookmark. See §10.1. |
@@ -48,7 +48,7 @@
 ## 2. Package and file layout
 
 ```
-packages/vwish_editor_core/
+packages/danaview_editor_core/
   pubspec.yaml            # sdk ^3.12; deps: meta, collection, crypto, path, characters; dev: test, lints
   schema/
     project.v1.schema.json        # project body JSON Schema (documentation + test validation)
@@ -88,7 +88,7 @@ packages/vwish_editor_core/
                  sprite_requests.dart export_settings.dart export_presets.dart bitrate.dart
       codec/     project_json.dart fragment_cache.dart schema_version.dart
         migrations/ migration.dart migrations.dart (registry) m0001_example.dart
-      store/     store_roots.dart store_fs.dart atomic_file.dart vwproj_format.dart owned_file_deleter.dart
+      store/     store_roots.dart store_fs.dart atomic_file.dart dnproj_format.dart owned_file_deleter.dart
                  project_repository.dart file_project_repository.dart project_summary.dart
                  autosave_scheduler.dart journal.dart recovery.dart
                  media_pool_service.dart media_access_port.dart import_policy.dart managed_store.dart
@@ -98,9 +98,9 @@ packages/vwish_editor_core/
 ```
 
 **Dependency rules** (enforced by `test/purity_test.dart`, which parses imports):
-* Nothing under `lib/src` imports `package:flutter` or any `vwish_*` package.
+* Nothing under `lib/src` imports `package:flutter` or any `danaview_*` package.
 * Only `lib/src/store/**` may import `dart:io`. Codecs take `Uint8List`/`String` and use `dart:convert` only. `model`, `ops`, `eval`, `formats`, `plan` and `codec` stay I/O-free and isolate-safe.
-* `vwish_editor` (UX), `vwish_transcription` (AI) and the engine package depend on the core. The core depends on none of them.
+* `danaview_editor` (UX), `danaview_transcription` (AI) and the engine package depend on the core. The core depends on none of them.
 
 ---
 
@@ -617,7 +617,7 @@ final class HistoryPolicy { final int maxEntries /*200*/; final int maxApproxByt
 T evaluate<T>(TimelineItem item, PropertyKey<T> key, TimeUs t);            // §4.11
 ItemBox? boxAt(EditProject p, ItemId id, TimeUs t, {TextMetricsProvider? text}); // ux.md §7.2; canvas px
 final class ItemBox { final Offset2 center; final Size2 size; final double rotationDeg; final bool flipH, flipV; }
-abstract interface class TextMetricsProvider {                               // implemented in vwish_editor with ui.Paragraph
+abstract interface class TextMetricsProvider {                               // implemented in danaview_editor with ui.Paragraph
   Size2 measure(TextLayoutSpec spec);                                       // canvas px, incl. background padding
 }
 TextLayoutSpec textLayoutSpecOf(TextItem item, CanvasSpec c);               // renderer-neutral, §12.5
@@ -634,29 +634,29 @@ Size2 baseSize(MediaProbe probe, CropRect crop, FitMode fit, Size2 canvas);  // 
 ### 9.1 Roots and bundle layout
 
 ```dart
-final class StoreRoots {                 // built in lib/main.dart from AppStorage (vwish_data); plain strings
+final class StoreRoots {                 // built in lib/main.dart from AppStorage (danaview_data); plain strings
   final String support;                  // <ApplicationSupport> (iOS Library/Application Support; Android filesDir)
   final String cache;                    // <Caches | cacheDir> (purgeable)
   final String documents;                // <Documents> (library originals; read-only to the editor)
-  String get editorSupport => '$support/vwish/editor';  String get editorCache => '$cache/vwish/editor';
+  String get editorSupport => '$support/danaview/editor';  String get editorCache => '$cache/danaview/editor';
 }
 ```
 
 ```
-<support>/vwish/editor/
+<support>/danaview/editor/
   projects/<projectId>/
-    project.vwproj            main document (header line + body line)
-    project.vwproj.bak        previous good main (rotated on every main write)
-    journal/a.vwproj b.vwproj autosave slots (alternating); recovered-<ts>.vwproj (kept after "Open last saved")
-    meta.json                 summary for the Projects list (rebuildable from project.vwproj)
+    project.dnproj            main document (header line + body line)
+    project.dnproj.bak        previous good main (rotated on every main write)
+    journal/a.dnproj b.dnproj autosave slots (alternating); recovered-<ts>.dnproj (kept after "Open last saved")
+    meta.json                 summary for the Projects list (rebuildable from project.dnproj)
     refs.json                 managed paths, derived specs, URI grants, retained (in-history) media: GC input
     poster.jpg                project thumbnail (engine renders on exit save)
     assets/luts/<id>.cube + <id>.vlut   assets/recordings/<id>.m4a   assets/stills/<id>.png
-    backups/pre-migration-s<N>.vwproj
+    backups/pre-migration-s<N>.dnproj
   media/<hh>/<quickHash>/<sanitized name>      managed copies, shared by projects (content-addressed)
   derived/<specHash>.mp4                       reversed renditions, shared, regenerable
   trash/<projectId>-<ts>/                      staged deletes
-<cache>/vwish/editor/
+<cache>/danaview/editor/
   thumbs/<quickHash>/…  waveforms/<quickHash>-<stream>.peaks  proxies/<quickHash>-<h>.mp4   (engine-owned formats)
   sprites/<spriteKey>.png  looks/<presetId>.vlut  renders/<jobId>/  subtitles-export/  tmp/
 ```
@@ -664,14 +664,14 @@ final class StoreRoots {                 // built in lib/main.dart from AppStora
 * **Why Application Support.** `Documents` is the scanned "On This Device" library (ux.md §1), and Caches is purgeable. Project JSON, recordings, stills and LUTs are small and user-authored, so they are backed up.
 * **Excluded from backup:** `media/` and `derived/`, which are large and either re-importable or regenerable.
   * **iOS:** `NSURLIsExcludedFromBackupKey` set on these directories through `MediaAccessPort.excludeFromBackup`. Setting it on a directory excludes its contents [VERIFY].
-  * **Android:** `res/xml/data_extraction_rules.xml` (API 31+) and `backup_rules.xml` (API ≤ 30) exclude `file/vwish/editor/media/` and `file/vwish/editor/derived/`.
+  * **Android:** `res/xml/data_extraction_rules.xml` (API 31+) and `backup_rules.xml` (API ≤ 30) exclude `file/danaview/editor/media/` and `file/danaview/editor/derived/`.
 * **After a restore,** projects open with missing media and the relink flow handles it.
 * **No global index file.** The Projects list scans `projects/*/meta.json`, which is cheap at 1,000 dirs. A bad or missing `meta.json` is rebuilt from the document in an isolate.
 
 ### 9.2 File format and schema
 
 ```
-{"format":"vwish.editor.project","schema":1,"minReader":1,"app":"1.1.0+3","savedAt":"2026-10-07T10:00:00Z","docRevision":812,"saveId":"sv_…","bodyBytes":48213,"bodySha256":"…"}\n
+{"format":"danaview.editor.project","schema":1,"minReader":1,"app":"1.1.0+3","savedAt":"2026-10-07T10:00:00Z","docRevision":812,"saveId":"sv_…","bodyBytes":48213,"bodySha256":"…"}\n
 {"id":"pr_…","meta":{…},"settings":{…},"tracks":[…],"markers":[…],"pool":{…},"view":{…}}\n
 ```
 
@@ -706,7 +706,7 @@ final class Migrations { static const current = 1; static final List<Migration> 
 ```
 
 * Migrations work on **raw JSON maps**, not on model classes. Old model classes never need to be kept, and the decoder knows only the current schema.
-* Before the first write after a migration, the original main file is copied to `backups/pre-migration-s<N>.vwproj`. Opening a project never writes anything. A migrated document is written at the first save, and re-opening before that migrates again (migrations are idempotent).
+* Before the first write after a migration, the original main file is copied to `backups/pre-migration-s<N>.dnproj`. Opening a project never writes anything. A migrated document is written at the first save, and re-opening before that migrates again (migrations are idempotent).
 * `LoadedProject.migratedFrom = MigrationInfo(fromSchema, toSchema, notes)` drives the ux.md toast.
 * **Tests:** every schema keeps fixtures under `test/fixtures/projects/s<N>/`. Every fixture must migrate, validate, re-encode and decode back to an equal model. v1 ships the framework plus a test-only `s0 → s1` migration so the path is exercised. ai.md's additive `provenance` and `origin` fields are **already in s1**, so no bump is needed.
 
@@ -735,7 +735,7 @@ final class Migrations { static const current = 1; static final List<Migration> 
 **Recovery.** At app start, `recoverable()` lists projects whose newest valid journal slot has `docRevision > main.docRevision` and `baseSaveId == main.saveId`. This happens only after a crash, a kill or a failed background save, because normal exits truncate the journal.
 * `restore(s)` promotes the journal to main through the atomic path.
 * `discard(s)` deletes it.
-* Opening a project with a pending recovery returns `LoadedProject.pendingRecovery` (ux.md §13.3). If the user picks "Open last saved", the journal is renamed to `journal/recovered-<ts>.vwproj` and kept until the next successful main save.
+* Opening a project with a pending recovery returns `LoadedProject.pendingRecovery` (ux.md §13.3). If the user picks "Open last saved", the journal is renamed to `journal/recovered-<ts>.dnproj` and kept until the next successful main save.
 * Save failures (disk full, I/O) surface as `SaveStatus.failed(StoreFailure)`. Edits stay in memory, and the next trigger retries.
 
 ### 9.6 Repository API (fulfills ux.md §2.2)
@@ -767,7 +767,7 @@ final class ProjectSummary { /* ux.md §2.2 fields */ ProjectId id; String name;
   * frame rate snapped to the nearest supported rate within 0.5%, capped at 60 (VFR phone video averaging 29.98 → 30000/1001)
   * base short side from the source: ≤ 720 → 720, else 1080. 2160 only when the source is ≥ 2160 and `EditorCapabilities` allows it
   * `initialPlayhead` stored in `view.playhead`, quantized
-* **Duplicate** copies `project.vwproj`, `assets/` and `poster.jpg` and rewrites the id, name, `origin` and `createdAt`. Managed media and derived renditions are shared, not copied.
+* **Duplicate** copies `project.dnproj`, `assets/` and `poster.jpg` and rewrites the id, name, `origin` and `createdAt`. Managed media and derived renditions are shared, not copied.
 * **Rename** of a closed project rewrites the document atomically.
 * **Delete** renames the bundle into `trash/` atomically, then deletes it in the background through `OwnedFileDeleter`, then runs GC (§10.5). ux.md's undo toast delays the call, so the repository never needs to un-delete.
 * **Concurrency.** A project can be open in only one session, enforced by an in-process registry. A second `open` returns `ProjectBusy`. Rename and duplicate of an open project go through its session and save queue.
@@ -831,7 +831,7 @@ Size is part of the hash. Two different files with identical size, first 64 KB a
 |---|---|---|
 | `available` | Found, and size/mtime match (or the hash matches) | n/a |
 | `missing` | Path doesn't exist, or the URI fails to resolve | Badge, banner, relink |
-| `accessLost` | Grant revoked, bookmark unresolvable, or permission denied | Relink ("Vwish lost access to this file") |
+| `accessLost` | Grant revoked, bookmark unresolvable, or permission denied | Relink ("Danaview lost access to this file") |
 | `changed` | Found, but the hash differs (the file was edited elsewhere) | Banner offering "Use updated file" (accept) or Relink |
 | `derivedMissing` | A regenerable rendition, still or proxy is gone | Not shown as missing; the job is requeued |
 
@@ -1048,7 +1048,7 @@ Transition helper channels combine with the clip's own keyframes. Opacity multip
 * **Preview:** the plan has **no** text or subtitle layers (`target: preview`). ux.md draws them in a Flutter overlay from `textLayoutSpecOf` and `evaluateTextAnimation`, the same functions the compiler uses.
 * **Export:** the steps run in this order.
   1. `collectSpriteRequests(project, settings) → List<SpriteRequest(key, TextLayoutSpec, reveal?)>` (pure).
-  2. vwish_editor's `TextSpriteRasterizer` lays out each spec with `ui.ParagraphBuilder` at canvas px, draws it with `ui.PictureRecorder` and encodes it with `toByteData(format: png)`. The encode is native and asynchronous [VERIFIED API, perf to measure]. Output goes to `<cache>/sprites/<key>.png` and returns a `SpriteManifest` (key → px size).
+  2. danaview_editor's `TextSpriteRasterizer` lays out each spec with `ui.ParagraphBuilder` at canvas px, draws it with `ui.PictureRecorder` and encodes it with `toByteData(format: png)`. The encode is native and asynchronous [VERIFIED API, perf to measure]. Output goes to `<cache>/sprites/<key>.png` and returns a `SpriteManifest` (key → px size).
   3. `compileExport(project, settings, manifest)` places the sprites. Text uses its transform center. Subtitles are anchored by `SubtitlePosition` using the sprite height.
 * **Keys** are `sha1(canonical TextLayoutSpec JSON + canvas size)`, so re-exports reuse sprites and the "Preparing captions" phase is O(new cues). 3,000 cues take about 10–15 s the first time (estimate).
 * `TextLayoutSpec` contains the runs (with `<i>`/`<b>` spans), family, px size, weight, italic, letter spacing, line height, alignment, max width, color, stroke, shadow, box, `maxLines`, and direction `auto` (first strong character, ai.md §10.4). Script fallback (CJK, Arabic, Devanagari) uses Flutter's system font fallback, and it's identical in preview and export because both are Flutter.
@@ -1170,7 +1170,7 @@ The design target matches ux.md §17.6: 2,000 items, 32 lanes, 3 h, 300 media fi
 
 | Layer | What | Where / how |
 |---|---|---|
-| Unit (pure Dart) | Time math properties; each command's before/after goldens and every rejection; keyframe partitioning on split/trim/speed; ramp closed forms (numerical integration cross-check ≤ 1 µs); `boxAt` vs compiler parity; snapping; selection expansion; history (coalescing, limits, pool deltas); transactions (update idempotence, cancel) | `packages/vwish_editor_core/test/**`, `dart test` |
+| Unit (pure Dart) | Time math properties; each command's before/after goldens and every rejection; keyframe partitioning on split/trim/speed; ramp closed forms (numerical integration cross-check ≤ 1 µs); `boxAt` vs compiler parity; snapping; selection expansion; history (coalescing, limits, pool deltas); transactions (update idempotence, cancel) | `packages/danaview_editor_core/test/**`, `dart test` |
 | Model fuzzer | Random projects × random command sequences (seeded): full validator after each step; `undo^n` restores `identical` tracks, markers and settings (root re-stamped); `redo^n` likewise; revision stamps never repeat; JSON round trip equal; diff/patch property. 200 seeds × 500 steps in CI, 10k nightly | `test/fuzz/` |
 | Codec and migration | Encode/decode equality; deterministic bytes; fixture corpus per schema; corrupt, torn and truncated inputs; newer-schema handling | `test/codec/`, `fixtures/projects/` |
 | Persistence | Every crash point via `FaultInjectingFs`; recovery listing and restore/discard; duplicate, rename, delete; GC never deletes outside roots or external assets (symlink and `..` fuzz); grant release | `test/store/` with temp dirs |
@@ -1178,7 +1178,7 @@ The design target matches ux.md §17.6: 2,000 items, 32 lanes, 3 h, 300 media fi
 | RenderPlan | Compile goldens; JSON Schema validation; lowering tables (§12.4) per transition kind; sprite placement | `test/plan/`, `fixtures/render_plans/` |
 | Cross-language contract | Swift and Kotlin decode/re-encode every plan fixture; golden frames | Engine tickets (§12.9) |
 | Widget | None in this package. UX widget tests use the real `EditSession` with `FakeEditorEngine` (ux.md §21.2) | ux.md |
-| On-device | `integration_test/editor_store_test.dart` (in vwish_editor): crash-recovery (abandon session → reopen → recoverable); large-project save/open timing; bookmark (iOS) and persisted-grant (Android) survival across app restart via native instrumentation | DOM-34, jointly with the engine areas |
+| On-device | `integration_test/editor_store_test.dart` (in danaview_editor): crash-recovery (abandon session → reopen → recoverable); large-project save/open timing; bookmark (iOS) and persisted-grant (Android) survival across app restart via native instrumentation | DOM-34, jointly with the engine areas |
 | Performance | `benchmark/*` thresholds (§14) | CI `editor-core.yml` |
 
 ---
@@ -1201,9 +1201,9 @@ The design target matches ux.md §17.6: 2,000 items, 32 lanes, 3 h, 300 media fi
 | `MediaJobs.reverse/freezeFrame` results → pending/ready pool assets | Engines, ux.md | Results arrive as `PoolChange.UpdateAsset`. Spec hash = `sha1(kind, quickHash, range/time, paramsVersion)` |
 | `TimelineView`, `AudibleClipView.timelineTimeOf` | ai.md §10.1 | `ClipTimeMap.timelineTimeOf` is exact for constant speed and ramps. The adapter (AI-13) is thin. `AudioRole` is on `Track` |
 | `AddGeneratedCaptionTrack`, `ReplaceGeneratedCaptions`, `CaptionProvenance`, `CueOrigin`, `editedAfterGeneration`, `SubtitleCueDraft` | ai.md §10.2 | **Adopted verbatim** in core (`ops/commands/caption_commands.dart`, `model/caption_provenance.dart`). Already in schema s1, so **no schema bump** |
-| `MediaRef` in `SpeechAudioRequest` | ai.md §7.1 | **Delta:** `vwish_domain` already has a player `MediaRef`. Use `MediaId` plus a `ResolvedMedia` from `MediaAccessPort.resolve` instead. `mediaFingerprint` = `MediaFingerprint.quickHash` |
-| Backup rules for `vwish/speech/*` and `vwish/editor/{media,derived}` | ai.md §5.4, Android | One `data_extraction_rules.xml` co-owned (DOM-28) |
-| `StorageContributor` sizes | ux.md §4.8 | `ProjectRepository.storageReport()` supplies "Editor projects". The cache contributor measures `<cache>/vwish/editor` |
+| `MediaRef` in `SpeechAudioRequest` | ai.md §7.1 | **Delta:** `danaview_domain` already has a player `MediaRef`. Use `MediaId` plus a `ResolvedMedia` from `MediaAccessPort.resolve` instead. `mediaFingerprint` = `MediaFingerprint.quickHash` |
+| Backup rules for `danaview/speech/*` and `danaview/editor/{media,derived}` | ai.md §5.4, Android | One `data_extraction_rules.xml` co-owned (DOM-28) |
+| `StorageContributor` sizes | ux.md §4.8 | `ProjectRepository.storageReport()` supplies "Editor projects". The cache contributor measures `<cache>/danaview/editor` |
 
 ---
 
@@ -1247,13 +1247,13 @@ The design target matches ux.md §17.6: 2,000 items, 32 lanes, 3 h, 300 media fi
 
 Milestones: **M1** foundations → **M2** operations → **M3** formats → **M4** persistence → **M5** RenderPlan → **M6** hardening. UX and AI tickets can start against M1 types and fakes. Engines can start on the M5 schema and fixtures as soon as DOM-29 lands.
 
-**DOM-01 Package scaffold, purity and CI** · *Files:* `packages/vwish_editor_core/{pubspec.yaml,analysis_options.yaml,lib/*.dart}`, `test/purity_test.dart`, `.github/workflows/editor-core.yml` · *Depends:* none · *AC:* `dart test` passes with no Flutter SDK on PATH. The purity test fails on any `package:flutter`/`vwish_*` import and on `dart:io` outside `store/`. The CI workflow runs on PRs that touch `packages/vwish_editor_core/**`.
+**DOM-01 Package scaffold, purity and CI** · *Files:* `packages/danaview_editor_core/{pubspec.yaml,analysis_options.yaml,lib/*.dart}`, `test/purity_test.dart`, `.github/workflows/editor-core.yml` · *Depends:* none · *AC:* `dart test` passes with no Flutter SDK on PATH. The purity test fails on any `package:flutter`/`danaview_*` import and on `dart:io` outside `store/`. The CI workflow runs on PRs that touch `packages/danaview_editor_core/**`.
 
 **DOM-02 Time and ids** · *Files:* `src/time/*`, `src/ids/*` · *Depends:* DOM-01 · *AC:* round-trip properties hold for all supported rates and every k ≤ 24 h. `Timecode.parse(format(t)) == quantize(t)`. `SeededIdGenerator` is deterministic.
 
 **DOM-03 Core model types** · *Files:* `src/model/**` (excluding `pool/` and `keyframes/`) · *Depends:* DOM-02 · *AC:* every type is `@immutable` with `copyWith`. Value types have `==`/`hashCode`. Track and item lists are unmodifiable. `EditProject.index` is lazy and cached. ux.md §2.1 getters exist.
 
-**DOM-04 Media pool model** · *Files:* `src/model/pool/*` · *Depends:* DOM-03 · *AC:* sealed `MediaLocator`. `MediaFingerprint.quickHash` equals `MediaIdentityService.computeQuickHash` on 6 fixture files (test reads `vwish_data`'s algorithm output from fixtures, not the package).
+**DOM-04 Media pool model** · *Files:* `src/model/pool/*` · *Depends:* DOM-03 · *AC:* sealed `MediaLocator`. `MediaFingerprint.quickHash` equals `MediaIdentityService.computeQuickHash` on 6 fixture files (test reads `danaview_data`'s algorithm output from fixtures, not the package).
 
 **DOM-05 Property keys and keyframes** · *Files:* `src/model/keyframes/*`, `src/eval/evaluate.dart` · *Depends:* DOM-03 · *AC:* registry covers every §4.11 property with metadata. Linear interpolation and hold are correct. Vec2 keys write both channels. Out-of-range keys are kept but ignored.
 
@@ -1287,13 +1287,13 @@ Milestones: **M1** foundations → **M2** operations → **M3** formats → **M4
 
 **DOM-20 SRT/VTT codec** · *Files:* `src/formats/{subtitle_codec,srt,vtt,text_decoding}.dart` · *Depends:* DOM-02 · *AC:* corpus passes. Round trip holds for the supported subset. Issues carry line numbers. 10k cues parse in ≤ 100 ms in an isolate.
 
-**DOM-21 `.cube` parser and `.vlut`** · *Files:* `src/formats/{cube_lut,vlut}.dart`, `vwish_editor/assets/looks/*.vlut` (12 looks; content from the owner/UX) · *Depends:* DOM-01 · *AC:* corpus passes (Resolve, Adobe, 1D → 3D, domain remap). 65³ resamples to 64³ with max error ≤ 1/255. V5 resolved.
+**DOM-21 `.cube` parser and `.vlut`** · *Files:* `src/formats/{cube_lut,vlut}.dart`, `danaview_editor/assets/looks/*.vlut` (12 looks; content from the owner/UX) · *Depends:* DOM-01 · *AC:* corpus passes (Resolve, Adobe, 1D → 3D, domain remap). 65³ resamples to 64³ with max error ≤ 1/255. V5 resolved.
 
 **DOM-22 Project JSON codec** · *Files:* `src/codec/{project_json,fragment_cache,schema_version}.dart`, `schema/project.v1.schema.json` · *Depends:* DOM-03, DOM-04, DOM-05 · *AC:* deterministic bytes. Decode(encode(p)) == p. Incremental re-encode after a one-item edit takes ≤ 3 ms at 2,000 items. Unknown enums produce a warning.
 
 **DOM-23 Migration framework** · *Files:* `src/codec/migrations/*`, `test/fixtures/projects/s0,s1/*` · *Depends:* DOM-22 · *AC:* the test-only s0→s1 migration runs. Pre-migration backup is written on first save. `needsNewerApp` and `readOnlyNewer` are detected from the header alone.
 
-**DOM-24 Store filesystem and atomic writes** · *Files:* `src/store/{store_roots,store_fs,atomic_file,vwproj_format,owned_file_deleter}.dart` · *Depends:* DOM-22 · *AC:* `FaultInjectingFs` crash at every step always yields a valid main, tmp or bak. Checksums detect truncation. The deleter rejects outside-root paths, symlinks and external assets (fuzz). V1 is verified on device (fsync via strace/Instruments or documented source).
+**DOM-24 Store filesystem and atomic writes** · *Files:* `src/store/{store_roots,store_fs,atomic_file,dnproj_format,owned_file_deleter}.dart` · *Depends:* DOM-22 · *AC:* `FaultInjectingFs` crash at every step always yields a valid main, tmp or bak. Checksums detect truncation. The deleter rejects outside-root paths, symlinks and external assets (fuzz). V1 is verified on device (fsync via strace/Instruments or documented source).
 
 **DOM-25 ProjectRepository** · *Files:* `src/store/{project_repository,file_project_repository,project_summary,storage_report}.dart` · *Depends:* DOM-24, DOM-19 · *AC:* create (empty or fromMedia with settings derivation), open, save, rename, duplicate (shares managed media), delete (trash then guarded delete), `watchSummaries`, `findUntouchedProjectFor`, `ProjectBusy`, and `storageReport` all work.
 
@@ -1313,6 +1313,6 @@ Milestones: **M1** foundations → **M2** operations → **M3** formats → **M4
 
 **DOM-33 Large-project performance pass** · *Files:* `benchmark/*`, `test/fixtures/projects/large_2000.json` · *Depends:* DOM-19, DOM-26, DOM-31 · *AC:* all §14 budgets are met in AOT on the benchmark host and on one mid-tier Android and one iPhone (via ux.md's perf harness). The CI regression gate is active.
 
-**DOM-34 On-device persistence and media-access tests** · *Files:* `packages/vwish_editor/integration_test/editor_store_test.dart` (UX-owned harness), plus native instrumentation in the engine packages · *Depends:* DOM-26, DOM-28, engine `MediaAccessPort` · *AC:* crash recovery after a forced kill restores the last edits. A bookmark (iOS) and a persisted grant (Android) survive an app restart. Excluded directories are not in the backup (manual check documented).
+**DOM-34 On-device persistence and media-access tests** · *Files:* `packages/danaview_editor/integration_test/editor_store_test.dart` (UX-owned harness), plus native instrumentation in the engine packages · *Depends:* DOM-26, DOM-28, engine `MediaAccessPort` · *AC:* crash recovery after a forced kill restores the last edits. A bookmark (iOS) and a persisted grant (Android) survive an app restart. Excluded directories are not in the backup (manual check documented).
 
-**DOM-35 Developer documentation** · *Files:* `packages/vwish_editor_core/README.md`, root `README.md` architecture section · *Depends:* DOM-31 · *AC:* documents the package boundaries, command-authoring checklist (purity, rejection, validator, fuzz registration), schema/migration procedure and plan versioning rules.
+**DOM-35 Developer documentation** · *Files:* `packages/danaview_editor_core/README.md`, root `README.md` architecture section · *Depends:* DOM-31 · *AC:* documents the package boundaries, command-authoring checklist (purity, rejection, validator, fuzz registration), schema/migration procedure and plan versioning rules.

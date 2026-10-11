@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_data/vwish_data.dart';
+import 'package:danaview_data/danaview_data.dart';
 
 String join(String a, String b, [String? c]) => [a, b, if (c != null) c].join(Platform.pathSeparator);
 
@@ -11,10 +11,10 @@ void main() {
   late Directory inbox;
 
   setUp(() async {
-    sandbox = await Directory.systemTemp.createTemp('vwish_storage_');
+    sandbox = await Directory.systemTemp.createTemp('danaview_storage_');
     container = Directory(join(sandbox.path, 'container'))..createSync();
     docs = Directory(join(container.path, 'Documents'));
-    inbox = Directory(join(container.path, 'tmp', 'com.vwish-Inbox'))..createSync(recursive: true);
+    inbox = Directory(join(container.path, 'tmp', 'com.danaview-Inbox'))..createSync(recursive: true);
   });
 
   tearDown(() => sandbox.delete(recursive: true));

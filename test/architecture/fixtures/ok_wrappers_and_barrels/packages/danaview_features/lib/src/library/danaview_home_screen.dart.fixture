@@ -1,0 +1,23 @@
+// A Slider, a Card and an AlertDialog in a comment do not count.
+/* Nor in a block comment: TextField(), IconButton(). */
+import 'package:flutter/widgets.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
+
+/// Uses kit wrappers only; `Chip` in dartdoc does not count either.
+class DanaviewHomeScreen extends StatelessWidget {
+  const DanaviewHomeScreen({super.key, this.mode = 0});
+
+  final int mode;
+
+  @override
+  Widget build(BuildContext context) {
+    const label = 'Card Slider Switch Chip';
+    final cardColor = DanaviewColors.surface;
+    switch (mode) {
+      case 0:
+        return DanaviewIconButton(icon: DanaviewIcons.edit, semanticLabel: '$label ${cardColor.toString()}');
+      default:
+        return DanaviewTextField(hint: "Search: TextField('x')", sliderTheme: DanaviewSliderThemeData());
+    }
+  }
+}

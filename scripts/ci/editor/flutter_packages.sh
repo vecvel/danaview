@@ -6,11 +6,11 @@
 #
 # Usage:
 #   scripts/ci/editor/flutter_packages.sh                 # every package + architecture tests
-#   scripts/ci/editor/flutter_packages.sh vwish_editor    # only the named package(s)
+#   scripts/ci/editor/flutter_packages.sh danaview_editor    # only the named package(s)
 #   scripts/ci/editor/flutter_packages.sh architecture    # only the root architecture tests
 #
 # Environment:
-#   VWISH_CI_EXCLUDE_TAGS  test tags left out of PR runs (default: nightly; nightly.d/ scripts
+#   DANAVIEW_CI_EXCLUDE_TAGS  test tags left out of PR runs (default: nightly; nightly.d/ scripts
 #                          run them). Set to an empty string to run everything.
 #
 # Packages that don't exist yet are skipped with a notice. Every package runs even when an
@@ -20,17 +20,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT"
 
-# Every editor Flutter package of this release (ARCH §4.1). vwish_editor_core is pure Dart and
+# Every editor Flutter package of this release (ARCH §4.1). danaview_editor_core is pure Dart and
 # runs in the dart-core job (core.sh).
 PACKAGES=(
-  vwish_editor_engine_api
-  vwish_editor_engine
-  vwish_transcription
-  vwish_whisper
-  vwish_editor_fonts
-  vwish_editor
+  danaview_editor_engine_api
+  danaview_editor_engine
+  danaview_transcription
+  danaview_whisper
+  danaview_editor_fonts
+  danaview_editor
 )
-EXCLUDE_TAGS="${VWISH_CI_EXCLUDE_TAGS-nightly}"
+EXCLUDE_TAGS="${DANAVIEW_CI_EXCLUDE_TAGS-nightly}"
 
 declare -a SELECTED=()
 RUN_ARCHITECTURE=true

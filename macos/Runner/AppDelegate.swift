@@ -45,7 +45,7 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   static func setupMediaChannel(_ messenger: FlutterBinaryMessenger) {
-    let channel = FlutterMethodChannel(name: "vwish/media_intent", binaryMessenger: messenger)
+    let channel = FlutterMethodChannel(name: "danaview/media_intent", binaryMessenger: messenger)
     mediaChannel = channel
     channel.setMethodCallHandler { (call, result) in
       if call.method == "getInitialMedia" {

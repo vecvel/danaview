@@ -32,7 +32,7 @@ Other scripts in this directory and their owners:
 
 ## Triggers
 
-- **Pull requests and pushes to `main`** that touch `packages/vwish_editor*/**`, `packages/vwish_transcription/**`, `packages/vwish_whisper/**`, `test/architecture/**`, `scripts/ci/editor/**` or the workflow itself. `packages/vwish_features/**` and `docs/editor/BUILD_PLAN.md` also trigger it, because the architecture test guards `vwish_features` (ARCH §4.2 rule 1, ARCH §1.3 Material scan) and reads the BUILD_PLAN owns lists.
+- **Pull requests and pushes to `main`** that touch `packages/danaview_editor*/**`, `packages/danaview_transcription/**`, `packages/danaview_whisper/**`, `test/architecture/**`, `scripts/ci/editor/**` or the workflow itself. `packages/danaview_features/**` and `docs/editor/BUILD_PLAN.md` also trigger it, because the architecture test guards `danaview_features` (ARCH §4.2 rule 1, ARCH §1.3 Material scan) and reads the BUILD_PLAN owns lists.
 - **Nightly** (cron `30 2 * * *`): only the `nightly` job runs.
 - **Manual** (`workflow_dispatch`): input `runner` (`self-hosted` or `macos-15`) picks the macOS runner, and input `nightly` adds the nightly job.
 
@@ -46,16 +46,16 @@ Every script in this directory and in `nightly.d/` must follow these rules:
 - Work from any working directory: resolve the repo root from the script's own location (`"$(dirname "${BASH_SOURCE[0]}")"`). `nightly.sh` runs `nightly.d/*` from the repo root.
 - Exit non-zero on failure. Skip with a notice only when a documented prerequisite of a not-yet-landed ticket is missing (for example a package that doesn't exist yet). Never skip because a tool is missing on a CI runner: fail with the install instruction instead (`ios.sh` fails early with `brew install cmake` when CMake ≥ 3.28 is missing).
 - In GitHub Actions (`GITHUB_ACTIONS=true`), use `::group::`, `::notice::` and `::error::` annotations.
-- Download nothing except package-manager dependency resolution (pub, CocoaPods, Gradle/Maven), apart from what a script's own ticket explicitly allows (AI-03's `whisper_host.sh` fetches ggml-tiny with a sha256 check). Keep downloads under `$VWISH_CI_CACHE_DIR` (default `~/.cache/vwish-ci`), which CI caches.
+- Download nothing except package-manager dependency resolution (pub, CocoaPods, Gradle/Maven), apart from what a script's own ticket explicitly allows (AI-03's `whisper_host.sh` fetches ggml-tiny with a sha256 check). Keep downloads under `$DANAVIEW_CI_CACHE_DIR` (default `~/.cache/danaview-ci`), which CI caches.
 - Never log media paths, transcript text or user content.
 
 Inputs the workflow passes:
 
 | Variable | Set for | Meaning |
 |---|---|---|
-| `VWISH_SANITIZER` | `whisper-host` | `none`, `thread` (TSan leg) or `address` (ASan leg) |
-| `VWISH_CI_CACHE_DIR` | `whisper-host`, `nightly` | cache directory restored by `actions/cache` (`.ci-cache/` in the workspace) |
-| `VWISH_CI_EXCLUDE_TAGS` | read by `flutter_packages.sh` | test tags left out of PR runs (default `nightly`) |
+| `DANAVIEW_SANITIZER` | `whisper-host` | `none`, `thread` (TSan leg) or `address` (ASan leg) |
+| `DANAVIEW_CI_CACHE_DIR` | `whisper-host`, `nightly` | cache directory restored by `actions/cache` (`.ci-cache/` in the workspace) |
+| `DANAVIEW_CI_EXCLUDE_TAGS` | read by `flutter_packages.sh` | test tags left out of PR runs (default `nightly`) |
 | `DEVELOPER_DIR` | `ios` | Xcode 26.6 when it is installed |
 
 **Test tags.** `flutter_packages.sh` runs `flutter test --exclude-tags nightly`. Long suites (for example QA-09's full overflow matrix) tag their tests `nightly`, declare the tag in the package's `dart_test.yaml`, and run in full from a `nightly.d/` script. The PR subset stays untagged.
@@ -66,12 +66,12 @@ Inputs the workflow passes:
 scripts/ci/editor/core.sh                              # dart-core
 scripts/ci/editor/flutter_packages.sh                  # every editor Flutter package + test/architecture
 scripts/ci/editor/flutter_packages.sh architecture     # only the root architecture tests
-scripts/ci/editor/flutter_packages.sh vwish_editor_engine_api
+scripts/ci/editor/flutter_packages.sh danaview_editor_engine_api
 scripts/ci/editor/nightly.sh --list                    # nightly.d scripts
 scripts/ci/editor/nightly.sh overflow_full             # one nightly script (the command printed on failure)
 ```
 
-`flutter_packages.sh` covers `vwish_editor_engine_api`, `vwish_editor_engine` (and its `example/` when present), `vwish_transcription`, `vwish_whisper`, `vwish_editor_fonts` and `vwish_editor`: `flutter pub get`, `flutter analyze --fatal-infos --fatal-warnings`, `flutter test`. Missing packages are skipped. It then runs `flutter analyze` and `flutter test` on `test/architecture/` at the repo root (`dependency_rules_test.dart`, ARCH §4.2 rules 1–7 and the ARCH §1.3 Material scan). `vwish_editor_core` is pure Dart and runs in `core.sh`.
+`flutter_packages.sh` covers `danaview_editor_engine_api`, `danaview_editor_engine` (and its `example/` when present), `danaview_transcription`, `danaview_whisper`, `danaview_editor_fonts` and `danaview_editor`: `flutter pub get`, `flutter analyze --fatal-infos --fatal-warnings`, `flutter test`. Missing packages are skipped. It then runs `flutter analyze` and `flutter test` on `test/architecture/` at the repo root (`dependency_rules_test.dart`, ARCH §4.2 rules 1–7 and the ARCH §1.3 Material scan). `danaview_editor_core` is pure Dart and runs in `core.sh`.
 
 ## Toolchain pins
 

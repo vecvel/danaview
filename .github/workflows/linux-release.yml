@@ -94,37 +94,37 @@ jobs:
 
           # 1. Standalone Tarball (.tar.gz)
           echo "Packaging standalone tarball..."
-          tar -czvf "release-artifacts/vwish-${VER}-linux-x64.tar.gz" -C build/linux/x64/release/bundle .
+          tar -czvf "release-artifacts/danaview-${VER}-linux-x64.tar.gz" -C build/linux/x64/release/bundle .
 
           # 2. Debian / Ubuntu Package (.deb)
           echo "Packaging Debian (.deb) package..."
           DEB_ROOT="deb-build"
           rm -rf "$DEB_ROOT"
           mkdir -p "$DEB_ROOT/DEBIAN"
-          mkdir -p "$DEB_ROOT/opt/vwish"
+          mkdir -p "$DEB_ROOT/opt/danaview"
           mkdir -p "$DEB_ROOT/usr/bin"
           mkdir -p "$DEB_ROOT/usr/share/applications"
           mkdir -p "$DEB_ROOT/usr/share/icons/hicolor/256x256/apps"
 
-          cp -r build/linux/x64/release/bundle/* "$DEB_ROOT/opt/vwish/"
-          ln -s "/opt/vwish/vwish" "$DEB_ROOT/usr/bin/vwish"
-          cp linux/packaging/com.vecvel.vwish.desktop "$DEB_ROOT/usr/share/applications/"
-          cp assets/branding/vwish_icon.png "$DEB_ROOT/usr/share/icons/hicolor/256x256/apps/vwish.png"
+          cp -r build/linux/x64/release/bundle/* "$DEB_ROOT/opt/danaview/"
+          ln -s "/opt/danaview/danaview" "$DEB_ROOT/usr/bin/danaview"
+          cp linux/packaging/com.vecvel.danaview.desktop "$DEB_ROOT/usr/share/applications/"
+          cp assets/branding/danaview_icon.png "$DEB_ROOT/usr/share/icons/hicolor/256x256/apps/danaview.png"
 
           {
-            echo "Package: vwish"
+            echo "Package: danaview"
             echo "Version: ${VER_NAME}"
             echo "Section: video"
             echo "Priority: optional"
             echo "Architecture: amd64"
             echo "Maintainer: Vecvel <contact@vecvel.com>"
             echo "Depends: libgtk-3-0, libmpv2 | libmpv1"
-            echo "Description: Vwish - Ultra-high performance HDR media player"
+            echo "Description: Danaview - Ultra-high performance HDR media player"
             echo " Modern cross-platform media player with hardware acceleration,"
             echo " stream diagnostics, custom seek controls, and on-device privacy."
           } > "$DEB_ROOT/DEBIAN/control"
 
-          dpkg-deb --build "$DEB_ROOT" "release-artifacts/vwish-${VER_NAME}-linux-amd64.deb"
+          dpkg-deb --build "$DEB_ROOT" "release-artifacts/danaview-${VER_NAME}-linux-amd64.deb"
 
           # 3. Compute SHA-256 Checksums
           cd release-artifacts
@@ -140,26 +140,26 @@ jobs:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
         run: |
           {
-            echo "## Vwish Linux Release (${APP_VERSION})"
+            echo "## Danaview Linux Release (${APP_VERSION})"
             echo ""
             echo "Ultra-high performance HDR media player for Linux desktop (Ubuntu, Debian, Fedora, Arch, and Wayland/X11 environments) with hardware acceleration."
             echo ""
             echo "### 📦 Download Packages"
-            echo "* **Debian / Ubuntu Package (\`vwish-${VERSION_NAME}-linux-amd64.deb\`)**: Native installer with system launcher, icons, and desktop integration."
-            echo "* **Standalone Tarball (\`vwish-${APP_VERSION}-linux-x64.tar.gz\`)**: Portable archive; extract and run on any modern Linux distribution."
+            echo "* **Debian / Ubuntu Package (\`danaview-${VERSION_NAME}-linux-amd64.deb\`)**: Native installer with system launcher, icons, and desktop integration."
+            echo "* **Standalone Tarball (\`danaview-${APP_VERSION}-linux-x64.tar.gz\`)**: Portable archive; extract and run on any modern Linux distribution."
             echo ""
             echo "### 🔧 Installation Guide"
             echo ""
             echo "#### Debian / Ubuntu / Mint:"
             echo "\`\`\`bash"
-            echo "sudo dpkg -i vwish-${VERSION_NAME}-linux-amd64.deb"
+            echo "sudo dpkg -i danaview-${VERSION_NAME}-linux-amd64.deb"
             echo "sudo apt-get install -f # If any dependencies are missing"
             echo "\`\`\`"
             echo ""
             echo "#### Standalone Portable Archive:"
             echo "\`\`\`bash"
-            echo "tar -xzvf vwish-${APP_VERSION}-linux-x64.tar.gz"
-            echo "./vwish"
+            echo "tar -xzvf danaview-${APP_VERSION}-linux-x64.tar.gz"
+            echo "./danaview"
             echo "\`\`\`"
             echo ""
             echo "### 🚀 Features & Capabilities"
@@ -178,7 +178,7 @@ jobs:
       - name: Upload Artifacts to Actions Run
         uses: actions/upload-artifact@v4
         with:
-          name: vwish-linux-${{ steps.version.outputs.version }}
+          name: danaview-linux-${{ steps.version.outputs.version }}
           path: release-artifacts/*
 
       - name: Publish GitHub Release
@@ -186,7 +186,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: "Vwish Linux ${{ steps.version.outputs.version }}"
+          name: "Danaview Linux ${{ steps.version.outputs.version }}"
           body_path: release-notes.md
           files: release-artifacts/*
           draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}

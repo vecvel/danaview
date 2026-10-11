@@ -1,7 +1,0 @@
-source: vw_spike_stitchable.metal
-source_sha256: 46af86b8c9dcd4311af20681d35715d28ed42b5bfec1481421a65bdcb133da02
-compiler: Apple metal version 32023.883 (metalfe-32023.883)
-flags: [[stitchable]]: metal -c / metal -framework CoreImage
-min_ios: 15.0
-vw_spike_stitchable.iphoneos.metallib: 197cfc553da0413555f2c401b3d3e0716c84d7804cdcd6408f7f86c13bef87a1
-vw_spike_stitchable.iphonesimulator.metallib: 5ecb7789e681ddcefc2ba7db4f8678284fd79df7a8b80f57a387645a37d02d4c

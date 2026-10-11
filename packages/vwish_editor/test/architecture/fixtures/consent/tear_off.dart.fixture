@@ -1,3 +1,0 @@
-import 'package:vwish_transcription/vwish_transcription.dart';
-
-final make = UserConsent . accepted;

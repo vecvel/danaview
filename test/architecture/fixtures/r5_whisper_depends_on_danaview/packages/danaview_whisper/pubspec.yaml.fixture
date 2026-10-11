@@ -1,0 +1,5 @@
+name: danaview_whisper
+dependencies:
+  ffi: ^2.1.3
+  danaview_data:
+    path: ../danaview_data

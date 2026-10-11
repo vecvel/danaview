@@ -251,7 +251,7 @@ Findings:
 2. **`frame_grid.json`:** `"androidSeekMsRounding": "floor"` (V-N18). On AND-16 this rounding
    applies to the slot players' item positions: `floor((ruleFramePts − clipStart) / 1000)` ms with
    `SeekParameters.EXACT`.
-3. **`packages/vwish_editor_engine/android/build.gradle.kts`.** The dependencies the engine needs,
+3. **`packages/danaview_editor_engine/android/build.gradle.kts`.** The dependencies the engine needs,
    all at one version:
    ```kotlin
    val media3Version = "1.11.1" // pinned (R1); upgrading means rerunning AND-01's tests

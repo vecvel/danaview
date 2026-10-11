@@ -1,8 +1,0 @@
-name: vwish_editor_engine_api
-dependencies:
-  flutter:
-    sdk: flutter
-  meta: ^1.11.0
-  path_provider: ^2.1.0
-  vwish_editor_core:
-    path: ../vwish_editor_core

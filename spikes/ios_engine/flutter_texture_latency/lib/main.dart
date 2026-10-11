@@ -3,7 +3,7 @@
 // Phase 1 plays with no compensation and measures the texture latency (display time of the
 // raster that sampled a texture frame minus the display-link target time it was fetched for).
 // Phase 2 applies that latency as `targetTimestamp + compensation` (ARCH §12.7) and measures the
-// remaining A/V offset. Results are printed by the native side as `VWSPIKE-METRIC {json}`.
+// remaining A/V offset. Results are printed by the native side as `DVSPIKE-METRIC {json}`.
 //
 // A texture-only update (`textureFrameAvailable`) re-rasterizes the last layer tree without a
 // Dart frame and reports no FrameTiming (first run: 0-3 timings per phase). The editor repaints
@@ -16,7 +16,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-const _channel = MethodChannel('vw.spike/latency');
+const _channel = MethodChannel('dv.spike/latency');
 
 void main() {
   runApp(const LatencyApp());

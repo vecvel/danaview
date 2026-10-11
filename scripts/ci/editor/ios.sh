@@ -6,7 +6,7 @@
 #   1. toolchain: Xcode, Flutter, CocoaPods and CMake >= 3.28 (fails early with the
 #      `brew install cmake` instruction; the whisper xcframework needs it, AI-05);
 #   2. check_ios_min_os.sh --self-test (its negative and positive fixtures, D-41);
-#   3. packages/vwish_whisper/tool/build_ios_xcframework.sh --if-missing, when that script exists;
+#   3. packages/danaview_whisper/tool/build_ios_xcframework.sh --if-missing, when that script exists;
 #   4. `flutter build ios --no-codesign` of the engine example host (release, device);
 #   5. check_ios_min_os.sh on the built Runner.app, the engine pod framework and
 #      WhisperCore.xcframework (when built): nothing strongly bound or linked above iOS 15.0;
@@ -19,16 +19,16 @@
 #   scripts/ci/editor/ios.sh --no-sim-tests     # skip 6-7 (device build + D-41 check only)
 #
 # Environment:
-#   VWISH_IOS_SIMULATOR          simulator name or UDID (default: the first available iPhone on
+#   DANAVIEW_IOS_SIMULATOR          simulator name or UDID (default: the first available iPhone on
 #                                the newest iOS runtime)
-#   VWISH_ALLOW_MISSING_CMAKE=1  local runs only: warn instead of failing when CMake >= 3.28 is
+#   DANAVIEW_ALLOW_MISSING_CMAKE=1  local runs only: warn instead of failing when CMake >= 3.28 is
 #                                missing, as long as the whisper xcframework script has not landed
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CI_DIR="$ROOT/scripts/ci/editor"
-EXAMPLE="$ROOT/packages/vwish_editor_engine/example"
-WHISPER_SCRIPT="$ROOT/packages/vwish_whisper/tool/build_ios_xcframework.sh"
+EXAMPLE="$ROOT/packages/danaview_editor_engine/example"
+WHISPER_SCRIPT="$ROOT/packages/danaview_whisper/tool/build_ios_xcframework.sh"
 export LANG="${LANG:-en_US.UTF-8}"
 export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 
@@ -79,8 +79,8 @@ for c in "$(command -v cmake || true)" /opt/homebrew/bin/cmake /usr/local/bin/cm
 done
 if [ "$CMAKE_OK" != true ]; then
   msg="CMake >= 3.28 is required to build WhisperCore.xcframework (AI-05). Install it with: brew install cmake"
-  if [ "${VWISH_ALLOW_MISSING_CMAKE:-}" = 1 ] && [ "$GHA" != true ] && [ ! -f "$WHISPER_SCRIPT" ]; then
-    warn "$msg (continuing: VWISH_ALLOW_MISSING_CMAKE=1 and the whisper xcframework script has not landed)"
+  if [ "${DANAVIEW_ALLOW_MISSING_CMAKE:-}" = 1 ] && [ "$GHA" != true ] && [ ! -f "$WHISPER_SCRIPT" ]; then
+    warn "$msg (continuing: DANAVIEW_ALLOW_MISSING_CMAKE=1 and the whisper xcframework script has not landed)"
   else
     die "$msg"
   fi
@@ -98,7 +98,7 @@ if [ -f "$WHISPER_SCRIPT" ]; then
   bash "$WHISPER_SCRIPT" --if-missing
   endgroup
 else
-  notice "packages/vwish_whisper/tool/build_ios_xcframework.sh does not exist yet (AI-05); WhisperCore.xcframework not built"
+  notice "packages/danaview_whisper/tool/build_ios_xcframework.sh does not exist yet (AI-05); WhisperCore.xcframework not built"
 fi
 
 group "flutter pub get (example)"
@@ -113,12 +113,12 @@ if [ "$DEVICE_BUILD" = true ]; then
 
   group "check_ios_min_os.sh (example app, engine pod, WhisperCore.xcframework)"
   declare -a CHECK=("$EXAMPLE/build/ios/iphoneos/Runner.app")
-  for pod in "$EXAMPLE"/build/ios/Release-iphoneos/vwish_editor_engine/vwish_editor_engine.framework; do
+  for pod in "$EXAMPLE"/build/ios/Release-iphoneos/danaview_editor_engine/danaview_editor_engine.framework; do
     [ -e "$pod" ] && CHECK+=("$pod")
   done
   while IFS= read -r xc; do
     [ -n "$xc" ] && CHECK+=("$xc")
-  done < <(find "$ROOT/packages/vwish_whisper" -type d -name 'WhisperCore.xcframework' -not -path '*/third_party/*' -prune 2>/dev/null)
+  done < <(find "$ROOT/packages/danaview_whisper" -type d -name 'WhisperCore.xcframework' -not -path '*/third_party/*' -prune 2>/dev/null)
   bash "$CI_DIR/check_ios_min_os.sh" "${CHECK[@]}"
   endgroup
 fi
@@ -138,7 +138,7 @@ boot_simulator() {
 
 if [ "$SIM_TESTS" = true ]; then
   group "pick a simulator"
-  SIM="${VWISH_IOS_SIMULATOR:-}"
+  SIM="${DANAVIEW_IOS_SIMULATOR:-}"
   UDID="$(xcrun simctl list devices available -j | python3 -c '
 import json, re, sys
 want = sys.argv[1]

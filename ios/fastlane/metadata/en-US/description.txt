@@ -1,6 +1,6 @@
-Vwish is the modern, ultra-high performance HDR media player designed for iPhone and iPad. Engineered with a hardware-accelerated playback engine, Vwish effortlessly handles virtually any video format, container, subtitle, and audio codec with silky-smooth frame pacing and zero battery drain.
+Danaview is the modern, ultra-high performance HDR media player designed for iPhone and iPad. Engineered with a hardware-accelerated playback engine, Danaview effortlessly handles virtually any video format, container, subtitle, and audio codec with silky-smooth frame pacing and zero battery drain.
 
-Whether playing high-bitrate HEVC and AV1 movies from your local storage, streaming live HLS and DASH broadcasts, or opening media directly from the Files app, Vwish delivers an uncompromising cinematic experience.
+Whether playing high-bitrate HEVC and AV1 movies from your local storage, streaming live HLS and DASH broadcasts, or opening media directly from the Files app, Danaview delivers an uncompromising cinematic experience.
 
 KEY FEATURES:
 
@@ -30,8 +30,8 @@ INTUITIVE GESTURE CONTROLS
 • Double-tap to pause or resume; one-tap screen lock prevents accidental touches.
 
 NATIVE FILES APP & PRIVACY FIRST
-• Full iOS Files app integration: Open with Vwish directly from Files, iCloud Drive, or USB drives.
+• Full iOS Files app integration: Open with Danaview directly from Files, iCloud Drive, or USB drives.
 • Zero telemetry, zero tracking, and no external tracking scripts. All your data stays strictly on your device.
 • Background audio playback with full lock screen and Control Center media integration.
 
-Experience the future of mobile video playback. Download Vwish today.
+Experience the future of mobile video playback. Download Danaview today.

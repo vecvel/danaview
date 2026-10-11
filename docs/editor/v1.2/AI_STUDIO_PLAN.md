@@ -1,6 +1,6 @@
-# Vwish 1.2.0: AI Studio and advanced subtitles
+# Danaview 1.2.0: AI Studio and advanced subtitles
 
-> **Release:** Vwish 1.2.0 (app version `1.2.0+N`; 1.1.x stays for editor bug fixes). **Date:** 2026-10-11. **Status:** proposal, written while the v1 editor (Vwish 1.1.0) is being built on `editor-wip`.
+> **Release:** Danaview 1.2.0 (app version `1.2.0+N`; 1.1.x stays for editor bug fixes). **Date:** 2026-10-11. **Status:** proposal, written while the v1 editor (Danaview 1.1.0) is being built on `editor-wip`.
 > **Baseline:** `docs/editor/ARCHITECTURE.md` (decisions D-01 to D-44, "ARCH") and `docs/editor/BUILD_PLAN.md` (158 tickets M0–M6, "BP"), plus the area designs in `docs/editor/design/` (`domain.md`, `native.md`, `ux.md`, `ai.md`) and the code on `editor-wip`. ARCH stays the source of truth for v1 behaviour. This plan proposes decisions **D-45 to D-70**. AIS-01 records them in ARCH (an [INTEGRATION] change) once the owner has confirmed the ones marked **[OWNER]**.
 > **Scope:** 1.2.0 work starts after the v1 release ticket INT-05 lands. Every v1 ticket listed under "Depends on" is therefore already merged when its 1.2.0 dependant starts.
 > **Notation:** "ARCH §11.2" points into ARCHITECTURE.md and "BP §6" into BUILD_PLAN.md. **[OWNER]** marks a decision the owner must confirm. **[VERIFY]** marks a claim to check during implementation; the ticket that closes each one is listed in §6.3. "Extends CORE-15" means the ticket edits a file that v1 ticket CORE-15 created (§5.1 rule 2).
@@ -22,7 +22,7 @@
 
 ### 1.1 Summary
 
-Vwish 1.2.0 adds two things to the v1 editor:
+Danaview 1.2.0 adds two things to the v1 editor:
 
 1. **Advanced subtitles, entirely on device.** Users can style any range of a caption (even one word) as rich text. Each line can have its own placement and its own style overrides. Captions can highlight word by word (karaoke) using the word timings whisper already produces. There is a transcript view for editing captions in place, plus timing tools, emoji tools, more bundled fonts (Indic, Arabic, Hebrew, Thai), imported fonts, and subtitle style presets. None of this uses the network.
 2. **AI Studio, which is optional and off by default.** The user brings their own API key for Google Gemini, OpenAI, Anthropic Claude, OpenRouter or xAI Grok. AI Studio can clean up transcripts, detect emotion and tone (from the text, or from the voice with audio-capable models), add emojis, label speakers, translate a subtitle track into a new track, and run "Ask AI" on a selection. Every result comes back as a suggestion. The user reviews it and accepts or rejects it, and undo always works. Nothing is sent unless the user starts an action and taps **Send** after seeing what will be sent.
@@ -59,20 +59,20 @@ When AI Studio is off (the default), the editor works exactly as in v1: on devic
 
 | v1 area | What exists (file, ticket, section) | What 1.2.0 needs on top |
 |---|---|---|
-| Subtitle model | `SubtitleCue {text, origin, editedAfterGeneration}` with `\n` breaks and inline `<i>`/`<b>` only (`packages/vwish_editor_core/lib/src/model/items.dart`, CORE-03, ARCH §6.3). `SubtitleTrackData {language, style, position, burnIn, provenance}`, `SubtitleStyle` (font, size, bold/italic, colour, box, outline, shadow, maxLines 1..3, maxWidth, align), `SubtitlePosition` sealed `bottom \| top \| custom(yFraction)`, `CaptionProvenance` (whisper fields, schema 1), `SubtitleCueDraft(range, text)` (`model/subtitle.dart`, CORE-03, ARCH §6.6) | Style spans over grapheme ranges, cue-level overrides and placement, word timings, emotion, speakers, translation provenance (D-52, D-53) |
+| Subtitle model | `SubtitleCue {text, origin, editedAfterGeneration}` with `\n` breaks and inline `<i>`/`<b>` only (`packages/danaview_editor_core/lib/src/model/items.dart`, CORE-03, ARCH §6.3). `SubtitleTrackData {language, style, position, burnIn, provenance}`, `SubtitleStyle` (font, size, bold/italic, colour, box, outline, shadow, maxLines 1..3, maxWidth, align), `SubtitlePosition` sealed `bottom \| top \| custom(yFraction)`, `CaptionProvenance` (whisper fields, schema 1), `SubtitleCueDraft(range, text)` (`model/subtitle.dart`, CORE-03, ARCH §6.6) | Style spans over grapheme ranges, cue-level overrides and placement, word timings, emotion, speakers, translation provenance (D-52, D-53) |
 | Subtitle commands | `AddCue, SetCueText, SetCueRange, SplitCue, MergeCues, DeleteCues, ShiftCues, ImportSubtitles, SetSubtitleStyle/Position/BurnIn/Language, AddGeneratedCaptionTrack, ReplaceGeneratedCaptions` (`ops/commands/{subtitle,caption}_commands.dart`, CORE-15, ARCH §7.2) | Span-aware versions plus new style, placement, batch-AI, derived-track and emoji commands (AIS-05, AIS-06) |
 | Text layout spec | `TextLayoutSpec` with `TextRun(text, bold, italic)` runs; `parseCueMarkup` turns `<b>/<i>` into runs; `cueLayoutSpecOf(cue, track, canvas)`; `resolveTextDirection` (first strong character); `textGraphemeCount` via `package:characters` (`eval/text_layout_spec.dart`, CORE-07) | Runs carrying full style overrides, placement, karaoke variants (AIS-12) |
-| Text rendering path | **Preview and export are both rendered by Flutter** (checked): D-05 draws preview text with a Flutter overlay (`TextOverlayLayer`, UX-19, `previewTextEngineProvider`), and D-06 rasterizes export sprites with the same `TextLayoutEngine` (`packages/vwish_editor_engine_api/lib/src/render_prep/text_layout_engine.dart`, API-04: "preview overlay, manipulation handles and export sprites all lay out a core `TextLayoutSpec` here with `ui.Paragraph`"). ai.md §10.4 still says export uses CoreText or a native overlay; ARCH D-05/D-06 supersede that. V-A11 was measured in API-04: Figtree has no Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, CJK or emoji, so those use Flutter's per-character system fallback in both paths, and `TextLayoutEngine.fallbackFamilies` already exists | Per-run styles, decorations, highlight, per-run outline and shadow, karaoke highlight sprite, bundled script fallbacks (AIS-13) |
+| Text rendering path | **Preview and export are both rendered by Flutter** (checked): D-05 draws preview text with a Flutter overlay (`TextOverlayLayer`, UX-19, `previewTextEngineProvider`), and D-06 rasterizes export sprites with the same `TextLayoutEngine` (`packages/danaview_editor_engine_api/lib/src/render_prep/text_layout_engine.dart`, API-04: "preview overlay, manipulation handles and export sprites all lay out a core `TextLayoutSpec` here with `ui.Paragraph`"). ai.md §10.4 still says export uses CoreText or a native overlay; ARCH D-05/D-06 supersede that. V-A11 was measured in API-04: Figtree has no Greek, Cyrillic, Hebrew, Arabic, Devanagari, Thai, CJK or emoji, so those use Flutter's per-character system fallback in both paths, and `TextLayoutEngine.fallbackFamilies` already exists | Per-run styles, decorations, highlight, per-run outline and shadow, karaoke highlight sprite, bundled script fallbacks (AIS-13) |
 | RenderPlan and sprites | Cues lower to export-only sprite layers `<cueId>#c` placed by `cueCenter` from the track position (`plan/lowering_text.dart`, CORE-31). `.vsprite` v1 holds premultiplied RGBA plus an optional u16 glyph-order map, and the `reveal` channel draws glyph `< floor(reveal(t))` (ARCH §10.3, §11.6). Sprite key = `sha1(TextLayoutSpec JSON, scale, canvas, fontsVersion)` with `contentFontsVersion = 1` (`plan/sprite_requests.dart`). `ZOrder.of` allows `sub` −5…5 (`plan/z_order.dart`). Preview plans have no text layers (D-05) | Karaoke as a second sprite layer with a `reveal` channel at `sub` +1, so the plan schema and engines stay unchanged (D-68, AIS-14) |
-| AI pipeline | Whisper words in **source µs** (`TranscriptWord`, AI-10) are cached under `<support>/vwish/speech/transcripts/` with a 64 MiB LRU, backup-excluded (D-20). `WordMapper` maps words to the timeline through `ClipTimeMap` (AI-12). `DpCaptionSegmenter` turns `TimedWord`s into `SubtitleCueDraft(range, text)`, **dropping word timings** (AI-11). `AddGeneratedCaptionTrack` carries `CaptionProvenance` (AI-13, CORE-15). Speech audio comes from `MediaJobs.extractSpeechAudio(SpeechAudioJobRequest(media, range, outputPath, audioStream))` as a 16 kHz s16 mono WAV (ARCH §12.3, D-28) | Persist word timings on cues (D-69, AIS-15). Reuse extraction for voice-tone clips (D-50) |
+| AI pipeline | Whisper words in **source µs** (`TranscriptWord`, AI-10) are cached under `<support>/danaview/speech/transcripts/` with a 64 MiB LRU, backup-excluded (D-20). `WordMapper` maps words to the timeline through `ClipTimeMap` (AI-12). `DpCaptionSegmenter` turns `TimedWord`s into `SubtitleCueDraft(range, text)`, **dropping word timings** (AI-11). `AddGeneratedCaptionTrack` carries `CaptionProvenance` (AI-13, CORE-15). Speech audio comes from `MediaJobs.extractSpeechAudio(SpeechAudioJobRequest(media, range, outputPath, audioStream))` as a 16 kHz s16 mono WAV (ARCH §12.3, D-28) | Persist word timings on cues (D-69, AIS-15). Reuse extraction for voice-tone clips (D-50) |
 | Consent model | `ConsentDisclosure.of(spec)` is exactly what the view shows; `UserConsent.accepted(` is allowed only in `model_consent_view.dart` (ARCH §4.2 rule 8, §16.3, §20.2). Consent is never remembered, and the downloader re-checks the disclosure | The same pattern for sends (`AiSendConsent`) and for key checks (`ProviderProbeConsent`) (D-45) |
-| Privacy | "Vwish keeps everything on your device…"; every editor bullet in `legal_texts.dart` starts "On iPhone, iPad and Android"; the speech model is the only extra download; INT-04's `HttpOverrides` spy proves zero network before consent (ARCH §20.3) | New disclosures, an "AI Studio with your own key" entry, and a network guard for AI (§6.4, AIS-36, AIS-37) |
-| Project codec and migrations | Two-line `.vwproj` with `schema` and `minReader` in the header; header-only classification (D-12); `Migrations.chain` of pure, idempotent raw-JSON steps with an **empty production chain** and a test-only s0→s1 step; pre-migration backup on first save; `currentProjectSchema = 1`, `currentProjectMinReader = 1` (`codec/schema_version.dart`, `codec/migrations/migrations.dart`, CORE-22, CORE-23, ARCH §8.5) | The first production step, s1→s2 (D-53, AIS-04) |
-| Font catalog | 10 OFL families bundled in `packages/vwish_editor_fonts` for user content only. `FontCatalog` maps ids to families and supplies the `FontResolver`. Unknown ids fall back to Figtree (ARCH §17.8, D-30, UX-30) | More bundled scripts, imported fonts, search, favourites and live preview (D-60, D-61, AIS-22 … AIS-25) |
+| Privacy | "Danaview keeps everything on your device…"; every editor bullet in `legal_texts.dart` starts "On iPhone, iPad and Android"; the speech model is the only extra download; INT-04's `HttpOverrides` spy proves zero network before consent (ARCH §20.3) | New disclosures, an "AI Studio with your own key" entry, and a network guard for AI (§6.4, AIS-36, AIS-37) |
+| Project codec and migrations | Two-line `.dnproj` with `schema` and `minReader` in the header; header-only classification (D-12); `Migrations.chain` of pure, idempotent raw-JSON steps with an **empty production chain** and a test-only s0→s1 step; pre-migration backup on first save; `currentProjectSchema = 1`, `currentProjectMinReader = 1` (`codec/schema_version.dart`, `codec/migrations/migrations.dart`, CORE-22, CORE-23, ARCH §8.5) | The first production step, s1→s2 (D-53, AIS-04) |
+| Font catalog | 10 OFL families bundled in `packages/danaview_editor_fonts` for user content only. `FontCatalog` maps ids to families and supplies the `FontResolver`. Unknown ids fall back to Figtree (ARCH §17.8, D-30, UX-30) | More bundled scripts, imported fonts, search, favourites and live preview (D-60, D-61, AIS-22 … AIS-25) |
 | Undo and history | Snapshot history of the `Timeline` root, 200 entries or about 48 MB, not persisted; transactions add one entry; coalescing keys (ARCH §7.3, CORE-19); every mutation goes through `EditorController.apply` (ARCH §17.3, UX-08) | Accepting a suggestion is a command, so undo comes for free. Pending suggestions live outside history (D-64) |
 | Action registry, inspector, tools | `EditorActionId` enum (complete v1 list, ARCH §17.6) in `contracts/action_ids.dart` (UX-01). Handlers live in per-feature `actions/bindings/<feature>_bindings.dart`, merged by `wiring/action_bindings.dart`. Inspector routes are in `contracts/inspector_routes.dart`, with `SubtitlesInspector(track, cue, section)` and `SubtitlesPanelSection {cues, style, position}`. Tool strip, inspector host and dock are UX-16; the subtitles panel is UX-31; SRT/VTT UI is UX-32; export sheet is UX-39 | New action ids, panel sections and binding files (AIS-01), plus panels and flows (S2–S4) |
 
-**State of v1 at the time of writing (2026-10-11, `editor-wip`).** Several v1 UX files are still D-33 placeholders: `editor/text/font_catalog.dart`, `editor/panels/{font_picker,text_panel,subtitles_panel}.dart`, `editor/flows/captions/model_consent_view.dart`, and the `vwish_editor_fonts` package. Core, engine API, render prep and transcription code exist. 1.2.0 starts after INT-05, so the dependencies above will be real by then. Where this plan describes a v1 type, it follows the code on `editor-wip`, which matches ARCH.
+**State of v1 at the time of writing (2026-10-11, `editor-wip`).** Several v1 UX files are still D-33 placeholders: `editor/text/font_catalog.dart`, `editor/panels/{font_picker,text_panel,subtitles_panel}.dart`, `editor/flows/captions/model_consent_view.dart`, and the `danaview_editor_fonts` package. Core, engine API, render prep and transcription code exist. 1.2.0 starts after INT-05, so the dependencies above will be real by then. Where this plan describes a v1 type, it follows the code on `editor-wip`, which matches ARCH.
 
 ---
 
@@ -83,7 +83,7 @@ Each decision lists options, a recommendation and its consequences. **[OWNER]** 
 | ID | Decision (short) | Owner? |
 |---|---|---|
 | D-45 | Privacy model: master switch off by default, per-provider opt-in, a disclosure and Send for every action, nothing automatic | **[OWNER]** |
-| D-46 | Keys in a small first-party plugin `vwish_secure_keys` (Keychain / Keystore-wrapped, no backups) | – |
+| D-46 | Keys in a small first-party plugin `danaview_secure_keys` (Keychain / Keystore-wrapped, no backups) | – |
 | D-47 | HTTP: pure `dart:io` `HttpClient` adapters, no vendor SDKs, host allow-list, keys in headers only | – |
 | D-48 | One `LlmProvider` interface with capability flags, curated and live model lists, timeouts, retries, rate limits | – |
 | D-49 | Usage: token estimate before sending, recorded usage after; no prices and no billing in the app | **[OWNER]** |
@@ -102,7 +102,7 @@ Each decision lists options, a recommendation and its consequences. **[OWNER]** 
 | D-62 | Presets: built-ins in code, user presets in one app-level JSON file, tracks copy the values | – |
 | D-63 | App Store and Play: disclosures, privacy labels / Data safety, review access, AI-content reporting | **[OWNER]** |
 | D-64 | Suggestions: outside history, stored in a project sidecar, stale detection, accept = command | – |
-| D-65 | Gating: compile-time `VWISH_AI_STUDIO` plus a runtime master switch. Rich subtitles ship without a flag | – |
+| D-65 | Gating: compile-time `DANAVIEW_AI_STUDIO` plus a runtime master switch. Rich subtitles ship without a flag | – |
 | D-66 | Endpoints: exactly five provider hosts, no custom base URL; a loopback override for debug and tests only | **[OWNER]** |
 | D-67 | Ask AI free-text: edits only the selected text of the selected cues; output shown as a diff | – |
 | D-68 | Karaoke rendered with the existing sprite `reveal` channel; no plan or engine change | – |
@@ -115,7 +115,7 @@ Each decision lists options, a recommendation and its consequences. **[OWNER]** 
 
 **Recommendation: (a).**
 - **Master switch.** Settings › Video editor › AI Studio, **off by default**. While off, no AI entry point is shown, no provider object is built, and no AI code path can open a socket. `aiStudioProvider` returns `AiStudioOff`, and AIS-37's test asserts zero requests.
-- **Per-provider opt-in.** A provider is usable only after the user enters its key in that provider's sheet. The sheet says who the provider is, which host Vwish contacts, that the provider's terms and data policy apply (and that some free tiers may use requests to improve models), and that the key stays on this device.
+- **Per-provider opt-in.** A provider is usable only after the user enters its key in that provider's sheet. The sheet says who the provider is, which host Danaview contacts, that the provider's terms and data policy apply (and that some free tiers may use requests to improve models), and that the key stays on this device.
 - **Per-action disclosure.** Every action that sends project content shows a "What will be sent" block inside its sheet, built from the exact prepared request bodies (§3.8):
   - the provider, host and model;
   - the number of caption lines and characters, and the estimated input tokens plus an output cap;
@@ -124,9 +124,9 @@ Each decision lists options, a recommendation and its consequences. **[OWNER]** 
 
   Only the **Send** button sends. **Test key** and **Load models** send no project content and carry a one-line disclosure of their own.
 - **Nothing automatic.** Auto captions, import, open and resume never start an AI action. A job interrupted by an app kill is never resumed without a new disclosure and Send. Failed batches are retried automatically only inside the running job, with identical bytes (D-51).
-- **Enforcement** mirrors ARCH §4.2 rule 8. `AiSendConsent.accepted(` may appear only in `packages/vwish_editor/lib/src/editor/flows/ai/ai_send_view.dart`, and `ProviderProbeConsent.accepted(` only in `packages/vwish_editor/lib/src/settings/ai/provider_sheet.dart` (architecture tests, AIS-01). The transport refuses any body whose SHA-256 is not in the consent's list (AIS-08).
+- **Enforcement** mirrors ARCH §4.2 rule 8. `AiSendConsent.accepted(` may appear only in `packages/danaview_editor/lib/src/editor/flows/ai/ai_send_view.dart`, and `ProviderProbeConsent.accepted(` only in `packages/danaview_editor/lib/src/settings/ai/provider_sheet.dart` (architecture tests, AIS-01). The transport refuses any body whose SHA-256 is not in the consent's list (AIS-08).
 - **Logging.** Keys, caption text, prompts, responses and audio are never logged (grep test, AIS-08).
-- **Policy text.** See §6.4: summary, storage, "When Vwish uses the internet", terms.
+- **Policy text.** See §6.4: summary, storage, "When Danaview uses the internet", terms.
 
 **Consequence.** The UI has one more step per action. That is the price of "exactly what is sent", and it is also what App Store guideline 5.1.2(i) appears to ask for (D-63).
 
@@ -134,15 +134,15 @@ Each decision lists options, a recommendation and its consequences. **[OWNER]** 
 
 **Options.**
 - (a) `flutter_secure_storage` from pub.dev. Mature, but on Android it stores ciphertext in a SharedPreferences file that Auto Backup copies. After a restore, that file can no longer be decrypted unless the backup rules are edited. Its Android cipher implementation has also changed across major versions [VERIFY current version behaviour].
-- (b) A first-party Pigeon plugin, `packages/vwish_secure_keys`.
+- (b) A first-party Pigeon plugin, `packages/danaview_secure_keys`.
 - (c) SharedPreferences encrypted in Dart. Rejected: there is no hardware-backed key.
 
 **Recommendation: (b), a platform channel.**
-- **iOS.** `kSecClassGenericPassword`, service `com.vecvel.vwish.ai`, account = provider id, `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, `kSecAttrSynchronizable = false`. The key never syncs to iCloud and is never restored to another device.
-- **Android.** An AES-256-GCM key in `AndroidKeyStore` (non-exportable, no user-auth requirement) wraps each API key. Ciphertext is stored in `context.noBackupFilesDir/vwish_ai_keys.bin`, which Auto Backup never copies, so neither the app's backup rules nor CORE-28's files change. A missing or invalidated Keystore key reports `keysLost`, and the UI asks the user to re-enter the key.
+- **iOS.** `kSecClassGenericPassword`, service `com.vecvel.danaview.ai`, account = provider id, `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, `kSecAttrSynchronizable = false`. The key never syncs to iCloud and is never restored to another device.
+- **Android.** An AES-256-GCM key in `AndroidKeyStore` (non-exportable, no user-auth requirement) wraps each API key. Ciphertext is stored in `context.noBackupFilesDir/danaview_ai_keys.bin`, which Auto Backup never copies, so neither the app's backup rules nor CORE-28's files change. A missing or invalidated Keystore key reports `keysLost`, and the UI asks the user to re-enter the key.
 - **API.** `get/set/delete/listProviders`. It returns key presence and the last four characters; the full key is read only by the transport at send time.
 - **Why not (a).** Restore and backup behaviour is under our control, there are no transitive dependencies, the surface is tiny (five entries), and the repo already uses Pigeon for its own plugins (ENG-01, ARCH §12.6).
-- **Port.** `vwish_editor` never imports the plugin. `vwish_ai_studio` defines the `AiKeyStore` port, and the app root adapts the plugin to it (AIS-37), the same pattern as D-28.
+- **Port.** `danaview_editor` never imports the plugin. `danaview_ai_studio` defines the `AiKeyStore` port, and the app root adapts the plugin to it (AIS-37), the same pattern as D-28.
 
 ### D-47 · HTTP
 
@@ -151,7 +151,7 @@ Each decision lists options, a recommendation and its consequences. **[OWNER]** 
 **Recommendation: (a)**, the same stack as v1's model downloader (AI-09). Rules:
 - HTTPS only, OS trust store, no certificate pinning (provider certificates rotate).
 - `followRedirects = false`: a redirect is an error.
-- No cookies. `User-Agent: Vwish/<version>`, and no other identifying headers. No OpenRouter attribution headers (`HTTP-Referer`, `X-Title`).
+- No cookies. `User-Agent: Danaview/<version>`, and no other identifying headers. No OpenRouter attribution headers (`HTTP-Referer`, `X-Title`).
 - Keys go in headers only (`Authorization: Bearer`, `x-api-key`, `x-goog-api-key`), **never in URLs**. Gemini's `?key=` form is banned by test.
 - Hosts are checked against the D-66 allow-list before connecting. One `HttpClient` per job, closed afterwards.
 
@@ -205,7 +205,7 @@ final class LlmResponse { final String json; final LlmUsage? usage; final Finish
 
 **Recommendation.**
 - **Which audio.** For each cue, AIS-28's `ClipPlanner` picks the audible clip under it, using AI-12's priority (voice > main video > other video > other audio > music; muted, soloed-out and reversed clips excluded). It maps the cue's timeline range to source time through `ClipTimeMap`. Neighbouring cues of one media item are merged into units (5 s gap rule, as AI-12).
-- **Extraction.** Each unit is extracted once with v1's `MediaJobs.extractSpeechAudio` (16 kHz s16 mono WAV, sample-accurate, ARCH §12.3/§15) into `<cache>/vwish/editor/work/ai/<jobId>/`. Then `WavSlicer` (Dart, isolate) cuts one clip per cue (cue range ±150 ms, at most 15 s).
+- **Extraction.** Each unit is extracted once with v1's `MediaJobs.extractSpeechAudio` (16 kHz s16 mono WAV, sample-accurate, ARCH §12.3/§15) into `<cache>/danaview/editor/work/ai/<jobId>/`. Then `WavSlicer` (Dart, isolate) cuts one clip per cue (cue range ±150 ms, at most 15 s).
 - **Cleanup.** Clips are deleted through `OwnedFileDeleter` when the job ends, and the launch-time `work/` wipe (ARCH §15) catches leftovers. No new engine API is needed: the adapter mirrors D-28 (`EngineAiAudioClipExtractor`, AIS-37).
 - **Size.** 16 kHz s16 mono is 32 kB per second, so a 7 s cue is about 224 kB (about 300 kB as base64).
 - **Limits.** At most 4 MB of raw audio per request (about 2 min). At most 20 min of audio per action; above that the sheet asks for a smaller scope. These stay below the providers' inline-request limits (Gemini documents a 20 MB inline request limit) [VERIFY each].
@@ -220,7 +220,7 @@ final class LlmResponse { final String json; final LlmUsage? usage; final Finish
 
 ### D-51 · Prompt and response contracts
 
-**Contracts.** Every action has a versioned contract (`vw.cleanup.v1`, `vw.emotion.v1`, `vw.emoji.v1`, `vw.speakers.v1`, `vw.ask.v1`, `vw.translate.v1`). A contract has:
+**Contracts.** Every action has a versioned contract (`dv.cleanup.v1`, `dv.emotion.v1`, `dv.emoji.v1`, `dv.speakers.v1`, `dv.ask.v1`, `dv.translate.v1`). A contract has:
 - a fixed system prompt (in code, reviewed like code);
 - an input JSON builder in which caption text is **data** in fields, with short ids `c1…cN` mapped locally;
 - an output **JSON Schema**, the strict subset all five providers accept;
@@ -299,7 +299,7 @@ final class Speaker { final SpeakerId id /*'sp_'*/; final String name; final int
 **Recommendation.** Body `schema = 2` and `minReader = 1` (`codec/schema_version.dart`).
 - **Production step `s1 → s2`** (`codec/migrations/s1_to_s2.dart`, the first production entry in `Migrations.chain`, AIS-04): for each cue whose JSON has no `"sp"` key, `parseCueMarkup` (v1's own parser) turns `<b>/<i>` into spans and strips the tags. Unknown keys are kept. The step is idempotent: an s2 encoder always writes `"sp":[]` for a cue whose plain text contains a literal `<b>`, `<i>` or `<u>` pattern, so the step never re-reads literal angle brackets in an s2 body.
 - **No other migration.** Every other 1.2.0 field is additive and optional, and default values are omitted (ARCH §8.2).
-- **Opening a v1 project in 1.2.0** follows the CORE-23 framework: header classified `needsMigration`, chain runs in the decode isolate, `LoadedProject.migratedFrom = 1`, UX-40's one-time toast ("This project was updated for the new subtitle features. The previous version is kept as a backup."), and the first save writes `backups/pre-migration-s1.vwproj` (CORE-25).
+- **Opening a v1 project in 1.2.0** follows the CORE-23 framework: header classified `needsMigration`, chain runs in the decode isolate, `LoadedProject.migratedFrom = 1`, UX-40's one-time toast ("This project was updated for the new subtitle features. The previous version is kept as a backup."), and the first save writes `backups/pre-migration-s1.dnproj` (CORE-25).
 - **Opening a 1.2.0 project in 1.1.x**: header `schema 2, minReader 1` → `readOnlyNewer` (D-12). The project opens read-only with the newer-version banner and shows plain cue text without spans, overrides, placement or karaoke. Imported fonts fall back to Figtree. Nothing is lost, because a 1.1.x app cannot save it.
 - **Why not `minReader 2`.** That would block 1.1.x users from viewing and exporting their own projects. Read-only with simpler rendering is the D-12 promise.
 - **JSON shape** (illustrative; AIS-04 pins the names in `schema/project.v2.schema.json`):
@@ -318,7 +318,7 @@ Default export options: "Keep basic styling" on, "Speaker names" on when the tra
 | Feature | SRT export | VTT export | Import (both, AIS-07) |
 |---|---|---|---|
 | Bold, italic, underline | `<b>`, `<i>`, `<u>` | `<b>`, `<i>`, `<u>` | Mapped to spans (v1 kept only `<b>/<i>`) |
-| Colour | `<font color="#RRGGBB">` (non-standard but common) | `<c.vwN>` classes plus a `STYLE` block (`::cue(.vwN){color:…;background-color:…}`) | SRT `<font color>`; VTT `<c.x>` resolved from `STYLE` (colour and background only) |
+| Colour | `<font color="#RRGGBB">` (non-standard but common) | `<c.dvN>` classes plus a `STYLE` block (`::cue(.dvN){color:…;background-color:…}`) | SRT `<font color>`; VTT `<c.x>` resolved from `STYLE` (colour and background only) |
 | Highlight | dropped | `background-color` in the class | from VTT class |
 | Strike, outline, shadow, font, size, per-cue placement | dropped | dropped (VTT position settings are not written; v1 ignores cue settings) | ignored |
 | Speaker | `NAME: ` prefix | `<v NAME>` voice span | VTT `<v>` → speakers; SRT `NAME:` prefix → speaker when ≥ 80% of cues match |
@@ -385,7 +385,7 @@ Default export options: "Keep basic styling" on, "Speaker names" on when the tra
 - light: at most 1 emoji per cue, only cues with a non-neutral label and confidence ≥ 0.6, and at most one in three consecutive cues.
 - heavy: at most 2 per cue, every non-neutral cue.
 
-The limits are enforced locally even when the model suggests more. Emotion-driven emoji need **no extra request** (local mapping from labels). "AI picks emojis" (contextual, for example 🍕) is the `vw.emoji.v1` contract.
+The limits are enforced locally even when the model suggests more. Emotion-driven emoji need **no extra request** (local mapping from labels). "AI picks emojis" (contextual, for example 🍕) is the `dv.emoji.v1` contract.
 
 Owner confirms the label set, colours and emoji pools.
 
@@ -402,7 +402,7 @@ Owner confirms the label set, colours and emoji pools.
 
 **Budget.** At most **8 MB** added to the compressed iOS and Android download (measured by AIS-22 on IPA and AAB, [VERIFY]). v1 already bundles about 3–4 MB (ARCH §17.8).
 
-**Add** (OFL-1.1, Regular and Bold static TTF, from the Noto project at a pinned upstream commit with SHA-256 recorded in `vwish_editor_fonts/FONTS.md`): Noto Sans Arabic, Noto Naskh Arabic, Noto Sans Hebrew, Noto Sans Devanagari, Noto Sans Bengali, Noto Sans Gurmukhi, Noto Sans Gujarati, Noto Sans Tamil, Noto Sans Telugu, Noto Sans Kannada, Noto Sans Malayalam, Noto Sans Sinhala, Noto Sans Thai. If the measurement exceeds the budget, drop Naskh and Sinhala first. Greek, Cyrillic and Vietnamese are covered by Inter (already bundled), which is added to the fallback chain.
+**Add** (OFL-1.1, Regular and Bold static TTF, from the Noto project at a pinned upstream commit with SHA-256 recorded in `danaview_editor_fonts/FONTS.md`): Noto Sans Arabic, Noto Naskh Arabic, Noto Sans Hebrew, Noto Sans Devanagari, Noto Sans Bengali, Noto Sans Gurmukhi, Noto Sans Gujarati, Noto Sans Tamil, Noto Sans Telugu, Noto Sans Kannada, Noto Sans Malayalam, Noto Sans Sinhala, Noto Sans Thai. If the measurement exceeds the budget, drop Naskh and Sinhala first. Greek, Cyrillic and Vietnamese are covered by Inter (already bundled), which is added to the fallback chain.
 
 **CJK options.**
 - (a) System CJK fonts. This is the v1 behaviour, and it renders correctly in preview and export on the device.
@@ -423,7 +423,7 @@ Owner confirms the label set, colours and emoji pools.
   - family and style names from `name`; supported scripts from `cmap` ranges;
   - `OS/2.fsType` embedding bits;
   - a successful load with `ui.loadFontFromList` before it is accepted.
-- **Storage.** An **app-level library** `<support>/vwish/editor/fonts/<sha256>.<ext>` plus `fonts/index.json` (atomic writes through `StoreFs`), deduplicated by hash. Projects reference `usr_<sha256[0:16]>` ids. `refs.json` lists the font ids a project uses, so the library can say "Used in 3 projects". Fonts are never garbage-collected; only the user deletes them.
+- **Storage.** An **app-level library** `<support>/danaview/editor/fonts/<sha256>.<ext>` plus `fonts/index.json` (atomic writes through `StoreFs`), deduplicated by hash. Projects reference `usr_<sha256[0:16]>` ids. `refs.json` lists the font ids a project uses, so the library can say "Used in 3 projects". Fonts are never garbage-collected; only the user deletes them.
 - **Portability.** Duplicating a project shares the fonts. A project opened where a font is missing (for example, after a restore) shows "1 font used in this project is missing" with **Import font…**, which re-links by family name plus hash. Until then those runs fall back to Figtree. The sprite key includes the font id, so a re-imported different file never reuses stale sprites.
 - **Rights reminder**, shown on every import, with **Import** and **Cancel**: "Only import fonts you have the right to use in videos you make and share. Some font licences don't allow this." When `fsType` marks the font restricted, a stronger line is added: "This font's licence restricts embedding. Check its licence before you publish videos that use it."
 
@@ -439,7 +439,7 @@ Owner confirms the label set, colours and emoji pools.
   | Cinema | Lora 40 pt off-white | soft shadow, no box | bottom |
   | Minimal | Inter 38 pt white | 30% shadow, no box | bottom |
 
-- **User presets.** One app-level file `<support>/vwish/editor/presets/subtitle_presets.json` (`{"format":"vwish.editor.subtitlePresets","schema":1,"presets":[…]}`, atomic writes, at most 100). Each holds style, karaoke, position, speaker display and emotion-styles values.
+- **User presets.** One app-level file `<support>/danaview/editor/presets/subtitle_presets.json` (`{"format":"danaview.editor.subtitlePresets","schema":1,"presets":[…]}`, atomic writes, at most 100). Each holds style, karaoke, position, speaker display and emotion-styles values.
 - **Applying a preset copies the values** into the track and records `presetRef {id, builtIn, revision}`. Projects therefore never depend on the presets file, and a changed or deleted preset never alters an existing project. The track shows "Modified" when its values differ from the referenced preset.
 - **Why not SharedPreferences.** The data is structured, versioned and may grow.
 
@@ -461,7 +461,7 @@ Owner confirms the label set, colours and emoji pools.
 ### D-64 · Suggestions and review
 
 - **Lifecycle.** A job produces a `SuggestionSet` of typed `AiSuggestion`s: text, emotion, emoji, speaker, style, or translated track. Each carries `cueId`, `baseHash` (a hash of the cue's text, spans, words, emotion and speaker when the suggestion was made) and a state (`pending | accepted | rejected | stale`). Suggestions live **outside history and outside the project JSON**.
-- **Storage.** A sidecar `<support>/vwish/editor/projects/<id>/ai/suggestions-<setId>.json` (atomic writes through core `StoreFs`, deleted through `OwnedFileDeleter`) keeps paid-for results across app kills. It is removed when a set is fully resolved and with the project bundle on project delete. It sits inside the project bundle, so it follows the bundle's backup rules (ARCH §8.1).
+- **Storage.** A sidecar `<support>/danaview/editor/projects/<id>/ai/suggestions-<setId>.json` (atomic writes through core `StoreFs`, deleted through `OwnedFileDeleter`) keeps paid-for results across app kills. It is removed when a set is fully resolved and with the project bundle on project delete. It sits inside the project bundle, so it follows the bundle's backup rules (ARCH §8.1).
 - **Accepting.**
   - **Accept** on one suggestion runs one command and adds one history entry.
   - **Accept all** in a group runs one `ApplyCueEdits` and adds one entry.
@@ -473,8 +473,8 @@ Owner confirms the label set, colours and emoji pools.
 
 ### D-65 · Gating
 
-- **AI Studio** sits behind the compile-time define `VWISH_AI_STUDIO` (default **false** until AIS-38/AIS-39/AIS-40 pass; AIS-41 enables it in release builds) **and** the runtime master switch (D-45).
-- **Rich subtitles, fonts and presets** use no network and ship unconditionally under the existing `VWISH_EDITOR`, because schema 2 is needed either way.
+- **AI Studio** sits behind the compile-time define `DANAVIEW_AI_STUDIO` (default **false** until AIS-38/AIS-39/AIS-40 pass; AIS-41 enables it in release builds) **and** the runtime master switch (D-45).
+- **Rich subtitles, fonts and presets** use no network and ship unconditionally under the existing `DANAVIEW_EDITOR`, because schema 2 is needed either way.
 - **Desktop** keeps the editor hidden (D-17).
 
 ### D-66 · Endpoints **[OWNER]**
@@ -486,7 +486,7 @@ The allow-list is exactly [VERIFY each]:
 - `openrouter.ai`
 - `api.x.ai`
 
-There are no user-configurable base URLs in 1.2.0. Debug and profile builds accept `--dart-define=VWISH_AI_FAKE_HOST=127.0.0.1:<port>`, which reroutes every provider to a loopback fake server for tests. It is asserted unreachable in release (`kReleaseMode` guard plus an architecture test). The owner confirms that no custom endpoints are offered.
+There are no user-configurable base URLs in 1.2.0. Debug and profile builds accept `--dart-define=DANAVIEW_AI_FAKE_HOST=127.0.0.1:<port>`, which reroutes every provider to a loopback fake server for tests. It is asserted unreachable in release (`kReleaseMode` guard plus an architecture test). The owner confirms that no custom endpoints are offered.
 
 ### D-67 · Ask AI with a free-text instruction
 
@@ -531,34 +531,34 @@ There are no user-configurable base URLs in 1.2.0. Debug and profile builds acce
 
 ```
 app root (lib/: main.dart, app.dart, router/)
- ├─ vwish_features ─────────► (unchanged deps; legal_texts.dart gains AI/font text)
- ├─ vwish_editor (UX)
- │    ├─ vwish_editor_core (pure Dart; rich cues, schema 2, commands, sfnt inspector, font/preset stores)
- │    ├─ vwish_editor_engine_api (render prep v2)
- │    ├─ vwish_transcription (segmenter with words)
- │    ├─ **vwish_ai_studio** (Dart, no widgets) ──► vwish_ai_providers, vwish_editor_core, vwish_transcription
- │    ├─ **vwish_ai_providers** (pure Dart + dart:io) ──► meta, collection, crypto only
- │    ├─ vwish_editor_fonts (+ Noto families)
- │    └─ vwish_ui_kit, vwish_data, vwish_platform, vwish_domain, vwish_features (chrome/orientation/storage only)
- ├─ vwish_editor_engine (font pick kind)
- ├─ vwish_whisper
- └─ **vwish_secure_keys** (Flutter plugin iOS+Android, Pigeon) ──► no vwish_* package
+ ├─ danaview_features ─────────► (unchanged deps; legal_texts.dart gains AI/font text)
+ ├─ danaview_editor (UX)
+ │    ├─ danaview_editor_core (pure Dart; rich cues, schema 2, commands, sfnt inspector, font/preset stores)
+ │    ├─ danaview_editor_engine_api (render prep v2)
+ │    ├─ danaview_transcription (segmenter with words)
+ │    ├─ **danaview_ai_studio** (Dart, no widgets) ──► danaview_ai_providers, danaview_editor_core, danaview_transcription
+ │    ├─ **danaview_ai_providers** (pure Dart + dart:io) ──► meta, collection, crypto only
+ │    ├─ danaview_editor_fonts (+ Noto families)
+ │    └─ danaview_ui_kit, danaview_data, danaview_platform, danaview_domain, danaview_features (chrome/orientation/storage only)
+ ├─ danaview_editor_engine (font pick kind)
+ ├─ danaview_whisper
+ └─ **danaview_secure_keys** (Flutter plugin iOS+Android, Pigeon) ──► no danaview_* package
 ```
 
 New dependency rules, numbered after ARCH §4.2's eight and enforced by `test/architecture/dependency_rules_test.dart` (AIS-01):
 
-9. `vwish_ai_providers` depends only on `meta`, `collection`, `crypto` and the SDK (`dart:io`, `dart:isolate`). No `package:flutter`, no `vwish_*`.
-10. `vwish_ai_studio` depends on `vwish_ai_providers`, `vwish_editor_core`, `vwish_transcription`, `characters`, `collection`, `meta`. Never the engine packages, `vwish_editor`, `vwish_features` or `vwish_secure_keys`. No widget code.
-11. `vwish_secure_keys` depends on no `vwish_*` package. Only the app root imports it.
-12. `vwish_editor` may import `vwish_ai_studio` and `vwish_ai_providers` (types only). It never imports `vwish_secure_keys`.
-13. `AiSendConsent.accepted(` appears only in `packages/vwish_editor/lib/src/editor/flows/ai/ai_send_view.dart`, and `ProviderProbeConsent.accepted(` only in `packages/vwish_editor/lib/src/settings/ai/provider_sheet.dart`.
-14. `HttpClient(` is constructed in the AI packages only in `packages/vwish_ai_providers/lib/src/transport/http_transport.dart`.
+9. `danaview_ai_providers` depends only on `meta`, `collection`, `crypto` and the SDK (`dart:io`, `dart:isolate`). No `package:flutter`, no `danaview_*`.
+10. `danaview_ai_studio` depends on `danaview_ai_providers`, `danaview_editor_core`, `danaview_transcription`, `characters`, `collection`, `meta`. Never the engine packages, `danaview_editor`, `danaview_features` or `danaview_secure_keys`. No widget code.
+11. `danaview_secure_keys` depends on no `danaview_*` package. Only the app root imports it.
+12. `danaview_editor` may import `danaview_ai_studio` and `danaview_ai_providers` (types only). It never imports `danaview_secure_keys`.
+13. `AiSendConsent.accepted(` appears only in `packages/danaview_editor/lib/src/editor/flows/ai/ai_send_view.dart`, and `ProviderProbeConsent.accepted(` only in `packages/danaview_editor/lib/src/settings/ai/provider_sheet.dart`.
+14. `HttpClient(` is constructed in the AI packages only in `packages/danaview_ai_providers/lib/src/transport/http_transport.dart`.
 15. No AI package source contains `?key=`, and no `print`/`debugPrint`/`log` call in the AI packages takes a request body, response body, key or caption text (grep test with an allow-list of format strings).
 
 ### 3.2 New and changed files (owner ticket in brackets)
 
 ```
-packages/vwish_ai_providers/  pubspec, analysis_options, lib/vwish_ai_providers.dart, lib/testing.dart          [AIS-01]
+packages/danaview_ai_providers/  pubspec, analysis_options, lib/danaview_ai_providers.dart, lib/testing.dart          [AIS-01]
   lib/src/contracts/{llm_provider,provider_id,capabilities,llm_request,llm_response,model_info,ai_failure}.dart [AIS-08]
   lib/src/consent/{ai_send_consent,provider_probe_consent,send_ticket}.dart                                    [AIS-08]
   lib/src/transport/{http_transport,retry_policy,rate_limiter,cancel_token,host_allow_list}.dart               [AIS-08]
@@ -567,12 +567,12 @@ packages/vwish_ai_providers/  pubspec, analysis_options, lib/vwish_ai_providers.
   lib/src/providers/{openai_compatible,openai_provider,gemini_provider}.dart  test/fixtures/providers/{openai,gemini}/   [AIS-09]
   lib/src/providers/{anthropic_provider,openrouter_provider,xai_provider}.dart test/fixtures/providers/{anthropic,openrouter,xai}/ [AIS-10]
   tool/live_check.dart (manual only)                                                                            [AIS-40]
-packages/vwish_ai_studio/  pubspec, analysis_options, lib/vwish_ai_studio.dart, lib/testing.dart                [AIS-01]
+packages/danaview_ai_studio/  pubspec, analysis_options, lib/danaview_ai_studio.dart, lib/testing.dart                [AIS-01]
   lib/src/{contracts,orchestrator,review,audio,usage,glossary}/                                                [AIS-28]
   lib/src/actions/{common,cleanup,emotion,emoji,speakers}/                                                     [AIS-29]
   lib/src/actions/{ask,translate}/, lib/src/translation/                                                       [AIS-30]
-packages/vwish_secure_keys/  (whole plugin)                                                                     [AIS-11]
-packages/vwish_editor_core/
+packages/danaview_secure_keys/  (whole plugin)                                                                     [AIS-11]
+packages/danaview_editor_core/
   lib/src/model/cue_rich.dart; model/{items,subtitle,text_style}.dart (extends CORE-03); validate/ (extends CORE-08) [AIS-02]
   lib/src/eval/cue_text_ops.dart, lib/src/formats/emoji.dart                                                    [AIS-03]
   codec/{project_json,schema_version}.dart (extends CORE-22), codec/migrations/{migrations (extends CORE-23),s1_to_s2}.dart,
@@ -586,11 +586,11 @@ packages/vwish_editor_core/
   ops/speech_snap.dart                                                                                          [AIS-19]
   formats/sfnt_inspector.dart, store/{font_library_store,preset_store}.dart, model/subtitle_presets.dart,
     store/file_project_repository.dart (extends CORE-25: refs.json fonts)                                         [AIS-23]
-packages/vwish_editor_engine_api/lib/src/render_prep/ (extends API-04)                                           [AIS-13]
-packages/vwish_editor_engine_api/lib/src/platform_services.dart (extends API-01) + engine Pigeon/native pickers  [AIS-24]
-packages/vwish_transcription/lib/src/segmentation/ (extends AI-11), pipeline/pipeline.dart (extends AI-13)       [AIS-15]
-packages/vwish_editor_fonts/ (extends UX-30), lib/src/editor/text/font_catalog.dart (extends UX-30)              [AIS-22]
-packages/vwish_editor/lib/src/
+packages/danaview_editor_engine_api/lib/src/render_prep/ (extends API-04)                                           [AIS-13]
+packages/danaview_editor_engine_api/lib/src/platform_services.dart (extends API-01) + engine Pigeon/native pickers  [AIS-24]
+packages/danaview_transcription/lib/src/segmentation/ (extends AI-11), pipeline/pipeline.dart (extends AI-13)       [AIS-15]
+packages/danaview_editor_fonts/ (extends UX-30), lib/src/editor/text/font_catalog.dart (extends UX-30)              [AIS-22]
+packages/danaview_editor/lib/src/
   editor/preview/{text_overlay_layer,text_overlay_painter} (extends UX-19), manipulation_overlay (extends UX-22),
     preview/cue_drag_controller.dart                                                                            [AIS-16]
   editor/panels/transcript/{transcript_view,transcript_row,transcript_controller,rich_cue_editor,rich_cue_controller}.dart,
@@ -610,7 +610,7 @@ packages/vwish_editor/lib/src/
   app/adapters/{secure_key_store_adapter,engine_ai_audio_extractor,prefs_usage_ledger}.dart, app/editor_bootstrap.dart (extends INT-02) [AIS-37]
   editor/contracts/{action_ids,inspector_routes,tool_ids}.dart, editor/wiring/action_bindings.dart,
     app/{editor_providers,editor_availability}.dart, pubspec.yaml (all extend UX-01)                             [AIS-01]
-packages/vwish_features/lib/src/more/legal_texts.dart (extends UX-42)                                            [AIS-36]
+packages/danaview_features/lib/src/more/legal_texts.dart (extends UX-42)                                            [AIS-36]
 Per-feature bindings and strings: actions/bindings/<feature>_bindings.dart and app/strings/<feature>_strings.dart, owned by the feature ticket.
 ```
 
@@ -660,7 +660,7 @@ PreparedRequest + ApiKey + AiSendTicket(from AiSendConsent) ──► HttpTransp
 ### 3.6 AI Studio service
 
 ```dart
-abstract interface class AiStudioService {                  // vwish_ai_studio (AIS-28)
+abstract interface class AiStudioService {                  // danaview_ai_studio (AIS-28)
   Future<AiStudioStatus> status();                           // off | on(configured providers, models, capabilities)
   Future<AiActionPlan> plan(AiActionRequest r, EditProject p);   // local only: select, extract audio, batch, prepare, disclose
   AiJob run(AiActionPlan plan, AiSendConsent consent);       // progress stream, cancel, result SuggestionSet
@@ -672,7 +672,7 @@ final class AiSendDisclosure { AiProviderId provider; String host, model, action
 ```
 
 `AiActionPlan` is immutable and holds the prepared requests, so the disclosure describes exactly the bytes that will be sent. Ports (implemented at the app root, AIS-37):
-- `AiKeyStore`, adapting `vwish_secure_keys`;
+- `AiKeyStore`, adapting `danaview_secure_keys`;
 - `AiAudioClipExtractor`, adapting `engine.jobs.extractSpeechAudio`;
 - `UsageLedgerStore` (SharedPreferences);
 - v1's `BackgroundLeaseProvider` for long jobs on Android.
@@ -747,7 +747,7 @@ Partial results are always kept and reviewable ("38 of 40 batches done").
 | Widget | every new surface and state with `FakeAiStudioService`, `FakeLlmProvider`, `InMemoryKeyStore`; matrix tests at 280–1280 px and 0.85–1.35 text scale; `expectOwnerUiRules`; semantics | AIS-17 … AIS-35 |
 | Architecture | consent call sites, `HttpClient` construction site, host allow-list, no `?key=`, no logging of content, dependency rules 9–15 | AIS-01, AIS-37 |
 | Network guard | an `HttpOverrides` spy through the real wiring: AI Studio off → zero requests in a full editor session; on → zero before Send; the first request goes to the chosen host only | AIS-37 |
-| On-device E2E | iOS Simulator and Android Emulator with a **loopback fake provider** (`VWISH_AI_FAKE_HOST`) | AIS-38 |
+| On-device E2E | iOS Simulator and Android Emulator with a **loopback fake provider** (`DANAVIEW_AI_FAKE_HOST`) | AIS-38 |
 | Live | manual, the owner's keys, outside CI, checklist only; never commits keys or content | AIS-40 |
 
 ---
@@ -759,14 +759,14 @@ Partial results are always kept and reviewable ("38 of 40 batches done").
 - Custom kit components only (no Material chrome). Figtree for every piece of chrome. Dark UI. Solid surfaces with soft shadows. Rounded-rectangle text buttons; only single-icon buttons are round.
 - Computed contrast ≥ 4.5:1. Touch targets ≥ 44×44. Semantics on everything painted. Announcements throttled through `editorAnnounce()`. Reduced motion honoured.
 - No overflow at widths 280–1280 and text scale 0.85–1.35, including the keyboard-inset cases. Toolstrips scroll and never wrap. Panels have a fixed header and a scrollable body.
-- Flows that are modal use `showVwishSheet` (AI Studio, Ask AI, Translate, font import, presets, emoji review). Ongoing work uses inspector panels (Transcript, Review, Cue), as a dock in `compactPortrait` and a side pane elsewhere (ARCH §17.2).
-- **User colours in the transcript.** User text colours are never used as the transcript's text colour on the dark UI, because they could fail contrast. Colour is shown as a 3 px underline bar in the span colour. Highlight is shown as a tinted chip whose text colour is computed with `VwishColors.foregroundOn`. Fonts and sizes appear as small badges ("Bebas · 120%"). The preview shows the true look.
+- Flows that are modal use `showDanaviewSheet` (AI Studio, Ask AI, Translate, font import, presets, emoji review). Ongoing work uses inspector panels (Transcript, Review, Cue), as a dock in `compactPortrait` and a side pane elsewhere (ARCH §17.2).
+- **User colours in the transcript.** User text colours are never used as the transcript's text colour on the dark UI, because they could fail contrast. Colour is shown as a 3 px underline bar in the span colour. Highlight is shown as a tinted chip whose text colour is computed with `DanaviewColors.foregroundOn`. Fonts and sizes appear as small badges ("Bebas · 120%"). The preview shows the true look.
 
 ### 4.2 Entry points and gating
 
 | Condition | What the user sees |
 |---|---|
-| `VWISH_AI_STUDIO=false` (development default) | Rich subtitles, transcript, fonts, presets, karaoke, emoji tools. **No** AI Studio row, buttons or Ask AI |
+| `DANAVIEW_AI_STUDIO=false` (development default) | Rich subtitles, transcript, fonts, presets, karaoke, emoji tools. **No** AI Studio row, buttons or Ask AI |
 | Flag on, master switch off (default) | Same as above, plus Settings › Video editor › **AI Studio** row (off) |
 | Master switch on, no provider key | AI buttons visible. Pressing one opens the "Add a provider" empty state, which links to Settings |
 | On, at least one provider ready | Captions tool header: **AI Studio**, **Translate**; selection bars: **Ask AI**; a Review badge with the pending count |
@@ -788,13 +788,13 @@ Each AI surface has these states: empty, loading, error, offline, key invalid, q
 
 **U2 · Provider sheet** (`provider_sheet.dart`, AIS-31; the only `ProviderProbeConsent.accepted(` site)
 - Disclosure paragraph: provider, host, "Their terms and privacy policy apply. Some free plans may use requests to improve their models." with an "Open {Provider} privacy policy" button that opens the system browser.
-- `VwishTextField` for the key: obscured, paste button, show/hide while typing. After saving, only `··` plus the last four characters is shown. No copy-out.
+- `DanaviewTextField` for the key: obscured, paste button, show/hide while typing. After saving, only `··` plus the last four characters is shown. No copy-out.
 - Model row (opens U3). **Test key** (one-line disclosure: "Contacts {host} with your key. No captions are sent."). **Remove key** (confirm).
 
 | State | Shown |
 |---|---|
 | empty | key field, Save disabled |
-| loading | Test key shows a spinner (kit `VwishSpinner`) and "Checking…" |
+| loading | Test key shows a spinner (kit `DanaviewSpinner`) and "Checking…" |
 | valid | "Key works · {n} models available" |
 | key invalid | "{Provider} didn't accept this key." |
 | quota exceeded | "Key works, but your quota or credit is used up." |
@@ -810,7 +810,7 @@ Each AI surface has these states: empty, loading, error, offline, key invalid, q
 - Buttons: Auto captions (v1), Add, **Transcript**, **AI Studio**, **Translate**, menu. A Review badge appears when suggestions are pending.
 - The track menu gains: Style presets…, Karaoke…, Speakers…, Remove all emojis…, Review emojis…, Translate…
 
-**U5 · AI Studio sheet** (`showVwishSheet(title: 'AI Studio')` with `VwishStepIndicator`, AIS-32)
+**U5 · AI Studio sheet** (`showDanaviewSheet(title: 'AI Studio')` with `DanaviewStepIndicator`, AIS-32)
 1. **Action**: Clean up the transcript · Detect emotion and tone · Add emojis · Label speakers · Emotion styles. Translate opens U10.
 2. **Options**: track; scope (whole track, selected cues, current range); provider and model.
    - Clean up: punctuation and capitals, spelling, names and terms (glossary field), "Remove filler words" (off).
@@ -818,7 +818,7 @@ Each AI surface has these states: empty, loading, error, offline, key invalid, q
    - Emojis: density; source "From emotions (no request)" or "Let AI choose".
    - Speakers: max speakers (2–8); from text or voice.
 3. **What will be sent** (U6, then Send).
-4. **Progress**: batches `n/m`, a `VwishProgressBar`, Cancel ("Stop. Results so far are kept.").
+4. **Progress**: batches `n/m`, a `DanaviewProgressBar`, Cancel ("Stop. Results so far are kept.").
 5. **Result**: "290 suggestions ready", with Review now and Later.
 
 | State | Shown |
@@ -897,7 +897,7 @@ When there are more than 200k estimated tokens, Send needs a second tap. Rows wr
 - Rows render a live preview of the current selection's text (or the cue text, or the family name) in that font, with a star toggle and a script badge.
 - "Import font…" runs the picker (AIS-24), validation, the rights reminder (D-61) and a done toast.
 - Manage fonts lives in Settings › Video editor › Fonts: rename the display name, delete ("Used in 2 projects. Captions using it will show in Figtree.").
-- Errors: "This file isn't a font Vwish can use (.ttf or .otf)." · "Font files up to 30 MB are supported." · "This font couldn't be loaded."
+- Errors: "This file isn't a font Danaview can use (.ttf or .otf)." · "Font files up to 30 MB are supported." · "This font couldn't be loaded."
 - Empty states per tab.
 
 **U17 · Style presets sheet** (AIS-26)
@@ -942,7 +942,7 @@ Shortcuts: ⌘B/⌘I/⌘U (inside the rich editor only), ⌘/Ctrl+Enter (split a
    - AI packages pass `test/support/no_network.dart` (no non-loopback host in any test);
    - nothing logs keys, captions, prompts, responses or audio;
    - every UI surface has matrix tests for each state in §4.3.
-5. **Flags.** `VWISH_AI_STUDIO` defaults to false; AIS-41 flips release builds. Rich-subtitle work is not flagged (D-65).
+5. **Flags.** `DANAVIEW_AI_STUDIO` defaults to false; AIS-41 flips release builds. Rich-subtitle work is not flagged (D-65).
 6. **Fixtures for providers are hand-written** from the public API references and marked with the reference URL and date in a comment. Live traffic is never recorded into fixtures.
 
 ### 5.2 Milestones
@@ -987,7 +987,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 | 8 | **AIS-08** | S1 | AI providers | Provider contracts, transport, consent tickets, retries, rate limits, tokens, JSON, fake server | AIS-01 |
 | 9 | **AIS-09** | S1 | AI providers | OpenAI-compatible base, OpenAI and Gemini adapters with hand-written fixtures | AIS-08 |
 | 10 | **AIS-10** | S1 | AI providers | Anthropic, OpenRouter and xAI adapters with hand-written fixtures | AIS-09 |
-| 11 | **AIS-11** | S1 | Native (iOS + Android) | vwish_secure_keys plugin: Keychain and Keystore-wrapped key store | AIS-01 |
+| 11 | **AIS-11** | S1 | Native (iOS + Android) | danaview_secure_keys plugin: Keychain and Keystore-wrapped key store | AIS-01 |
 | 12 | **AIS-12** | S2 | Core (pure Dart) | Text layout spec v2: rich runs, effective style, placement, karaoke evaluation | AIS-02, AIS-03, CORE-07 |
 | 13 | **AIS-13** | S2 | Engine (Dart) | Render prep v2: per-run styles, decorations, karaoke highlight sprite, script rules, fallbacks | AIS-12, API-04 |
 | 14 | **AIS-14** | S2 | Core (pure Dart) | Lowering v2: per-cue placement, karaoke layers, sprite variants, contract fixture | AIS-12, CORE-29, CORE-30, CORE-31 |
@@ -1028,29 +1028,29 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S1 · **Area:** Integration
 - **Depends on:** INT-05, UX-01, INT-01, CORE-01, CORE-09
 - **Owns:**
-  - `packages/vwish_ai_providers/{pubspec.yaml, analysis_options.yaml, lib/vwish_ai_providers.dart, lib/testing.dart}`
-  - `packages/vwish_ai_studio/{pubspec.yaml, analysis_options.yaml, lib/vwish_ai_studio.dart, lib/testing.dart}`
-  - `packages/vwish_editor_core/lib/{model,ops,eval,formats,plan,codec,store}.dart` (extends CORE-01: export lines for the new files)
-  - `packages/vwish_editor_core/lib/src/ops/edit_command.dart` (extends CORE-09: `part` directives for `rich_cue_commands.dart`, `ai_cue_commands.dart`)
-  - `packages/vwish_editor/pubspec.yaml` (extends UX-01)
-  - `packages/vwish_editor/lib/src/editor/contracts/action_ids.dart`, `inspector_routes.dart`, `tool_ids.dart` (extends UX-01)
-  - `packages/vwish_editor/lib/src/editor/wiring/action_bindings.dart` (extends UX-01)
-  - `packages/vwish_editor/lib/src/app/editor_providers.dart`, `editor_availability.dart` (extends UX-01)
+  - `packages/danaview_ai_providers/{pubspec.yaml, analysis_options.yaml, lib/danaview_ai_providers.dart, lib/testing.dart}`
+  - `packages/danaview_ai_studio/{pubspec.yaml, analysis_options.yaml, lib/danaview_ai_studio.dart, lib/testing.dart}`
+  - `packages/danaview_editor_core/lib/{model,ops,eval,formats,plan,codec,store}.dart` (extends CORE-01: export lines for the new files)
+  - `packages/danaview_editor_core/lib/src/ops/edit_command.dart` (extends CORE-09: `part` directives for `rich_cue_commands.dart`, `ai_cue_commands.dart`)
+  - `packages/danaview_editor/pubspec.yaml` (extends UX-01)
+  - `packages/danaview_editor/lib/src/editor/contracts/action_ids.dart`, `inspector_routes.dart`, `tool_ids.dart` (extends UX-01)
+  - `packages/danaview_editor/lib/src/editor/wiring/action_bindings.dart` (extends UX-01)
+  - `packages/danaview_editor/lib/src/app/editor_providers.dart`, `editor_availability.dart` (extends UX-01)
   - `test/architecture/dependency_rules_test.dart` (extends INT-01)
-  - `packages/vwish_editor/test/architecture/ai_call_sites_test.dart`
+  - `packages/danaview_editor/test/architecture/ai_call_sites_test.dart`
   - `.github/workflows/editor-ci.yml` (extends INT-01), `scripts/ci/editor/ai.sh`
   - `docs/editor/ARCHITECTURE.md` ([INTEGRATION]: D-45…D-70 with the owner's answers, §4 additions)
 - **Spec:**
   - **Placeholders (D-33)** for every new file in §3.2 and for the new binding and string files, each with `// OWNER: AIS-xx`.
   - **Manifests.**
-    - `vwish_ai_providers`: `meta`, `collection`, `crypto`; dev `test`.
-    - `vwish_ai_studio`: `flutter` (because `vwish_transcription` needs it), `characters`, `collection`, `meta`, `path`, `vwish_editor_core`, `vwish_transcription`, `vwish_ai_providers`.
-    - `vwish_editor` adds `vwish_ai_studio` and `vwish_ai_providers`.
-    - The `vwish_secure_keys` package is created whole by AIS-11.
+    - `danaview_ai_providers`: `meta`, `collection`, `crypto`; dev `test`.
+    - `danaview_ai_studio`: `flutter` (because `danaview_transcription` needs it), `characters`, `collection`, `meta`, `path`, `danaview_editor_core`, `danaview_transcription`, `danaview_ai_providers`.
+    - `danaview_editor` adds `danaview_ai_studio` and `danaview_ai_providers`.
+    - The `danaview_secure_keys` package is created whole by AIS-11.
   - **Contracts.**
     - The new `EditorActionId`s of §4.4 (groups: tools / editing).
     - `SubtitlesPanelSection.{transcript, review, cue}`.
-    - The `aiStudioFlag` constant (`bool.fromEnvironment('VWISH_AI_STUDIO')`).
+    - The `aiStudioFlag` constant (`bool.fromEnvironment('DANAVIEW_AI_STUDIO')`).
     - Root providers `aiStudioServiceProvider` (default `AiStudioOff`), `fontLibraryProvider`, `subtitlePresetStoreProvider`, overridden by `EditorBootstrap` (AIS-37).
   - **Merge** the new binding files in `wiring/action_bindings.dart`.
   - **Dependency rules 9–15 (§3.1)** in the root architecture test. The call-site tests for `AiSendConsent.accepted(` and `ProviderProbeConsent.accepted(` are in the editor's architecture test.
@@ -1059,7 +1059,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Acceptance criteria and tests:**
   - Every new package analyzes and tests green with placeholders.
   - The architecture tests fail on a planted violation of each rule, then pass.
-  - With `VWISH_AI_STUDIO=false`, a widget test shows no AI action in the registry, tool sets or settings.
+  - With `DANAVIEW_AI_STUDIO=false`, a widget test shows no AI action in the registry, tool sets or settings.
   - The editor compiles and the v1 test suite is unchanged.
   - The CI job runs on PRs touching the AI packages.
 
@@ -1068,13 +1068,13 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S1 · **Area:** Core (pure Dart)
 - **Depends on:** AIS-01, CORE-03, CORE-08
 - **Owns:**
-  - `packages/vwish_editor_core/lib/src/model/cue_rich.dart`
-  - `packages/vwish_editor_core/lib/src/model/items.dart` (extends CORE-03)
-  - `packages/vwish_editor_core/lib/src/model/subtitle.dart` (extends CORE-03)
-  - `packages/vwish_editor_core/lib/src/model/text_style.dart` (extends CORE-03: `Opt<T>` helper only if shared)
-  - `packages/vwish_editor_core/lib/src/validate/` (extends CORE-08)
-  - `packages/vwish_editor_core/test/support/random_project.dart` (extends CORE-08)
-  - `packages/vwish_editor_core/test/model/rich_cues/`, `packages/vwish_editor_core/test/validate/rich_cues/`
+  - `packages/danaview_editor_core/lib/src/model/cue_rich.dart`
+  - `packages/danaview_editor_core/lib/src/model/items.dart` (extends CORE-03)
+  - `packages/danaview_editor_core/lib/src/model/subtitle.dart` (extends CORE-03)
+  - `packages/danaview_editor_core/lib/src/model/text_style.dart` (extends CORE-03: `Opt<T>` helper only if shared)
+  - `packages/danaview_editor_core/lib/src/validate/` (extends CORE-08)
+  - `packages/danaview_editor_core/test/support/random_project.dart` (extends CORE-08)
+  - `packages/danaview_editor_core/test/model/rich_cues/`, `packages/danaview_editor_core/test/validate/rich_cues/`
 - **Spec:**
   - Types exactly as D-52: `GraphemeRange`, `CueStyleOverride` with `Opt<T>` (inherit | off | value), `CueSpan`, `CuePlacement`, `CueWord`, `CueEmotion` + `EmotionLabel` (D-58) + `EmotionSource`, `Speaker`/`SpeakerId` (`sp_` prefix, ids from `IdGenerator`).
   - `SubtitleCue` gains `spans`, `emojiMarks`, `override`, `placement`, `words`, `emotion`, `speaker`, all with defaults, immutable lists, `copyWith` and equality. `CueOrigin.translated`.
@@ -1094,10 +1094,10 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S1 · **Area:** Core (pure Dart)
 - **Depends on:** AIS-02, CORE-07
 - **Owns:**
-  - `packages/vwish_editor_core/lib/src/eval/cue_text_ops.dart`
-  - `packages/vwish_editor_core/lib/src/formats/emoji.dart`
-  - `packages/vwish_editor_core/test/eval/cue_text_ops/`
-  - `packages/vwish_editor_core/test/formats/emoji/`
+  - `packages/danaview_editor_core/lib/src/eval/cue_text_ops.dart`
+  - `packages/danaview_editor_core/lib/src/formats/emoji.dart`
+  - `packages/danaview_editor_core/test/eval/cue_text_ops/`
+  - `packages/danaview_editor_core/test/formats/emoji/`
 - **Spec:** Pure functions (D-52):
   - `graphemes(text)`;
   - `applyStyle(spans, range, patch)` and `clearStyle(spans, range, fields?)`, which normalize;
@@ -1118,13 +1118,13 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S1 · **Area:** Core (pure Dart)
 - **Depends on:** AIS-02, AIS-03, CORE-22, CORE-23
 - **Owns:**
-  - `packages/vwish_editor_core/lib/src/codec/project_json.dart` (extends CORE-22)
-  - `packages/vwish_editor_core/lib/src/codec/schema_version.dart` (extends CORE-22)
-  - `packages/vwish_editor_core/lib/src/codec/migrations/migrations.dart` (extends CORE-23)
-  - `packages/vwish_editor_core/lib/src/codec/migrations/s1_to_s2.dart`
-  - `packages/vwish_editor_core/schema/project.v2.schema.json`
-  - `packages/vwish_editor_core/test/fixtures/projects/s2/`
-  - `packages/vwish_editor_core/test/codec_migrations/s1_to_s2/`, `packages/vwish_editor_core/test/codec/rich_cues/`
+  - `packages/danaview_editor_core/lib/src/codec/project_json.dart` (extends CORE-22)
+  - `packages/danaview_editor_core/lib/src/codec/schema_version.dart` (extends CORE-22)
+  - `packages/danaview_editor_core/lib/src/codec/migrations/migrations.dart` (extends CORE-23)
+  - `packages/danaview_editor_core/lib/src/codec/migrations/s1_to_s2.dart`
+  - `packages/danaview_editor_core/schema/project.v2.schema.json`
+  - `packages/danaview_editor_core/test/fixtures/projects/s2/`
+  - `packages/danaview_editor_core/test/codec_migrations/s1_to_s2/`, `packages/danaview_editor_core/test/codec/rich_cues/`
 - **Spec:** D-53.
   - `currentProjectSchema = 2`, `currentProjectMinReader = 1`.
   - Encode and decode every field added by AIS-02 with short keys pinned in `project.v2.schema.json`, following the ARCH §8.2 conventions (defaults omitted, fixed key order, colours `#RRGGBBAA`, unknown enums → default plus warning). Literal-tag rule: write `"sp":[]` when the plain text contains a literal `<b>`, `<i>` or `<u>`.
@@ -1145,10 +1145,10 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S1 · **Area:** Core (pure Dart)
 - **Depends on:** AIS-02, AIS-03, CORE-15, CORE-19, CORE-34
 - **Owns:**
-  - `packages/vwish_editor_core/lib/src/ops/commands/subtitle_commands.dart` (extends CORE-15)
-  - `packages/vwish_editor_core/lib/src/ops/commands/rich_cue_commands.dart`
-  - `packages/vwish_editor_core/test/ops/subtitles_rich/`
-  - `packages/vwish_editor_core/test/fuzz/rich_cue_fuzz_test.dart`
+  - `packages/danaview_editor_core/lib/src/ops/commands/subtitle_commands.dart` (extends CORE-15)
+  - `packages/danaview_editor_core/lib/src/ops/commands/rich_cue_commands.dart`
+  - `packages/danaview_editor_core/test/ops/subtitles_rich/`
+  - `packages/danaview_editor_core/test/fuzz/rich_cue_fuzz_test.dart`
 - **Spec:**
   - **Existing commands made span-aware.**
     - `SetCueText` remaps spans, marks and words (AIS-03).
@@ -1175,9 +1175,9 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S1 · **Area:** Core (pure Dart)
 - **Depends on:** AIS-05
 - **Owns:**
-  - `packages/vwish_editor_core/lib/src/ops/commands/ai_cue_commands.dart`
-  - `packages/vwish_editor_core/lib/src/ops/commands/caption_commands.dart` (extends CORE-15)
-  - `packages/vwish_editor_core/test/ops/ai_cues/`
+  - `packages/danaview_editor_core/lib/src/ops/commands/ai_cue_commands.dart`
+  - `packages/danaview_editor_core/lib/src/ops/commands/caption_commands.dart` (extends CORE-15)
+  - `packages/danaview_editor_core/test/ops/ai_cues/`
 - **Spec:**
   - `ApplyCueEdits(track, edits: List<CueEdit{cue, baseHash, text?, spans?, marks?, emotion?, speaker?, override?}>, record: AiEditRecord?)`: one entry. Stale items (current hash ≠ `baseHash`) are skipped with an `EditNotice`, and the rest apply atomically. `cueContentHash(cue)` is exported for D-64.
   - `AddDerivedSubtitleTrack(sourceTrack, drafts (rich), data)`: new track directly above the source, `CueOrigin.translated`, burn-in off, provenance as D-57.
@@ -1197,9 +1197,9 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S1 · **Area:** Core (pure Dart)
 - **Depends on:** AIS-03, CORE-20, CORE-33
 - **Owns:**
-  - `packages/vwish_editor_core/lib/src/formats/subtitle_codec.dart`, `srt.dart`, `vtt.dart` (extends CORE-20)
-  - `packages/vwish_editor_core/lib/src/plan/export_settings.dart` (extends CORE-33: `SubtitleFileOptions{keepStyling, speakerNames, karaokeTimings, rtlMarks}` on `ExportSettings`)
-  - `packages/vwish_editor_core/test/formats/subtitles_v2/`, `packages/vwish_editor_core/test/fixtures/subtitles_v2/`
+  - `packages/danaview_editor_core/lib/src/formats/subtitle_codec.dart`, `srt.dart`, `vtt.dart` (extends CORE-20)
+  - `packages/danaview_editor_core/lib/src/plan/export_settings.dart` (extends CORE-33: `SubtitleFileOptions{keepStyling, speakerNames, karaokeTimings, rtlMarks}` on `ExportSettings`)
+  - `packages/danaview_editor_core/test/formats/subtitles_v2/`, `packages/danaview_editor_core/test/fixtures/subtitles_v2/`
 - **Spec:** The D-54 table.
   - The parser maps `<u>`, SRT `<font color>`, VTT `STYLE` classes (colour and background only), `<v Name>`, VTT timestamp tags (→ words) and the SRT `NAME:` speaker prefix heuristic (≥ 80%) into rich drafts, and strips U+200E/U+200F.
   - `serialize(cues, format, options)`. "Keep basic styling" off reproduces v1's bytes exactly.
@@ -1215,9 +1215,9 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S1 · **Area:** AI providers
 - **Depends on:** AIS-01
 - **Owns:**
-  - `packages/vwish_ai_providers/lib/src/contracts/`, `lib/src/consent/`, `lib/src/transport/`, `lib/src/json/`, `lib/src/tokens/`, `lib/src/fake/`
-  - `packages/vwish_ai_providers/test/{contracts,consent,transport,json,tokens}/`
-  - `packages/vwish_ai_providers/test/support/no_network.dart`
+  - `packages/danaview_ai_providers/lib/src/contracts/`, `lib/src/consent/`, `lib/src/transport/`, `lib/src/json/`, `lib/src/tokens/`, `lib/src/fake/`
+  - `packages/danaview_ai_providers/test/{contracts,consent,transport,json,tokens}/`
+  - `packages/danaview_ai_providers/test/support/no_network.dart`
 - **Spec:** D-47, D-48, D-51 and §3.5.
   - Types: `LlmProvider`, `ProviderCapabilities`, `AiModelInfo`, `LlmRequest`/`LlmPart(text|wavAudio)`, `PreparedRequest{bytes, sha256}`, `LlmResponse`, `LlmUsage`, `FinishReason`, `AiFailure`.
   - `ApiKey`: a wrapper whose `toString` is redacted, with no JSON form.
@@ -1238,8 +1238,8 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S1 · **Area:** AI providers
 - **Depends on:** AIS-08
 - **Owns:**
-  - `packages/vwish_ai_providers/lib/src/providers/openai_compatible.dart`, `openai_provider.dart`, `gemini_provider.dart`
-  - `packages/vwish_ai_providers/test/providers/{openai,gemini}/`, `packages/vwish_ai_providers/test/fixtures/providers/{openai,gemini}/`
+  - `packages/danaview_ai_providers/lib/src/providers/openai_compatible.dart`, `openai_provider.dart`, `gemini_provider.dart`
+  - `packages/danaview_ai_providers/test/providers/{openai,gemini}/`, `packages/danaview_ai_providers/test/fixtures/providers/{openai,gemini}/`
 - **Spec:**
   - **OpenAI-compatible base:** chat completions request building (system and user messages, `input_audio` parts, `response_format` json_schema strict or `json_object`, `max_tokens`/`max_completion_tokens` per model family [VERIFY], `temperature`, `store: false` where supported [VERIFY]); response parsing (content, usage, `finish_reason`); error-body mapping to `AiFailure` (`insufficient_quota` vs rate limit, `context_length_exceeded`, model not found).
   - **OpenAI** (`https://api.openai.com/v1`): `GET /models` for key test and list; `POST /chat/completions`; `Authorization: Bearer`; curated models recorded with ids and capabilities at implementation.
@@ -1256,24 +1256,24 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S1 · **Area:** AI providers
 - **Depends on:** AIS-09
 - **Owns:**
-  - `packages/vwish_ai_providers/lib/src/providers/anthropic_provider.dart`, `openrouter_provider.dart`, `xai_provider.dart`
-  - `packages/vwish_ai_providers/test/providers/{anthropic,openrouter,xai}/`, `packages/vwish_ai_providers/test/fixtures/providers/{anthropic,openrouter,xai}/`
+  - `packages/danaview_ai_providers/lib/src/providers/anthropic_provider.dart`, `openrouter_provider.dart`, `xai_provider.dart`
+  - `packages/danaview_ai_providers/test/providers/{anthropic,openrouter,xai}/`, `packages/danaview_ai_providers/test/fixtures/providers/{anthropic,openrouter,xai}/`
 - **Spec:**
   - **Anthropic** (`https://api.anthropic.com/v1`): `x-api-key`, `anthropic-version` header [VERIFY current value]; `GET /models`; `POST /messages` with `system`, a single forced tool whose `input_schema` is the contract schema, `max_tokens`; parse `tool_use.input`; `usage`; `stop_reason max_tokens` → truncated; overloaded (529) retryable; credit-balance errors → quota. Text only (no `audioInput`).
   - **OpenRouter** (`https://openrouter.ai/api/v1`): OpenAI-compatible base; `GET /models` gives `architecture.input_modalities` and `supported_parameters` → capabilities per model; `response_format` only when supported; no attribution headers (D-47); 402 → quota; the `cost` field is ignored (D-49).
   - **xAI** (`https://api.x.ai/v1`): OpenAI-compatible base; `GET /models`; structured output per capability [VERIFY]; text only unless verified.
 - **Acceptance criteria and tests:** As AIS-09 for each provider, plus OpenRouter capability derivation from a hand-written models list (audio model → `audioInput`, a model without structured outputs → `jsonObject` fallback with local validation).
 
-#### AIS-11 · vwish_secure_keys plugin: Keychain and Keystore-wrapped key store
+#### AIS-11 · danaview_secure_keys plugin: Keychain and Keystore-wrapped key store
 
 - **Milestone:** S1 · **Area:** Native (iOS + Android)
 - **Depends on:** AIS-01
 - **Owns:**
-  - `packages/vwish_secure_keys/` (pubspec, `pigeons/secure_keys_api.dart`, generated code, `lib/`, `ios/Classes/`, `ios/vwish_secure_keys.podspec`, `ios/Resources/PrivacyInfo.xcprivacy`, `android/`, `example/`, tests)
+  - `packages/danaview_secure_keys/` (pubspec, `pigeons/secure_keys_api.dart`, generated code, `lib/`, `ios/Classes/`, `ios/danaview_secure_keys.podspec`, `ios/Resources/PrivacyInfo.xcprivacy`, `android/`, `example/`, tests)
 - **Spec:** D-46.
   - Pigeon (`^29`, as ENG-01) `SecureKeysHostApi { set(account, Uint8List secret), get(account) → Uint8List?, delete(account), list() → List<KeyInfo{account, last4, updatedAt}>, status() → ok|keysLost }`.
-  - **iOS**: Keychain generic password, service `com.vecvel.vwish.ai`, `WhenUnlockedThisDeviceOnly`, not synchronizable; deployment target 15.0 with `-Werror=unguarded-availability-new`.
-  - **Android**: an `AndroidKeyStore` AES-256-GCM key `vwish_ai_keys_v1` (random IV per entry), one file `noBackupFilesDir/vwish_ai_keys.bin` written atomically (temp + rename); a `KeyPermanentlyInvalidatedException` or missing key gives `keysLost` and wipes the file; crypto on a background executor.
+  - **iOS**: Keychain generic password, service `com.vecvel.danaview.ai`, `WhenUnlockedThisDeviceOnly`, not synchronizable; deployment target 15.0 with `-Werror=unguarded-availability-new`.
+  - **Android**: an `AndroidKeyStore` AES-256-GCM key `danaview_ai_keys_v1` (random IV per entry), one file `noBackupFilesDir/danaview_ai_keys.bin` written atomically (temp + rename); a `KeyPermanentlyInvalidatedException` or missing key gives `keysLost` and wipes the file; crypto on a background executor.
   - Dart `SecureKeyStore` class plus `InMemorySecureKeyStore` for tests. Secrets are cleared from Dart memory after use where possible (`Uint8List.fillRange(0)`).
 - **Acceptance criteria and tests:**
   - XCTest on the iOS simulator and JUnit plus instrumented tests on the Android emulator: set/get/delete/list round trip; the Android file is under `noBackupFilesDir`; a deleted Keystore key gives `keysLost`; the iOS item's accessibility attribute checked.
@@ -1288,9 +1288,9 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S2 · **Area:** Core (pure Dart)
 - **Depends on:** AIS-02, AIS-03, CORE-07
 - **Owns:**
-  - `packages/vwish_editor_core/lib/src/eval/text_layout_spec.dart` (extends CORE-07)
-  - `packages/vwish_editor_core/lib/src/eval/karaoke_eval.dart`
-  - `packages/vwish_editor_core/test/eval/layout_v2/`
+  - `packages/danaview_editor_core/lib/src/eval/text_layout_spec.dart` (extends CORE-07)
+  - `packages/danaview_editor_core/lib/src/eval/karaoke_eval.dart`
+  - `packages/danaview_editor_core/test/eval/layout_v2/`
 - **Spec:**
   - `TextRun` gains `fontFamily?`, `fontSizePx?`, `color?`, `underline`, `strike`, `highlight?`, `stroke?` (`TextStrokeSpec`, or "none"), `shadow?`, `script hint`. `toJson` writes the new fields only when they are not the defaults (plain cues keep v1 JSON).
   - `effectiveCueStyle(cue, track, emotionTable)` implements the D-52 layer table.
@@ -1309,10 +1309,10 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S2 · **Area:** Engine (Dart)
 - **Depends on:** AIS-12, API-04
 - **Owns:**
-  - `packages/vwish_editor_engine_api/lib/src/render_prep/text_layout_engine.dart`, `text_sprite_rasterizer.dart`, `sprite_prepass.dart` (extends API-04)
-  - `packages/vwish_editor_engine_api/test/render_prep/rich/`
-  - `packages/vwish_editor_engine_api/test_fixtures/sprites/rich/`
-  - `packages/vwish_editor_engine_api/test_fixtures/fonts/` (OFL test fonts with licence files)
+  - `packages/danaview_editor_engine_api/lib/src/render_prep/text_layout_engine.dart`, `text_sprite_rasterizer.dart`, `sprite_prepass.dart` (extends API-04)
+  - `packages/danaview_editor_engine_api/test/render_prep/rich/`
+  - `packages/danaview_editor_engine_api/test_fixtures/sprites/rich/`
+  - `packages/danaview_editor_engine_api/test_fixtures/fonts/` (OFL test fonts with licence files)
 - **Spec:**
   - Per-run `ui.TextStyle`:
     - family through `FontResolver`, size, weight, style;
@@ -1336,11 +1336,11 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S2 · **Area:** Core (pure Dart)
 - **Depends on:** AIS-12, CORE-29, CORE-30, CORE-31
 - **Owns:**
-  - `packages/vwish_editor_core/lib/src/plan/lowering_text.dart`, `sprite_requests.dart` (extends CORE-31)
-  - `packages/vwish_editor_core/lib/src/plan/sprite_request.dart` (extends CORE-29: `variant` in the key)
-  - `packages/vwish_editor_core/lib/src/plan/z_order.dart` (extends CORE-30: `karaokeSub = 1`)
-  - `packages/vwish_editor_core/test/fixtures/render_plans/contract/karaoke_cue.json` (extends CORE-29's corpus with one file)
-  - `packages/vwish_editor_core/test/plan/compile_rich/`
+  - `packages/danaview_editor_core/lib/src/plan/lowering_text.dart`, `sprite_requests.dart` (extends CORE-31)
+  - `packages/danaview_editor_core/lib/src/plan/sprite_request.dart` (extends CORE-29: `variant` in the key)
+  - `packages/danaview_editor_core/lib/src/plan/z_order.dart` (extends CORE-30: `karaokeSub = 1`)
+  - `packages/danaview_editor_core/test/fixtures/render_plans/contract/karaoke_cue.json` (extends CORE-29's corpus with one file)
+  - `packages/danaview_editor_core/test/plan/compile_rich/`
 - **Spec:** D-68 and §3.4.
   - `lowerCue` uses `cueAnchorOf`.
   - Karaoke cues add a `<cueId>#k` sprite layer at the cue lane's z + 1, with `reveal` keys from `karaokeRevealKeys` shifted to absolute µs.
@@ -1359,9 +1359,9 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S2 · **Area:** AI (transcription)
 - **Depends on:** AIS-06, AI-11, AI-13
 - **Owns:**
-  - `packages/vwish_transcription/lib/src/segmentation/caption_segmenter.dart`, `caption_layout.dart` (extends AI-11)
-  - `packages/vwish_transcription/lib/src/pipeline/pipeline.dart` (extends AI-13)
-  - `packages/vwish_transcription/test/segmentation/words/`, `packages/vwish_transcription/test/pipeline/words/`
+  - `packages/danaview_transcription/lib/src/segmentation/caption_segmenter.dart`, `caption_layout.dart` (extends AI-11)
+  - `packages/danaview_transcription/lib/src/pipeline/pipeline.dart` (extends AI-13)
+  - `packages/danaview_transcription/test/segmentation/words/`, `packages/danaview_transcription/test/pipeline/words/`
 - **Spec:** D-69.
   - `DpCaptionSegmenter.segment` returns drafts whose `words` map each `TimedWord` to its grapheme range in the draft text (after normalization and line breaking), with times relative to the draft start. Words whose text was altered by the layout (trimmed punctuation) keep their nearest range.
   - The pipeline and `resegment` pass drafts with words to `AddGeneratedCaptionTrack`/`ReplaceGeneratedCaptions`.
@@ -1377,10 +1377,10 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S2 · **Area:** UI/UX
 - **Depends on:** AIS-13, AIS-05, UX-19, UX-22
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/preview/text_overlay_layer.dart`, `text_overlay_painter.dart` (extends UX-19)
-  - `packages/vwish_editor/lib/src/editor/preview/manipulation_overlay.dart` (extends UX-22)
-  - `packages/vwish_editor/lib/src/editor/preview/cue_drag_controller.dart`
-  - `packages/vwish_editor/test/preview/rich_overlay/`
+  - `packages/danaview_editor/lib/src/editor/preview/text_overlay_layer.dart`, `text_overlay_painter.dart` (extends UX-19)
+  - `packages/danaview_editor/lib/src/editor/preview/manipulation_overlay.dart` (extends UX-22)
+  - `packages/danaview_editor/lib/src/editor/preview/cue_drag_controller.dart`
+  - `packages/danaview_editor/test/preview/rich_overlay/`
 - **Spec:**
   - The overlay paints rich cues through AIS-12/13, applies per-cue placement, and paints karaoke as base plus the highlight clipped with `revealClip(karaokeRevealAt)`. It repaints only on frame change (v1 rule).
   - `ghostProject` input: the review panel's preview of a suggestion (overlay only; never PlanSync).
@@ -1396,11 +1396,11 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S2 · **Area:** UI/UX
 - **Depends on:** AIS-05, UX-31, UX-14
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/panels/transcript/transcript_view.dart`, `transcript_row.dart`, `transcript_controller.dart`, `rich_cue_editor.dart`, `rich_cue_controller.dart`
-  - `packages/vwish_editor/lib/src/editor/panels/subtitles_panel.dart` (extends UX-31: hosts the transcript, review and cue sections and the U4 header buttons)
-  - `packages/vwish_editor/lib/src/editor/actions/bindings/transcript_bindings.dart`
-  - `packages/vwish_editor/lib/src/app/strings/transcript_strings.dart`
-  - `packages/vwish_editor/test/panels/transcript/`
+  - `packages/danaview_editor/lib/src/editor/panels/transcript/transcript_view.dart`, `transcript_row.dart`, `transcript_controller.dart`, `rich_cue_editor.dart`, `rich_cue_controller.dart`
+  - `packages/danaview_editor/lib/src/editor/panels/subtitles_panel.dart` (extends UX-31: hosts the transcript, review and cue sections and the U4 header buttons)
+  - `packages/danaview_editor/lib/src/editor/actions/bindings/transcript_bindings.dart`
+  - `packages/danaview_editor/lib/src/app/strings/transcript_strings.dart`
+  - `packages/danaview_editor/test/panels/transcript/`
 - **Spec:** U4 and U11.
   - `RichCueController` (a `TextEditingController` with `buildTextSpan` from spans using the §4.1 display rules; the composing region unstyled).
   - Edits → `SetCueText` (coalesced, spans remapped).
@@ -1420,11 +1420,11 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S2 · **Area:** UI/UX
 - **Depends on:** AIS-17, AIS-16, AIS-06, UX-30
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/panels/transcript/style_toolbar.dart`
-  - `packages/vwish_editor/lib/src/editor/panels/cue/` (`cue_section.dart`, `cue_placement_row.dart`, `cue_override_rows.dart`, `speaker_editor.dart`, `emotion_chip.dart`)
-  - `packages/vwish_editor/lib/src/editor/actions/bindings/rich_text_bindings.dart`
-  - `packages/vwish_editor/lib/src/app/strings/rich_text_strings.dart`
-  - `packages/vwish_editor/test/panels/rich_text/`
+  - `packages/danaview_editor/lib/src/editor/panels/transcript/style_toolbar.dart`
+  - `packages/danaview_editor/lib/src/editor/panels/cue/` (`cue_section.dart`, `cue_placement_row.dart`, `cue_override_rows.dart`, `speaker_editor.dart`, `emotion_chip.dart`)
+  - `packages/danaview_editor/lib/src/editor/actions/bindings/rich_text_bindings.dart`
+  - `packages/danaview_editor/lib/src/app/strings/rich_text_strings.dart`
+  - `packages/danaview_editor/test/panels/rich_text/`
 - **Spec:** U12 and U13.
   - Toolbar controls dispatch `ApplyCueStyle`/`ClearCueStyle` for a range or whole cues. ⌘B/⌘I/⌘U in the editor. Font button opens the v1 `FontPicker` (AIS-25 upgrades it behind the same API).
   - Cue section: placement row, alignment, override rows with Reset, speaker picker plus the speaker table editor (`SetTrackSpeakers`/`AssignSpeaker`), emotion chip (manual set or clear: `ApplyCueEdits` with source manual), word-timing status.
@@ -1440,11 +1440,11 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S2 · **Area:** UI/UX
 - **Depends on:** AIS-15, AIS-17, UX-13, UX-21, CORE-18
 - **Owns:**
-  - `packages/vwish_editor_core/lib/src/ops/speech_snap.dart`
-  - `packages/vwish_editor/lib/src/editor/panels/transcript/timing_tools.dart`
-  - `packages/vwish_editor/lib/src/editor/timeline/snapping.dart` (extends UX-13: word boundaries of the edited cue's track as snap targets while dragging a cue edge)
-  - `packages/vwish_editor/lib/src/editor/actions/bindings/timing_bindings.dart`
-  - `packages/vwish_editor_core/test/ops/speech_snap/`, `packages/vwish_editor/test/panels/timing/`
+  - `packages/danaview_editor_core/lib/src/ops/speech_snap.dart`
+  - `packages/danaview_editor/lib/src/editor/panels/transcript/timing_tools.dart`
+  - `packages/danaview_editor/lib/src/editor/timeline/snapping.dart` (extends UX-13: word boundaries of the edited cue's track as snap targets while dragging a cue edge)
+  - `packages/danaview_editor/lib/src/editor/actions/bindings/timing_bindings.dart`
+  - `packages/danaview_editor_core/test/ops/speech_snap/`, `packages/danaview_editor/test/panels/timing/`
 - **Spec:**
   - `SpeechSnapIndex` from the cues' words (non-estimated first) plus an optional `EnergyEnvelope` (RMS from UX-21's waveform peaks of the audible clip, adapted in the editor).
   - `snapCueEdges(cue, tol 400 ms)`: start → first word start or speech onset within tolerance, end → last word end + 120 ms linger, capped by the next cue − 2 frames; on grid.
@@ -1461,11 +1461,11 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S2 · **Area:** UI/UX
 - **Depends on:** AIS-14, AIS-16, AIS-17, AIS-06
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/panels/subtitles/karaoke_section.dart`
-  - `packages/vwish_editor/lib/src/editor/flows/emoji/` (`remove_emojis_sheet.dart`, `emoji_review_sheet.dart`)
-  - `packages/vwish_editor/lib/src/editor/actions/bindings/emoji_bindings.dart`
-  - `packages/vwish_editor/lib/src/app/strings/karaoke_strings.dart`
-  - `packages/vwish_editor/test/panels/karaoke/`, `packages/vwish_editor/test/flows/emoji/`
+  - `packages/danaview_editor/lib/src/editor/panels/subtitles/karaoke_section.dart`
+  - `packages/danaview_editor/lib/src/editor/flows/emoji/` (`remove_emojis_sheet.dart`, `emoji_review_sheet.dart`)
+  - `packages/danaview_editor/lib/src/editor/actions/bindings/emoji_bindings.dart`
+  - `packages/danaview_editor/lib/src/app/strings/karaoke_strings.dart`
+  - `packages/danaview_editor/test/panels/karaoke/`, `packages/danaview_editor/test/flows/emoji/`
 - **Spec:**
   - U14: mode, highlight fields (metrics-neutral only), timed/estimated counts, Estimate missing timings (`SetCueWords` composite, one entry), loop preview.
   - U15: Remove all emojis (counts from `emojiRangesOf`, AI-only vs all, empty-cue warning; `RemoveEmojis`). Review emojis stepper (seek per cue; remove one emoji → `SetCueText`).
@@ -1480,9 +1480,9 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S2 · **Area:** UI/UX
 - **Depends on:** AIS-07, UX-32, UX-39
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/panels/subtitle_io.dart` (extends UX-32)
-  - `packages/vwish_editor/lib/src/editor/flows/export/export_sheet.dart` (extends UX-39)
-  - `packages/vwish_editor/test/panels/subtitle_io_v2/`
+  - `packages/danaview_editor/lib/src/editor/panels/subtitle_io.dart` (extends UX-32)
+  - `packages/danaview_editor/lib/src/editor/flows/export/export_sheet.dart` (extends UX-39)
+  - `packages/danaview_editor/test/panels/subtitle_io_v2/`
 - **Spec:** U18.
   - SRT/VTT export options (`SubtitleFileOptions`, defaults per D-54).
   - The import summary lists mapped styles, speakers and karaoke timings.
@@ -1501,10 +1501,10 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S3 · **Area:** UI/UX
 - **Depends on:** AIS-13, AIS-14, UX-30
 - **Owns:**
-  - `packages/vwish_editor_fonts/` (extends UX-30: Noto families, `FONTS.md` with upstream commit and SHA-256 per file, OFL texts)
-  - `packages/vwish_editor/lib/src/editor/text/font_catalog.dart` (extends UX-30)
-  - `packages/vwish_editor/tool/measure_font_budget.dart`
-  - `packages/vwish_editor/test/text/font_catalog_v2/`
+  - `packages/danaview_editor_fonts/` (extends UX-30: Noto families, `FONTS.md` with upstream commit and SHA-256 per file, OFL texts)
+  - `packages/danaview_editor/lib/src/editor/text/font_catalog.dart` (extends UX-30)
+  - `packages/danaview_editor/tool/measure_font_budget.dart`
+  - `packages/danaview_editor/test/text/font_catalog_v2/`
 - **Spec:** D-60.
   - Add the listed Noto families (Regular and Bold).
   - `FontCatalog` v2: entries carry id, family, category, scripts (from a generated table), weights, `bundled|imported|system`.
@@ -1522,15 +1522,15 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S3 · **Area:** Core (pure Dart)
 - **Depends on:** AIS-02, CORE-24, CORE-25
 - **Owns:**
-  - `packages/vwish_editor_core/lib/src/formats/sfnt_inspector.dart`
-  - `packages/vwish_editor_core/lib/src/store/font_library_store.dart`, `preset_store.dart`
-  - `packages/vwish_editor_core/lib/src/model/subtitle_presets.dart`
-  - `packages/vwish_editor_core/lib/src/store/file_project_repository.dart` (extends CORE-25: `refs.json` gains `fonts`)
-  - `packages/vwish_editor_core/test/formats/sfnt/`, `packages/vwish_editor_core/test/store/{fonts,presets}/`
-  - `packages/vwish_editor_core/test/fixtures/fonts/` (hand-built minimal sfnt files and one OFL font)
+  - `packages/danaview_editor_core/lib/src/formats/sfnt_inspector.dart`
+  - `packages/danaview_editor_core/lib/src/store/font_library_store.dart`, `preset_store.dart`
+  - `packages/danaview_editor_core/lib/src/model/subtitle_presets.dart`
+  - `packages/danaview_editor_core/lib/src/store/file_project_repository.dart` (extends CORE-25: `refs.json` gains `fonts`)
+  - `packages/danaview_editor_core/test/formats/sfnt/`, `packages/danaview_editor_core/test/store/{fonts,presets}/`
+  - `packages/danaview_editor_core/test/fixtures/fonts/` (hand-built minimal sfnt files and one OFL font)
 - **Spec:**
   - D-61 validation and metadata (`SfntInfo{family, style, weightClass, italic, scripts, fsType, glyphCount}`), with errors as data.
-  - `FontLibraryStore` (`<support>/vwish/editor/fonts/`): import from a picked temp file (copy, hash, dedupe, `index.json` atomic), list, rename the display name, delete (through `OwnedFileDeleter`), `usage()` from all `refs.json`.
+  - `FontLibraryStore` (`<support>/danaview/editor/fonts/`): import from a picked temp file (copy, hash, dedupe, `index.json` atomic), list, rename the display name, delete (through `OwnedFileDeleter`), `usage()` from all `refs.json`.
   - `PresetStore` (`presets/subtitle_presets.json`, schema 1, atomic, at most 100).
   - The five built-ins of D-62 as constants with revision numbers.
 - **Acceptance criteria and tests:**
@@ -1544,14 +1544,14 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S3 · **Area:** Integration
 - **Depends on:** AIS-01, API-01, ENG-03, ENG-06, IOS-15, AND-14
 - **Owns:**
-  - `packages/vwish_editor_engine_api/lib/src/platform_services.dart` (extends API-01: `MediaPickKind.font`)
-  - `packages/vwish_editor_engine_api/lib/src/fake/fake_editor_engine.dart` (extends API-01)
-  - `packages/vwish_editor_engine/pigeons/engine_api.dart` and the generated files (extends ENG-01/ENG-06)
-  - `packages/vwish_editor_engine/lib/src/mobile_platform_services.dart` (extends ENG-03)
-  - `packages/vwish_editor_engine/ios/Classes/Platform/MediaPicker.swift` (extends IOS-15)
-  - `packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/platform/MediaPicker.kt` (extends AND-14)
-  - `packages/vwish_editor_engine/example/ios/RunnerTests/FontPick/`
-  - `packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/fontpick/`
+  - `packages/danaview_editor_engine_api/lib/src/platform_services.dart` (extends API-01: `MediaPickKind.font`)
+  - `packages/danaview_editor_engine_api/lib/src/fake/fake_editor_engine.dart` (extends API-01)
+  - `packages/danaview_editor_engine/pigeons/engine_api.dart` and the generated files (extends ENG-01/ENG-06)
+  - `packages/danaview_editor_engine/lib/src/mobile_platform_services.dart` (extends ENG-03)
+  - `packages/danaview_editor_engine/ios/Classes/Platform/MediaPicker.swift` (extends IOS-15)
+  - `packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/platform/MediaPicker.kt` (extends AND-14)
+  - `packages/danaview_editor_engine/example/ios/RunnerTests/FontPick/`
+  - `packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/fontpick/`
 - **Spec:**
   - A new enum value through the frozen Pigeon surface: a lead-approved [INTEGRATION] change per BP §2.
   - **iOS:** `UIDocumentPickerViewController` with `public.truetype-ttf-font`, `public.opentype-font`, `public.font` [VERIFY UTType ids], copy into `work/picks/` as for LUTs.
@@ -1567,11 +1567,11 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S3 · **Area:** UI/UX
 - **Depends on:** AIS-22, AIS-23, AIS-24
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/panels/font_picker.dart` (extends UX-30)
-  - `packages/vwish_editor/lib/src/editor/text/font_library_controller.dart`, `font_import_flow.dart`, `font_loader.dart`
-  - `packages/vwish_editor/lib/src/settings/fonts_settings_section.dart`
-  - `packages/vwish_editor/lib/src/app/strings/fonts_strings.dart`
-  - `packages/vwish_editor/test/text/fonts_v2/`
+  - `packages/danaview_editor/lib/src/editor/panels/font_picker.dart` (extends UX-30)
+  - `packages/danaview_editor/lib/src/editor/text/font_library_controller.dart`, `font_import_flow.dart`, `font_loader.dart`
+  - `packages/danaview_editor/lib/src/settings/fonts_settings_section.dart`
+  - `packages/danaview_editor/lib/src/app/strings/fonts_strings.dart`
+  - `packages/danaview_editor/test/text/fonts_v2/`
 - **Spec:** U16 and D-61.
   - Search, tabs, script chips, favourites/recent (prefs `editor.fonts.favourites`, `editor.fonts.recent`), and a live preview using the current selection text (paragraph cache, lazy).
   - Import: pick → inspector → rights reminder (with the stronger line for restricted fonts) → library → `ui.loadFontFromList` → done.
@@ -1590,11 +1590,11 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S3 · **Area:** UI/UX
 - **Depends on:** AIS-23, AIS-18, AIS-13
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/panels/presets/` (`presets_sheet.dart`, `preset_tile.dart`)
-  - `packages/vwish_editor/lib/src/editor/state/presets_controller.dart`
-  - `packages/vwish_editor/lib/src/editor/actions/bindings/presets_bindings.dart`
-  - `packages/vwish_editor/lib/src/app/strings/presets_strings.dart`
-  - `packages/vwish_editor/test/panels/presets/`
+  - `packages/danaview_editor/lib/src/editor/panels/presets/` (`presets_sheet.dart`, `preset_tile.dart`)
+  - `packages/danaview_editor/lib/src/editor/state/presets_controller.dart`
+  - `packages/danaview_editor/lib/src/editor/actions/bindings/presets_bindings.dart`
+  - `packages/danaview_editor/lib/src/app/strings/presets_strings.dart`
+  - `packages/danaview_editor/test/panels/presets/`
 - **Spec:** U17 and D-62.
   - Tiles rendered with `TextLayoutEngine` (cached).
   - Apply → `ApplySubtitlePreset` (one entry). Save current, rename, duplicate built-in, delete.
@@ -1611,14 +1611,14 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S3 · **Area:** UI/UX
 - **Depends on:** AIS-22, AIS-25, AI-09
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/text/font_packs/`
-  - `packages/vwish_editor_core/lib/src/store/font_pack_store.dart`
-  - `packages/vwish_editor/test/text/font_packs/`
+  - `packages/danaview_editor/lib/src/editor/text/font_packs/`
+  - `packages/danaview_editor_core/lib/src/store/font_pack_store.dart`
+  - `packages/danaview_editor/test/text/font_packs/`
 - **Spec:**
   - A catalog of pinned files (host, path, size, SHA-256).
   - A consent view with a `FontPackConsent.accepted(` call-site rule (same pattern as §16.3).
   - Downloader reusing AI-09's resumable logic with the same headers policy.
-  - Packs stored under `<support>/vwish/editor/fonts/packs/` (backup-excluded on iOS).
+  - Packs stored under `<support>/danaview/editor/fonts/packs/` (backup-excluded on iOS).
   - The privacy text adds the host (AIS-36 coordinates).
 - **Acceptance criteria and tests:** Fake HTTP for every status; hash mismatch deletes the file; zero network before consent (spy); pack fonts render in a golden.
 
@@ -1629,8 +1629,8 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S4 · **Area:** AI Studio
 - **Depends on:** AIS-06, AIS-08, AI-08, AI-12
 - **Owns:**
-  - `packages/vwish_ai_studio/lib/src/contracts/`, `orchestrator/`, `review/`, `audio/`, `usage/`, `glossary/`
-  - `packages/vwish_ai_studio/test/{orchestrator,review,audio,usage}/`
+  - `packages/danaview_ai_studio/lib/src/contracts/`, `orchestrator/`, `review/`, `audio/`, `usage/`, `glossary/`
+  - `packages/danaview_ai_studio/test/{orchestrator,review,audio,usage}/`
 - **Spec:** §3.6, D-49, D-50 and D-64.
   - `AiStudioService` with `plan` (local only) and `run`.
   - Ports: `AiKeyStore`, `AiAudioClipExtractor`, `UsageLedgerStore`, `BackgroundLeaseProvider` (v1 port), `ProjectFiles` (core `StoreFs` + `OwnedFileDeleter` roots).
@@ -1660,15 +1660,15 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S4 · **Area:** AI Studio
 - **Depends on:** AIS-28, AIS-03
 - **Owns:**
-  - `packages/vwish_ai_studio/lib/src/actions/common/` (`prompt_kit.dart`, `contract_registry.dart`, `emotion_tables.dart`)
-  - `packages/vwish_ai_studio/lib/src/actions/{cleanup,emotion,emoji,speakers}/`
-  - `packages/vwish_ai_studio/test/actions/{cleanup,emotion,emoji,speakers}/`
-  - `packages/vwish_ai_studio/test/fixtures/actions/`
+  - `packages/danaview_ai_studio/lib/src/actions/common/` (`prompt_kit.dart`, `contract_registry.dart`, `emotion_tables.dart`)
+  - `packages/danaview_ai_studio/lib/src/actions/{cleanup,emotion,emoji,speakers}/`
+  - `packages/danaview_ai_studio/test/actions/{cleanup,emotion,emoji,speakers}/`
+  - `packages/danaview_ai_studio/test/fixtures/actions/`
 - **Spec:** D-51, D-58 and D-59.
-  - **`vw.cleanup.v1`.** Input `{lang, glossary[], options{punctuation, spelling, names, fillers}, cues:[{id, text}]}`. Output `{cues:[{id, text}]}`. Rules: no merging, splitting or reordering; keep the language, emoji and line breaks; a change > 30% of the length is flagged "large change".
-  - **`vw.emotion.v1`.** Text or voice: the audio part per cue with an id label in the text part. Output `{cues:[{id, label, intensity, confidence}]}`. Optional local follow-ups: emotion styles, emoji from the D-58 tables with the density rules.
-  - **`vw.emoji.v1`.** Output `{cues:[{id, inserts:[{afterWord, emoji}]}]}`. Allow-list and density enforced locally; `emojiMarks` set.
-  - **`vw.speakers.v1`.** Windows of about 2 min carrying the roster `[{label, name?}]`. Output `{cues:[{id, speaker}], roster:[{label, name?}]}`. Names only when spoken (validated: the name must occur in some cue text). At most 8.
+  - **`dv.cleanup.v1`.** Input `{lang, glossary[], options{punctuation, spelling, names, fillers}, cues:[{id, text}]}`. Output `{cues:[{id, text}]}`. Rules: no merging, splitting or reordering; keep the language, emoji and line breaks; a change > 30% of the length is flagged "large change".
+  - **`dv.emotion.v1`.** Text or voice: the audio part per cue with an id label in the text part. Output `{cues:[{id, label, intensity, confidence}]}`. Optional local follow-ups: emotion styles, emoji from the D-58 tables with the density rules.
+  - **`dv.emoji.v1`.** Output `{cues:[{id, inserts:[{afterWord, emoji}]}]}`. Allow-list and density enforced locally; `emojiMarks` set.
+  - **`dv.speakers.v1`.** Windows of about 2 min carrying the roster `[{label, name?}]`. Output `{cues:[{id, speaker}], roster:[{label, name?}]}`. Names only when spoken (validated: the name must occur in some cue text). At most 8.
   - Prompts are versioned constants. The JSON Schemas are expressed in `json_schema_lite`.
   - Mappers produce `TextSuggestion`, `EmotionSuggestion`, `EmojiSuggestion`, `SpeakerSuggestion`, `StyleSuggestion`.
 - **Acceptance criteria and tests:**
@@ -1682,12 +1682,12 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S4 · **Area:** AI Studio
 - **Depends on:** AIS-28, AIS-15, AI-11
 - **Owns:**
-  - `packages/vwish_ai_studio/lib/src/actions/{ask,translate}/`
-  - `packages/vwish_ai_studio/lib/src/translation/` (`aligner.dart`, `sentence_groups.dart`, `languages.dart`)
-  - `packages/vwish_ai_studio/test/actions/{ask,translate}/`, `packages/vwish_ai_studio/test/translation/`
+  - `packages/danaview_ai_studio/lib/src/actions/{ask,translate}/`
+  - `packages/danaview_ai_studio/lib/src/translation/` (`aligner.dart`, `sentence_groups.dart`, `languages.dart`)
+  - `packages/danaview_ai_studio/test/actions/{ask,translate}/`, `packages/danaview_ai_studio/test/translation/`
 - **Spec:** D-57 and D-67.
-  - **`vw.ask.v1`.** Ops translate(lang), grammar, shorten, tone(kind), addEmoji, custom(instruction ≤ 500). Sub-range selections use the `⟦…⟧` markers, and text outside them must be unchanged. Output `{cues:[{id, text}]}`.
-  - **`vw.translate.v1`.** Input sentence groups `{gid, text, cues:[{id, text, dur}]}` with source and target languages and formality. Output `{groups:[{gid, text}]}`. Option "keep line timing" uses per-cue items instead.
+  - **`dv.ask.v1`.** Ops translate(lang), grammar, shorten, tone(kind), addEmoji, custom(instruction ≤ 500). Sub-range selections use the `⟦…⟧` markers, and text outside them must be unchanged. Output `{cues:[{id, text}]}`.
+  - **`dv.translate.v1`.** Input sentence groups `{gid, text, cues:[{id, text, dur}]}` with source and target languages and formality. Output `{groups:[{gid, text}]}`. Option "keep line timing" uses per-cue items instead.
   - **Aligner:** proportional pseudo-times → AIS-15 segmenter with the target script profile and the project canvas (9:16 limits) → drafts with estimated words; overrides, placement, emotion and speaker taken from the dominant source cue; partial spans dropped, with the count reported.
   - `languages.dart`: about 180 BCP-47 tags with names, plus syntax validation for "Other".
   - Builds `TranslationTrackSuggestion`.
@@ -1702,10 +1702,10 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S4 · **Area:** UI/UX
 - **Depends on:** AIS-28, UX-04
 - **Owns:**
-  - `packages/vwish_editor/lib/src/settings/ai/` (`ai_settings_screen.dart`, `provider_sheet.dart`, `model_picker.dart`, `usage_section.dart`)
-  - `packages/vwish_editor/lib/src/settings/editor_settings_screen.dart` (extends UX-04: "AI Studio" row through an `onOpenAiSettings` callback)
-  - `packages/vwish_editor/lib/src/app/strings/ai_settings_strings.dart`
-  - `packages/vwish_editor/test/settings/ai/`
+  - `packages/danaview_editor/lib/src/settings/ai/` (`ai_settings_screen.dart`, `provider_sheet.dart`, `model_picker.dart`, `usage_section.dart`)
+  - `packages/danaview_editor/lib/src/settings/editor_settings_screen.dart` (extends UX-04: "AI Studio" row through an `onOpenAiSettings` callback)
+  - `packages/danaview_editor/lib/src/app/strings/ai_settings_strings.dart`
+  - `packages/danaview_editor/test/settings/ai/`
 - **Spec:** U1–U3, D-45, D-46 and D-49.
   - The master switch is stored in prefs `editor.ai.enabled`.
   - The provider sheet is the only `ProviderProbeConsent.accepted(` site. Key entry (obscured, paste), Save → `AiKeyStore.set`, Test key, Load models, Remove key, default model (`editor.ai.<provider>.model`), the provider privacy policy link (system browser).
@@ -1722,10 +1722,10 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S4 · **Area:** UI/UX
 - **Depends on:** AIS-29, AIS-31, AIS-17
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/flows/ai/ai_studio_sheet.dart`, `ai_studio_controller.dart`, `ai_send_view.dart`, `ai_progress_panel.dart`, `ai_failure_copy.dart`
-  - `packages/vwish_editor/lib/src/editor/actions/bindings/ai_bindings.dart`
-  - `packages/vwish_editor/lib/src/app/strings/ai_strings.dart`
-  - `packages/vwish_editor/test/flows/ai/`
+  - `packages/danaview_editor/lib/src/editor/flows/ai/ai_studio_sheet.dart`, `ai_studio_controller.dart`, `ai_send_view.dart`, `ai_progress_panel.dart`, `ai_failure_copy.dart`
+  - `packages/danaview_editor/lib/src/editor/actions/bindings/ai_bindings.dart`
+  - `packages/danaview_editor/lib/src/app/strings/ai_strings.dart`
+  - `packages/danaview_editor/test/flows/ai/`
 - **Spec:** U5–U7 and §3.9.
   - The controller state machine: choose → options → planning (audio extraction progress) → disclose → sending (batches) → result | failure | partial.
   - `AiSendView` is the only `AiSendConsent.accepted(` site, with the second tap above 200k tokens.
@@ -1743,10 +1743,10 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S4 · **Area:** UI/UX
 - **Depends on:** AIS-28, AIS-16, AIS-17
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/panels/review/` (`review_panel.dart`, `suggestion_row.dart`, `diff_text.dart`, `review_controller.dart`)
-  - `packages/vwish_editor/lib/src/editor/actions/bindings/review_bindings.dart`
-  - `packages/vwish_editor/lib/src/app/strings/review_strings.dart`
-  - `packages/vwish_editor/test/panels/review/`
+  - `packages/danaview_editor/lib/src/editor/panels/review/` (`review_panel.dart`, `suggestion_row.dart`, `diff_text.dart`, `review_controller.dart`)
+  - `packages/danaview_editor/lib/src/editor/actions/bindings/review_bindings.dart`
+  - `packages/danaview_editor/lib/src/app/strings/review_strings.dart`
+  - `packages/danaview_editor/test/panels/review/`
 - **Spec:** U8 and D-64.
   - Filters, rows, accept/reject/edit, Accept all per group (one `ApplyCueEdits`).
   - Stale handling. Ghost preview (AIS-16 `ghostProject`).
@@ -1766,8 +1766,8 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S4 · **Area:** UI/UX
 - **Depends on:** AIS-30, AIS-32, AIS-33, AIS-18
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/flows/ai/ask_ai_sheet.dart`, `ask_ai_controller.dart`
-  - `packages/vwish_editor/test/flows/ask_ai/`
+  - `packages/danaview_editor/lib/src/editor/flows/ai/ask_ai_sheet.dart`, `ask_ai_controller.dart`
+  - `packages/danaview_editor/test/flows/ask_ai/`
 - **Spec:** U9 and D-67.
   - Entry from the style toolbar, the line-selection bar, cue context menus and ⌘⇧A.
   - Preset chips and the free-text field.
@@ -1786,8 +1786,8 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S4 · **Area:** UI/UX
 - **Depends on:** AIS-30, AIS-32, AIS-33
 - **Owns:**
-  - `packages/vwish_editor/lib/src/editor/flows/ai/translate_sheet.dart`, `translate_controller.dart`, `language_search.dart`
-  - `packages/vwish_editor/test/flows/translate/`
+  - `packages/danaview_editor/lib/src/editor/flows/ai/translate_sheet.dart`, `translate_controller.dart`, `language_search.dart`
+  - `packages/danaview_editor/test/flows/translate/`
 - **Spec:** U10 and D-57.
   - Language search (recent languages in prefs `editor.ai.recentLanguages`), options, disclosure, progress.
   - Side-by-side review with inline edits and line rejects.
@@ -1806,7 +1806,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S5 · **Area:** UI/UX
 - **Depends on:** UX-42
 - **Owns:**
-  - `packages/vwish_features/lib/src/more/legal_texts.dart` (extends UX-42)
+  - `packages/danaview_features/lib/src/more/legal_texts.dart` (extends UX-42)
   - `test/editor_entry/legal_texts_ai_test.dart`
 - **Spec:**
   - The §6.4 text, verbatim after owner review.
@@ -1814,7 +1814,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
   - Every AI and font bullet carries "On iPhone, iPad and Android".
 - **Acceptance criteria and tests:**
   - The test asserts the summary mentions AI Studio and "your own key".
-  - The internet section names all five hosts (from `vwish_ai_providers`' allow-list, through a root test in AIS-37) and the speech-model host.
+  - The internet section names all five hosts (from `danaview_ai_providers`' allow-list, through a root test in AIS-37) and the speech-model host.
   - Platform qualifiers present on every new bullet.
   - The terms contain the AI Studio and imported-fonts paragraphs.
   - No overflow at 280 px @1.35 on the legal screens.
@@ -1825,12 +1825,12 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Depends on:** AIS-09, AIS-10, AIS-11, AIS-25, AIS-28, AIS-31, AIS-32, AIS-36, INT-04
 - **Owns:**
   - `lib/main.dart`, `lib/router/app_router.dart`, `pubspec.yaml` (root; [INTEGRATION] after INT-05)
-  - `packages/vwish_editor/lib/src/app/adapters/secure_key_store_adapter.dart`, `engine_ai_audio_extractor.dart`, `prefs_usage_ledger.dart`
-  - `packages/vwish_editor/lib/src/app/editor_bootstrap.dart` (extends INT-02)
+  - `packages/danaview_editor/lib/src/app/adapters/secure_key_store_adapter.dart`, `engine_ai_audio_extractor.dart`, `prefs_usage_ledger.dart`
+  - `packages/danaview_editor/lib/src/app/editor_bootstrap.dart` (extends INT-02)
   - `test/ai_wiring_test.dart`, `test/ai_network_guard_test.dart`, `test/privacy_policy_ai_hosts_test.dart`
 - **Spec:**
-  - The root pubspec adds `vwish_secure_keys`.
-  - `main.dart` constructs the providers (five adapters, transport with `allowLoopback: !kReleaseMode && VWISH_AI_FAKE_HOST set`), the `AiStudioServiceImpl` with the adapters (key store → plugin, audio clips → `engine.jobs.extractSpeechAudio`, usage → prefs, background lease → `engine.background`), the font library and the preset store.
+  - The root pubspec adds `danaview_secure_keys`.
+  - `main.dart` constructs the providers (five adapters, transport with `allowLoopback: !kReleaseMode && DANAVIEW_AI_FAKE_HOST set`), the `AiStudioServiceImpl` with the adapters (key store → plugin, audio clips → `engine.jobs.extractSpeechAudio`, usage → prefs, background lease → `engine.background`), the font library and the preset store.
   - Register Noto `LicenseRegistry` entries.
   - Router: `/settings/editor/ai` (explicit child route, as BP §9 item 5) and `onOpenAiSettings`.
   - **Network guard tests** (`HttpOverrides` spy through the real wiring, as INT-04):
@@ -1841,7 +1841,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Acceptance criteria and tests:**
   - The wiring test boots the app with fakes and reaches U1, U5, U8, U9, U10 and U16.
   - The network guard and hosts tests are green.
-  - Release build check: `VWISH_AI_FAKE_HOST` is ignored (unit test with `kReleaseMode` simulation plus an architecture test).
+  - Release build check: `DANAVIEW_AI_FAKE_HOST` is ignored (unit test with `kReleaseMode` simulation plus an architecture test).
   - iOS and Android builds; desktop unaffected (editor hidden).
 
 #### AIS-38 · On-device E2E with a loopback fake provider, overflow matrix, accessibility
@@ -1851,10 +1851,10 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Owns:**
   - `integration_test/editor/ai_studio/`, `integration_test/editor/rich_subtitles/`
   - `scripts/ci/editor/ai_e2e.sh`
-  - `packages/vwish_editor/test/overflow/ai_studio/`
+  - `packages/danaview_editor/test/overflow/ai_studio/`
   - `docs/editor/v1.2/qa/e2e_report.md`
 - **Spec:**
-  - Run on the iOS Simulator (iPhone 17 Pro, iPad Pro with keyboard) and the Android Emulator (API 35 Pixel, API 29 minimal), with a loopback fake provider started by the test (`VWISH_AI_FAKE_HOST`) serving hand-written fixtures.
+  - Run on the iOS Simulator (iPhone 17 Pro, iPad Pro with keyboard) and the Android Emulator (API 35 Pixel, API 29 minimal), with a loopback fake provider started by the test (`DANAVIEW_AI_FAKE_HOST`) serving hand-written fixtures.
   - Scenarios:
     1. Settings: enable, add key, Test key valid/invalid.
     2. Auto captions (tiny model) → Clean up → review → accept 3 / reject 1 → undo.
@@ -1877,7 +1877,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Depends on:** AIS-37, AIS-14, AIS-16, AIS-22, AIS-25
 - **Owns:**
   - `integration_test/editor/rich_parity/`
-  - `packages/vwish_editor/test/parity/rich_text/`
+  - `packages/danaview_editor/test/parity/rich_text/`
   - `docs/editor/v1.2/qa/parity_and_performance.md`
 - **Spec:**
   - On the simulator, the emulator and the device lab (iPhone SE 2 and the 4 GB Android): compare the preview overlay capture with export frames at cue midpoints and karaoke word boundaries for Latin, Arabic, Hebrew, Devanagari, Thai, CJK (system), mixed bidi and emoji (the QA-03 parity method, text regions only).
@@ -1895,7 +1895,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S5 · **Area:** QA
 - **Depends on:** AIS-37
 - **Owns:**
-  - `packages/vwish_ai_providers/tool/live_check.dart`
+  - `packages/danaview_ai_providers/tool/live_check.dart`
   - `docs/editor/v1.2/qa/live_providers.md`
 - **Spec:**
   - A manual tool, never run in CI. It reads keys from environment variables for the owner's accounts and runs each contract on a fixed public-domain sample text (and a CC0 speech clip from ENG-05's fixtures).
@@ -1916,7 +1916,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
   - `ios/fastlane/metadata*/`, Android Play listing metadata
   - `docs/editor/ARCHITECTURE.md` ([INTEGRATION]: 1.2.0 status, [VERIFY] closures)
 - **Spec:**
-  - Release builds pass `--dart-define=VWISH_AI_STUDIO=true` alongside v1's flags.
+  - Release builds pass `--dart-define=DANAVIEW_AI_STUDIO=true` alongside v1's flags.
   - Store descriptions and release notes ("AI Studio is optional and off by default. It uses your own key with Gemini, OpenAI, Claude, OpenRouter or Grok. Nothing is sent until you choose to.").
   - Privacy label and Data safety per the owner's D-63 decision, with evidence.
   - App Review notes (demo key or not, per D-63).
@@ -1930,37 +1930,37 @@ These v1 files are edited by 1.2.0 tickets. Each row is edited by exactly one 1.
 
 | Path | v1 owner | 1.2.0 ticket(s), in order |
 |---|---|---|
-| `vwish_editor_core/lib/{model,ops,eval,formats,plan,codec,store}.dart` | CORE-01 | AIS-01 |
-| `vwish_editor_core/lib/src/ops/edit_command.dart` | CORE-09 | AIS-01 |
-| `vwish_editor_core/lib/src/model/{items,subtitle,text_style}.dart` | CORE-03 | AIS-02 |
-| `vwish_editor_core/lib/src/validate/`, `test/support/random_project.dart` | CORE-08 | AIS-02 |
-| `vwish_editor_core/lib/src/codec/{project_json,schema_version}.dart` | CORE-22 | AIS-04 |
-| `vwish_editor_core/lib/src/codec/migrations/migrations.dart` | CORE-23 | AIS-04 |
-| `vwish_editor_core/lib/src/ops/commands/subtitle_commands.dart` | CORE-15 | AIS-05 |
-| `vwish_editor_core/lib/src/ops/commands/caption_commands.dart` | CORE-15 | AIS-06 |
-| `vwish_editor_core/lib/src/formats/{subtitle_codec,srt,vtt}.dart` | CORE-20 | AIS-07 |
-| `vwish_editor_core/lib/src/plan/export_settings.dart` | CORE-33 | AIS-07 |
-| `vwish_editor_core/lib/src/eval/text_layout_spec.dart` | CORE-07 | AIS-12 |
-| `vwish_editor_core/lib/src/plan/{lowering_text,sprite_requests}.dart` | CORE-31 | AIS-14 |
-| `vwish_editor_core/lib/src/plan/sprite_request.dart`, `test/fixtures/render_plans/contract/` (one new file) | CORE-29 | AIS-14 |
-| `vwish_editor_core/lib/src/plan/z_order.dart` | CORE-30 | AIS-14 |
-| `vwish_editor_core/lib/src/store/file_project_repository.dart` | CORE-25 | AIS-23 |
-| `vwish_editor_engine_api/lib/src/render_prep/` | API-04 | AIS-13 |
-| `vwish_editor_engine_api/lib/src/{platform_services,fake/fake_editor_engine}.dart` | API-01 | AIS-24 |
-| `vwish_editor_engine/pigeons/`, generated Pigeon files, `lib/src/mobile_platform_services.dart`, `ios/.../MediaPicker.swift`, `android/.../MediaPicker.kt` | ENG-01/ENG-06, ENG-03, IOS-15, AND-14 | AIS-24 ([INTEGRATION]) |
-| `vwish_transcription/lib/src/segmentation/`, `pipeline/pipeline.dart` | AI-11, AI-13 | AIS-15 |
-| `vwish_editor/pubspec.yaml`, `contracts/*`, `wiring/action_bindings.dart`, `app/{editor_providers,editor_availability}.dart` | UX-01 | AIS-01 |
-| `vwish_editor/lib/src/editor/preview/{text_overlay_layer,text_overlay_painter}.dart` | UX-19 | AIS-16 |
-| `vwish_editor/lib/src/editor/preview/manipulation_overlay.dart` | UX-22 | AIS-16 |
-| `vwish_editor/lib/src/editor/panels/subtitles_panel.dart` | UX-31 | AIS-17 |
-| `vwish_editor/lib/src/editor/timeline/snapping.dart` | UX-13 | AIS-19 |
-| `vwish_editor/lib/src/editor/panels/subtitle_io.dart` | UX-32 | AIS-21 |
-| `vwish_editor/lib/src/editor/flows/export/export_sheet.dart` | UX-39 | AIS-21 |
-| `vwish_editor_fonts/`, `vwish_editor/lib/src/editor/text/font_catalog.dart` | UX-30 | AIS-22 |
-| `vwish_editor/lib/src/editor/panels/font_picker.dart` | UX-30 | AIS-25 |
-| `vwish_editor/lib/src/settings/editor_settings_screen.dart` | UX-04 | AIS-31 |
-| `vwish_editor/lib/src/app/editor_bootstrap.dart` | INT-02 | AIS-37 |
-| `vwish_features/lib/src/more/legal_texts.dart` | UX-42 | AIS-36 |
+| `danaview_editor_core/lib/{model,ops,eval,formats,plan,codec,store}.dart` | CORE-01 | AIS-01 |
+| `danaview_editor_core/lib/src/ops/edit_command.dart` | CORE-09 | AIS-01 |
+| `danaview_editor_core/lib/src/model/{items,subtitle,text_style}.dart` | CORE-03 | AIS-02 |
+| `danaview_editor_core/lib/src/validate/`, `test/support/random_project.dart` | CORE-08 | AIS-02 |
+| `danaview_editor_core/lib/src/codec/{project_json,schema_version}.dart` | CORE-22 | AIS-04 |
+| `danaview_editor_core/lib/src/codec/migrations/migrations.dart` | CORE-23 | AIS-04 |
+| `danaview_editor_core/lib/src/ops/commands/subtitle_commands.dart` | CORE-15 | AIS-05 |
+| `danaview_editor_core/lib/src/ops/commands/caption_commands.dart` | CORE-15 | AIS-06 |
+| `danaview_editor_core/lib/src/formats/{subtitle_codec,srt,vtt}.dart` | CORE-20 | AIS-07 |
+| `danaview_editor_core/lib/src/plan/export_settings.dart` | CORE-33 | AIS-07 |
+| `danaview_editor_core/lib/src/eval/text_layout_spec.dart` | CORE-07 | AIS-12 |
+| `danaview_editor_core/lib/src/plan/{lowering_text,sprite_requests}.dart` | CORE-31 | AIS-14 |
+| `danaview_editor_core/lib/src/plan/sprite_request.dart`, `test/fixtures/render_plans/contract/` (one new file) | CORE-29 | AIS-14 |
+| `danaview_editor_core/lib/src/plan/z_order.dart` | CORE-30 | AIS-14 |
+| `danaview_editor_core/lib/src/store/file_project_repository.dart` | CORE-25 | AIS-23 |
+| `danaview_editor_engine_api/lib/src/render_prep/` | API-04 | AIS-13 |
+| `danaview_editor_engine_api/lib/src/{platform_services,fake/fake_editor_engine}.dart` | API-01 | AIS-24 |
+| `danaview_editor_engine/pigeons/`, generated Pigeon files, `lib/src/mobile_platform_services.dart`, `ios/.../MediaPicker.swift`, `android/.../MediaPicker.kt` | ENG-01/ENG-06, ENG-03, IOS-15, AND-14 | AIS-24 ([INTEGRATION]) |
+| `danaview_transcription/lib/src/segmentation/`, `pipeline/pipeline.dart` | AI-11, AI-13 | AIS-15 |
+| `danaview_editor/pubspec.yaml`, `contracts/*`, `wiring/action_bindings.dart`, `app/{editor_providers,editor_availability}.dart` | UX-01 | AIS-01 |
+| `danaview_editor/lib/src/editor/preview/{text_overlay_layer,text_overlay_painter}.dart` | UX-19 | AIS-16 |
+| `danaview_editor/lib/src/editor/preview/manipulation_overlay.dart` | UX-22 | AIS-16 |
+| `danaview_editor/lib/src/editor/panels/subtitles_panel.dart` | UX-31 | AIS-17 |
+| `danaview_editor/lib/src/editor/timeline/snapping.dart` | UX-13 | AIS-19 |
+| `danaview_editor/lib/src/editor/panels/subtitle_io.dart` | UX-32 | AIS-21 |
+| `danaview_editor/lib/src/editor/flows/export/export_sheet.dart` | UX-39 | AIS-21 |
+| `danaview_editor_fonts/`, `danaview_editor/lib/src/editor/text/font_catalog.dart` | UX-30 | AIS-22 |
+| `danaview_editor/lib/src/editor/panels/font_picker.dart` | UX-30 | AIS-25 |
+| `danaview_editor/lib/src/settings/editor_settings_screen.dart` | UX-04 | AIS-31 |
+| `danaview_editor/lib/src/app/editor_bootstrap.dart` | INT-02 | AIS-37 |
+| `danaview_features/lib/src/more/legal_texts.dart` | UX-42 | AIS-36 |
 | `lib/main.dart`, `lib/router/app_router.dart`, root `pubspec.yaml` | INT-02/INT-04/INT-05 | AIS-37 → AIS-41 (version only) |
 | `test/architecture/dependency_rules_test.dart`, `.github/workflows/editor-ci.yml` | INT-01 | AIS-01 |
 | `docs/editor/ARCHITECTURE.md` | INT-01/ENG-06/INT-05 | AIS-01 → AIS-41 |
@@ -1975,12 +1975,12 @@ These v1 files are edited by 1.2.0 tickets. Each row is edited by exactly one 1.
 | 1 | Settings: key fields per provider, model picker, Test key | AIS-31 (U1–U3) |
 | 1 | Keys in secure storage (Keychain / Keystore) | D-46; AIS-11, AIS-37 |
 | 1 | Off = v1 behaviour, on device and offline | D-45, D-65; AIS-01 (flag test), AIS-37 (network guard) |
-| 2 | Clean up the whisper transcript (punctuation, names, spelling) | AIS-29 (`vw.cleanup.v1`), AIS-32, AIS-33 |
-| 2 | Emotion/tone per line from text (any provider) | AIS-29 (`vw.emotion.v1`), AIS-32 |
+| 2 | Clean up the whisper transcript (punctuation, names, spelling) | AIS-29 (`dv.cleanup.v1`), AIS-32, AIS-33 |
+| 2 | Emotion/tone per line from text (any provider) | AIS-29 (`dv.emotion.v1`), AIS-32 |
 | 2 | Emotion/tone from voice (audio providers) | D-50; AIS-28 (clips), AIS-29, AIS-37 (extractor adapter) |
 | 2 | Emojis by emotion, density none/light/heavy | D-55, D-58; AIS-29, AIS-32 |
 | 2 | Optional emotion-driven style presets | D-58; AIS-12 (style layer), AIS-18 (switch), AIS-29 |
-| 2 | Speaker labels | D-59; AIS-29 (`vw.speakers.v1`), AIS-06, AIS-18, AIS-07 (VTT voices) |
+| 2 | Speaker labels | D-59; AIS-29 (`dv.speakers.v1`), AIS-06, AIS-18, AIS-07 (VTT voices) |
 | 3 | Translate a track into any language as a NEW track; original kept | D-57; AIS-30, AIS-35, AIS-06 (`AddDerivedSubtitleTrack`) |
 | 3 | Timing matched, lines re-split to fit | D-57; AIS-30 (aligner), AIS-15 (segmenter with words) |
 | 3 | RTL and complex scripts render correctly | D-56, D-60; AIS-13, AIS-22, AIS-39 |
@@ -2063,31 +2063,31 @@ These v1 files are edited by 1.2.0 tickets. Each row is edited by exactly one 1.
 
 ### 6.4 Privacy policy and terms changes (draft text for `legal_texts.dart`, AIS-36)
 
-The text follows the plain style of `packages/vwish_features/lib/src/more/legal_texts.dart` and its "On iPhone, iPad and Android" qualifiers.
+The text follows the plain style of `packages/danaview_features/lib/src/more/legal_texts.dart` and its "On iPhone, iPad and Android" qualifiers.
 
 **Privacy Policy › summary (replace):**
-"Vwish keeps everything on your device. There are no accounts, no analytics, no ads and no tracking, and nothing you watch, edit or type is sent to us. The only extra download is the optional speech model for Auto captions, and only after you agree. If you turn on AI Studio and add your own key for an AI provider, the captions you choose are sent to that provider, only when you ask and after you see what will be sent."
+"Danaview keeps everything on your device. There are no accounts, no analytics, no ads and no tracking, and nothing you watch, edit or type is sent to us. The only extra download is the optional speech model for Auto captions, and only after you agree. If you turn on AI Studio and add your own key for an AI provider, the captions you choose are sent to that provider, only when you ask and after you see what will be sent."
 
-**What Vwish stores on your device (add bullets):**
+**What Danaview stores on your device (add bullets):**
 - "On iPhone, iPad and Android, if you use AI Studio: the API keys you enter, kept in your device's secure storage (the Keychain on iPhone and iPad, a key protected by Android Keystore on Android). Keys are not included in backups and are only ever sent to the provider they belong to."
 - "On iPhone, iPad and Android, AI suggestions you haven't reviewed yet, and the names and terms you add to help AI Studio, saved with the project they belong to."
 - "On iPhone, iPad and Android, fonts you import and the subtitle style presets you save, so you can use them in any project."
 
-**When Vwish uses the internet (add bullet, lead "AI Studio with your own key"):**
-"On iPhone, iPad and Android, AI Studio is off until you turn it on. If you turn it on and add an API key for Google Gemini, OpenAI, Anthropic Claude, OpenRouter or xAI Grok, Vwish connects to that provider (generativelanguage.googleapis.com, api.openai.com, api.anthropic.com, openrouter.ai or api.x.ai) only when you start an AI action, such as cleaning up, translating or adding emojis to captions, or when you tap Test key. Before anything is sent, Vwish shows what will be sent and to which provider. It sends the caption text you chose and, only for actions that listen to the voice, short audio clips of the parts of your video those captions cover. It never sends the video picture, file names, the project name or your profile. Your key is sent only to its provider, to identify your account. The provider handles the request under its own terms and privacy policy, which apply to your account with them, and may keep it for a time under those policies. Vwish has no access to your provider account and doesn't see what you are billed."
+**When Danaview uses the internet (add bullet, lead "AI Studio with your own key"):**
+"On iPhone, iPad and Android, AI Studio is off until you turn it on. If you turn it on and add an API key for Google Gemini, OpenAI, Anthropic Claude, OpenRouter or xAI Grok, Danaview connects to that provider (generativelanguage.googleapis.com, api.openai.com, api.anthropic.com, openrouter.ai or api.x.ai) only when you start an AI action, such as cleaning up, translating or adding emojis to captions, or when you tap Test key. Before anything is sent, Danaview shows what will be sent and to which provider. It sends the caption text you chose and, only for actions that listen to the voice, short audio clips of the parts of your video those captions cover. It never sends the video picture, file names, the project name or your profile. Your key is sent only to its provider, to identify your account. The provider handles the request under its own terms and privacy policy, which apply to your account with them, and may keep it for a time under those policies. Danaview has no access to your provider account and doesn't see what you are billed."
 
-**When Vwish uses the internet, closing paragraph (replace):**
+**When Danaview uses the internet, closing paragraph (replace):**
 "Files on your device that you play, edit, inspect, export or browse are processed on your device and are never uploaded, except the captions and audio clips you choose to send with AI Studio."
 
 **Files and permissions (add bullet, lead "Fonts"):**
-"On iPhone, iPad and Android, when you import a font, Vwish copies only the file you pick into its own storage."
+"On iPhone, iPad and Android, when you import a font, Danaview copies only the file you pick into its own storage."
 
 **Your choices (add bullets):**
 - "On iPhone, iPad and Android, turn AI Studio off, and remove the keys you added, in Settings › Video editor › AI Studio. With AI Studio off, nothing is sent to an AI provider."
 - "On iPhone, iPad and Android, delete imported fonts in Settings › Video editor › Fonts, and saved presets in the editor's Style presets."
 
 **Terms of Use (add section "AI Studio"):**
-"On iPhone, iPad and Android, AI Studio uses your own account with the AI provider you choose. You are responsible for your use of that provider, its charges and following its terms. AI suggestions, including translations, names, emotions, emojis and speaker labels, may be wrong or inappropriate. Review them before you publish. Vwish doesn't change your project until you accept a suggestion."
+"On iPhone, iPad and Android, AI Studio uses your own account with the AI provider you choose. You are responsible for your use of that provider, its charges and following its terms. AI suggestions, including translations, names, emotions, emojis and speaker labels, may be wrong or inappropriate. Review them before you publish. Danaview doesn't change your project until you accept a suggestion."
 
 **Terms › Your content (add sentence):**
 "Only import fonts you have the right to use; some font licences don't allow use in videos you publish."

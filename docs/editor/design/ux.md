@@ -1,4 +1,4 @@
-# Vwish Editor: UX, Timeline UI and App Integration Design
+# Danaview Editor: UX, Timeline UI and App Integration Design
 
 > **Area:** Editor UX, timeline UI, app integration (Flutter side).
 > **Status:** design draft for the "Editor" release. This document contains no production code. The Dart, Swift and Kotlin snippets are interface sketches.
@@ -9,8 +9,8 @@
 
 ## 0. Decisions at a glance
 
-1. **New package `packages/vwish_editor`** holds the Projects screen, the Editor screen, every editor widget, and the Riverpod controllers. `vwish_features` only gets two entry points, wired through callbacks (Home edit button, player "Edit"). `vwish_features` never imports the editor. The app root (`lib/`) composes routes and providers.
-2. **The layout is chosen by window size, not by device type.** There are four layouts: `compactPortrait`, `compactLandscape`, `medium`, `expanded`. On phones in portrait, tool panels open in a **non-modal docked inspector** so the preview stays visible while the user drags a slider. In the other layouts the inspector is a side pane. The modal `showVwishSheet` is used only for flows: export, auto captions, relink, import, project, track menu, markers.
+1. **New package `packages/danaview_editor`** holds the Projects screen, the Editor screen, every editor widget, and the Riverpod controllers. `danaview_features` only gets two entry points, wired through callbacks (Home edit button, player "Edit"). `danaview_features` never imports the editor. The app root (`lib/`) composes routes and providers.
+2. **The layout is chosen by window size, not by device type.** There are four layouts: `compactPortrait`, `compactLandscape`, `medium`, `expanded`. On phones in portrait, tool panels open in a **non-modal docked inspector** so the preview stays visible while the user drags a slider. In the other layouts the inspector is a side pane. The modal `showDanaviewSheet` is used only for flows: export, auto captions, relink, import, project, track menu, markers.
 3. **The timeline is one custom `RenderBox` (`RenderTimelineCanvas`).** It paints only the visible time window, using per-lane picture tiles. Track headers are real widgets (they have buttons and semantics). The playhead, ghosts and guides sit on their own repaint-boundary layers. During playback the **widget tree is not rebuilt per frame**.
 4. **The native preview is the master clock.** `PlayheadController` is a `ValueListenable<TimeUs>` kept *outside* Riverpod state. It extrapolates native clock samples on every vsync. Scrubbing coalesces seeks so only the latest one is sent, and it ends with an exact seek on release. Every time shown on screen is quantized to the project frame grid.
 5. **Every mutation goes through `EditorController.apply(EditCommand)`.** Continuous gestures (sliders, preview manipulation, clip drags, trims) run inside an `EditTransaction`. While the gesture runs, native receives *transient* overrides at most 60 Hz, latest-wins. On commit the gesture produces **one** history entry, one RenderPlan patch, and one autosave trigger.
@@ -26,21 +26,21 @@
 | Fact | Where | Consequence for this design |
 |---|---|---|
 | go_router 14.8.1; flutter_riverpod 2.6.1 with `StateNotifier`; Dart 3.12, so extension types are available | `pubspec.lock` | Controllers use `StateNotifier` to match the existing code, written so a later move to Riverpod 3 `Notifier` is mechanical. Routes nest under `/` like the existing pages. |
-| `_HomeHeader` is a `Row(VwishLogo, Expanded(title), VwishIconButton(settings, tonal, size 44, icon 22))` | `packages/vwish_features/lib/src/library/vwish_home_screen.dart` L474–510 | The edit button uses the identical component and sits immediately before the gear. |
-| The player top bar holds back, title, lock and info. The bottom bar uses a width-priority planner that measures text with `_textWidth` | `vwish_controls_overlay.dart` L357–406, L428–575 | "Edit" is added to the trailing group of the top bar and to the "Playback" more-sheet. The editor transport reuses the measure-then-place pattern. |
-| The player binds shortcuts with `Shortcuts`/`Actions` (Space/K, arrows, …) inside `Focus(autofocus)` | `vwish_player_screen.dart` L48–70, L193–237 | The editor uses the same pattern plus a text-field focus guard (§15). |
-| On phones, orientation is portrait in the library and owned by the player through a **single static owner** | `vwish_player_actions.dart` `PlayerOrientation` | An owner stack is needed so the editor can open over the player and give orientation back correctly (§4.5). |
+| `_HomeHeader` is a `Row(DanaviewLogo, Expanded(title), DanaviewIconButton(settings, tonal, size 44, icon 22))` | `packages/danaview_features/lib/src/library/danaview_home_screen.dart` L474–510 | The edit button uses the identical component and sits immediately before the gear. |
+| The player top bar holds back, title, lock and info. The bottom bar uses a width-priority planner that measures text with `_textWidth` | `danaview_controls_overlay.dart` L357–406, L428–575 | "Edit" is added to the trailing group of the top bar and to the "Playback" more-sheet. The editor transport reuses the measure-then-place pattern. |
+| The player binds shortcuts with `Shortcuts`/`Actions` (Space/K, arrows, …) inside `Focus(autofocus)` | `danaview_player_screen.dart` L48–70, L193–237 | The editor uses the same pattern plus a text-field focus guard (§15). |
+| On phones, orientation is portrait in the library and owned by the player through a **single static owner** | `danaview_player_actions.dart` `PlayerOrientation` | An owner stack is needed so the editor can open over the player and give orientation back correctly (§4.5). |
 | Text scale is clamped to 0.85–1.35 app-wide | `lib/app.dart` `MediaQuery.withClampedTextScaling` | The layout planner and the overflow test matrix use exactly this range. |
-| UI kit provides `VwishButton` (primary/secondary/tonal/ghost/destructive; sm/md/lg), `VwishIconButton` (circle; hit area ≥44 on touch), `VwishSurface`, `VwishSlider` (RenderBox; axis; `origin` for bipolar values), `VwishSegmentedControl`, `VwishChoiceChip`/`VwishChipGroup`, `VwishDropdown`, `VwishMenuAnchor`/`VwishMenuIconTrigger`, `showVwishSheet`, `showVwishDialog/Confirm/Prompt`, `VwishToast`, `VwishTextField`, `VwishSwitch(Row)`, `VwishListTile`/`VwishTileIcon`, `VwishEmptyState`, `VwishSpinner`, `VwishBadge`, `VwishSeekBar`, `VwishButtonBar` | `packages/vwish_ui_kit/lib/src/components/*` | All editor UI is composed from these. New *generic* pieces go into the kit with its overflow tests (§3.2). Editor-specific pieces stay in `vwish_editor`. |
-| `showVwishSheet` is a modal `PopupRoute` with a scrim. It is keyboard-aware, defaults `maxHeightFactor` to 0.85, and is drag-dismissible | `vwish_sheet.dart` | Good for flows. Not used for live inspectors, because it would hide the preview. |
-| Tokens: `VwishColors` (primary `#5E60EE`, primaryLight, cyan, purple, warning, success, error, hairline `0x14FFFFFF`), `VwishRadius` (xs 6 … xl 20), `VwishShadows.subtle/soft`, `VwishBorders.hairline` (0.8 px), `VwishSpacing.minTapTarget = 44`, `VwishBreakpoints` (560 / 900), `VwishColors.foregroundOn()` / `contrastRatio()` | `vwish_theme.dart`, `vwish_tokens.dart` | Editor colors derive from these tokens (§6.8). Clip-label contrast is computed, never guessed. |
+| UI kit provides `DanaviewButton` (primary/secondary/tonal/ghost/destructive; sm/md/lg), `DanaviewIconButton` (circle; hit area ≥44 on touch), `DanaviewSurface`, `DanaviewSlider` (RenderBox; axis; `origin` for bipolar values), `DanaviewSegmentedControl`, `DanaviewChoiceChip`/`DanaviewChipGroup`, `DanaviewDropdown`, `DanaviewMenuAnchor`/`DanaviewMenuIconTrigger`, `showDanaviewSheet`, `showDanaviewDialog/Confirm/Prompt`, `DanaviewToast`, `DanaviewTextField`, `DanaviewSwitch(Row)`, `DanaviewListTile`/`DanaviewTileIcon`, `DanaviewEmptyState`, `DanaviewSpinner`, `DanaviewBadge`, `DanaviewSeekBar`, `DanaviewButtonBar` | `packages/danaview_ui_kit/lib/src/components/*` | All editor UI is composed from these. New *generic* pieces go into the kit with its overflow tests (§3.2). Editor-specific pieces stay in `danaview_editor`. |
+| `showDanaviewSheet` is a modal `PopupRoute` with a scrim. It is keyboard-aware, defaults `maxHeightFactor` to 0.85, and is drag-dismissible | `danaview_sheet.dart` | Good for flows. Not used for live inspectors, because it would hide the preview. |
+| Tokens: `DanaviewColors` (primary `#5E60EE`, primaryLight, cyan, purple, warning, success, error, hairline `0x14FFFFFF`), `DanaviewRadius` (xs 6 … xl 20), `DanaviewShadows.subtle/soft`, `DanaviewBorders.hairline` (0.8 px), `DanaviewSpacing.minTapTarget = 44`, `DanaviewBreakpoints` (560 / 900), `DanaviewColors.foregroundOn()` / `contrastRatio()` | `danaview_theme.dart`, `danaview_tokens.dart` | Editor colors derive from these tokens (§6.8). Clip-label contrast is computed, never guessed. |
 | Icons are Material `Icons.*_rounded`. **`Icons.movie_edit` exists, with no rounded variant. `Icons.transition_rounded` does NOT exist.** | Flutter SDK `material/icons.dart`, checked by grep | Every icon name in this document was checked against the SDK. |
-| Mobile pickers return temporary copies. `LibraryStorage.importPickedFiles` moves *only the app's own temp copies* into `Documents/Imported` and never touches user files | `vwish_data/lib/src/storage/library_storage.dart` | The editor follows the same rule. Files the editor creates never go into `Documents/`, because that folder is the "On This Device" library and is scanned for videos. |
+| Mobile pickers return temporary copies. `LibraryStorage.importPickedFiles` moves *only the app's own temp copies* into `Documents/Imported` and never touches user files | `danaview_data/lib/src/storage/library_storage.dart` | The editor follows the same rule. Files the editor creates never go into `Documents/`, because that folder is the "On This Device" library and is scanned for videos. |
 | `LSSupportsOpeningDocumentsInPlace = true`, and `AppDelegate.handleIncomingUrl` calls `startAccessingSecurityScopedResource` | `ios/Runner/Info.plist`, `AppDelegate.swift` | A project that references a file opened in place needs a security-scoped bookmark (persistence area). The relink UI handles stale bookmarks. |
-| Settings › Storage clears only the cache folder and never deletes videos | `tools/storage_usage.dart`, `tools/vwish_storage_screen.dart` | Editor caches (thumbnails, waveforms, proxies) live under the cache folder and are listed there. Project bundles are listed separately and are never cleared by "Clear cache". |
+| Settings › Storage clears only the cache folder and never deletes videos | `tools/storage_usage.dart`, `tools/danaview_storage_screen.dart` | Editor caches (thumbnails, waveforms, proxies) live under the cache folder and are listed there. Project bundles are listed separately and are never cleared by "Clear cache". |
 | The privacy policy and terms are structured Dart constants (`LegalSection`, `LegalBlock`, `LegalBullet`) | `more/legal_texts.dart` | §20 gives the exact block additions. |
-| A pure-Dart MP4/MKV `MediaInspector` already exists | `vwish_data/lib/src/media/media_inspector.dart` | Used as a fast "can this be edited?" pre-check and to verify export output in tests. |
-| Test harness: `Surface` matrix (280×500 @1.35 … 1200×800), `pumpKit`, `expectInside`, `FakePlaybackEngine` | `vwish_ui_kit/test/test_utils.dart`, `test/player_screen_test.dart` | Editor tests extend this harness (§21). |
+| A pure-Dart MP4/MKV `MediaInspector` already exists | `danaview_data/lib/src/media/media_inspector.dart` | Used as a fast "can this be edited?" pre-check and to verify export output in tests. |
+| Test harness: `Surface` matrix (280×500 @1.35 … 1200×800), `pumpKit`, `expectInside`, `FakePlaybackEngine` | `danaview_ui_kit/test/test_utils.dart`, `test/player_screen_test.dart` | Editor tests extend this harness (§21). |
 | iOS deployment target 13.0; `UIBackgroundModes = [audio]`; no microphone or photo usage strings. Android has `READ_MEDIA_VIDEO/AUDIO` and `FOREGROUND_SERVICE` but no `RECORD_AUDIO` or `POST_NOTIFICATIONS` | `Info.plist`, `project.pbxproj`, `AndroidManifest.xml` | Declarations to add are in §20.3. Minimum OS for the editor is a runtime capability check (§4.1), not a change to the app's deployment target. |
 
 ---
@@ -261,15 +261,15 @@ abstract interface class TranscriptionJob {
 
 ## 3. Package and file layout
 
-### 3.1 New package `packages/vwish_editor`
+### 3.1 New package `packages/danaview_editor`
 
 ```
-packages/vwish_editor/
-  pubspec.yaml        # flutter, flutter_riverpod ^2.5.1, vwish_ui_kit, vwish_domain, vwish_data,
-                      # vwish_platform, vwish_features (chrome only), <editor domain pkg>,
+packages/danaview_editor/
+  pubspec.yaml        # flutter, flutter_riverpod ^2.5.1, danaview_ui_kit, danaview_domain, danaview_data,
+                      # danaview_platform, danaview_features (chrome only), <editor domain pkg>,
                       # <editor engine pkg>, <transcription pkg>, path
   lib/
-    vwish_editor.dart                  # public: ProjectsScreen, EditorScreen, EditorLauncher,
+    danaview_editor.dart                  # public: ProjectsScreen, EditorScreen, EditorLauncher,
                                        # EditorAvailability, editor root providers, StorageContributor impl
     src/
       app/
@@ -320,36 +320,36 @@ packages/vwish_editor/
   integration_test/  # on-device (§21)
 ```
 
-### 3.2 Additions to `vwish_ui_kit` (generic, reusable, overflow-tested)
+### 3.2 Additions to `danaview_ui_kit` (generic, reusable, overflow-tested)
 
 | Component | Purpose | Notes |
 |---|---|---|
-| `VwishProgressBar` | Determinate and indeterminate linear progress (export, download, transcription, tasks) | RenderBox like `VwishSlider`; semantics value "45 percent". |
-| `VwishNumberField` | Numeric entry with unit suffix, −/+ steppers, drag-to-scrub label, min/max clamping, optional bipolar display | Built on `VwishTextField` and `VwishIconButton`. Accepts `formatter`/`parser`. |
-| `VwishColorPicker` | HSV square, hue strip, hex field, opacity strip, swatches, optional "eyedropper" callback | All `CustomPainter`/RenderBox; no Material pickers. |
-| `VwishDockedPanel` | Non-modal surface with the same look as `VwishSheet` (sheetTop radius, `surfaceElevated`, drag handle, keyboard-aware) | The editor dock builds on it; also usable elsewhere. |
-| `VwishSearchField` | `VwishTextField` preset (search icon, clear, debounced `onChanged`) | Language picker, font picker, media bin. |
-| `VwishStepIndicator` (small) | "Step 2 of 3" dots for multi-step sheets | Used by the auto-captions flow. |
+| `DanaviewProgressBar` | Determinate and indeterminate linear progress (export, download, transcription, tasks) | RenderBox like `DanaviewSlider`; semantics value "45 percent". |
+| `DanaviewNumberField` | Numeric entry with unit suffix, −/+ steppers, drag-to-scrub label, min/max clamping, optional bipolar display | Built on `DanaviewTextField` and `DanaviewIconButton`. Accepts `formatter`/`parser`. |
+| `DanaviewColorPicker` | HSV square, hue strip, hex field, opacity strip, swatches, optional "eyedropper" callback | All `CustomPainter`/RenderBox; no Material pickers. |
+| `DanaviewDockedPanel` | Non-modal surface with the same look as `DanaviewSheet` (sheetTop radius, `surfaceElevated`, drag handle, keyboard-aware) | The editor dock builds on it; also usable elsewhere. |
+| `DanaviewSearchField` | `DanaviewTextField` preset (search icon, clear, debounced `onChanged`) | Language picker, font picker, media bin. |
+| `DanaviewStepIndicator` (small) | "Step 2 of 3" dots for multi-step sheets | Used by the auto-captions flow. |
 
 ### 3.3 Changes outside the new package
 
 | File | Change |
 |---|---|
-| `packages/vwish_features/lib/src/library/vwish_home_screen.dart` | `VwishHomeScreen.onOpenEditor` and `_HomeHeader` edit button (§4.3). |
-| `packages/vwish_features/lib/src/player/vwish_controls_overlay.dart` | `onEdit` callback: top-bar button and more-sheet tile (§4.4). |
-| `packages/vwish_features/lib/src/player/vwish_player_screen.dart` | `onEditVideo` param, `EditVideoIntent` bound to `E`, handoff hooks. |
-| `packages/vwish_features/lib/src/player/vwish_player_actions.dart` | `PlayerOrientation` → owner-stack `ScreenOrientationPolicy` (§4.5). |
-| `packages/vwish_features/lib/src/controllers/player_controller.dart` | `suspendForEditor()` / `resumeAfterEditor(token)` (§4.6). |
-| `packages/vwish_features/lib/chrome.dart` (new library file) | Exports `VwishLibraryFrame`, `VwishLibraryTopBar`, `VwishLibrarySectionHeader`, `VwishLibraryGroup`, `VwishInlineEmpty`, `vwishLibraryInsets`, `VwishRefreshOnReturn` so the Projects screen shares the library chrome. |
-| `packages/vwish_features/lib/src/tools/vwish_storage_screen.dart`, `storage_usage.dart` | `StorageContributor` extension point (§4.8). |
-| `packages/vwish_features/lib/src/more/vwish_settings_screen.dart`, `settings_destination.dart` | Optional "Video editor" row through an `extraRows` builder (§4.8). |
-| `packages/vwish_features/lib/src/more/legal_texts.dart` | Privacy and terms additions (§20). |
+| `packages/danaview_features/lib/src/library/danaview_home_screen.dart` | `DanaviewHomeScreen.onOpenEditor` and `_HomeHeader` edit button (§4.3). |
+| `packages/danaview_features/lib/src/player/danaview_controls_overlay.dart` | `onEdit` callback: top-bar button and more-sheet tile (§4.4). |
+| `packages/danaview_features/lib/src/player/danaview_player_screen.dart` | `onEditVideo` param, `EditVideoIntent` bound to `E`, handoff hooks. |
+| `packages/danaview_features/lib/src/player/danaview_player_actions.dart` | `PlayerOrientation` → owner-stack `ScreenOrientationPolicy` (§4.5). |
+| `packages/danaview_features/lib/src/controllers/player_controller.dart` | `suspendForEditor()` / `resumeAfterEditor(token)` (§4.6). |
+| `packages/danaview_features/lib/chrome.dart` (new library file) | Exports `DanaviewLibraryFrame`, `DanaviewLibraryTopBar`, `DanaviewLibrarySectionHeader`, `DanaviewLibraryGroup`, `DanaviewInlineEmpty`, `danaviewLibraryInsets`, `DanaviewRefreshOnReturn` so the Projects screen shares the library chrome. |
+| `packages/danaview_features/lib/src/tools/danaview_storage_screen.dart`, `storage_usage.dart` | `StorageContributor` extension point (§4.8). |
+| `packages/danaview_features/lib/src/more/danaview_settings_screen.dart`, `settings_destination.dart` | Optional "Video editor" row through an `extraRows` builder (§4.8). |
+| `packages/danaview_features/lib/src/more/legal_texts.dart` | Privacy and terms additions (§20). |
 | `lib/router/app_router.dart` | `/projects`, `/editor/:projectId` routes with the gate (§4.2). |
 | `lib/main.dart` | Overrides for editor root providers (engine, repository, transcription). |
 | `ios/Runner/Info.plist`, `android/app/src/main/AndroidManifest.xml` | Usage strings and permissions (§20.3; owned jointly with the engine areas). |
 | `README.md` | Architecture tree and keyboard shortcuts gain an "Editor" section. |
 
-**Dependency rule (enforced by a test that parses the pubspecs):** `vwish_features` must not depend on `vwish_editor`. `vwish_editor` may depend on `vwish_features` only through `package:vwish_features/chrome.dart`.
+**Dependency rule (enforced by a test that parses the pubspecs):** `danaview_features` must not depend on `danaview_editor`. `danaview_editor` may depend on `danaview_features` only through `package:danaview_features/chrome.dart`.
 
 ---
 
@@ -377,8 +377,8 @@ final editorDeviceSupportProvider = FutureProvider<EditorSupport>((ref) async { 
 ```
 
 * **Platform gate (sync):** decides whether the Home button, the player action and the routes exist at all.
-* **Device gate (async):** checked when the Projects screen or editor opens. If the device is unsupported (for example, the iOS minimum chosen by the iOS area, or a GPU without the required GLES/Metal features), the Projects screen shows `VwishEmptyState(icon: Icons.movie_edit, title: 'Video editing isn't available on this device', message: reason)`. The entry points stay visible, so the explanation is reachable.
-* **Desktop:** when `hidden`, both entry points are absent and the routes redirect. When `comingSoon`, the Home button opens `VwishDialog(title: 'Video editor is coming to desktop', message: 'Editing is available on iPhone, iPad and Android today.')`.
+* **Device gate (async):** checked when the Projects screen or editor opens. If the device is unsupported (for example, the iOS minimum chosen by the iOS area, or a GPU without the required GLES/Metal features), the Projects screen shows `DanaviewEmptyState(icon: Icons.movie_edit, title: 'Video editing isn't available on this device', message: reason)`. The entry points stay visible, so the explanation is reachable.
+* **Desktop:** when `hidden`, both entry points are absent and the routes redirect. When `comingSoon`, the Home button opens `DanaviewDialog(title: 'Video editor is coming to desktop', message: 'Editing is available on iPhone, iPad and Android today.')`.
 
 ### 4.2 Routes (`lib/router/app_router.dart`)
 
@@ -408,20 +408,20 @@ GoRoute(
 ),
 ```
 
-* **Unknown project id** (stale deep link, deleted project): `EditorScreen` shows `VwishEmptyState('This project isn't available', 'It may have been deleted.', actions: [Go to Projects])`. It never throws.
+* **Unknown project id** (stale deep link, deleted project): `EditorScreen` shows `DanaviewEmptyState('This project isn't available', 'It may have been deleted.', actions: [Go to Projects])`. It never throws.
 * **Back-swipe:** the editor wraps its content in `PopScope(canPop: false, onPopInvokedWithResult: …)`. This disables the iOS edge back-swipe (`ModalRoute.popGestureEnabled` is false when `popDisposition == doNotPop`), which would otherwise fight horizontal timeline drags near the left edge. Back is handled explicitly (§4.7). *Verify on 3.44 (see §24).*
-* **Navigation from the editor:** "Play exported video" uses the existing queue (`vwishPlayItems`) and then `context.push('/player')`.
+* **Navigation from the editor:** "Play exported video" uses the existing queue (`danaviewPlayItems`) and then `context.push('/player')`.
 
 ### 4.3 Home header edit button
 
-`VwishHomeScreen` gets `final VoidCallback? onOpenEditor;` (doc comment: *Shows a video-editor button immediately before the settings button when set*). `_HomeHeader(onOpenEditor:, onOpenSettings:)`:
+`DanaviewHomeScreen` gets `final VoidCallback? onOpenEditor;` (doc comment: *Shows a video-editor button immediately before the settings button when set*). `_HomeHeader(onOpenEditor:, onOpenSettings:)`:
 
 ```dart
 if (onOpenEditor != null) ...[
-  const SizedBox(width: VwishSpacing.sm),
-  VwishIconButton(
+  const SizedBox(width: DanaviewSpacing.sm),
+  DanaviewIconButton(
     icon: Icons.movie_edit,                 // exists in the SDK; no _rounded variant
-    variant: VwishIconButtonVariant.tonal,  // same as settings, for visual parity
+    variant: DanaviewIconButtonVariant.tonal,  // same as settings, for visual parity
     size: 44, iconSize: 22,
     tooltip: 'Video editor',
     semanticLabel: 'Open video editor',
@@ -432,11 +432,11 @@ if (onOpenSettings != null) ...[ /* existing gear */ ],
 ```
 
 Router: `onOpenEditor: EditorAvailability.showsEntryPoints ? () => context.push(projectsLocation()) : null`.
-**Overflow check (280 px wide at 1.35×):** with a 16 px gutter on each side, the content width is 248. Logo 36 + gap 12 + edit 44 + gap 8 + gear 44 + gap 8 = 152 fixed, leaving 96 px for the `Expanded` "Vwish" title (ellipsized). The Home overflow test is extended to cover this (UX-03).
+**Overflow check (280 px wide at 1.35×):** with a 16 px gutter on each side, the content width is 248. Logo 36 + gap 12 + edit 44 + gap 8 + gear 44 + gap 8 = 152 fixed, leaving 96 px for the `Expanded` "Danaview" title (ellipsized). The Home overflow test is extended to cover this (UX-03).
 
 ### 4.4 Player "Edit" action
 
-**Data type (in `vwish_features`, plain data):**
+**Data type (in `danaview_features`, plain data):**
 
 ```dart
 @immutable
@@ -448,8 +448,8 @@ class PlayerEditRequest { const PlayerEditRequest({required this.media, required
 
 | Place | Widget |
 |---|---|
-| Top bar, first item of the trailing group (before lock) | `VwishIconButton(icon: Icons.movie_edit, iconSize: 20, tooltip: 'Edit video (E)', semanticLabel: 'Edit this video')` |
-| "Playback" more sheet, above Queue | `VwishListTile(leading: VwishTileIcon(Icons.movie_edit), title: 'Edit video', subtitle: 'Trim, add text, captions and more', showChevron: true)` |
+| Top bar, first item of the trailing group (before lock) | `DanaviewIconButton(icon: Icons.movie_edit, iconSize: 20, tooltip: 'Edit video (E)', semanticLabel: 'Edit this video')` |
+| "Playback" more sheet, above Queue | `DanaviewListTile(leading: DanaviewTileIcon(Icons.movie_edit), title: 'Edit video', subtitle: 'Trim, add text, captions and more', showChevron: true)` |
 | Keyboard (when supported) | `SingleActivator(LogicalKeyboardKey.keyE)` → `EditVideoIntent` |
 
 Remote streams: the action is **hidden**, because the user cannot fix that. Local files in a format the editor can't use: the action is **shown**, and tapping it explains why (see step 2 below).
@@ -460,16 +460,16 @@ Top-bar width check at 280 px: back 44 + edit 44 + lock 44 + info 44 + paddings 
 1. `PlayerController.pause()`. `position` is taken from the request (the player's last snapshot).
 2. **Compatibility pre-check.** Both steps must answer within 300 ms:
    * `File(media.pathOrUri).exists()`. If false, show the existing player toast "Couldn't find this video. It may have been moved or deleted."
-   * `EditorEngine.compatibility(path)`. The engine may use `MediaInspector` for the container and codec plus a platform table. If unsupported, show `VwishDialog(icon: Icons.movie_edit, title: "This video can't be edited", message: compat.reason)`. Example copy for iOS + MKV: *"Vwish can play MKV files, but iPhone and iPad can only edit MP4, MOV and M4V videos. Convert it to MP4 to edit it."* The single action is "OK".
+   * `EditorEngine.compatibility(path)`. The engine may use `MediaInspector` for the container and codec plus a platform table. If unsupported, show `DanaviewDialog(icon: Icons.movie_edit, title: "This video can't be edited", message: compat.reason)`. Example copy for iOS + MKV: *"Danaview can play MKV files, but iPhone and iPad can only edit MP4, MOV and M4V videos. Convert it to MP4 to edit it."* The single action is "OK".
 3. **Reuse or create:**
    * If `ProjectRepository.findUntouchedProjectFor(path)` returns an id (a project created from this file with no edits yet), reuse it. Tapping Edit twice must not litter the Projects list.
    * Otherwise `create(NewProjectSpec.fromMedia(path, name: media.title, initialPlayhead: position))`. The canvas size, aspect and frame rate come from the probe; rotation metadata is respected.
-   * If this step takes longer than 300 ms, show a non-dismissible `VwishDialog` with `VwishSpinner` and the text "Preparing editor…". Failures map through §18 into a dialog.
+   * If this step takes longer than 300 ms, show a non-dismissible `DanaviewDialog` with `DanaviewSpinner` and the text "Preparing editor…". Failures map through §18 into a dialog.
 4. `PlayerHandoff.suspend(mode)` (§4.6).
 5. `context.push(editorLocation(id, at: position.inMicroseconds))`. The editor opens with an exact seek to `frameRate.quantize(at)`.
 6. When the editor route pops, `PlayerHandoff.resume()` runs: orientation owner restored (§4.5), playback stays paused at the original position, and the controls are revealed.
 
-`vwish_features` stays editor-agnostic: `VwishPlayerScreen(onEditVideo: ValueChanged<PlayerEditRequest>?)` and the router passes `(r) => ref.read(editorLauncherProvider).openFromPlayer(r, context)`.
+`danaview_features` stays editor-agnostic: `DanaviewPlayerScreen(onEditVideo: ValueChanged<PlayerEditRequest>?)` and the router passes `(r) => ref.read(editorLauncherProvider).openFromPlayer(r, context)`.
 
 ### 4.5 Orientation owner stack (refactor of `PlayerOrientation`)
 
@@ -518,10 +518,10 @@ Mode selection: `release` when `EditorCapabilities.lowMemoryDevice`, otherwise `
 | `didHaveMemoryPressure` | Thumbnail memory cache trimmed to 25%; paragraph cache cleared; `PreviewSession` asked to drop caches |
 | Playback / export / transcription / model download | `PlatformBridge.setSleepInhibited(true)` while active |
 
-### 4.8 Settings and Storage integration (no `vwish_features` → `vwish_editor` dependency)
+### 4.8 Settings and Storage integration (no `danaview_features` → `danaview_editor` dependency)
 
 ```dart
-// vwish_features (new)
+// danaview_features (new)
 abstract interface class StorageContributor {
   String get title;                         // 'Video editor projects', 'Editor cache', 'Speech model'
   String get subtitle;                      // explains what clearing does
@@ -531,7 +531,7 @@ abstract interface class StorageContributor {
 final storageContributorsProvider = Provider<List<StorageContributor>>((ref) => const []);
 ```
 
-`vwish_editor` provides three contributors, overridden in `main.dart`:
+`danaview_editor` provides three contributors, overridden in `main.dart`:
 
 | Contributor | Location | Clear action |
 |---|---|---|
@@ -560,9 +560,9 @@ Preferences are stored through the existing `SessionRepository`/`AppStorage` pat
 
 ```
 ┌──────────────────────────────────────────────┐
-│ ‹  Projects                         [+ New] │  VwishLibraryTopBar (actions: VwishButton.primary sm)
+│ ‹  Projects                         [+ New] │  DanaviewLibraryTopBar (actions: DanaviewButton.primary sm)
 ├──────────────────────────────────────────────┤
-│ ┌ Recovery banner (only when needed) ──────┐ │  VwishSurface, warning-tinted icon
+│ ┌ Recovery banner (only when needed) ──────┐ │  DanaviewSurface, warning-tinted icon
 │ │ ⚠ "Goa trip" closed unexpectedly.        │ │
 │ │   [Restore changes]   [Discard]          │ │
 │ └──────────────────────────────────────────┘ │
@@ -573,36 +573,36 @@ Preferences are stored through the existing `SessionRepository`/`AppStorage` pat
 │ │1:24·9:16│ │0:31·1:1│ │0:00·16:9│          │
 │ │⚠ 2 missing│ │      │ │        │          │
 │ └────────┘ └────────┘ └────────┘            │
-│ Projects use 1.4 GB · Manage storage ›       │  footer (VwishPressable → /settings/storage)
+│ Projects use 1.4 GB · Manage storage ›       │  footer (DanaviewPressable → /settings/storage)
 └──────────────────────────────────────────────┘
 ```
 
 * Grid: `columns = clamp(floor((width - 2·gutter + 12) / (minCard 160 + 12)), 2, 6)`. Below 340 px wide, one column with a horizontal card variant (thumbnail 96 px on the left, text on the right). Card thumbnail area is fixed 16:9; the project aspect is letterboxed inside it on a `surfaceElevatedHigher` background.
-* Card text: name (`headline`, 1 line, ellipsis); meta line (`caption`, 1 line, ellipsis): `formatClock(duration) · aspect label · Edited 2 h ago`. Badges (`VwishBadge`, wrap): `Missing media` (error), `Recovered` (warning), `Needs update` (when the schema is newer than the app).
-* Card menu (`VwishMenuIconTrigger(Icons.more_horiz_rounded)`, also on long-press and right-click): Open, Rename, Duplicate, Delete. Thumbnail via `Image.file(cacheWidth: cardWidth·dpr)`, with a placeholder `VwishTileIcon(Icons.movie_edit)` when there is no thumbnail.
+* Card text: name (`headline`, 1 line, ellipsis); meta line (`caption`, 1 line, ellipsis): `formatClock(duration) · aspect label · Edited 2 h ago`. Badges (`DanaviewBadge`, wrap): `Missing media` (error), `Recovered` (warning), `Needs update` (when the schema is newer than the app).
+* Card menu (`DanaviewMenuIconTrigger(Icons.more_horiz_rounded)`, also on long-press and right-click): Open, Rename, Duplicate, Delete. Thumbnail via `Image.file(cacheWidth: cardWidth·dpr)`, with a placeholder `DanaviewTileIcon(Icons.movie_edit)` when there is no thumbnail.
 
 ### 5.2 Actions and copy
 
 | Action | UI | Result |
 |---|---|---|
 | New | `NewProjectSheet` (§5.3) | Creates and opens the editor |
-| Open | Tap card | `onOpenProject(id)`. A project in `needsNewerApp` state shows a dialog instead: "This project was made with a newer version of Vwish. Update Vwish to open it." Unchanged on disk. |
-| Rename | `showVwishPrompt(title: 'Rename project', initialValue: name, validator: 1–80 chars after trim)` | Toast "Renamed to "…"" |
+| Open | Tap card | `onOpenProject(id)`. A project in `needsNewerApp` state shows a dialog instead: "This project was made with a newer version of Danaview. Update Danaview to open it." Unchanged on disk. |
+| Rename | `showDanaviewPrompt(title: 'Rename project', initialValue: name, validator: 1–80 chars after trim)` | Toast "Renamed to "…"" |
 | Duplicate | Immediate; name `"<name> copy"`, then `"<name> copy 2"` … | New card animates in; toast "Duplicated" |
-| Delete | `showVwishConfirm(title: 'Delete "<name>"?', message: 'The project and media made in it (voice recordings, freeze frames, reversed clips) are removed. Your original videos, photos and music stay where they are.', destructive: true)` | Toast with **Undo** for 5 s: deletion is deferred until the toast expires, then committed via the repository |
+| Delete | `showDanaviewConfirm(title: 'Delete "<name>"?', message: 'The project and media made in it (voice recordings, freeze frames, reversed clips) are removed. Your original videos, photos and music stay where they are.', destructive: true)` | Toast with **Undo** for 5 s: deletion is deferred until the toast expires, then committed via the repository |
 | Restore (banner) | `ProjectRepository.restore` → opens editor | The card gets a `Recovered` badge until the next manual save |
 | Discard (banner) | Confirm "Discard unsaved changes from that session? The last saved version is kept." | Banner disappears |
 
 ### 5.3 New project sheet
 
-`showVwishSheet(title: 'New project')`, scroll-controlled:
+`showDanaviewSheet(title: 'New project')`, scroll-controlled:
 
-1. **Add media** (`VwishButtonBar`): `Photos` (iOS) or `Gallery` (Android) with `Icons.photo_library_rounded`, and `Files` with `Icons.folder_open_rounded`. Both call `EditorEngine.pickMedia(MediaPickRequest(kinds: {video, image, audio}, multiple: true))`. Picked items are listed as removable chips with thumbnail and duration.
-2. **Format:** `VwishSegmentedControl` (wraps to a `VwishChipGroup` under 360 px): Auto (from first video), 16:9, 9:16, 1:1, 4:5, 4:3, 21:9.
-3. **Name** (optional): `VwishTextField`, hint "Untitled project".
+1. **Add media** (`DanaviewButtonBar`): `Photos` (iOS) or `Gallery` (Android) with `Icons.photo_library_rounded`, and `Files` with `Icons.folder_open_rounded`. Both call `EditorEngine.pickMedia(MediaPickRequest(kinds: {video, image, audio}, multiple: true))`. Picked items are listed as removable chips with thumbnail and duration.
+2. **Format:** `DanaviewSegmentedControl` (wraps to a `DanaviewChipGroup` under 360 px): Auto (from first video), 16:9, 9:16, 1:1, 4:5, 4:3, 21:9.
+3. **Name** (optional): `DanaviewTextField`, hint "Untitled project".
 4. Primary button "Create" (disabled while importing). A secondary "Start empty" creates a project with no media.
 
-While importing, each chip shows `VwishProgressBar`. If a copy is needed (iOS Photos), a hint reads "Videos from Photos are copied into Vwish so your project keeps working." Errors stay inline on the chip: "Couldn't add this file: format not supported", with a remove (×) button.
+While importing, each chip shows `DanaviewProgressBar`. If a copy is needed (iOS Photos), a hint reads "Videos from Photos are copied into Danaview so your project keeps working." Errors stay inline on the chip: "Couldn't add this file: format not supported", with a remove (×) button.
 
 ### 5.4 State
 
@@ -786,9 +786,9 @@ On an 844×390 phone (usable ≈ 750×369): 44 + preview 175 + 40 + 110 = 369. I
 
 `[close][title button][spacer][undo][redo][export]`
 * **Close:** `Icons.close_rounded` on compact kinds, `Icons.arrow_back_ios_new_rounded` on medium and expanded. Tooltip "Close editor".
-* **Title button:** `VwishPressable` wrapping a column of name (`headline`, 1 line, ellipsis) and status (`caption`, 1 line): `Saved` · `Saving…` · `Edited` · `Couldn't save · Retry` (error color, tappable). A trailing `Icons.expand_more_rounded` hints that it opens the **Project sheet**: rename, Format (canvas), Save now (shows `⌘S`/`Ctrl+S` when a keyboard is attached), Media in project, Keyboard shortcuts, Background tasks.
-* **Undo / Redo:** `VwishIconButton(Icons.undo_rounded / Icons.redo_rounded)`, disabled when the history doesn't allow it. Tooltip carries the label: "Undo Split clip (⌘Z)". **Long-press on undo** opens the history sheet (§14.2).
-* **Export:** at width ≥ 360, `VwishButton.primary(size: sm, label: 'Export', icon: Icons.upload_rounded)`. Otherwise an icon-only `VwishIconButton(variant: primary, icon: Icons.upload_rounded, tooltip: 'Export')`, which is round because it is a single icon, per the owner's rule.
+* **Title button:** `DanaviewPressable` wrapping a column of name (`headline`, 1 line, ellipsis) and status (`caption`, 1 line): `Saved` · `Saving…` · `Edited` · `Couldn't save · Retry` (error color, tappable). A trailing `Icons.expand_more_rounded` hints that it opens the **Project sheet**: rename, Format (canvas), Save now (shows `⌘S`/`Ctrl+S` when a keyboard is attached), Media in project, Keyboard shortcuts, Background tasks.
+* **Undo / Redo:** `DanaviewIconButton(Icons.undo_rounded / Icons.redo_rounded)`, disabled when the history doesn't allow it. Tooltip carries the label: "Undo Split clip (⌘Z)". **Long-press on undo** opens the history sheet (§14.2).
+* **Export:** at width ≥ 360, `DanaviewButton.primary(size: sm, label: 'Export', icon: Icons.upload_rounded)`. Otherwise an icon-only `DanaviewIconButton(variant: primary, icon: Icons.upload_rounded, tooltip: 'Export')`, which is round because it is a single icon, per the owner's rule.
 * Width at 280: close 44 + undo 44 + redo 44 + export 44 + paddings 16 = 192, leaving 88 for the title button.
 
 ### 6.5 Splitter
@@ -798,33 +798,33 @@ On an 844×390 phone (usable ≈ 750×369): 44 + preview 175 + 40 + 110 = 369. I
 ### 6.6 Keyboard insets
 
 * `EditorScaffold` reads `MediaQuery.viewInsetsOf(context).bottom` and recomputes the spec. The dock sits above the keyboard (bottom padding = viewInsets). The preview shrinks first, then step 5 applies.
-* Sheets (`showVwishSheet`) already handle keyboards.
+* Sheets (`showDanaviewSheet`) already handle keyboards.
 
 ### 6.7 No-overflow rules applied in every editor region
 
 1. Every `Row` holding text gives that text `Expanded`/`Flexible` with `maxLines` and ellipsis. Numeric labels use `FontFeature.tabularFigures()` and widths **measured at the current text scale**, using `TextPainter` the same way `_textWidth` does in the player.
-2. Bars that hold variable-count controls use a **priority planner**: mandatory items, optional items by priority while they fit, and the rest in "more". This is the same algorithm as the player's `_buildControlsRow`, extracted into `PriorityRowPlanner` in `vwish_editor/lib/src/editor/layout/`.
+2. Bars that hold variable-count controls use a **priority planner**: mandatory items, optional items by priority while they fit, and the rest in "more". This is the same algorithm as the player's `_buildControlsRow`, extracted into `PriorityRowPlanner` in `danaview_editor/lib/src/editor/layout/`.
 3. Toolstrips scroll horizontally and never wrap. Tile width is `clamp(measuredLabel + 16, 64, 112)`.
 4. Panels have a fixed header and a scrollable body (`CustomScrollView`). No panel assumes a height.
 5. Painted text in the timeline is clipped to its clip's rect and ellipsized by the paragraph (`ParagraphStyle(maxLines: 1, ellipsis: '…')`).
 6. Every dialog and sheet comes from the kit (already overflow-tested). Editor-specific sheet bodies get their own matrix tests (§19.2).
 
-### 6.8 Editor color tokens (`timeline_style.dart`, derived from `VwishColors`)
+### 6.8 Editor color tokens (`timeline_style.dart`, derived from `DanaviewColors`)
 
 | Token | Value | Use |
 |---|---|---|
-| `laneBackground` | `VwishColors.background` | lanes |
-| `laneSeparator` | `VwishColors.hairlineSubtle` | 1 px between lanes |
-| `videoAccent` | `VwishColors.primary` | main video lane header icon, selected-tool tint |
-| `overlayAccent` | `VwishColors.purple` | overlay/PiP clips (3 px top stripe) |
+| `laneBackground` | `DanaviewColors.background` | lanes |
+| `laneSeparator` | `DanaviewColors.hairlineSubtle` | 1 px between lanes |
+| `videoAccent` | `DanaviewColors.primary` | main video lane header icon, selected-tool tint |
+| `overlayAccent` | `DanaviewColors.purple` | overlay/PiP clips (3 px top stripe) |
 | `audioFill` / `audioWave` | `cyan @ 0x29` / `cyan @ 0xCC` | audio clips |
 | `textFill` | `warning @ 0x33` | text clips |
 | `subtitleFill` | `success @ 0x29` | subtitle cues |
-| `selection` | `VwishColors.primaryLight` | 2 px inner outline; handles' accent |
-| `playhead` | `VwishColors.textPrimary` | 2 px line + knob |
-| `snapGuide` | `VwishColors.primaryLight` | 1 px guide + time pill |
+| `selection` | `DanaviewColors.primaryLight` | 2 px inner outline; handles' accent |
+| `playhead` | `DanaviewColors.textPrimary` | 2 px line + knob |
+| `snapGuide` | `DanaviewColors.primaryLight` | 1 px guide + time pill |
 | `offline` | `error @ 0x33` + hatch `0x14FFFFFF` | missing media |
-| `marker` (default) | `VwishColors.warning` | ruler flags; 6 user colors |
+| `marker` (default) | `DanaviewColors.warning` | ruler flags; 6 user colors |
 
 Clip labels sit on an `overlayDark` chip, so the white text contrast is ≥ 7:1 whatever the thumbnail shows. Colors never carry meaning alone: every lane kind has an icon and a name, and badges have glyphs.
 
@@ -836,10 +836,10 @@ Clip labels sit on an `overlayDark` chip, so the white text contrast is ≥ 7:1 
 
 * `PreviewSurface` = `ColoredBox(black)` → `Center` → `AspectRatio(canvas aspect)` → `Texture(textureId: session.textureId, filterQuality: FilterQuality.low)`. Native renders at the quality-dependent size (`frameSize`), and Flutter scales the texture to the view rect.
 * Status overlays (centered, `IgnorePointer` except buttons):
-  * `starting`: `VwishSpinner`.
-  * `failed`: `VwishInlineEmpty` with "Preview stopped" and a "Restart preview" button (re-creates the session).
+  * `starting`: `DanaviewSpinner`.
+  * `failed`: `DanaviewInlineEmpty` with "Preview stopped" and a "Restart preview" button (re-creates the session).
   * `offline media at playhead`: a hatched card "Media missing" with a "Relink…" button.
-  * `degraded`: a small `VwishBadge('Preview ½')` top-right with tooltip "Preview quality was lowered to keep playback smooth. Export is unaffected."
+  * `degraded`: a small `DanaviewBadge('Preview ½')` top-right with tooltip "Preview quality was lowered to keep playback smooth. Export is unaffected."
 * Background color: the project's canvas background. Letterbox areas outside the canvas are pure black so the canvas edge is visible.
 * Semantics: `Semantics(label: 'Preview, 1080 by 1920, ${timecode}', image: true)`, plus the manipulation overlay's own semantics (§19.1).
 
@@ -886,7 +886,7 @@ A single `RawGestureDetector` uses a `ScaleGestureRecognizer`, which reports one
 
 **Handles (`ManipulationPainter`):**
 * Oriented outline: 1.5 px `primaryLight`.
-* Corner handles: 12 px white circles with `VwishShadows.subtle`, hit radius 22 px on touch and 10 on pointer.
+* Corner handles: 12 px white circles with `DanaviewShadows.subtle`, hit radius 22 px on touch and 10 on pointer.
 * Rotate handle: 24 px `surfaceElevatedHigher` circle with `Icons.rotate_right_rounded` drawn as a glyph.
 * Size and angle readout pill while dragging: "W 64% · 32°".
 
@@ -913,8 +913,8 @@ The `PriorityRowPlanner` places items in this order (mandatory first):
 
 | Priority | Item | Widget | Shortcut |
 |---|---|---|---|
-| M | Play/pause | `VwishIconButton(Icons.play_arrow_rounded / pause_rounded, 28)` | Space, K |
-| M | Timecode `00:12:15 / 01:30:00` (compact fallback `0:12 / 1:30`) | `TimecodeText` in `VwishPressable`; tap opens timecode entry | — |
+| M | Play/pause | `DanaviewIconButton(Icons.play_arrow_rounded / pause_rounded, 28)` | Space, K |
+| M | Timecode `00:12:15 / 01:30:00` (compact fallback `0:12 / 1:30`) | `TimecodeText` in `DanaviewPressable`; tap opens timecode entry | — |
 | 1 | Frame back / forward | `Icons.keyboard_arrow_left_rounded` / `keyboard_arrow_right_rounded` (repeat on hold, 8 Hz after 400 ms) | ← / → |
 | 2 | Previous / next edit point | `Icons.first_page_rounded` / `last_page_rounded` | ↑ / ↓ |
 | 3 | Add marker | `Icons.bookmark_add_rounded` | M |
@@ -922,15 +922,15 @@ The `PriorityRowPlanner` places items in this order (mandatory first):
 | 5 | Ripple toggle | `Icons.swap_horiz_rounded` (selected state) | R |
 | 6 | Zoom out / in | `Icons.zoom_out_rounded`, `Icons.zoom_in_rounded` | ⌘− / ⌘= |
 | 7 | Fullscreen preview | `Icons.fullscreen_rounded` | F |
-| 8 | Preview quality | `VwishMenuIconTrigger(Icons.hd_rounded)` | — |
-| M (if anything is hidden) | More | `Icons.more_horiz_rounded` → `VwishMenuAnchor` with the hidden items | — |
+| 8 | Preview quality | `DanaviewMenuIconTrigger(Icons.hd_rounded)` | — |
+| M (if anything is hidden) | More | `Icons.more_horiz_rounded` → `DanaviewMenuAnchor` with the hidden items | — |
 
-**Timecode** formats as `mm:ss:ff`, or `h:mm:ss:ff` at one hour and above. Frames use the project frame rate (drop-frame display is not used in v1). Typing in **timecode entry** (`showVwishPrompt`) accepts `1:23`, `1:23:12`, `83.5s`, `+2s`, `-10f`, and seeks to the frame-quantized result. Invalid input returns an inline validator message such as "Use minutes:seconds or seconds, like 1:23 or 83.5s".
+**Timecode** formats as `mm:ss:ff`, or `h:mm:ss:ff` at one hour and above. Frames use the project frame rate (drop-frame display is not used in v1). Typing in **timecode entry** (`showDanaviewPrompt`) accepts `1:23`, `1:23:12`, `83.5s`, `+2s`, `-10f`, and seeks to the frame-quantized result. Invalid input returns an inline validator message such as "Use minutes:seconds or seconds, like 1:23 or 83.5s".
 
 ### 7.7 Fullscreen preview and quality
 
 * **Fullscreen:** a pushed `PageRoute` with a fade transition. It hosts a second `Texture` widget with the same `textureId` while the editor's surface is hidden (one texture id can back several `Texture` widgets).
-  * Controls: play/pause, `VwishSeekBar` (reused; markers passed as `chapters`), time, a close button, and rotate on phones (through `ScreenOrientationPolicy.toggle`).
+  * Controls: play/pause, `DanaviewSeekBar` (reused; markers passed as `chapters`), time, a close button, and rotate on phones (through `ScreenOrientationPolicy.toggle`).
   * `SystemUiMode.immersiveSticky`. Tap toggles the controls; they auto-hide after 3 s while playing, like the player overlay.
 * **Quality menu:**
   * Auto (default): native lowers quality when dropped frames exceed 10% over 2 s.
@@ -978,7 +978,7 @@ TimelineView (ConsumerStatefulWidget)
  └─ Semantics (scroll actions, live region for drags)
 ```
 
-The single gesture surface covers both the headers and the lanes, so a vertical drag on a header scrolls the tracks. Taps on header buttons still win in the gesture arena because `VwishPressable`'s tap recognizer accepts on pointer-up with no movement.
+The single gesture surface covers both the headers and the lanes, so a vertical drag on a header scrolls the tracks. Taps on header buttons still win in the gesture arena because `DanaviewPressable`'s tap recognizer accepts on pointer-up with no movement.
 
 ### 8.2 View model: `TimelineSnapshot`
 
@@ -1059,7 +1059,7 @@ class TimelineViewportController extends ChangeNotifier {
 * **Tick ladder** (seconds unless noted): `[1f, 2f, 5f, 10f, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600]`. The major interval is the smallest ladder value whose pixel spacing is at least `measuredLabelWidth + 24`. Minor ticks subdivide by 5 (or 2 when the spacing would fall below 8 px).
 * **Labels:** `m:ss` for second intervals and `m:ss:ff` for frame intervals. Paragraphs are cached in an LRU (256 entries) keyed by `(text, scale)`.
 * **Markers:** a 10 px flag in the marker color. Tap selects the marker and opens the marker sheet (name, color among 6, note, delete, jump). Drag moves the marker (snaps to frames and playhead). The sheet is also reachable from the long-press menu.
-* **Ruler corner cell** (above the headers): `VwishMenuIconTrigger(Icons.tune_rounded)` "Timeline options" with these entries:
+* **Ruler corner cell** (above the headers): `DanaviewMenuIconTrigger(Icons.tune_rounded)` "Timeline options" with these entries:
   * Snapping ✓ (N)
   * Ripple editing ✓ (R)
   * Center playhead
@@ -1093,7 +1093,7 @@ class RenderTimelineCanvas extends RenderBox {
 **Visible window:** `[timeAt(0) − overscan, timeAt(width) + overscan]` with overscan = ½ viewport. Visible lanes come from `scrollY` and the lane heights. For each visible lane, a binary search over `items` finds the first item ending after the window start, and iteration stops past the window end. Cost is O(log n + visible).
 
 **Per item (in this order):**
-1. **Body:** `RRect` with radius 6 (`VwishRadius.xs`), filled with the kind color.
+1. **Body:** `RRect` with radius 6 (`DanaviewRadius.xs`), filled with the kind color.
 2. **Content:**
    * video/image/freeze: a thumbnail strip (§17.3) drawn with `drawImageRect` per visible frame cell. A missing cell is a flat `surfaceElevatedHigher` rectangle (no shimmer animation).
    * audio, and video with audio when the lane is "Large": waveform lines from the mip level closest to the current px/s (§17.4), drawn in one `drawRawPoints(PointMode.lines)` call.
@@ -1107,7 +1107,7 @@ class RenderTimelineCanvas extends RenderBox {
    * Main lane with no transition at a cut: a 16 px "+" circle (`Icons.add_rounded` glyph), shown only when both neighbors are at least 40 px wide. Its hit area is 32 px, or 44 px on touch, centered on the cut.
    * Tapping either opens the Transitions panel for that cut.
 
-**Text:** `ui.Paragraph`s are built with `VwishFonts.family`, `maxLines: 1`, `ellipsis: '…'`, and laid out at `clipWidth − padding`. They are cached by `(text, widthBucket(8 px), style)`.
+**Text:** `ui.Paragraph`s are built with `DanaviewFonts.family`, `maxLines: 1`, `ellipsis: '…'`, and laid out at `clipWidth − padding`. They are cached by `(text, widthBucket(8 px), style)`.
 
 ### 8.7 Interaction layer and playhead layer
 
@@ -1177,7 +1177,7 @@ Recognizers (custom subclasses gate entry with `isPointerAllowed`):
 
 ### 8.10 Track headers and track menu
 
-* **Compact (44 px):** a 44×lane-height `VwishPressable` with the kind icon and tiny status glyphs (lock, eye-off, muted, solo "S") drawn in its corner. Tap opens the **track menu sheet**:
+* **Compact (44 px):** a 44×lane-height `DanaviewPressable` with the kind icon and tiny status glyphs (lock, eye-off, muted, solo "S") drawn in its corner. Tap opens the **track menu sheet**:
   * Name (rename), then switches for Visible, Locked, Muted, Solo, per §8.3.
   * Height: Compact / Normal / Large.
   * Move up / Move down.
@@ -1185,7 +1185,7 @@ Recognizers (custom subclasses gate entry with `isPointerAllowed`):
   * Select all on track.
   * Subtitles: Style, Import SRT/VTT, Export SRT/VTT, Burn into video.
   * Delete track (confirm when it isn't empty).
-* **Medium/expanded (132–220 px):** kind icon, name (ellipsis), and inline `VwishIconButton(size: 32)` toggles. On touch the hit area grows to 44, as the component already does. The full menu is still available through the icon button.
+* **Medium/expanded (132–220 px):** kind icon, name (ellipsis), and inline `DanaviewIconButton(size: 32)` toggles. On touch the hit area grows to 44, as the component already does. The full menu is still available through the icon button.
 * Kind icons: video `Icons.movie_rounded`, overlay `Icons.picture_in_picture_alt_rounded`, audio `Icons.music_note_rounded`, text `Icons.text_fields_rounded`, subtitle `Icons.subtitles_rounded`.
 
 ### 8.11 Clip thumbnails, waveforms, metadata
@@ -1228,7 +1228,7 @@ Recognizers (custom subclasses gate entry with `isPointerAllowed`):
 
 \* "Animation" on video is **reserved and hidden** in v1. It is not in the owner's list; text animations are.
 
-Each tile is `ToolTile(spec: EditorActionSpec)` with icon, label, enablement, and semantics `button + label + hint`. A disabled tile stays visible with 40% opacity (`VwishColors.disabled`). Tapping it explains why in a toast, for example "Reverse isn't available for images." The leading chip is `[✕ Video clip]` (`VwishChoiceChip`, selected, `Icons.close_rounded`) and clears the selection.
+Each tile is `ToolTile(spec: EditorActionSpec)` with icon, label, enablement, and semantics `button + label + hint`. A disabled tile stays visible with 40% opacity (`DanaviewColors.disabled`). Tapping it explains why in a toast, for example "Reverse isn't available for images." The leading chip is `[✕ Video clip]` (`DanaviewChoiceChip`, selected, `Icons.close_rounded`) and clears the selection.
 
 ### 9.3 Inspector host
 
@@ -1251,11 +1251,11 @@ sealed class InspectorRoute {
   * reset (`Icons.settings_backup_restore_rounded`, confirm only when keyframes would be removed)
   * keyframe-all toggle (when the panel has keyframable rows)
   * done (`Icons.check_rounded`)
-* **Dock heights:** default `max(240, timelineHeight + toolStripHeight − 76)`, expanded to 85% of the screen by dragging the handle (`VwishDockedPanel`). The body scrolls.
+* **Dock heights:** default `max(240, timelineHeight + toolStripHeight − 76)`, expanded to 85% of the screen by dragging the handle (`DanaviewDockedPanel`). The body scrolls.
 * **Changing selection while a panel is open:** the panel re-targets if the new item supports it, or closes and shows the new context tools if it doesn't.
 * **Row widgets (`inspector_rows.dart`), all built on kit components:**
-  * `InspectorSliderRow`: label, keyframe toggle, `VwishSlider` (bipolar values use `origin: 0`), value text tapping into `VwishNumberField`, double-tap to reset to default.
-  * `InspectorNumberRow`, `InspectorToggleRow` (`VwishSwitchRow`), `InspectorChoiceRow` (`VwishSegmentedControl` / chip group), `InspectorColorRow` (swatch → `VwishColorPicker` sheet).
+  * `InspectorSliderRow`: label, keyframe toggle, `DanaviewSlider` (bipolar values use `origin: 0`), value text tapping into `DanaviewNumberField`, double-tap to reset to default.
+  * `InspectorNumberRow`, `InspectorToggleRow` (`DanaviewSwitchRow`), `InspectorChoiceRow` (`DanaviewSegmentedControl` / chip group), `InspectorColorRow` (swatch → `DanaviewColorPicker` sheet).
   * Rows are generated from `PropertyKey` metadata: name, unit, range, default, step, keyframable.
 * **Transactions:**
   * Slider drag: `onChangeStart` → `beginTransaction(label)`, `onChanged` → `tx.update`, `onChangeEnd` → `tx.commit()`.
@@ -1263,7 +1263,7 @@ sealed class InspectorRoute {
 
 ### 9.4 Keyframe toggle (`KeyframeToggle`)
 
-`VwishIconButton(size: 32)` driven by `KeyframeStateListenable(item, key, playhead)`. It notifies only when the state changes:
+`DanaviewIconButton(size: 32)` driven by `KeyframeStateListenable(item, key, playhead)`. It notifies only when the state changes:
 
 | State | Icon | Meaning | Tap |
 |---|---|---|---|
@@ -1293,23 +1293,23 @@ The owner's list names Brightness/Contrast/Saturation/Exposure/Highlights/Shadow
 
 | Row | Control | Range (UI) | KF |
 |---|---|---|---|
-| Position X / Y | `VwishNumberField` (% of canvas, 0 = center) | −200…200 % | ✓ |
+| Position X / Y | `DanaviewNumberField` (% of canvas, 0 = center) | −200…200 % | ✓ |
 | Scale | slider + number | 1…800 % (default 100) | ✓ |
 | Rotation | slider (origin 0) + number | −360…360° | ✓ |
 | Flip | two toggle buttons: `Icons.flip_rounded`, and the same icon rotated 90° for vertical | — | ✗ |
 | Opacity | slider | 0…100 % | ✓ |
 | Fit | segmented: Fit / Fill / Stretch | — | ✗ |
 | Crop | button → crop mode (§7.5) | — | ✗ |
-| Reset transform | `VwishButton.ghost` | — | — |
+| Reset transform | `DanaviewButton.ghost` | — | — |
 
 Direct manipulation (§7.3) edits the same properties. The panel stays live while gesturing because both read the working project.
 
 ### 10.3 Speed (video, audio)
 
-* `VwishSegmentedControl`: **Constant** | **Curve**.
+* `DanaviewSegmentedControl`: **Constant** | **Curve**.
 * **Constant:**
   * Chips 0.25×, 0.5×, 0.75×, 1×, 1.25×, 1.5×, 2×, 3×, 4×.
-  * "Custom" `VwishNumberField`, range 0.1–10× (Domain to confirm; clamped to `capabilities`).
+  * "Custom" `DanaviewNumberField`, range 0.1–10× (Domain to confirm; clamped to `capabilities`).
 * **Curve (speed ramping):**
   * Presets: Montage, Hero, Bullet, Jump cut, Flash in, Flash out, Custom.
   * `SpeedCurveEditor` (`CustomPainter`):
@@ -1318,7 +1318,7 @@ Direct manipulation (§7.3) edits the same properties. The panel stays live whil
     * The 1× line is drawn.
     * Point hit radius 22 on touch. Double-tap a segment adds a point; long-press a point deletes it.
     * Semantics: each point is a node with increase/decrease (speed) and left/right (time) custom actions.
-* Footer: "Duration 0:12:00 → 0:06:00". "Keep audio pitch" `VwishSwitchRow` (default on).
+* Footer: "Duration 0:12:00 → 0:06:00". "Keep audio pitch" `DanaviewSwitchRow` (default on).
 * Note when the result exceeds the source: "Audio is muted above 4× on this device" (only if the engine capability says so).
 * Commit label: "Change speed".
 
@@ -1334,12 +1334,12 @@ Direct manipulation (§7.3) edits the same properties. The panel stays live whil
 
 ### 10.5 Voiceover (Audio tool › Record), shown only when `voiceRecorder != null`
 
-* **Permission:** on first tap, an explanation sheet ("Vwish uses the microphone only while you record. Recordings stay in this project on your device.") → the OS prompt.
+* **Permission:** on first tap, an explanation sheet ("Danaview uses the microphone only while you record. Recordings stay in this project on your device.") → the OS prompt.
   * Denied: inline message with "Open Settings" (platform deep link through the engine; the UI only calls `voiceRecorder.openSystemSettings()`).
 * **Record screen in the dock:**
   * Big record button (round; primary → error color while recording).
   * 3-2-1 countdown (skippable; respects reduced motion).
-  * Live level meter (`VwishProgressBar`-style bars from `levels` at 20 Hz).
+  * Live level meter (`DanaviewProgressBar`-style bars from `levels` at 20 Hz).
   * Elapsed time.
   * Switch "Play project while recording" (default on, project audio muted to avoid bleed).
 * **Stop:** the clip is created at the record start time on the first free audio lane (a new one if needed). Label "Record voiceover". The file is project-owned.
@@ -1347,7 +1347,7 @@ Direct manipulation (§7.3) edits the same properties. The panel stays live whil
 
 ### 10.6 Adjust (Effects tool)
 
-Three sections in a `VwishSegmentedControl`: **Light**, **Color**, **Detail**. Every row is KF ("basic effect keyframes") unless the Domain marks it otherwise.
+Three sections in a `DanaviewSegmentedControl`: **Light**, **Color**, **Detail**. Every row is KF ("basic effect keyframes") unless the Domain marks it otherwise.
 
 | Section | Rows (range, default) |
 |---|---|
@@ -1370,11 +1370,11 @@ Footer: "Apply to all clips" (the same values on every main-lane clip, one histo
 ### 10.8 Text
 
 * **Add:** a `TextItem` at the playhead (3 s, center, "Your text"). It lands on the topmost free text lane (created if needed). The panel opens on **Edit** with the keyboard up.
-* **Tabs** (`VwishSegmentedControl`, which becomes a scrolling chip row below 360 px): **Edit · Font · Style · Background · Stroke · Shadow · Animation**.
+* **Tabs** (`DanaviewSegmentedControl`, which becomes a scrolling chip row below 360 px): **Edit · Font · Style · Background · Stroke · Shadow · Animation**.
 
 | Tab | Controls |
 |---|---|
-| Edit | Multi-line `VwishTextField` (live preview; typing coalesces into one history entry per 1 s idle or on blur: "Edit text"), Duration `VwishNumberField` |
+| Edit | Multi-line `DanaviewTextField` (live preview; typing coalesces into one history entry per 1 s idle or on blur: "Edit text"), Duration `DanaviewNumberField` |
 | Font | `FontPicker`: searchable list; each row renders its family name *in that font* (content preview, see §24 Q4); size slider 8–200 pt (canvas-relative) KF ✗; Bold / Italic toggles |
 | Style | Color (`InspectorColorRow`), Opacity (KF ✓), Alignment (left/center/right segmented), Letter spacing (−20…100), Line spacing (0.6…3.0) |
 | Background | Switch, color, opacity, padding, corner radius |
@@ -1392,8 +1392,8 @@ Footer: "Apply to all clips" (the same values on every main-lane clip, one histo
   * **Cue list:** `ListView.builder`; rows are `start – end` (tabular) above the text, max 3 lines with ellipsis. The current cue (under the playhead) is highlighted and auto-scrolled into view while playing.
   * Tap a row: select the cue and seek to its start.
   * **Selected row expands:**
-    * `VwishTextField` for the text (Enter inserts a line break; Done commits).
-    * Timing: start and end `VwishNumberField`s in timecode format with ±1 frame and ±100 ms steppers, plus a "Set start/end to playhead" button.
+    * `DanaviewTextField` for the text (Enter inserts a line break; Done commits).
+    * Timing: start and end `DanaviewNumberField`s in timecode format with ±1 frame and ±100 ms steppers, plus a "Set start/end to playhead" button.
     * Row actions: Split at playhead (text split at the cursor position, or at the word boundary nearest the middle when the cursor isn't placed), Merge with next, Delete.
 * **On the timeline:** cues are blocks on the subtitle lane. Drag moves a cue and the handles adjust start/end. Cues on one lane can't overlap; the Domain rejects overlaps or clamps the move to the nearest valid position, and the ghost shows that result.
 * **Style (track-wide):** font, size, color, background box (color/opacity), outline (color/width), max lines (1–3), line width (% of canvas).
@@ -1417,7 +1417,7 @@ Footer: "Apply to all clips" (the same values on every main-lane clip, one histo
 * A list of the selected item's animated properties, grouped by Transform, Adjust and Audio. Each row shows the property name, keyframe count, ‹ › jump buttons and a "Remove all" menu.
 * **Selected keyframe** (picked in the list or by tapping a diamond on the timeline):
   * time (timecode with ±1 frame nudges)
-  * value (`VwishNumberField`)
+  * value (`DanaviewNumberField`)
   * Interpolation: "Linear" (read-only chip; easing is out of scope for v1)
   * Delete
 * **Timeline diamonds:** drag moves a keyframe (snaps to frames, the playhead and other keyframes). Long-press opens a menu with Delete and "Jump here".
@@ -1459,7 +1459,7 @@ Footer: "Apply to all clips" (the same values on every main-lane clip, one histo
 
 ### 10.15 Freeze frame, reverse, replace
 
-* **Freeze:** split at the playhead and insert a still of the current frame (default 3 s; "Duration" `VwishNumberField` in the confirmation sheet). The still is a project-owned asset produced by `MediaJobs.freezeFrame`. While it is generated, a placeholder item shows a spinner badge.
+* **Freeze:** split at the playhead and insert a still of the current frame (default 3 s; "Duration" `DanaviewNumberField` in the confirmation sheet). The still is a project-owned asset produced by `MediaJobs.freezeFrame`. While it is generated, a placeholder item shows a spinner badge.
 * **Reverse:** `MediaJobs.reverse(item)` produces a project-owned reversed rendition. The clip shows a progress badge ("Reversing 45%"), and a background-task row allows Cancel. When the rendition is ready the clip switches to it automatically. Undo restores the forward clip. Export waits for or blocks on unfinished reverse jobs: "Finish reversing 1 clip before exporting" with "Wait" or "Cancel reverse".
 * **Replace:** pick media → `ReplaceMedia(item, media)`. Effects, transform and timeline range are kept. When the new media is shorter than the used range, the clip is trimmed and the toast says "The new video is shorter, so the clip was trimmed to 0:04." Kind mismatch: video can replace video or image; audio only audio.
 
@@ -1477,10 +1477,10 @@ The Export button runs `ExportController.prepare()`. These checks run in order a
 4. **Storage:** compare the estimate (§11.3) with free space from the engine. When short: "You need about 1.2 GB free to export. Free up space or lower the resolution."
 5. **Background capability notice** (first export only): see §11.5.
 
-### 11.2 Export sheet (`showVwishSheet(title: 'Export')`)
+### 11.2 Export sheet (`showDanaviewSheet(title: 'Export')`)
 
 ```
-Presets   [YouTube] [Shorts] [Reels] [IG Feed] [TikTok] [Custom]   (VwishChipGroup, wraps)
+Presets   [YouTube] [Shorts] [Reels] [IG Feed] [TikTok] [Custom]   (DanaviewChipGroup, wraps)
           1920×1080 · 30 fps · H.264 · ≈ 210 MB                     (summary, caption style)
 ▸ Custom settings (expands when Custom is chosen, or tap "Edit")
    Format        MP4 | MOV*               (segmented; MOV only if capabilities.movContainer)
@@ -1493,12 +1493,12 @@ Presets   [YouTube] [Shorts] [Reels] [IG Feed] [TikTok] [Custom]   (VwishChipGro
 Captions  ☑ Burn "Captions (Spanish)" into the video     (one row per subtitle track)
           ☐ Also save captions as  SRT | VTT
 Save to   (•) Photos / Gallery   ( ) Files…   ( ) Share…
-          ☐ Keep a copy in Vwish (On This Device)
-[ Export ]                                                  (VwishButton.primary, expand)
+          ☐ Keep a copy in Danaview (On This Device)
+[ Export ]                                                  (DanaviewButton.primary, expand)
 ```
 
 * **Aspect mismatch** between the preset and the project (for example a 16:9 project with the TikTok preset): an inline notice "Your project is 16:9. TikTok videos are 9:16, so yours will have black bars." with the button "Change project to 9:16", which opens the Canvas panel. Export never silently crops.
-* **"Keep a copy in Vwish"** writes the export to `Documents/Exports/`, so it shows in the existing "On This Device" library and can be played immediately. It is off by default to avoid doubling storage.
+* **"Keep a copy in Danaview"** writes the export to `Documents/Exports/`, so it shows in the existing "On This Device" library and can be played immediately. It is off by default to avoid doubling storage.
 * **Preset table** (UI defaults; the Export/engine owners confirm the encoder parameters; platform guidance is non-binding hints, flagged in §24):
 
 | Preset | Size | FPS | Codec | Video | Audio |
@@ -1525,8 +1525,8 @@ Last-used settings are remembered per project.
 | State | View |
 |---|---|
 | `Preparing` | Spinner, "Preparing…" |
-| `Running(progress)` | Big determinate `VwishProgressBar` and percent; phase label (Rendering video / Mixing audio / Finishing / Saving to Photos); ETA ("About 1 min left", after ≥ 3 samples); optional small live thumbnail; **Cancel** (`VwishButton.secondary`) |
-| `Backgrounded` | Text depends on capability: "Export continues in the background. You'll get a notification when it's done." (Android FGS / iOS continued processing) or "Export pauses while Vwish is in the background. Keep Vwish open for the fastest export." |
+| `Running(progress)` | Big determinate `DanaviewProgressBar` and percent; phase label (Rendering video / Mixing audio / Finishing / Saving to Photos); ETA ("About 1 min left", after ≥ 3 samples); optional small live thumbnail; **Cancel** (`DanaviewButton.secondary`) |
+| `Backgrounded` | Text depends on capability: "Export continues in the background. You'll get a notification when it's done." (Android FGS / iOS continued processing) or "Export pauses while Danaview is in the background. Keep Danaview open for the fastest export." |
 | `Interrupted(canResume)` | "Export was interrupted." [Resume] (if `canResume`) or [Start again] |
 | `Cancelling` | Spinner, "Cancelling…" |
 | `Completed(result)` | `Icons.check_circle_rounded` (success), "Saved to Photos", file size and duration, buttons **Share**, **Play** (opens the existing player), **Done** |
@@ -1540,7 +1540,7 @@ Last-used settings are remembered per project.
 
 | `capabilities.backgroundKind` | UX |
 |---|---|
-| `foregroundService` (Android) | First export on Android 13+: explain "Allow notifications to see export progress when Vwish is in the background", then request `POST_NOTIFICATIONS` through the engine. If denied, export still works while visible. The notification has progress and Cancel (native area). |
+| `foregroundService` (Android) | First export on Android 13+: explain "Allow notifications to see export progress when Danaview is in the background", then request `POST_NOTIFICATIONS` through the engine. If denied, export still works while visible. The notification has progress and Cancel (native area). |
 | `continued` (iOS 26+ `BGContinuedProcessingTask`, if the iOS area adopts it) | No in-app prompt; the system shows progress. |
 | `timeLimited` / `none` | The `Backgrounded` copy above. On return, the state becomes `Running` or `Interrupted`. |
 
@@ -1577,21 +1577,21 @@ final class CaptionsReady extends AutoCaptionsState { int cueCount; Transcriptio
 final class AutoCaptionsFailed extends AutoCaptionsState { EditorFailure failure; AutoCaptionsState retryFrom; }
 ```
 
-### 12.2 Screens (one `showVwishSheet(title: 'Auto captions')` with `VwishStepIndicator`)
+### 12.2 Screens (one `showDanaviewSheet(title: 'Auto captions')` with `DanaviewStepIndicator`)
 
 1. **Language** (step 1):
-   * `VwishSearchField` plus a list of `VwishListTile(title: englishName, subtitle: nativeName, selected:)`.
+   * `DanaviewSearchField` plus a list of `DanaviewListTile(title: englishName, subtitle: nativeName, selected:)`.
    * Recent languages at the top, the device locale's language preselected.
    * An "Auto-detect" row appears only if the AI area supports it. The owner requires a user choice, so it is not the default.
    * Primary "Continue".
 2. **Model consent** (only if the model is missing or corrupt):
    * Icon `Icons.cloud_download_rounded`. Title "Download speech model".
-   * Body: "Auto captions run entirely on this device. Vwish needs to download the speech recognition model once (**57 MB**, from **huggingface.co**). After that, captions work offline and your audio never leaves this device."
+   * Body: "Auto captions run entirely on this device. Danaview needs to download the speech recognition model once (**57 MB**, from **huggingface.co**). After that, captions work offline and your audio never leaves this device."
    * Size and host come from `SpeechModelSpec`, never hard-coded; the example values are illustrative.
    * Hint shown when the engine reports a metered connection: "This may use mobile data."
    * Free space check: "Not enough space: you need 57 MB free."
    * Buttons: **Download** (primary) and **Not now**. The `UserConsent` value is created only here (§2.4).
-3. **Downloading:** `VwishProgressBar`, "23 of 57 MB", speed, Cancel. The sheet can be closed: the download continues while the app is foregrounded, and a background-task row shows progress. A resumed download continues from where it stopped (AI area).
+3. **Downloading:** `DanaviewProgressBar`, "23 of 57 MB", speed, Cancel. The sheet can be closed: the download continues while the app is foregrounded, and a background-task row shows progress. A resumed download continues from where it stopped (AI area).
 4. **Options** (step 2):
    * Range: Whole video / Selected clips / From playhead to end.
    * Caption style: Sentences (up to 2 lines, 42 characters) / Short phrases (1 line, good for Shorts and Reels).
@@ -1620,7 +1620,7 @@ final class AutoCaptionsFailed extends AutoCaptionsState { EditorFailure failure
 * **Editor:** `MissingMediaBanner` under the top bar (warning color icon, 1 line): "2 files are missing · Relink". It can be dismissed for this session but returns on export.
 * **Timeline:** clips render offline (§8.6). **Preview:** the "Media missing" card when the playhead is on an offline clip.
 
-### 13.2 Relink sheet (`showVwishSheet(title: 'Missing media')`)
+### 13.2 Relink sheet (`showDanaviewSheet(title: 'Missing media')`)
 
 * For each missing media item, a row with a type glyph, original file name, last known folder (middle-ellipsized), duration and size, and "used in 3 clips". Actions: **Locate…** (`pickMedia`, single), and a menu with Remove clips that use it / Replace with other media….
 * **Validation** after the user picks a file (`checkRelink`):
@@ -1638,11 +1638,11 @@ final class AutoCaptionsFailed extends AutoCaptionsState { EditorFailure failure
 ### 13.3 Recovery
 
 * **On the Projects screen:** the recovery banner (§5.1).
-* **Opening a project that has a pending recovery** (`LoadedProject.pendingRecovery`): `VwishDialog(icon: Icons.history_rounded, title: 'Restore unsaved changes?', message: 'Vwish closed before your last changes to "Goa trip" were saved (changes from 14:32).', actions: [Restore (primary), Open last saved])`. Choosing "Open last saved" keeps the recovery file until the next successful save (Persistence decides). The UI copy says "You can still restore them from Projects until you save."
+* **Opening a project that has a pending recovery** (`LoadedProject.pendingRecovery`): `DanaviewDialog(icon: Icons.history_rounded, title: 'Restore unsaved changes?', message: 'Danaview closed before your last changes to "Goa trip" were saved (changes from 14:32).', actions: [Restore (primary), Open last saved])`. Choosing "Open last saved" keeps the recovery file until the next successful save (Persistence decides). The UI copy says "You can still restore them from Projects until you save."
 
 ### 13.4 Migration
 
-* **Opened with a migration** (`migratedFrom`): a one-time toast "Updated this project for the new version of Vwish." Persistence keeps the pre-migration backup; the UI does not expose it.
+* **Opened with a migration** (`migratedFrom`): a one-time toast "Updated this project for the new version of Danaview." Persistence keeps the pre-migration backup; the UI does not expose it.
 * **Newer schema:** blocked with the dialog in §5.2.
 * **Corrupt project:** the card shows "Can't open" with a menu offering "Restore last good version" (if Persistence keeps one) or Delete.
 
@@ -1661,7 +1661,7 @@ final class AutoCaptionsFailed extends AutoCaptionsState { EditorFailure failure
 
 ### 14.2 History sheet
 
-Long-press on undo (or the Project sheet › "Edit history") opens `showVwishSheet(title: 'Edit history')` with the last 50 labels, newest first. The current position is marked. Tapping a row undoes or redoes to that point, as one controller call that applies N steps and patches the plan once.
+Long-press on undo (or the Project sheet › "Edit history") opens `showDanaviewSheet(title: 'Edit history')` with the last 50 labels, newest first. The current position is marked. Tapping a row undoes or redoes to that point, as one controller call that applies N steps and patches the plan once.
 
 ### 14.3 Save status and manual save
 
@@ -2023,7 +2023,7 @@ The design target is 2,000 items, 32 lanes, a 3-hour timeline and 300 media file
 ### 17.7 Proxy media (UX side)
 
 * Setting: Auto / Always / Off.
-* Proxy jobs show as background tasks ("Optimizing 2 videos for editing · 45%") in a top-bar task indicator: a `VwishSpinner` with a count badge that opens `TasksSheet`.
+* Proxy jobs show as background tasks ("Optimizing 2 videos for editing · 45%") in a top-bar task indicator: a `DanaviewSpinner` with a count badge that opens `TasksSheet`.
 * The media bin shows proxy badges. The preview uses proxies when quality ≠ Full or the toggle is on.
 * Export always uses originals. The export sheet states this in its footer: "Exports use your original media."
 
@@ -2053,7 +2053,7 @@ final class UnknownFailure extends EditorFailure { Object error; }
 1. Engines and repositories convert platform exceptions into `EditorFailure` at their boundary. Controllers catch anything else and wrap it as `UnknownFailure`. **No editor action can crash the app.** `FlutterError.onError` stays the app's default.
 2. `editorFailureMessage(EditorFailure)` and `editRejectionMessage(EditRejection)` live in `editor_messages.dart` and are unit-tested for every subtype. The style follows `playerErrorMessage`: plain, specific, with a next step.
 3. Logging uses `debugPrint` only. There is no telemetry, consistent with the privacy policy. "Copy details" copies the code and settings, never file paths or content.
-4. Rejections are informational toasts (`VwishToastKind.info`), not errors.
+4. Rejections are informational toasts (`DanaviewToastKind.info`), not errors.
 
 Sample copy:
 
@@ -2087,8 +2087,8 @@ Sample copy:
 | Live announcements | `SemanticsService.announce` (throttled ≤ 1/s) for drag results ("Moved to 0:12"), snaps ("Snapped to marker Intro"), export completion, undo/redo labels |
 | Timecode | Text with `semanticsLabel` in words ("12 seconds 15 frames of 1 minute 30 seconds") |
 
-* **Contrast:** clip labels sit on the `overlayDark` chip. Every foreground on colored fills uses `VwishColors.foregroundOn(fill)`, and a test (§21.2) asserts ≥ 4.5:1 for every token pair used.
-* **Targets:** at least 44×44 on touch everywhere (`VwishIconButton` already enforces it; timeline handles and "+" buttons have extended hit areas). Verified with `androidTapTargetGuideline` / `iOSTapTargetGuideline` / `labeledTapTargetGuideline`.
+* **Contrast:** clip labels sit on the `overlayDark` chip. Every foreground on colored fills uses `DanaviewColors.foregroundOn(fill)`, and a test (§21.2) asserts ≥ 4.5:1 for every token pair used.
+* **Targets:** at least 44×44 on touch everywhere (`DanaviewIconButton` already enforces it; timeline handles and "+" buttons have extended hit areas). Verified with `androidTapTargetGuideline` / `iOSTapTargetGuideline` / `labeledTapTargetGuideline`.
 * **Reduced motion** (`MediaQuery.disableAnimationsOf`): no countdown animation, panel transitions are instant, no auto-scroll easing. Preview playback is unaffected.
 * **Haptics** (snap, split, lift, keyframe add) are never the only feedback.
 * **RTL:** chrome mirrors via `Directionality`. The **time axis stays left→right**, as is standard practice for timelines; headers stay on the start side.
@@ -2119,29 +2119,29 @@ Run time is controlled by tagging: the full matrix runs nightly (`--tags overflo
 
 ## 20. Privacy policy, terms and platform declarations
 
-All edits go in `packages/vwish_features/lib/src/more/legal_texts.dart`. `legalEffectiveDate` is updated to the release date. `<MODEL_HOST>`, `<MODEL_HOST_OPERATOR>` and `<MODEL_SIZE>` are filled from the AI area's final manifest. A test asserts the policy contains the exact host string used by `SpeechModelSpec.host`, so the two can't drift.
+All edits go in `packages/danaview_features/lib/src/more/legal_texts.dart`. `legalEffectiveDate` is updated to the release date. `<MODEL_HOST>`, `<MODEL_HOST_OPERATOR>` and `<MODEL_SIZE>` are filled from the AI area's final manifest. A test asserts the policy contains the exact host string used by `SpeechModelSpec.host`, so the two can't drift.
 
 ### 20.1 Privacy Policy changes
 
 **Summary** (replace):
-> Vwish keeps everything on your device. There are no accounts, no analytics, no ads and no tracking, and nothing you watch, edit or type is sent to us. The only download you don't start by opening a link is the speech model for Auto captions, and only after you agree.
+> Danaview keeps everything on your device. There are no accounts, no analytics, no ads and no tracking, and nothing you watch, edit or type is sent to us. The only download you don't start by opening a link is the speech model for Auto captions, and only after you agree.
 
-**"What Vwish stores on your device"**, adding bullets:
+**"What Danaview stores on your device"**, adding bullets:
 * `LegalBullet('Video editing projects: your edits and the files the editor makes for them, such as voice recordings, freeze frames, reversed clips, optimized copies for smoother editing, thumbnails and audio waveforms. Projects refer to your original videos, photos and music where they are. Editing never changes, moves, renames or deletes your originals.')`
-* `LegalBullet('On iPhone and iPad, videos and photos you add to a project from your photo library are copied into Vwish\'s own storage so the project keeps working. Deleting the project removes these copies.')` *(Exact wording depends on the Persistence area's iOS decision; on Android, items are referenced, not copied.)*
+* `LegalBullet('On iPhone and iPad, videos and photos you add to a project from your photo library are copied into Danaview\'s own storage so the project keeps working. Deleting the project removes these copies.')` *(Exact wording depends on the Persistence area's iOS decision; on Android, items are referenced, not copied.)*
 * `LegalBullet('The Auto captions speech model, once you download it.')`
 
-**"When Vwish uses the internet"**, adding a bullet:
-* `LegalBullet(lead: 'Auto captions model', 'The first time you use Auto captions, and only after you agree, Vwish downloads a speech recognition model (about <MODEL_SIZE>) from <MODEL_HOST>, a service run by <MODEL_HOST_OPERATOR>. Only the model file is requested. No audio, video, captions, text or personal data is sent. Like any website, the server sees the usual details of the connection, such as your IP address. After the download, captions are created entirely on your device and work offline.')`
+**"When Danaview uses the internet"**, adding a bullet:
+* `LegalBullet(lead: 'Auto captions model', 'The first time you use Auto captions, and only after you agree, Danaview downloads a speech recognition model (about <MODEL_SIZE>) from <MODEL_HOST>, a service run by <MODEL_HOST_OPERATOR>. Only the model file is requested. No audio, video, captions, text or personal data is sent. Like any website, the server sees the usual details of the connection, such as your IP address. After the download, captions are created entirely on your device and work offline.')`
 
 and changing the closing paragraph to:
 > Files on your device that you play, edit, inspect, export or browse are processed on your device and are never uploaded.
 
 **"Files and permissions"**, replacing it with paragraph + bullets:
-* `LegalBlock.paragraph('Vwish reads only the files and folders you choose to open, add to your library or add to a project, and on phones and tablets the videos you place in its own folder. It doesn\'t scan the rest of your storage, and it never changes, moves or deletes your videos, photos or music.')`
-* `LegalBullet(lead: 'Photo library', 'When you add photos or videos to a project, Vwish receives only the items you pick. When you save an export to Photos or your gallery, Vwish adds that video and doesn\'t read the rest of your library.')`
+* `LegalBlock.paragraph('Danaview reads only the files and folders you choose to open, add to your library or add to a project, and on phones and tablets the videos you place in its own folder. It doesn\'t scan the rest of your storage, and it never changes, moves or deletes your videos, photos or music.')`
+* `LegalBullet(lead: 'Photo library', 'When you add photos or videos to a project, Danaview receives only the items you pick. When you save an export to Photos or your gallery, Danaview adds that video and doesn\'t read the rest of your library.')`
 * `LegalBullet(lead: 'Microphone', 'Used only while you record a voiceover in the editor. Recordings stay in that project on your device.')`
-* `LegalBullet(lead: 'Notifications (Android)', 'Used only to show export progress while Vwish is in the background, if you allow it.')`
+* `LegalBullet(lead: 'Notifications (Android)', 'Used only to show export progress while Danaview is in the background, if you allow it.')`
 
 **"Your choices"**, adding bullets:
 * `LegalBullet('Delete video editing projects in the editor\'s Projects screen. This removes the project and the files made for it, never your originals.')`
@@ -2149,8 +2149,8 @@ and changing the closing paragraph to:
 
 ### 20.2 Terms of Use changes
 
-* **"Your content"**, adding a paragraph: "This includes media you edit and the videos, captions and other content you create and export with Vwish. You are responsible for having the rights to the footage, music, images and fonts you use, and to publish what you create."
-* **New section "Editing and exports":** "Vwish edits non-destructively and never changes your original files. Keep backups of projects and media that matter to you. Export presets for services such as YouTube, Instagram and TikTok are provided for convenience; Vwish isn't affiliated with or endorsed by those services, and their requirements can change."
+* **"Your content"**, adding a paragraph: "This includes media you edit and the videos, captions and other content you create and export with Danaview. You are responsible for having the rights to the footage, music, images and fonts you use, and to publish what you create."
+* **New section "Editing and exports":** "Danaview edits non-destructively and never changes your original files. Keep backups of projects and media that matter to you. Export presets for services such as YouTube, Instagram and TikTok are provided for convenience; Danaview isn't affiliated with or endorsed by those services, and their requirements can change."
 * **New section "Auto captions":** "Captions are generated on your device by a speech recognition model and may contain mistakes. Review them before you publish. The model and the speech recognition engine are third-party open-source software provided under their own licenses (see Settings › About › Open-source licenses)."
 * **"Trademarks"**, adding: "YouTube, Instagram and TikTok are trademarks of their respective owners."
 * **"No warranty"**, extending the tool sentence: "…such as speed test measurements, data usage estimates, export file size estimates and automatic captions, are approximate."
@@ -2159,8 +2159,8 @@ and changing the closing paragraph to:
 
 | Platform | Item | Value / note |
 |---|---|---|
-| iOS Info.plist | `NSMicrophoneUsageDescription` | "Vwish uses the microphone only while you record a voiceover in the video editor." |
-| iOS Info.plist | `NSPhotoLibraryAddUsageDescription` | "Vwish saves the videos you export to your photo library." |
+| iOS Info.plist | `NSMicrophoneUsageDescription` | "Danaview uses the microphone only while you record a voiceover in the video editor." |
+| iOS Info.plist | `NSPhotoLibraryAddUsageDescription` | "Danaview saves the videos you export to your photo library." |
 | iOS Info.plist | `NSPhotoLibraryUsageDescription` | **Only if** the Persistence area references `PHAsset`s instead of copying. Not needed with `PHPickerViewController` + copy |
 | iOS | `PrivacyInfo.xcprivacy` (Runner) | Required-reason API declarations for the app's own native editor code (e.g. disk space checks before export, file timestamps); none exists in Runner today. iOS area |
 | iOS | `BGTaskSchedulerPermittedIdentifiers` | Only if `BGContinuedProcessingTask` is adopted (iOS area) |
@@ -2170,13 +2170,13 @@ and changing the closing paragraph to:
 | Android | `WRITE_EXTERNAL_STORAGE` `maxSdkVersion="28"` | saving exports to the gallery on Android 9 and below |
 | Android | **No** `READ_MEDIA_IMAGES` | use the Photo Picker. Google Play's photo/video permission policy discourages broad media permissions; the existing `READ_MEDIA_VIDEO` is the player's and must keep its policy justification |
 | Both stores | Privacy labels / Data safety | Still "No data collected". The developer receives nothing; the model host sees an IP address like any download. Update descriptions and screenshots via fastlane metadata (ticket UX-47) |
-| App | Open-source licenses page | New custom `VwishLicensesScreen` (no Material `LicensePage`) listing `LicenseRegistry` entries plus manual entries: whisper.cpp (MIT), Whisper model (MIT), AndroidX Media3 (Apache-2.0), bundled editor fonts (OFL-1.1), Figtree (OFL-1.1, already shipped in `fonts/OFL.txt`) |
+| App | Open-source licenses page | New custom `DanaviewLicensesScreen` (no Material `LicensePage`) listing `LicenseRegistry` entries plus manual entries: whisper.cpp (MIT), Whisper model (MIT), AndroidX Media3 (Apache-2.0), bundled editor fonts (OFL-1.1), Figtree (OFL-1.1, already shipped in `fonts/OFL.txt`) |
 
 ---
 
 ## 21. Testing strategy
 
-### 21.1 Unit tests (pure Dart, `packages/vwish_editor/test/unit/`)
+### 21.1 Unit tests (pure Dart, `packages/danaview_editor/test/unit/`)
 
 | Subject | Cases |
 |---|---|
@@ -2194,7 +2194,7 @@ and changing the closing paragraph to:
 | Export estimate & presets | capability filtering (no HEVC → hidden; MOV hidden on Android); size estimate math |
 | `AutoCaptionsController` | state machine transitions incl. cancel at every step; consent token required; regenerate path |
 | Legal texts | policy mentions `SpeechModelSpec.host`; effective date updated |
-| Dependency rule | `vwish_features/pubspec.yaml` does not list `vwish_editor` |
+| Dependency rule | `danaview_features/pubspec.yaml` does not list `danaview_editor` |
 
 ### 21.2 Widget tests (`test/widget/`) with `FakeEditorEngine`, `FakeProjectRepository`, `FakeTranscriptionService`
 
@@ -2233,7 +2233,7 @@ Goldens guard *visual* regressions only; they are never the overflow check.
 * Thumbnails, cancel semantics, waveform peaks.
 * Export codecs and containers per capability.
 
-### 21.5 On-device integration tests (`packages/vwish_editor/integration_test/`, `integration_test` package)
+### 21.5 On-device integration tests (`packages/danaview_editor/integration_test/`, `integration_test` package)
 
 Run on: iOS Simulator (latest) plus a physical iPhone (A13-class); an Android emulator (API 35) plus a physical low-tier Android (4 GB RAM) and a Pixel-class device.
 
@@ -2286,11 +2286,11 @@ Cross-area dependency tags are written as `DOM:` (domain/model), `PER:` (persist
 
 | ID | Title | Files owned | Depends on | Acceptance criteria |
 |---|---|---|---|---|
-| UX-01 | Package scaffold, availability gate, root providers | `packages/vwish_editor/{pubspec.yaml, lib/vwish_editor.dart, lib/src/app/editor_availability.dart, editor_providers.dart, editor_strings.dart}`; `lib/main.dart` overrides | ENG:api+fake (interfaces only) | Package builds and analyzes clean. `EditorAvailability.platform` is supported on iOS/Android and comingSoon on desktop. The pubspec dependency-rule test passes |
-| UX-02 | Orientation owner stack | `vwish_features/.../vwish_player_actions.dart` (+ `screen_orientation_policy.dart`) | — | Existing player orientation tests pass unchanged. New tests: editor over player → pop restores player mode; release of a non-top owner keeps the top |
-| UX-03 | Home edit button + routes + Projects shell | `vwish_home_screen.dart`, `lib/router/app_router.dart`, `vwish_features/lib/chrome.dart`, `projects/projects_screen.dart` (shell) | UX-01 | Button sits immediately left of the gear (same size and variant). Tooltip "Video editor". Hidden on desktop; `/projects` and `/editor/x` redirect to `/` on desktop. Home overflow test at 280 px @1.35 passes |
-| UX-04 | UI kit additions | `vwish_ui_kit/lib/src/components/{vwish_progress_bar, vwish_number_field, vwish_color_picker, vwish_docked_panel, vwish_search_field, vwish_step_indicator}.dart` + tests | — | Each component passes the kit's surface matrix with no overflow and has keyboard, focus and semantics tests. No Material widgets used for visuals. Exported from `vwish_ui_kit.dart` |
-| UX-05 | Storage contributors + editor settings screen | `vwish_features/.../storage_usage.dart`, `vwish_storage_screen.dart`, `vwish_settings_screen.dart`, `settings_destination.dart`; `vwish_editor/.../editor_storage_contributor.dart`, `settings/editor_settings_screen.dart` | UX-01, PER:repo (sizes), AI:service (model size) | Storage shows Editor projects / Editor cache / Speech model with correct clear semantics. "Clear cache" never touches projects. Settings › Video editor is shown only when available |
+| UX-01 | Package scaffold, availability gate, root providers | `packages/danaview_editor/{pubspec.yaml, lib/danaview_editor.dart, lib/src/app/editor_availability.dart, editor_providers.dart, editor_strings.dart}`; `lib/main.dart` overrides | ENG:api+fake (interfaces only) | Package builds and analyzes clean. `EditorAvailability.platform` is supported on iOS/Android and comingSoon on desktop. The pubspec dependency-rule test passes |
+| UX-02 | Orientation owner stack | `danaview_features/.../danaview_player_actions.dart` (+ `screen_orientation_policy.dart`) | — | Existing player orientation tests pass unchanged. New tests: editor over player → pop restores player mode; release of a non-top owner keeps the top |
+| UX-03 | Home edit button + routes + Projects shell | `danaview_home_screen.dart`, `lib/router/app_router.dart`, `danaview_features/lib/chrome.dart`, `projects/projects_screen.dart` (shell) | UX-01 | Button sits immediately left of the gear (same size and variant). Tooltip "Video editor". Hidden on desktop; `/projects` and `/editor/x` redirect to `/` on desktop. Home overflow test at 280 px @1.35 passes |
+| UX-04 | UI kit additions | `danaview_ui_kit/lib/src/components/{danaview_progress_bar, danaview_number_field, danaview_color_picker, danaview_docked_panel, danaview_search_field, danaview_step_indicator}.dart` + tests | — | Each component passes the kit's surface matrix with no overflow and has keyboard, focus and semantics tests. No Material widgets used for visuals. Exported from `danaview_ui_kit.dart` |
+| UX-05 | Storage contributors + editor settings screen | `danaview_features/.../storage_usage.dart`, `danaview_storage_screen.dart`, `danaview_settings_screen.dart`, `settings_destination.dart`; `danaview_editor/.../editor_storage_contributor.dart`, `settings/editor_settings_screen.dart` | UX-01, PER:repo (sizes), AI:service (model size) | Storage shows Editor projects / Editor cache / Speech model with correct clear semantics. "Clear cache" never touches projects. Settings › Video editor is shown only when available |
 
 **Milestone M1: projects, editor shell, timeline and core edits (on fakes)**
 
@@ -2343,10 +2343,10 @@ Cross-area dependency tags are written as `DOM:` (domain/model), `PER:` (persist
 
 | ID | Title | Files owned | Depends on | Acceptance criteria |
 |---|---|---|---|---|
-| UX-38 | Export sheet + controller + presets + progress | `flows/export/*` | UX-09, ENG:export, IOS:export, AND:export | Pre-checks (§11.1); presets and custom settings gated by capability; aspect-mismatch notice; estimate; destinations; non-dismissible progress; cancel confirm; completion actions (share, play in Vwish); failure fallbacks; background copy per capability; notification permission flow (Android 13+) |
+| UX-38 | Export sheet + controller + presets + progress | `flows/export/*` | UX-09, ENG:export, IOS:export, AND:export | Pre-checks (§11.1); presets and custom settings gated by capability; aspect-mismatch notice; estimate; destinations; non-dismissible progress; cancel confirm; completion actions (share, play in Danaview); failure fallbacks; background copy per capability; notification permission flow (Android 13+) |
 | UX-39 | Missing media banner + relink sheet + recovery/migration dialogs | `flows/relink/*`, `state/media_health_controller.dart`, `projects/recovery_banner.dart` | PER:mediapool, PER:recovery | §13 fully; relink validation outcomes; folder auto-relink report; one history entry; recovery dialog on open; newer-schema block |
-| UX-40 | Player "Edit" action + launcher + handoff | `vwish_controls_overlay.dart`, `vwish_player_screen.dart`, `player_controller.dart` (handoff ext), `app/editor_launcher.dart` | UX-02, UX-08, PER:repo, ENG:compatibility | Shown only for local media on supported platforms; E shortcut; unsupported-format dialog with platform-specific copy; untouched-project reuse; "Preparing editor…" after 300 ms; opens at the exact position; return restores player paused + orientation; pause vs release mode by capability; 280 px top-bar test |
-| UX-41 | Legal texts + licenses screen + platform strings | `more/legal_texts.dart`, new `more/vwish_licenses_screen.dart`, About row; Info.plist/Manifest entries (with IOS/AND) | AI:service (host), IOS/AND | §20 text in place with the exact host; the host-consistency test; effective date; custom licenses screen (no Material `LicensePage`); usage strings present |
+| UX-40 | Player "Edit" action + launcher + handoff | `danaview_controls_overlay.dart`, `danaview_player_screen.dart`, `player_controller.dart` (handoff ext), `app/editor_launcher.dart` | UX-02, UX-08, PER:repo, ENG:compatibility | Shown only for local media on supported platforms; E shortcut; unsupported-format dialog with platform-specific copy; untouched-project reuse; "Preparing editor…" after 300 ms; opens at the exact position; return restores player paused + orientation; pause vs release mode by capability; 280 px top-bar test |
+| UX-41 | Legal texts + licenses screen + platform strings | `more/legal_texts.dart`, new `more/danaview_licenses_screen.dart`, About row; Info.plist/Manifest entries (with IOS/AND) | AI:service (host), IOS/AND | §20 text in place with the exact host; the host-consistency test; effective date; custom licenses screen (no Material `LicensePage`); usage strings present |
 | UX-42 | Accessibility pass | all editor widgets; `timeline/timeline_semantics.dart` | M1–M3 | Guideline tests pass; custom actions on clips, keyframes, transitions and markers; announcements; reduced motion; VoiceOver and TalkBack manual script executed on device (checklist in the test plan) |
 | UX-43 | Overflow matrix suite | `test/overflow/*` | M1–M3 | Full matrix (§19.2) green nightly; PR subset green; long-content fixtures |
 | UX-44 | Performance instrumentation + profile tests | `integration_test/perf_*`, debug rebuild counters | M1–M3 | §22 budgets measured on the low-tier device; report artifact in CI |

@@ -1,5 +1,0 @@
-name: vwish_whisper
-dependencies:
-  ffi: ^2.1.3
-  vwish_data:
-    path: ../vwish_data

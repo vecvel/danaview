@@ -1,6 +1,0 @@
-name: vwish_editor_engine_example
-dependencies:
-  vwish_editor:
-    path: ../../vwish_editor
-  vwish_features:
-    path: ../../vwish_features

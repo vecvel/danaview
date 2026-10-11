@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_domain/vwish_domain.dart';
-import 'package:vwish_engine/vwish_engine.dart';
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_engine/danaview_engine.dart';
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import 'library_test_utils.dart';
 
@@ -37,15 +37,15 @@ Future<void> _tapShowAll(WidgetTester tester) async {
   expect(find.text('Show less'), findsOneWidget);
 }
 
-/// The [VwishGlyph] of [kind] inside the nearest [within] around [text]: by default the
-/// [VwishPressable] of the library row showing it.
-Finder _glyphIn(String text, VwishGlyphKind kind, {Type within = VwishPressable}) => find.descendant(
+/// The [DanaviewGlyph] of [kind] inside the nearest [within] around [text]: by default the
+/// [DanaviewPressable] of the library row showing it.
+Finder _glyphIn(String text, DanaviewGlyphKind kind, {Type within = DanaviewPressable}) => find.descendant(
       of: find.ancestor(of: find.text(text), matching: find.byType(within)).first,
-      matching: find.byWidgetPredicate((w) => w is VwishGlyph && w.kind == kind),
+      matching: find.byWidgetPredicate((w) => w is DanaviewGlyph && w.kind == kind),
     );
 
 Future<void> _finish(WidgetTester tester, LibraryTestEnv env) async {
-  VwishToast.dismiss();
+  DanaviewToast.dismiss();
   await tester.pumpWidget(const SizedBox());
   await env.dispose();
 }
@@ -77,7 +77,7 @@ void main() {
         await seedLibrary(env, existingDir: tree.path);
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+          DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
           textScale: surface.textScale,
         ));
         await pumpFrames(tester);
@@ -96,7 +96,7 @@ void main() {
         final env = await LibraryTestEnv.create();
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+          DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
           textScale: surface.textScale,
           platform: TargetPlatform.macOS,
         ));
@@ -114,7 +114,7 @@ void main() {
         for (final path in [tree.path, seasonPath]) {
           await tester.pumpWidget(libraryTestApp(
             env,
-            VwishFolderScreen(
+            DanaviewFolderScreen(
               key: ValueKey(path),
               path: path,
               onBack: () {},
@@ -141,7 +141,7 @@ void main() {
         }
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishPlaylistScreen(name: _longPlaylist, onBack: () {}, onOpenPlayer: () {}, onRenamed: (_) {}),
+          DanaviewPlaylistScreen(name: _longPlaylist, onBack: () {}, onOpenPlayer: () {}, onRenamed: (_) {}),
           textScale: surface.textScale,
         ));
         await pumpFrames(tester);
@@ -151,7 +151,7 @@ void main() {
 
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishPlaylistScreen(name: 'Empty', onBack: () {}, onOpenPlayer: () {}, onRenamed: (_) {}),
+          DanaviewPlaylistScreen(name: 'Empty', onBack: () {}, onOpenPlayer: () {}, onRenamed: (_) {}),
           textScale: surface.textScale,
         ));
         await pumpFrames(tester);
@@ -172,7 +172,7 @@ void main() {
 
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
         textScale: 1.35,
       ));
       await pumpFrames(tester);
@@ -196,7 +196,7 @@ void main() {
       await seedLibrary(env, existingDir: tree.path);
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
       ));
       await pumpFrames(tester);
       await _tapShowAll(tester);
@@ -220,7 +220,7 @@ void main() {
       for (final text in [subtitle, title]) {
         expect(opacityOf(text), 1.0);
         final color = tester.widget<Text>(text).style!.color!;
-        expect(VwishColors.contrastRatio(color, VwishColors.surface), greaterThanOrEqualTo(4.5));
+        expect(DanaviewColors.contrastRatio(color, DanaviewColors.surface), greaterThanOrEqualTo(4.5));
       }
       await _finish(tester, env);
     });
@@ -233,7 +233,7 @@ void main() {
       await env.library.updateHistoryDuration(clip.pathOrUri, const Duration(seconds: 10));
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
       ));
       await pumpFrames(tester);
       expect(find.text('10s'), findsOneWidget);
@@ -248,7 +248,7 @@ void main() {
       await seedLibrary(env, existingDir: tree.path);
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
       ));
       await pumpFrames(tester);
       final statusBar = surface.padding.top;
@@ -256,7 +256,7 @@ void main() {
             if (w is! DecoratedBox || w.decoration is! BoxDecoration) return false;
             final decoration = w.decoration as BoxDecoration;
             final border = decoration.border;
-            return decoration.color == VwishColors.background &&
+            return decoration.color == DanaviewColors.background &&
                 border is Border &&
                 border.bottom.color == edge;
           });
@@ -264,7 +264,7 @@ void main() {
       expect(tester.getRect(find.byType(Scrollable).first).top, moreOrLessEquals(statusBar));
       await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));
       await pumpFrames(tester);
-      final strip = backdrop(VwishColors.hairline);
+      final strip = backdrop(DanaviewColors.hairline);
       expect(strip, findsOneWidget);
       expect(tester.getRect(strip), Rect.fromLTWH(0, 0, surface.size.width, statusBar));
       await _finish(tester, env);
@@ -277,7 +277,7 @@ void main() {
       String? opened;
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (name) => opened = name),
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (name) => opened = name),
       ));
       await pumpFrames(tester);
       await tester.tap(find.text('New'));
@@ -305,7 +305,7 @@ void main() {
       await env.library.addToPlaylist('Movies', [localRef(joinPath([tree.path, 'Movie 1 - $longTitle.mp4']))]);
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
       ));
       await pumpFrames(tester);
       await tester.tap(find.byTooltip('More'));
@@ -313,7 +313,7 @@ void main() {
       await tester.tap(find.text('Delete'));
       await pumpFrames(tester);
       expect(find.text('"Movies" will be deleted. The videos stay on disk.'), findsOneWidget);
-      await tester.tap(find.widgetWithText(VwishButton, 'Delete'));
+      await tester.tap(find.widgetWithText(DanaviewButton, 'Delete'));
       await pumpFrames(tester);
       expect(env.library.getSavedPlaylistNames(), isEmpty);
       expect(find.text('No playlists yet'), findsOneWidget);
@@ -327,7 +327,7 @@ void main() {
       await seedLibrary(env, existingDir: tree.path);
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
       ));
       await pumpFrames(tester);
       final first = env.library.getRecentlyPlayed().first;
@@ -356,7 +356,7 @@ void main() {
 
     testWidgets('mobile shows the device folder first with a Files app hint', (tester) async {
       useSurface(tester, librarySurfaces[2]);
-      final documents = Directory.systemTemp.createTempSync('vwish_documents_');
+      final documents = Directory.systemTemp.createTempSync('danaview_documents_');
       addTearDown(() => documents.deleteSync(recursive: true));
       final env = await LibraryTestEnv.create(
         storage: LibraryStorage(isMobile: true, documentsDirectory: () async => documents),
@@ -366,7 +366,7 @@ void main() {
       await tester.runAsync(() async {
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (path) => opened = path, onOpenPlaylist: (_) {}),
+          DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (path) => opened = path, onOpenPlaylist: (_) {}),
         ));
         await Future<void>.delayed(const Duration(milliseconds: 100));
       });
@@ -374,12 +374,12 @@ void main() {
       await _scrollThrough(tester);
 
       expect(find.text(LibraryRepository.deviceFolderLabel), findsOneWidget);
-      expect(find.text('Files app › On My iPhone › Vwish'), findsOneWidget);
+      expect(find.text('Files app › On My iPhone › Danaview'), findsOneWidget);
       final deviceTop = tester.getTopLeft(find.text(LibraryRepository.deviceFolderLabel)).dy;
       final userTop = tester.getTopLeft(find.text(tree.path)).dy;
       expect(deviceTop, lessThan(userTop));
-      expect(_glyphIn(LibraryRepository.deviceFolderLabel, VwishGlyphKind.device), findsOneWidget);
-      expect(_glyphIn(tree.path, VwishGlyphKind.folderVideo), findsOneWidget);
+      expect(_glyphIn(LibraryRepository.deviceFolderLabel, DanaviewGlyphKind.device), findsOneWidget);
+      expect(_glyphIn(tree.path, DanaviewGlyphKind.folderVideo), findsOneWidget);
 
       await tester.tap(find.text(LibraryRepository.deviceFolderLabel));
       await tester.pump();
@@ -394,21 +394,21 @@ void main() {
       final env = await LibraryTestEnv.create();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
         platform: TargetPlatform.macOS,
       ));
       await pumpFrames(tester);
       expect(
         find.descendant(
-          of: find.ancestor(of: find.text('Open folder'), matching: find.byType(VwishPressable)).first,
-          matching: find.byWidgetPredicate((w) => w is VwishGlyph && w.kind == VwishGlyphKind.folderOpen),
+          of: find.ancestor(of: find.text('Open folder'), matching: find.byType(DanaviewPressable)).first,
+          matching: find.byWidgetPredicate((w) => w is DanaviewGlyph && w.kind == DanaviewGlyphKind.folderOpen),
         ),
         findsOneWidget,
       );
       await tester.scrollUntilVisible(find.text('No folders yet'), 300, scrollable: find.byType(Scrollable).first);
       await pumpFrames(tester);
-      expect(_glyphIn('No folders yet', VwishGlyphKind.folderVideo, within: VwishSurface), findsOneWidget);
-      expect(_glyphIn('Add folder', VwishGlyphKind.folderAdd, within: VwishButton), findsOneWidget);
+      expect(_glyphIn('No folders yet', DanaviewGlyphKind.folderVideo, within: DanaviewSurface), findsOneWidget);
+      expect(_glyphIn('Add folder', DanaviewGlyphKind.folderAdd, within: DanaviewButton), findsOneWidget);
       expect(tester.takeException(), isNull);
       await _finish(tester, env);
     });
@@ -419,25 +419,25 @@ void main() {
       await env.library.addFolder(tree.path);
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
         platform: TargetPlatform.macOS,
       ));
       await pumpFrames(tester);
       final more = find.descendant(
-        of: find.ancestor(of: find.text(tree.path), matching: find.byType(VwishPressable)).first,
+        of: find.ancestor(of: find.text(tree.path), matching: find.byType(DanaviewPressable)).first,
         matching: find.byTooltip('More'),
       );
       await tester.scrollUntilVisible(more, 300, scrollable: find.byType(Scrollable).first);
       await tester.tap(more);
       await pumpFrames(tester);
-      expect(find.byWidgetPredicate((w) => w is VwishGlyph && w.kind == VwishGlyphKind.folderOpen), findsWidgets);
+      expect(find.byWidgetPredicate((w) => w is DanaviewGlyph && w.kind == DanaviewGlyphKind.folderOpen), findsWidgets);
 
       await tester.tap(find.text('Remove from library'));
       await pumpFrames(tester);
       // The confirm keeps the menu entry's metaphor; the slashed folder means "can't open".
-      expect(find.descendant(of: find.byType(VwishDialog), matching: find.byIcon(Icons.remove_circle_outline_rounded)),
+      expect(find.descendant(of: find.byType(DanaviewDialog), matching: find.byIcon(Icons.remove_circle_outline_rounded)),
           findsOneWidget);
-      expect(find.byWidgetPredicate((w) => w is VwishGlyph && w.kind == VwishGlyphKind.folderOff), findsNothing);
+      expect(find.byWidgetPredicate((w) => w is DanaviewGlyph && w.kind == DanaviewGlyphKind.folderOff), findsNothing);
       await tester.tap(find.text('Cancel'));
       await pumpFrames(tester);
       expect(env.library.getFolders().map((f) => f.path), contains(tree.path));
@@ -455,7 +455,7 @@ void main() {
       String? openedFolder;
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishFolderScreen(
+        DanaviewFolderScreen(
           path: tree.path,
           onBack: () {},
           onOpenFolder: (path) => openedFolder = path,
@@ -469,7 +469,7 @@ void main() {
       final videoTop = tester.getTopLeft(find.text(rootListing.media.first.title)).dy;
       expect(folderTop, lessThan(videoTop));
       expect(find.text('9 videos'), findsOneWidget);
-      expect(_glyphIn('Season 1', VwishGlyphKind.folder), findsOneWidget);
+      expect(_glyphIn('Season 1', DanaviewGlyphKind.folder), findsOneWidget);
 
       await tester.tap(find.text('Season 1'));
       expect(openedFolder, seasonPath);
@@ -477,7 +477,7 @@ void main() {
       await tester.tap(find.text(rootListing.media[1].title));
       await pumpFrames(tester);
       expect(played, 1);
-      final container = ProviderScope.containerOf(tester.element(find.byType(VwishFolderScreen)));
+      final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewFolderScreen)));
       final queue = container.read(queueControllerProvider);
       expect(queue.items.length, rootListing.media.length);
       expect(queue.currentIndex, 1);
@@ -491,7 +491,7 @@ void main() {
       String? jumped;
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishFolderScreen(
+        DanaviewFolderScreen(
           path: seasonPath,
           onBack: () {},
           onOpenFolder: (_) {},
@@ -503,8 +503,8 @@ void main() {
       ));
       await pumpFrames(tester);
       final rootLabel = env.library.getFolders().single.label;
-      expect(_glyphIn(rootLabel, VwishGlyphKind.folderVideo, within: VwishButton), findsOneWidget);
-      await tester.tap(find.widgetWithText(VwishButton, rootLabel));
+      expect(_glyphIn(rootLabel, DanaviewGlyphKind.folderVideo, within: DanaviewButton), findsOneWidget);
+      await tester.tap(find.widgetWithText(DanaviewButton, rootLabel));
       expect(jumped, tree.path);
       expect(find.text('S01E01'), findsOneWidget);
       await _finish(tester, env);
@@ -517,20 +517,20 @@ void main() {
       await tester.runAsync(() async {
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishFolderScreen(path: missing, onBack: () {}, onOpenFolder: (_) {}, onOpenPlayer: () {}),
+          DanaviewFolderScreen(path: missing, onBack: () {}, onOpenFolder: (_) {}, onOpenPlayer: () {}),
         ));
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
       await pumpFrames(tester);
       expect(find.text("Can't open this folder"), findsOneWidget);
       expect(find.text('Try again'), findsOneWidget);
-      expect(_glyphIn("Can't open this folder", VwishGlyphKind.folderOff, within: VwishEmptyState), findsOneWidget);
+      expect(_glyphIn("Can't open this folder", DanaviewGlyphKind.folderOff, within: DanaviewEmptyState), findsOneWidget);
       expect(tester.takeException(), isNull);
 
       await tester.runAsync(() async {
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishFolderScreen(
+          DanaviewFolderScreen(
             key: const ValueKey('season'),
             path: seasonPath,
             onBack: () {},
@@ -548,7 +548,7 @@ void main() {
 
     testWidgets('an empty device folder explains how to add videos', (tester) async {
       useSurface(tester, librarySurfaces[2]);
-      final documents = Directory.systemTemp.createTempSync('vwish_documents_');
+      final documents = Directory.systemTemp.createTempSync('danaview_documents_');
       addTearDown(() => documents.deleteSync(recursive: true));
       final env = await LibraryTestEnv.create(
         storage: LibraryStorage(isMobile: true, documentsDirectory: () async => documents),
@@ -556,15 +556,15 @@ void main() {
       await tester.runAsync(() async {
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishFolderScreen(path: documents.path, onBack: () {}, onOpenFolder: (_) {}, onOpenPlayer: () {}),
+          DanaviewFolderScreen(path: documents.path, onBack: () {}, onOpenFolder: (_) {}, onOpenPlayer: () {}),
         ));
         await Future<void>.delayed(const Duration(milliseconds: 200));
       });
       await pumpFrames(tester);
       expect(find.text(LibraryRepository.deviceFolderLabel), findsOneWidget);
       expect(find.text('No videos on this device yet'), findsOneWidget);
-      expect(_glyphIn('No videos on this device yet', VwishGlyphKind.device, within: VwishEmptyState), findsOneWidget);
-      expect(find.textContaining('On My iPhone › Vwish'), findsOneWidget);
+      expect(_glyphIn('No videos on this device yet', DanaviewGlyphKind.device, within: DanaviewEmptyState), findsOneWidget);
+      expect(find.textContaining('On My iPhone › Danaview'), findsOneWidget);
       await _finish(tester, env);
     });
   });
@@ -587,7 +587,7 @@ void main() {
       final before = titles(env);
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishPlaylistScreen(name: 'Mix', onBack: () {}, onOpenPlayer: () {}, onRenamed: (_) {}),
+        DanaviewPlaylistScreen(name: 'Mix', onBack: () {}, onOpenPlayer: () {}, onRenamed: (_) {}),
       ));
       await pumpFrames(tester);
 
@@ -614,7 +614,7 @@ void main() {
       var backs = 0;
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishPlaylistScreen(
+        DanaviewPlaylistScreen(
           name: 'Mix',
           onBack: () => backs++,
           onOpenPlayer: () {},
@@ -634,7 +634,7 @@ void main() {
       await tester.tap(find.text('Rename'));
       await pumpFrames(tester);
       await tester.enterText(find.byType(EditableText), 'Late Night');
-      await tester.tap(find.widgetWithText(VwishButton, 'Rename'));
+      await tester.tap(find.widgetWithText(DanaviewButton, 'Rename'));
       await pumpFrames(tester);
       expect(renamedTo, 'Late Night');
       expect(env.library.getPlaylist('Late Night'), hasLength(3));
@@ -644,7 +644,7 @@ void main() {
       await pumpFrames(tester);
       await tester.tap(find.text('Delete playlist'));
       await pumpFrames(tester);
-      await tester.tap(find.widgetWithText(VwishButton, 'Delete'));
+      await tester.tap(find.widgetWithText(DanaviewButton, 'Delete'));
       await pumpFrames(tester);
       expect(backs, 1);
       expect(env.library.getSavedPlaylistNames(), isEmpty);
@@ -657,18 +657,18 @@ void main() {
       final env = await playlistEnv();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishPlaylistScreen(name: 'Mix', onBack: () {}, onOpenPlayer: () {}, onRenamed: (_) {}),
+        DanaviewPlaylistScreen(name: 'Mix', onBack: () {}, onOpenPlayer: () {}, onRenamed: (_) {}),
       ));
       await pumpFrames(tester);
       await tester.tap(find.text('Add link'));
       await pumpFrames(tester);
       await tester.enterText(find.byType(EditableText), 'javascript:alert(1)');
-      await tester.tap(find.widgetWithText(VwishButton, 'Add'));
+      await tester.tap(find.widgetWithText(DanaviewButton, 'Add'));
       await pumpFrames(tester);
       expect(find.text(MediaUrl.validationError('javascript:alert(1)')!), findsOneWidget);
 
       await tester.enterText(find.byType(EditableText), 'https://cdn.example.com/live/master.m3u8');
-      await tester.tap(find.widgetWithText(VwishButton, 'Add'));
+      await tester.tap(find.widgetWithText(DanaviewButton, 'Add'));
       await pumpFrames(tester);
       final items = env.library.getPlaylist('Mix');
       expect(items, hasLength(5));
@@ -685,14 +685,14 @@ void main() {
 
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
         overrides: [
           playbackEngineProvider.overrideWithValue(engine),
         ],
       ));
       await pumpFrames(tester);
 
-      final container = ProviderScope.containerOf(tester.element(find.byType(VwishHomeScreen)));
+      final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewHomeScreen)));
       await container.read(queueControllerProvider.notifier).playFrom([item]);
       await pumpFrames(tester);
 

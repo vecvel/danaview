@@ -1,4 +1,4 @@
-# Vwish Editor: Native Engines Design (iOS AVFoundation, Android Media3)
+# Danaview Editor: Native Engines Design (iOS AVFoundation, Android Media3)
 
 > **Area:** the editor engine. It covers preview, export, media services (probe, thumbnails, waveforms, proxies, reverse, freeze frame, speech-audio extraction), voice recording, and the platform services the editor needs (pickers, saving, background work). It is built as a Flutter plugin with iOS and Android code behind one Dart contract.
 > **Status:** design draft for the Editor release. This document contains no production code. Dart, Swift, Kotlin, GLSL and Metal snippets are interface sketches.
@@ -12,9 +12,9 @@
 ## 0. Decisions at a glance
 
 1. **Two packages.**
-   - `packages/vwish_editor_engine_api` is a Flutter package with **no native code**. It holds the platform-neutral `EditorEngine` contract, value types, failures, the RenderPlan **wire codec**, render-prep services (text sprites, LUT normalization), the shared math reference, `FakeEditorEngine`, and a contract test kit.
-   - `packages/vwish_editor_engine` is a Flutter **plugin** for iOS and Android. It contains `MobileEditorEngine` (Pigeon-based) and the native engines.
-   - A later desktop engine implements the same API package. `vwish_editor` (UX) depends only on the API package.
+   - `packages/danaview_editor_engine_api` is a Flutter package with **no native code**. It holds the platform-neutral `EditorEngine` contract, value types, failures, the RenderPlan **wire codec**, render-prep services (text sprites, LUT normalization), the shared math reference, `FakeEditorEngine`, and a contract test kit.
+   - `packages/danaview_editor_engine` is a Flutter **plugin** for iOS and Android. It contains `MobileEditorEngine` (Pigeon-based) and the native engines.
+   - A later desktop engine implements the same API package. `danaview_editor` (UX) depends only on the API package.
 2. **Domain compiles; native renders.** The Domain area compiles the project into a **RenderPlan**: an immutable, fully resolved description with item render ranges (transition handles applied), speed segments, keyframe arrays, and resolved mute and solo. Native code makes no editing decisions. It maps the plan onto AVFoundation or Media3 and evaluates keyframes per frame with the shared linear formula. **This doc owns the wire schema v1 and the render-math semantics (§4).** Domain owns the Dart types and the compiler.
 3. **Transport.** Control calls and events use **Pigeon 29.x**: `@HostApi` with `@async`, plus one multiplexed `@EventChannelApi` stream. Plans and patches travel as **UTF-8 JSON bytes**, encoded in an isolate. Native decodes them off the main thread with `JSONDecoder` or `android.util.JsonReader`. Transient gesture overrides are tiny fire-and-forget messages, coalesced natively to one per frame.
 4. **Text is rasterized by Flutter, not by native.** This resolves `ux.md` Q3. Text items and subtitle cues are laid out with `ui.Paragraph`, using bundled user-content fonts plus system fallback for RTL and CJK. They are rasterized to `.vsprite` files: premultiplied RGBA compressed with zlib, plus an optional glyph-order reveal map for the typewriter animation. Native code only places sprites. This gives identical metrics for the preview handles, the preview and the export on both platforms, and no CoreText or StaticLayout parity work.
@@ -54,7 +54,7 @@
 
 | Item | Value | Source |
 |---|---|---|
-| Repo app ids | iOS bundle `com.vecvel.vwish`; Android `applicationId`/namespace `com.vecvel.vwish` (the brief said `vwishplayer` / `vwish_player`) | `project.pbxproj`, `app/build.gradle.kts` [VERIFIED] |
+| Repo app ids | iOS bundle `com.vecvel.danaview`; Android `applicationId`/namespace `com.vecvel.danaview` (the brief said `danaviewplayer` / `danaview_player`) | `project.pbxproj`, `app/build.gradle.kts` [VERIFIED] |
 | Android toolchain | AGP 9.0.1, Kotlin 2.3.20, Gradle 9.1, Java 17, compileSdk/targetSdk 36, `minSdk = flutter.minSdkVersion` = **24** (`FlutterExtension.kt`) | repo + Flutter SDK [VERIFIED] |
 | iOS toolchain | deployment 13.0, Swift 5.0, CocoaPods 1.16.2 (media_kit pods) **plus** SPM (`FlutterGeneratedPluginSwiftPackage` present), `UIBackgroundModes=[audio]` | repo [VERIFIED] |
 | Manifest today | `FOREGROUND_SERVICE` (no type-specific permission), no `RECORD_AUDIO`, no `POST_NOTIFICATIONS`, no services | `AndroidManifest.xml` [VERIFIED] |
@@ -72,11 +72,11 @@
 
 ## 2. Packages and file layout
 
-### 2.1 `packages/vwish_editor_engine_api` (Flutter package, no native code)
+### 2.1 `packages/danaview_editor_engine_api` (Flutter package, no native code)
 
 ```
 pubspec.yaml            # flutter, meta, collection, <domain pkg> (RenderPlan types), path
-lib/vwish_editor_engine_api.dart       # public contract
+lib/danaview_editor_engine_api.dart       # public contract
 lib/testing.dart                        # FakeEditorEngine, contract kit, reference renderer
 lib/src/
   engine.dart            EditorEngine, EngineMedia, EditCompatibility, MediaProbe
@@ -97,26 +97,26 @@ lib/src/
 test/  test_fixtures/{plans,patches,vectors,images,sprites,luts,media}/
 ```
 
-### 2.2 `packages/vwish_editor_engine` (Flutter plugin: ios, android)
+### 2.2 `packages/danaview_editor_engine` (Flutter plugin: ios, android)
 
 ```
-pubspec.yaml   # plugin: ios {pluginClass: VwishEditorEnginePlugin}; android {package: com.vecvel.vwish.editor.engine,
-               #   pluginClass: VwishEditorEnginePlugin}; deps: vwish_editor_engine_api; dev: pigeon ^29.0.0
+pubspec.yaml   # plugin: ios {pluginClass: DanaviewEditorEnginePlugin}; android {package: com.vecvel.danaview.editor.engine,
+               #   pluginClass: DanaviewEditorEnginePlugin}; deps: danaview_editor_engine_api; dev: pigeon ^29.0.0
 pigeons/engine_api.dart
-lib/vwish_editor_engine.dart            # MobileEditorEngine.create()
+lib/danaview_editor_engine.dart            # MobileEditorEngine.create()
 lib/src/ mobile_editor_engine.dart  mobile_preview_session.dart  mobile_jobs.dart  mobile_export.dart
          mobile_recorder.dart  mobile_platform_services.dart  event_router.dart  error_mapper.dart
          plan_sync.dart (revision tracking, patch vs full, out-of-sync retry)  pigeon/engine_api.g.dart
-ios/vwish_editor_engine.podspec        # s.platform :ios '13.0'; frameworks AVFoundation CoreImage Metal CoreVideo
+ios/danaview_editor_engine.podspec        # s.platform :ios '13.0'; frameworks AVFoundation CoreImage Metal CoreVideo
                                         # VideoToolbox ImageIO Photos PhotosUI UniformTypeIdentifiers BackgroundTasks(weak)
                                         # pod_target_xcconfig MTL_COMPILER_FLAGS=-fcikernel, MTLLINKER_FLAGS=-cikernel
 ios/Classes/
-  VwishEditorEnginePlugin.swift   Pigeon/EngineApi.g.swift
+  DanaviewEditorEnginePlugin.swift   Pigeon/EngineApi.g.swift
   Core/        EngineContext  ErrorCodes  DeviceProfile  Capabilities  JobRegistry  EventHub  Log  Paths
   Plan/        RenderPlan (Codable)  PlanStore  PlanDiff  Keyframes  FrameGrid  ParamSnapshot
   Composition/ CompositionBuilder  TrackAllocator  InstructionBuilder  AudioMixBuilder  AssetCache  SpacerTrack
-  Render/      VWCompositor  VWInstruction  LayerRenderer  Kernels  SpriteStore  ImageLayerCache  LutStore
-               Shaders/VwishKernels.metal
+  Render/      DVCompositor  DVInstruction  LayerRenderer  Kernels  SpriteStore  ImageLayerCache  LutStore
+               Shaders/DanaviewKernels.metal
   Preview/     PreviewSession  TextureBridge  DisplayLinkDriver  SeekController  QualityGovernor  SourceFrameCache
   Export/      ExportJob  ReaderWriterPipeline  EncoderSettings  BackgroundExecution  ActiveExportStore
   Media/       Probe  Compatibility  ThumbnailService  WaveformService  PcmReader  SpeechAudioExtractor
@@ -126,9 +126,9 @@ ios/Classes/
   Resources/   spacer_16x16.mov  PrivacyInfo.xcprivacy
 android/build.gradle.kts               # com.android.library + kotlin-android; minSdk 24 (runtime gate 29)
 android/src/main/AndroidManifest.xml   # ExportService (FGS), permissions, FileProvider
-android/src/main/assets/vwish_shaders/*.glsl
-android/src/main/kotlin/com/vecvel/vwish/editor/engine/
-  VwishEditorEnginePlugin.kt  pigeon/EngineApi.g.kt
+android/src/main/assets/danaview_shaders/*.glsl
+android/src/main/kotlin/com/vecvel/danaview/editor/engine/
+  DanaviewEditorEnginePlugin.kt  pigeon/EngineApi.g.kt
   core/        EngineContext  ErrorCodes  DeviceProfile  Capabilities  JobRegistry  EventHub  EngineThreads  Paths
   plan/        RenderPlan  PlanJsonReader  PlanStore  PlanDiff  Keyframes  FrameGrid  ParamSnapshot
   composition/ CompositionMapper  TrackAllocator  SequenceBuilders  LayerGatingCompositorSettings
@@ -148,20 +148,20 @@ example/       # test host app: integration_test/, ios/RunnerTests (XCTest), and
 
 **Gradle dependencies (plugin):** `androidx.media3:media3-{transformer,effect,exoplayer,common,muxer,inspector,inspector-frame}:1.11.1`, `androidx.activity:activity:1.13.0`, `androidx.concurrent:concurrent-futures-ktx:1.3.0`. The plugin uses its own executors, not coroutines, to keep the dependency surface small. Media3 is `@UnstableApi`: the module enables `@OptIn(UnstableApi::class)` per file, and lint `UnsafeOptInUsageError` stays an error everywhere else.
 
-**iOS packaging:** **CocoaPods only in v1**, the same choice as `vwish_whisper`. Reason: the Metal CI kernels need `-fcikernel` / `-cikernel`, which the podspec can set and SPM manifests cannot. Shipping `Package.swift` with a prebuilt metallib is a deferred ticket (ENG-D1).
+**iOS packaging:** **CocoaPods only in v1**, the same choice as `danaview_whisper`. Reason: the Metal CI kernels need `-fcikernel` / `-cikernel`, which the podspec can set and SPM manifests cannot. Shipping `Package.swift` with a prebuilt metallib is a deferred ticket (ENG-D1).
 
 ### 2.3 Dependency rules (enforced by the pubspec-parsing test from `ux.md` §3.3)
 
-- `vwish_editor` → `vwish_editor_engine_api` only. `lib/main.dart` overrides the engine provider with `MobileEditorEngine` on iOS and Android, and leaves the editor gated on desktop.
-- `vwish_editor_engine` → `vwish_editor_engine_api` (+ domain pkg through it). It never imports `vwish_editor`, `vwish_features` or `vwish_transcription`.
-- `vwish_transcription` gets audio extraction only through its `SpeechAudioExtractor` port (`ai.md` §7). `editor_providers.dart` binds that port to `engine.jobs.extractSpeechAudio`.
-- Desktop later: a `vwish_editor_engine_desktop` plugin implements the API. macOS can reuse about 90% of the iOS Swift, because AVFoundation and Core Image are the same; the plugin then sets `sharedDarwinSource: true`. Nothing in the API package mentions a platform.
+- `danaview_editor` → `danaview_editor_engine_api` only. `lib/main.dart` overrides the engine provider with `MobileEditorEngine` on iOS and Android, and leaves the editor gated on desktop.
+- `danaview_editor_engine` → `danaview_editor_engine_api` (+ domain pkg through it). It never imports `danaview_editor`, `danaview_features` or `danaview_transcription`.
+- `danaview_transcription` gets audio extraction only through its `SpeechAudioExtractor` port (`ai.md` §7). `editor_providers.dart` binds that port to `engine.jobs.extractSpeechAudio`.
+- Desktop later: a `danaview_editor_engine_desktop` plugin implements the API. macOS can reuse about 90% of the iOS Swift, because AVFoundation and Core Image are the same; the plugin then sets `sharedDarwinSource: true`. Nothing in the API package mentions a platform.
 
 ---
 
 ## 3. Dart-facing contract
 
-This is the final shape of `ux.md` §2.3. **Additions** are marked `// +`. Names the UX uses are unchanged. MediaId-keyed calls in the UX map onto `EngineMedia` through a resolver in `vwish_editor`.
+This is the final shape of `ux.md` §2.3. **Additions** are marked `// +`. Names the UX uses are unchanged. MediaId-keyed calls in the UX map onto `EngineMedia` through a resolver in `danaview_editor`.
 
 ### 3.1 Engine root, media identity, probe
 
@@ -314,7 +314,7 @@ abstract interface class MediaPicker {
 }                                                      // kinds: video, audio, image, lut, subtitle
 final class PickedMedia { String uri; String displayName; bool isTemporaryCopy; Uint8List? bookmark; int? sizeBytes; }
 abstract interface class FileHandoff {
-  Future<FileHandoffResult> saveToPhotos(String path);  // PHPhotoLibrary add-only / MediaStore Movies/Vwish
+  Future<FileHandoffResult> saveToPhotos(String path);  // PHPhotoLibrary add-only / MediaStore Movies/Danaview
   Future<FileHandoffResult> saveToFiles(String path, String suggestedName); // UIDocumentPicker export / SAF create
   Future<FileHandoffResult> share(String path);         // UIActivityViewController / ACTION_SEND + FileProvider
 }
@@ -362,8 +362,8 @@ sealed class EngineFailure implements Exception { EngineErrorCode get code; Stri
 // pigeons/engine_api.dart  (pigeon ^29.0.0)
 @ConfigurePigeon(PigeonOptions(dartOut: 'lib/src/pigeon/engine_api.g.dart',
   swiftOut: 'ios/Classes/Pigeon/EngineApi.g.swift',
-  kotlinOut: 'android/src/main/kotlin/com/vecvel/vwish/editor/engine/pigeon/EngineApi.g.kt',
-  kotlinOptions: KotlinOptions(package: 'com.vecvel.vwish.editor.engine.pigeon')))
+  kotlinOut: 'android/src/main/kotlin/com/vecvel/danaview/editor/engine/pigeon/EngineApi.g.kt',
+  kotlinOptions: KotlinOptions(package: 'com.vecvel.danaview.editor.engine.pigeon')))
 
 @HostApi() abstract class EngineHostApi {
   @async CapabilitiesMsg capabilities();       @async CompatibilityMsg compatibility(String uri);
@@ -603,13 +603,13 @@ All math is on **straight-alpha, gamma-encoded RGB in [0,1]**. CI kernels unprem
    - For each item and each speed segment: `insertTimeRange(segSrc, of: srcTrack, at: cursor)`, then `scaleTimeRange(CMTimeRange(cursor, segSrc.duration), toDuration: segTimelineDur)`.
    - Images, sprites and solids are **not** composition tracks. They are compositor layers.
 3. **Spacer track.** A bundled 16×16 one-second black video (`spacer_16x16.mov`) is inserted and scaled across `[0, durationUs)`. It guarantees a compositor request for every output frame, including gaps and stills-only regions. It is never drawn.
-4. **Instructions.** `InstructionBuilder` splits the timeline at every item, transition and sprite boundary. Each segment gets a `VWInstruction: NSObject, AVVideoCompositionInstructionProtocol` with:
+4. **Instructions.** `InstructionBuilder` splits the timeline at every item, transition and sprite boundary. Each segment gets a `DVInstruction: NSObject, AVVideoCompositionInstructionProtocol` with:
    - `timeRange`, `enablePostProcessing=false`, `containsTweening=true`,
    - `requiredSourceTrackIDs` = the active video tracks,
    - `layers: [LayerRef]` bottom → top: `(itemId, kind, trackID?, transitionRole?)`.
    It is checked with `AVVideoComposition.isValid(for:timeRange:validationDelegate:)` in debug builds.
 5. **Video composition.** `AVMutableVideoComposition()` with:
-   - `customVideoCompositorClass = VWCompositor.self`,
+   - `customVideoCompositorClass = DVCompositor.self`,
    - `frameDuration = CMTime(1, fps)`, `renderSize` = preview or export size,
    - `colorPrimaries/transferFunction/yCbCrMatrix = ITU_R_709_2` (SDR; HDR sources are converted before compositing [VERIFIED header semantics]),
    - `sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid`.
@@ -622,16 +622,16 @@ All math is on **straight-alpha, gamma-encoded RGB in [0,1]**. CI kernels unprem
 
 Cost target: ≤ 150 ms to build a 2,000-item composition on mid tier with a warm `AssetCache` (measured in IOS-08).
 
-### 5.3 Compositor (`VWCompositor: NSObject, AVVideoCompositing`)
+### 5.3 Compositor (`DVCompositor: NSObject, AVVideoCompositing`)
 
 - **Pixel formats:**
   - `sourcePixelBufferAttributes = [PixelFormat: [32BGRA], IOSurface: [:], MetalCompatibility: true]`. VideoToolbox does the YUV→RGB conversion with the right matrix, so CI sees plain BGRA.
   - `requiredPixelBufferAttributesForRenderContext` = BGRA.
   - `supportsHDRSourceFrames = false` and `supportsWideColorSourceFrames = false`, so sources arrive as BT.709 SDR.
-- **Context.** One `CIContext(mtlDevice:, options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull(), .cacheIntermediates: false, .name: "vwish.compose"])` per compositor instance. With color management off, the kernels see gamma-encoded values, which is the parity rule (§0.7).
+- **Context.** One `CIContext(mtlDevice:, options: [.workingColorSpace: NSNull(), .outputColorSpace: NSNull(), .cacheIntermediates: false, .name: "danaview.compose"])` per compositor instance. With color management off, the kernels see gamma-encoded values, which is the parity rule (§0.7).
 - **Kernels.**
-  - `VwishKernels.metal` is compiled by Xcode with `-fcikernel` into the pod's `default.metallib` and loaded with `CIKernel(functionName:fromMetalLibraryData:)` once per process.
-  - Kernels: `vw_look` (color kernel: grade + LUT tiled sampler + chroma + spill), `vw_blur_h/vw_blur_v` (sampler kernels), `vw_sharpen`, `vw_vignette_mask` (vignette + mask SDF + alpha), `vw_transition` (dip, wipe alpha), `vw_reveal` (typewriter), `vw_matte`.
+  - `DanaviewKernels.metal` is compiled by Xcode with `-fcikernel` into the pod's `default.metallib` and loaded with `CIKernel(functionName:fromMetalLibraryData:)` once per process.
+  - Kernels: `dv_look` (color kernel: grade + LUT tiled sampler + chroma + spill), `dv_blur_h/dv_blur_v` (sampler kernels), `dv_sharpen`, `dv_vignette_mask` (vignette + mask SDF + alpha), `dv_transition` (dip, wipe alpha), `dv_reveal` (typewriter), `dv_matte`.
   - Transforms use `CIImage.transformed(by:)` with the §4.8 matrix, converted to CI's y-up space by a fixed flip.
   - Compositing uses `CISourceOverCompositing`, which is premultiplied and mathematically equal to the GL straight-alpha "over" on an opaque base.
 - **`startRequest`** dispatches to `renderQueue` (serial; `.userInteractive` for preview, `.userInitiated` for export):
@@ -639,7 +639,7 @@ Cost target: ≤ 150 ms to build a 2,000-item composition on mid tier with a war
   - Map `request.compositionTime` to the frame index and µs.
   - Build the CI graph for `instruction.layers`.
   - Render into a buffer from `request.renderContext.newPixelBuffer()`.
-  - Attach `vwish.frame` = frame index (`CVBufferSetAttachment`).
+  - Attach `danaview.frame` = frame index (`CVBufferSetAttachment`).
   - Call `finish(withComposedVideoFrame:)`.
   - Errors call `finish(with:)`, and the preview reports `failed`.
 - **Redraw-from-cache.**
@@ -667,7 +667,7 @@ Cost target: ≤ 150 ms to build a 2,000-item composition on mid tier with a war
   - `addPeriodicTimeObserver(1/10 s)` plus KVO on `timeControlStatus` emit `PreviewClock(time, playing, rate, seq)`.
   - On a stall: `events.stalled`, then `recovered`.
 - **Seek (`SeekController`).**
-  - **exact:** `seek(to: CMTime(k, fps), toleranceBefore: .zero, toleranceAfter: .zero)`. On completion, wait for the output buffer whose `vwish.frame == k`, with a 500 ms timeout, then send the ack with `displayedFrame`.
+  - **exact:** `seek(to: CMTime(k, fps), toleranceBefore: .zero, toleranceAfter: .zero)`. On completion, wait for the output buffer whose `danaview.frame == k`, with a 500 ms timeout, then send the ack with `displayedFrame`.
   - **scrub:** tolerance `±0.5 s` while the drag velocity is high, otherwise zero. A newer scrub supersedes a pending one: the controller keeps one seek in flight, the same chase pattern as the UX.
 - **Quality.**
   - Render size = canvas × {1, ½, ¼}, with the long side capped at `maxPreviewLongSide`. Changing it rebuilds only the video composition (`renderSize`), assigned to the item without a reload.
@@ -707,11 +707,11 @@ Cost target: ≤ 150 ms to build a 2,000-item composition on mid tier with a war
   - VideoToolbox picks the hardware encoder. `Capabilities` probes HEVC and H.264 by creating a `VTCompressionSession` with `kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder` at the target size.
   - If HEVC hardware is missing, the HEVC option is hidden. If H.264 hardware is missing (simulator), the export uses software and `ExportResult.hardwareEncoder = false`.
 - **Background (`BackgroundExecution`).**
-  - On iOS 26+, at `start` we submit `BGContinuedProcessingTaskRequest(identifier: "com.vecvel.vwish.export.<jobId>", title: "Exporting video", subtitle: <project>)` with `strategy = .fail`.
+  - On iOS 26+, at `start` we submit `BGContinuedProcessingTaskRequest(identifier: "com.vecvel.danaview.export.<jobId>", title: "Exporting video", subtitle: <project>)` with `strategy = .fail`.
     - Add `requiredResources = .gpu` when `BGTaskScheduler.supportedResources.contains(.gpu)` and the app has the GPU entitlement.
     - The launch handler adopts the running job, mirrors progress into `task.progress`, and calls `setTaskCompleted`.
     - The expiration handler cancels with `interrupted`.
-    - The identifier pattern is registered at launch in the plugin's `register(with:)`, which requires `BGTaskSchedulerPermittedIdentifiers = ["com.vecvel.vwish.export.*"]` in Info.plist [VERIFIED API; wildcard registration ordering is VERIFY].
+    - The identifier pattern is registered at launch in the plugin's `register(with:)`, which requires `BGTaskSchedulerPermittedIdentifiers = ["com.vecvel.danaview.export.*"]` in Info.plist [VERIFIED API; wildcard registration ordering is VERIFY].
   - With no GPU resource on iOS 26, the compositor switches to a software `CIContext` (`.useSoftwareRenderer: true`) while backgrounded. It is slower but keeps going.
   - On iOS 15–25, or when submission fails: on `didEnterBackground` the pipeline **pauses**. The compositor's `startRequest` waits on a foreground gate, and the pumps stop pulling. A `beginBackgroundTask` lets the in-flight frame finish cleanly. Progress events report `pausedInBackground = true`. The pipeline resumes on `didBecomeActive`. If the system kills the app, the next launch reports `interrupted` once from `ActiveExportStore`.
 - **Thermal:** `.critical` pauses the pumps until the state is ≤ `.serious` (event `thermal`).
@@ -727,7 +727,7 @@ Cost target: ≤ 150 ms to build a 2,000-item composition on mid tier with a war
 | Probe / compatibility | `AVURLAsset` + `load(.duration, .isPlayable, .isComposable, .hasProtectedContent)`, track `formatDescriptions` (codec, bit depth, transfer function → `hdr`), `preferredTransform` → rotation. Compatibility first runs the Dart `MediaInspector` container sniff (MKV/WebM/AVI → `NotEditable('container_unsupported_ios')`). It then answers within the 300 ms budget, with a 250 ms timeout on loading |
 | Thumbnails | `ThumbnailService`: one `AVAssetImageGenerator` per (media, proxy). `appliesPreferredTrackTransform = true`, `maximumSize = (h·aspect, h)`, tolerance ±interval/2, `dynamicRangePolicy = .forceSDR` on iOS 18+. `generateCGImagesAsynchronously(forTimes:)` produces the N frames of one tile; frames are drawn into a strip `CGContext` and encoded with ImageIO JPEG at q 0.7. Disk cache key `sha1(fingerprint, intervalMs, heightPx, tile, proxy)`. Concurrency is 1 generator (low tier) or 2. `cancel` calls `cancelAllCGImageGeneration` on that generator after its batch |
 | PCM reader (shared) | `PcmReader`: `AVAssetReader` + `AVAssetReaderTrackOutput` (LPCM Float32 interleaved, native rate and layout), `timeRange` set. Used by waveforms, speech audio and reverse audio |
-| Waveforms | Bins of `sampleRate/200` frames → per-bin min/max of the channel-mixed signal → int8. File `cache/editor/waves/<fp>-<stream>.vwpk` (header + pairs). Results are progressive inside the job, but the Future resolves at the end. Speed is ≥ 20× realtime on low tier |
+| Waveforms | Bins of `sampleRate/200` frames → per-bin min/max of the channel-mixed signal → int8. File `cache/editor/waves/<fp>-<stream>.dvpk` (header + pairs). Results are progressive inside the job, but the Future resolves at the end. Speed is ≥ 20× realtime on low tier |
 | Speech audio | Exactly `ai.md` §7.2: downmix matrix, `AVAudioConverter` → 16 kHz s16 mono, streamed WAV with patched header, sample-accurate trim against `range.start` |
 | Proxies | `ProxyJob`: reader → writer at **short side 540** (long side ≤ 960), H.264 High, 3 Mbps, `MaxKeyFrameInterval = 10` frames, SDR, AAC 128 kbps. **Same PTS for every frame** (VFR is preserved). Written to `cache/editor/proxies/<fp>.mp4.part` and renamed on success. Policy comes from the UX setting: Auto proxies media with long side > 1920, fps > 60, HDR, 10-bit, or bitrate > 40 Mbps |
 | Freeze frame | `AVAssetImageGenerator` with tolerances zero at the source time, full natural size, transform applied → PNG (ImageIO) at `outputPath` |
@@ -814,9 +814,9 @@ EditedMediaItem.Builder(MediaItem.Builder().setUri(uriOrProxy)
 
 | Effect | Program | Notes |
 |---|---|---|
-| `LayerLookEffect(itemId)` | `BaseGlShaderProgram`. `configure(w,h)` returns `min(source, needed)`, where needed = render size ÷ item scale, so 4K sources are downscaled first | Fragment `vw_look.glsl`: crop via texcoords, grade, LUT (tiled `sampler2D`), chroma + spill. Uniforms come from `ParamSnapshot` at `ptsUs`. Editing mode `matte` sets a flag |
+| `LayerLookEffect(itemId)` | `BaseGlShaderProgram`. `configure(w,h)` returns `min(source, needed)`, where needed = render size ÷ item scale, so 4K sources are downscaled first | Fragment `dv_look.glsl`: crop via texcoords, grade, LUT (tiled `sampler2D`), chroma + spill. Uniforms come from `ParamSnapshot` at `ptsUs`. Editing mode `matte` sets a flag |
 | `SeparableBlurEffect(itemId)` | Two passes: H then V | Inserted only when the item has blur > 0 at any time. The radius is updated per frame. The `isNoOp` path is not usable for keyframed blur |
-| `LayerPlaceEffect(itemId, lane)` | `configure` returns the **canvas render size** | `vw_place.glsl`: sharpen (3×3), vignette, mask SDF, full §4.8 M as a 3×3 matrix (inverse-mapped per fragment), opacity, transition role (A/B: alpha, dip color, wipe, offsets/scales), straight-alpha output. Edges are antialiased with 1 px coverage |
+| `LayerPlaceEffect(itemId, lane)` | `configure` returns the **canvas render size** | `dv_place.glsl`: sharpen (3×3), vignette, mask SDF, full §4.8 M as a 3×3 matrix (inverse-mapped per fragment), opacity, transition role (A/B: alpha, dip color, wipe, offsets/scales), straight-alpha output. Edges are antialiased with 1 px coverage |
 | `SpriteBandEffect(bandIndex)` | Draws N sprite quads onto a transparent canvas-size target | For each sprite item active at pts (sorted bottom → top): textured quad with M, text animation, reveal map (two 8-bit channels → u16). Textures come from `SpriteTextures` (LRU by bytes; inflated on a background executor, uploaded lazily on the GL thread) |
 
 **Timestamps.** Effect pts are composition time [VERIFY that per-item effects in a multi-item sequence see sequence-cumulative pts in both CompositionPlayer and Transformer]. If they turn out to be item-relative, `ParamSnapshot` lookup uses `(sequence, pts)` → item through the item's known sequence start instead. Spike AND-01 decides this.
@@ -858,7 +858,7 @@ CompositionPlayer.Builder(ctx).setLooper(previewThread.looper)
 
 ### 6.5 Export
 
-- **`ExportCoordinator`** is a process singleton that owns one `Transformer` per job on the `vwish-export` HandlerThread looper. It survives activity recreation and engine detach.
+- **`ExportCoordinator`** is a process singleton that owns one `Transformer` per job on the `danaview-export` HandlerThread looper. It survives activity recreation and engine detach.
 - **Transformer:**
 
 ```kotlin
@@ -901,9 +901,9 @@ Transformer.Builder(appCtx).setLooper(exportThread.looper)
   - `POST_NOTIFICATIONS` is requested in context by the UX flow through `PlatformHostApi`. Without it the export still runs; the notification just isn't shown in the shade.
 - **Reattach:** `activeJobs()` returns live jobs. If the process died during an export, `ActiveExportStore` (a JSON file written at start) yields one `interrupted` record on the next launch, and the partial output is deleted.
 - **Destinations:**
-  - Gallery: `MediaStore.Video.Media` insert with `RELATIVE_PATH = Movies/Vwish` and `IS_PENDING = 1`, stream copy, then clear pending.
+  - Gallery: `MediaStore.Video.Media` insert with `RELATIVE_PATH = Movies/Danaview` and `IS_PENDING = 1`, stream copy, then clear pending.
   - Files: SAF `ACTION_CREATE_DOCUMENT`.
-  - Share: `ACTION_SEND` with a `FileProvider` URI (authority `${applicationId}.vwish.editor.files`).
+  - Share: `ACTION_SEND` with a `FileProvider` URI (authority `${applicationId}.danaview.editor.files`).
 
 ### 6.6 Media services
 
@@ -912,7 +912,7 @@ Transformer.Builder(appCtx).setLooper(exportThread.looper)
 | Probe / compatibility | `MetadataRetriever` (`media3-inspector`: track groups, duration) + `MediaExtractorCompat` formats → codec, profile, size, color info (HDR). Decoder availability via `MediaCodecList` for mime/profile/size; `isHardwareAccelerated` decides `proxiesRecommended`. MKV/WebM are editable when decoders exist. HDR sources are editable via tone mapping, and an automatic proxy is used for preview [VERIFY CompositionPlayer honours `Composition.hdrMode`; if not, HDR preview uses the SDR proxy always] |
 | Thumbnails | `FrameExtractor` per (media, proxy) with `SeekParameters.CLOSEST_SYNC` and `setEffects(listOf(Presentation.createForHeight(h)))`, so the GPU downscales. Frames are drawn into a strip `Bitmap` → `compress(JPEG, 70)`. Same disk cache keys as iOS. Concurrency 1–2. Extractors close after 10 s idle |
 | PCM decoder (shared) | `PcmDecoder`: `MediaExtractorCompat` + async `MediaCodec` on a `HandlerThread`, `KEY_PCM_ENCODING = ENCODING_PCM_FLOAT`, sample-accurate trim by pts + sample index (`ai.md` §7.3). Used by waveforms, speech audio and reverse audio |
-| Waveforms | Same binning and `.vwpk` format as iOS |
+| Waveforms | Same binning and `.dvpk` format as iOS |
 | Speech audio | `ai.md` §7.3: `ChannelMixingAudioProcessor` + `SonicAudioProcessor(16 kHz)` + WAV writer |
 | Proxies | `Transformer` with `Presentation.createForShortSide(540)`, H.264 3 Mbps, `setiFrameIntervalSeconds(0.33f)`, `HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL`, AAC 128k, same timestamps. Runs at background priority on the job executor; paused (cancelled and requeued) while an export runs |
 | Freeze frame | `FrameExtractor` with `SeekParameters.EXACT` → `Bitmap.compress(PNG)` at `outputPath` |
@@ -931,11 +931,11 @@ Transformer.Builder(appCtx).setLooper(exportThread.looper)
 | Thread | Work |
 |---|---|
 | Main | Pigeon handlers, SurfaceProducer callbacks, `EventChannel` sink, activity-result pickers, permission results |
-| `vwish-preview` HandlerThread | `CompositionPlayer` application looper, plan decode (`JsonReader`), `CompositionMapper`, `ParamSnapshot` build |
-| `vwish-gl` single-thread executor | Media3 video graph and our effects. **The only thread that touches GL objects.** Texture uploads are queued here |
+| `danaview-preview` HandlerThread | `CompositionPlayer` application looper, plan decode (`JsonReader`), `CompositionMapper`, `ParamSnapshot` build |
+| `danaview-gl` single-thread executor | Media3 video graph and our effects. **The only thread that touches GL objects.** Texture uploads are queued here |
 | Media3 internal | Playback thread, codec callbacks, audio graph |
-| `vwish-export` HandlerThread | Transformer looper, progress polling |
-| `vwish-jobs` executor (1 low / 2 mid-high) + `vwish-io` (2) | Thumbnails, waveforms, proxies, reverse, freeze, speech audio; sprite and LUT inflation |
+| `danaview-export` HandlerThread | Transformer looper, progress polling |
+| `danaview-jobs` executor (1 low / 2 mid-high) + `danaview-io` (2) | Thumbnails, waveforms, proxies, reverse, freeze, speech audio; sprite and LUT inflation |
 | Recorder thread | `AudioRecord.read` loop |
 
 - **GPU memory model:** each visual sequence keeps about 3 textures at ≤ render size (LayerLook output, an optional blur pair, the LayerPlace canvas output).
@@ -950,8 +950,8 @@ Transformer.Builder(appCtx).setLooper(exportThread.looper)
 | Feature (owner list) | iOS | Android |
 |---|---|---|
 | Multiple video tracks, PiP (video/image over video), multiple overlays, independent timing | Composition tracks by interval coloring + compositor layer stack | One sequence per lane color; compositor blend; gating |
-| Position / scale / rotation / flip / opacity / aspect / fit / reset / direct manipulation | `vw_place` math via `CIImage.transformed` + opacity kernel; transients | `LayerPlaceEffect` matrix |
-| Crop (incl. PiP crop) and crop mode | `CIImage.cropped` before the look; `cropSource` mode | Texcoord crop in `vw_look`; mode flag |
+| Position / scale / rotation / flip / opacity / aspect / fit / reset / direct manipulation | `dv_place` math via `CIImage.transformed` + opacity kernel; transients | `LayerPlaceEffect` matrix |
+| Crop (incl. PiP crop) and crop mode | `CIImage.cropped` before the look; `cropSource` mode | Texcoord crop in `dv_look`; mode flag |
 | Keyframes (position, scale, rotation, opacity, volume, effects) | `ParamSnapshot` linear eval per frame; volume as `AVAudioMix` ramps | `ParamSnapshot` per pts; `KeyframedGainProvider` per sample |
 | Speed presets, custom speed, ramps (segments) | `scaleTimeRange` per segment, audio and video | `SegmentSpeedProvider` via `setSpeed(SpeedParameters)` |
 | Maintain pitch | Per-track `audioTimePitchAlgorithm` `.spectral` / `.varispeed` | `SpeedParameters.shouldMaintainPitch` (Sonic) |
@@ -960,21 +960,21 @@ Transformer.Builder(appCtx).setLooper(exportThread.looper)
 | Freeze frame | Exact generator still → image item | `FrameExtractor` EXACT → image item |
 | Frame-accurate seeking | Rational `CMTime(k, fps)`, zero tolerance, frame attachment ack | ms ceiling + `VideoFrameMetadataListener` ack |
 | Text overlays, fonts, styles, background, stroke, shadow | Flutter sprite → `SpriteStore` layer | Flutter sprite → `SpriteBandEffect` |
-| Text animations (fade, slide, scale, typewriter) | `vw_place` / `vw_reveal` | `SpriteBandEffect` uniforms + reveal map |
+| Text animations (fade, slide, scale, typewriter) | `dv_place` / `dv_reveal` | `SpriteBandEffect` uniforms + reveal map |
 | Subtitle track, styling, positioning, burn-in | Sprites per cue on a sprite lane | Same |
 | SRT/VTT import/export | n/a (Dart, Subtitles area) | n/a |
 | AI subtitles: extract audio | `PcmReader` → 16 kHz WAV | `PcmDecoder` → 16 kHz WAV |
-| Effects: brightness … tint | `vw_look` kernel | `vw_look.glsl` |
-| Sharpness, blur, vignette | `vw_sharpen`, `vw_blur_h/v`, `vw_vignette_mask` | `vw_place` sharpen/vignette, `SeparableBlurEffect` |
+| Effects: brightness … tint | `dv_look` kernel | `dv_look.glsl` |
+| Sharpness, blur, vignette | `dv_sharpen`, `dv_blur_h/v`, `dv_vignette_mask` | `dv_place` sharpen/vignette, `SeparableBlurEffect` |
 | Color presets / look stills | Grade params (+ optional LUT) rendered via redraw path | `FrameExtractor` + `LayerLookEffect` |
 | LUT `.cube` import, intensity | `.vlut` tiled CIImage, kernel trilinear | `.vlut` tiled texture, shader trilinear |
-| Transitions (all 7 + duration, direction, preview) | `vw_place`/`vw_transition` on A/B layers; loop play | Same math in `LayerPlaceEffect` on A/B sequences |
-| Chroma key, similarity, smoothness, spill, matte preview | `vw_look` chroma + `matte` mode | Same in GLSL |
-| Masks (rect, circle, position, size, feather, opacity) | `vw_vignette_mask` SDF | `vw_place` SDF |
+| Transitions (all 7 + duration, direction, preview) | `dv_place`/`dv_transition` on A/B layers; loop play | Same math in `LayerPlaceEffect` on A/B sequences |
+| Chroma key, similarity, smoothness, spill, matte preview | `dv_look` chroma + `matte` mode | Same in GLSL |
+| Masks (rect, circle, position, size, feather, opacity) | `dv_vignette_mask` SDF | `dv_place` SDF |
 | Multiple audio tracks, background music, extracted audio | Composition audio tracks per lane color | Audio-only sequences; `DefaultAudioMixer` |
 | Volume, fades, mute/solo | Ramps; mute/solo resolved by Domain; lane gain param | `GainProcessor`; lane gain param |
 | Voice recording | `AVAudioEngine` WAV | `AudioRecord` WAV |
-| Waveforms, thumbnails, caching | `.vwpk` + JPEG strips on disk, LRU | Same |
+| Waveforms, thumbnails, caching | `.dvpk` + JPEG strips on disk, LRU | Same |
 | Proxy media | Reader/writer 540p GOP 10 | Transformer 540p GOP 0.33 s |
 | Real-time preview, play/pause, quality, fullscreen | `AVPlayer` + compositor → `FlutterTexture` | `CompositionPlayer` → `SurfaceProducer` |
 | MP4 / MOV / H.264 / H.265 / res / fps / bitrates | `AVAssetWriter` (MOV ✓, HEVC on HW probe) | Transformer + `InAppMp4Muxer` (MOV ✗, HEVC on HW probe) |
@@ -992,7 +992,7 @@ Transformer.Builder(appCtx).setLooper(exportThread.looper)
 | Cache | Key | Cap (LRU by access time) | Notes |
 |---|---|---|---|
 | `thumbs/` | `sha1(fp, interval, height, tile, proxy)` | 300 MB | JPEG strips |
-| `waves/` | `fp-stream` | 64 MB | `.vwpk` |
+| `waves/` | `fp-stream` | 64 MB | `.dvpk` |
 | `proxies/` | `fp` | 4 GB or 10% of free space, whichever is smaller | `.part` + rename; never used by export |
 | `sprites/` | content hash | 400 MB | Preview and export scales |
 | `work/` | job id | none; wiped at launch except active jobs | Reverse intermediates, export temp files |
@@ -1031,7 +1031,7 @@ Error flow:
 1. Native throws.
 2. A Pigeon `FlutterError(code = EngineErrorCode.name, message = debug text without paths, details = {itemId?, mediaFingerprint?, retryable})`.
 3. `error_mapper.dart` turns it into an `EngineFailure`.
-4. `vwish_editor` turns that into an `EditorFailure` (`ux.md` §18):
+4. `danaview_editor` turns that into an `EditorFailure` (`ux.md` §18):
 
 | EngineErrorCode | UX failure |
 |---|---|
@@ -1048,7 +1048,7 @@ Error flow:
 | `surfaceLost` | Preview event; auto-recovered |
 | `cancelled` | Not a failure: `JobCancelled` |
 
-Preview failures are recoverable by recreating the session. The UX shows a "Restart preview" button. Native logs use `os_log` (subsystem `com.vecvel.vwish.editor`) and `Log` (tag `VwishEngine`). There is no telemetry, and paths never appear in user-copyable details.
+Preview failures are recoverable by recreating the session. The UX shows a "Restart preview" button. Native logs use `os_log` (subsystem `com.vecvel.danaview.editor`) and `Log` (tag `DanaviewEngine`). There is no telemetry, and paths never appear in user-copyable details.
 
 ---
 
@@ -1125,7 +1125,7 @@ Preview failures are recoverable by recreating the session. The UX shows a "Rest
 - **Parity:** render each golden plan's frames via `renderLookStills`/redraw or export decode, then compare to the Dart reference with the §4.8 tolerance. Run on both platforms.
 - **Frame accuracy:** 200 random exact seeks on the frame-counter clip (and through speed segments) → the decoded barcode equals the expected source frame and `SeekAck.displayedFrame == k`.
 - **A/V sync:** export `clicks_flash` through 1×, 2× (keep pitch), a 0.5× ramp and a cross-dissolve. Decode the output and detect the flash frame and the click onset: |Δ| ≤ 1 frame and ≤ 20 ms.
-- **Export conformance:** decoded output via `MediaInspector` (`vwish_data`) plus platform extractors: container, `avc1`/`hvc1`, size, fps, frame count = duration × fps ± 1, AAC 48 kHz stereo, bitrate within ±25% of the request (VBR).
+- **Export conformance:** decoded output via `MediaInspector` (`danaview_data`) plus platform extractors: container, `avc1`/`hvc1`, size, fps, frame count = duration × fps ± 1, AAC 48 kHz stereo, bitrate within ±25% of the request (VBR).
 - **Jobs:**
   - Reverse: barcode order strictly decreasing.
   - Freeze: barcode equals the requested frame.
@@ -1150,7 +1150,7 @@ Preview failures are recoverable by recreating the session. The UX shows a "Rest
 
 ### 11.5 CI wiring
 
-A new `.github/workflows/editor-ci.yml` runs on PRs touching `packages/vwish_editor*`, with these jobs:
+A new `.github/workflows/editor-ci.yml` runs on PRs touching `packages/danaview_editor*`, with these jobs:
 - `dart-test` (ubuntu),
 - `android-unit` (ubuntu, Gradle through `example/android`),
 - `android-instrumented` (ubuntu with KVM, `reactivecircus/android-emulator-runner`, API 35),
@@ -1263,10 +1263,10 @@ Mapping from the UX tags:
 
 | ID | Title | Files owned | Depends on | Acceptance criteria |
 |---|---|---|---|---|
-| ENG-01 | Engine API package, value types, failures, fake, contract kit | `packages/vwish_editor_engine_api/{pubspec.yaml, lib/vwish_editor_engine_api.dart, lib/testing.dart, lib/src/{engine,preview,media_services,export,recorder,platform_services,capabilities,failures}.dart, lib/src/fake/*}`, `test/contract/*` | DOM: RenderPlan placeholder types | Analyzes clean. `FakeEditorEngine` passes the contract kit (clock seq rules, exact-seek ack, cancel semantics, transient non-persistence). UX-01 compiles against it. Dependency-rule test updated |
+| ENG-01 | Engine API package, value types, failures, fake, contract kit | `packages/danaview_editor_engine_api/{pubspec.yaml, lib/danaview_editor_engine_api.dart, lib/testing.dart, lib/src/{engine,preview,media_services,export,recorder,platform_services,capabilities,failures}.dart, lib/src/fake/*}`, `test/contract/*` | DOM: RenderPlan placeholder types | Analyzes clean. `FakeEditorEngine` passes the contract kit (clock seq rules, exact-seek ack, cancel semantics, transient non-persistence). UX-01 compiles against it. Dependency-rule test updated |
 | ENG-02 | RenderPlan wire schema v1, codec, patch codec, validator, fixtures | `lib/src/plan/*`, `render_plan_v1.schema.json`, `test_fixtures/{plans,patches}/*` | ENG-01, DOM: RenderPlan types | ≥ 15 fixtures covering every §4.2 field. Encode of 2,000 items in `Isolate.run` ≤ 40 ms (mid). Validator rejects each §4.1 invariant with item id. Classification vectors committed |
 | ENG-03 | Shared math, vectors, Dart reference renderer, goldens | `lib/src/math/*`, `lib/src/reference/*`, `test_fixtures/{vectors,images}/*`, `tool/regen_goldens.dart` | ENG-02 | Vectors for frame grid, keyframes, transform M, every §4.8 row, gain. Goldens generated. Joint test: Domain `FrameRate`/`evaluate`/`boxAt` pass the same vectors (with DOM) |
-| ENG-04 | Plugin scaffold, Pigeon, event router, error mapper, example host, CI | `packages/vwish_editor_engine/{pubspec.yaml, pigeons/*, lib/**}`, `ios/{vwish_editor_engine.podspec, Classes/{VwishEditorEnginePlugin.swift, Pigeon/*, Core/*}}`, `android/{build.gradle.kts, src/main/AndroidManifest.xml, src/main/kotlin/**/{VwishEditorEnginePlugin.kt, pigeon/*, core/*}}`, `example/**`, `.github/workflows/editor-ci.yml` | ENG-01 | `capabilities()` round-trips on the iOS simulator and the Android emulator. Every `EngineErrorCode` maps (test). Events delivered and throttled. Pigeon pinned `^29.0.0` with generated files committed. V8 and V14 answered. CI green. App builds still pass (`flutter build ios/apk`) |
+| ENG-04 | Plugin scaffold, Pigeon, event router, error mapper, example host, CI | `packages/danaview_editor_engine/{pubspec.yaml, pigeons/*, lib/**}`, `ios/{danaview_editor_engine.podspec, Classes/{DanaviewEditorEnginePlugin.swift, Pigeon/*, Core/*}}`, `android/{build.gradle.kts, src/main/AndroidManifest.xml, src/main/kotlin/**/{DanaviewEditorEnginePlugin.kt, pigeon/*, core/*}}`, `example/**`, `.github/workflows/editor-ci.yml` | ENG-01 | `capabilities()` round-trips on the iOS simulator and the Android emulator. Every `EngineErrorCode` maps (test). Events delivered and throttled. Pigeon pinned `^29.0.0` with generated files committed. V8 and V14 answered. CI green. App builds still pass (`flutter build ios/apk`) |
 | ENG-05 | Text layout engine, sprite rasterizer, `.vsprite`, sprite scheduler | `lib/src/render_prep/{text_layout_engine, text_sprite_rasterizer, vsprite_codec, sprite_scheduler}.dart` | ENG-02, DOM: text style, UX Q3/Q4 decisions | Glyph boxes equal `ui.Paragraph` boxes. RTL + CJK + emoji fixtures render with fallback. Reveal map correct for grapheme clusters. Slices ≤ 4 ms UI time. 1,000-cue export prep ≤ 8 s (mid). Content-hash reuse test |
 | ENG-06 | LUT normalizer + `.vlut` | `lib/src/render_prep/{lut_normalizer, vlut_codec}.dart` | ENG-02, DOM/PER: `.cube` parser | Sizes 2–65; DOMAIN_MIN/MAX; identity LUT round-trips within 1/1024; > 65 rejected with a typed error |
 
@@ -1285,7 +1285,7 @@ Mapping from the UX tags:
 | AND-02 | Probe, compatibility, device profile, capabilities | `android/.../{media/Probe, media/Compatibility, core/DeviceProfile, core/Capabilities}.kt` | AND-01 | Same fields. Decoder availability per mime/profile/size. `codecMaxInstances` cap. API/GLES gate (V7). Thermal listener |
 | IOS-03 | Thumbnails + disk cache | `ios/Classes/Media/{ThumbnailService, DiskCache}.swift` | IOS-02 | Tile = N frames at the requested height, JPEG. Cache hit ≤ 20 ms. Cancel stops work. LRU cap enforced. ≤ 400 ms miss (low) |
 | AND-03 | Thumbnails + disk cache | `android/.../media/{ThumbnailService, DiskCache}.kt` | AND-02 | Same ACs, using `FrameExtractor` CLOSEST_SYNC with GPU downscale |
-| IOS-04 | PCM reader, waveforms, speech audio extraction | `ios/Classes/Media/{PcmReader, WaveformService, SpeechAudioExtractor}.swift` | IOS-02, AI-10 contract | `.vwpk` matches reference peaks. ≥ 20× realtime (low). AI-10 ACs (16 kHz s16 mono, ±1 ms, clap ±20 ms, 5.1 centre kept, cancel deletes) |
+| IOS-04 | PCM reader, waveforms, speech audio extraction | `ios/Classes/Media/{PcmReader, WaveformService, SpeechAudioExtractor}.swift` | IOS-02, AI-10 contract | `.dvpk` matches reference peaks. ≥ 20× realtime (low). AI-10 ACs (16 kHz s16 mono, ±1 ms, clap ±20 ms, 5.1 centre kept, cancel deletes) |
 | AND-04 | PCM decoder, waveforms, speech audio extraction | `android/.../media/{PcmDecoder, WaveformService, SpeechAudioExtractor}.kt` | AND-02, AI-10 contract | Same ACs, including MP4 edit list and AAC priming |
 | IOS-05 | Proxy job, proxy registry, job registry priorities | `ios/Classes/{Media/ProxyJob, Media/ProxyRegistry, Core/JobRegistry}.swift` | IOS-02 | Proxy PTS equal to the source (VFR fixture). 540p, GOP 10. `.part` rename. Pre-emption by interactive jobs. Policy from the UX setting |
 | AND-05 | Proxy job, registry, job priorities | `android/.../{media/ProxyJob, media/ProxyRegistry, core/JobRegistry}.kt` | AND-02 | Same ACs. HDR source → SDR proxy. Paused during export |
@@ -1299,10 +1299,10 @@ Mapping from the UX tags:
 | ID | Title | Files owned | Depends on | Acceptance criteria |
 |---|---|---|---|---|
 | IOS-08 | Plan decode, `ParamSnapshot`, composition builder, allocator, instructions, audio mix | `ios/Classes/{Plan/*, Composition/*}` | IOS-01, ENG-02, ENG-03 | All plan fixtures build valid compositions (`isValid`). Segment durations equal the plan within 1 µs. Pitch-mode track split. Volume ramps within 0.1 dB of the reference envelope. 2,000 items ≤ 150 ms (mid). Patch classification equals the vectors |
-| IOS-09 | `VWCompositor`, kernels (all §4.8 stages), sprite/image/LUT stores, editing modes | `ios/Classes/Render/*` | IOS-08, ENG-05, ENG-06 | Parity suite green for every golden plan. Matte and cropSource modes. Typewriter reveal. Compose ≤ 8 ms mid at 1080p (2 layers + LUT + text). Cancellation generation works |
+| IOS-09 | `DVCompositor`, kernels (all §4.8 stages), sprite/image/LUT stores, editing modes | `ios/Classes/Render/*` | IOS-08, ENG-05, ENG-06 | Parity suite green for every golden plan. Matte and cropSource modes. Typewriter reveal. Compose ≤ 8 ms mid at 1080p (2 layers + LUT + text). Cancellation generation works |
 | IOS-10 | Preview session: texture bridge, display link, clock, seek, transients, patches, quality governor, look stills, source frame, lifecycle, audio session | `ios/Classes/Preview/*` | IOS-09, IOS-06 | `ux.md` §2.3 semantics: seq, exact ack 200/200, scrub coalescing, transient ≤ 2 frames, param patch ≤ 30 ms, structural ≤ 250 ms (mid), degraded/recovered events, background/foreground refresh without a black frame, player→editor→player audio-session test |
 | AND-08 | Plan reader, `ParamSnapshot`, composition mapper, gating settings, speed and gain providers | `android/.../{plan/*, composition/*}` | AND-01, ENG-02, ENG-03 | Every fixture maps. Sequence durations equal `durationUs`. Z-order and gating unit tests. `SegmentSpeedProvider` integrates to the plan durations ± 1 µs. Gain envelope sample-exact vs the vectors |
-| AND-09 | GL effects (`LayerLook`, `SeparableBlur`, `LayerPlace`, `SpriteBand`), LUT and sprite textures | `android/.../effects/*`, `android/src/main/assets/vwish_shaders/*` | AND-08, ENG-05, ENG-06 | Parity suite green. GL resources released on effect release (leak test). 1080p compose ≤ 8 ms mid (GL timer query). Only `vwish-gl` touches GL (assertion) |
+| AND-09 | GL effects (`LayerLook`, `SeparableBlur`, `LayerPlace`, `SpriteBand`), LUT and sprite textures | `android/.../effects/*`, `android/src/main/assets/danaview_shaders/*` | AND-08, ENG-05, ENG-06 | Parity suite green. GL resources released on effect release (leak test). 1080p compose ≤ 8 ms mid (GL timer query). Only `danaview-gl` touches GL (assertion) |
 | AND-10 | Preview session: SurfaceProducer bridge, clock, seek and scrub, transients, redraw, patches, quality, look stills, source frame, lifecycle | `android/.../preview/*` | AND-09, AND-06 | Same ACs as IOS-10. `resetInBackground` surface loss recovers. Main-thread latch never exceeds 500 ms. Rebuild keeps the last frame |
 | ENG-07 | `MobileEditorEngine` preview glue, plan sync, sprite pushes, resolver adapter for UX MediaId APIs | `lib/src/{mobile_editor_engine, mobile_preview_session, plan_sync, mobile_jobs}.dart` | ENG-04, IOS-10, AND-10 | Out-of-sync retry. Transients dropped when not param-only. Sprite window follows the playhead. UX-19 integrates without platform-specific code |
 

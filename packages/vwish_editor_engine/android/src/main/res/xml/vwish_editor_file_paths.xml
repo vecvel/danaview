@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- OWNER: ENG-08 (ARCH §14.3, §20.4)
-     Paths the engine's FileProvider (authority ${applicationId}.vwish.editor.files) may share. Only the
-     engine work directory under the Dart cache root (<cache>/vwish/editor/work/, ARCH §8.1) is
-     exposed: exports are written there before the share sheet or the SAF/MediaStore handoff
-     (AND-12 FileHandoff). Projects, managed copies and the speech tree are never shared. -->
-<paths>
-    <cache-path name="vwish_editor_work" path="vwish/editor/work/" />
-</paths>

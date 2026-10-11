@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # IOS-01 spike: (re)generate the Xcode project and integrate the local pods.
 # Usage: tools/bootstrap.sh            # static-library linkage (default)
-#        VW_SPIKE_LINKAGE=dynamic tools/bootstrap.sh
+#        DV_SPIKE_LINKAGE=dynamic tools/bootstrap.sh
 set -euo pipefail
 export LANG=en_US.UTF-8
 HERE="$(cd "$(dirname "$0")/.." && pwd)"

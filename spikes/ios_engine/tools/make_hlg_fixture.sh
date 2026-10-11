@@ -6,7 +6,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 FFMPEG="${FFMPEG:-/opt/homebrew/bin/ffmpeg}"
-OUT="$HERE/VWSpikeTests/Fixtures/hlg_bars_640x360.mov"
+OUT="$HERE/DVSpikeTests/Fixtures/hlg_bars_640x360.mov"
 mkdir -p "$(dirname "$OUT")"
 # 10-bit video-range luma codes: 64 + s·876 → 502 (0.50) and 721 (0.75); 8-bit-equivalent inputs
 # 125.5/180.25 are expressed through a 16-bit gray source so the 10-bit codes are exact.

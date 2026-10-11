@@ -1,2 +1,0 @@
-import 'package:vwish_editor_core/model.dart';
-import 'package:vwish_editor_engine/vwish_editor_engine.dart';

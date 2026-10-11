@@ -7,13 +7,13 @@
 #   bash scripts/ci/editor/check_native_libs.sh [options] <app.aab|app.apk> [more archives...]
 #
 # For each archive it checks:
-#   1. ABIs: the whisper libraries are exactly arm64-v8a/{libvwish_whisper.so, libvwish_whisper_v82.so}
-#      and x86_64/libvwish_whisper.so: every ABI in --abis, and any of the two that is present, is
+#   1. ABIs: the whisper libraries are exactly arm64-v8a/{libdanaview_whisper.so, libdanaview_whisper_v82.so}
+#      and x86_64/libdanaview_whisper.so: every ABI in --abis, and any of the two that is present, is
 #      complete; nothing in armeabi-v7a, x86 or under another name (D-43(b)).
 #   2. 16 KB pages: every LOAD segment of every 64-bit .so (arm64-v8a, x86_64) is aligned to >= 16384
 #      (llvm-readelf -l). --align-scope whisper limits this to the whisper libraries.
-#   3. Exports: the defined dynamic symbols of each whisper library are exactly the VW_API functions of
-#      packages/vwish_whisper/src/vw_whisper.h (all vw_*); no libc++_shared.so dependency (c++_static).
+#   3. Exports: the defined dynamic symbols of each whisper library are exactly the DV_API functions of
+#      packages/danaview_whisper/src/dv_whisper.h (all dv_*); no libc++_shared.so dependency (c++_static).
 #   4. Size: each whisper library is <= --max-bytes (default 3 MB = 3145728 bytes, as packaged).
 #   5. ELF machine matches the ABI folder.
 #
@@ -24,7 +24,7 @@
 #   --max-bytes N             size limit per whisper .so (default 3145728)
 #
 # Tools: llvm-readelf from the Android NDK (toolchains/llvm/prebuilt/<host>/bin; host folder from
-# uname -s: darwin-x86_64, linux-x86_64 or windows-x86_64 with .exe). NDK lookup: VWISH_LLVM_READELF,
+# uname -s: darwin-x86_64, linux-x86_64 or windows-x86_64 with .exe). NDK lookup: DANAVIEW_LLVM_READELF,
 # ANDROID_NDK_HOME, ANDROID_NDK_ROOT, ANDROID_NDK, then <sdk>/ndk/28.2.13676358, then the newest
 # <sdk>/ndk/*; the SDK is ANDROID_HOME, ANDROID_SDK_ROOT or the platform default.
 # Unpacking uses the JDK's `jar` (JAVA_HOME/bin or PATH): every machine that builds an AAB/APK has a
@@ -35,7 +35,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-HEADER="$REPO_ROOT/packages/vwish_whisper/src/vw_whisper.h"
+HEADER="$REPO_ROOT/packages/danaview_whisper/src/dv_whisper.h"
 PINNED_NDK="28.2.13676358"
 
 ABIS="arm64-v8a x86_64"
@@ -98,7 +98,7 @@ readelf_in() { # <ndk dir> -> prints the llvm-readelf path if present
 
 find_readelf() {
   local found="" ndk sdk dir newest
-  if [ -n "${VWISH_LLVM_READELF:-}" ] && [ -f "$VWISH_LLVM_READELF" ]; then echo "$VWISH_LLVM_READELF"; return; fi
+  if [ -n "${DANAVIEW_LLVM_READELF:-}" ] && [ -f "$DANAVIEW_LLVM_READELF" ]; then echo "$DANAVIEW_LLVM_READELF"; return; fi
   for ndk in "${ANDROID_NDK_HOME:-}" "${ANDROID_NDK_ROOT:-}" "${ANDROID_NDK:-}"; do
     [ -n "$ndk" ] || continue
     found="$(readelf_in "$ndk")"
@@ -154,17 +154,17 @@ extract_entries() { # <archive> <dest dir> <entry>...
   fi
 }
 
-# Expected exports: the VW_API function names of vw_whisper.h (C ABI). Falls back to "vw_* only".
+# Expected exports: the DV_API function names of dv_whisper.h (C ABI). Falls back to "dv_* only".
 EXPECTED_EXPORTS=""
 if [ -f "$HEADER" ]; then
   EXPECTED_EXPORTS="$(tr -d '\r' < "$HEADER" \
-    | sed -n 's/^VW_API[^(]*[^A-Za-z0-9_]\(vw_[A-Za-z0-9_]*\)[[:space:]]*(.*/\1/p' | LC_ALL=C sort -u)"
+    | sed -n 's/^DV_API[^(]*[^A-Za-z0-9_]\(dv_[A-Za-z0-9_]*\)[[:space:]]*(.*/\1/p' | LC_ALL=C sort -u)"
 fi
 if [ -z "$EXPECTED_EXPORTS" ]; then
-  note "vw_whisper.h not found or empty: checking that every export starts with vw_ only"
+  note "dv_whisper.h not found or empty: checking that every export starts with dv_ only"
 fi
 
-TMP_ROOT="$(mktemp -d 2>/dev/null || mktemp -d -t vwish_native)"
+TMP_ROOT="$(mktemp -d 2>/dev/null || mktemp -d -t danaview_native)"
 cleanup() { rm -rf "$TMP_ROOT"; }
 trap cleanup EXIT
 
@@ -227,7 +227,7 @@ check_archive() {
   echo "  native libraries:"
   printf '%s\n' "$so_entries" | sed 's/^/    /'
 
-  whisper_entries="$(printf '%s\n' "$so_entries" | grep -E '/lib/[^/]+/libvwish_whisper[^/]*\.so$|^lib/[^/]+/libvwish_whisper[^/]*\.so$' || true)"
+  whisper_entries="$(printf '%s\n' "$so_entries" | grep -E '/lib/[^/]+/libdanaview_whisper[^/]*\.so$|^lib/[^/]+/libdanaview_whisper[^/]*\.so$' || true)"
 
   # 1. ABIs and file names of the whisper libraries. Every ABI named by --abis must be complete; an
   #    ABI outside --abis may also be present (AGP builds the plugin's own abiFilters even for a
@@ -240,10 +240,10 @@ check_archive() {
   for abi in $required_abis; do
     case "$abi" in
       arm64-v8a) expected_set="$expected_set
-arm64-v8a/libvwish_whisper.so
-arm64-v8a/libvwish_whisper_v82.so" ;;
+arm64-v8a/libdanaview_whisper.so
+arm64-v8a/libdanaview_whisper_v82.so" ;;
       x86_64) expected_set="$expected_set
-x86_64/libvwish_whisper.so" ;;
+x86_64/libdanaview_whisper.so" ;;
     esac
   done
   expected_set="$(printf '%s\n' "$expected_set" | sed '/^$/d' | LC_ALL=C sort -u)"
@@ -291,15 +291,15 @@ EOF_ALIGN
     name="$(basename "$entry")"
 
     exports="$(defined_exports "$so")"
-    bad_exports="$(printf '%s\n' "$exports" | sed '/^$/d' | grep -v '^vw_' || true)"
+    bad_exports="$(printf '%s\n' "$exports" | sed '/^$/d' | grep -v '^dv_' || true)"
     if [ -n "$bad_exports" ]; then
-      fail "$abi/$name exports non-vw_ symbols: $(echo $bad_exports | cut -c1-400)"
+      fail "$abi/$name exports non-dv_ symbols: $(echo $bad_exports | cut -c1-400)"
     elif [ -n "$EXPECTED_EXPORTS" ] && [ "$exports" != "$EXPECTED_EXPORTS" ]; then
-      fail "$abi/$name exports differ from vw_whisper.h: missing [$(LC_ALL=C comm -23 <(printf '%s\n' "$EXPECTED_EXPORTS") <(printf '%s\n' "$exports") | tr '\n' ' ')] extra [$(LC_ALL=C comm -13 <(printf '%s\n' "$EXPECTED_EXPORTS") <(printf '%s\n' "$exports") | tr '\n' ' ')]"
+      fail "$abi/$name exports differ from dv_whisper.h: missing [$(LC_ALL=C comm -23 <(printf '%s\n' "$EXPECTED_EXPORTS") <(printf '%s\n' "$exports") | tr '\n' ' ')] extra [$(LC_ALL=C comm -13 <(printf '%s\n' "$EXPECTED_EXPORTS") <(printf '%s\n' "$exports") | tr '\n' ' ')]"
     elif [ -z "$exports" ]; then
       fail "$abi/$name exports nothing"
     else
-      echo "  ok   exports: $abi/$name exports exactly $(printf '%s\n' "$exports" | sed '/^$/d' | wc -l | tr -d ' ') vw_* symbols"
+      echo "  ok   exports: $abi/$name exports exactly $(printf '%s\n' "$exports" | sed '/^$/d' | wc -l | tr -d ' ') dv_* symbols"
     fi
 
     needed="$(needed_libs "$so")"

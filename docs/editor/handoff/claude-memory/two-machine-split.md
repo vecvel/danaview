@@ -10,7 +10,7 @@ metadata:
 
 On 2026-10-10 the owner split the video editor build across two machines because the Mac has only 8 GB RAM.
 
-- **Mac:** this repo at /Users/besaoct/Desktop/vwish_player. It does everything except the Android lane:
+- **Mac:** this repo at /Users/besaoct/Desktop/danaview_player. It does everything except the Android lane:
   - core, UI/UX, integration and QA
   - all iOS work
   - ENG-01..07, ENG-09, ENG-02/03/04, ENG-06 (integration freeze), AI-05

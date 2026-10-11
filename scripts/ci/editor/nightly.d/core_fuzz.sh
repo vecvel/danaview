@@ -9,7 +9,7 @@
 #
 # The seed range moves every day, so each night explores new seeds; the log and report name it.
 # Failing seeds are minimized and written as regression fixtures to $CORE_FUZZ_OUT/fixtures/
-# (copy them into packages/vwish_editor_core/test/fuzz/regressions/). The report with the command
+# (copy them into packages/danaview_editor_core/test/fuzz/regressions/). The report with the command
 # coverage table is $CORE_FUZZ_OUT/report.json.
 #
 # Environment:
@@ -17,14 +17,14 @@
 #   CORE_FUZZ_FIRST   first seed (default: moves with the UTC date)
 #   CORE_FUZZ_STEPS   steps per seed (default 500)
 #   CORE_FUZZ_JOBS    worker isolates (default: the processor count)
-#   CORE_FUZZ_OUT     report directory (default packages/vwish_editor_core/build/core_fuzz)
+#   CORE_FUZZ_OUT     report directory (default packages/danaview_editor_core/build/core_fuzz)
 #   CORE_FUZZ_STRICT  1 to fail on the open known defects too (default 0)
 #
 # Exit status: 0 when every seed passed and every EditCommand subtype was exercised.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-PKG="$ROOT/packages/vwish_editor_core"
+PKG="$ROOT/packages/danaview_editor_core"
 
 SEEDS="${CORE_FUZZ_SEEDS:-10000}"
 STEPS="${CORE_FUZZ_STEPS:-500}"

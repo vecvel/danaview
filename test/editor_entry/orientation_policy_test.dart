@@ -1,8 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_features/orientation.dart';
-import 'package:vwish_features/vwish_features.dart';
+import 'package:danaview_features/orientation.dart';
+import 'package:danaview_features/danaview_features.dart';
 
 const _portrait = ['DeviceOrientation.portraitUp'];
 const _landscape = ['DeviceOrientation.landscapeLeft', 'DeviceOrientation.landscapeRight'];
@@ -19,7 +19,7 @@ class _Platform {
       return null;
     });
     messenger.setMockStreamHandler(
-      const EventChannel('vwish/device_orientation'),
+      const EventChannel('danaview/device_orientation'),
       MockStreamHandler.inline(
         onListen: (_, sink) {
           _sink = sink;
@@ -31,7 +31,7 @@ class _Platform {
     );
     addTearDown(() {
       messenger.setMockMethodCallHandler(SystemChannels.platform, null);
-      messenger.setMockStreamHandler(const EventChannel('vwish/device_orientation'), null);
+      messenger.setMockStreamHandler(const EventChannel('danaview/device_orientation'), null);
     });
   }
 

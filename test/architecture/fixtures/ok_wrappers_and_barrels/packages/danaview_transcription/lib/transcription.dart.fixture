@@ -1,0 +1,6 @@
+import 'package:flutter/foundation.dart';
+import 'package:danaview_editor_core/model.dart';
+import 'package:danaview_whisper/danaview_whisper.dart';
+
+/// Mentions StatelessWidget only in a comment and in a 'extends StatelessWidget' string.
+class TranscriptionService extends ChangeNotifier {}

@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_domain/vwish_domain.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_domain/danaview_domain.dart';
 
 String join(String a, String b, [String? c]) => [a, b, if (c != null) c].join(Platform.pathSeparator);
 
@@ -131,7 +131,7 @@ void main() {
 
   group('Library folders', () {
     test('add normalizes, dedupes and labels; remove is DB-only', () async {
-      final tmp = await Directory.systemTemp.createTemp('vwish_folders_');
+      final tmp = await Directory.systemTemp.createTemp('danaview_folders_');
       addTearDown(() => tmp.delete(recursive: true));
       final repo = await _repo();
 
@@ -165,7 +165,7 @@ void main() {
       final desktop = await _repo();
       expect(await desktop.getDeviceFolder(), isNull);
 
-      final tmp = await Directory.systemTemp.createTemp('vwish_device_');
+      final tmp = await Directory.systemTemp.createTemp('danaview_device_');
       addTearDown(() => tmp.delete(recursive: true));
       final docs = Directory(join(tmp.path, 'Documents'));
       final prefs = await SharedPreferences.getInstance();
@@ -225,7 +225,7 @@ void main() {
     });
 
     test('mediaExists greys out only missing local files', () async {
-      final tmp = await Directory.systemTemp.createTemp('vwish_exists_');
+      final tmp = await Directory.systemTemp.createTemp('danaview_exists_');
       addTearDown(() => tmp.delete(recursive: true));
       final file = File(join(tmp.path, 'here.mkv'))..writeAsStringSync('x');
       expect(LibraryRepository.mediaExists(_ref(file.path)), isTrue);
@@ -236,7 +236,7 @@ void main() {
 
   group('SessionRepository resume info', () {
     test('stores duration alongside the position and clears both when finished', () async {
-      SharedPreferences.setMockInitialValues({'vwish_resume_/old.mkv': 30000});
+      SharedPreferences.setMockInitialValues({'danaview_resume_/old.mkv': 30000});
       final session = SessionRepository(await SharedPreferences.getInstance());
 
       expect(session.getResumeInfo('/old.mkv'), const ResumeInfo(position: Duration(seconds: 30)));
@@ -259,7 +259,7 @@ void main() {
     late Directory root;
 
     setUp(() async {
-      root = await Directory.systemTemp.createTemp('vwish_browse_');
+      root = await Directory.systemTemp.createTemp('danaview_browse_');
       for (final dir in ['Season 10', 'Season 2', 'Season 1', '.hidden', r'$RECYCLE.BIN', '@eaDir']) {
         Directory(join(root.path, dir)).createSync();
       }

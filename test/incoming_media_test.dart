@@ -3,13 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_domain/vwish_domain.dart';
-import 'package:vwish_engine/vwish_engine.dart';
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_platform/vwish_platform.dart';
-import 'package:vwish/app.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_engine/danaview_engine.dart';
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_platform/danaview_platform.dart';
+import 'package:danaview/app.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import 'library_test_utils.dart';
 
@@ -27,7 +27,7 @@ Future<FakePlaybackEngine> _pumpApp(WidgetTester tester) async {
           LibraryRepository(prefs, storage: LibraryStorage(isMobile: false)),
         ),
       ],
-      child: const VwishApp(),
+      child: const DanaviewApp(),
     ),
   );
   await pumpFrames(tester);
@@ -35,7 +35,7 @@ Future<FakePlaybackEngine> _pumpApp(WidgetTester tester) async {
 }
 
 Future<void> _tearDown(WidgetTester tester, FakePlaybackEngine engine) async {
-  VwishToast.dismiss();
+  DanaviewToast.dismiss();
   await tester.pumpWidget(const SizedBox());
   await engine.dispose();
 }
@@ -51,7 +51,7 @@ void main() {
     });
 
     test('MethodChannel getInitialMedia and onOpenMedia communication', () async {
-      const channel = MethodChannel('vwish/media_intent');
+      const channel = MethodChannel('danaview/media_intent');
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
         if (call.method == 'getInitialMedia') {
@@ -71,7 +71,7 @@ void main() {
       final encodedCall = const StandardMethodCodec().encodeMethodCall(
         const MethodCall('onOpenMedia', '/storage/emulated/0/Movies/runtime.mp4'),
       );
-      await binaryMessenger.handlePlatformMessage('vwish/media_intent', encodedCall, (data) {});
+      await binaryMessenger.handlePlatformMessage('danaview/media_intent', encodedCall, (data) {});
       await Future<void>.delayed(Duration.zero);
 
       expect(events, ['/storage/emulated/0/Movies/runtime.mp4']);
@@ -93,7 +93,7 @@ void main() {
     });
   });
 
-  group('VwishApp Incoming Media Handling', () {
+  group('DanaviewApp Incoming Media Handling', () {
     testWidgets('Cold launch with mock initial media automatically plays and opens player', (tester) async {
       const videoUrl = 'https://example.com/files_app_open.mp4';
       IncomingMediaBridge.mockInitialMedia = videoUrl;
@@ -102,26 +102,26 @@ void main() {
       await pumpFrames(tester, count: 10);
 
       // Player screen should be presented
-      expect(find.byType(VwishPlayerScreen), findsOneWidget);
+      expect(find.byType(DanaviewPlayerScreen), findsOneWidget);
       expect(engine.currentSnapshot.status, PlaybackStatus.playing);
 
-      final container = ProviderScope.containerOf(tester.element(find.byType(VwishPlayerScreen)));
+      final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewPlayerScreen)));
       expect(container.read(playerControllerProvider).currentMediaRef?.pathOrUri, videoUrl);
 
       await _tearDown(tester, engine);
     });
 
-    testWidgets('Cold launch with vwish:// deep link plays target media', (tester) async {
+    testWidgets('Cold launch with danaview:// deep link plays target media', (tester) async {
       const targetUrl = 'https://example.com/deep_link_video.mp4';
-      IncomingMediaBridge.mockInitialMedia = 'vwish://open?url=$targetUrl';
+      IncomingMediaBridge.mockInitialMedia = 'danaview://open?url=$targetUrl';
 
       final engine = await _pumpApp(tester);
       await pumpFrames(tester, count: 10);
 
-      expect(find.byType(VwishPlayerScreen), findsOneWidget);
+      expect(find.byType(DanaviewPlayerScreen), findsOneWidget);
       expect(engine.currentSnapshot.status, PlaybackStatus.playing);
 
-      final container = ProviderScope.containerOf(tester.element(find.byType(VwishPlayerScreen)));
+      final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewPlayerScreen)));
       expect(container.read(playerControllerProvider).currentMediaRef?.pathOrUri, targetUrl);
 
       await _tearDown(tester, engine);
@@ -131,17 +131,17 @@ void main() {
       IncomingMediaBridge.mockInitialMedia = null;
       final engine = await _pumpApp(tester);
 
-      expect(find.byType(VwishHomeScreen), findsOneWidget);
-      expect(find.byType(VwishPlayerScreen), findsNothing);
+      expect(find.byType(DanaviewHomeScreen), findsOneWidget);
+      expect(find.byType(DanaviewPlayerScreen), findsNothing);
 
       const runtimeUrl = 'https://example.com/opened_from_files_at_runtime.mp4';
       IncomingMediaBridge.emitMockMedia(runtimeUrl);
       await pumpFrames(tester, count: 10);
 
-      expect(find.byType(VwishPlayerScreen), findsOneWidget);
+      expect(find.byType(DanaviewPlayerScreen), findsOneWidget);
       expect(engine.currentSnapshot.status, PlaybackStatus.playing);
 
-      final container = ProviderScope.containerOf(tester.element(find.byType(VwishPlayerScreen)));
+      final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewPlayerScreen)));
       expect(container.read(playerControllerProvider).currentMediaRef?.pathOrUri, runtimeUrl);
 
       await _tearDown(tester, engine);

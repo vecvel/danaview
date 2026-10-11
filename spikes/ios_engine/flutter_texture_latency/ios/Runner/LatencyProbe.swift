@@ -64,7 +64,7 @@ final class LatencyProbe: NSObject, FlutterTexture {
         p.play()
         completion(self.textureId)
       } catch {
-        print("VWSPIKE-LATENCY error \(error)")
+        print("DVSPIKE-LATENCY error \(error)")
         completion(-1)
       }
     }

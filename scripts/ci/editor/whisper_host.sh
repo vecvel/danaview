@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # OWNER: AI-03
 #
-# whisper-host CI job (ARCH §22, ai.md §16.3): builds the vwish whisper shim with the vendored
+# whisper-host CI job (ARCH §22, ai.md §16.3): builds the danaview whisper shim with the vendored
 # whisper.cpp/ggml (CPU backend only) on the host (Linux or macOS) and runs the C++ host tests.
 #
-#   VWISH_SANITIZER=none     plain RelWithDebInfo build: every suite incl. the real-model tests
-#   VWISH_SANITIZER=thread   ThreadSanitizer build of shim + whisper/ggml + tests (fixture suites)
-#   VWISH_SANITIZER=address  AddressSanitizer build (+ LeakSanitizer on Linux) (fixture suites)
+#   DANAVIEW_SANITIZER=none     plain RelWithDebInfo build: every suite incl. the real-model tests
+#   DANAVIEW_SANITIZER=thread   ThreadSanitizer build of shim + whisper/ggml + tests (fixture suites)
+#   DANAVIEW_SANITIZER=address  AddressSanitizer build (+ LeakSanitizer on Linux) (fixture suites)
 #
 # Checks, in order:
-#   1. static: no VW_LOG* format string in src/ takes a %s (shim logs carry numbers only, never text
-#      or paths; vw_log.h);
-#   2. the host tests (src/tests, `vw_tests`), which also fail on any leaked model/job handle and on any
+#   1. static: no DV_LOG* format string in src/ takes a %s (shim logs carry numbers only, never text
+#      or paths; dv_log.h);
+#   2. the host tests (src/tests, `dv_tests`), which also fail on any leaked model/job handle and on any
 #      captured log line containing a registered secret (segment text, prompts, file paths);
 #   3. macOS plain leg: the fixture suites again under `leaks --atExit` (no LeakSanitizer on macOS;
 #      Linux ASan runs with detect_leaks=1);
@@ -24,17 +24,17 @@
 #
 # Usage: scripts/ci/editor/whisper_host.sh [--sanitizer none|thread|address] [--download-models]
 #                                          [--jobs N] [test-filter...]
-# Env:   VWISH_SANITIZER, VWISH_CI_CACHE_DIR (default ~/.cache/vwish-ci), VW_CMAKE (cmake binary),
-#        VW_HOST_BUILD_DIR (default packages/vwish_whisper/build/host-<sanitizer>).
+# Env:   DANAVIEW_SANITIZER, DANAVIEW_CI_CACHE_DIR (default ~/.cache/danaview-ci), DV_CMAKE (cmake binary),
+#        DV_HOST_BUILD_DIR (default packages/danaview_whisper/build/host-<sanitizer>).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-PKG="$ROOT/packages/vwish_whisper"
+PKG="$ROOT/packages/danaview_whisper"
 SRC="$PKG/src"
 
-SANITIZER="${VWISH_SANITIZER:-none}"
+SANITIZER="${DANAVIEW_SANITIZER:-none}"
 DOWNLOAD=0
-JOBS="${VW_JOBS:-4}"
+JOBS="${DV_JOBS:-4}"
 FILTERS=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -49,11 +49,11 @@ if [ "${GITHUB_ACTIONS:-}" = "true" ]; then DOWNLOAD=1; fi
 
 case "$SANITIZER" in
   none|thread|address) ;;
-  *) echo "VWISH_SANITIZER must be none, thread or address (got '$SANITIZER')" >&2; exit 2 ;;
+  *) echo "DANAVIEW_SANITIZER must be none, thread or address (got '$SANITIZER')" >&2; exit 2 ;;
 esac
 
-CACHE="${VWISH_CI_CACHE_DIR:-$HOME/.cache/vwish-ci}/whisper"
-BUILD="${VW_HOST_BUILD_DIR:-$PKG/build/host-$SANITIZER}"
+CACHE="${DANAVIEW_CI_CACHE_DIR:-$HOME/.cache/danaview-ci}/whisper"
+BUILD="${DV_HOST_BUILD_DIR:-$PKG/build/host-$SANITIZER}"
 
 group() { if [ "${GITHUB_ACTIONS:-}" = "true" ]; then echo "::group::$1"; else echo "== $1"; fi; }
 endgroup() { if [ "${GITHUB_ACTIONS:-}" = "true" ]; then echo "::endgroup::"; fi; }
@@ -63,7 +63,7 @@ fail() {
 }
 
 # --- toolchain ------------------------------------------------------------------------------------
-CMAKE="${VW_CMAKE:-}"
+CMAKE="${DV_CMAKE:-}"
 if [ -z "$CMAKE" ]; then
   if command -v cmake >/dev/null 2>&1; then
     CMAKE="$(command -v cmake)"
@@ -74,7 +74,7 @@ if [ -z "$CMAKE" ]; then
     done
   fi
 fi
-[ -n "$CMAKE" ] || fail "cmake not found: install it (macOS: brew install cmake; Ubuntu: sudo apt-get install cmake ninja-build) or set VW_CMAKE"
+[ -n "$CMAKE" ] || fail "cmake not found: install it (macOS: brew install cmake; Ubuntu: sudo apt-get install cmake ninja-build) or set DV_CMAKE"
 GEN_ARGS=()
 NINJA=""
 if command -v ninja >/dev/null 2>&1; then
@@ -91,10 +91,10 @@ size_of() { wc -c < "$1" | tr -d ' '; }
 
 # --- 1. static log-format check -------------------------------------------------------------------
 group "static check: shim log formats carry no strings"
-if grep -nE 'VW_LOG[EWID][[:space:]]*\(.*%[-+ #0-9.]*s' "$SRC"/*.cpp "$SRC"/*.h; then
-  fail "a VW_LOG* format string uses %s: shim logs must carry numbers only (no text, no paths)"
+if grep -nE 'DV_LOG[EWID][[:space:]]*\(.*%[-+ #0-9.]*s' "$SRC"/*.cpp "$SRC"/*.h; then
+  fail "a DV_LOG* format string uses %s: shim logs must carry numbers only (no text, no paths)"
 fi
-if grep -nE 'log_printf[[:space:]]*\(.*%[-+ #0-9.]*s' "$SRC"/*.cpp | grep -v 'vw_log.cpp'; then
+if grep -nE 'log_printf[[:space:]]*\(.*%[-+ #0-9.]*s' "$SRC"/*.cpp | grep -v 'dv_log.cpp'; then
   fail "a log_printf format string uses %s"
 fi
 echo "ok"
@@ -128,20 +128,20 @@ if [ "$SANITIZER" = "none" ]; then
     fi
   done
   endgroup
-  if [ -f "$CACHE/ggml-tiny-q5_1.bin" ]; then export VW_TEST_WHISPER_MODEL="$CACHE/ggml-tiny-q5_1.bin"; fi
-  if [ -f "$CACHE/ggml-silero-v6.2.0.bin" ]; then export VW_TEST_VAD_MODEL="$CACHE/ggml-silero-v6.2.0.bin"; fi
+  if [ -f "$CACHE/ggml-tiny-q5_1.bin" ]; then export DV_TEST_WHISPER_MODEL="$CACHE/ggml-tiny-q5_1.bin"; fi
+  if [ -f "$CACHE/ggml-silero-v6.2.0.bin" ]; then export DV_TEST_VAD_MODEL="$CACHE/ggml-silero-v6.2.0.bin"; fi
 fi
 
 # --- 2. build + host tests --------------------------------------------------------------------------
 group "configure + build (sanitizer: $SANITIZER, build dir: ${BUILD#"$ROOT"/})"
 "$CMAKE" -S "$SRC" -B "$BUILD" ${GEN_ARGS[@]+"${GEN_ARGS[@]}"} -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DVW_SANITIZER="$SANITIZER" -DVW_BUILD_TESTS=ON >/dev/null
+  -DDV_SANITIZER="$SANITIZER" -DDV_BUILD_TESTS=ON >/dev/null
 "$CMAKE" --build "$BUILD" -j "$JOBS"
 endgroup
 
-LOG_FILE="$BUILD/vw_tests.log"
+LOG_FILE="$BUILD/dv_tests.log"
 rm -f "$LOG_FILE"
-export VW_TEST_LOG_FILE="$LOG_FILE"
+export DV_TEST_LOG_FILE="$LOG_FILE"
 case "$SANITIZER" in
   thread)
     export TSAN_OPTIONS="halt_on_error=1 second_deadlock_stack=1 ${TSAN_OPTIONS:-}"
@@ -166,16 +166,16 @@ if [ ${#FILTERS[@]} -eq 0 ]; then
 fi
 
 group "host tests (sanitizer: $SANITIZER)"
-"$BUILD/tests/vw_tests" ${FILTERS[@]+"${FILTERS[@]}"}
+"$BUILD/tests/dv_tests" ${FILTERS[@]+"${FILTERS[@]}"}
 endgroup
 
 # LeakSanitizer does not exist on macOS: the plain macOS leg re-runs the fixture suites under Apple's
-# `leaks` tool instead (vw_job_free / vw_model_release / vw_shutdown_all must leave nothing behind).
+# `leaks` tool instead (dv_job_free / dv_model_release / dv_shutdown_all must leave nothing behind).
 if [ "$SANITIZER" = "none" ] && [ "$(uname -s)" = "Darwin" ] && command -v leaks >/dev/null 2>&1; then
   group "leak check (macOS leaks --atExit)"
   leaks_out="$BUILD/leaks.txt"
   set +e
-  VW_TEST_LOG_FILE="" leaks --atExit -- "$BUILD/tests/vw_tests" Wav. Json. Words. Chunker. Vad. Log. Abi. Model. Jobs. Detect. Shutdown. >"$leaks_out" 2>&1
+  DV_TEST_LOG_FILE="" leaks --atExit -- "$BUILD/tests/dv_tests" Wav. Json. Words. Chunker. Vad. Log. Abi. Model. Jobs. Detect. Shutdown. >"$leaks_out" 2>&1
   set -e
   grep -E "passed, |leaks for" "$leaks_out" || true
   grep -qE "[[:space:]]0 leaks for 0 total leaked bytes" "$leaks_out" || fail "leaks reported memory leaks (see $leaks_out)"
@@ -188,7 +188,7 @@ group "log privacy grep"
 [ -s "$LOG_FILE" ] || fail "no log lines were captured (expected the debug-level test log in $LOG_FILE)"
 lines="$(wc -l < "$LOG_FILE" | tr -d ' ')"
 bad=0
-for pattern in '/' '\\' '\.wav' '\.bin' 'vwtest_pathsecret' 'hello world' 'ask not' 'prompt secret' 'decoder prompt'; do
+for pattern in '/' '\\' '\.wav' '\.bin' 'dvtest_pathsecret' 'hello world' 'ask not' 'prompt secret' 'decoder prompt'; do
   if grep -nE -- "$pattern" "$LOG_FILE" | head -5; then
     echo "log line matches forbidden pattern: $pattern" >&2
     bad=1

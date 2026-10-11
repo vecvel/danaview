@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎬 Vwish
+# 🎬 Danaview
 
 **High-performance media player and on-device video editor.**
 *Powered by Flutter, libmpv, native video engines and on-device AI.*
@@ -18,7 +18,7 @@
 
 ## 🌟 Overview
 
-**Vwish** is a media player and a non-destructive video editor in one app.
+**Danaview** is a media player and a non-destructive video editor in one app.
 
 - 🎥 **The Player** (available now): plays almost any video file or network stream on Android, iOS, macOS, Windows and Linux, with a 10-band equalizer, volume boost up to 300%, subtitles, playlists, a queue, diagnostics and built-in network and media tools.
 - ✂️ **The Editor** (in development, v1.1.0): a multi-track editor for iPhone, iPad and Android, with frame-accurate cuts, text, subtitles, effects, color and LUTs, transitions, picture-in-picture, chroma key, masks, keyframes, real video export, and **on-device AI subtitles** that never send audio to the cloud.
@@ -29,7 +29,7 @@
 
 ## 💖 Sponsor & Support
 
-If you enjoy using **Vwish** or find our engineering helpful, consider sponsoring the project to support active development and upcoming features:
+If you enjoy using **Danaview** or find our engineering helpful, consider sponsoring the project to support active development and upcoming features:
 
 - 💖 **GitHub Sponsors**: [github.com/sponsors/vecvel](https://github.com/sponsors/vecvel)
 - ☕ **Buy Me a Coffee**: [buymeacoffee.com/vecvel](https://buymeacoffee.com/vecvel)
@@ -87,11 +87,11 @@ If you enjoy using **Vwish** or find our engineering helpful, consider sponsorin
 - **Playlists:** create, rename, delete, play, shuffle, add videos or links, drag to reorder, play from here.
 - **Queue:** jump to any item, remove, drag to reorder, shuffle (restores the original order when turned off), repeat Off / All / One, and auto-play of the next video.
 - **Open link:** plays http, https, rtsp, rtmp, srt, udp, rtp, mms and file URLs, with a paste button and address checking.
-- **Open with Vwish:**
+- **Open with Danaview:**
   - Android: open videos from other apps and links.
   - iOS: open from Files and from other apps.
   - macOS: open from Finder.
-  - All platforms: `vwish://` links.
+  - All platforms: `danaview://` links.
 - **Drag and drop** of files and folders onto the player (desktop).
 
 ### Diagnostics
@@ -309,30 +309,30 @@ Built natively for **iPhone, iPad and Android** (iOS 15+, Android 10+):
 
 ## 🏗️ Monorepo Architecture
 
-Vwish is a Flutter & Dart monorepo with strict package boundaries:
+Danaview is a Flutter & Dart monorepo with strict package boundaries:
 
 ```
-vwish/
+danaview/
 ├── lib/
 │   ├── app.dart                    # App root, theme & incoming media
 │   ├── main.dart                   # Composition root & MediaKit bootstrap
 │   └── router/app_router.dart      # GoRouter declaration
 ├── packages/
 │   │   # Player
-│   ├── vwish_domain/               # Pure Dart player models & state
-│   ├── vwish_engine/               # libmpv / media_kit playback engine
-│   ├── vwish_data/                 # Storage, natural sort, sessions, network & media tools
-│   ├── vwish_ui_kit/               # Design system: theme, Figtree font, components
-│   ├── vwish_platform/             # Window, orientation, wakelock, open-with bridges
-│   ├── vwish_features/             # Player, library, queue, settings, tools screens
+│   ├── danaview_domain/               # Pure Dart player models & state
+│   ├── danaview_engine/               # libmpv / media_kit playback engine
+│   ├── danaview_data/                 # Storage, natural sort, sessions, network & media tools
+│   ├── danaview_ui_kit/               # Design system: theme, Figtree font, components
+│   ├── danaview_platform/             # Window, orientation, wakelock, open-with bridges
+│   ├── danaview_features/             # Player, library, queue, settings, tools screens
 │   │
 │   │   # Editor (v1.1.0, in development)
-│   ├── vwish_editor/               # Editor screens and state
-│   ├── vwish_editor_core/          # Pure Dart timeline model, frame grid, commands, render plan
-│   ├── vwish_editor_engine_api/    # Engine contracts, fake engine, reference renderer
-│   ├── vwish_editor_engine/        # Native engines (AVFoundation/Metal on iOS, Media3 on Android)
-│   ├── vwish_transcription/        # Speech model catalog, downloads, caption pipeline
-│   └── vwish_whisper/              # whisper.cpp (vendored) FFI plugin
+│   ├── danaview_editor/               # Editor screens and state
+│   ├── danaview_editor_core/          # Pure Dart timeline model, frame grid, commands, render plan
+│   ├── danaview_editor_engine_api/    # Engine contracts, fake engine, reference renderer
+│   ├── danaview_editor_engine/        # Native engines (AVFoundation/Metal on iOS, Media3 on Android)
+│   ├── danaview_transcription/        # Speech model catalog, downloads, caption pipeline
+│   └── danaview_whisper/              # whisper.cpp (vendored) FFI plugin
 ├── spikes/                         # Native engine experiments (iOS, Android)
 ├── docs/
 │   └── editor/                     # Editor architecture & 158-ticket build plan
@@ -354,8 +354,8 @@ vwish/
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/vecvel/vwish.git
-   cd vwish
+   git clone https://github.com/vecvel/danaview.git
+   cd danaview
    ```
 
 2. **Install dependencies**:
@@ -378,8 +378,8 @@ vwish/
    flutter run -d macos
 
    # iOS / Android with the editor enabled (in development)
-   flutter run -d ios --dart-define=VWISH_EDITOR=true
-   flutter run -d android --dart-define=VWISH_EDITOR=true --dart-define=VWISH_AUTO_CAPTIONS=true
+   flutter run -d ios --dart-define=DANAVIEW_EDITOR=true
+   flutter run -d android --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true
 
    # Windows / Linux
    flutter run -d windows

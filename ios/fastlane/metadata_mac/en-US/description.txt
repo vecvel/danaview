@@ -1,6 +1,6 @@
-Vwish is the modern, ultra-high performance HDR media player built for macOS. Engineered with a hardware-accelerated playback engine, Vwish effortlessly handles virtually any video format, container, subtitle, and audio codec with silky-smooth frame pacing and minimal CPU utilization.
+Danaview is the modern, ultra-high performance HDR media player built for macOS. Engineered with a hardware-accelerated playback engine, Danaview effortlessly handles virtually any video format, container, subtitle, and audio codec with silky-smooth frame pacing and minimal CPU utilization.
 
-Whether playing high-bitrate HEVC and AV1 movies from your local drive, streaming live HLS and DASH broadcasts, or managing video playlists, Vwish delivers an uncompromising cinematic experience on your Mac.
+Whether playing high-bitrate HEVC and AV1 movies from your local drive, streaming live HLS and DASH broadcasts, or managing video playlists, Danaview delivers an uncompromising cinematic experience on your Mac.
 
 KEY FEATURES:
 
@@ -34,4 +34,4 @@ ON-DEVICE PRIVACY FIRST
 • Zero telemetry, zero analytics, and zero tracking. All your media stays strictly on your device.
 • Sandboxed and secure with minimal system footprint.
 
-Experience ultra-smooth, high-definition video playback on your Mac. Download Vwish today.
+Experience ultra-smooth, high-definition video playback on your Mac. Download Danaview today.

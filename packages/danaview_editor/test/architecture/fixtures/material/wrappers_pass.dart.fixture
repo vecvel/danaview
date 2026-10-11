@@ -1,0 +1,20 @@
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
+
+// A TextField, Slider or Card mentioned in a comment does not count.
+/// Neither does `IconButton` in a doc comment.
+class Good extends StatelessWidget {
+  const Good({super.key});
+
+  static const label = 'Card TextField Switch Chip';
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        const DanaviewTextField(),
+        DanaviewSlider(value: 0.5, onChanged: (_) {}),
+        DanaviewIconButton(icon: Icons.add, onPressed: () {}),
+        DanaviewSwitch(value: true, onChanged: (_) {}),
+        const DanaviewChoiceChip(label: 'Card'),
+        const CardLike(),
+        const MyTextFieldWrapper(),
+      ]);
+}

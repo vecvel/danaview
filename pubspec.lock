@@ -81,6 +81,97 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
+  danaview_data:
+    dependency: "direct main"
+    description:
+      path: "packages/danaview_data"
+      relative: true
+    source: path
+    version: "1.0.0"
+  danaview_domain:
+    dependency: "direct main"
+    description:
+      path: "packages/danaview_domain"
+      relative: true
+    source: path
+    version: "1.0.0"
+  danaview_editor:
+    dependency: "direct main"
+    description:
+      path: "packages/danaview_editor"
+      relative: true
+    source: path
+    version: "1.1.0"
+  danaview_editor_core:
+    dependency: "direct dev"
+    description:
+      path: "packages/danaview_editor_core"
+      relative: true
+    source: path
+    version: "1.1.0"
+  danaview_editor_engine:
+    dependency: "direct main"
+    description:
+      path: "packages/danaview_editor_engine"
+      relative: true
+    source: path
+    version: "1.1.0"
+  danaview_editor_engine_api:
+    dependency: "direct dev"
+    description:
+      path: "packages/danaview_editor_engine_api"
+      relative: true
+    source: path
+    version: "1.1.0"
+  danaview_editor_fonts:
+    dependency: transitive
+    description:
+      path: "packages/danaview_editor_fonts"
+      relative: true
+    source: path
+    version: "1.1.0"
+  danaview_engine:
+    dependency: "direct main"
+    description:
+      path: "packages/danaview_engine"
+      relative: true
+    source: path
+    version: "1.0.0"
+  danaview_features:
+    dependency: "direct main"
+    description:
+      path: "packages/danaview_features"
+      relative: true
+    source: path
+    version: "1.0.0"
+  danaview_platform:
+    dependency: "direct main"
+    description:
+      path: "packages/danaview_platform"
+      relative: true
+    source: path
+    version: "1.0.0"
+  danaview_transcription:
+    dependency: transitive
+    description:
+      path: "packages/danaview_transcription"
+      relative: true
+    source: path
+    version: "1.1.0"
+  danaview_ui_kit:
+    dependency: "direct main"
+    description:
+      path: "packages/danaview_ui_kit"
+      relative: true
+    source: path
+    version: "1.0.0"
+  danaview_whisper:
+    dependency: transitive
+    description:
+      path: "packages/danaview_whisper"
+      relative: true
+    source: path
+    version: "1.1.0"
   dbus:
     dependency: transitive
     description:
@@ -812,97 +903,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.6.1"
-  vwish_data:
-    dependency: "direct main"
-    description:
-      path: "packages/vwish_data"
-      relative: true
-    source: path
-    version: "1.0.0"
-  vwish_domain:
-    dependency: "direct main"
-    description:
-      path: "packages/vwish_domain"
-      relative: true
-    source: path
-    version: "1.0.0"
-  vwish_editor:
-    dependency: "direct main"
-    description:
-      path: "packages/vwish_editor"
-      relative: true
-    source: path
-    version: "1.1.0"
-  vwish_editor_core:
-    dependency: "direct dev"
-    description:
-      path: "packages/vwish_editor_core"
-      relative: true
-    source: path
-    version: "1.1.0"
-  vwish_editor_engine:
-    dependency: "direct main"
-    description:
-      path: "packages/vwish_editor_engine"
-      relative: true
-    source: path
-    version: "1.1.0"
-  vwish_editor_engine_api:
-    dependency: "direct dev"
-    description:
-      path: "packages/vwish_editor_engine_api"
-      relative: true
-    source: path
-    version: "1.1.0"
-  vwish_editor_fonts:
-    dependency: transitive
-    description:
-      path: "packages/vwish_editor_fonts"
-      relative: true
-    source: path
-    version: "1.1.0"
-  vwish_engine:
-    dependency: "direct main"
-    description:
-      path: "packages/vwish_engine"
-      relative: true
-    source: path
-    version: "1.0.0"
-  vwish_features:
-    dependency: "direct main"
-    description:
-      path: "packages/vwish_features"
-      relative: true
-    source: path
-    version: "1.0.0"
-  vwish_platform:
-    dependency: "direct main"
-    description:
-      path: "packages/vwish_platform"
-      relative: true
-    source: path
-    version: "1.0.0"
-  vwish_transcription:
-    dependency: transitive
-    description:
-      path: "packages/vwish_transcription"
-      relative: true
-    source: path
-    version: "1.1.0"
-  vwish_ui_kit:
-    dependency: "direct main"
-    description:
-      path: "packages/vwish_ui_kit"
-      relative: true
-    source: path
-    version: "1.0.0"
-  vwish_whisper:
-    dependency: transitive
-    description:
-      path: "packages/vwish_whisper"
-      relative: true
-    source: path
-    version: "1.1.0"
   wakelock_plus:
     dependency: "direct main"
     description:

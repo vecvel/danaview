@@ -12,20 +12,20 @@
 #
 # Xcode 26 no longer ships the Metal compiler: it is the optional "Metal Toolchain" component
 # (`xcodebuild -downloadComponent MetalToolchain`, ~700 MB). When it is installed, `xcrun metal`
-# is used. Otherwise set VW_METAL_TOOLCHAIN to a mounted Metal.xctoolchain (on the dev Mac the
+# is used. Otherwise set DV_METAL_TOOLCHAIN to a mounted Metal.xctoolchain (on the dev Mac the
 # 26.4 toolchain asset already on disk was mounted read-only with hdiutil; see
 # docs/editor/spikes/IOS-01.md §V-N9).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 
-if [[ -n "${VW_METAL_TOOLCHAIN:-}" ]]; then
-  METAL="$VW_METAL_TOOLCHAIN/usr/bin/metal"
-  METALLIB="$VW_METAL_TOOLCHAIN/usr/bin/metallib"
+if [[ -n "${DV_METAL_TOOLCHAIN:-}" ]]; then
+  METAL="$DV_METAL_TOOLCHAIN/usr/bin/metal"
+  METALLIB="$DV_METAL_TOOLCHAIN/usr/bin/metallib"
 elif xcrun metal --version >/dev/null 2>&1; then
   METAL="xcrun metal"
   METALLIB="xcrun metallib"
 else
-  echo "No Metal compiler: install the Metal Toolchain component or set VW_METAL_TOOLCHAIN" >&2
+  echo "No Metal compiler: install the Metal Toolchain component or set DV_METAL_TOOLCHAIN" >&2
   exit 1
 fi
 
@@ -38,10 +38,13 @@ build() { # <source> <outdir> <basename> <cikernel:yes|no>
     local sdk="${pair%%:*}" triple="${pair#*:}"
     local sysroot; sysroot="$(xcrun --sdk "$sdk" --show-sdk-path)"
     if [[ "$ci" == yes ]]; then
-      $METAL -c -fcikernel -target "$triple" -isysroot "$sysroot" "$src" -o "$tmp/$base.$sdk.air"
+      # -fcikernel records the absolute source path; compile a copy from a neutral temp folder
+      # so the metallib carries no checkout path.
+      mkdir -p "$tmp/src" && cp "$src" "$tmp/src/" && local csrc="$tmp/src/$(basename "$src")"
+      (cd "$tmp/src" && $METAL -c -fcikernel -ffile-prefix-map="$tmp/src"=. -target "$triple" -isysroot "$sysroot" "$(basename "$csrc")" -o "$tmp/$base.$sdk.air")
       $METALLIB -cikernel "$tmp/$base.$sdk.air" -o "$out/$base.$sdk.metallib"
     else
-      $METAL -c -target "$triple" -isysroot "$sysroot" "$src" -o "$tmp/$base.$sdk.air"
+      $METAL -c -ffile-prefix-map="$HERE"=. -target "$triple" -isysroot "$sysroot" "$src" -o "$tmp/$base.$sdk.air"
       $METAL -target "$triple" -isysroot "$sysroot" -framework CoreImage "$tmp/$base.$sdk.air" \
         -o "$out/$base.$sdk.metallib"
     fi
@@ -57,6 +60,7 @@ build() { # <source> <outdir> <basename> <cikernel:yes|no>
   } > "$out/BUILD_INFO.txt"
 }
 
-build "$HERE/VWSpikeKernels/Kernels/vw_spike_kernels.ci.metal" "$HERE/VWSpikeKernels/Prebuilt" vw_spike_kernels yes
-build "$HERE/VWSpikeStitchable/Kernels/vw_spike_stitchable.metal" "$HERE/VWSpikeStitchable/Prebuilt" vw_spike_stitchable no
-ls -la "$HERE"/VWSpikeKernels/Prebuilt "$HERE"/VWSpikeStitchable/Prebuilt
+cd "$HERE"  # relative source paths: the metallibs must not embed the absolute checkout path
+build "DVSpikeKernels/Kernels/dv_spike_kernels.ci.metal" "DVSpikeKernels/Prebuilt" dv_spike_kernels yes
+build "DVSpikeStitchable/Kernels/dv_spike_stitchable.metal" "DVSpikeStitchable/Prebuilt" dv_spike_stitchable no
+ls -la "$HERE"/DVSpikeKernels/Prebuilt "$HERE"/DVSpikeStitchable/Prebuilt

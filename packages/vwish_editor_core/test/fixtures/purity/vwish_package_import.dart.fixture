@@ -1,2 +1,0 @@
-// Negative fixture: lib/ code must not depend on another vwish package.
-import 'package:vwish_data/vwish_data.dart';

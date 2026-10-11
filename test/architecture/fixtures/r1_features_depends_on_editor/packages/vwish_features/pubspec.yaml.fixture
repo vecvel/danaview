@@ -1,8 +1,0 @@
-name: vwish_features
-dependencies:
-  flutter:
-    sdk: flutter
-  vwish_ui_kit:
-    path: ../vwish_ui_kit
-  vwish_editor_core:
-    path: ../vwish_editor_core

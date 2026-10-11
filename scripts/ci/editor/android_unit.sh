@@ -6,21 +6,21 @@
 #   1. `flutter build apk` of the editor engine example host (release by default; the example
 #      signs release builds with the debug key);
 #   2. the plugin's JVM unit tests through the example's Gradle build:
-#      ./gradlew :vwish_editor_engine:testDebugUnitTest. The example's vwish_test_harness.gradle
+#      ./gradlew :danaview_editor_engine:testDebugUnitTest. The example's danaview_test_harness.gradle
 #      adds the ENG-05 barcode reader source root and passes the shared fixture roots
-#      (vwish.fixtures*, see JvmFixtures.kt).
+#      (danaview.fixtures*, see JvmFixtures.kt).
 #
 # Usage:
 #   scripts/ci/editor/android_unit.sh
 #
 # Environment:
-#   VWISH_ANDROID_APK_MODE  release (default), debug, or none to skip the APK build
-#   VWISH_GRADLE_ARGS       extra Gradle arguments (CI adds --no-daemon)
+#   DANAVIEW_ANDROID_APK_MODE  release (default), debug, or none to skip the APK build
+#   DANAVIEW_GRADLE_ARGS       extra Gradle arguments (CI adds --no-daemon)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-EXAMPLE="$ROOT/packages/vwish_editor_engine/example"
-MODE="${VWISH_ANDROID_APK_MODE:-release}"
+EXAMPLE="$ROOT/packages/danaview_editor_engine/example"
+MODE="${DANAVIEW_ANDROID_APK_MODE:-release}"
 
 GHA="${GITHUB_ACTIONS:-}"
 group() { if [ "$GHA" = true ]; then echo "::group::$1"; else echo "==> $1"; fi; }
@@ -38,7 +38,7 @@ command -v java >/dev/null || die "java not found: install JDK 17 (Temurin)"
 
 declare -a GRADLE_ARGS=()
 if [ "$GHA" = true ]; then GRADLE_ARGS+=(--no-daemon); fi
-for a in ${VWISH_GRADLE_ARGS:-}; do GRADLE_ARGS+=("$a"); done
+for a in ${DANAVIEW_GRADLE_ARGS:-}; do GRADLE_ARGS+=("$a"); done
 
 group "flutter pub get (example)"
 (cd "$EXAMPLE" && flutter pub get)
@@ -55,13 +55,13 @@ case "$MODE" in
     (cd "$EXAMPLE" && flutter build apk --debug --config-only)
     endgroup
     ;;
-  *) die "VWISH_ANDROID_APK_MODE must be release, debug or none (got '$MODE')" ;;
+  *) die "DANAVIEW_ANDROID_APK_MODE must be release, debug or none (got '$MODE')" ;;
 esac
 
 [ -x "$EXAMPLE/android/gradlew" ] || die "example/android/gradlew missing after the Flutter build"
 
-group "plugin JVM unit tests (:vwish_editor_engine:testDebugUnitTest)"
-(cd "$EXAMPLE/android" && ./gradlew "${GRADLE_ARGS[@]+"${GRADLE_ARGS[@]}"}" :vwish_editor_engine:testDebugUnitTest)
+group "plugin JVM unit tests (:danaview_editor_engine:testDebugUnitTest)"
+(cd "$EXAMPLE/android" && ./gradlew "${GRADLE_ARGS[@]+"${GRADLE_ARGS[@]}"}" :danaview_editor_engine:testDebugUnitTest)
 endgroup
 
 echo "android-unit: OK"

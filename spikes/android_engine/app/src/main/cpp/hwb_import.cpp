@@ -11,7 +11,7 @@
 #include <android/hardware_buffer_jni.h>
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_vecvel_vwish_spike_engine_HwbImport_nativeCreateImage(JNIEnv* env, jclass, jobject buffer) {
+Java_com_vecvel_danaview_spike_engine_HwbImport_nativeCreateImage(JNIEnv* env, jclass, jobject buffer) {
     AHardwareBuffer* hb = AHardwareBuffer_fromHardwareBuffer(env, buffer);
     if (hb == nullptr) return 0;
     EGLClientBuffer client = eglGetNativeClientBufferANDROID(hb);
@@ -22,13 +22,13 @@ Java_com_vecvel_vwish_spike_engine_HwbImport_nativeCreateImage(JNIEnv* env, jcla
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_com_vecvel_vwish_spike_engine_HwbImport_nativeBindOes(JNIEnv*, jclass, jint texture, jlong image) {
+Java_com_vecvel_danaview_spike_engine_HwbImport_nativeBindOes(JNIEnv*, jclass, jint texture, jlong image) {
     glBindTexture(GL_TEXTURE_EXTERNAL_OES, static_cast<GLuint>(texture));
     glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, reinterpret_cast<GLeglImageOES>(image));
     return glGetError() == GL_NO_ERROR;
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_vecvel_vwish_spike_engine_HwbImport_nativeDestroyImage(JNIEnv*, jclass, jlong image) {
+Java_com_vecvel_danaview_spike_engine_HwbImport_nativeDestroyImage(JNIEnv*, jclass, jlong image) {
     if (image != 0) eglDestroyImageKHR(eglGetCurrentDisplay(), reinterpret_cast<EGLImageKHR>(image));
 }

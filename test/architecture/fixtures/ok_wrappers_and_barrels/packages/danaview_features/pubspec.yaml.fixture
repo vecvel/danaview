@@ -1,0 +1,11 @@
+name: danaview_features
+dependencies:
+  flutter:
+    sdk: flutter
+  danaview_ui_kit:
+    path: ../danaview_ui_kit
+  danaview_domain:
+    path: ../danaview_domain
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_features/chrome.dart' as chrome;
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_features/chrome.dart' as chrome;
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../library_test_utils.dart';
 
@@ -20,7 +20,7 @@ Future<LibraryTestEnv> _pumpHome(
   final env = await LibraryTestEnv.create();
   await tester.pumpWidget(libraryTestApp(
     env,
-    VwishHomeScreen(
+    DanaviewHomeScreen(
       onOpenPlayer: () {},
       onOpenFolder: (_) {},
       onOpenPlaylist: (_) {},
@@ -34,22 +34,22 @@ Future<LibraryTestEnv> _pumpHome(
 }
 
 Future<void> _finish(WidgetTester tester, LibraryTestEnv env) async {
-  VwishToast.dismiss();
+  DanaviewToast.dismiss();
   await tester.pumpWidget(const SizedBox());
   await env.dispose();
 }
 
-Finder get _title => find.text('Vwish');
+Finder get _title => find.text('Danaview');
 
 /// The slot the title text occupies in the header row.
 Size _titleSlot(WidgetTester tester) =>
     tester.getSize(find.ancestor(of: _title, matching: find.byType(Expanded)).first);
 
 void main() {
-  testWidgets('header order is logo, title, edit, settings with VwishSpacing.sm between the buttons',
+  testWidgets('header order is logo, title, edit, settings with DanaviewSpacing.sm between the buttons',
       (tester) async {
     final env = await _pumpHome(tester, size: const Size(390, 844), onOpenEditor: () {}, onOpenSettings: () {});
-    final logo = tester.getRect(find.byType(VwishLogo));
+    final logo = tester.getRect(find.byType(DanaviewLogo));
     final title = tester.getRect(_title);
     final edit = tester.getRect(find.byTooltip(_editorTooltip));
     final gear = tester.getRect(find.byTooltip(_settingsTooltip));
@@ -57,13 +57,13 @@ void main() {
     expect(logo.right, lessThanOrEqualTo(title.left));
     expect(title.right, lessThanOrEqualTo(edit.left));
     expect(edit.right, lessThanOrEqualTo(gear.left));
-    expect(gear.left - edit.right, VwishSpacing.sm);
+    expect(gear.left - edit.right, DanaviewSpacing.sm);
     expect(edit.size, const Size(44, 44));
     expect(gear.size, const Size(44, 44));
     expect(edit.center.dy, closeTo(gear.center.dy, 0.01));
 
-    final button = tester.widget<VwishIconButton>(find.widgetWithIcon(VwishIconButton, Icons.movie_edit));
-    expect(button.variant, VwishIconButtonVariant.tonal);
+    final button = tester.widget<DanaviewIconButton>(find.widgetWithIcon(DanaviewIconButton, Icons.movie_edit));
+    expect(button.variant, DanaviewIconButtonVariant.tonal);
     expect(button.size, 44);
     expect(button.iconSize, 22);
     expect(button.tooltip, _editorTooltip);
@@ -151,15 +151,15 @@ void main() {
   });
 
   testWidgets('the features chrome entry point exports the shared library chrome', (tester) async {
-    // Compile-time proof that `package:vwish_features/chrome.dart` exposes what vwish_editor reuses.
-    expect(chrome.vwishLibraryInsets(390), isA<EdgeInsets>());
+    // Compile-time proof that `package:danaview_features/chrome.dart` exposes what danaview_editor reuses.
+    expect(chrome.danaviewLibraryInsets(390), isA<EdgeInsets>());
     final types = <Type>[
-      chrome.VwishLibraryFrame,
-      chrome.VwishLibraryTopBar,
-      chrome.VwishLibrarySectionHeader,
-      chrome.VwishLibraryGroup,
-      chrome.VwishInlineEmpty,
-      chrome.VwishRefreshOnReturn,
+      chrome.DanaviewLibraryFrame,
+      chrome.DanaviewLibraryTopBar,
+      chrome.DanaviewLibrarySectionHeader,
+      chrome.DanaviewLibraryGroup,
+      chrome.DanaviewInlineEmpty,
+      chrome.DanaviewRefreshOnReturn,
     ];
     expect(types.toSet(), hasLength(6));
   });

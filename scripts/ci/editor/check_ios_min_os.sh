@@ -36,18 +36,18 @@
 # iOS 17 symbol behind __builtin_available, weak links to BackgroundTasks and to an allowlisted
 # iOS 16 framework, a clean archive) and checks that the script fails and passes on exactly those.
 #
-# Environment: VWISH_IOS_MIN_OS (default 15.0), VWISH_MIN_OS_WEAK_ALLOW (extra allowlist names).
+# Environment: DANAVIEW_IOS_MIN_OS (default 15.0), DANAVIEW_MIN_OS_WEAK_ALLOW (extra allowlist names).
 # Output names binaries relative to the given path; it never prints media or user content.
 set -euo pipefail
 
 SCRIPT="${BASH_SOURCE[0]}"
-MIN_OS="${VWISH_IOS_MIN_OS:-15.0}"
+MIN_OS="${DANAVIEW_IOS_MIN_OS:-15.0}"
 
 # Frameworks introduced after the floor that may be weak-linked. A weak link is only safe when
 # every use is guarded, so a new entry needs a review of the code that uses it. BackgroundTasks
 # exists on iOS 15 but its iOS 26 continued-processing API is what the export service guards
 # (IOS-13), so it is listed for the record.
-WEAK_ALLOWLIST="BackgroundTasks ${VWISH_MIN_OS_WEAK_ALLOW:-}"
+WEAK_ALLOWLIST="BackgroundTasks ${DANAVIEW_MIN_OS_WEAK_ALLOW:-}"
 
 # System frameworks and Swift runtime dylibs introduced after iOS 15.0 ("name first-iOS-version").
 # Strongly linking one of these makes dyld abort the launch on older iOS. Extend this list when the
@@ -121,7 +121,7 @@ vgt() {
 # ---------------------------------------------------------------------------------------------
 self_test() {
   local dir sdk status=0
-  dir="$(mktemp -d "${TMPDIR:-/tmp}/vwish_min_os_selftest.XXXXXX")"
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/danaview_min_os_selftest.XXXXXX")"
   # shellcheck disable=SC2064
   trap "rm -rf '$dir'" EXIT
   sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
@@ -146,8 +146,8 @@ self_test() {
   # Built for iOS 17: the minimum OS check fails.
   cc -target arm64-apple-ios17.0 "$dir/plain.c" -o "$dir/neg_minos_17"
   # An archive whose second member was built for iOS 17.
-  printf '%s\n' 'int vwish_a(void) { return 1; }' >"$dir/a.c"
-  printf '%s\n' 'int vwish_b(void) { return 2; }' >"$dir/b.c"
+  printf '%s\n' 'int danaview_a(void) { return 1; }' >"$dir/a.c"
+  printf '%s\n' 'int danaview_b(void) { return 2; }' >"$dir/b.c"
   cc -target "arm64-apple-ios$MIN_OS" -c "$dir/a.c" -o "$dir/a.o"
   cc -target arm64-apple-ios17.0 -c "$dir/b.c" -o "$dir/b.o"
   xcrun --sdk iphoneos libtool -static -o "$dir/neg_archive_member_17.a" "$dir/a.o" "$dir/b.o" 2>/dev/null
@@ -173,7 +173,7 @@ self_test() {
     allow=""
     [ "$name" = pos_weak_newer_allowlisted ] && allow=AppIntents
     got=0
-    VWISH_MIN_OS_WEAK_ALLOW="$allow" bash "$SCRIPT" --min "$MIN_OS" "$dir/$name" >"$dir/out.txt" 2>&1 || got=$?
+    DANAVIEW_MIN_OS_WEAK_ALLOW="$allow" bash "$SCRIPT" --min "$MIN_OS" "$dir/$name" >"$dir/out.txt" 2>&1 || got=$?
     if { [ "$expect" -eq 0 ] && [ "$got" -eq 0 ]; } || { [ "$expect" -ne 0 ] && [ "$got" -eq 1 ]; }; then
       echo "self-test ok: $name (exit $got)"
     else
@@ -183,7 +183,7 @@ self_test() {
     fi
   done
   # The strong-symbol fixture must fail for the symbol itself, not for anything else.
-  VWISH_MIN_OS_WEAK_ALLOW="" bash "$SCRIPT" --min "$MIN_OS" "$dir/neg_strong_ios17_symbol" >"$dir/out.txt" 2>&1 || true
+  DANAVIEW_MIN_OS_WEAK_ALLOW="" bash "$SCRIPT" --min "$MIN_OS" "$dir/neg_strong_ios17_symbol" >"$dir/out.txt" 2>&1 || true
   if ! grep -q 'CMTaggedBufferGroupGetCount.*iOS 17.0' "$dir/out.txt"; then
     fail_msg "self-test: the strong iOS 17 symbol was not named in the report"
     sed 's/^/    /' "$dir/out.txt" >&2
@@ -220,7 +220,7 @@ for tool in vtool otool nm lipo clang; do
 done
 SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/vwish_min_os.XXXXXX")"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/danaview_min_os.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 FAILURES="$WORK/failures.txt"
 SYMBOLS="$WORK/symbols.tsv"
@@ -412,7 +412,7 @@ probe_symbols() {
     [ -z "$headers" ] && continue
     {
       printf '%s\n' "$headers"
-      echo "static void vwish_probe(void) {"
+      echo "static void danaview_probe(void) {"
       awk -F '\t' -v lib="$lib" '$1 == lib { print $2 }' "$WORK/sorted.tsv" | sort -u | awk '
         /^_OBJC_(META)?CLASS_\$_[A-Za-z_][A-Za-z0-9_]*$/ { n = $0; sub(/^_OBJC_(META)?CLASS_\$_/, "", n); if (!seen["c" n]++) print "  (void)[" n " class];"; next }
         /^_[A-Za-z][A-Za-z0-9_]*$/ { n = substr($0, 2); if (!seen["s" n]++) print "  (void)&" n ";"; next }

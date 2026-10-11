@@ -10,27 +10,27 @@ name: Editor CI
 on:
   pull_request:
     paths:
-      - 'packages/vwish_editor*/**'
-      - 'packages/vwish_transcription/**'
-      - 'packages/vwish_whisper/**'
+      - 'packages/danaview_editor*/**'
+      - 'packages/danaview_transcription/**'
+      - 'packages/danaview_whisper/**'
       - 'test/architecture/**'
       - 'scripts/ci/editor/**'
       - '.github/workflows/editor-ci.yml'
-      # The architecture test also guards vwish_features (ARCH §4.2 rule 1 and the ARCH §1.3
+      # The architecture test also guards danaview_features (ARCH §4.2 rule 1 and the ARCH §1.3
       # Material scan) and reads the BUILD_PLAN owns lists, so changes there run it too.
-      - 'packages/vwish_features/**'
+      - 'packages/danaview_features/**'
       - 'docs/editor/BUILD_PLAN.md'
   push:
     branches: [main]
     # Same list as pull_request above.
     paths:
-      - 'packages/vwish_editor*/**'
-      - 'packages/vwish_transcription/**'
-      - 'packages/vwish_whisper/**'
+      - 'packages/danaview_editor*/**'
+      - 'packages/danaview_transcription/**'
+      - 'packages/danaview_whisper/**'
       - 'test/architecture/**'
       - 'scripts/ci/editor/**'
       - '.github/workflows/editor-ci.yml'
-      - 'packages/vwish_features/**'
+      - 'packages/danaview_features/**'
       - 'docs/editor/BUILD_PLAN.md'
   schedule:
     # Nightly suites (fuzz, full overflow matrix, AI eval): 02:30 UTC.
@@ -150,8 +150,8 @@ jobs:
             host: macos
             sanitizer: none
     env:
-      VWISH_SANITIZER: ${{ matrix.sanitizer }}
-      VWISH_CI_CACHE_DIR: ${{ github.workspace }}/.ci-cache
+      DANAVIEW_SANITIZER: ${{ matrix.sanitizer }}
+      DANAVIEW_CI_CACHE_DIR: ${{ github.workspace }}/.ci-cache
     steps:
       - uses: actions/checkout@v4
       - name: Look for scripts/ci/editor/whisper_host.sh
@@ -310,7 +310,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 240
     env:
-      VWISH_CI_CACHE_DIR: ${{ github.workspace }}/.ci-cache
+      DANAVIEW_CI_CACHE_DIR: ${{ github.workspace }}/.ci-cache
     steps:
       - uses: actions/checkout@v4
       - name: Look for scripts/ci/editor/nightly.sh

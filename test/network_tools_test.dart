@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import 'library_test_utils.dart';
 
@@ -173,7 +173,7 @@ final Map<String, StreamProbeResult> _probeResults = {
       encryption: 'AES-128',
     ),
     issues: const [
-      StreamIssue(StreamIssueLevel.info, 'Segments are encrypted with AES-128, which Vwish supports.'),
+      StreamIssue(StreamIssueLevel.info, 'Segments are encrypted with AES-128, which Danaview supports.'),
       StreamIssue(StreamIssueLevel.info, 'Redirects from a secure https:// link to plain http://.'),
     ],
   ),
@@ -235,7 +235,7 @@ Future<void> _reveal(WidgetTester tester, Finder finder) async {
 }
 
 Future<void> _finish(WidgetTester tester, LibraryTestEnv env) async {
-  VwishToast.dismiss();
+  DanaviewToast.dismiss();
   await tester.pumpWidget(const SizedBox());
   await env.dispose();
 }
@@ -269,7 +269,7 @@ void main() {
         final fake = _FakeSpeedTest();
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishSpeedTestScreen(onBack: () {}),
+          DanaviewSpeedTestScreen(onBack: () {}),
           textScale: surface.textScale,
           platform: _platformFor(surface),
           overrides: [speedTestServiceProvider.overrideWithValue(fake)],
@@ -305,7 +305,7 @@ void main() {
       final fake = _FakeSpeedTest();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishSpeedTestScreen(onBack: () {}),
+        DanaviewSpeedTestScreen(onBack: () {}),
         textScale: 1.35,
         overrides: [speedTestServiceProvider.overrideWithValue(fake)],
       ));
@@ -325,7 +325,7 @@ void main() {
       final fake = _FakeSpeedTest();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishSpeedTestScreen(onBack: () {}),
+        DanaviewSpeedTestScreen(onBack: () {}),
         overrides: [speedTestServiceProvider.overrideWithValue(fake)],
       ));
       await tester.tap(find.text('Start test'));
@@ -356,7 +356,7 @@ void main() {
       final fake = _FakeSpeedTest();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishSpeedTestScreen(onBack: () {}),
+        DanaviewSpeedTestScreen(onBack: () {}),
         overrides: [speedTestServiceProvider.overrideWithValue(fake)],
       ));
       await tester.tap(find.text('Start test'));
@@ -386,7 +386,7 @@ void main() {
         final probe = _FakeProbe(_probeResults);
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
+          DanaviewStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
           textScale: surface.textScale,
           platform: _platformFor(surface),
           overrides: [streamProbeProvider.overrideWithValue(probe)],
@@ -397,7 +397,7 @@ void main() {
 
         await _checkLink(tester, _hlsUrl);
         expect(find.text('Playable'), findsOneWidget);
-        expect(find.text('Play in Vwish'), findsOneWidget);
+        expect(find.text('Play in Danaview'), findsOneWidget);
         await _reveal(tester, find.text('Quality levels (5)'));
         expect(find.text('2160p · 3840×2160'), findsOneWidget);
         await _scrollThrough(tester);
@@ -413,7 +413,7 @@ void main() {
         expect(find.text('Not playable'), findsOneWidget);
         // A page's last path segment ("watch") means nothing, so the host names it.
         expect(find.text('www.example.com'), findsOneWidget);
-        expect(find.text('Play in Vwish'), findsNothing);
+        expect(find.text('Play in Danaview'), findsNothing);
         await _scrollThrough(tester);
         expect(find.textContaining('This is a web page, not a video'), findsOneWidget);
         // Seeking means nothing for a web page.
@@ -423,13 +423,13 @@ void main() {
       });
     }
 
-    testWidgets('Play in Vwish queues the link and opens the player', (tester) async {
+    testWidgets('Play in Danaview queues the link and opens the player', (tester) async {
       useSurface(tester, _surfaces[2]);
       final env = await LibraryTestEnv.create();
       var opened = 0;
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishStreamCheckScreen(onBack: () {}, onOpenPlayer: () => opened++),
+        DanaviewStreamCheckScreen(onBack: () {}, onOpenPlayer: () => opened++),
         overrides: [streamProbeProvider.overrideWithValue(_FakeProbe(_probeResults))],
       ));
       await tester.enterText(find.byType(TextField), _hlsUrl);
@@ -439,15 +439,15 @@ void main() {
       expect(find.text('Playable'), findsOneWidget);
       expect(find.text('master.m3u8'), findsOneWidget);
       // Full width on a phone, not capped a little short of the card's edge.
-      final card = find.ancestor(of: find.text('Playable'), matching: find.byType(VwishSurface)).first;
+      final card = find.ancestor(of: find.text('Playable'), matching: find.byType(DanaviewSurface)).first;
       expect(
-        tester.getSize(find.widgetWithText(VwishButton, 'Play in Vwish')).width,
-        tester.getSize(card).width - 2 * VwishSpacing.lg,
+        tester.getSize(find.widgetWithText(DanaviewButton, 'Play in Danaview')).width,
+        tester.getSize(card).width - 2 * DanaviewSpacing.lg,
       );
-      await tester.tap(find.text('Play in Vwish'));
+      await tester.tap(find.text('Play in Danaview'));
       await pumpFrames(tester);
       expect(opened, 1);
-      final container = ProviderScope.containerOf(tester.element(find.byType(VwishStreamCheckScreen)));
+      final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewStreamCheckScreen)));
       expect(container.read(queueControllerProvider).currentItem?.pathOrUri, Uri.parse(_hlsUrl).toString());
       await _finish(tester, env);
     });
@@ -458,7 +458,7 @@ void main() {
       final probe = _FakeProbe(_probeResults);
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
+        DanaviewStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
         overrides: [streamProbeProvider.overrideWithValue(probe)],
       ));
       await tester.tap(find.text('Check link'));
@@ -470,7 +470,7 @@ void main() {
       await tester.tap(find.text('Check link'));
       await pumpFrames(tester);
       expect(find.text("This kind of link can't be checked"), findsOneWidget);
-      expect(find.text('Play in Vwish'), findsOneWidget);
+      expect(find.text('Play in Danaview'), findsOneWidget);
       expect(probe.checked, isEmpty);
       expect(tester.takeException(), isNull);
       await _finish(tester, env);
@@ -482,7 +482,7 @@ void main() {
       final probe = _FakeProbe(_probeResults);
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
+        DanaviewStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
         overrides: [streamProbeProvider.overrideWithValue(probe)],
       ));
       await _checkLink(tester, _mp4Url);
@@ -514,7 +514,7 @@ void main() {
       });
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
+        DanaviewStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
         textScale: 1.35,
         overrides: [streamProbeProvider.overrideWithValue(probe)],
       ));
@@ -534,7 +534,7 @@ void main() {
       final probe = _FakeProbe(_probeResults)..pending = Completer<StreamProbeResult>();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
+        DanaviewStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
         textScale: 1.35,
         overrides: [streamProbeProvider.overrideWithValue(probe)],
       ));
@@ -542,7 +542,7 @@ void main() {
       await tester.tap(find.text('Check link'));
       await pumpFrames(tester, count: 2);
       expect(find.text('Checking…'), findsOneWidget);
-      expect(find.byType(VwishSpinner), findsOneWidget);
+      expect(find.byType(DanaviewSpinner), findsOneWidget);
       // The host gets a line of its own so it never breaks mid-word.
       expect(find.text('Contacting the server…'), findsOneWidget);
       expect(tester.widget<Text>(find.text('media.example.com')).maxLines, 1);
@@ -567,7 +567,7 @@ void main() {
       addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
+        DanaviewStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
         overrides: [streamProbeProvider.overrideWithValue(_FakeProbe(_probeResults))],
       ));
       await tester.tap(find.text('Paste'));

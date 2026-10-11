@@ -1,4 +1,0 @@
-name: vwish_editor
-dependencies:
-  vwish_features:
-    path: ../vwish_features

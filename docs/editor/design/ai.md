@@ -1,4 +1,4 @@
-# Vwish Editor: On-Device AI Subtitles (whisper.cpp) Design
+# Danaview Editor: On-Device AI Subtitles (whisper.cpp) Design
 
 > **Area:** AI subtitles ("Auto captions" in the UI): model management, on-device speech-to-text, cue segmentation, timeline insertion, regenerate, and how they connect to SRT/VTT export and burn-in.
 > **Status:** Design draft for the Editor release. There is no production code in this document. Dart, C, Swift and Kotlin snippets are interface sketches.
@@ -12,9 +12,9 @@
 ## 0. Decisions at a glance
 
 1. **Two new packages.**
-   - `packages/vwish_whisper` is a Flutter FFI plugin for iOS and Android only. It has a small C ABI shim over whisper.cpp, a device-profile channel, and a Dart runtime that polls native jobs. It knows nothing about projects.
-   - `packages/vwish_transcription` is Dart-only logic. It holds the model catalog and store, the resumable downloader, the transcription pipeline, segmentation, timeline mapping and caches. It implements the `TranscriptionService` that `ux.md` §2.4 consumes.
-   - The UI lives in `vwish_editor` (`flows/captions/`, owned by the UX area). This doc specifies its behavior, states and copy.
+   - `packages/danaview_whisper` is a Flutter FFI plugin for iOS and Android only. It has a small C ABI shim over whisper.cpp, a device-profile channel, and a Dart runtime that polls native jobs. It knows nothing about projects.
+   - `packages/danaview_transcription` is Dart-only logic. It holds the model catalog and store, the resumable downloader, the transcription pipeline, segmentation, timeline mapping and caches. It implements the `TranscriptionService` that `ux.md` §2.4 consumes.
+   - The UI lives in `danaview_editor` (`flows/captions/`, owned by the UX area). This doc specifies its behavior, states and copy.
 2. **whisper.cpp is pinned to `v1.9.4`**: tag object `7d75b149…`, commit `927cfce34f31707e17f2bff35c349632fb9e2c3a`, released 2026-09-11, bundling ggml 0.23.0 [VERIFIED]. `v1.9.5` came out on 2026-10-06 and is too new to ship. We bump only after a soak and a re-run of the eval suite (§16). The source is **vendored and pruned** (about 7.8 MB, 192 files) instead of added as a submodule, so CI checkouts and offline builds stay simple.
 3. **Native execution model.** The shim owns a **native worker thread** for each job. Dart never blocks inside FFI. The UI isolate polls a mutex-protected status and segment buffer every 250 ms. Cancellation is an atomic flag that whisper's `abort_callback` and `encoder_begin_callback` read. No Dart callbacks cross threads.
 4. **Acceleration.**
@@ -40,7 +40,7 @@
 
    Presets are Standard (2 × 42), Single line, and Short phrases (social), with 9:16 projects defaulting narrower. Cue edges are quantized to the project frame grid.
 9. **One undo step.** Generated captions arrive as `SubtitleCueDraft`s. The editor controller applies them as a single `EditCommand`, either `AddGeneratedCaptionTrack` or `ReplaceGeneratedCaptions`. The track carries `CaptionProvenance` (model, language, settings, transcript keys), which makes Regenerate possible. Generated cues are ordinary subtitle cues: fully editable, exportable as SRT/VTT, and burnable.
-10. **Privacy.** Audio, video and text never leave the device. The only network traffic is the model download from `huggingface.co`, which redirects to Hugging Face's CDN on `*.hf.co`. The privacy policy gains one bullet in "When Vwish uses the internet", plus storage and choices bullets (§13). The app shows MIT notices for whisper.cpp, the OpenAI Whisper weights and Silero VAD.
+10. **Privacy.** Audio, video and text never leave the device. The only network traffic is the model download from `huggingface.co`, which redirects to Hugging Face's CDN on `*.hf.co`. The privacy policy gains one bullet in "When Danaview uses the internet", plus storage and choices bullets (§13). The app shows MIT notices for whisper.cpp, the OpenAI Whisper weights and Silero VAD.
 
 ---
 
@@ -62,14 +62,14 @@
 - No summarization, chapters, keyword extraction, auto-edit or silence removal.
 - No cloud fallback.
 - No custom-vocabulary prompt in the UI. The API supports `initialPrompt`, but it stays unused in v1.
-- No desktop. The editor is gated off there (`ux.md` §4.1), and `vwish_whisper` declares no desktop platforms.
+- No desktop. The editor is gated off there (`ux.md` §4.1), and `danaview_whisper` declares no desktop platforms.
 
 ### 1.1 Corrections to the brief, found while reading the repo [VERIFIED]
 
 | Brief said | Repo says | Impact |
 |---|---|---|
-| iOS bundle id `com.vecvel.vwishplayer` | `com.vecvel.vwish` (`project.pbxproj`) | Plugin bundle IDs and log subsystems use `com.vecvel.vwish.whisper`. |
-| Android applicationId `com.vecvel.vwish_player`, minSdk 21 | `com.vecvel.vwish`; `minSdk = flutter.minSdkVersion` = **24** in Flutter 3.44.2 (`FlutterExtension.kt`); NDK `28.2.13676358` | NDK r28 links with 16 KB page alignment by default. minSdk ≥ 23 means native libs are not extracted by default, which rules out ggml's directory-scanning `GGML_BACKEND_DL`. |
+| iOS bundle id `com.vecvel.danaviewplayer` | `com.vecvel.danaview` (`project.pbxproj`) | Plugin bundle IDs and log subsystems use `com.vecvel.danaview.whisper`. |
+| Android applicationId `com.vecvel.danaview_player`, minSdk 21 | `com.vecvel.danaview`; `minSdk = flutter.minSdkVersion` = **24** in Flutter 3.44.2 (`FlutterExtension.kt`); NDK `28.2.13676358` | NDK r28 links with 16 KB page alignment by default. minSdk ≥ 23 means native libs are not extracted by default, which rules out ggml's directory-scanning `GGML_BACKEND_DL`. |
 | (n/a) | AGP 9.0.1, Kotlin 2.3.20, `android.builtInKotlin=false`, `android.newDsl=false` | The plugin's Gradle file applies `kotlin-android` explicitly. |
 | (n/a) | Flutter 3.44 enables **Swift Package Manager by default**; the app runs **hybrid** (SPM plus CocoaPods for media_kit) | The `plugin_ffi` template is CocoaPods-only. v1 ships a podspec; `Package.swift` is a deferred ticket (AI-D2). |
 | (n/a) | No `cmake` on the dev Mac; the Android SDK has CMake 3.22.1 | The iOS xcframework build needs `brew install cmake` (≥ 3.28, matching upstream's check). Android uses the SDK's CMake. |
@@ -97,7 +97,7 @@
 | VAD repo | `huggingface.co/ggml-org/whisper-vad`, revision `9ffd54a1e1ee413ddf265af9913beaf518d1639b`, licence tag `mit` | HF API [VERIFIED] |
 | Download behaviour | `GET /resolve/<rev>/<file>` → `302` to `https://us.aws.cdn.hf.co/xet-bridge-us/…` (signed, expiring); headers `x-linked-size`, `x-linked-etag` (= SHA-256), `x-repo-commit`; `accept-ranges: bytes`; ranged GET → `206` | curl [VERIFIED] |
 | AndroidX Media3 | latest stable `1.11.1`; `androidx.media3.inspector.MediaExtractorCompat` (artifact `media3-inspector`); `androidx.media3.common.audio.{SonicAudioProcessor (setOutputSampleRateHz), ChannelMixingAudioProcessor, ChannelMixingMatrix(int,int,float[])}` | Google Maven + `javap` [VERIFIED] |
-| Dart packages | `ffigen 23.0.0` (Dart ≥ 3.10), `ffi 2.2.0`, `crypto ^3.0.3` (already in `vwish_data`), `hooks 2.2.0` / `native_toolchain_cmake 0.3.2` (considered, not used) | pub.dev API [VERIFIED] |
+| Dart packages | `ffigen 23.0.0` (Dart ≥ 3.10), `ffi 2.2.0`, `crypto ^3.0.3` (already in `danaview_data`), `hooks 2.2.0` / `native_toolchain_cmake 0.3.2` (considered, not used) | pub.dev API [VERIFIED] |
 | `background_downloader` | 9.6.x requires Flutter ≥ 3.47 (incompatible); 9.5.9 is compatible | pub.dev API [VERIFIED]. Not used (§5.5). |
 
 ---
@@ -108,28 +108,28 @@
 
 ```
 lib/ (app root: providers overrides, routes)
- └─ vwish_editor (UX area: screens, controllers, flows/captions/*)
-     ├─ vwish_transcription (THIS AREA, Dart)        implements TranscriptionService (ux.md §2.4)
-     │   ├─ vwish_whisper (THIS AREA, FFI plugin: iOS + Android)
+ └─ danaview_editor (UX area: screens, controllers, flows/captions/*)
+     ├─ danaview_transcription (THIS AREA, Dart)        implements TranscriptionService (ux.md §2.4)
+     │   ├─ danaview_whisper (THIS AREA, FFI plugin: iOS + Android)
      │   ├─ <editor domain pkg> (Domain area)         TimeUs, TimeRange, FrameRate, MediaClip, SubtitleCue, EditCommand
-     │   ├─ vwish_data                                NetworkCancelToken, AppStorage dirs
+     │   ├─ danaview_data                                NetworkCancelToken, AppStorage dirs
      │   └─ crypto, path, characters, meta, collection
      └─ <editor engine pkg> (iOS/Android engine areas)  implements SpeechAudioExtractor (§7) via EditorEngine.jobs
 ```
 
 Rules:
-- `vwish_transcription` never imports the engine package or Flutter widgets. It gets audio extraction through the `SpeechAudioExtractor` port, which `editor_providers.dart` binds.
-- `vwish_whisper` never imports any `vwish_*` package.
-- `vwish_features` never imports either package. The Storage screen is reached through `ux.md` §4.8 `StorageContributor`.
+- `danaview_transcription` never imports the engine package or Flutter widgets. It gets audio extraction through the `SpeechAudioExtractor` port, which `editor_providers.dart` binds.
+- `danaview_whisper` never imports any `danaview_*` package.
+- `danaview_features` never imports either package. The Storage screen is reached through `ux.md` §4.8 `StorageContributor`.
 - A pubspec-parsing test enforces these rules, as `ux.md` §3.3 does.
 
 ### 3.2 Runtime data flow
 
 ```
-AutoCaptionsSheet ──► AutoCaptionsController (vwish_editor, UI isolate, StateNotifier)
+AutoCaptionsSheet ──► AutoCaptionsController (danaview_editor, UI isolate, StateNotifier)
                              │ preflight / start / cancel / provideLanguage
                              ▼
-                 TranscriptionServiceImpl (vwish_transcription, UI isolate, async only)
+                 TranscriptionServiceImpl (danaview_transcription, UI isolate, async only)
    ┌──────────────┬───────────────┬──────────────────┬────────────────┬───────────────┬───────────────┐
    ▼              ▼               ▼                  ▼                ▼               ▼
 SpeechModelStore  TranscriptionPlanner  SpeechAudioExtractor  WhisperRuntime   TranscriptCache   CaptionSegmenter
@@ -145,7 +145,7 @@ SpeechModelStore  TranscriptionPlanner  SpeechAudioExtractor  WhisperRuntime   T
 
 | Work | Where | Why |
 |---|---|---|
-| Controllers, service orchestration, polling FFI (`vw_job_status_get` is an FFI *leaf* call), JSON parse of a few segments per poll | UI isolate | Each call is < 0.5 ms. Nothing blocks. |
+| Controllers, service orchestration, polling FFI (`dv_job_status_get` is an FFI *leaf* call), JSON parse of a few segments per poll | UI isolate | Each call is < 0.5 ms. Nothing blocks. |
 | Model load (`whisper_init_from_file_with_params_no_state`), whole transcription job | Native `std::thread` created by the shim | whisper calls block for seconds to minutes. A native thread keeps Dart free and makes cancel an atomic store. |
 | ggml compute | ggml thread pool (`n_threads`, OpenMP **off**) | Predictable thread counts, and abort checks reach every graph compute. |
 | Metal command buffers | ggml-metal queues | n/a |
@@ -156,44 +156,44 @@ SpeechModelStore  TranscriptionPlanner  SpeechAudioExtractor  WhisperRuntime   T
 
 **Why not a Dart isolate blocked in FFI, or `NativeCallable.listener`?** whisper's `abort_callback` can run on ggml worker threads, so a `Pointer.fromFunction` callback would crash. A listener owned by a blocked isolate would never deliver. A Dart-isolate design also makes cancellation latency depend on message delivery. Polling an atomic and mutex-guarded C state is simple, deterministic, and testable with a fake bindings class.
 
-**Hot restart hygiene.** Native threads survive a Dart hot restart. `WhisperRuntime.open()` calls `vw_shutdown_all()` once per VM. In debug this cancels and joins orphan jobs and frees models. In release it is a no-op.
+**Hot restart hygiene.** Native threads survive a Dart hot restart. `WhisperRuntime.open()` calls `dv_shutdown_all()` once per VM. In debug this cancels and joins orphan jobs and frees models. In release it is a no-op.
 
 ---
 
-## 4. Native integration: `packages/vwish_whisper`
+## 4. Native integration: `packages/danaview_whisper`
 
 ### 4.1 Layout
 
 ```
-packages/vwish_whisper/
+packages/danaview_whisper/
   pubspec.yaml               # flutter: plugin: platforms:
-                             #   android: {ffiPlugin: true, package: com.vecvel.vwish.whisper, pluginClass: VwishWhisperPlugin}
-                             #   ios:     {ffiPlugin: true, pluginClass: VwishWhisperPlugin}
+                             #   android: {ffiPlugin: true, package: com.vecvel.danaview.whisper, pluginClass: DanaviewWhisperPlugin}
+                             #   ios:     {ffiPlugin: true, pluginClass: DanaviewWhisperPlugin}
                              # deps: ffi ^2.2.0; dev: ffigen ^23.0.0, flutter_test
-  ffigen.yaml                # entry-point src/vw_whisper.h only → lib/src/ffi/vw_whisper_bindings.g.dart (DynamicLibrary class bindings)
+  ffigen.yaml                # entry-point src/dv_whisper.h only → lib/src/ffi/dv_whisper_bindings.g.dart (DynamicLibrary class bindings)
   lib/
-    vwish_whisper.dart                         # exports runtime/device/support APIs only
-    src/ffi/vw_whisper_bindings.g.dart         # generated, committed
+    danaview_whisper.dart                         # exports runtime/device/support APIs only
+    src/ffi/dv_whisper_bindings.g.dart         # generated, committed
     src/ffi/library_loader.dart                # variant choice, ABI check, unsupported fallbacks
     src/runtime/whisper_runtime.dart           # WhisperRuntime, WhisperModel
     src/runtime/whisper_job.dart               # polling WhisperJob implementation
     src/runtime/whisper_types.dart             # requests, options, RawSegment/RawWord, updates, WhisperException
     src/runtime/segment_json.dart              # schema v1 decoder (tolerant)
     src/device/device_profile.dart             # WhisperDeviceProfile, ThermalLevel, CpuFeature, GpuTier
-    src/device/device_channel.dart             # MethodChannel 'vwish/whisper', EventChannel 'vwish/whisper/events'
+    src/device/device_channel.dart             # MethodChannel 'danaview/whisper', EventChannel 'danaview/whisper/events'
     src/support.dart                           # WhisperSupport evaluation (pure, testable)
   src/                                         # shared native code (C++17, C ABI)
-    vw_whisper.h  vw_whisper.cpp               # ABI surface, try/catch wrappers
-    vw_model.h/.cpp  vw_job.h/.cpp             # async load, refcount, job thread, state machine
-    vw_wav.h/.cpp                              # strict 16k/mono/s16 WAV reader (chunked)
-    vw_chunker.h/.cpp                          # RMS silence search
-    vw_words.h/.cpp                            # token → word assembly, UTF-8 safety
-    vw_json.h/.cpp                             # segment JSON writer (escaping)
-    vw_log.h/.cpp                              # whisper_log_set → os_log / logcat (no user content)
-    vw_cpu.cpp                                 # getauxval HWCAP probe (Android), sysctl perf cores (iOS)
-    vw_exports.map                             # Android: export vw_* only
+    dv_whisper.h  dv_whisper.cpp               # ABI surface, try/catch wrappers
+    dv_model.h/.cpp  dv_job.h/.cpp             # async load, refcount, job thread, state machine
+    dv_wav.h/.cpp                              # strict 16k/mono/s16 WAV reader (chunked)
+    dv_chunker.h/.cpp                          # RMS silence search
+    dv_words.h/.cpp                            # token → word assembly, UTF-8 safety
+    dv_json.h/.cpp                             # segment JSON writer (escaping)
+    dv_log.h/.cpp                              # whisper_log_set → os_log / logcat (no user content)
+    dv_cpu.cpp                                 # getauxval HWCAP probe (Android), sysctl perf cores (iOS)
+    dv_exports.map                             # Android: export dv_* only
     CMakeLists.txt                             # Android variants + host test build
-    tests/ vw_tests.cpp  fixtures/(jfk.wav, sil_concat.wav, cjk_sample.wav, bad_headers/*.wav)
+    tests/ dv_tests.cpp  fixtures/(jfk.wav, sil_concat.wav, cjk_sample.wav, bad_headers/*.wav)
   third_party/
     whisper.cpp/                               # vendored, pruned (see 4.2)
     VENDORED.md                                # upstream URL, tag, commit, date, prune list, sha256 of source tarball
@@ -203,14 +203,14 @@ packages/vwish_whisper/
   android/
     build.gradle.kts                           # library; externalNativeBuild → ../src/CMakeLists.txt
     src/main/AndroidManifest.xml
-    src/main/kotlin/com/vecvel/vwish/whisper/{VwishWhisperPlugin.kt, DeviceProfiler.kt, ThermalMonitor.kt}
+    src/main/kotlin/com/vecvel/danaview/whisper/{DanaviewWhisperPlugin.kt, DeviceProfiler.kt, ThermalMonitor.kt}
     src/test/kotlin/...                        # cpuinfo/thermal mapping unit tests
   ios/
-    vwish_whisper.podspec
-    Classes/VwishWhisperPlugin.swift  Classes/DeviceProfiler.swift  Classes/vw_whisper_forwarder.cpp
+    danaview_whisper.podspec
+    Classes/DanaviewWhisperPlugin.swift  Classes/DeviceProfiler.swift  Classes/dv_whisper_forwarder.cpp
     Resources/PrivacyInfo.xcprivacy
     Frameworks/WhisperCore.xcframework         # BUILD OUTPUT, git-ignored, stamped
-  test/                                        # Dart unit tests with FakeVwBindings + mocked channels
+  test/                                        # Dart unit tests with FakeDvBindings + mocked channels
   LICENSE-THIRD-PARTY.md                       # whisper.cpp MIT, ggml MIT
 ```
 
@@ -225,7 +225,7 @@ The pruned tree measured from the pinned commit is about **7.8 MB / 192 files** 
 
 ### 4.3 Android build
 
-- **Gradle:** `externalNativeBuild { cmake { path = file("../src/CMakeLists.txt"); version = "3.22.1" } }` and `defaultConfig.externalNativeBuild.cmake { abiFilters += listOf("arm64-v8a", "x86_64"); arguments += listOf("-DANDROID_STL=c++_static", "-DVW_ANDROID=ON") }`.
+- **Gradle:** `externalNativeBuild { cmake { path = file("../src/CMakeLists.txt"); version = "3.22.1" } }` and `defaultConfig.externalNativeBuild.cmake { abiFilters += listOf("arm64-v8a", "x86_64"); arguments += listOf("-DANDROID_STL=c++_static", "-DDV_ANDROID=ON") }`.
   - We use `c++_static` because media_kit already ships `libc++_shared.so`. A second shared STL could collide in packaging.
 - **`src/CMakeLists.txt`** uses `ExternalProject_Add` **twice on arm64** (once on x86_64). Each one configures the vendored whisper.cpp as a static build:
 
@@ -239,13 +239,13 @@ The pruned tree measured from the pinned commit is about **7.8 MB / 192 files** 
   + forwarded CMAKE_TOOLCHAIN_FILE, ANDROID_ABI, ANDROID_PLATFORM, ANDROID_STL=c++_static, CMAKE_BUILD_TYPE
   ```
 
-  We then build `add_library(vwish_whisper SHARED <shim sources>)`, linked against the v80 static set, and `add_library(vwish_whisper_v82 SHARED <shim sources>)`, linked against the v82 static set (arm64 only). Link options: `-Wl,--version-script=vw_exports.map -Wl,--gc-sections -Wl,-z,max-page-size=16384`.
+  We then build `add_library(danaview_whisper SHARED <shim sources>)`, linked against the v80 static set, and `add_library(danaview_whisper_v82 SHARED <shim sources>)`, linked against the v82 static set (arm64 only). Link options: `-Wl,--version-script=dv_exports.map -Wl,--gc-sections -Wl,-z,max-page-size=16384`.
   - The 16 KB flag is redundant on NDK r28 but explicit. KleidiAI is off because it fetches sources at build time.
 - **Why not upstream `GGML_CPU_ALL_VARIANTS`?** It requires `GGML_BACKEND_DL` and shared libraries, and loads variants by **scanning a directory**. With minSdk 24, AGP keeps `.so` files uncompressed inside the APK, so no such directory exists. Two self-contained shims avoid that and are what the upstream Android example does in spirit [VERIFIED: the example builds `whisper_v8fp16_va` and picks it via `/proc/cpuinfo`].
 - **Runtime choice (Dart `library_loader.dart`):**
-  1. Open `libvwish_whisper.so` (baseline, always safe).
-  2. Call `vw_cpu_features()`, which returns a bitmask from `getauxval(AT_HWCAP)`: `HWCAP_ASIMDDP`, `HWCAP_FPHP`, `HWCAP_ASIMDHP`.
-  3. If DOTPROD, FPHP and ASIMDHP are all present, open `libvwish_whisper_v82.so` and bind all calls to it. The baseline library stays mapped (about 3 MB of virtual memory) and is unused.
+  1. Open `libdanaview_whisper.so` (baseline, always safe).
+  2. Call `dv_cpu_features()`, which returns a bitmask from `getauxval(AT_HWCAP)`: `HWCAP_ASIMDDP`, `HWCAP_FPHP`, `HWCAP_ASIMDHP`.
+  3. If DOTPROD, FPHP and ASIMDHP are all present, open `libdanaview_whisper_v82.so` and bind all calls to it. The baseline library stays mapped (about 3 MB of virtual memory) and is unused.
   4. If opening fails (an armeabi-v7a device, or a missing `.so`), report `WhisperSupport.unsupported(libraryMissing)`.
 - **Size budget:** ≤ 3 MB per variant `.so` after stripping, so the arm64 download grows by about 6 MB or less (AAB ABI split) [VERIFY in AI-04].
 - **CI:** `.github/workflows/android-release.yml` needs no checkout change, because the source is vendored. The NDK CMake 3.22.1 must satisfy ggml's `cmake_minimum_required(3.14…3.28)` [VERIFIED]. If any ggml feature needs newer CMake, AI-04 pins `version = "3.31.x"` [VERIFY].
@@ -255,7 +255,7 @@ The pruned tree measured from the pinned commit is about **7.8 MB / 192 files** 
 - **Script:** `tool/build_ios_xcframework.sh` (needs Xcode and CMake ≥ 3.28) builds static libraries for two slices: `ios-arm64` (`iphoneos`) and `ios-arm64_x86_64-simulator`. It uses:
 
   ```
-  -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=${VW_IOS_MIN:-13.0}
+  -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=${DV_IOS_MIN:-13.0}
   -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_EXAMPLES=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
   -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF
   -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_METAL_USE_BF16=OFF
@@ -268,15 +268,15 @@ The pruned tree measured from the pinned commit is about **7.8 MB / 192 files** 
 - **Why Accelerate and BLAS are off:** ggml defines `ACCELERATE_NEW_LAPACK`/`ILP64` [VERIFIED]. Apple's new BLAS/LAPACK interface is iOS 16.4+ [VERIFY]. With a 13.0 deployment target, strongly bound `$NEWLAPACK` symbols would stop the **whole app** from launching on iOS < 16.4, because our framework loads at launch. Metal does the heavy lifting on supported devices, and NEON covers the rest. Acceptance (AI-05):
   - `nm -um` on the built framework shows no `NEWLAPACK` symbols, and no symbol introduced after 13.0 is strongly bound,
   - the app launches on an iOS 15 simulator runtime.
-- **Podspec (`vwish_whisper.podspec`):**
+- **Podspec (`danaview_whisper.podspec`):**
   - `s.platform = :ios, '13.0'`
-  - `s.source_files = 'Classes/**/*.{swift,cpp,h}'`. The forwarder `vw_whisper_forwarder.cpp` `#include`s `../../src/*.cpp`, as the Flutter FFI template does.
+  - `s.source_files = 'Classes/**/*.{swift,cpp,h}'`. The forwarder `dv_whisper_forwarder.cpp` `#include`s `../../src/*.cpp`, as the Flutter FFI template does.
   - `s.vendored_frameworks = 'Frameworks/WhisperCore.xcframework'`
   - `s.frameworks = 'Metal', 'MetalKit', 'Foundation'`, `s.libraries = 'c++'`
-  - `s.resource_bundles = {'vwish_whisper_privacy' => ['Resources/PrivacyInfo.xcprivacy']}`
-  - `pod_target_xcconfig`: `CLANG_CXX_LANGUAGE_STANDARD=c++17`, `HEADER_SEARCH_PATHS` to the xcframework headers, `GCC_PREPROCESSOR_DEFINITIONS='VW_IOS=1'`
-  - A Ruby guard **raises a clear error when the xcframework is missing**: "Run packages/vwish_whisper/tool/build_ios_xcframework.sh".
-  - Under the existing `use_frameworks!`, the pod becomes a dynamic framework that exports `vw_*`. Dart opens `vwish_whisper.framework/vwish_whisper`, falling back to `DynamicLibrary.process()`.
+  - `s.resource_bundles = {'danaview_whisper_privacy' => ['Resources/PrivacyInfo.xcprivacy']}`
+  - `pod_target_xcconfig`: `CLANG_CXX_LANGUAGE_STANDARD=c++17`, `HEADER_SEARCH_PATHS` to the xcframework headers, `GCC_PREPROCESSOR_DEFINITIONS='DV_IOS=1'`
+  - A Ruby guard **raises a clear error when the xcframework is missing**: "Run packages/danaview_whisper/tool/build_ios_xcframework.sh".
+  - Under the existing `use_frameworks!`, the pod becomes a dynamic framework that exports `dv_*`. Dart opens `danaview_whisper.framework/danaview_whisper`, falling back to `DynamicLibrary.process()`.
 - **Privacy manifest:** the plugin uses the disk-space API (`volumeAvailableCapacityForImportantUsageKey`). It declares `NSPrivacyAccessedAPICategoryDiskSpace` with reason `E174.1`. ggml uses `clock_gettime(CLOCK_MONOTONIC)` and `sysctlbyname("machdep.cpu.brand_string")` [VERIFIED]; neither is a required-reason API to my knowledge [VERIFY]. No tracking, no collected data.
 - **Build integration:**
   - `ios/fastlane/Fastfile` `flutter_ipa` runs the script before `flutter build ipa` (fast no-op when the stamp matches).
@@ -287,46 +287,46 @@ The pruned tree measured from the pinned commit is about **7.8 MB / 192 files** 
   - The 16.4 floor matches upstream's tested floor. A12-class devices (Apple5) run on CPU unless the AI-19 benchmark shows Metal wins there [VERIFY].
 - **Supported OS floor for the feature:** the editor's floor (iOS area) or **iOS 15.0**, whichever is higher. iOS 13–14 cannot be tested on current Xcode simulators. `WhisperSupport` returns `osTooOld` below that.
 
-### 4.5 C ABI (`src/vw_whisper.h`)
+### 4.5 C ABI (`src/dv_whisper.h`)
 
-All entry points are `extern "C"`, `__attribute__((visibility("default"), used))`, wrapped in `try/catch` (C++ exceptions map to `VW_ERR_OOM`/`VW_ERR_INTERNAL`), and thread-safe. Every struct starts with `struct_size` for forward compatibility. **All strings passed in are copied**, so Dart frees its allocations right after the call.
+All entry points are `extern "C"`, `__attribute__((visibility("default"), used))`, wrapped in `try/catch` (C++ exceptions map to `DV_ERR_OOM`/`DV_ERR_INTERNAL`), and thread-safe. Every struct starts with `struct_size` for forward compatibility. **All strings passed in are copied**, so Dart frees its allocations right after the call.
 
 ```c
-#define VW_ABI_VERSION 1
+#define DV_ABI_VERSION 1
 
-typedef enum { VW_OK = 0, VW_ERR_INVALID_ARG = 1, VW_ERR_MODEL_LOAD = 2, VW_ERR_WAV_FORMAT = 3,
-               VW_ERR_IO = 4, VW_ERR_OOM = 5, VW_ERR_CANCELLED = 6, VW_ERR_INFERENCE = 7,
-               VW_ERR_BUSY = 8, VW_ERR_VAD_MODEL = 9, VW_ERR_NO_SPEECH = 10, VW_ERR_INTERNAL = 99 } vw_status;
-typedef enum { VW_MODEL_LOADING = 0, VW_MODEL_READY = 1, VW_MODEL_FAILED = 2 } vw_model_state;
-typedef enum { VW_JOB_RUNNING = 1, VW_JOB_PAUSED = 2, VW_JOB_SUCCEEDED = 3,
-               VW_JOB_FAILED = 4, VW_JOB_CANCELLED = 5 } vw_job_state;
-typedef enum { VW_MODE_TRANSCRIBE = 0, VW_MODE_DETECT_LANGUAGE = 1 } vw_job_mode;
-typedef enum { VW_PHASE_PREPARING = 0, VW_PHASE_VAD = 1, VW_PHASE_ENCODING = 2, VW_PHASE_DECODING = 3 } vw_phase;
+typedef enum { DV_OK = 0, DV_ERR_INVALID_ARG = 1, DV_ERR_MODEL_LOAD = 2, DV_ERR_WAV_FORMAT = 3,
+               DV_ERR_IO = 4, DV_ERR_OOM = 5, DV_ERR_CANCELLED = 6, DV_ERR_INFERENCE = 7,
+               DV_ERR_BUSY = 8, DV_ERR_VAD_MODEL = 9, DV_ERR_NO_SPEECH = 10, DV_ERR_INTERNAL = 99 } dv_status;
+typedef enum { DV_MODEL_LOADING = 0, DV_MODEL_READY = 1, DV_MODEL_FAILED = 2 } dv_model_state;
+typedef enum { DV_JOB_RUNNING = 1, DV_JOB_PAUSED = 2, DV_JOB_SUCCEEDED = 3,
+               DV_JOB_FAILED = 4, DV_JOB_CANCELLED = 5 } dv_job_state;
+typedef enum { DV_MODE_TRANSCRIBE = 0, DV_MODE_DETECT_LANGUAGE = 1 } dv_job_mode;
+typedef enum { DV_PHASE_PREPARING = 0, DV_PHASE_VAD = 1, DV_PHASE_ENCODING = 2, DV_PHASE_DECODING = 3 } dv_phase;
 
-typedef struct vw_model vw_model;
-typedef struct vw_job vw_job;
+typedef struct dv_model dv_model;
+typedef struct dv_job dv_job;
 
 typedef struct {
   int32_t struct_size;
   int32_t use_gpu;            /* request; shim applies the GPU policy on iOS and may downgrade */
   int32_t flash_attn;         /* 1 (default) */
   int32_t dtw_preset;         /* 0 = off (default); else whisper_alignment_heads_preset; forces flash_attn = 0 */
-} vw_model_params;
+} dv_model_params;
 
 typedef struct {
   int32_t struct_size;
   int32_t multilingual, n_vocab, model_type, ftype;
   int32_t gpu_used, gpu_fallback;
-} vw_model_info;
+} dv_model_info;
 
 typedef struct {
   int32_t struct_size;
-  int32_t mode;                     /* vw_job_mode */
+  int32_t mode;                     /* dv_job_mode */
   const char *wav_path;             /* 16 kHz, mono, PCM s16le, canonical RIFF/WAVE; validated */
   int64_t range_start_ms;           /* inclusive, relative to WAV start; resume point */
   int64_t range_end_ms;             /* exclusive; -1 = end of file */
   const char *language;             /* whisper code ("en", "ja", …); "auto" only allowed in DETECT mode */
-  int32_t n_threads;                /* 1..8; may change later via vw_job_set_threads */
+  int32_t n_threads;                /* 1..8; may change later via dv_job_set_threads */
   int32_t chunk_target_ms;          /* 180000 */
   int32_t chunk_search_ms;          /* 15000: search ±this around the target for the quietest 400 ms */
   int32_t chunk_min_ms;             /* 10000: tail shorter than this merges into the previous chunk */
@@ -346,13 +346,13 @@ typedef struct {
   const char *initial_prompt;       /* nullable; unused by the v1 UI */
   int32_t detect_max_speech_ms;     /* DETECT mode: up to 30000 ms of speech after the first VAD speech start */
   int32_t detect_search_ms;         /* DETECT mode: search window for first speech (600000) */
-} vw_job_params;
+} dv_job_params;
 
 typedef struct {
   int32_t struct_size;
-  int32_t state;                    /* vw_job_state */
-  int32_t error;                    /* vw_status (valid when FAILED/CANCELLED) */
-  int32_t phase;                    /* vw_phase */
+  int32_t state;                    /* dv_job_state */
+  int32_t error;                    /* dv_status (valid when FAILED/CANCELLED) */
+  int32_t phase;                    /* dv_phase */
   int32_t progress_permille;        /* 0..1000 over [range_start, range_end) */
   int32_t chunk_index, chunk_count; /* 0-based current chunk; count known after planning */
   int32_t chunks_completed;         /* chunks whose segments are final and fully available */
@@ -362,42 +362,42 @@ typedef struct {
   int32_t threads;                  /* current n_threads */
   char    language[8];              /* language used/detected */
   float   language_p;
-} vw_job_status;
+} dv_job_status;
 
 /* library */
-int32_t     vw_abi_version(void);
-const char *vw_engine_version(void);            /* whisper_version(), e.g. "1.9.4" */
-const char *vw_system_info(void);               /* whisper_print_system_info(); diagnostics only */
-uint64_t    vw_cpu_features(void);              /* bitmask, Android: HWCAP-derived; iOS: 0 */
-int32_t     vw_perf_core_count(void);           /* iOS: hw.perflevel0.physicalcpu (fallback ncpu/2); Android: 0 (Kotlin decides) */
-void        vw_set_log_level(int32_t level);    /* 0 off … 4 debug; never logs transcript text or paths */
-int32_t     vw_lang_max_id(void);
-const char *vw_lang_code(int32_t id);           /* whisper_lang_str */
-void        vw_shutdown_all(void);              /* cancel+join all jobs, free all models (hot restart) */
-void        vw_free(void *p);
+int32_t     dv_abi_version(void);
+const char *dv_engine_version(void);            /* whisper_version(), e.g. "1.9.4" */
+const char *dv_system_info(void);               /* whisper_print_system_info(); diagnostics only */
+uint64_t    dv_cpu_features(void);              /* bitmask, Android: HWCAP-derived; iOS: 0 */
+int32_t     dv_perf_core_count(void);           /* iOS: hw.perflevel0.physicalcpu (fallback ncpu/2); Android: 0 (Kotlin decides) */
+void        dv_set_log_level(int32_t level);    /* 0 off … 4 debug; never logs transcript text or paths */
+int32_t     dv_lang_max_id(void);
+const char *dv_lang_code(int32_t id);           /* whisper_lang_str */
+void        dv_shutdown_all(void);              /* cancel+join all jobs, free all models (hot restart) */
+void        dv_free(void *p);
 
 /* model */
-vw_model   *vw_model_load(const char *model_path, const vw_model_params *params);  /* returns at once; loads on a native thread */
-int32_t     vw_model_state(const vw_model *m);
-int32_t     vw_model_error(const vw_model *m, char *buf, int32_t buf_len);
-int32_t     vw_model_info_get(const vw_model *m, vw_model_info *out);
-void        vw_model_release(vw_model *m);      /* refcounted; freed after the last job using it is freed */
+dv_model   *dv_model_load(const char *model_path, const dv_model_params *params);  /* returns at once; loads on a native thread */
+int32_t     dv_model_state(const dv_model *m);
+int32_t     dv_model_error(const dv_model *m, char *buf, int32_t buf_len);
+int32_t     dv_model_info_get(const dv_model *m, dv_model_info *out);
+void        dv_model_release(dv_model *m);      /* refcounted; freed after the last job using it is freed */
 
-/* job: at most one active job per model (VW_ERR_BUSY otherwise) */
-vw_job     *vw_job_start(vw_model *m, const vw_job_params *params, int32_t *out_status);
-void        vw_job_status_get(const vw_job *j, vw_job_status *out);       /* leaf, O(1), takes a mutex briefly */
-char       *vw_job_take_segments_json(vw_job *j, int32_t from_index, int32_t max_count); /* free with vw_free */
-char       *vw_job_language_probs_json(vw_job *j, int32_t top_n);          /* DETECT mode result */
-void        vw_job_cancel(vw_job *j);
-void        vw_job_pause(vw_job *j, int32_t abort_current_chunk);         /* 0: pause at next chunk boundary;
+/* job: at most one active job per model (DV_ERR_BUSY otherwise) */
+dv_job     *dv_job_start(dv_model *m, const dv_job_params *params, int32_t *out_status);
+void        dv_job_status_get(const dv_job *j, dv_job_status *out);       /* leaf, O(1), takes a mutex briefly */
+char       *dv_job_take_segments_json(dv_job *j, int32_t from_index, int32_t max_count); /* free with dv_free */
+char       *dv_job_language_probs_json(dv_job *j, int32_t top_n);          /* DETECT mode result */
+void        dv_job_cancel(dv_job *j);
+void        dv_job_pause(dv_job *j, int32_t abort_current_chunk);         /* 0: pause at next chunk boundary;
                                                                              1: abort the running chunk now and
                                                                                 redo it on resume (iOS background) */
-void        vw_job_resume(vw_job *j);
-void        vw_job_set_threads(vw_job *j, int32_t n_threads);             /* applied at next chunk */
-void        vw_job_free(vw_job *j);              /* cancels if running, joins the thread, frees */
+void        dv_job_resume(dv_job *j);
+void        dv_job_set_threads(dv_job *j, int32_t n_threads);             /* applied at next chunk */
+void        dv_job_free(dv_job *j);              /* cancels if running, joins the thread, frees */
 ```
 
-**Segment JSON (schema 1)** comes from `vw_job_take_segments_json`. It is a JSON array. Times are **milliseconds relative to the WAV start**:
+**Segment JSON (schema 1)** comes from `dv_job_take_segments_json`. It is a JSON array. Times are **milliseconds relative to the WAV start**:
 
 ```json
 [{"i":12,"c":3,"t0":123450,"t1":127890,"text":"And that's why we left.",
@@ -429,12 +429,12 @@ PLANNING ─► (VAD-free chunk plan from RMS) ─► for chunk k:
        p.progress_callback = stores chunk-local % (atomic)
    rc != 0 && abort_chunk → mark chunk for redo, state = PAUSED (wait for resume)
    rc != 0 && cancel      → CANCELLED
-   rc != 0 otherwise      → FAILED(VW_ERR_INFERENCE)
+   rc != 0 otherwise      → FAILED(DV_ERR_INFERENCE)
    collect segments → assemble words → offset by k.start → append under mutex; chunks_completed++
  ─► SUCCEEDED
 ```
 
-- **Model and state:** one `whisper_context` per model, created with `_no_state`, plus one `whisper_state` per job (`whisper_init_state`), freed in `vw_job_free`. The context is shared between sequential jobs, never concurrently (whisper's thread-safety rule [VERIFIED in header comment]).
+- **Model and state:** one `whisper_context` per model, created with `_no_state`, plus one `whisper_state` per job (`whisper_init_state`), freed in `dv_job_free`. The context is shared between sequential jobs, never concurrently (whisper's thread-safety rule [VERIFIED in header comment]).
 - **Chunk planning:** chunk boundaries come from 20 ms RMS frames. For target `T`, search `[T − 15 s, T + 5 s]` for the minimum-energy 400 ms window and cut at its center. This is deterministic, so a resumed job re-plans identical chunks from `range_start_ms`.
   - We do not use VAD to plan chunks: it would mean a second pass over the whole file in windows. whisper's own VAD runs inside each chunk.
   - RAM for one 180 s chunk is about 11.5 MB f32 PCM plus about 5.8 MB mel. A 1 h file never needs more than one chunk in memory.
@@ -443,16 +443,16 @@ PLANNING ─► (VAD-free chunk plan from RMS) ─► for chunk k:
   1. Run whisper VAD (`whisper_vad_segments_from_samples` on windows of the first `detect_search_ms`) to find the first speech start.
   2. Take up to 30 s of samples from there.
   3. Run `whisper_pcm_to_mel_with_state` and `whisper_lang_auto_detect_with_state`, which costs one encoder pass.
-  4. Return the top-N languages. With no speech in the window, return `VW_ERR_NO_SPEECH`.
-- **Word assembly** (`vw_words.cpp`):
+  4. Return the top-N languages. With no speech in the window, return `DV_ERR_NO_SPEECH`.
+- **Word assembly** (`dv_words.cpp`):
   - Iterate tokens with `whisper_full_get_token_data_from_state`. Skip ids ≥ `whisper_token_eot(ctx)` (special and timestamp tokens).
   - Concatenate raw token **bytes**. Start a new word when a token begins with `' '` (space-delimited scripts) or, for no-space scripts (zh, ja, yue, th, lo, km, my, bo), at each token whose accumulated bytes form complete UTF-8.
   - Emit a word only when its byte buffer is valid UTF-8. Multi-byte characters often split across BPE tokens. A trailing invalid sequence at segment end becomes U+FFFD.
   - Pure-punctuation tokens attach to the previous word.
   - `t0`/`t1` are the min/max of member token `t0`/`t1` (centiseconds → ms), clamped to the segment and forced monotonic. `p` is the minimum member token probability.
 - **Hallucination guard in native:** whisper already skips segments when `no_speech_prob > no_speech_thold && avg_logprob < logprob_thold`, and falls back on temperature when entropy/logprob are bad. The shim adds nothing more. All text-level filtering is in Dart (§8.3), where it is unit-testable.
-- **Threads:** `vw_job_set_threads` takes effect at the next chunk. Dart computes threads from the device profile and thermal state (§6).
-- **Logging:** `whisper_log_set` forwards to `os_log(subsystem "com.vecvel.vwish.whisper")` or `__android_log_print("VwishWhisper")` at the configured level. **Transcript text, prompts and file paths are never logged**, by policy and by test (§16).
+- **Threads:** `dv_job_set_threads` takes effect at the next chunk. Dart computes threads from the device profile and thermal state (§6).
+- **Logging:** `whisper_log_set` forwards to `os_log(subsystem "com.vecvel.danaview.whisper")` or `__android_log_print("DanaviewWhisper")` at the configured level. **Transcript text, prompts and file paths are never logged**, by policy and by test (§16).
 - **Crash surface:** `GGML_ASSERT` aborts the process. We reduce exposure by:
   - loading only SHA-256-verified models,
   - checking the `ggml` magic and size before `whisper_init`,
@@ -460,12 +460,12 @@ PLANNING ─► (VAD-free chunk plan from RMS) ─► for chunk k:
   - rejecting chunks shorter than 1 s (they skip, and are not sent to whisper),
   - never calling into a context that is still loading.
 
-### 4.7 Dart runtime API (`vwish_whisper`)
+### 4.7 Dart runtime API (`danaview_whisper`)
 
 ```dart
 /// Opens the native library for this CPU and checks the ABI. Never throws; see [support].
 abstract interface class WhisperRuntime {
-  static Future<WhisperRuntime> open({WhisperDeviceChannel? channel, VwBindingsFactory? bindings});
+  static Future<WhisperRuntime> open({WhisperDeviceChannel? channel, DvBindingsFactory? bindings});
 
   WhisperSupport get support;            // supported(tiers) | unsupported(reason)
   String get engineVersion;              // "1.9.4"
@@ -527,13 +527,13 @@ final class WhisperException implements Exception { const WhisperException(this.
 ```
 
 **Polling implementation** (`whisper_job.dart`):
-- A `Timer.periodic(250 ms)` reads `vw_job_status_get`.
+- A `Timer.periodic(250 ms)` reads `dv_job_status_get`.
 - When `segments_ready > taken`, it calls `take_segments_json(taken, 256)`, decodes, and emits.
-- When the state is terminal, it does a final take, completes `result`, and calls `vw_job_free`.
+- When the state is terminal, it does a final take, completes `result`, and calls `dv_job_free`.
 - A `Finalizer` frees the job if Dart drops it.
 - A job that has not changed `compute_ms` while RUNNING for 120 s emits a `stalled` diagnostic. Nothing kills it automatically.
 
-### 4.8 Platform channel (`VwishWhisperPlugin`)
+### 4.8 Platform channel (`DanaviewWhisperPlugin`)
 
 | Method / event | Returns / payload | iOS API | Android API |
 |---|---|---|---|
@@ -551,8 +551,8 @@ final class WhisperException implements Exception { const WhisperException(this.
 Swift sketch:
 
 ```swift
-public final class VwishWhisperPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
-  public static func register(with registrar: FlutterPluginRegistrar)   // channel "vwish/whisper", events "vwish/whisper/events"
+public final class DanaviewWhisperPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
+  public static func register(with registrar: FlutterPluginRegistrar)   // channel "danaview/whisper", events "danaview/whisper/events"
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult)
   public func onListen(withArguments: Any?, eventSink: @escaping FlutterEventSink) -> FlutterError?
   public func onCancel(withArguments: Any?) -> FlutterError?
@@ -564,7 +564,7 @@ Registration needs no Runner change. `GeneratedPluginRegistrant.register(with: e
 Kotlin sketch:
 
 ```kotlin
-class VwishWhisperPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler, ComponentCallbacks2 {
+class DanaviewWhisperPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler, ComponentCallbacks2 {
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding)
   override fun onMethodCall(call: MethodCall, result: MethodChannel.Result)
   override fun onListen(arguments: Any?, events: EventChannel.EventSink)
@@ -577,7 +577,7 @@ class VwishWhisperPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
 
 ## 5. Models: catalog, download, verification, storage, consent, deletion
 
-### 5.1 Catalog (`vwish_transcription/lib/src/catalog/speech_model_catalog.dart`)
+### 5.1 Catalog (`danaview_transcription/lib/src/catalog/speech_model_catalog.dart`)
 
 All files are multilingual (no `.en` variants, because the user picks the language). Base URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/`.
 
@@ -626,13 +626,13 @@ abstract final class SpeechModelCatalog {
 
 | Path (under `getApplicationSupportDirectory()`) | Content | Backup | Cleared by |
 |---|---|---|---|
-| `vwish/speech/models/<file>` | verified model files | **excluded** (iOS resource key; Android rules) | user delete only |
-| `vwish/speech/models/<file>.part` + `.part.json` | partial download + sidecar `{url, bytes, sha256, written, updatedAt, catalogRevision}` | excluded | completion, cancel-with-discard, 7-day stale sweep |
-| `vwish/speech/models/manifest.json` | `{schema:1, installed:[{id, file, sha256, bytes, installedAt, verifiedAt, lastUsedAt}]}` written atomically (temp + rename) | excluded | n/a |
-| `vwish/speech/transcripts/<key>.json` | transcript cache (§8.4), LRU budget 64 MiB | included (small, user-derived) [ASSUMPTION; Persistence may prefer excluded] | LRU eviction; never by "Clear cache" |
-| `vwish/speech/transcripts/<key>.partial.jsonl` | per-chunk checkpoints | included | on completion; 30-day sweep |
-| `vwish/speech/jobs/<jobId>.json` | resumable job record (§8.6) | excluded | on completion/discard |
-| `vwish/speech/work/<jobId>/<unit>.wav` | extracted 16 kHz WAV (about 1.92 MB/min) | excluded | right after that unit is transcribed; startup sweep of anything older than 24 h |
+| `danaview/speech/models/<file>` | verified model files | **excluded** (iOS resource key; Android rules) | user delete only |
+| `danaview/speech/models/<file>.part` + `.part.json` | partial download + sidecar `{url, bytes, sha256, written, updatedAt, catalogRevision}` | excluded | completion, cancel-with-discard, 7-day stale sweep |
+| `danaview/speech/models/manifest.json` | `{schema:1, installed:[{id, file, sha256, bytes, installedAt, verifiedAt, lastUsedAt}]}` written atomically (temp + rename) | excluded | n/a |
+| `danaview/speech/transcripts/<key>.json` | transcript cache (§8.4), LRU budget 64 MiB | included (small, user-derived) [ASSUMPTION; Persistence may prefer excluded] | LRU eviction; never by "Clear cache" |
+| `danaview/speech/transcripts/<key>.partial.jsonl` | per-chunk checkpoints | included | on completion; 30-day sweep |
+| `danaview/speech/jobs/<jobId>.json` | resumable job record (§8.6) | excluded | on completion/discard |
+| `danaview/speech/work/<jobId>/<unit>.wav` | extracted 16 kHz WAV (about 1.92 MB/min) | excluded | right after that unit is transcribed; startup sweep of anything older than 24 h |
 
 On iOS this is `Library/Application Support`; on Android it is `files/` [VERIFIED: `AppStorage` uses `getApplicationSupportDirectory`]. WAVs deliberately do **not** live in the cache folder, because Settings › Storage "Clear cache" (`ux.md` §4.8) could delete them in the middle of a job. **Original media is only ever read** by the engine extractor, never written.
 
@@ -663,7 +663,7 @@ enum ModelDownloadFailureKind { offline, timeout, server, secureConnection, inte
    - `consent.disclosure` must equal the spec (id, file, bytes, sha256, host); otherwise fail with `consentMismatch`.
    - `freeDiskBytes ≥ remaining + 64 MiB`, else `diskFull`.
    - Acquire the wakelock (`ux.md` §4.7) and, on iOS, a background task.
-2. **Resolve the redirect.** `GET <huggingface URL>` with `followRedirects = false` and `User-Agent: Vwish/<version>` (no identifiers).
+2. **Resolve the redirect.** `GET <huggingface URL>` with `followRedirects = false` and `User-Agent: Danaview/<version>` (no identifiers).
    - Expect `302`.
    - Check `x-linked-size == spec.bytes` and `x-linked-etag == spec.sha256`. A mismatch fails **before** any download, with `sizeMismatch`/`checksumMismatch`.
    - Read `Location`. It is a signed CDN URL with `Expires`, so it is never persisted and resumes always re-resolve.
@@ -683,21 +683,21 @@ enum ModelDownloadFailureKind { offline, timeout, server, secureConnection, inte
 6. **Finish.** Rename atomically to the final name, call `excludeFromBackup`, update `manifest.json`, emit `done`. The VAD file follows the same path and is skipped if already installed.
 7. **App lifecycle.** On iOS background, keep downloading until the background task expires, then `cancel(keepPartial: true)` and record `interrupted`. On `resumed` the controller offers "Resume download", which is automatic if the sheet is still open.
 
-We use the existing `NetworkCancelToken` (`vwish_data`) for cancellation. The fake-client pattern from `StreamProbe` (`clientFactory`) makes every branch unit-testable.
+We use the existing `NetworkCancelToken` (`danaview_data`) for cancellation. The fake-client pattern from `StreamProbe` (`clientFactory`) makes every branch unit-testable.
 
 **Why not a native background downloader?** The files are 31–181 MB and the download is user-initiated and watched in a sheet. Foreground plus `Range` resume covers it. `background_downloader` 9.6 needs Flutter 3.47 [VERIFIED]. An iOS background `URLSession` needs AppDelegate plumbing. Revisit only if field data shows abandoned downloads (deferred ticket AI-D4).
 
-**Load-time integrity.** Before `vw_model_load`:
+**Load-time integrity.** Before `dv_model_load`:
 - check file size equals the manifest,
 - check the magic,
 - check the manifest `verifiedAt` is set.
 
-A full re-hash runs only if the size differs or the manifest is missing. A `VW_MODEL_FAILED` on a verified file deletes it and asks the user to download again ("The speech model is damaged").
+A full re-hash runs only if the size differs or the manifest is missing. A `DV_MODEL_FAILED` on a verified file deletes it and asks the user to download again ("The speech model is damaged").
 
 ### 5.4 Backup exclusion
 
-- **iOS:** `isExcludedFromBackup` on `vwish/speech/models/` and on each file.
-- **Android:** the app manifest gains `android:fullBackupContent="@xml/vwish_backup_rules"` (API ≤ 30) and `android:dataExtractionRules="@xml/vwish_data_extraction_rules"` (API 31+), each with `<exclude domain="file" path="vwish/speech/models/"/>`, `.../jobs/` and `.../work/`.
+- **iOS:** `isExcludedFromBackup` on `danaview/speech/models/` and on each file.
+- **Android:** the app manifest gains `android:fullBackupContent="@xml/danaview_backup_rules"` (API ≤ 30) and `android:dataExtractionRules="@xml/danaview_data_extraction_rules"` (API 31+), each with `<exclude domain="file" path="danaview/speech/models/"/>`, `.../jobs/` and `.../work/`.
 
 These XML files are app-level, so they are **co-owned with Persistence**, which also decides project backup policy. AI contributes the exclusion lines (AI-09). Without them, Android Auto Backup's 25 MB quota would be exceeded [VERIFY quota], and backups could silently stop.
 
@@ -724,7 +724,7 @@ Consent is **per download**. Each download needs a fresh tap, and nothing is rem
 ### 5.6 Deletion
 
 From Settings › Video editor › Auto captions, or from Storage › "Speech model" (`ux.md` §4.8):
-- `showVwishConfirm(destructive: true, title: 'Delete speech model?', message: 'Auto captions won't work until you download it again (57 MB). Captions already in your projects stay.')`.
+- `showDanaviewConfirm(destructive: true, title: 'Delete speech model?', message: 'Auto captions won't work until you download it again (57 MB). Captions already in your projects stay.')`.
 - While a job is running, the action is disabled with "In use by auto captions".
 - Deleting the last tier also deletes the VAD file. Transcripts are kept (they are project-derived text) and age out by LRU.
 
@@ -736,7 +736,7 @@ From Settings › Video editor › Auto captions, or from Storage › "Speech mo
 
 | Check | Rule | Outcome |
 |---|---|---|
-| Platform / ABI / OS | `WhisperSupport` | `unsupported(reason)`: the sheet shows `VwishEmptyState` with an explanation |
+| Platform / ABI / OS | `WhisperSupport` | `unsupported(reason)`: the sheet shows `DanaviewEmptyState` with an explanation |
 | RAM tier | §5.1 | Tier disabled |
 | Available memory | iOS `os_proc_available_memory() ≥ 1.3 × peakBudget`; Android `availMem − threshold ≥ 1.3 × peakBudget` and not `lowMemory` | Otherwise the sheet suggests a smaller tier ("Close other apps or choose Fast") |
 | Disk | `freeDisk ≥ Σ unit WAV bytes (1.92 MB/min) + 64 MiB` | `diskFull` |
@@ -796,7 +796,7 @@ final class SpeechAudioRequest {
   final MediaRef media;          // resolved by Persistence: path, content:// URI, or security-scoped bookmark
   final TimeRange range;         // source time, µs
   final int? audioStream;        // null = default/first audio track
-  final String outputPath;       // under vwish/speech/work/
+  final String outputPath;       // under danaview/speech/work/
 }
 abstract interface class SpeechAudioExtraction {
   Stream<double> get progress;                 // 0..1, ≤ 10 Hz
@@ -848,7 +848,7 @@ Reversed clips are excluded (reversed speech is meaningless). Freeze frames have
 
 ---
 
-## 8. Transcription pipeline (`vwish_transcription`)
+## 8. Transcription pipeline (`danaview_transcription`)
 
 ### 8.1 Service (implements `ux.md` §2.4, extended)
 
@@ -912,7 +912,7 @@ final class TranscriptionResult { final List<SubtitleCueDraft> drafts; final Cap
 final class SubtitleCueDraft { final TimeRange range; final String text; }  // timeline time, frame-quantized, '\n' between lines
 ```
 
-The controller applies `result` through the domain command (§10). The service never mutates the project. This keeps `vwish_transcription` pure and lets the job finish even if the timeline changed meanwhile, because mapping uses `timeline()` at the end.
+The controller applies `result` through the domain command (§10). The service never mutates the project. This keeps `danaview_transcription` pure and lets the job finish even if the timeline changed meanwhile, because mapping uses `timeline()` at the end.
 
 ### 8.2 Steps
 
@@ -932,7 +932,7 @@ The controller applies `result` through the domain command (§10). The service n
 5. **Detect the language** when it is `auto` and not cached. Use a DETECT job on the unit with the highest priority, then the longest.
    - If top-1 p ≥ 0.6, use it.
    - Otherwise emit `needsLanguage` with the top 3 and wait for `provideLanguage`. The sheet shows a picker with those preselected.
-   - `VW_ERR_NO_SPEECH` on every unit fails with `noSpeech`.
+   - `DV_ERR_NO_SPEECH` on every unit fails with `noSpeech`.
 6. **Transcribe** each unit (phase `transcribing`):
    - `WhisperModel.transcribe(range = resume point …)`.
    - On each `WhisperSegmentsAdded` with `chunkFinal`, append the chunk to `<key>.partial.jsonl`. This is the checkpoint.
@@ -980,7 +980,7 @@ Times are absolute **source** µs. Unknown `schema` values are discarded and reg
 
 `jobs/<jobId>.json` holds `{project, request (serializable), units with state, detected language, startedAt}`. It is written at start and on each unit transition.
 
-When the editor opens a project with a pending record, the Captions tool shows a `VwishSurface` notice: "Auto captions were interrupted. Resume?" with the buttons Resume and Discard. Resume re-runs the request. Completed units are cache hits, and the unit in progress resumes at its last checkpointed chunk end (`range_start_ms`). Records older than 7 days are dropped silently.
+When the editor opens a project with a pending record, the Captions tool shows a `DanaviewSurface` notice: "Auto captions were interrupted. Resume?" with the buttons Resume and Discard. Resume re-runs the request. Completed units are cache hits, and the unit in progress resumes at its last checkpointed chunk end (`range_start_ms`). Records older than 7 days are dropped silently.
 
 ### 8.7 Failure taxonomy (Dart)
 
@@ -1062,7 +1062,7 @@ There are 99 entries, generated from whisper's `g_lang` (ids 0–98) [VERIFIED l
 - `rtl` covers ar, fa, ur, he, yi, ps, sd.
 - `qualityHint` marks languages where Fast and Balanced are weak, so the sheet recommends Accurate. We fill it from OpenAI's published per-language WER (Whisper paper, FLEURS table) during AI-19 [VERIFY numbers]. Until then, mark everything outside the top 30 by FLEURS WER.
 
-The picker (`ux.md` `language_picker.dart` with `VwishSearchField`) lists "Detect automatically" first, then the last 3 languages used, then all languages sorted by English name with the native name as a subtitle. Search matches the English name, the native name and the code.
+The picker (`ux.md` `language_picker.dart` with `DanaviewSearchField`) lists "Detect automatically" first, then the last 3 languages used, then all languages sorted by English name with the native name as a subtitle. Search matches the English name, the native name and the code.
 
 ---
 
@@ -1163,7 +1163,7 @@ Two requirements from this area:
 ## 11. UX (files owned by `ux.md`; behavior and copy specified here)
 
 ### 11.1 Entry points
-- **Captions tool** (`ux.md` §6.3 tool strip, "Captions"): the panel has an **Auto captions** tile (icon+text, rounded rectangle; `Icons.subtitles_rounded` [VERIFY exists]) that opens `AutoCaptionsSheet` (modal `showVwishSheet`, a flow per `ux.md` §0.2).
+- **Captions tool** (`ux.md` §6.3 tool strip, "Captions"): the panel has an **Auto captions** tile (icon+text, rounded rectangle; `Icons.subtitles_rounded` [VERIFY exists]) that opens `AutoCaptionsSheet` (modal `showDanaviewSheet`, a flow per `ux.md` §0.2).
 - **Clip context menu / long-press:** "Auto captions for this clip" opens the sheet with scope = clip.
 - **Subtitle track menu:** "Regenerate captions…" (§10.3).
 - **Interrupted job notice** (§8.6).
@@ -1199,17 +1199,17 @@ The controller keeps itself alive (`ref.keepAlive()`) while a job runs, so closi
 
 ### 11.3 Copy (centralized in `editor_strings.dart`)
 
-**Configure step** (`VwishStepIndicator` "Step 1 of 2"):
+**Configure step** (`DanaviewStepIndicator` "Step 1 of 2"):
 - Title: **Auto captions**
 - "Spoken language": dropdown → language picker. Default: last used, else "Detect automatically".
-- "Quality": `VwishSegmentedControl` (wraps to `VwishChipGroup` under 360 px):
+- "Quality": `DanaviewSegmentedControl` (wraps to `DanaviewChipGroup` under 360 px):
   - Fast · 31 MB
   - Balanced · 57 MB
   - Accurate · 181 MB
 
   Installed tiers show "Ready" instead of a size. Unavailable tiers are disabled with the reason as their semantics hint.
 - "Captions from": This clip | Whole video. The Advanced section lists audio tracks with switches; music tracks are off by default.
-- "Layout": Standard (2 lines) | Single line | Short phrases. Advanced shows max characters per line, reading speed, and "Include sound descriptions" (`VwishSwitchRow`).
+- "Layout": Standard (2 lines) | Single line | Short phrases. Advanced shows max characters per line, reading speed, and "Include sound descriptions" (`DanaviewSwitchRow`).
 - Footer note (caption style): "Captions are created on this device. Your video and audio are never uploaded."
 - Primary button: **Create captions**. Secondary button: Cancel.
 
@@ -1221,7 +1221,7 @@ The controller keeps itself alive (`ref.keepAlive()`) while a job runs, so closi
 - Buttons: **Not now** (secondary), **Download 57 MB** (primary).
 
 **Downloading:**
-- "Downloading speech model… 23 of 57 MB" with `VwishProgressBar` and a Cancel button.
+- "Downloading speech model… 23 of 57 MB" with `DanaviewProgressBar` and a Cancel button.
 - Errors reuse the downloader kinds:
   - offline: "You're offline. Connect to the internet to download the speech model."
   - checksumMismatch: "The download was damaged. Try again."
@@ -1238,26 +1238,26 @@ The controller keeps itself alive (`ref.keepAlive()`) while a job runs, so closi
   - "Finishing up"
 - Partial text preview: one line, ellipsized, live region off.
 - Paused lines:
-  - "Paused while Vwish is in the background"
+  - "Paused while Danaview is in the background"
   - "Paused while your device cools down"
   - "Waiting for the export to finish"
 - Buttons: **Cancel** (secondary), **Hide** (ghost; keeps running).
 
-**Needs language:** "Which language is spoken?" with the top 3 as `VwishChoiceChip`s ("Hindi 62%", …), "Other language…", and Continue.
+**Needs language:** "Which language is spoken?" with the top 3 as `DanaviewChoiceChip`s ("Hindi 62%", …), "Other language…", and Continue.
 
 **Done:** sheet closes. Toast: "Added 128 captions (English)". If clips were skipped, the toast becomes "Added 128 captions. 2 clips were skipped", and the detail is in the track's info.
 
-**No speech:** `VwishDialog` "No speech found", message "We couldn't hear anyone speaking in the selected clips."
+**No speech:** `DanaviewDialog` "No speech found", message "We couldn't hear anyone speaking in the selected clips."
 
 ### 11.4 Layout rules (standing UI rules)
 - Custom components only: no `AlertDialog`, `ListTile`, `Slider` or `LinearProgressIndicator`. Solid surfaces, soft shadows, hairline borders. Figtree.
-- Every row must fit at **280–1280 px widths at text scale 0.85–1.35**: `Wrap`/`Flexible`, one-line ellipsis for names, `VwishSegmentedControl` falling back to chips.
+- Every row must fit at **280–1280 px widths at text scale 0.85–1.35**: `Wrap`/`Flexible`, one-line ellipsis for names, `DanaviewSegmentedControl` falling back to chips.
 - The sheet is scrollable. Its max height is 0.85 of the screen and it is keyboard-aware.
 - Widget tests use the `ux.md` §21 surface matrix (AI-16).
 
 ### 11.5 Settings, storage, tasks
-- **Settings › Video editor › Auto captions** section (`editor_settings_screen.dart`, `ux.md` §4.8). One `VwishListTile` per tier: "Balanced · 57 MB · Ready", trailing "Delete"; or "Fast · 31 MB", trailing "Download", which goes through the consent view. Below that: "Default quality", "Default language", "Include sound descriptions", and the privacy paragraph with a Privacy Policy link.
-- **Storage contributor "Speech model"** (`ux.md` §4.8). `measure()` sums `vwish/speech/models` plus partials. The clear action is "Delete speech models" (§5.6).
+- **Settings › Video editor › Auto captions** section (`editor_settings_screen.dart`, `ux.md` §4.8). One `DanaviewListTile` per tier: "Balanced · 57 MB · Ready", trailing "Delete"; or "Fast · 31 MB", trailing "Download", which goes through the consent view. Below that: "Default quality", "Default language", "Include sound descriptions", and the privacy paragraph with a Privacy Policy link.
+- **Storage contributor "Speech model"** (`ux.md` §4.8). `measure()` sums `danaview/speech/models` plus partials. The clear action is "Delete speech models" (§5.6).
 - **Background tasks sheet:** the active `TranscriptionJob` appears with title "Auto captions", progress and Cancel.
 
 ---
@@ -1277,14 +1277,14 @@ All of these are compatible with the app's proprietary licence. Downloading mode
 
 ## 13. Privacy policy and store disclosures
 
-`ux.md` §20 merges these into `packages/vwish_features/lib/src/more/legal_texts.dart`. The exact AI blocks follow.
+`ux.md` §20 merges these into `packages/danaview_features/lib/src/more/legal_texts.dart`. The exact AI blocks follow.
 
-In **"When Vwish uses the internet"**, add after "Stream check":
+In **"When Danaview uses the internet"**, add after "Stream check":
 
 ```dart
 LegalBullet(
   lead: 'Speech model for auto captions',
-  'Only if you choose to create captions automatically, Vwish downloads a speech-recognition model '
+  'Only if you choose to create captions automatically, Danaview downloads a speech-recognition model '
   '(about 31 to 181 MB, depending on the quality you pick) from Hugging Face (huggingface.co), which '
   "delivers it through its download network on hf.co. The request contains only the model's file name. "
   'No video, audio, captions or personal data are sent. Hugging Face sees the usual details of the '
@@ -1293,7 +1293,7 @@ LegalBullet(
 ),
 ```
 
-In **"What Vwish stores on your device"**, add:
+In **"What Danaview stores on your device"**, add:
 
 ```dart
 LegalBullet(
@@ -1310,7 +1310,7 @@ LegalBullet('Delete downloaded speech models at any time in Settings › Video e
 
 Also:
 - Bump `legalEffectiveDate`.
-- Update the hosted policy at `https://vecvel.com/ios/vwish/privacy` (owner action).
+- Update the hosted policy at `https://vecvel.com/ios/danaview/privacy` (owner action).
 - **App Store privacy label / Play Data safety:** unchanged. No data is collected or shared, because downloading a public file is not collection.
 - **Store descriptions:** "All your data stays strictly on your device" (iOS) and "100% on-device" (Android) remain true. Release notes should say "Auto captions run on your device; a one-time model download is needed."
 
@@ -1358,7 +1358,7 @@ Sparse speech gets faster (VAD skips silence). Sustained runs over 5 minutes may
 
 | Failure | Detected at | User sees | Recovery |
 |---|---|---|---|
-| Unsupported device or OS, library missing (armeabi-v7a) | `support()` | `VwishEmptyState`: "Auto captions aren't available on this device." plus the reason ("Needs iOS 15 or later" / "Needs a 64-bit device") | None |
+| Unsupported device or OS, library missing (armeabi-v7a) | `support()` | `DanaviewEmptyState`: "Auto captions aren't available on this device." plus the reason ("Needs iOS 15 or later" / "Needs a 64-bit device") | None |
 | Tier needs more RAM | offers | Disabled segment with hint | Pick a lower tier |
 | Low available memory at start | preflight | "There isn't enough free memory right now. Close other apps or choose Fast." | Retry |
 | Download errors | downloader | §11.3 copy | Retry (resumes) |
@@ -1378,10 +1378,10 @@ All failures are typed. Raw `PlatformException`s and `WhisperException`s are map
 
 ## 16. Testing strategy
 
-### 16.1 Dart unit tests (`vwish_whisper/test`, `vwish_transcription/test`)
+### 16.1 Dart unit tests (`danaview_whisper/test`, `danaview_transcription/test`)
 
 - **Loader:** variant selection from HWCAP masks (fake bindings); ABI mismatch → `abiMismatch`; desktop → `unsupported(platform)`.
-- **WhisperJob polling with `FakeVwBindings`:**
+- **WhisperJob polling with `FakeDvBindings`:**
   - progress throttling,
   - segment batching across polls,
   - terminal-state handling (succeeded/failed/cancelled),
@@ -1404,9 +1404,9 @@ All failures are typed. Raw `PlatformException`s and `WhisperException`s are map
   - frame quantization at 23.976, 25, 29.97 and 60 fps.
 - **Planner and mapping:** split clip → one unit; mute, solo and role filters; reversed and freeze excluded; speed 0.25×–4× and ramps (`timelineTimeOf` fake with a piecewise-linear map); partially visible words; overlap priority; cut points.
 - **Service orchestration** (fake runtime, extractor, store, cache, clock): phase order and weights; ETA; language auto (confident vs `needsLanguage`); cache hit, miss and superset reuse; checkpoint write and resume; cancel at each phase cleans up WAVs; export-active waiting and pausing; iOS lifecycle pause/resume; failure mapping for every kind in §15.
-- **Architecture tests:** the pubspec dependency rules (§3.1); `UserConsent.accepted(` call sites limited to `model_consent_view.dart`; no `print`/`debugPrint` of transcript text in `vwish_transcription` (a grep test for `partialText`/`text` passed into logging calls).
+- **Architecture tests:** the pubspec dependency rules (§3.1); `UserConsent.accepted(` call sites limited to `model_consent_view.dart`; no `print`/`debugPrint` of transcript text in `danaview_transcription` (a grep test for `partialText`/`text` passed into logging calls).
 
-### 16.2 Widget tests (`vwish_editor/test/flows/captions/`, UX-owned harness)
+### 16.2 Widget tests (`danaview_editor/test/flows/captions/`, UX-owned harness)
 
 - Every sheet state (configure, consent, downloading, error, running, paused, needsLanguage, done, unsupported) across the `ux.md` surface matrix: **280×500 @ 1.35 … 1280×800 @ 0.85**. Assert no `RenderFlex` overflow and every element inside the sheet bounds (`expectInside`).
 - No Material chrome: the tree contains no `AlertDialog`, `ListTile`, `Slider`, `LinearProgressIndicator` or `CircularProgressIndicator`.
@@ -1426,7 +1426,7 @@ All failures are typed. Raw `PlatformException`s and `WhisperException`s are map
   7. WAV validator rejects wrong rate, stereo, 24-bit and truncated files.
   8. JSON escaping fuzz (random bytes in token text → valid JSON).
   9. A CJK fixture yields complete characters only.
-  10. `vw_shutdown_all` with active jobs joins cleanly under ThreadSanitizer (one CI job with `WHISPER_SANITIZE_THREAD`).
+  10. `dv_shutdown_all` with active jobs joins cleanly under ThreadSanitizer (one CI job with `WHISPER_SANITIZE_THREAD`).
 - **Android:** Kotlin unit tests for HWCAP and cpufreq clustering parsing and thermal mapping. An instrumented test on the x86_64 emulator loads the library and runs `jfk.wav` with tiny. An extraction test with fixtures (AAC stereo 48k MP4, 5.1 AC-3 MOV where the decoder exists, mono AMR 3GP): a clap test where the transient at a known source time is detected in the WAV within ±20 ms, including an MP4 with an edit list.
 - **iOS:** XCTest (RunnerTests) for the device-profile channel and extraction with the same fixtures plus the clap test. Simulator CPU path test with tiny.
 
@@ -1447,7 +1447,7 @@ All failures are typed. Raw `PlatformException`s and `WhisperException`s are map
   7. SRT export round-trip.
   8. Burn-in export of Arabic and Japanese captions: visual check plus golden frame compare between preview and export (shared with Subtitles/engines).
 
-### 16.5 Accuracy evaluation harness (`vwish_transcription/tool/eval/`)
+### 16.5 Accuracy evaluation harness (`danaview_transcription/tool/eval/`)
 
 - A host CLI runs the same shim (CPU) over an eval set of about 40 clips in 10 languages. Sources and licences:
   - Common Voice (CC0),
@@ -1465,12 +1465,12 @@ All failures are typed. Raw `PlatformException`s and `WhisperException`s are map
 |---|---|---|---|---|
 | `TranscriptionService`, `TranscriptionJob`, `SubtitleCueDraft`, `UserConsent` | UX (`ux.md` §2.4) | AI provides | §8.1 extends the minimum (`offers`, `preflight`, `resegment`, `activeJob`, `resumableFor`, `provideLanguage`). UX adopts the extensions or keeps them behind its controller. | §8.1 |
 | Auto captions sheet, consent view, language picker, settings section, storage contributor, tasks entry | UX | UX owns the files; AI specifies behaviour and copy | §11 | §11 |
-| `VwishProgressBar`, `VwishSearchField`, `VwishStepIndicator` | UX / UI kit (`ux.md` §3.2) | AI consumes | Must exist before AI-16 | n/a |
+| `DanaviewProgressBar`, `DanaviewSearchField`, `DanaviewStepIndicator` | UX / UI kit (`ux.md` §3.2) | AI consumes | Must exist before AI-16 | n/a |
 | `TimelineView` adapter over `EditProject`, `MediaClip`, `FrameRate`, `TimeRange`; `timelineTimeOf(source)` inverse speed map; track role | Domain | AI consumes | Exact inverse time map for constant speed and ramps; `AudioRole` or an equivalent music flag | §10.1 |
 | `AddGeneratedCaptionTrack`, `ReplaceGeneratedCaptions`, `CaptionProvenance`, `CueOrigin`, `editedAfterGeneration` | Domain | AI proposes, Domain owns | One history entry; rejections as data | §10.2 |
 | Project schema bump (additive fields) | Persistence | Persistence owns | Migration defaults | §10.2 |
 | `MediaRef` resolution (paths, `content://`, security-scoped bookmarks), availability, `mediaFingerprint` | Persistence / media pool | AI consumes | Stable fingerprint string per media | §8.2 |
-| Backup rules XML (Android), app-support dir policy | Persistence | Co-owned | Exclusion lines for `vwish/speech/{models,jobs,work}` | §5.4 |
+| Backup rules XML (Android), app-support dir policy | Persistence | Co-owned | Exclusion lines for `danaview/speech/{models,jobs,work}` | §5.4 |
 | `SpeechAudioExtractor` (`EditorEngine.jobs.extractSpeechAudio`) | iOS and Android engines | AI defines, engines implement | 16 kHz mono s16 WAV, sample-accurate range, progress, cancel, typed errors | §7 |
 | `BackgroundWorkGuard` (foreground service / iOS background task), `exportActive` signal | Engines / UX tasks | AI consumes | Lease API; export activity stream | §6.3 |
 | Subtitle rendering (explicit `\n`, font fallback, RTL) in preview and burn-in; SRT/VTT codec | Subtitles feature (Domain + engines + UX) | AI consumes | §10.4 requirements | §10.4 |
@@ -1480,20 +1480,20 @@ All failures are typed. Raw `PlatformException`s and `WhisperException`s are map
 
 ## 18. Implementation tickets (ordered)
 
-Size: S ≤ 2 days, M ≤ 1 week, L ≤ 2 weeks. All tickets land behind the compile-time flag `--dart-define=VWISH_AUTO_CAPTIONS=true` until AI-20 passes. There is no remote config, for privacy.
+Size: S ≤ 2 days, M ≤ 1 week, L ≤ 2 weeks. All tickets land behind the compile-time flag `--dart-define=DANAVIEW_AUTO_CAPTIONS=true` until AI-20 passes. There is no remote config, for privacy.
 
 ### Milestone M1: native foundation
 
 **AI-01 · Vendor whisper.cpp v1.9.4 (pruned)** · S
-- Files: `packages/vwish_whisper/third_party/whisper.cpp/**`, `third_party/VENDORED.md`, `tool/vendor_whisper.sh`, `LICENSE-THIRD-PARTY.md`.
+- Files: `packages/danaview_whisper/third_party/whisper.cpp/**`, `third_party/VENDORED.md`, `tool/vendor_whisper.sh`, `LICENSE-THIRD-PARTY.md`.
 - Depends on: n/a.
 - Acceptance:
   - The script reproduces the tree byte-for-byte from commit `927cfce3…`, after checking the tarball sha256.
   - A host CMake configure and build with the §4.3 option set and the §4.4 option set (macOS host, iOS SDK) succeeds with the pruned tree.
   - The licence file is present.
 
-**AI-02 · `vwish_whisper` plugin skeleton and C ABI** · M
-- Files: `packages/vwish_whisper/{pubspec.yaml, ffigen.yaml, lib/vwish_whisper.dart, lib/src/ffi/*, lib/src/support.dart}`, `src/vw_whisper.h`.
+**AI-02 · `danaview_whisper` plugin skeleton and C ABI** · M
+- Files: `packages/danaview_whisper/{pubspec.yaml, ffigen.yaml, lib/danaview_whisper.dart, lib/src/ffi/*, lib/src/support.dart}`, `src/dv_whisper.h`.
 - Depends on: AI-01.
 - Acceptance:
   - The header matches §4.5. ffigen output is committed and regenerates without a diff in CI.
@@ -1501,34 +1501,34 @@ Size: S ≤ 2 days, M ≤ 1 week, L ≤ 2 weeks. All tickets land behind the com
   - The ABI check works.
 
 **AI-03 · Native shim implementation and host tests** · L
-- Files: `src/vw_*.{h,cpp}`, `src/CMakeLists.txt` (host test target), `src/tests/**`.
+- Files: `src/dv_*.{h,cpp}`, `src/CMakeLists.txt` (host test target), `src/tests/**`.
 - Depends on: AI-01, AI-02.
-- Acceptance: all §16.3 C++ host tests pass on macOS and Linux CI, including a TSan job. A grep check confirms logs never contain segment text or paths. `vw_job_free` never leaks (ASan job).
+- Acceptance: all §16.3 C++ host tests pass on macOS and Linux CI, including a TSan job. A grep check confirms logs never contain segment text or paths. `dv_job_free` never leaks (ASan job).
 
 **AI-04 · Android native build** · M
-- Files: `packages/vwish_whisper/android/**`, `src/CMakeLists.txt` (Android part), `src/vw_exports.map`, `.github/workflows/android-release.yml` (size check step).
+- Files: `packages/danaview_whisper/android/**`, `src/CMakeLists.txt` (Android part), `src/dv_exports.map`, `.github/workflows/android-release.yml` (size check step).
 - Depends on: AI-03.
 - Acceptance:
-  - The AAB contains `libvwish_whisper.so` (arm64-v8a, x86_64) and `libvwish_whisper_v82.so` (arm64-v8a), and no armeabi-v7a copies.
+  - The AAB contains `libdanaview_whisper.so` (arm64-v8a, x86_64) and `libdanaview_whisper_v82.so` (arm64-v8a), and no armeabi-v7a copies.
   - ELF `LOAD` alignment is 16 KB (checked with the Android `check_elf_alignment.sh` or `llvm-readelf`).
-  - Only `vw_*` symbols are exported. Each `.so` is ≤ 3 MB.
+  - Only `dv_*` symbols are exported. Each `.so` is ≤ 3 MB.
   - Variant selection is logged correctly on an A55-class device and a dotprod device.
   - It builds with the SDK's CMake 3.22.1, or the pinned version is documented.
   - There is no duplicate `libc++_shared.so` packaging conflict with media_kit.
 
 **AI-05 · iOS native build** · M
-- Files: `packages/vwish_whisper/ios/**`, `tool/build_ios_xcframework.sh`, `.gitignore`, `ios/fastlane/Fastfile` (pre-build step), `README.md` (setup).
+- Files: `packages/danaview_whisper/ios/**`, `tool/build_ios_xcframework.sh`, `.gitignore`, `ios/fastlane/Fastfile` (pre-build step), `README.md` (setup).
 - Depends on: AI-03.
 - Acceptance:
   - A clean checkout plus the script plus `flutter build ipa` succeeds.
   - The podspec guard message appears when the framework is missing.
   - There are no `NEWLAPACK` symbols, and nothing newer than the deployment target is strongly bound (`nm -um` review).
   - The app launches on an iOS 15 simulator runtime and on iOS 26.
-  - Metal is used on an A15 device on iOS ≥ 16.4 (from `vw_model_info.gpu_used`). The simulator uses CPU.
+  - Metal is used on an A15 device on iOS ≥ 16.4 (from `dv_model_info.gpu_used`). The simulator uses CPU.
   - App Store Connect validation passes (no ITMS-90208). The privacy manifest is included. The IPA grows by ≤ 6 MB (thinned arm64).
 
 **AI-06 · Device profile and events channel** · M
-- Files: `lib/src/device/*`, `ios/Classes/{VwishWhisperPlugin.swift, DeviceProfiler.swift}`, `android/src/main/kotlin/com/vecvel/vwish/whisper/*`, `android/src/test/**`.
+- Files: `lib/src/device/*`, `ios/Classes/{DanaviewWhisperPlugin.swift, DeviceProfiler.swift}`, `android/src/main/kotlin/com/vecvel/danaview/whisper/*`, `android/src/test/**`.
 - Depends on: AI-02.
 - Acceptance:
   - Every §4.8 method and event works on one iOS and one Android device (manual checklist). Dart parsing is defensive (unit tests with malformed maps).
@@ -1542,18 +1542,18 @@ Size: S ≤ 2 days, M ≤ 1 week, L ≤ 2 weeks. All tickets land behind the com
 - Acceptance:
   - All §16.1 runtime tests pass with fake bindings.
   - On device, transcribing `jfk.wav` through the Dart API matches the host test.
-  - Hot restart during a running job leaves no orphan thread (debug check via `vw_shutdown_all`).
+  - Hot restart during a running job leaves no orphan thread (debug check via `dv_shutdown_all`).
   - Poll cost is < 0.5 ms p95 (trace).
 
 ### Milestone M2: transcription core
 
-**AI-08 · `vwish_transcription` package, catalog, languages, core types** · S
-- Files: `packages/vwish_transcription/{pubspec.yaml, lib/vwish_transcription.dart, lib/src/catalog/*, lib/src/models/*}`.
+**AI-08 · `danaview_transcription` package, catalog, languages, core types** · S
+- Files: `packages/danaview_transcription/{pubspec.yaml, lib/danaview_transcription.dart, lib/src/catalog/*, lib/src/models/*}`.
 - Depends on: AI-07 and the Domain types (`TimeUs`, `TimeRange`, `FrameRate`, ids).
 - Acceptance: catalog and language tests (§16.1) pass, and the dependency-rule test is added.
 
 **AI-09 · Model store and resumable downloader** · M
-- Files: `lib/src/models_store/*`, `android/app/src/main/res/xml/vwish_{backup_rules,data_extraction_rules}.xml` plus manifest attributes (co-owned with Persistence).
+- Files: `lib/src/models_store/*`, `android/app/src/main/res/xml/danaview_{backup_rules,data_extraction_rules}.xml` plus manifest attributes (co-owned with Persistence).
 - Depends on: AI-06, AI-08.
 - Acceptance:
   - All downloader unit tests pass.
@@ -1601,7 +1601,7 @@ Size: S ≤ 2 days, M ≤ 1 week, L ≤ 2 weeks. All tickets land behind the com
 ### Milestone M3: UX
 
 **AI-16 · Auto captions flow** (paired with UX) · L
-- Files: `packages/vwish_editor/lib/src/editor/flows/captions/*` (`auto_captions_sheet.dart`, `auto_captions_controller.dart`, `language_picker.dart`, `model_consent_view.dart`, `captions_progress_panel.dart`), `editor_strings.dart` additions.
+- Files: `packages/danaview_editor/lib/src/editor/flows/captions/*` (`auto_captions_sheet.dart`, `auto_captions_controller.dart`, `language_picker.dart`, `model_consent_view.dart`, `captions_progress_panel.dart`), `editor_strings.dart` additions.
 - Depends on: AI-14, AI-15, UI kit additions.
 - Acceptance: all §11 states implemented with the §11.3 copy; §16.2 widget tests pass across the full surface matrix; no Material chrome; semantics checked with TalkBack and VoiceOver on one device each.
 
@@ -1611,14 +1611,14 @@ Size: S ≤ 2 days, M ≤ 1 week, L ≤ 2 weeks. All tickets land behind the com
 - Acceptance: instant re-split ≤ 300 ms for 30 min of speech; the edited-cues confirm; replace-in-range for clip scope; the resume notice appears after a kill.
 
 **AI-18 · Settings, storage, privacy and licences** · M
-- Files: `packages/vwish_editor/lib/src/settings/editor_settings_screen.dart` (section), `editor_storage_contributor.dart` (speech model), `packages/vwish_features/lib/src/more/legal_texts.dart`, a new custom `vwish_licences_screen.dart` plus route (if UX doesn't already own one), and `lib/main.dart` (`LicenseRegistry.addLicense`).
+- Files: `packages/danaview_editor/lib/src/settings/editor_settings_screen.dart` (section), `editor_storage_contributor.dart` (speech model), `packages/danaview_features/lib/src/more/legal_texts.dart`, a new custom `danaview_licences_screen.dart` plus route (if UX doesn't already own one), and `lib/main.dart` (`LicenseRegistry.addLicense`).
 - Depends on: AI-09.
 - Acceptance: deleting a model from Settings and from Storage works and is blocked during a job; the privacy text matches §13 exactly; the effective date is bumped; the licences screen lists the whisper.cpp, OpenAI Whisper and Silero notices verbatim; widget overflow tests pass.
 
 ### Milestone M4: hardening
 
 **AI-19 · Benchmarks, accuracy eval, tuning** · L
-- Files: `packages/vwish_transcription/tool/eval/**`, `integration_test/ai_benchmark_test.dart`, `docs/editor/ai-eval.md`, catalog constants.
+- Files: `packages/danaview_transcription/tool/eval/**`, `integration_test/ai_benchmark_test.dart`, `docs/editor/ai-eval.md`, catalog constants.
 - Depends on: AI-14.
 - Acceptance:
   - The §14.1 table is replaced by measured values on the §16.4 matrix.
@@ -1637,7 +1637,7 @@ Size: S ≤ 2 days, M ≤ 1 week, L ≤ 2 weeks. All tickets land behind the com
 ### Deferred (designed for, not in v1 unless the owner pulls them in)
 
 - **AI-D1 · Core ML encoder (iOS):** `WHISPER_COREML=ON` with `ALLOW_FALLBACK`. Download `ggml-<tier>-encoder.mlmodelc.zip` (tiny 15.0 MB, base 37.9 MB, small 163.1 MB, sha256 in the HF tree [VERIFIED sizes]), then unzip with a pure-Dart `archive` in an isolate. First-run ANE compile latency must be shown in the UI.
-- **AI-D2 · SwiftPM `Package.swift`** for `vwish_whisper` (binaryTarget plus C target), once Flutter requires it.
+- **AI-D2 · SwiftPM `Package.swift`** for `danaview_whisper` (binaryTarget plus C target), once Flutter requires it.
 - **AI-D3 · Android GPU backends** (OpenCL Adreno / Vulkan), behind a device allow-list and benchmark gating.
 - **AI-D4 · Native background downloads** (iOS background `URLSession` / Android WorkManager) if field data shows abandoned downloads.
 - **AI-D5 · iOS 26 `BGContinuedProcessingTask`** for long jobs in the background [VERIFY API and GPU entitlement].

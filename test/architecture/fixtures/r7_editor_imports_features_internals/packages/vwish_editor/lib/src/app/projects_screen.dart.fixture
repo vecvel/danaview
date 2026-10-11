@@ -1,2 +1,0 @@
-import 'package:vwish_features/chrome.dart';
-import 'package:vwish_features/src/player/vwish_player_screen.dart';

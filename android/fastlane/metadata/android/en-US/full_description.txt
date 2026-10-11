@@ -1,6 +1,6 @@
-Vwish is the modern, ultra-high performance HDR media player built for speed, fidelity, and versatility. Powered by an advanced hardware-accelerated playback engine, Vwish plays virtually any video format, audio stream, and subtitle file with silky-smooth frame rates and zero battery waste.
+Danaview is the modern, ultra-high performance HDR media player built for speed, fidelity, and versatility. Powered by an advanced hardware-accelerated playback engine, Danaview plays virtually any video format, audio stream, and subtitle file with silky-smooth frame rates and zero battery waste.
 
-Whether you're playing high-bitrate HEVC and AV1 movies from your local storage, streaming live HLS/DASH broadcasts, or opening videos directly from your file manager, Vwish delivers an uncompromising cinematic experience.
+Whether you're playing high-bitrate HEVC and AV1 movies from your local storage, streaming live HLS/DASH broadcasts, or opening videos directly from your file manager, Danaview delivers an uncompromising cinematic experience.
 
 KEY HIGHLIGHTS:
 
@@ -33,4 +33,4 @@ PRIVACY FIRST & ON-DEVICE
 • 100% on-device sandbox. No telemetry, no tracking scripts, no ads.
 • Background audio playback with notification and media control support.
 
-Download Vwish and experience high-performance mobile video playback.
+Download Danaview and experience high-performance mobile video playback.

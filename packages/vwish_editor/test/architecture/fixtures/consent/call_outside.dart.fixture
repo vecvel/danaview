@@ -1,4 +1,0 @@
-import 'package:vwish_transcription/vwish_transcription.dart';
-
-UserConsent skipTheConsentView(ConsentDisclosure disclosure) =>
-    UserConsent.accepted(disclosure, acceptedAt: DateTime.now());

@@ -1,0 +1,328 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vecvel.com/schemas/danaview/render_plan.v1.schema.json",
+  "title": "Danaview RenderPlan v1 (plan, patch or transient)",
+  "description": "Normative wire format of ARCH §11.2 (OWNER: CORE-29). Times are integer microseconds on the canvas.gridFps grid (D-35); colours are \"#RRGGBBAA\". Unknown keys must be ignored by decoders, so objects allow additional properties. Grid alignment, map contiguity, seq non-overlap and ordering are checked by the validators (ARCH §11.3), not by this schema.",
+  "oneOf": [
+    { "$ref": "#/$defs/plan" },
+    { "$ref": "#/$defs/patch" },
+    { "$ref": "#/$defs/transient" }
+  ],
+  "$defs": {
+    "us": { "type": "integer", "minimum": 0 },
+    "rate": { "enum": [24, 25, 30, 48, 50, 60] },
+    "colour": { "type": "string", "pattern": "^#[0-9A-Fa-f]{8}$" },
+    "rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+    "unit": { "type": "number", "minimum": 0, "maximum": 1 },
+    "signedUnit": { "type": "number", "minimum": -1, "maximum": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "range": {
+      "type": "array",
+      "prefixItems": [{ "$ref": "#/$defs/us" }, { "$ref": "#/$defs/us" }],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "mapSegment": {
+      "type": "array",
+      "description": "[t0, t1, s0, s1]: timeline [t0, t1) maps linearly onto source [s0, s1] (exact, unbiased µs, D-04).",
+      "prefixItems": [
+        { "$ref": "#/$defs/us" },
+        { "$ref": "#/$defs/us" },
+        { "type": "integer" },
+        { "type": "integer" }
+      ],
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "map": { "type": "array", "items": { "$ref": "#/$defs/mapSegment" }, "minItems": 1 },
+    "animKeys": {
+      "type": "array",
+      "description": "[[tUs, v], …] in absolute timeline µs, sorted with unique times; linear between keys, held outside.",
+      "items": {
+        "type": "array",
+        "prefixItems": [{ "type": "integer" }, { "type": "number" }],
+        "minItems": 2,
+        "maxItems": 2
+      },
+      "minItems": 1
+    },
+    "anim": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "xf.cx", "xf.cy", "xf.s", "xf.r", "xf.op",
+          "adj.exposure", "adj.brightness", "adj.contrast", "adj.highlights",
+          "adj.shadows", "adj.saturation", "adj.temperature", "adj.tint",
+          "detail.sharpen", "detail.blur", "detail.vignette",
+          "mask.cx", "mask.cy", "mask.w", "mask.h", "mask.r", "mask.feather", "mask.op",
+          "reveal"
+        ]
+      },
+      "additionalProperties": { "$ref": "#/$defs/animKeys" }
+    },
+    "canvas": {
+      "type": "object",
+      "required": ["w", "h", "fps"],
+      "properties": {
+        "w": { "type": "integer", "minimum": 16, "multipleOf": 2 },
+        "h": { "type": "integer", "minimum": 16, "multipleOf": 2 },
+        "fps": { "$ref": "#/$defs/rate" },
+        "gridFps": { "$ref": "#/$defs/rate", "description": "Project rate; default = fps. Every layer edge, map breakpoint, audio edge and durUs lies on this grid." },
+        "bg": { "$ref": "#/$defs/colour" }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "required": ["kind", "uri"],
+      "properties": {
+        "kind": { "enum": ["video", "audio", "image", "lut", "sprite"] },
+        "uri": { "type": "string", "pattern": "^(file|content)://" },
+        "bookmark": { "type": "string" },
+        "fp": { "type": "string" },
+        "proxyUri": { "type": "string", "pattern": "^(file|content)://" },
+        "w": { "type": "integer", "minimum": 1 },
+        "h": { "type": "integer", "minimum": 1 },
+        "rot": { "enum": [0, 90, 180, 270] },
+        "durUs": { "$ref": "#/$defs/us" },
+        "transfer": { "enum": ["sdr", "hlg", "pq"] },
+        "hasAudio": { "type": "boolean" },
+        "n": { "type": "integer", "minimum": 2, "maximum": 65 },
+        "sw": { "type": "integer", "minimum": 1 },
+        "sh": { "type": "integer", "minimum": 1 },
+        "sscale": { "type": "number", "exclusiveMinimum": 0 },
+        "reveal": { "type": "boolean" }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "lut" } } }, "then": { "required": ["n"] } },
+        { "if": { "properties": { "kind": { "const": "sprite" } } }, "then": { "required": ["sw", "sh", "sscale"] } }
+      ]
+    },
+    "xf": {
+      "type": "object",
+      "properties": {
+        "cx": { "type": "number" },
+        "cy": { "type": "number" },
+        "s": { "type": "number" },
+        "r": { "type": "number" },
+        "fx": { "type": "boolean" },
+        "fy": { "type": "boolean" },
+        "op": { "$ref": "#/$defs/unit" }
+      }
+    },
+    "crop": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/unit" },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "base": {
+      "type": "array",
+      "items": { "type": "number", "exclusiveMinimum": 0 },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "effects": {
+      "type": "object",
+      "properties": {
+        "adj": {
+          "type": "object",
+          "properties": {
+            "exposure": { "$ref": "#/$defs/signedUnit" },
+            "brightness": { "$ref": "#/$defs/signedUnit" },
+            "contrast": { "$ref": "#/$defs/signedUnit" },
+            "highlights": { "$ref": "#/$defs/signedUnit" },
+            "shadows": { "$ref": "#/$defs/signedUnit" },
+            "saturation": { "$ref": "#/$defs/signedUnit" },
+            "temperature": { "$ref": "#/$defs/signedUnit" },
+            "tint": { "$ref": "#/$defs/signedUnit" }
+          }
+        },
+        "detail": {
+          "type": "object",
+          "properties": {
+            "sharpen": { "$ref": "#/$defs/unit" },
+            "blur": { "$ref": "#/$defs/unit" },
+            "vignette": { "$ref": "#/$defs/unit" }
+          }
+        },
+        "lut": {
+          "type": "object",
+          "required": ["asset"],
+          "properties": { "asset": { "$ref": "#/$defs/id" }, "i": { "$ref": "#/$defs/unit" } }
+        },
+        "chroma": {
+          "type": "object",
+          "required": ["key"],
+          "properties": {
+            "key": { "$ref": "#/$defs/rgb" },
+            "sim": { "$ref": "#/$defs/unit" },
+            "smooth": { "$ref": "#/$defs/unit" },
+            "spill": { "$ref": "#/$defs/unit" }
+          }
+        },
+        "mask": {
+          "type": "object",
+          "required": ["shape"],
+          "properties": {
+            "shape": { "enum": ["rect", "ellipse"] },
+            "cx": { "type": "number" },
+            "cy": { "type": "number" },
+            "w": { "type": "number", "minimum": 0 },
+            "h": { "type": "number", "minimum": 0 },
+            "r": { "type": "number" },
+            "corner": { "type": "number", "minimum": 0, "maximum": 0.5 },
+            "feather": { "$ref": "#/$defs/unit" },
+            "op": { "$ref": "#/$defs/unit" },
+            "inv": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "canvasMask": {
+      "type": "object",
+      "required": ["cx", "cy", "w", "h"],
+      "properties": {
+        "cx": { "type": "number" },
+        "cy": { "type": "number" },
+        "w": { "type": "number", "minimum": 0 },
+        "h": { "type": "number", "minimum": 0 },
+        "r": { "type": "number" },
+        "feather": { "type": "number", "minimum": 0 },
+        "inv": { "type": "boolean" },
+        "anim": {
+          "type": "object",
+          "propertyNames": { "enum": ["cx", "cy", "w", "h"] },
+          "additionalProperties": { "$ref": "#/$defs/animKeys" }
+        }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "required": ["id", "z", "t", "kind"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "z": { "type": "integer", "minimum": 0, "maximum": 39999 },
+        "seq": { "type": "integer", "minimum": 0 },
+        "t": { "$ref": "#/$defs/range" },
+        "kind": { "enum": ["media", "image", "solid", "sprite"] },
+        "asset": { "$ref": "#/$defs/id" },
+        "map": { "$ref": "#/$defs/map" },
+        "hold": { "type": "boolean" },
+        "color": { "$ref": "#/$defs/colour" },
+        "base": { "$ref": "#/$defs/base" },
+        "crop": { "$ref": "#/$defs/crop" },
+        "xf": { "$ref": "#/$defs/xf" },
+        "fx": { "$ref": "#/$defs/effects" },
+        "anim": { "$ref": "#/$defs/anim" },
+        "cmasks": { "type": "array", "items": { "$ref": "#/$defs/canvasMask" } }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "media" } } }, "then": { "required": ["asset", "map", "seq"] }, "else": { "not": { "required": ["seq"] } } },
+        { "if": { "properties": { "kind": { "enum": ["image", "sprite"] } } }, "then": { "required": ["asset"] } },
+        { "if": { "properties": { "kind": { "const": "solid" } } }, "then": { "required": ["color"] } }
+      ]
+    },
+    "audioSeg": {
+      "type": "object",
+      "required": ["id", "asset", "t", "map", "gain"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "asset": { "$ref": "#/$defs/id" },
+        "stream": { "type": "integer", "minimum": 0 },
+        "t": { "$ref": "#/$defs/range" },
+        "map": { "$ref": "#/$defs/map" },
+        "gain": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [{ "type": "integer" }, { "type": "number", "minimum": 0, "maximum": 2 }],
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "minItems": 1
+        },
+        "pitch": { "type": "boolean" }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "properties": {
+        "offline": { "type": "array", "items": { "type": "string" } },
+        "pendingReverse": { "type": "array", "items": { "type": "string" } },
+        "pendingStill": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "required": ["v", "rev", "target", "canvas", "durUs", "assets", "layers", "audio"],
+      "properties": {
+        "v": { "const": 1 },
+        "rev": { "type": "integer", "minimum": 0 },
+        "target": { "enum": ["preview", "export"] },
+        "canvas": { "$ref": "#/$defs/canvas" },
+        "durUs": { "$ref": "#/$defs/us" },
+        "assets": { "type": "object", "additionalProperties": { "$ref": "#/$defs/asset" } },
+        "layers": { "type": "array", "items": { "$ref": "#/$defs/layer" } },
+        "audio": { "type": "array", "items": { "$ref": "#/$defs/audioSeg" } },
+        "req": { "$ref": "#/$defs/requirements" }
+      }
+    },
+    "patch": {
+      "type": "object",
+      "required": ["v", "from", "to"],
+      "not": { "required": ["rev"] },
+      "properties": {
+        "v": { "const": 1 },
+        "from": { "type": "integer", "minimum": 0 },
+        "to": { "type": "integer", "minimum": 0 },
+        "canvas": { "$ref": "#/$defs/canvas" },
+        "durUs": { "$ref": "#/$defs/us" },
+        "assets": {
+          "type": "object",
+          "properties": {
+            "upsert": { "type": "object", "additionalProperties": { "$ref": "#/$defs/asset" } },
+            "remove": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "layers": {
+          "type": "object",
+          "properties": {
+            "upsert": { "type": "array", "items": { "$ref": "#/$defs/layer" } },
+            "remove": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "audio": {
+          "type": "object",
+          "properties": {
+            "upsert": { "type": "array", "items": { "$ref": "#/$defs/audioSeg" } },
+            "remove": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "transient": {
+      "type": "object",
+      "required": ["v", "item", "layers"],
+      "properties": {
+        "v": { "const": 1 },
+        "item": { "$ref": "#/$defs/id" },
+        "layers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "xf": { "$ref": "#/$defs/xf" },
+              "crop": { "$ref": "#/$defs/crop" },
+              "base": { "$ref": "#/$defs/base" },
+              "fx": { "$ref": "#/$defs/effects" },
+              "anim": { "$ref": "#/$defs/anim" },
+              "cmasks": { "type": "array", "items": { "$ref": "#/$defs/canvasMask" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

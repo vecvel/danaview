@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_domain/vwish_domain.dart';
-import 'package:vwish_features/vwish_features.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_features/danaview_features.dart';
 
 import 'library_test_utils.dart';
 
@@ -24,7 +24,7 @@ void main() {
   late SessionRepository session;
 
   setUpAll(() {
-    media = Directory.systemTemp.createTempSync('vwish_controller_test_');
+    media = Directory.systemTemp.createTempSync('danaview_controller_test_');
     existing = joinPath([media.path, 'Show.S01E01.mkv']);
     File(existing).writeAsStringSync('x');
   });
@@ -147,7 +147,7 @@ void main() {
   });
 
   test('on mobile the device folder is the first, non-removable root', () async {
-    final documents = Directory.systemTemp.createTempSync('vwish_documents_');
+    final documents = Directory.systemTemp.createTempSync('danaview_documents_');
     addTearDown(() => documents.deleteSync(recursive: true));
     repo = LibraryRepository(prefs, storage: LibraryStorage(isMobile: true, documentsDirectory: () async => documents));
     await repo.addFolder(media.path);

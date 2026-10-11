@@ -18,7 +18,7 @@ import UIKit
     guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "LatencyProbe") else { return }
     let probe = LatencyProbe(registry: registrar.textures())
     self.probe = probe
-    let channel = FlutterMethodChannel(name: "vw.spike/latency", binaryMessenger: registrar.messenger())
+    let channel = FlutterMethodChannel(name: "dv.spike/latency", binaryMessenger: registrar.messenger())
     channel.setMethodCallHandler { call, result in
       switch call.method {
       case "start":
@@ -32,12 +32,12 @@ import UIKit
         if let data = try? JSONSerialization.data(withJSONObject: r, options: [.sortedKeys]),
           let s = String(data: data, encoding: .utf8)
         {
-          print("VWSPIKE-METRIC \(s)")
+          print("DVSPIKE-METRIC \(s)")
           fflush(stdout)
         }
         result(r)
       case "exit":
-        print("VWSPIKE-LATENCY done")
+        print("DVSPIKE-LATENCY done")
         fflush(stdout)
         result(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exit(0) }

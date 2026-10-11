@@ -1,0 +1,1838 @@
+{
+  "schema": 1,
+  "generatedBy": "packages/danaview_editor_core/tool/gen_frame_vectors.dart",
+  "rule": "plan time of frame k = ceil(k*1e6/fps); platform time tau -> k = round(tau*fps/1e6); P(k) = round(k*1e6/fps); evaluate at timeOfFrame(k) (ARCH §5, D-35)",
+  "androidSeekMsRounding": "floor",
+  "rates": [
+    {
+      "fps": 24,
+      "halfFrameMinus1Us": 20832,
+      "frames": [
+        {
+          "k": 0,
+          "timeOfFrame": 0,
+          "floorTime": 0,
+          "platformTime": 0,
+          "rational": [
+            0,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": -1,
+            "t": 0,
+            "tPlus1": 0
+          },
+          "nearest": {
+            "timeOfFrame": 0,
+            "floorTime": 0,
+            "platformTime": 0,
+            "rational": 0
+          },
+          "nearestAtPlatformPlusHalf": 0,
+          "nearestAtPlatformMinusHalf": 0
+        },
+        {
+          "k": 1,
+          "timeOfFrame": 41667,
+          "floorTime": 41666,
+          "platformTime": 41667,
+          "rational": [
+            1,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 0,
+            "t": 1,
+            "tPlus1": 1
+          },
+          "nearest": {
+            "timeOfFrame": 1,
+            "floorTime": 1,
+            "platformTime": 1,
+            "rational": 1
+          },
+          "nearestAtPlatformPlusHalf": 1,
+          "nearestAtPlatformMinusHalf": 1
+        },
+        {
+          "k": 2,
+          "timeOfFrame": 83334,
+          "floorTime": 83333,
+          "platformTime": 83333,
+          "rational": [
+            2,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 1,
+            "t": 2,
+            "tPlus1": 2
+          },
+          "nearest": {
+            "timeOfFrame": 2,
+            "floorTime": 2,
+            "platformTime": 2,
+            "rational": 2
+          },
+          "nearestAtPlatformPlusHalf": 2,
+          "nearestAtPlatformMinusHalf": 2
+        },
+        {
+          "k": 3,
+          "timeOfFrame": 125000,
+          "floorTime": 125000,
+          "platformTime": 125000,
+          "rational": [
+            3,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 2,
+            "t": 3,
+            "tPlus1": 3
+          },
+          "nearest": {
+            "timeOfFrame": 3,
+            "floorTime": 3,
+            "platformTime": 3,
+            "rational": 3
+          },
+          "nearestAtPlatformPlusHalf": 3,
+          "nearestAtPlatformMinusHalf": 3
+        },
+        {
+          "k": 23,
+          "timeOfFrame": 958334,
+          "floorTime": 958333,
+          "platformTime": 958333,
+          "rational": [
+            23,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 22,
+            "t": 23,
+            "tPlus1": 23
+          },
+          "nearest": {
+            "timeOfFrame": 23,
+            "floorTime": 23,
+            "platformTime": 23,
+            "rational": 23
+          },
+          "nearestAtPlatformPlusHalf": 23,
+          "nearestAtPlatformMinusHalf": 23
+        },
+        {
+          "k": 24,
+          "timeOfFrame": 1000000,
+          "floorTime": 1000000,
+          "platformTime": 1000000,
+          "rational": [
+            24,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 23,
+            "t": 24,
+            "tPlus1": 24
+          },
+          "nearest": {
+            "timeOfFrame": 24,
+            "floorTime": 24,
+            "platformTime": 24,
+            "rational": 24
+          },
+          "nearestAtPlatformPlusHalf": 24,
+          "nearestAtPlatformMinusHalf": 24
+        },
+        {
+          "k": 25,
+          "timeOfFrame": 1041667,
+          "floorTime": 1041666,
+          "platformTime": 1041667,
+          "rational": [
+            25,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 24,
+            "t": 25,
+            "tPlus1": 25
+          },
+          "nearest": {
+            "timeOfFrame": 25,
+            "floorTime": 25,
+            "platformTime": 25,
+            "rational": 25
+          },
+          "nearestAtPlatformPlusHalf": 25,
+          "nearestAtPlatformMinusHalf": 25
+        },
+        {
+          "k": 26,
+          "timeOfFrame": 1083334,
+          "floorTime": 1083333,
+          "platformTime": 1083333,
+          "rational": [
+            26,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 25,
+            "t": 26,
+            "tPlus1": 26
+          },
+          "nearest": {
+            "timeOfFrame": 26,
+            "floorTime": 26,
+            "platformTime": 26,
+            "rational": 26
+          },
+          "nearestAtPlatformPlusHalf": 26,
+          "nearestAtPlatformMinusHalf": 26
+        },
+        {
+          "k": 1000,
+          "timeOfFrame": 41666667,
+          "floorTime": 41666666,
+          "platformTime": 41666667,
+          "rational": [
+            1000,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 999,
+            "t": 1000,
+            "tPlus1": 1000
+          },
+          "nearest": {
+            "timeOfFrame": 1000,
+            "floorTime": 1000,
+            "platformTime": 1000,
+            "rational": 1000
+          },
+          "nearestAtPlatformPlusHalf": 1000,
+          "nearestAtPlatformMinusHalf": 1000
+        },
+        {
+          "k": 86400,
+          "timeOfFrame": 3600000000,
+          "floorTime": 3600000000,
+          "platformTime": 3600000000,
+          "rational": [
+            86400,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 86399,
+            "t": 86400,
+            "tPlus1": 86400
+          },
+          "nearest": {
+            "timeOfFrame": 86400,
+            "floorTime": 86400,
+            "platformTime": 86400,
+            "rational": 86400
+          },
+          "nearestAtPlatformPlusHalf": 86400,
+          "nearestAtPlatformMinusHalf": 86400
+        },
+        {
+          "k": 86401,
+          "timeOfFrame": 3600041667,
+          "floorTime": 3600041666,
+          "platformTime": 3600041667,
+          "rational": [
+            86401,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 86400,
+            "t": 86401,
+            "tPlus1": 86401
+          },
+          "nearest": {
+            "timeOfFrame": 86401,
+            "floorTime": 86401,
+            "platformTime": 86401,
+            "rational": 86401
+          },
+          "nearestAtPlatformPlusHalf": 86401,
+          "nearestAtPlatformMinusHalf": 86401
+        },
+        {
+          "k": 86402,
+          "timeOfFrame": 3600083334,
+          "floorTime": 3600083333,
+          "platformTime": 3600083333,
+          "rational": [
+            86402,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 86401,
+            "t": 86402,
+            "tPlus1": 86402
+          },
+          "nearest": {
+            "timeOfFrame": 86402,
+            "floorTime": 86402,
+            "platformTime": 86402,
+            "rational": 86402
+          },
+          "nearestAtPlatformPlusHalf": 86402,
+          "nearestAtPlatformMinusHalf": 86402
+        },
+        {
+          "k": 2073599,
+          "timeOfFrame": 86399958334,
+          "floorTime": 86399958333,
+          "platformTime": 86399958333,
+          "rational": [
+            2073599,
+            24
+          ],
+          "frameIndexOf": {
+            "tMinus1": 2073598,
+            "t": 2073599,
+            "tPlus1": 2073599
+          },
+          "nearest": {
+            "timeOfFrame": 2073599,
+            "floorTime": 2073599,
+            "platformTime": 2073599,
+            "rational": 2073599
+          },
+          "nearestAtPlatformPlusHalf": 2073599,
+          "nearestAtPlatformMinusHalf": 2073599
+        }
+      ]
+    },
+    {
+      "fps": 25,
+      "halfFrameMinus1Us": 19999,
+      "frames": [
+        {
+          "k": 0,
+          "timeOfFrame": 0,
+          "floorTime": 0,
+          "platformTime": 0,
+          "rational": [
+            0,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": -1,
+            "t": 0,
+            "tPlus1": 0
+          },
+          "nearest": {
+            "timeOfFrame": 0,
+            "floorTime": 0,
+            "platformTime": 0,
+            "rational": 0
+          },
+          "nearestAtPlatformPlusHalf": 0,
+          "nearestAtPlatformMinusHalf": 0
+        },
+        {
+          "k": 1,
+          "timeOfFrame": 40000,
+          "floorTime": 40000,
+          "platformTime": 40000,
+          "rational": [
+            1,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 0,
+            "t": 1,
+            "tPlus1": 1
+          },
+          "nearest": {
+            "timeOfFrame": 1,
+            "floorTime": 1,
+            "platformTime": 1,
+            "rational": 1
+          },
+          "nearestAtPlatformPlusHalf": 1,
+          "nearestAtPlatformMinusHalf": 1
+        },
+        {
+          "k": 2,
+          "timeOfFrame": 80000,
+          "floorTime": 80000,
+          "platformTime": 80000,
+          "rational": [
+            2,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 1,
+            "t": 2,
+            "tPlus1": 2
+          },
+          "nearest": {
+            "timeOfFrame": 2,
+            "floorTime": 2,
+            "platformTime": 2,
+            "rational": 2
+          },
+          "nearestAtPlatformPlusHalf": 2,
+          "nearestAtPlatformMinusHalf": 2
+        },
+        {
+          "k": 3,
+          "timeOfFrame": 120000,
+          "floorTime": 120000,
+          "platformTime": 120000,
+          "rational": [
+            3,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 2,
+            "t": 3,
+            "tPlus1": 3
+          },
+          "nearest": {
+            "timeOfFrame": 3,
+            "floorTime": 3,
+            "platformTime": 3,
+            "rational": 3
+          },
+          "nearestAtPlatformPlusHalf": 3,
+          "nearestAtPlatformMinusHalf": 3
+        },
+        {
+          "k": 24,
+          "timeOfFrame": 960000,
+          "floorTime": 960000,
+          "platformTime": 960000,
+          "rational": [
+            24,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 23,
+            "t": 24,
+            "tPlus1": 24
+          },
+          "nearest": {
+            "timeOfFrame": 24,
+            "floorTime": 24,
+            "platformTime": 24,
+            "rational": 24
+          },
+          "nearestAtPlatformPlusHalf": 24,
+          "nearestAtPlatformMinusHalf": 24
+        },
+        {
+          "k": 25,
+          "timeOfFrame": 1000000,
+          "floorTime": 1000000,
+          "platformTime": 1000000,
+          "rational": [
+            25,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 24,
+            "t": 25,
+            "tPlus1": 25
+          },
+          "nearest": {
+            "timeOfFrame": 25,
+            "floorTime": 25,
+            "platformTime": 25,
+            "rational": 25
+          },
+          "nearestAtPlatformPlusHalf": 25,
+          "nearestAtPlatformMinusHalf": 25
+        },
+        {
+          "k": 26,
+          "timeOfFrame": 1040000,
+          "floorTime": 1040000,
+          "platformTime": 1040000,
+          "rational": [
+            26,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 25,
+            "t": 26,
+            "tPlus1": 26
+          },
+          "nearest": {
+            "timeOfFrame": 26,
+            "floorTime": 26,
+            "platformTime": 26,
+            "rational": 26
+          },
+          "nearestAtPlatformPlusHalf": 26,
+          "nearestAtPlatformMinusHalf": 26
+        },
+        {
+          "k": 27,
+          "timeOfFrame": 1080000,
+          "floorTime": 1080000,
+          "platformTime": 1080000,
+          "rational": [
+            27,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 26,
+            "t": 27,
+            "tPlus1": 27
+          },
+          "nearest": {
+            "timeOfFrame": 27,
+            "floorTime": 27,
+            "platformTime": 27,
+            "rational": 27
+          },
+          "nearestAtPlatformPlusHalf": 27,
+          "nearestAtPlatformMinusHalf": 27
+        },
+        {
+          "k": 1000,
+          "timeOfFrame": 40000000,
+          "floorTime": 40000000,
+          "platformTime": 40000000,
+          "rational": [
+            1000,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 999,
+            "t": 1000,
+            "tPlus1": 1000
+          },
+          "nearest": {
+            "timeOfFrame": 1000,
+            "floorTime": 1000,
+            "platformTime": 1000,
+            "rational": 1000
+          },
+          "nearestAtPlatformPlusHalf": 1000,
+          "nearestAtPlatformMinusHalf": 1000
+        },
+        {
+          "k": 90000,
+          "timeOfFrame": 3600000000,
+          "floorTime": 3600000000,
+          "platformTime": 3600000000,
+          "rational": [
+            90000,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 89999,
+            "t": 90000,
+            "tPlus1": 90000
+          },
+          "nearest": {
+            "timeOfFrame": 90000,
+            "floorTime": 90000,
+            "platformTime": 90000,
+            "rational": 90000
+          },
+          "nearestAtPlatformPlusHalf": 90000,
+          "nearestAtPlatformMinusHalf": 90000
+        },
+        {
+          "k": 90001,
+          "timeOfFrame": 3600040000,
+          "floorTime": 3600040000,
+          "platformTime": 3600040000,
+          "rational": [
+            90001,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 90000,
+            "t": 90001,
+            "tPlus1": 90001
+          },
+          "nearest": {
+            "timeOfFrame": 90001,
+            "floorTime": 90001,
+            "platformTime": 90001,
+            "rational": 90001
+          },
+          "nearestAtPlatformPlusHalf": 90001,
+          "nearestAtPlatformMinusHalf": 90001
+        },
+        {
+          "k": 90002,
+          "timeOfFrame": 3600080000,
+          "floorTime": 3600080000,
+          "platformTime": 3600080000,
+          "rational": [
+            90002,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 90001,
+            "t": 90002,
+            "tPlus1": 90002
+          },
+          "nearest": {
+            "timeOfFrame": 90002,
+            "floorTime": 90002,
+            "platformTime": 90002,
+            "rational": 90002
+          },
+          "nearestAtPlatformPlusHalf": 90002,
+          "nearestAtPlatformMinusHalf": 90002
+        },
+        {
+          "k": 2159999,
+          "timeOfFrame": 86399960000,
+          "floorTime": 86399960000,
+          "platformTime": 86399960000,
+          "rational": [
+            2159999,
+            25
+          ],
+          "frameIndexOf": {
+            "tMinus1": 2159998,
+            "t": 2159999,
+            "tPlus1": 2159999
+          },
+          "nearest": {
+            "timeOfFrame": 2159999,
+            "floorTime": 2159999,
+            "platformTime": 2159999,
+            "rational": 2159999
+          },
+          "nearestAtPlatformPlusHalf": 2159999,
+          "nearestAtPlatformMinusHalf": 2159999
+        }
+      ]
+    },
+    {
+      "fps": 30,
+      "halfFrameMinus1Us": 16665,
+      "frames": [
+        {
+          "k": 0,
+          "timeOfFrame": 0,
+          "floorTime": 0,
+          "platformTime": 0,
+          "rational": [
+            0,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": -1,
+            "t": 0,
+            "tPlus1": 0
+          },
+          "nearest": {
+            "timeOfFrame": 0,
+            "floorTime": 0,
+            "platformTime": 0,
+            "rational": 0
+          },
+          "nearestAtPlatformPlusHalf": 0,
+          "nearestAtPlatformMinusHalf": 0
+        },
+        {
+          "k": 1,
+          "timeOfFrame": 33334,
+          "floorTime": 33333,
+          "platformTime": 33333,
+          "rational": [
+            1,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 0,
+            "t": 1,
+            "tPlus1": 1
+          },
+          "nearest": {
+            "timeOfFrame": 1,
+            "floorTime": 1,
+            "platformTime": 1,
+            "rational": 1
+          },
+          "nearestAtPlatformPlusHalf": 1,
+          "nearestAtPlatformMinusHalf": 1
+        },
+        {
+          "k": 2,
+          "timeOfFrame": 66667,
+          "floorTime": 66666,
+          "platformTime": 66667,
+          "rational": [
+            2,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 1,
+            "t": 2,
+            "tPlus1": 2
+          },
+          "nearest": {
+            "timeOfFrame": 2,
+            "floorTime": 2,
+            "platformTime": 2,
+            "rational": 2
+          },
+          "nearestAtPlatformPlusHalf": 2,
+          "nearestAtPlatformMinusHalf": 2
+        },
+        {
+          "k": 3,
+          "timeOfFrame": 100000,
+          "floorTime": 100000,
+          "platformTime": 100000,
+          "rational": [
+            3,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 2,
+            "t": 3,
+            "tPlus1": 3
+          },
+          "nearest": {
+            "timeOfFrame": 3,
+            "floorTime": 3,
+            "platformTime": 3,
+            "rational": 3
+          },
+          "nearestAtPlatformPlusHalf": 3,
+          "nearestAtPlatformMinusHalf": 3
+        },
+        {
+          "k": 29,
+          "timeOfFrame": 966667,
+          "floorTime": 966666,
+          "platformTime": 966667,
+          "rational": [
+            29,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 28,
+            "t": 29,
+            "tPlus1": 29
+          },
+          "nearest": {
+            "timeOfFrame": 29,
+            "floorTime": 29,
+            "platformTime": 29,
+            "rational": 29
+          },
+          "nearestAtPlatformPlusHalf": 29,
+          "nearestAtPlatformMinusHalf": 29
+        },
+        {
+          "k": 30,
+          "timeOfFrame": 1000000,
+          "floorTime": 1000000,
+          "platformTime": 1000000,
+          "rational": [
+            30,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 29,
+            "t": 30,
+            "tPlus1": 30
+          },
+          "nearest": {
+            "timeOfFrame": 30,
+            "floorTime": 30,
+            "platformTime": 30,
+            "rational": 30
+          },
+          "nearestAtPlatformPlusHalf": 30,
+          "nearestAtPlatformMinusHalf": 30
+        },
+        {
+          "k": 31,
+          "timeOfFrame": 1033334,
+          "floorTime": 1033333,
+          "platformTime": 1033333,
+          "rational": [
+            31,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 30,
+            "t": 31,
+            "tPlus1": 31
+          },
+          "nearest": {
+            "timeOfFrame": 31,
+            "floorTime": 31,
+            "platformTime": 31,
+            "rational": 31
+          },
+          "nearestAtPlatformPlusHalf": 31,
+          "nearestAtPlatformMinusHalf": 31
+        },
+        {
+          "k": 32,
+          "timeOfFrame": 1066667,
+          "floorTime": 1066666,
+          "platformTime": 1066667,
+          "rational": [
+            32,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 31,
+            "t": 32,
+            "tPlus1": 32
+          },
+          "nearest": {
+            "timeOfFrame": 32,
+            "floorTime": 32,
+            "platformTime": 32,
+            "rational": 32
+          },
+          "nearestAtPlatformPlusHalf": 32,
+          "nearestAtPlatformMinusHalf": 32
+        },
+        {
+          "k": 1000,
+          "timeOfFrame": 33333334,
+          "floorTime": 33333333,
+          "platformTime": 33333333,
+          "rational": [
+            1000,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 999,
+            "t": 1000,
+            "tPlus1": 1000
+          },
+          "nearest": {
+            "timeOfFrame": 1000,
+            "floorTime": 1000,
+            "platformTime": 1000,
+            "rational": 1000
+          },
+          "nearestAtPlatformPlusHalf": 1000,
+          "nearestAtPlatformMinusHalf": 1000
+        },
+        {
+          "k": 108000,
+          "timeOfFrame": 3600000000,
+          "floorTime": 3600000000,
+          "platformTime": 3600000000,
+          "rational": [
+            108000,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 107999,
+            "t": 108000,
+            "tPlus1": 108000
+          },
+          "nearest": {
+            "timeOfFrame": 108000,
+            "floorTime": 108000,
+            "platformTime": 108000,
+            "rational": 108000
+          },
+          "nearestAtPlatformPlusHalf": 108000,
+          "nearestAtPlatformMinusHalf": 108000
+        },
+        {
+          "k": 108001,
+          "timeOfFrame": 3600033334,
+          "floorTime": 3600033333,
+          "platformTime": 3600033333,
+          "rational": [
+            108001,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 108000,
+            "t": 108001,
+            "tPlus1": 108001
+          },
+          "nearest": {
+            "timeOfFrame": 108001,
+            "floorTime": 108001,
+            "platformTime": 108001,
+            "rational": 108001
+          },
+          "nearestAtPlatformPlusHalf": 108001,
+          "nearestAtPlatformMinusHalf": 108001
+        },
+        {
+          "k": 108002,
+          "timeOfFrame": 3600066667,
+          "floorTime": 3600066666,
+          "platformTime": 3600066667,
+          "rational": [
+            108002,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 108001,
+            "t": 108002,
+            "tPlus1": 108002
+          },
+          "nearest": {
+            "timeOfFrame": 108002,
+            "floorTime": 108002,
+            "platformTime": 108002,
+            "rational": 108002
+          },
+          "nearestAtPlatformPlusHalf": 108002,
+          "nearestAtPlatformMinusHalf": 108002
+        },
+        {
+          "k": 2591999,
+          "timeOfFrame": 86399966667,
+          "floorTime": 86399966666,
+          "platformTime": 86399966667,
+          "rational": [
+            2591999,
+            30
+          ],
+          "frameIndexOf": {
+            "tMinus1": 2591998,
+            "t": 2591999,
+            "tPlus1": 2591999
+          },
+          "nearest": {
+            "timeOfFrame": 2591999,
+            "floorTime": 2591999,
+            "platformTime": 2591999,
+            "rational": 2591999
+          },
+          "nearestAtPlatformPlusHalf": 2591999,
+          "nearestAtPlatformMinusHalf": 2591999
+        }
+      ]
+    },
+    {
+      "fps": 48,
+      "halfFrameMinus1Us": 10415,
+      "frames": [
+        {
+          "k": 0,
+          "timeOfFrame": 0,
+          "floorTime": 0,
+          "platformTime": 0,
+          "rational": [
+            0,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": -1,
+            "t": 0,
+            "tPlus1": 0
+          },
+          "nearest": {
+            "timeOfFrame": 0,
+            "floorTime": 0,
+            "platformTime": 0,
+            "rational": 0
+          },
+          "nearestAtPlatformPlusHalf": 0,
+          "nearestAtPlatformMinusHalf": 0
+        },
+        {
+          "k": 1,
+          "timeOfFrame": 20834,
+          "floorTime": 20833,
+          "platformTime": 20833,
+          "rational": [
+            1,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 0,
+            "t": 1,
+            "tPlus1": 1
+          },
+          "nearest": {
+            "timeOfFrame": 1,
+            "floorTime": 1,
+            "platformTime": 1,
+            "rational": 1
+          },
+          "nearestAtPlatformPlusHalf": 1,
+          "nearestAtPlatformMinusHalf": 1
+        },
+        {
+          "k": 2,
+          "timeOfFrame": 41667,
+          "floorTime": 41666,
+          "platformTime": 41667,
+          "rational": [
+            2,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 1,
+            "t": 2,
+            "tPlus1": 2
+          },
+          "nearest": {
+            "timeOfFrame": 2,
+            "floorTime": 2,
+            "platformTime": 2,
+            "rational": 2
+          },
+          "nearestAtPlatformPlusHalf": 2,
+          "nearestAtPlatformMinusHalf": 2
+        },
+        {
+          "k": 3,
+          "timeOfFrame": 62500,
+          "floorTime": 62500,
+          "platformTime": 62500,
+          "rational": [
+            3,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 2,
+            "t": 3,
+            "tPlus1": 3
+          },
+          "nearest": {
+            "timeOfFrame": 3,
+            "floorTime": 3,
+            "platformTime": 3,
+            "rational": 3
+          },
+          "nearestAtPlatformPlusHalf": 3,
+          "nearestAtPlatformMinusHalf": 3
+        },
+        {
+          "k": 47,
+          "timeOfFrame": 979167,
+          "floorTime": 979166,
+          "platformTime": 979167,
+          "rational": [
+            47,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 46,
+            "t": 47,
+            "tPlus1": 47
+          },
+          "nearest": {
+            "timeOfFrame": 47,
+            "floorTime": 47,
+            "platformTime": 47,
+            "rational": 47
+          },
+          "nearestAtPlatformPlusHalf": 47,
+          "nearestAtPlatformMinusHalf": 47
+        },
+        {
+          "k": 48,
+          "timeOfFrame": 1000000,
+          "floorTime": 1000000,
+          "platformTime": 1000000,
+          "rational": [
+            48,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 47,
+            "t": 48,
+            "tPlus1": 48
+          },
+          "nearest": {
+            "timeOfFrame": 48,
+            "floorTime": 48,
+            "platformTime": 48,
+            "rational": 48
+          },
+          "nearestAtPlatformPlusHalf": 48,
+          "nearestAtPlatformMinusHalf": 48
+        },
+        {
+          "k": 49,
+          "timeOfFrame": 1020834,
+          "floorTime": 1020833,
+          "platformTime": 1020833,
+          "rational": [
+            49,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 48,
+            "t": 49,
+            "tPlus1": 49
+          },
+          "nearest": {
+            "timeOfFrame": 49,
+            "floorTime": 49,
+            "platformTime": 49,
+            "rational": 49
+          },
+          "nearestAtPlatformPlusHalf": 49,
+          "nearestAtPlatformMinusHalf": 49
+        },
+        {
+          "k": 50,
+          "timeOfFrame": 1041667,
+          "floorTime": 1041666,
+          "platformTime": 1041667,
+          "rational": [
+            50,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 49,
+            "t": 50,
+            "tPlus1": 50
+          },
+          "nearest": {
+            "timeOfFrame": 50,
+            "floorTime": 50,
+            "platformTime": 50,
+            "rational": 50
+          },
+          "nearestAtPlatformPlusHalf": 50,
+          "nearestAtPlatformMinusHalf": 50
+        },
+        {
+          "k": 1000,
+          "timeOfFrame": 20833334,
+          "floorTime": 20833333,
+          "platformTime": 20833333,
+          "rational": [
+            1000,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 999,
+            "t": 1000,
+            "tPlus1": 1000
+          },
+          "nearest": {
+            "timeOfFrame": 1000,
+            "floorTime": 1000,
+            "platformTime": 1000,
+            "rational": 1000
+          },
+          "nearestAtPlatformPlusHalf": 1000,
+          "nearestAtPlatformMinusHalf": 1000
+        },
+        {
+          "k": 172800,
+          "timeOfFrame": 3600000000,
+          "floorTime": 3600000000,
+          "platformTime": 3600000000,
+          "rational": [
+            172800,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 172799,
+            "t": 172800,
+            "tPlus1": 172800
+          },
+          "nearest": {
+            "timeOfFrame": 172800,
+            "floorTime": 172800,
+            "platformTime": 172800,
+            "rational": 172800
+          },
+          "nearestAtPlatformPlusHalf": 172800,
+          "nearestAtPlatformMinusHalf": 172800
+        },
+        {
+          "k": 172801,
+          "timeOfFrame": 3600020834,
+          "floorTime": 3600020833,
+          "platformTime": 3600020833,
+          "rational": [
+            172801,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 172800,
+            "t": 172801,
+            "tPlus1": 172801
+          },
+          "nearest": {
+            "timeOfFrame": 172801,
+            "floorTime": 172801,
+            "platformTime": 172801,
+            "rational": 172801
+          },
+          "nearestAtPlatformPlusHalf": 172801,
+          "nearestAtPlatformMinusHalf": 172801
+        },
+        {
+          "k": 172802,
+          "timeOfFrame": 3600041667,
+          "floorTime": 3600041666,
+          "platformTime": 3600041667,
+          "rational": [
+            172802,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 172801,
+            "t": 172802,
+            "tPlus1": 172802
+          },
+          "nearest": {
+            "timeOfFrame": 172802,
+            "floorTime": 172802,
+            "platformTime": 172802,
+            "rational": 172802
+          },
+          "nearestAtPlatformPlusHalf": 172802,
+          "nearestAtPlatformMinusHalf": 172802
+        },
+        {
+          "k": 4147199,
+          "timeOfFrame": 86399979167,
+          "floorTime": 86399979166,
+          "platformTime": 86399979167,
+          "rational": [
+            4147199,
+            48
+          ],
+          "frameIndexOf": {
+            "tMinus1": 4147198,
+            "t": 4147199,
+            "tPlus1": 4147199
+          },
+          "nearest": {
+            "timeOfFrame": 4147199,
+            "floorTime": 4147199,
+            "platformTime": 4147199,
+            "rational": 4147199
+          },
+          "nearestAtPlatformPlusHalf": 4147199,
+          "nearestAtPlatformMinusHalf": 4147199
+        }
+      ]
+    },
+    {
+      "fps": 50,
+      "halfFrameMinus1Us": 9999,
+      "frames": [
+        {
+          "k": 0,
+          "timeOfFrame": 0,
+          "floorTime": 0,
+          "platformTime": 0,
+          "rational": [
+            0,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": -1,
+            "t": 0,
+            "tPlus1": 0
+          },
+          "nearest": {
+            "timeOfFrame": 0,
+            "floorTime": 0,
+            "platformTime": 0,
+            "rational": 0
+          },
+          "nearestAtPlatformPlusHalf": 0,
+          "nearestAtPlatformMinusHalf": 0
+        },
+        {
+          "k": 1,
+          "timeOfFrame": 20000,
+          "floorTime": 20000,
+          "platformTime": 20000,
+          "rational": [
+            1,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 0,
+            "t": 1,
+            "tPlus1": 1
+          },
+          "nearest": {
+            "timeOfFrame": 1,
+            "floorTime": 1,
+            "platformTime": 1,
+            "rational": 1
+          },
+          "nearestAtPlatformPlusHalf": 1,
+          "nearestAtPlatformMinusHalf": 1
+        },
+        {
+          "k": 2,
+          "timeOfFrame": 40000,
+          "floorTime": 40000,
+          "platformTime": 40000,
+          "rational": [
+            2,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 1,
+            "t": 2,
+            "tPlus1": 2
+          },
+          "nearest": {
+            "timeOfFrame": 2,
+            "floorTime": 2,
+            "platformTime": 2,
+            "rational": 2
+          },
+          "nearestAtPlatformPlusHalf": 2,
+          "nearestAtPlatformMinusHalf": 2
+        },
+        {
+          "k": 3,
+          "timeOfFrame": 60000,
+          "floorTime": 60000,
+          "platformTime": 60000,
+          "rational": [
+            3,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 2,
+            "t": 3,
+            "tPlus1": 3
+          },
+          "nearest": {
+            "timeOfFrame": 3,
+            "floorTime": 3,
+            "platformTime": 3,
+            "rational": 3
+          },
+          "nearestAtPlatformPlusHalf": 3,
+          "nearestAtPlatformMinusHalf": 3
+        },
+        {
+          "k": 49,
+          "timeOfFrame": 980000,
+          "floorTime": 980000,
+          "platformTime": 980000,
+          "rational": [
+            49,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 48,
+            "t": 49,
+            "tPlus1": 49
+          },
+          "nearest": {
+            "timeOfFrame": 49,
+            "floorTime": 49,
+            "platformTime": 49,
+            "rational": 49
+          },
+          "nearestAtPlatformPlusHalf": 49,
+          "nearestAtPlatformMinusHalf": 49
+        },
+        {
+          "k": 50,
+          "timeOfFrame": 1000000,
+          "floorTime": 1000000,
+          "platformTime": 1000000,
+          "rational": [
+            50,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 49,
+            "t": 50,
+            "tPlus1": 50
+          },
+          "nearest": {
+            "timeOfFrame": 50,
+            "floorTime": 50,
+            "platformTime": 50,
+            "rational": 50
+          },
+          "nearestAtPlatformPlusHalf": 50,
+          "nearestAtPlatformMinusHalf": 50
+        },
+        {
+          "k": 51,
+          "timeOfFrame": 1020000,
+          "floorTime": 1020000,
+          "platformTime": 1020000,
+          "rational": [
+            51,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 50,
+            "t": 51,
+            "tPlus1": 51
+          },
+          "nearest": {
+            "timeOfFrame": 51,
+            "floorTime": 51,
+            "platformTime": 51,
+            "rational": 51
+          },
+          "nearestAtPlatformPlusHalf": 51,
+          "nearestAtPlatformMinusHalf": 51
+        },
+        {
+          "k": 52,
+          "timeOfFrame": 1040000,
+          "floorTime": 1040000,
+          "platformTime": 1040000,
+          "rational": [
+            52,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 51,
+            "t": 52,
+            "tPlus1": 52
+          },
+          "nearest": {
+            "timeOfFrame": 52,
+            "floorTime": 52,
+            "platformTime": 52,
+            "rational": 52
+          },
+          "nearestAtPlatformPlusHalf": 52,
+          "nearestAtPlatformMinusHalf": 52
+        },
+        {
+          "k": 1000,
+          "timeOfFrame": 20000000,
+          "floorTime": 20000000,
+          "platformTime": 20000000,
+          "rational": [
+            1000,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 999,
+            "t": 1000,
+            "tPlus1": 1000
+          },
+          "nearest": {
+            "timeOfFrame": 1000,
+            "floorTime": 1000,
+            "platformTime": 1000,
+            "rational": 1000
+          },
+          "nearestAtPlatformPlusHalf": 1000,
+          "nearestAtPlatformMinusHalf": 1000
+        },
+        {
+          "k": 180000,
+          "timeOfFrame": 3600000000,
+          "floorTime": 3600000000,
+          "platformTime": 3600000000,
+          "rational": [
+            180000,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 179999,
+            "t": 180000,
+            "tPlus1": 180000
+          },
+          "nearest": {
+            "timeOfFrame": 180000,
+            "floorTime": 180000,
+            "platformTime": 180000,
+            "rational": 180000
+          },
+          "nearestAtPlatformPlusHalf": 180000,
+          "nearestAtPlatformMinusHalf": 180000
+        },
+        {
+          "k": 180001,
+          "timeOfFrame": 3600020000,
+          "floorTime": 3600020000,
+          "platformTime": 3600020000,
+          "rational": [
+            180001,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 180000,
+            "t": 180001,
+            "tPlus1": 180001
+          },
+          "nearest": {
+            "timeOfFrame": 180001,
+            "floorTime": 180001,
+            "platformTime": 180001,
+            "rational": 180001
+          },
+          "nearestAtPlatformPlusHalf": 180001,
+          "nearestAtPlatformMinusHalf": 180001
+        },
+        {
+          "k": 180002,
+          "timeOfFrame": 3600040000,
+          "floorTime": 3600040000,
+          "platformTime": 3600040000,
+          "rational": [
+            180002,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 180001,
+            "t": 180002,
+            "tPlus1": 180002
+          },
+          "nearest": {
+            "timeOfFrame": 180002,
+            "floorTime": 180002,
+            "platformTime": 180002,
+            "rational": 180002
+          },
+          "nearestAtPlatformPlusHalf": 180002,
+          "nearestAtPlatformMinusHalf": 180002
+        },
+        {
+          "k": 4319999,
+          "timeOfFrame": 86399980000,
+          "floorTime": 86399980000,
+          "platformTime": 86399980000,
+          "rational": [
+            4319999,
+            50
+          ],
+          "frameIndexOf": {
+            "tMinus1": 4319998,
+            "t": 4319999,
+            "tPlus1": 4319999
+          },
+          "nearest": {
+            "timeOfFrame": 4319999,
+            "floorTime": 4319999,
+            "platformTime": 4319999,
+            "rational": 4319999
+          },
+          "nearestAtPlatformPlusHalf": 4319999,
+          "nearestAtPlatformMinusHalf": 4319999
+        }
+      ]
+    },
+    {
+      "fps": 60,
+      "halfFrameMinus1Us": 8332,
+      "frames": [
+        {
+          "k": 0,
+          "timeOfFrame": 0,
+          "floorTime": 0,
+          "platformTime": 0,
+          "rational": [
+            0,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": -1,
+            "t": 0,
+            "tPlus1": 0
+          },
+          "nearest": {
+            "timeOfFrame": 0,
+            "floorTime": 0,
+            "platformTime": 0,
+            "rational": 0
+          },
+          "nearestAtPlatformPlusHalf": 0,
+          "nearestAtPlatformMinusHalf": 0
+        },
+        {
+          "k": 1,
+          "timeOfFrame": 16667,
+          "floorTime": 16666,
+          "platformTime": 16667,
+          "rational": [
+            1,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 0,
+            "t": 1,
+            "tPlus1": 1
+          },
+          "nearest": {
+            "timeOfFrame": 1,
+            "floorTime": 1,
+            "platformTime": 1,
+            "rational": 1
+          },
+          "nearestAtPlatformPlusHalf": 1,
+          "nearestAtPlatformMinusHalf": 1
+        },
+        {
+          "k": 2,
+          "timeOfFrame": 33334,
+          "floorTime": 33333,
+          "platformTime": 33333,
+          "rational": [
+            2,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 1,
+            "t": 2,
+            "tPlus1": 2
+          },
+          "nearest": {
+            "timeOfFrame": 2,
+            "floorTime": 2,
+            "platformTime": 2,
+            "rational": 2
+          },
+          "nearestAtPlatformPlusHalf": 2,
+          "nearestAtPlatformMinusHalf": 2
+        },
+        {
+          "k": 3,
+          "timeOfFrame": 50000,
+          "floorTime": 50000,
+          "platformTime": 50000,
+          "rational": [
+            3,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 2,
+            "t": 3,
+            "tPlus1": 3
+          },
+          "nearest": {
+            "timeOfFrame": 3,
+            "floorTime": 3,
+            "platformTime": 3,
+            "rational": 3
+          },
+          "nearestAtPlatformPlusHalf": 3,
+          "nearestAtPlatformMinusHalf": 3
+        },
+        {
+          "k": 59,
+          "timeOfFrame": 983334,
+          "floorTime": 983333,
+          "platformTime": 983333,
+          "rational": [
+            59,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 58,
+            "t": 59,
+            "tPlus1": 59
+          },
+          "nearest": {
+            "timeOfFrame": 59,
+            "floorTime": 59,
+            "platformTime": 59,
+            "rational": 59
+          },
+          "nearestAtPlatformPlusHalf": 59,
+          "nearestAtPlatformMinusHalf": 59
+        },
+        {
+          "k": 60,
+          "timeOfFrame": 1000000,
+          "floorTime": 1000000,
+          "platformTime": 1000000,
+          "rational": [
+            60,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 59,
+            "t": 60,
+            "tPlus1": 60
+          },
+          "nearest": {
+            "timeOfFrame": 60,
+            "floorTime": 60,
+            "platformTime": 60,
+            "rational": 60
+          },
+          "nearestAtPlatformPlusHalf": 60,
+          "nearestAtPlatformMinusHalf": 60
+        },
+        {
+          "k": 61,
+          "timeOfFrame": 1016667,
+          "floorTime": 1016666,
+          "platformTime": 1016667,
+          "rational": [
+            61,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 60,
+            "t": 61,
+            "tPlus1": 61
+          },
+          "nearest": {
+            "timeOfFrame": 61,
+            "floorTime": 61,
+            "platformTime": 61,
+            "rational": 61
+          },
+          "nearestAtPlatformPlusHalf": 61,
+          "nearestAtPlatformMinusHalf": 61
+        },
+        {
+          "k": 62,
+          "timeOfFrame": 1033334,
+          "floorTime": 1033333,
+          "platformTime": 1033333,
+          "rational": [
+            62,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 61,
+            "t": 62,
+            "tPlus1": 62
+          },
+          "nearest": {
+            "timeOfFrame": 62,
+            "floorTime": 62,
+            "platformTime": 62,
+            "rational": 62
+          },
+          "nearestAtPlatformPlusHalf": 62,
+          "nearestAtPlatformMinusHalf": 62
+        },
+        {
+          "k": 1000,
+          "timeOfFrame": 16666667,
+          "floorTime": 16666666,
+          "platformTime": 16666667,
+          "rational": [
+            1000,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 999,
+            "t": 1000,
+            "tPlus1": 1000
+          },
+          "nearest": {
+            "timeOfFrame": 1000,
+            "floorTime": 1000,
+            "platformTime": 1000,
+            "rational": 1000
+          },
+          "nearestAtPlatformPlusHalf": 1000,
+          "nearestAtPlatformMinusHalf": 1000
+        },
+        {
+          "k": 216000,
+          "timeOfFrame": 3600000000,
+          "floorTime": 3600000000,
+          "platformTime": 3600000000,
+          "rational": [
+            216000,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 215999,
+            "t": 216000,
+            "tPlus1": 216000
+          },
+          "nearest": {
+            "timeOfFrame": 216000,
+            "floorTime": 216000,
+            "platformTime": 216000,
+            "rational": 216000
+          },
+          "nearestAtPlatformPlusHalf": 216000,
+          "nearestAtPlatformMinusHalf": 216000
+        },
+        {
+          "k": 216001,
+          "timeOfFrame": 3600016667,
+          "floorTime": 3600016666,
+          "platformTime": 3600016667,
+          "rational": [
+            216001,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 216000,
+            "t": 216001,
+            "tPlus1": 216001
+          },
+          "nearest": {
+            "timeOfFrame": 216001,
+            "floorTime": 216001,
+            "platformTime": 216001,
+            "rational": 216001
+          },
+          "nearestAtPlatformPlusHalf": 216001,
+          "nearestAtPlatformMinusHalf": 216001
+        },
+        {
+          "k": 216002,
+          "timeOfFrame": 3600033334,
+          "floorTime": 3600033333,
+          "platformTime": 3600033333,
+          "rational": [
+            216002,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 216001,
+            "t": 216002,
+            "tPlus1": 216002
+          },
+          "nearest": {
+            "timeOfFrame": 216002,
+            "floorTime": 216002,
+            "platformTime": 216002,
+            "rational": 216002
+          },
+          "nearestAtPlatformPlusHalf": 216002,
+          "nearestAtPlatformMinusHalf": 216002
+        },
+        {
+          "k": 5183999,
+          "timeOfFrame": 86399983334,
+          "floorTime": 86399983333,
+          "platformTime": 86399983333,
+          "rational": [
+            5183999,
+            60
+          ],
+          "frameIndexOf": {
+            "tMinus1": 5183998,
+            "t": 5183999,
+            "tPlus1": 5183999
+          },
+          "nearest": {
+            "timeOfFrame": 5183999,
+            "floorTime": 5183999,
+            "platformTime": 5183999,
+            "rational": 5183999
+          },
+          "nearestAtPlatformPlusHalf": 5183999,
+          "nearestAtPlatformMinusHalf": 5183999
+        }
+      ]
+    }
+  ]
+}

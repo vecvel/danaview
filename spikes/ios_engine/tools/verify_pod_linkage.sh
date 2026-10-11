@@ -17,16 +17,16 @@ for LINKAGE in library static dynamic; do
   DIR="$WORK/$LINKAGE"
   rm -rf "$DIR"
   mkdir -p "$DIR"
-  rsync -a --exclude build --exclude results --exclude Pods --exclude 'VWSpikeHost.xcworkspace' \
-    --exclude 'VWSpikeHost.xcodeproj' --exclude flutter_texture_latency "$HERE/" "$DIR/"
-  (cd "$DIR" && VW_SPIKE_LINKAGE="$LINKAGE" tools/bootstrap.sh > "$DIR/bootstrap.log" 2>&1)
+  rsync -a --exclude build --exclude results --exclude Pods --exclude 'DVSpikeHost.xcworkspace' \
+    --exclude 'DVSpikeHost.xcodeproj' --exclude flutter_texture_latency "$HERE/" "$DIR/"
+  (cd "$DIR" && DV_SPIKE_LINKAGE="$LINKAGE" tools/bootstrap.sh > "$DIR/bootstrap.log" 2>&1)
   for SDK in iphonesimulator iphoneos; do
     DEST="generic/platform=iOS Simulator"
     [[ "$SDK" == iphoneos ]] && DEST="generic/platform=iOS"
-    if (cd "$DIR" && xcodebuild -workspace VWSpikeHost.xcworkspace -scheme VWSpikeHost -configuration Release \
+    if (cd "$DIR" && xcodebuild -workspace DVSpikeHost.xcworkspace -scheme DVSpikeHost -configuration Release \
         -destination "$DEST" -derivedDataPath "$DIR/dd" CODE_SIGNING_ALLOWED=NO build > "$DIR/build-$SDK.log" 2>&1); then
-      APP="$DIR/dd/Build/Products/Release-$SDK/VWSpikeHost.app"
-      LIBS=$(cd "$APP" && find . -name 'vw_spike_kernels.*.metallib' | sort | tr '\n' ' ')
+      APP="$DIR/dd/Build/Products/Release-$SDK/DVSpikeHost.app"
+      LIBS=$(cd "$APP" && find . -name 'dv_spike_kernels.*.metallib' | sort | tr '\n' ' ')
       echo "$LINKAGE $SDK: BUILD OK; metallibs in app: $LIBS"
     else
       echo "$LINKAGE $SDK: BUILD FAILED"

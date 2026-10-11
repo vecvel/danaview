@@ -21,5 +21,5 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.3.20" apply false
 }
 
-rootProject.name = "vwish_android_engine_spike"
+rootProject.name = "danaview_android_engine_spike"
 include(":app")

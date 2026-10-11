@@ -10,7 +10,7 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 ADB="$SDK/platform-tools/adb"
 SERIAL="${ANDROID_SERIAL:-$("$ADB" devices | awk 'NR>1 && $2=="device"{print $1; exit}')}"
-PKG=com.vecvel.vwish.spike.engine
+PKG=com.vecvel.danaview.spike.engine
 cd "$HERE"
 [ -f media/barcode_30.mp4 ] || ./tool/gen_media.sh
 ./gradlew --console=plain -q :app:assembleDebug :app:assembleDebugAndroidTest

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # IOS-01 / V-N23: build flutter_texture_latency for the simulator, run it once and collect the
-# `VWSPIKE-METRIC` lines into results/<label>.texture_latency.jsonl.
+# `DVSPIKE-METRIC` lines into results/<label>.texture_latency.jsonl.
 # Usage: tools/run_texture_latency.sh <simulator-udid> <label>
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,5 +34,5 @@ xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
 LOG="$HERE/results/$LABEL.texture_latency.log"
 # --console-pty streams stdout; the app exits itself after the last phase.
 perl -e 'alarm shift; exec @ARGV' 240 xcrun simctl launch --console-pty --terminate-running-process "$UDID" "$BUNDLE" > "$LOG" 2>&1 || true
-grep -o 'VWSPIKE-METRIC {.*}' "$LOG" | sed 's/^VWSPIKE-METRIC //' > "$HERE/results/$LABEL.texture_latency.jsonl" || true
+grep -o 'DVSPIKE-METRIC {.*}' "$LOG" | sed 's/^DVSPIKE-METRIC //' > "$HERE/results/$LABEL.texture_latency.jsonl" || true
 cat "$HERE/results/$LABEL.texture_latency.jsonl"

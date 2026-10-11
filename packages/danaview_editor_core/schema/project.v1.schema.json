@@ -1,0 +1,694 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vecvel.com/schemas/danaview/project.v1.schema.json",
+  "title": "Danaview editor project body, schema 1",
+  "description": "Normative body line of a .dnproj document (ARCH §8.2; OWNER: CORE-22). The header line is described by ProjectHeader (lib/src/codec/schema_version.dart). Conventions: times are integer microseconds; colours \"#RRGGBBAA\" (the chroma key colour \"#RRGGBB\"); doubles in shortest round-trip form with integral values written as integers; fields equal to their model default are omitted (the subtitle style box is written as null when cleared); keys appear in the order listed here; keyframe channels are sorted; the pool keeps insertion order; items are tagged by \"t\"; enums are lower-camel strings; sealed variants are objects discriminated by their first key. No string holds an absolute app-container path except BookmarkLocator hints (\"loc.hint\"). This schema checks the structure that schema-1 writers produce; value ranges, the frame grid, ordering and cross references are invariants checked by the project validator (ARCH §6.9), not here. Readers ignore unknown keys and map unknown enum values to defaults with a warning, so newer documents read under D-12 need not validate.",
+  "type": "object",
+  "required": ["id", "meta", "settings", "tracks", "markers", "pool", "view"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "$ref": "#/$defs/projectId" },
+    "docRev": { "$ref": "#/$defs/count", "description": "EditProject.docRevision (also in the header); omitted when 0." },
+    "rev": { "$ref": "#/$defs/count", "description": "Timeline.revision, the session-monotonic stamp; omitted when 0." },
+    "meta": { "$ref": "#/$defs/meta" },
+    "settings": { "$ref": "#/$defs/settings" },
+    "tracks": { "type": "array", "items": { "$ref": "#/$defs/track" } },
+    "markers": { "type": "array", "items": { "$ref": "#/$defs/marker" } },
+    "pool": { "$ref": "#/$defs/pool" },
+    "view": { "$ref": "#/$defs/view" }
+  },
+  "$defs": {
+    "us": { "type": "integer", "minimum": 0, "description": "Microseconds." },
+    "signedUs": { "type": "integer", "description": "Microseconds, may be negative (item-local keyframe times before the item start)." },
+    "count": { "type": "integer", "minimum": 0 },
+    "positive": { "type": "integer", "minimum": 1 },
+    "number": { "type": "number" },
+    "colour": { "type": "string", "pattern": "^#[0-9A-F]{8}$", "description": "\"#RRGGBBAA\" (upper-case hex) of an ARGB colour." },
+    "rgb": { "type": "string", "pattern": "^#[0-9A-F]{6}([0-9A-F]{2})?$", "description": "\"#RRGGBB\" of an RGB value (eight digits only if bits above 24 are set)." },
+    "time": {
+      "type": "string",
+      "pattern": "^[+-]?[0-9]{4,6}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}([0-9]{3})?Z$",
+      "description": "UTC ISO-8601 with milliseconds (microseconds when non-zero)."
+    },
+    "projectId": { "type": "string", "pattern": "^pr_" },
+    "trackId": { "type": "string", "pattern": "^tr_" },
+    "itemId": { "type": "string", "pattern": "^it_" },
+    "mediaId": { "type": "string", "pattern": "^md_" },
+    "markerId": { "type": "string", "pattern": "^mk_" },
+    "transitionId": { "type": "string", "pattern": "^tx_" },
+    "linkId": { "type": "string", "pattern": "^ln_" },
+    "vec2": {
+      "type": "array",
+      "prefixItems": [{ "type": "number" }, { "type": "number" }],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "range": {
+      "type": "array",
+      "description": "[start, end) in µs, end ≥ start.",
+      "prefixItems": [{ "$ref": "#/$defs/us" }, { "$ref": "#/$defs/us" }],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "frameRate": {
+      "description": "An integer rate, or [num, den] for a rational rate (probe values such as [30000, 1001]).",
+      "oneOf": [
+        { "$ref": "#/$defs/positive" },
+        {
+          "type": "array",
+          "prefixItems": [{ "$ref": "#/$defs/positive" }, { "$ref": "#/$defs/positive" }],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      ]
+    },
+
+    "meta": {
+      "type": "object",
+      "required": ["name", "created", "updated"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "created": { "$ref": "#/$defs/time" },
+        "updated": { "$ref": "#/$defs/time" },
+        "origin": {
+          "description": "Omitted for projects started from the Projects screen.",
+          "type": "object",
+          "required": ["player", "size"],
+          "additionalProperties": false,
+          "properties": {
+            "player": { "type": "string", "description": "quickHash of the played file (never its path)." },
+            "size": { "$ref": "#/$defs/count" },
+            "name": { "type": "string", "description": "File name for diagnostics (never a path)." }
+          }
+        },
+        "edits": { "$ref": "#/$defs/count" }
+      }
+    },
+
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "canvas": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "aspect": {
+              "type": "array",
+              "description": "[w, h]; omitted for 16:9.",
+              "prefixItems": [{ "$ref": "#/$defs/positive" }, { "$ref": "#/$defs/positive" }],
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "short": { "$ref": "#/$defs/positive", "description": "Short side in px; omitted for 1080." }
+          }
+        },
+        "fps": { "$ref": "#/$defs/frameRate", "description": "Omitted for 30." },
+        "bg": {
+          "description": "Omitted for solid black.",
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["solid"],
+              "additionalProperties": false,
+              "properties": { "solid": { "$ref": "#/$defs/colour" } }
+            },
+            {
+              "type": "object",
+              "required": ["blur"],
+              "additionalProperties": false,
+              "properties": { "blur": { "type": "number" } }
+            }
+          ]
+        },
+        "sampleRate": { "$ref": "#/$defs/positive", "description": "Omitted for 48000." }
+      }
+    },
+
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "playhead": { "$ref": "#/$defs/us" },
+        "pps": { "type": "number" },
+        "scrollT": { "$ref": "#/$defs/us" },
+        "scrollY": { "type": "number" },
+        "ripple": { "const": false },
+        "snap": { "const": false },
+        "follow": { "enum": ["centreLocked", "free"] },
+        "exportPreset": { "type": "string" }
+      }
+    },
+
+    "marker": {
+      "type": "object",
+      "required": ["id", "time"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/markerId" },
+        "time": { "$ref": "#/$defs/us" },
+        "name": { "type": "string", "minLength": 1 },
+        "color": { "$ref": "#/$defs/count" },
+        "note": { "type": "string" }
+      }
+    },
+
+    "track": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/trackId" },
+        "kind": { "enum": ["video", "overlay", "audio", "text", "subtitle"] },
+        "name": { "type": "string", "minLength": 1 },
+        "main": { "const": true },
+        "locked": { "const": true },
+        "hidden": { "const": true },
+        "muted": { "const": true },
+        "solo": { "const": true },
+        "role": { "enum": ["original", "voice", "music", "effects"] },
+        "sub": { "$ref": "#/$defs/subtitleTrack" },
+        "chg": { "$ref": "#/$defs/count", "description": "Track.changedAt stamp; omitted when 0." },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [{ "$ref": "#/$defs/clip" }, { "$ref": "#/$defs/text" }, { "$ref": "#/$defs/cue" }]
+          }
+        },
+        "tx": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/transition" } }
+      }
+    },
+
+    "transition": {
+      "type": "object",
+      "required": ["id", "left", "right", "kind", "frames"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/transitionId" },
+        "left": { "$ref": "#/$defs/itemId" },
+        "right": { "$ref": "#/$defs/itemId" },
+        "kind": { "enum": ["fade", "crossDissolve", "dipToBlack", "dipToWhite", "slide", "wipe", "zoom"] },
+        "frames": { "type": "integer" },
+        "dir": { "enum": ["left", "right", "up", "down", "zoomIn", "zoomOut"] }
+      }
+    },
+
+    "keyframes": {
+      "type": "object",
+      "description": "Channel id (e.g. \"transform.position.x\") → [[t, v], …], t item-local µs; channels sorted.",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "prefixItems": [{ "$ref": "#/$defs/signedUs" }, { "type": "number" }],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+
+    "clip": {
+      "type": "object",
+      "required": ["t", "id", "start", "dur", "media"],
+      "additionalProperties": false,
+      "properties": {
+        "t": { "const": "clip" },
+        "id": { "$ref": "#/$defs/itemId" },
+        "start": { "$ref": "#/$defs/us" },
+        "dur": { "$ref": "#/$defs/us" },
+        "media": { "$ref": "#/$defs/mediaId" },
+        "in": { "$ref": "#/$defs/us", "description": "sourceIn; omitted when 0." },
+        "speed": {
+          "description": "Omitted for constant 1×.",
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["c"],
+              "additionalProperties": false,
+              "properties": { "c": { "type": "number" } }
+            },
+            {
+              "type": "object",
+              "required": ["ramp"],
+              "additionalProperties": false,
+              "properties": {
+                "ramp": {
+                  "type": "array",
+                  "minItems": 2,
+                  "items": { "$ref": "#/$defs/vec2" },
+                  "description": "[[x, speed], …] over normalized source position."
+                },
+                "preset": { "type": "string" }
+              }
+            }
+          ]
+        },
+        "pitch": { "const": false },
+        "reversed": { "const": true },
+        "stream": { "$ref": "#/$defs/count" },
+        "visual": { "$ref": "#/$defs/visual", "description": "Absent on audio lanes; {} when neutral." },
+        "audio": { "$ref": "#/$defs/audio" },
+        "detached": { "const": true },
+        "kf": { "$ref": "#/$defs/keyframes" },
+        "link": { "$ref": "#/$defs/linkId" },
+        "label": { "type": "string" }
+      }
+    },
+
+    "text": {
+      "type": "object",
+      "required": ["t", "id", "start", "dur", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "t": { "const": "text" },
+        "id": { "$ref": "#/$defs/itemId" },
+        "start": { "$ref": "#/$defs/us" },
+        "dur": { "$ref": "#/$defs/us" },
+        "text": { "type": "string" },
+        "style": { "$ref": "#/$defs/textStyle" },
+        "anim": { "$ref": "#/$defs/textAnimation" },
+        "xf": { "$ref": "#/$defs/transform" },
+        "kf": { "$ref": "#/$defs/keyframes" },
+        "link": { "$ref": "#/$defs/linkId" },
+        "label": { "type": "string" }
+      }
+    },
+
+    "cue": {
+      "type": "object",
+      "required": ["t", "id", "start", "dur", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "t": { "const": "cue" },
+        "id": { "$ref": "#/$defs/itemId" },
+        "start": { "$ref": "#/$defs/us" },
+        "dur": { "$ref": "#/$defs/us" },
+        "text": { "type": "string", "description": "'\\n' line breaks; inline <i>, <b> only." },
+        "origin": { "enum": ["imported", "generated"], "description": "Omitted for manual." },
+        "edited": { "const": true, "description": "editedAfterGeneration." },
+        "link": { "$ref": "#/$defs/linkId" },
+        "label": { "type": "string" }
+      }
+    },
+
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pos": { "$ref": "#/$defs/vec2", "description": "Canvas fractions, 0 = centre." },
+        "s": { "type": "number" },
+        "r": { "type": "number", "description": "Degrees, clockwise." },
+        "flipH": { "const": true },
+        "flipV": { "const": true },
+        "op": { "type": "number" }
+      }
+    },
+
+    "visual": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "xf": { "$ref": "#/$defs/transform" },
+        "fit": { "enum": ["fill", "stretch"], "description": "Omitted for fit." },
+        "crop": {
+          "type": "array",
+          "description": "[left, top, right, bottom] in normalized source coordinates; omitted for the full frame.",
+          "items": { "type": "number" },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "adj": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "exposure": { "type": "number" },
+            "brightness": { "type": "number" },
+            "contrast": { "type": "number" },
+            "highlights": { "type": "number" },
+            "shadows": { "type": "number" },
+            "saturation": { "type": "number" },
+            "temperature": { "type": "number" },
+            "tint": { "type": "number" }
+          }
+        },
+        "detail": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sharpness": { "type": "number" },
+            "blur": { "type": "number" },
+            "vignette": { "type": "number" }
+          }
+        },
+        "look": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["builtin"],
+              "additionalProperties": false,
+              "properties": { "builtin": { "type": "string" }, "i": { "type": "number" } }
+            },
+            {
+              "type": "object",
+              "required": ["lut"],
+              "additionalProperties": false,
+              "properties": { "lut": { "$ref": "#/$defs/mediaId" }, "i": { "type": "number" } }
+            }
+          ]
+        },
+        "chroma": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "on": { "const": true },
+            "color": { "$ref": "#/$defs/rgb" },
+            "sim": { "type": "number" },
+            "smooth": { "type": "number" },
+            "spill": { "type": "number" }
+          }
+        },
+        "mask": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "shape": { "enum": ["rectangle", "ellipse"], "description": "Omitted for none." },
+            "c": { "$ref": "#/$defs/vec2" },
+            "size": { "$ref": "#/$defs/vec2" },
+            "r": { "type": "number" },
+            "corner": { "type": "number" },
+            "feather": { "type": "number" },
+            "op": { "type": "number" },
+            "invert": { "const": true }
+          }
+        }
+      }
+    },
+
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "vol": { "type": "number", "description": "Linear gain, 1 = 0 dB." },
+        "muted": { "const": true },
+        "fadeIn": { "$ref": "#/$defs/us" },
+        "fadeOut": { "$ref": "#/$defs/us" }
+      }
+    },
+
+    "box": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": { "$ref": "#/$defs/colour" },
+        "op": { "type": "number" },
+        "pad": { "type": "number" },
+        "radius": { "type": "number" }
+      }
+    },
+    "stroke": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": { "$ref": "#/$defs/colour" },
+        "width": { "type": "number" }
+      }
+    },
+    "shadow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": { "$ref": "#/$defs/colour" },
+        "op": { "type": "number" },
+        "blur": { "type": "number" },
+        "dist": { "type": "number" },
+        "angle": { "type": "number" }
+      }
+    },
+    "align": { "enum": ["left", "right"], "description": "Omitted for center." },
+
+    "textStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "font": { "type": "string" },
+        "size": { "type": "number" },
+        "bold": { "const": true },
+        "italic": { "const": true },
+        "align": { "$ref": "#/$defs/align" },
+        "color": { "$ref": "#/$defs/colour" },
+        "spacing": { "type": "number" },
+        "lineHeight": { "type": "number" },
+        "maxWidth": { "type": "number" },
+        "box": { "$ref": "#/$defs/box" },
+        "stroke": { "$ref": "#/$defs/stroke" },
+        "shadow": { "$ref": "#/$defs/shadow" }
+      }
+    },
+
+    "textAnimation": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "in": { "enum": ["fade", "slide", "scale", "typewriter"] },
+        "inDir": { "enum": ["left", "right", "down"] },
+        "inDur": { "$ref": "#/$defs/us" },
+        "out": { "enum": ["fade", "slide", "scale", "typewriter"] },
+        "outDir": { "enum": ["left", "right", "up"] },
+        "outDur": { "$ref": "#/$defs/us" }
+      }
+    },
+
+    "subtitleTrack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lang": { "type": "string", "description": "BCP-47." },
+        "style": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "font": { "type": "string" },
+            "size": { "type": "number" },
+            "bold": { "const": true },
+            "italic": { "const": true },
+            "color": { "$ref": "#/$defs/colour" },
+            "box": {
+              "description": "Omitted for the default box; null when the box is turned off.",
+              "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/box" }]
+            },
+            "outline": { "$ref": "#/$defs/stroke" },
+            "shadow": { "$ref": "#/$defs/shadow" },
+            "maxLines": { "type": "integer" },
+            "maxWidth": { "type": "number" },
+            "align": { "$ref": "#/$defs/align" }
+          }
+        },
+        "pos": {
+          "description": "Omitted for bottom.",
+          "oneOf": [
+            { "const": "top" },
+            {
+              "type": "object",
+              "required": ["y"],
+              "additionalProperties": false,
+              "properties": { "y": { "type": "number", "description": "Cue block centre as a fraction of the canvas height." } }
+            }
+          ]
+        },
+        "burnIn": { "const": false },
+        "prov": { "$ref": "#/$defs/provenance" }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "description": "CaptionProvenance (ai.md §10.2, adopted verbatim; part of schema 1).",
+      "required": ["generator", "engineVersion", "modelId", "modelSha256", "language", "languageDetected", "generatedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "generator": { "type": "string" },
+        "engineVersion": { "type": "string" },
+        "modelId": { "type": "string" },
+        "modelSha256": { "type": "string" },
+        "language": { "type": "string" },
+        "languageDetected": { "type": "boolean" },
+        "languageConfidence": { "type": "number" },
+        "segmentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "preset": { "enum": ["singleLine", "shortPhrases"], "description": "Omitted for standard." },
+            "maxLines": { "type": "integer" },
+            "maxCharsPerLine": { "type": "integer" },
+            "maxCharsPerSecond": { "type": "number" }
+          }
+        },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "clips": { "type": "array", "items": { "$ref": "#/$defs/itemId" } },
+            "tracks": { "type": "array", "items": { "$ref": "#/$defs/trackId" } },
+            "range": { "$ref": "#/$defs/range" }
+          }
+        },
+        "transcriptKeys": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "generatedAt": { "$ref": "#/$defs/time" },
+        "schema": { "type": "integer", "description": "Provenance schema; omitted when 1." }
+      }
+    },
+
+    "pool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "assets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/asset" }, "description": "Insertion (media-bin) order." }
+      }
+    },
+
+    "asset": {
+      "type": "object",
+      "required": ["id", "kind", "name", "loc", "own", "fp", "probe", "origin", "added"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/mediaId" },
+        "kind": { "$ref": "#/$defs/mediaKind" },
+        "name": { "type": "string", "description": "Display name (a file name, never a container path)." },
+        "loc": { "$ref": "#/$defs/locator" },
+        "own": { "enum": ["external", "managedCopy", "projectOwned"] },
+        "fp": {
+          "type": "object",
+          "required": ["size", "qh"],
+          "additionalProperties": false,
+          "properties": {
+            "size": { "$ref": "#/$defs/count" },
+            "qh": { "type": "string", "description": "quickHash: sha1(head 64 KiB + tail 64 KiB + ':' + size), '' for an empty file." },
+            "mtime": { "type": "integer" },
+            "dur": { "$ref": "#/$defs/us" }
+          }
+        },
+        "probe": { "$ref": "#/$defs/probe" },
+        "origin": { "enum": ["photos", "files", "library", "player", "drop", "recorded", "derived", "imported"] },
+        "derived": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["reversed", "range", "qh"],
+              "additionalProperties": false,
+              "properties": {
+                "reversed": { "$ref": "#/$defs/mediaId" },
+                "range": { "$ref": "#/$defs/range" },
+                "qh": { "type": "string" }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["still", "at", "qh"],
+              "additionalProperties": false,
+              "properties": {
+                "still": { "$ref": "#/$defs/mediaId" },
+                "at": { "$ref": "#/$defs/us" },
+                "qh": { "type": "string" }
+              }
+            }
+          ]
+        },
+        "status": {
+          "description": "Omitted when ready.",
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["pending"],
+              "additionalProperties": false,
+              "properties": { "pending": { "type": "string", "description": "Engine job id." } }
+            },
+            {
+              "type": "object",
+              "required": ["failed"],
+              "additionalProperties": false,
+              "properties": { "failed": { "type": "string", "description": "Engine error code name." } }
+            }
+          ]
+        },
+        "proxy": { "enum": ["pending", "ready", "failed"], "description": "Omitted for none." },
+        "added": { "$ref": "#/$defs/time" }
+      }
+    },
+
+    "mediaKind": { "enum": ["video", "audio", "image", "lut", "still", "recording"] },
+
+    "locator": {
+      "description": "AppRelativeLocator | FileLocator (desktop, or a bare file name kept as a relink hint) | ContentUriLocator | BookmarkLocator.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["app", "rel"],
+          "additionalProperties": false,
+          "properties": {
+            "app": { "enum": ["documents", "support", "cache"] },
+            "rel": { "type": "string", "pattern": "^[^/]", "description": "'/'-separated path relative to the root." }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["file"],
+          "additionalProperties": false,
+          "properties": { "file": { "type": "string" } }
+        },
+        {
+          "type": "object",
+          "required": ["uri"],
+          "additionalProperties": false,
+          "properties": { "uri": { "type": "string" } }
+        },
+        {
+          "type": "object",
+          "required": ["bookmark"],
+          "additionalProperties": false,
+          "properties": {
+            "bookmark": { "type": "string", "description": "Base64 security-scoped bookmark." },
+            "hint": { "type": "string", "description": "lastKnownPath: display hint only, never used to open the file." }
+          }
+        }
+      ]
+    },
+
+    "probe": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "$ref": "#/$defs/mediaKind" },
+        "dur": { "$ref": "#/$defs/us" },
+        "video": { "const": true },
+        "audio": { "const": true },
+        "w": { "type": "integer" },
+        "h": { "type": "integer" },
+        "rot": { "type": "integer" },
+        "fps": { "$ref": "#/$defs/frameRate", "description": "nominalFrameRate." },
+        "avgFps": { "type": "number", "description": "nominalFps (measured, display only)." },
+        "vfr": { "const": true },
+        "container": { "type": "string" },
+        "vcodec": { "type": "string" },
+        "acodec": { "type": "string" },
+        "streams": { "$ref": "#/$defs/count" },
+        "ch": { "type": "integer" },
+        "sr": { "type": "integer" },
+        "bits": { "type": "integer" },
+        "transfer": { "enum": ["hlg", "pq"], "description": "Omitted for sdr." },
+        "size": { "$ref": "#/$defs/count" },
+        "editable": { "const": false },
+        "issues": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    }
+  }
+}

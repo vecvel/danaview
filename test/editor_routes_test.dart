@@ -2,21 +2,21 @@
 //
 // The editor's app routes and entry points (ARCH §17.1, D-17, D-31): `/projects`,
 // `/editor/:projectId?t=`, `/settings/editor`, the Home edit button, the Settings "Video editor" row
-// and the Settings › Storage contributors, gated by platform and the VWISH_EDITOR flag.
+// and the Settings › Storage contributors, gated by platform and the DANAVIEW_EDITOR flag.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:vwish/app.dart';
-import 'package:vwish/router/app_router.dart';
-import 'package:vwish_editor/vwish_editor.dart';
-import 'package:vwish_editor_core/store.dart' show EmptyProjectSpec, StoreRoots;
-import 'package:vwish_editor_core/testing.dart' show MemoryStoreFs;
-import 'package:vwish_editor_engine_api/testing.dart' show FakeEditorEngine;
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview/app.dart';
+import 'package:danaview/router/app_router.dart';
+import 'package:danaview_editor/danaview_editor.dart';
+import 'package:danaview_editor_core/store.dart' show EmptyProjectSpec, StoreRoots;
+import 'package:danaview_editor_core/testing.dart' show MemoryStoreFs;
+import 'package:danaview_editor_engine_api/testing.dart' show FakeEditorEngine;
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import 'library_test_utils.dart';
 
@@ -40,7 +40,7 @@ Future<_App> _pumpApp(WidgetTester tester, {required TargetPlatform platform, re
     onOpenProjects: openProjects,
   );
   final container = ProviderContainer(overrides: [...env.overrides, ...editor]);
-  await tester.pumpWidget(UncontrolledProviderScope(container: container, child: const VwishApp()));
+  await tester.pumpWidget(UncontrolledProviderScope(container: container, child: const DanaviewApp()));
   await pumpFrames(tester);
   return _App(tester, env, container, engine);
 }
@@ -63,7 +63,7 @@ class _App {
   }
 
   Future<void> dispose() async {
-    VwishToast.dismiss();
+    DanaviewToast.dismiss();
     await tester.pumpWidget(const SizedBox());
     await pumpFrames(tester, count: 40);
     await container.read(editorRuntimeProvider)?.dispose();
@@ -76,7 +76,7 @@ class _App {
 
 void main() {
   group('platform gate', () {
-    test('supported only on iOS/Android with VWISH_EDITOR; hidden on desktop and web', () {
+    test('supported only on iOS/Android with DANAVIEW_EDITOR; hidden on desktop and web', () {
       for (final platform in TargetPlatform.values) {
         for (final flag in [true, false]) {
           final support = EditorAvailability.resolve(platform: platform, editorFlag: flag);
@@ -100,14 +100,14 @@ void main() {
     testWidgets('no edit button, no Video editor row, no storage contributor; editor routes redirect to /', (tester) async {
       final app = await _pumpApp(tester, platform: TargetPlatform.macOS, flag: true);
       try {
-        expect(find.byType(VwishHomeScreen), findsOneWidget);
+        expect(find.byType(DanaviewHomeScreen), findsOneWidget);
         expect(find.byTooltip(_editorTooltip), findsNothing);
         expect(app.container.read(storageContributorsProvider), isEmpty);
         expect(app.container.read(editorRuntimeProvider), isNull);
         expect(app.engine.log.calls, isEmpty);
 
         await app.go('/settings');
-        expect(find.byType(VwishSettingsScreen), findsOneWidget);
+        expect(find.byType(DanaviewSettingsScreen), findsOneWidget);
         expect(find.byKey(const ValueKey('settings-video-editor')), findsNothing);
         expect(find.text('Video editor'), findsNothing);
 
@@ -125,7 +125,7 @@ void main() {
     });
   });
 
-  group('iOS/Android with VWISH_EDITOR off', () {
+  group('iOS/Android with DANAVIEW_EDITOR off', () {
     for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
       testWidgets('$platform: hidden entry points and redirects', (tester) async {
         final app = await _pumpApp(tester, platform: platform, flag: false);
@@ -143,7 +143,7 @@ void main() {
     }
   });
 
-  group('iOS/Android with VWISH_EDITOR on', () {
+  group('iOS/Android with DANAVIEW_EDITOR on', () {
     for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
       testWidgets('$platform: Home edit button opens Projects; storage lists the editor contributors', (tester) async {
         final app = await _pumpApp(tester, platform: platform, flag: true);
@@ -236,7 +236,7 @@ void main() {
         await tester.tap(manage);
         await pumpFrames(tester, count: 10);
         expect(app.location, settingsLocation(SettingsDestination.storage));
-        expect(find.byType(VwishStorageScreen), findsOneWidget);
+        expect(find.byType(DanaviewStorageScreen), findsOneWidget);
       } finally {
         await app.dispose();
       }

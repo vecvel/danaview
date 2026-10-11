@@ -2,21 +2,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_domain/vwish_domain.dart';
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_platform/vwish_platform.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_platform/danaview_platform.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'router/app_router.dart';
 
-class VwishApp extends ConsumerStatefulWidget {
-  const VwishApp({super.key});
+class DanaviewApp extends ConsumerStatefulWidget {
+  const DanaviewApp({super.key});
 
   @override
-  ConsumerState<VwishApp> createState() => _VwishAppState();
+  ConsumerState<DanaviewApp> createState() => _DanaviewAppState();
 }
 
-class _VwishAppState extends ConsumerState<VwishApp> {
+class _DanaviewAppState extends ConsumerState<DanaviewApp> {
   late final GoRouter _router = createAppRouter();
   StreamSubscription<String>? _mediaSub;
   String? _lastOpenedMedia;
@@ -66,7 +66,7 @@ class _VwishAppState extends ConsumerState<VwishApp> {
         _router.push('/player');
       }
     } catch (e) {
-      debugPrint('[VwishApp] Failed to play incoming media: $e');
+      debugPrint('[DanaviewApp] Failed to play incoming media: $e');
     }
   }
 
@@ -74,15 +74,15 @@ class _VwishAppState extends ConsumerState<VwishApp> {
     var pathOrUrl = raw.trim();
     if (pathOrUrl.isEmpty) return null;
 
-    // Custom scheme: vwish://
-    if (pathOrUrl.startsWith('vwish://')) {
+    // Custom scheme: danaview://
+    if (pathOrUrl.startsWith('danaview://')) {
       final uri = Uri.tryParse(pathOrUrl);
       if (uri != null) {
         final queryUrl = uri.queryParameters['url'];
         if (queryUrl != null && queryUrl.isNotEmpty) {
           pathOrUrl = queryUrl;
         } else {
-          final stripped = pathOrUrl.substring('vwish://'.length);
+          final stripped = pathOrUrl.substring('danaview://'.length);
           if (stripped.startsWith('http://') ||
               stripped.startsWith('https://') ||
               stripped.startsWith('/')) {
@@ -115,7 +115,7 @@ class _VwishAppState extends ConsumerState<VwishApp> {
           localPath = imported.first;
         }
       } catch (e) {
-        debugPrint('[VwishApp] LibraryStorage import error: $e');
+        debugPrint('[DanaviewApp] LibraryStorage import error: $e');
       }
     }
 
@@ -125,9 +125,9 @@ class _VwishAppState extends ConsumerState<VwishApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Vwish',
+      title: 'Danaview',
       debugShowCheckedModeBanner: false,
-      theme: VwishTheme.darkTheme,
+      theme: DanaviewTheme.darkTheme,
       routerConfig: _router,
       builder: (context, child) => MediaQuery.withClampedTextScaling(
         minScaleFactor: 0.85,

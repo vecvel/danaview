@@ -2,11 +2,11 @@
 
 > Status 2026-10-11. Sources: `docs/editor/BUILD_PLAN.md` §1, §2, §5, §6, §7; `docs/editor/spikes/AND-01.md`; `docs/editor/ARCHITECTURE.md` §3.2, §4.4, §13.3–13.5, §14.3, §15, §20.4, §24.2.
 > When sources disagree: ARCHITECTURE as updated by ENG-06 wins, then the rules in AND-01.md §6 and §7, then BUILD_PLAN §6, then this file. ENG-06 records the AND-01 rules in ARCH §13.3 before any AND ticket starts. Until then, AND-01 beats older ARCH and BUILD_PLAN text, for example AND-08's gaps (transparent images, not `addGap`), AND-16's ImageReader decks (not a SurfaceTexture) and AND-17's reference frame.
-> Repo: github.com/vecvel/vwish. Windows branch: `editor-android`, created from `origin/editor-wip`.
+> Repo: github.com/vecvel/danaview. Windows branch: `editor-android`, created from `origin/editor-wip`.
 
 ## 1. Summary
 
-The laptop builds the Android half of the editor's native engine inside the `vwish_editor_engine` plugin (`packages/vwish_editor_engine/android/`), plus the Android build of the on-device speech library (`packages/vwish_whisper`). That covers the plugin glue that connects Dart to Kotlin (ENG-08), the whisper `.so` build (AI-04), and the media services: probe, thumbnails, waveforms, speech audio, proxies, freeze frames and reverse (AND-02..07). It also covers the live preview: plan reader, GL effects, paused-frame renderer, preview session, and the contingency preview engine AND-16, which is active because AND-01 was a NO-GO for Media3's `CompositionPlayer`. Last come export, the export foreground service, the voice recorder, pickers and drag-and-drop (AND-11 to AND-15), then the render-preview renderer (AND-18) and the multi-pass export precompose (AND-19), both added by the owner's D-43(e) decision of 2026-10-11 (ARCH D-45). Everything is checked with Gradle builds, JVM unit tests and instrumented tests on the Android emulator. Anything that needs a real phone is written down as "deferred: no device available". The Mac builds everything else, including ENG-06, which freezes the plugin's Gradle file and glue after ENG-08. The Mac merges the laptop's branch.
+The laptop builds the Android half of the editor's native engine inside the `danaview_editor_engine` plugin (`packages/danaview_editor_engine/android/`), plus the Android build of the on-device speech library (`packages/danaview_whisper`). That covers the plugin glue that connects Dart to Kotlin (ENG-08), the whisper `.so` build (AI-04), and the media services: probe, thumbnails, waveforms, speech audio, proxies, freeze frames and reverse (AND-02..07). It also covers the live preview: plan reader, GL effects, paused-frame renderer, preview session, and the contingency preview engine AND-16, which is active because AND-01 was a NO-GO for Media3's `CompositionPlayer`. Last come export, the export foreground service, the voice recorder, pickers and drag-and-drop (AND-11 to AND-15), then the render-preview renderer (AND-18) and the multi-pass export precompose (AND-19), both added by the owner's D-43(e) decision of 2026-10-11 (ARCH D-45). Everything is checked with Gradle builds, JVM unit tests and instrumented tests on the Android emulator. Anything that needs a real phone is written down as "deferred: no device available". The Mac builds everything else, including ENG-06, which freezes the plugin's Gradle file and glue after ENG-08. The Mac merges the laptop's branch.
 
 ## 2. Owner checklist (plain language)
 
@@ -14,7 +14,7 @@ The laptop builds the Android half of the editor's native engine inside the `vwi
    - **API 29 and API 34 AVDs** (`Pixel_API_29`, `Pixel_API_34`). AND-02 checks GLES 3 on API 29, and AND-12 tests the export service on API 29, 34 and 35.
    - **A tablet AVD** (`Pixel_Tablet_API_35`), for AND-15's manual drag test from the Files app.
    - **An ffmpeg build with libx264 and libx265**, for test media.
-   - **The clone at `C:\dev\vwish_player`** (WINDOWS_SETUP A6). Claude's notes folder name comes from that path, and a short path avoids Windows path-length limits.
+   - **The clone at `C:\dev\danaview_player`** (WINDOWS_SETUP A6). Claude's notes folder name comes from that path, and a short path avoids Windows path-length limits.
 2. **Carry the gates between machines.**
    - Tell the Windows session when each of these lands on `editor-wip`: ENG-06, ENG-02, ENG-03, ENG-04. (ENG-09 and API-04 are already done.)
    - Tell the Mac session each time Windows reports a ticket pushed, so it can merge `editor-android`.
@@ -23,7 +23,7 @@ The laptop builds the Android half of the editor's native engine inside the `vwi
 5. **Optional.** The root app's Android build makes `media_kit_libs_android_video` download its libmpv jars from github.com (its own `build.gradle`; this is not pub or Maven). Windows will not build the root app unless you allow it. Only one AI-04 check needs that build ("no libc++_shared clash with media_kit"). Without your OK, the Mac covers it when INT-02 wires whisper into the app.
 
 **For the Mac to settle in ENG-06** (Windows does not decide these):
-- **AND-16 needs a ~60-line JNI shim** (HardwareBuffer → OES texture) built with CMake (AND-01 §6.3). No ticket owns `packages/vwish_editor_engine/android/src/main/cpp/`, and ENG-06 freezes `build.gradle.kts`. ENG-06 must add the `externalNativeBuild` block and assign the cpp directory before AND-16 starts.
+- **AND-16 needs a ~60-line JNI shim** (HardwareBuffer → OES texture) built with CMake (AND-01 §6.3). No ticket owns `packages/danaview_editor_engine/android/src/main/cpp/`, and ENG-06 freezes `build.gradle.kts`. ENG-06 must add the `externalNativeBuild` block and assign the cpp directory before AND-16 starts.
 - **`minSdk` conflict.** ENG-08's spec and ARCH §3.2 keep the plugin at minSdk 24: the app is minSdk 24 and gates the editor at runtime. AND-01 §6.3 says 29. ENG-08 ships 24, and ENG-06 decides.
 - **Ignore `.cxx/`.** The root `.gitignore` covers `**/build/` but not `.cxx/`, where AGP stages CMake builds inside plugin modules. Add `**/.cxx/` before AND-16's shim build. AI-04 keeps its own staging folder under `build/`.
 - **AND-01.md still has `{{…}}` measurement placeholders** from the Mac's final reruns. The NO-GO verdict and the rules in its §6 do not depend on them.
@@ -34,7 +34,7 @@ The laptop builds the Android half of the editor's native engine inside the `vwi
 - **Line endings.** `.gitattributes` keeps LF everywhere and marks fixtures `-text`. Check with `git ls-files --eol scripts/ci/editor/android_unit.sh`, which should print `i/lf w/lf`.
 - **Edit only your ticket's `owns` paths** (§5 below, copied from BUILD_PLAN §6), plus files whose header says `// OWNER: <your ticket>`. Need a change in someone else's file? Report it as a defect against that ticket (BUILD_PLAN §1 rule 3) and tell the owner. Never edit:
   - `docs/editor/**`, `spikes/**`
-  - `packages/vwish_editor_engine/{pigeons,lib,example,test_fixtures}/**`, except AND-10's one integration test file
+  - `packages/danaview_editor_engine/{pigeons,lib,example,test_fixtures}/**`, except AND-10's one integration test file
   - the root `pubspec.yaml` and `android/app/**`
 - **Never run `pigeon` or `tool/make_fixtures.swift`.** The generated code and fixtures belong to Mac tickets.
 - **No downloads except pub, Gradle and Maven resolution.** Never download speech models or media. Generate test media locally (ffmpeg, or in code) inside your owned test directories. If a build tries to fetch an NDK, CMake, a system image or a GitHub file, stop and ask the owner.
@@ -58,17 +58,17 @@ Statuses: **DONE** means finished and on `origin/editor-wip`. **MAC (pending)** 
 
 Verification keys:
 - **GRADLE**: the example host builds the plugin (`flutter build apk` inside `android_unit.sh`).
-- **JVM**: `:vwish_editor_engine:testDebugUnitTest`.
-- **EMU**: `:vwish_editor_engine:connectedDebugAndroidTest` on the API 35 emulator. Run the ticket's test package first, then the full `android_emulator.sh`.
+- **JVM**: `:danaview_editor_engine:testDebugUnitTest`.
+- **EMU**: `:danaview_editor_engine:connectedDebugAndroidTest` on the API 35 emulator. Run the ticket's test package first, then the full `android_emulator.sh`.
 - **IT**: an example `integration_test/` run on the emulator.
-- **LINT**: `:vwish_editor_engine:lintDebug`.
+- **LINT**: `:danaview_editor_engine:lintDebug`.
 - **NDK**: the whisper native build plus `check_native_libs.sh` on an AAB.
 
 Commands are in §9.
 
 | # | Ticket | Title | M | Depends on | Can start when | Group | Verification |
 |---|---|---|---|---|---|---|---|
-| 1 | AI-04 | whisper Android native build | M2 | AI-03 DONE | Now (AI-03's `packages/vwish_whisper/src/` is on `origin/editor-wip`) | ai-android | NDK, whisper JVM tests via a scratch host, `flutter_packages.sh vwish_whisper` |
+| 1 | AI-04 | whisper Android native build | M2 | AI-03 DONE | Now (AI-03's `packages/danaview_whisper/src/` is on `origin/editor-wip`) | ai-android | NDK, whisper JVM tests via a scratch host, `flutter_packages.sh danaview_whisper` |
 | 2 | ENG-08 | Android plugin glue, engine core, Gradle, manifest and native service placeholders | M0 | ENG-09 DONE | Now (ENG-09's `example/android/` is on `origin/editor-wip`) | eng08 | GRADLE, JVM, LINT (plus a negative fixture), EMU + `engine_smoke_test.dart` |
 | 3 | AND-02 | Android probe, compatibility, device profile, capabilities | M2 | ENG-06 MAC (pending), ENG-05 DONE | ENG-06 merged into `editor-android` | and-m2a | JVM, EMU on API 35 and API 29 |
 | 4 | AND-03 | Android thumbnails and disk cache | M2 | AND-02 WINDOWS | AND-02 committed | and-m2a | JVM, EMU |
@@ -102,23 +102,23 @@ Every `AND-xx` main-source file below starts as a `// OWNER: AND-xx` placeholder
 ### AI-04 · whisper Android native build (ai-android)
 
 ```
-packages/vwish_whisper/android/build.gradle.kts
-packages/vwish_whisper/android/src/main/AndroidManifest.xml
-packages/vwish_whisper/src/cmake/android.cmake
-packages/vwish_whisper/src/vw_exports.map
+packages/danaview_whisper/android/build.gradle.kts
+packages/danaview_whisper/android/src/main/AndroidManifest.xml
+packages/danaview_whisper/src/cmake/android.cmake
+packages/danaview_whisper/src/dv_exports.map
 scripts/ci/editor/check_native_libs.sh
 ```
 
 **§7 files:** none. Two files need care even so:
 - AI-06 (Mac, done) already added lines to the two files above: `testImplementation("junit:junit:4.13.2")` and `ACCESS_NETWORK_STATE`. Keep both.
-- `packages/vwish_whisper/src/CMakeLists.txt` belongs to AI-03. It already `include()`s `cmake/android.cmake` when `ANDROID OR VW_ANDROID`. Do not edit it.
+- `packages/danaview_whisper/src/CMakeLists.txt` belongs to AI-03. It already `include()`s `cmake/android.cmake` when `ANDROID OR DV_ANDROID`. Do not edit it.
 
 **Build (ai.md §4.3):**
 - `externalNativeBuild` points at `../src/CMakeLists.txt` with CMake `3.22.1`.
 - ABIs: `arm64-v8a` and `x86_64` only, never `armeabi-v7a`.
-- Arguments: `-DANDROID_STL=c++_static -DVW_ANDROID=ON`.
-- Libraries: `libvwish_whisper.so` (armv8-a, plus x86_64) and `libvwish_whisper_v82.so` (armv8.2-a+fp16+dotprod, arm64 only).
-- Link flags: 16 KB pages, `--version-script=vw_exports.map`, `--gc-sections`.
+- Arguments: `-DANDROID_STL=c++_static -DDV_ANDROID=ON`.
+- Libraries: `libdanaview_whisper.so` (armv8-a, plus x86_64) and `libdanaview_whisper_v82.so` (armv8.2-a+fp16+dotprod, arm64 only).
+- Link flags: 16 KB pages, `--version-script=dv_exports.map`, `--gc-sections`.
 - Compiler: `-O3`, no OpenMP, `GGML_NATIVE=OFF`.
 - `GGML_CPU_KLEIDIAI=OFF`: KleidiAI fetches sources at build time, which is a forbidden download.
 - Pin `ndkVersion` to an installed NDK. Flutter 3.44.2's default is 28.2.13676358, which the spike also uses.
@@ -128,43 +128,43 @@ scripts/ci/editor/check_native_libs.sh
 
 **Acceptance criteria:**
 - The AAB contains exactly the expected `.so` files.
-- The 16 KB LOAD alignment and "only `vw_*` exported" checks pass.
+- The 16 KB LOAD alignment and "only `dv_*` exported" checks pass.
 - Each `.so` is ≤ 3 MB.
 - The build works with SDK CMake 3.22.1, or the pinned version is documented (V-A8, answered in the commit body).
 - No `libc++_shared` conflict with media_kit. This needs a root-app build; see owner item 5. Otherwise record it as "checked by the Mac in INT-02".
 
 **How to verify:**
-- Build a throwaway Flutter app **outside the repo** that has a path dependency on `packages/vwish_whisper`.
+- Build a throwaway Flutter app **outside the repo** that has a path dependency on `packages/danaview_whisper`.
 - Run `flutter build appbundle` on it, then `check_native_libs.sh` on the AAB.
-- Run `./gradlew :vwish_whisper:testDebugUnitTest` from its `android/`. This keeps AI-06's JVM tests green.
+- Run `./gradlew :danaview_whisper:testDebugUnitTest` from its `android/`. This keeps AI-06's JVM tests green.
 
 On-device loading is AI-07's (Mac), not AI-04's.
 
 ### ENG-08 · Android plugin glue, engine core, Gradle, manifest and native service placeholders (eng08)
 
 ```
-packages/vwish_editor_engine/android/build.gradle.kts
-packages/vwish_editor_engine/android/lint.xml
-packages/vwish_editor_engine/android/src/main/AndroidManifest.xml
-packages/vwish_editor_engine/android/src/main/res/xml/vwish_editor_file_paths.xml
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/VwishEditorEnginePlugin.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/glue/
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/core/EngineContext.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/core/ErrorCodes.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/core/EventHub.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/core/EngineThreads.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/core/Paths.kt
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/glue/
+packages/danaview_editor_engine/android/build.gradle.kts
+packages/danaview_editor_engine/android/lint.xml
+packages/danaview_editor_engine/android/src/main/AndroidManifest.xml
+packages/danaview_editor_engine/android/src/main/res/xml/danaview_editor_file_paths.xml
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/DanaviewEditorEnginePlugin.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/glue/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/core/EngineContext.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/core/ErrorCodes.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/core/EventHub.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/core/EngineThreads.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/core/Paths.kt
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/glue/
 ```
 
 **§7 files:**
-- `build.gradle.kts`, `AndroidManifest.xml`, `VwishEditorEnginePlugin.kt`, `glue/` and `lint.xml` all follow the order ENG-01 (placeholder) → **ENG-08** → ENG-06 (Mac), then freeze.
+- `build.gradle.kts`, `AndroidManifest.xml`, `DanaviewEditorEnginePlugin.kt`, `glue/` and `lint.xml` all follow the order ENG-01 (placeholder) → **ENG-08** → ENG-06 (Mac), then freeze.
 - `pigeon/EngineApi.g.kt` is ENG-01/ENG-06's: use it, never regenerate it.
 - Also creates the placeholders for every Android service file of ARCH §4.4, AND-02..AND-17. That includes `preview/{PausedFrameRenderer,LayerCompositorGl,StructuralDebouncer}` and an AND-16 placeholder in `preview/fallback/`. Each placeholder returns `notSupportedOnDevice` and carries a `// OWNER: AND-xx` header.
 
 **Spec points:**
 - Glue for the 6 host APIs plus `EngineEventsStreamHandler` (ARCH §12.6). Handlers validate, hop to the engine threads, reply asynchronously and never block.
-- `EngineThreads`: `vwish-preview`, `vwish-gl`, `vwish-export`, `vwish-jobs`, `vwish-io`.
+- `EngineThreads`: `danaview-preview`, `danaview-gl`, `danaview-export`, `danaview-jobs`, `danaview-io`.
 - Gradle: minSdk 24; Media3 1.11.1 (`common`, `exoplayer`, `effect`, `transformer`, `muxer`, `inspector`, `inspector-frame`); `concurrent-futures`; `activity`.
 - `lint.xml`: make `UnstableApi` and `ExperimentalApi` opt-in-required errors. The AND-01 spike's `app/lint.xml` is proven.
 - Manifest per ARCH §20.4.
@@ -186,12 +186,12 @@ packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/eng
 ### AND-02 · Android probe, compatibility, device profile, capabilities (and-m2a)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/Probe.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/Compatibility.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/core/DeviceProfile.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/core/Capabilities.kt
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/probe/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/probe/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/Probe.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/Compatibility.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/core/DeviceProfile.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/core/Capabilities.kt
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/probe/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/probe/
 ```
 
 **§7 files:** none.
@@ -215,10 +215,10 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-03 · Android thumbnails and disk cache (and-m2a)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/ThumbnailService.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/DiskCache.kt
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/thumbs/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/thumbs/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/ThumbnailService.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/DiskCache.kt
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/thumbs/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/thumbs/
 ```
 
 **§7 files:** none.
@@ -235,18 +235,18 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-04 · Android PCM decoder, waveforms, speech audio extraction (and-m2a)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/PcmDecoder.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/WaveformService.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/SpeechAudioExtractor.kt
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/audio/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/audio/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/PcmDecoder.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/WaveformService.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/SpeechAudioExtractor.kt
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/audio/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/audio/
 ```
 
 **§7 files:** none.
 
 **Acceptance criteria** (the same as IOS-04):
 - Peaks match the reference.
-- The `.vwpk` and 16 kHz s16 mono WAV formats are correct.
+- The `.dvpk` and 16 kHz s16 mono WAV formats are correct.
 - Duration is within ±1 ms.
 - The clap lands within ±20 ms, including the edit list and AAC priming (V-A6, answered in the commit body).
 - The 5.1 centre channel is kept.
@@ -257,11 +257,11 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-05 · Android job registry, proxy job and registry (and-m2a)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/core/JobRegistry.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/ProxyJob.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/ProxyRegistry.kt
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/proxy/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/proxy/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/core/JobRegistry.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/ProxyJob.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/ProxyRegistry.kt
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/proxy/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/proxy/
 ```
 
 **§7 files:** none.
@@ -276,10 +276,10 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-06 · Android freeze frame and source-frame cache (and-m2b)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/FreezeFrameJob.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/SourceFrameCache.kt
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/freeze/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/freeze/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/FreezeFrameJob.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/SourceFrameCache.kt
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/freeze/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/freeze/
 ```
 
 **§7 files:** none.
@@ -295,9 +295,9 @@ All of this is emulator-verifiable.
 ### AND-07 · Android reverse rendition job (and-m2b)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/ReverseJob.kt
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/reverse/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/reverse/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/media/ReverseJob.kt
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/reverse/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/reverse/
 ```
 
 **§7 files:** none.
@@ -316,14 +316,14 @@ All of this is emulator-verifiable.
 ### AND-08 · Android plan reader, ParamSnapshot, composition mapper, gating, speed and gain providers (and-m3-render)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/plan/
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/composition/
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/composition/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/composition/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/plan/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/composition/
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/composition/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/composition/
 ```
 
 **§7 files:** none.
-- Reads `packages/vwish_editor_core/test/fixtures/vectors/frame_grid.json`, read-only. Its `androidSeekMsRounding` field is written by ENG-06 (`"floor"` per AND-01).
+- Reads `packages/danaview_editor_core/test/fixtures/vectors/frame_grid.json`, read-only. Its `androidSeekMsRounding` field is written by ENG-06 (`"floor"` per AND-01).
 - Reads the core contract fixtures.
 
 **Acceptance criteria:**
@@ -350,10 +350,10 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-09 · Android GL effects, shaders, LUT and sprite textures (and-m3-text)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/effects/
-packages/vwish_editor_engine/android/src/main/assets/vwish_shaders/
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/effects/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/effects/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/effects/
+packages/danaview_editor_engine/android/src/main/assets/danaview_shaders/
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/effects/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/effects/
 ```
 
 **§7 files:** none. Reads API-03's vectors and goldens and API-04's `.vsprite` format.
@@ -369,10 +369,10 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-17 · Android paused-frame renderer, layer GL compositor and structural debounce (and-m3-paused)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/PausedFrameRenderer.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/LayerCompositorGl.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/StructuralDebouncer.kt
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/paused/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/PausedFrameRenderer.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/LayerCompositorGl.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/StructuralDebouncer.kt
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/paused/
 ```
 
 **§7 files:** none.
@@ -390,13 +390,13 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-10 · Android preview session (and-m3-preview)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/PreviewSession.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/PreviewSessionManager.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/SurfaceBridge.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/SeekController.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/QualityGovernor.kt
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/preview/
-packages/vwish_editor_engine/example/integration_test/android_preview_test.dart
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/PreviewSession.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/PreviewSessionManager.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/SurfaceBridge.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/SeekController.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/QualityGovernor.kt
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/preview/
+packages/danaview_editor_engine/example/integration_test/android_preview_test.dart
 ```
 
 **§7 files:** none. The integration test sits inside ENG-09's (Mac) `example/`; touch nothing else there.
@@ -421,8 +421,8 @@ packages/vwish_editor_engine/example/integration_test/android_preview_test.dart
 ### AND-16 · Android contingency preview engine (and-m3-fallback, active)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/fallback/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/fallback/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/fallback/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/fallback/
 ```
 
 **§7 files:**
@@ -454,8 +454,8 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-13 · Android voice recorder (and-m4-services)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/recording/VoiceRecorder.kt
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/recording/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/recording/VoiceRecorder.kt
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/recording/
 ```
 
 **§7 files:** none. `RECORD_AUDIO` is already in ENG-08's manifest.
@@ -471,10 +471,10 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-14 · Android pickers, URI grants (media access), permissions (and-m4-services)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/platform/MediaPicker.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/platform/MediaAccess.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/platform/Permissions.kt
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/platform/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/platform/MediaPicker.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/platform/MediaAccess.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/platform/Permissions.kt
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/platform/
 ```
 
 **§7 files:** none.
@@ -490,8 +490,8 @@ All of this is emulator-verifiable.
 ### AND-15 · Android external drop target (and-m4-services)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/platform/DropTarget.kt
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/drop/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/platform/DropTarget.kt
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/drop/
 ```
 
 **§7 files:** none.
@@ -505,13 +505,13 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-11 · Android export (and-m4-export)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/ExportCoordinator.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/TransformerExport.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/EncoderSettings.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/HardwareEncoderSelector.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/ActiveExportStore.kt
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/export/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/export/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/export/ExportCoordinator.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/export/TransformerExport.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/export/EncoderSettings.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/export/HardwareEncoderSelector.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/export/ActiveExportStore.kt
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/export/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/export/
 ```
 
 **§7 files:** none.
@@ -533,13 +533,13 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-12 · Android export foreground service, notification, background guard, MediaStore, file handoff (and-m5)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/ExportService.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/ExportNotification.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/platform/BackgroundGuard.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/platform/MediaStoreSaver.kt
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/platform/FileHandoff.kt
-packages/vwish_editor_engine/android/src/main/res/drawable/vwish_export_notification.xml
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/service/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/export/ExportService.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/export/ExportNotification.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/platform/BackgroundGuard.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/platform/MediaStoreSaver.kt
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/platform/FileHandoff.kt
+packages/danaview_editor_engine/android/src/main/res/drawable/danaview_export_notification.xml
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/service/
 ```
 
 **§7 files:** none. The `ExportService` and `FileProvider` entries live in ENG-08's frozen manifest. If they are wrong, report a defect; do not edit the manifest.
@@ -556,15 +556,15 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-18 · Android render-preview renderer and playback swap-in (and-m4-rpreview)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/render/
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/render/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/render/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/preview/render/
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/render/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/render/
 ```
 
 **§7 files:** none. It is called through `JobKindMsg.renderPreview`, `PreviewHostApi.setRenderedRanges` and the power signal (`powerState`), which the Mac's INT-06 ([INTEGRATION]) adds to the frozen Pigeon surface and glue (ARCH D-45, §12.6); AND-18 depends on INT-06 and starts only after it is merged. INT-06 leaves `notSupportedOnDevice` placeholders headed `// OWNER: AND-18` in `preview/render/` (the render-preview job service, the rendered-range handler and the power signal); replace them, keeping their names and signatures. Never edit Pigeon or glue files; a signature mismatch is a defect report against INT-06. Never edit AND-16's, AND-10's or AND-11's files: plug into AND-16's `RenderedRangeHook`.
 
 **Design:** ARCH D-45 and §13.3 'Over-budget layers and the render-preview cache'.
-- `RenderPreviewJob` (AND-05's job registry): a `Transformer` export of the range plan through AND-08's mapper at the preview canvas size and project fps into `<cache>/vwish/editor/renders/`, H.264 all-intra or ≤ 0.5 s GOP, video only; cancel deletes the partial file; thermal `SEVERE` pauses; never runs during an export.
+- `RenderPreviewJob` (AND-05's job registry): a `Transformer` export of the range plan through AND-08's mapper at the preview canvas size and project fps into `<cache>/danaview/editor/renders/`, H.264 all-intra or ≤ 0.5 s GOP, video only; cancel deletes the partial file; thermal `SEVERE` pauses; never runs during an export.
 - `RenderedRangeSwap`: during playback one deck plays the cached file in place of every slot of the range, pre-rolled like a standby deck, switched at the range's exact frame boundaries under the hold/miss rule. Paused, scrub and exact seek keep the normal decks. A patch touching a range drops it until the next `setRenderedRanges`.
 
 **Acceptance criteria:**
@@ -579,9 +579,9 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 ### AND-19 · Android multi-pass export precompose (and-m4-precomp)
 
 ```
-packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/precompose/
-packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/precompose/
-packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/precompose/
+packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/export/precompose/
+packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/precompose/
+packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/precompose/
 ```
 
 **§7 files:** none. Plug into AND-11's `MultiPassExport` hook; never edit AND-11's files (a missing hook is a FIX-AND-11 request).
@@ -615,16 +615,16 @@ Nothing else can start until ENG-06. Do not start AND tickets against the unfroz
 
 | Path | Who edits, in order | Rule for Windows |
 |---|---|---|
-| `packages/vwish_editor_engine/android/build.gradle.kts`, `android/lint.xml` | ENG-01 → **ENG-08 (Windows)** → ENG-06 (Mac), then frozen | Edit only in ENG-08. After that, every dependency, NDK, CMake or test-dependency need goes to the owner as a request for the Mac. |
-| `android/src/main/AndroidManifest.xml`, `.../engine/VwishEditorEnginePlugin.kt`, `.../engine/glue/` | ENG-01 → **ENG-08** → ENG-06 (glue amendments), then frozen → INT-06 (Mac, [INTEGRATION]: `renderPreview` job kind, `setRenderedRanges`, `powerState`) | Edit only in ENG-08. Service tickets implement the classes the glue already calls. A signature mismatch is a defect report, not an edit. |
+| `packages/danaview_editor_engine/android/build.gradle.kts`, `android/lint.xml` | ENG-01 → **ENG-08 (Windows)** → ENG-06 (Mac), then frozen | Edit only in ENG-08. After that, every dependency, NDK, CMake or test-dependency need goes to the owner as a request for the Mac. |
+| `android/src/main/AndroidManifest.xml`, `.../engine/DanaviewEditorEnginePlugin.kt`, `.../engine/glue/` | ENG-01 → **ENG-08** → ENG-06 (glue amendments), then frozen → INT-06 (Mac, [INTEGRATION]: `renderPreview` job kind, `setRenderedRanges`, `powerState`) | Edit only in ENG-08. Service tickets implement the classes the glue already calls. A signature mismatch is a defect report, not an edit. |
 | `pigeons/`, `lib/src/pigeon/`, `lib/src/mobile_editor_engine.dart`, `android/.../engine/pigeon/` | ENG-01 → ENG-06 (Mac only) | Read-only. Never regenerate. |
 | `ENG-08` placeholders (`// OWNER: AND-xx`) | ENG-08 creates them → ENG-06 may update them with Pigeon amendments → the AND ticket replaces them | Merge `origin/editor-wip` after ENG-06 before starting any AND ticket. |
-| `packages/vwish_editor_core/test/fixtures/vectors/frame_grid.json` | CORE-02 → ENG-06 (`androidSeekMsRounding` only) | Read-only (AND-08 and AND-10 read it). |
+| `packages/danaview_editor_core/test/fixtures/vectors/frame_grid.json` | CORE-02 → ENG-06 (`androidSeekMsRounding` only) | Read-only (AND-08 and AND-10 read it). |
 | `docs/editor/ARCHITECTURE.md` | INT-01 → ENG-06 → INT-05 (Mac) | Read-only. Put V-item answers in the commit body; the Mac records them. |
-| `packages/vwish_whisper/android/build.gradle.kts`, `.../src/main/AndroidManifest.xml` | AI-02 skeleton → AI-06 lines (Mac, done) → **AI-04** | Keep AI-06's `junit` and `ACCESS_NETWORK_STATE` lines (both are on `origin/editor-wip`). |
-| `packages/vwish_whisper/src/CMakeLists.txt` | AI-03 (Mac) | Read-only. AI-04 works through `src/cmake/android.cmake`. |
-| `packages/vwish_editor_engine/example/**`, `scripts/ci/editor/{android_unit,android_emulator}.sh` | ENG-09 (Mac) | Read-only. The one exception is AND-10's `example/integration_test/android_preview_test.dart`. |
-| `packages/vwish_editor_engine/test_fixtures/media/` | ENG-05 (Mac; generated with Swift and AVFoundation) | Read-only. Windows can't regenerate it. Ask the Mac for new shared fixtures, or generate ticket-local ones inside owned test directories. |
+| `packages/danaview_whisper/android/build.gradle.kts`, `.../src/main/AndroidManifest.xml` | AI-02 skeleton → AI-06 lines (Mac, done) → **AI-04** | Keep AI-06's `junit` and `ACCESS_NETWORK_STATE` lines (both are on `origin/editor-wip`). |
+| `packages/danaview_whisper/src/CMakeLists.txt` | AI-03 (Mac) | Read-only. AI-04 works through `src/cmake/android.cmake`. |
+| `packages/danaview_editor_engine/example/**`, `scripts/ci/editor/{android_unit,android_emulator}.sh` | ENG-09 (Mac) | Read-only. The one exception is AND-10's `example/integration_test/android_preview_test.dart`. |
+| `packages/danaview_editor_engine/test_fixtures/media/` | ENG-05 (Mac; generated with Swift and AVFoundation) | Read-only. Windows can't regenerate it. Ask the Mac for new shared fixtures, or generate ticket-local ones inside owned test directories. |
 | `android/src/main/cpp/` (AND-16's JNI shim) | unowned; ENG-06 decides | Don't create it until ENG-06 assigns it. |
 | `spikes/android_engine/`, `docs/editor/spikes/AND-01.md` | AND-01 (Mac, final reruns) | Read-only reference. |
 | Root `pubspec.yaml`, `lib/`, `android/app/**` | INT-02, INT-04, INT-05, CORE-28 (Mac) | Never commit. A local verification edit (owner item 5) must be reverted with `git restore`. |
@@ -638,7 +638,7 @@ Nothing else can start until ENG-06. Do not start AND tickets against the unfroz
    - the ticket's androidTest package on the API 35 emulator (plus API 29 or 34 where listed);
    - then the full `scripts/ci/editor/android_unit.sh` and `scripts/ci/editor/android_emulator.sh` (no regressions);
    - `lintDebug` clean;
-   - `bash scripts/ci/editor/flutter_packages.sh vwish_editor_engine` (or `vwish_whisper` for AI-04).
+   - `bash scripts/ci/editor/flutter_packages.sh danaview_editor_engine` (or `danaview_whisper` for AI-04).
 3. **Ownership.** Stage owned paths explicitly; never `git add -A`. After committing, `git show --name-only --format= HEAD` lists only paths from the ticket's owns in §5, or files whose header names the ticket. `git status --porcelain` shows no leftover edits to files you don't own.
 4. **Content.**
    - Media3 opt-in on every Media3 file.
@@ -661,9 +661,9 @@ export PATH="$ANDROID_HOME/platform-tools:$PATH"
 
 # Gate checks (read-only)
 git fetch origin
-git cat-file -e origin/editor-wip:packages/vwish_whisper/src/vw_whisper.cpp && echo "AI-03 present (AI-04 can start)"
-git cat-file -e origin/editor-wip:packages/vwish_editor_engine/example/android/vwish_test_harness.gradle && echo "ENG-09 present (ENG-08 can start)"
-git show origin/editor-wip:packages/vwish_editor_core/test/fixtures/vectors/frame_grid.json | grep androidSeekMsRounding
+git cat-file -e origin/editor-wip:packages/danaview_whisper/src/dv_whisper.cpp && echo "AI-03 present (AI-04 can start)"
+git cat-file -e origin/editor-wip:packages/danaview_editor_engine/example/android/danaview_test_harness.gradle && echo "ENG-09 present (ENG-08 can start)"
+git show origin/editor-wip:packages/danaview_editor_core/test/fixtures/vectors/frame_grid.json | grep androidSeekMsRounding
 #   null before ENG-06, "floor" after. Also wait for the owner's word.
 #   ENG-02, ENG-03, ENG-04, INT-06: the owner's word.
 
@@ -671,17 +671,17 @@ git show origin/editor-wip:packages/vwish_editor_core/test/fixtures/vectors/fram
 git switch editor-android && git merge --no-edit origin/editor-wip
 
 # Plugin tests (from the repo root)
-VWISH_ANDROID_APK_MODE=debug bash scripts/ci/editor/android_unit.sh   # APK build + all JVM tests
+DANAVIEW_ANDROID_APK_MODE=debug bash scripts/ci/editor/android_unit.sh   # APK build + all JVM tests
 bash scripts/ci/editor/android_emulator.sh                            # all instrumented tests + engine smoke test
-cd packages/vwish_editor_engine/example/android
-./gradlew :vwish_editor_engine:testDebugUnitTest --tests 'com.vecvel.vwish.editor.engine.thumbs.*'
-./gradlew :vwish_editor_engine:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.package=com.vecvel.vwish.editor.engine.thumbs
-./gradlew :vwish_editor_engine:lintDebug
+cd packages/danaview_editor_engine/example/android
+./gradlew :danaview_editor_engine:testDebugUnitTest --tests 'com.vecvel.danaview.editor.engine.thumbs.*'
+./gradlew :danaview_editor_engine:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.package=com.vecvel.danaview.editor.engine.thumbs
+./gradlew :danaview_editor_engine:lintDebug
 cd -
 
 # AND-10 integration test (serial from `adb devices`)
-cd packages/vwish_editor_engine/example && flutter test integration_test/android_preview_test.dart -d emulator-5554
+cd packages/danaview_editor_engine/example && flutter test integration_test/android_preview_test.dart -d emulator-5554
 
 # API 29 / API 34 / tablet runs (AND-02, AND-12, AND-15): one emulator at a time, under the workflow's lock
 emulator -list-avds              # Pixel_9_Pro_XL_API_35, Pixel_API_29, Pixel_API_34, Pixel_Tablet_API_35
@@ -716,4 +716,4 @@ Test packages per ticket:
 | AND-18 | `render` |
 | AND-19 | `precompose` |
 
-Each package is under `com.vecvel.vwish.editor.engine`.
+Each package is under `com.vecvel.danaview.editor.engine`.

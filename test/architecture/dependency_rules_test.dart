@@ -1,15 +1,15 @@
 // OWNER: INT-01
 //
 // Architecture rules for the editor packages (ARCH §4.2 rules 1–7) and the owner's "no Material
-// chrome" rule (ARCH §1.3) for the vwish_features files that editor tickets touch.
+// chrome" rule (ARCH §1.3) for the danaview_features files that editor tickets touch.
 //
 // * Every `packages/*/pubspec.yaml` is parsed (dependencies, dev_dependencies,
 //   dependency_overrides) and every Dart file of the package (excluding build output, hidden
 //   directories and nested packages such as `example/`) is scanned for `import`/`export` URIs.
-// * A rule whose package does not exist yet is skipped with a notice (vwish_editor arrives with
+// * A rule whose package does not exist yet is skipped with a notice (danaview_editor arrives with
 //   UX-01). Rule 8 (`UserConsent.accepted(`) belongs to UX-01's own architecture test.
 // * The Material scan matches the ARCH §1.3 names as whole identifiers in code only (comments and
-//   string literals are ignored), so `VwishTextField`, `VwishIconButton` and other kit wrappers
+//   string literals are ignored), so `DanaviewTextField`, `DanaviewIconButton` and other kit wrappers
 //   pass. The baseline is empty: these files have zero matches.
 // * Every rule is proven to fire by a negative fixture in `test/architecture/fixtures/`. Fixture
 //   trees mirror the repo layout with a `.fixture` suffix on every file, so neither the analyzer
@@ -40,7 +40,7 @@ void main() {
     }
   });
 
-  group('ARCH §1.3 forbidden Material names in editor-touched vwish_features files', () {
+  group('ARCH §1.3 forbidden Material names in editor-touched danaview_features files', () {
     test('every listed file that exists has zero matches (empty baseline)', () {
       final violations = materialRule.check(repo);
       expect(violations, isEmpty, reason: _describe(violations));
@@ -50,12 +50,12 @@ void main() {
       expect(editorTouchedFeatureFiles, hasLength(17));
       expect(editorTouchedFeatureFiles.toSet(), hasLength(17));
       for (final path in editorTouchedFeatureFiles) {
-        expect(path, startsWith('packages/vwish_features/lib/'));
+        expect(path, startsWith('packages/danaview_features/lib/'));
         expect(path, endsWith('.dart'));
       }
     });
 
-    test('the scanned list equals every vwish_features Dart file owned in BUILD_PLAN §6', () {
+    test('the scanned list equals every danaview_features Dart file owned in BUILD_PLAN §6', () {
       final plan = repo.readFile('docs/editor/BUILD_PLAN.md');
       expect(plan, isNotNull, reason: 'docs/editor/BUILD_PLAN.md is missing');
       final owned = featureFilesOwnedInPlan(plan!);
@@ -146,8 +146,8 @@ dependencies:
   meta: ^1.11.0
   # commented: ^1.0.0
   "quoted_pkg": any
-  vwish_editor_core:
-    path: ../vwish_editor_core
+  danaview_editor_core:
+    path: ../danaview_editor_core
 dev_dependencies:
   test: ^1.25.0
 dependency_overrides: {}
@@ -156,7 +156,7 @@ flutter:
 ''';
       final pubspec = Pubspec.parse(yaml);
       expect(pubspec.name, 'demo');
-      expect(pubspec.dependencies, <String>{'flutter', 'meta', 'quoted_pkg', 'vwish_editor_core'});
+      expect(pubspec.dependencies, <String>{'flutter', 'meta', 'quoted_pkg', 'danaview_editor_core'});
       expect(pubspec.devDependencies, <String>{'test'});
       expect(pubspec.overrides, isEmpty);
     });
@@ -167,42 +167,42 @@ flutter:
 // Rules
 // ---------------------------------------------------------------------------------------------
 
-/// Every package of the editor release (ARCH §4.1). vwish_features may depend on none of them.
+/// Every package of the editor release (ARCH §4.1). danaview_features may depend on none of them.
 const editorPackages = <String>{
-  'vwish_editor',
-  'vwish_editor_core',
-  'vwish_editor_engine_api',
-  'vwish_editor_engine',
-  'vwish_editor_fonts',
-  'vwish_transcription',
-  'vwish_whisper',
+  'danaview_editor',
+  'danaview_editor_core',
+  'danaview_editor_engine_api',
+  'danaview_editor_engine',
+  'danaview_editor_fonts',
+  'danaview_transcription',
+  'danaview_whisper',
 };
 
-/// The vwish_features files an editor ticket owns (BUILD_PLAN §6 owns lists of UX-02, UX-03,
+/// The danaview_features files an editor ticket owns (BUILD_PLAN §6 owns lists of UX-02, UX-03,
 /// UX-04, UX-41 and UX-42). Files that don't exist yet are skipped.
 const editorTouchedFeatureFiles = <String>[
   // UX-02
-  'packages/vwish_features/lib/src/player/vwish_player_actions.dart',
-  'packages/vwish_features/lib/src/player/screen_orientation_policy.dart',
-  'packages/vwish_features/lib/orientation.dart',
+  'packages/danaview_features/lib/src/player/danaview_player_actions.dart',
+  'packages/danaview_features/lib/src/player/screen_orientation_policy.dart',
+  'packages/danaview_features/lib/orientation.dart',
   // UX-03
-  'packages/vwish_features/lib/src/library/vwish_home_screen.dart',
-  'packages/vwish_features/lib/chrome.dart',
+  'packages/danaview_features/lib/src/library/danaview_home_screen.dart',
+  'packages/danaview_features/lib/chrome.dart',
   // UX-04
-  'packages/vwish_features/lib/src/tools/storage_usage.dart',
-  'packages/vwish_features/lib/src/tools/vwish_storage_screen.dart',
-  'packages/vwish_features/lib/src/more/vwish_settings_screen.dart',
-  'packages/vwish_features/lib/storage.dart',
+  'packages/danaview_features/lib/src/tools/storage_usage.dart',
+  'packages/danaview_features/lib/src/tools/danaview_storage_screen.dart',
+  'packages/danaview_features/lib/src/more/danaview_settings_screen.dart',
+  'packages/danaview_features/lib/storage.dart',
   // UX-41
-  'packages/vwish_features/lib/src/player/vwish_controls_overlay.dart',
-  'packages/vwish_features/lib/src/player/vwish_player_screen.dart',
-  'packages/vwish_features/lib/src/controllers/player_controller.dart',
-  'packages/vwish_features/lib/src/settings/vwish_settings_panel.dart',
+  'packages/danaview_features/lib/src/player/danaview_controls_overlay.dart',
+  'packages/danaview_features/lib/src/player/danaview_player_screen.dart',
+  'packages/danaview_features/lib/src/controllers/player_controller.dart',
+  'packages/danaview_features/lib/src/settings/danaview_settings_panel.dart',
   // UX-42
-  'packages/vwish_features/lib/src/more/legal_texts.dart',
-  'packages/vwish_features/lib/src/more/vwish_licenses_screen.dart',
-  'packages/vwish_features/lib/src/more/vwish_about_screen.dart',
-  'packages/vwish_features/lib/licenses.dart',
+  'packages/danaview_features/lib/src/more/legal_texts.dart',
+  'packages/danaview_features/lib/src/more/danaview_licenses_screen.dart',
+  'packages/danaview_features/lib/src/more/danaview_about_screen.dart',
+  'packages/danaview_features/lib/licenses.dart',
 ];
 
 /// ARCH §1.3 rule 1: Material chrome that editor surfaces must not use (whole identifiers).
@@ -225,15 +225,15 @@ const fixtureExpectations = <String, Set<String>>{
   'r1_features_dev_dependency_and_override': {'1'},
   'r1_features_imports_editor': {'1'},
   'r2_core_depends_on_flutter': {'2'},
-  'r2_core_imports_vwish_package': {'2'},
+  'r2_core_imports_danaview_package': {'2'},
   'r2_core_dart_io_outside_store': {'2'},
   'r2_core_imports_dart_ui_and_third_party': {'2'},
   'r3_engine_api_extra_dependency': {'3'},
   'r3_engine_api_imports_plugin': {'3'},
   'r4_engine_depends_on_editor': {'4'},
   'r4_engine_imports_transcription': {'4'},
-  'r5_whisper_depends_on_vwish': {'5'},
-  'r5_whisper_imports_vwish': {'5'},
+  'r5_whisper_depends_on_danaview': {'5'},
+  'r5_whisper_imports_danaview': {'5'},
   'r6_transcription_depends_on_engine_api': {'6'},
   'r6_transcription_widget_code': {'6'},
   'r6_transcription_widget_class_without_import': {'6'},
@@ -300,7 +300,7 @@ class MaterialRule {
       final code = blankNonCode(source, blankStrings: true);
       for (final m in pattern.allMatches(code)) {
         final line = '\n'.allMatches(code.substring(0, m.start)).length + 1;
-        out.add(Violation(id, '$path:$line', 'Material chrome `${m[1]}` (ARCH §1.3); use the Vwish kit component'));
+        out.add(Violation(id, '$path:$line', 'Material chrome `${m[1]}` (ARCH §1.3); use the Danaview kit component'));
       }
     }
     return out;
@@ -311,13 +311,13 @@ const materialRule = MaterialRule();
 
 /// ARCH §4.2 rules 1–7.
 final dependencyRules = <DependencyRule>[
-  DependencyRule('1', 'vwish_features', 'vwish_features depends on no editor package', (repo, pkg, report) {
-    _forbidPackages(pkg, editorPackages, report, why: 'vwish_features must not depend on editor packages');
+  DependencyRule('1', 'danaview_features', 'danaview_features depends on no editor package', (repo, pkg, report) {
+    _forbidPackages(pkg, editorPackages, report, why: 'danaview_features must not depend on editor packages');
   }),
   DependencyRule(
     '2',
-    'vwish_editor_core',
-    'vwish_editor_core is pure Dart (meta, collection, crypto, path, characters; dart:io/isolate only in lib/src/store/)',
+    'danaview_editor_core',
+    'danaview_editor_core is pure Dart (meta, collection, crypto, path, characters; dart:io/isolate only in lib/src/store/)',
     (repo, pkg, report) {
       const allowed = {'meta', 'collection', 'crypto', 'path', 'characters'};
       for (final dep in pkg.pubspec.dependencies) {
@@ -326,7 +326,7 @@ final dependencyRules = <DependencyRule>[
         }
       }
       for (final dep in {...pkg.pubspec.devDependencies, ...pkg.pubspec.overrides}) {
-        if (dep == 'flutter' || dep == 'flutter_test' || (dep.startsWith('vwish_') && dep != pkg.name)) {
+        if (dep == 'flutter' || dep == 'flutter_test' || (dep.startsWith('danaview_') && dep != pkg.name)) {
           report(pkg.pubspecPath, 'dev dependency `$dep` is not allowed in the pure core package');
         }
       }
@@ -336,9 +336,9 @@ final dependencyRules = <DependencyRule>[
         for (final uri in file.uris) {
           final p = packageOf(uri);
           if (uri == 'dart:ui' || p == 'flutter' || p == 'flutter_test' || p == 'sky_engine') {
-            report(file.repoPath, 'imports `$uri`: no Flutter in vwish_editor_core');
-          } else if (p != null && p.startsWith('vwish_') && p != pkg.name) {
-            report(file.repoPath, 'imports `$uri`: no vwish_* package in vwish_editor_core');
+            report(file.repoPath, 'imports `$uri`: no Flutter in danaview_editor_core');
+          } else if (p != null && p.startsWith('danaview_') && p != pkg.name) {
+            report(file.repoPath, 'imports `$uri`: no danaview_* package in danaview_editor_core');
           } else if (inLib && p != null && p != pkg.name && !allowed.contains(p)) {
             report(file.repoPath, 'imports `$uri`: lib/ may import only ${allowed.join(', ')}');
           } else if (inLib && !inStore && (uri == 'dart:io' || uri == 'dart:isolate')) {
@@ -350,11 +350,11 @@ final dependencyRules = <DependencyRule>[
   ),
   DependencyRule(
     '3',
-    'vwish_editor_engine_api',
-    'vwish_editor_engine_api depends only on flutter, meta, collection, vwish_editor_core',
+    'danaview_editor_engine_api',
+    'danaview_editor_engine_api depends only on flutter, meta, collection, danaview_editor_core',
     (repo, pkg, report) {
-      const allowed = {'flutter', 'meta', 'collection', 'vwish_editor_core'};
-      const forbidden = {'vwish_editor_engine', 'vwish_editor', 'vwish_transcription', 'vwish_features'};
+      const allowed = {'flutter', 'meta', 'collection', 'danaview_editor_core'};
+      const forbidden = {'danaview_editor_engine', 'danaview_editor', 'danaview_transcription', 'danaview_features'};
       for (final dep in pkg.pubspec.dependencies) {
         if (!allowed.contains(dep)) report(pkg.pubspecPath, 'dependency `$dep` is not one of ${allowed.join(', ')}');
       }
@@ -371,28 +371,28 @@ final dependencyRules = <DependencyRule>[
   ),
   DependencyRule(
     '4',
-    'vwish_editor_engine',
-    'vwish_editor_engine depends on vwish_editor_engine_api and vwish_editor_core only (no vwish_editor, features, transcription)',
+    'danaview_editor_engine',
+    'danaview_editor_engine depends on danaview_editor_engine_api and danaview_editor_core only (no danaview_editor, features, transcription)',
     (repo, pkg, report) {
-      const allowedVwish = {'vwish_editor_engine_api', 'vwish_editor_core'};
+      const allowedDanaview = {'danaview_editor_engine_api', 'danaview_editor_core'};
       _forbidPackages(
         pkg,
         null,
         report,
-        allowVwish: allowedVwish,
-        why: 'the plugin depends only on the engine API and core among vwish packages',
+        allowDanaview: allowedDanaview,
+        why: 'the plugin depends only on the engine API and core among danaview packages',
       );
     },
   ),
-  DependencyRule('5', 'vwish_whisper', 'vwish_whisper depends on no vwish_* package', (repo, pkg, report) {
-    _forbidPackages(pkg, null, report, allowVwish: const {}, why: 'vwish_whisper is standalone');
+  DependencyRule('5', 'danaview_whisper', 'danaview_whisper depends on no danaview_* package', (repo, pkg, report) {
+    _forbidPackages(pkg, null, report, allowDanaview: const {}, why: 'danaview_whisper is standalone');
   }),
   DependencyRule(
     '6',
-    'vwish_transcription',
-    'vwish_transcription never depends on the engine packages, vwish_editor or vwish_features; no widget code',
+    'danaview_transcription',
+    'danaview_transcription never depends on the engine packages, danaview_editor or danaview_features; no widget code',
     (repo, pkg, report) {
-      const forbidden = {'vwish_editor_engine', 'vwish_editor_engine_api', 'vwish_editor', 'vwish_features'};
+      const forbidden = {'danaview_editor_engine', 'danaview_editor_engine_api', 'danaview_editor', 'danaview_features'};
       _forbidPackages(pkg, forbidden, report, why: 'transcription is independent of the engine and the UI');
       const widgetLibraries = {
         'package:flutter/widgets.dart',
@@ -404,28 +404,28 @@ final dependencyRules = <DependencyRule>[
       );
       for (final file in pkg.dartFiles.where((f) => f.packagePath.startsWith('lib/'))) {
         for (final uri in file.uris.where(widgetLibraries.contains)) {
-          report(file.repoPath, 'imports `$uri`: no widget code in vwish_transcription');
+          report(file.repoPath, 'imports `$uri`: no widget code in danaview_transcription');
         }
         if (widgetClass.hasMatch(blankNonCode(file.source, blankStrings: true))) {
-          report(file.repoPath, 'declares a widget: no widget code in vwish_transcription');
+          report(file.repoPath, 'declares a widget: no widget code in danaview_transcription');
         }
       }
     },
   ),
   DependencyRule(
     '7',
-    'vwish_editor',
-    'vwish_editor never depends on the plugin; vwish_features only via chrome/orientation/storage.dart',
+    'danaview_editor',
+    'danaview_editor never depends on the plugin; danaview_features only via chrome/orientation/storage.dart',
     (repo, pkg, report) {
-      _forbidPackages(pkg, {'vwish_editor_engine'}, report, why: 'vwish_editor talks to the engine API only');
+      _forbidPackages(pkg, {'danaview_editor_engine'}, report, why: 'danaview_editor talks to the engine API only');
       const featureEntryPoints = {
-        'package:vwish_features/chrome.dart',
-        'package:vwish_features/orientation.dart',
-        'package:vwish_features/storage.dart',
+        'package:danaview_features/chrome.dart',
+        'package:danaview_features/orientation.dart',
+        'package:danaview_features/storage.dart',
       };
       for (final file in pkg.dartFiles) {
         for (final uri in file.uris) {
-          if (packageOf(uri) == 'vwish_features' && !featureEntryPoints.contains(uri)) {
+          if (packageOf(uri) == 'danaview_features' && !featureEntryPoints.contains(uri)) {
             report(file.repoPath, 'imports `$uri`: use ${featureEntryPoints.join(', ')}');
           }
         }
@@ -440,19 +440,19 @@ List<Violation> checkAll(RepoTree repo) => <Violation>[
       ...materialRule.check(repo),
     ];
 
-/// Reports manifest entries and imports naming a package in [forbidden], or (when [allowVwish] is
-/// given) any `vwish_*` package outside [allowVwish] and the package itself.
+/// Reports manifest entries and imports naming a package in [forbidden], or (when [allowDanaview] is
+/// given) any `danaview_*` package outside [allowDanaview] and the package itself.
 void _forbidPackages(
   PackageView pkg,
   Set<String>? forbidden,
   void Function(String location, String message) report, {
-  Set<String>? allowVwish,
+  Set<String>? allowDanaview,
   required String why,
 }) {
   bool bad(String name) {
     if (name == pkg.name) return false;
     if (forbidden != null && forbidden.contains(name)) return true;
-    if (allowVwish != null && name.startsWith('vwish_') && !allowVwish.contains(name)) return true;
+    if (allowDanaview != null && name.startsWith('danaview_') && !allowDanaview.contains(name)) return true;
     return false;
   }
 
@@ -474,12 +474,12 @@ void _forbidPackages(
   }
 }
 
-/// Every `packages/vwish_features/lib/**.dart` path listed under a ticket's **Owns** in the build
-/// plan, mapped to the owning ticket id (so a new editor ticket that touches vwish_features shows
+/// Every `packages/danaview_features/lib/**.dart` path listed under a ticket's **Owns** in the build
+/// plan, mapped to the owning ticket id (so a new editor ticket that touches danaview_features shows
 /// up as a drift in the scanned list).
 Map<String, String> featureFilesOwnedInPlan(String plan) {
   final heading = RegExp(r'^#### ([A-Z]+-\d+) ');
-  final ownedPath = RegExp(r'^\s+- `(packages/vwish_features/lib/[^`]+\.dart)`');
+  final ownedPath = RegExp(r'^\s+- `(packages/danaview_features/lib/[^`]+\.dart)`');
   final out = <String, String>{};
   String? ticket;
   var inOwns = false;
@@ -581,7 +581,7 @@ class PackageView {
 class DartFileView {
   DartFileView(this.repoPath, this.packagePath, this.source) : uris = directiveUris(source);
 
-  /// Path relative to the repo root, e.g. `packages/vwish_editor_core/lib/model.dart`.
+  /// Path relative to the repo root, e.g. `packages/danaview_editor_core/lib/model.dart`.
   final String repoPath;
 
   /// Path relative to the package root, e.g. `lib/model.dart`.

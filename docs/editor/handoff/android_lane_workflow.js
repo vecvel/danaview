@@ -1,6 +1,6 @@
 export const meta = {
   name: 'editor-android-lane',
-  description: 'Build the Vwish editor Android lane on the Windows laptop (ENG-08, AI-04, AND-02..AND-19) in dependency order, gated on Mac tickets merged from editor-wip, then one review and one fix pass',
+  description: 'Build the Danaview editor Android lane on the Windows laptop (ENG-08, AI-04, AND-02..AND-19) in dependency order, gated on Mac tickets merged from editor-wip, then one review and one fix pass',
   whenToUse: 'On the Windows laptop, on branch editor-android after merging origin/editor-wip. Args: {root, landed, preloaded}; see the comment block below the meta.',
   phases: [
     { title: 'Build', detail: 'Android lane ticket groups in dependency order; groups waiting on Mac tickets are skipped', model: 'opus' },
@@ -12,7 +12,7 @@ export const meta = {
 /*
  * ANDROID LANE WORKFLOW (Windows laptop)
  * ======================================
- * Builds the Android lane of the Vwish editor (docs/editor/BUILD_PLAN.md): ENG-08, AI-04 and
+ * Builds the Android lane of the Danaview editor (docs/editor/BUILD_PLAN.md): ENG-08, AI-04 and
  * AND-02..AND-19. One builder agent per ticket group, then one reviewer and one fixer. The Mac
  * keeps every other ticket. Lane plan: ANDROID_LANE.md. Windows setup and pitfalls:
  * WINDOWS_SETUP.md. Ticket status at hand-off time: BUILD_STATE.md (all in docs/editor/handoff/).
@@ -32,9 +32,9 @@ export const meta = {
  *
  * RUN
  *   Workflow({
- *     scriptPath: 'C:/dev/vwish_player/docs/editor/handoff/android_lane_workflow.js',
+ *     scriptPath: 'C:/dev/danaview_player/docs/editor/handoff/android_lane_workflow.js',
  *     args: {
- *       root: 'C:/dev/vwish_player',                     // required: repo root, forward slashes
+ *       root: 'C:/dev/danaview_player',                     // required: repo root, forward slashes
  *       landed: ['ENG-09', 'API-04'],                    // Mac tickets merged into this tree
  *       preloaded: {},                                   // finished groups, see RESUME
  *       // optional: only: ['ai-android'], maxParallel: 1, review: true
@@ -42,7 +42,7 @@ export const meta = {
  *   })
  *
  * ARGS
- *   root         Required. Absolute repo root on this machine, e.g. 'C:/dev/vwish_player'.
+ *   root         Required. Absolute repo root on this machine, e.g. 'C:/dev/danaview_player'.
  *   landed       Ticket ids merged into this working tree from editor-wip, plus owner tokens.
  *                ENG-09, API-04 and AI-03 are done and always counted. Gates still to come:
  *                ENG-06 (every AND group), ENG-02 (and-m3-preview), ENG-03 (and-m4-services) and
@@ -83,7 +83,7 @@ export const meta = {
  *   and-m5          AND-12                           and-m4-export                         (ENG-04)
  *   A gate in parentheses comes from a Windows dependency. Cross-machine order: ENG-08 (here) must
  *   land on editor-wip before the Mac's ENG-06, and ENG-06 must land here before any AND ticket.
- *   Builders share one emulator through a lock directory at <root>/build/vwish_locks/emulator
+ *   Builders share one emulator through a lock directory at <root>/build/danaview_locks/emulator
  *   (gitignored). Delete it if a killed run leaves it behind.
  *
  * AFTER A RUN (the lead does this; builder agents never change git state)
@@ -128,7 +128,7 @@ function parseMaybeJson(value, name) {
 
 const A = parseMaybeJson(args, '') || {}
 if (!A.root || typeof A.root !== 'string') {
-  throw new Error("android_lane_workflow: args.root is required (absolute repo root with forward slashes), e.g. Workflow({scriptPath: '<repo>/docs/editor/handoff/android_lane_workflow.js', args: {root: 'C:/dev/vwish_player', landed: ['ENG-09', 'API-04'], preloaded: {}}})")
+  throw new Error("android_lane_workflow: args.root is required (absolute repo root with forward slashes), e.g. Workflow({scriptPath: '<repo>/docs/editor/handoff/android_lane_workflow.js', args: {root: 'C:/dev/danaview_player', landed: ['ENG-09', 'API-04'], preloaded: {}}})")
 }
 const ROOT = A.root.replace(/\\/g, '/').replace(/\/+$/, '')
 
@@ -148,7 +148,7 @@ const ONLY = A.only ? new Set(toIdList(A.only, 'only')) : null
 const MAX_PARALLEL = Math.max(1, Math.min(4, Number.isFinite(Number(A.maxParallel)) && A.maxParallel ? Math.floor(Number(A.maxParallel)) : 1))
 const RUN_REVIEW = A.review !== false
 const RAW_PRELOADED = parseMaybeJson((A && A.preloaded) || {}, 'preloaded') || {}
-const LOCK = `${ROOT}/build/vwish_locks/emulator`
+const LOCK = `${ROOT}/build/danaview_locks/emulator`
 
 // ---------- tickets, ownership ----------
 
@@ -176,16 +176,16 @@ const TITLES = {
 }
 
 const OWNS_LEGEND = `Path prefixes:
-K/ = packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/
-T/ = packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/
-A/ = packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/
-E/ = packages/vwish_editor_engine/
+K/ = packages/danaview_editor_engine/android/src/main/kotlin/com/vecvel/danaview/editor/engine/
+T/ = packages/danaview_editor_engine/android/src/test/kotlin/com/vecvel/danaview/editor/engine/
+A/ = packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/
+E/ = packages/danaview_editor_engine/
 (a path ending in / is the whole directory)`
 
 // Summary of the BUILD_PLAN §6 owns lists (BUILD_PLAN wins if they differ).
 const OWNS = {
-  'ENG-08': ['E/android/build.gradle.kts', 'E/android/lint.xml', 'E/android/src/main/AndroidManifest.xml', 'E/android/src/main/res/xml/vwish_editor_file_paths.xml', 'K/VwishEditorEnginePlugin.kt', 'K/glue/', 'K/core/EngineContext.kt', 'K/core/ErrorCodes.kt', 'K/core/EventHub.kt', 'K/core/EngineThreads.kt', 'K/core/Paths.kt', 'T/glue/', '+ D-33 placeholders (header // OWNER: <ticket>) for every Android service file of ARCH §4.4'],
-  'AI-04': ['packages/vwish_whisper/android/build.gradle.kts', 'packages/vwish_whisper/android/src/main/AndroidManifest.xml', 'packages/vwish_whisper/src/cmake/android.cmake', 'packages/vwish_whisper/src/vw_exports.map', 'scripts/ci/editor/check_native_libs.sh'],
+  'ENG-08': ['E/android/build.gradle.kts', 'E/android/lint.xml', 'E/android/src/main/AndroidManifest.xml', 'E/android/src/main/res/xml/danaview_editor_file_paths.xml', 'K/DanaviewEditorEnginePlugin.kt', 'K/glue/', 'K/core/EngineContext.kt', 'K/core/ErrorCodes.kt', 'K/core/EventHub.kt', 'K/core/EngineThreads.kt', 'K/core/Paths.kt', 'T/glue/', '+ D-33 placeholders (header // OWNER: <ticket>) for every Android service file of ARCH §4.4'],
+  'AI-04': ['packages/danaview_whisper/android/build.gradle.kts', 'packages/danaview_whisper/android/src/main/AndroidManifest.xml', 'packages/danaview_whisper/src/cmake/android.cmake', 'packages/danaview_whisper/src/dv_exports.map', 'scripts/ci/editor/check_native_libs.sh'],
   'AND-02': ['K/media/Probe.kt', 'K/media/Compatibility.kt', 'K/core/DeviceProfile.kt', 'K/core/Capabilities.kt', 'T/probe/', 'A/probe/'],
   'AND-03': ['K/media/ThumbnailService.kt', 'K/media/DiskCache.kt', 'T/thumbs/', 'A/thumbs/'],
   'AND-04': ['K/media/PcmDecoder.kt', 'K/media/WaveformService.kt', 'K/media/SpeechAudioExtractor.kt', 'T/audio/', 'A/audio/'],
@@ -193,7 +193,7 @@ const OWNS = {
   'AND-06': ['K/media/FreezeFrameJob.kt', 'K/preview/SourceFrameCache.kt', 'T/freeze/', 'A/freeze/'],
   'AND-07': ['K/media/ReverseJob.kt', 'T/reverse/', 'A/reverse/'],
   'AND-08': ['K/plan/', 'K/composition/', 'T/composition/', 'A/composition/'],
-  'AND-09': ['K/effects/', 'E/android/src/main/assets/vwish_shaders/', 'T/effects/', 'A/effects/'],
+  'AND-09': ['K/effects/', 'E/android/src/main/assets/danaview_shaders/', 'T/effects/', 'A/effects/'],
   'AND-17': ['K/preview/PausedFrameRenderer.kt', 'K/preview/LayerCompositorGl.kt', 'K/preview/StructuralDebouncer.kt', 'A/paused/'],
   'AND-10': ['K/preview/PreviewSession.kt', 'K/preview/PreviewSessionManager.kt', 'K/preview/SurfaceBridge.kt', 'K/preview/SeekController.kt', 'K/preview/QualityGovernor.kt', 'A/preview/', 'E/example/integration_test/android_preview_test.dart'],
   'AND-16': ['K/preview/fallback/', 'A/fallback/'],
@@ -201,7 +201,7 @@ const OWNS = {
   'AND-13': ['K/recording/VoiceRecorder.kt', 'A/recording/'],
   'AND-14': ['K/platform/MediaPicker.kt', 'K/platform/MediaAccess.kt', 'K/platform/Permissions.kt', 'A/platform/'],
   'AND-15': ['K/platform/DropTarget.kt', 'A/drop/'],
-  'AND-12': ['K/export/ExportService.kt', 'K/export/ExportNotification.kt', 'K/platform/BackgroundGuard.kt', 'K/platform/MediaStoreSaver.kt', 'K/platform/FileHandoff.kt', 'E/android/src/main/res/drawable/vwish_export_notification.xml', 'A/service/'],
+  'AND-12': ['K/export/ExportService.kt', 'K/export/ExportNotification.kt', 'K/platform/BackgroundGuard.kt', 'K/platform/MediaStoreSaver.kt', 'K/platform/FileHandoff.kt', 'E/android/src/main/res/drawable/danaview_export_notification.xml', 'A/service/'],
   'AND-18': ['K/preview/render/', 'T/render/', 'A/render/'],
   'AND-19': ['K/export/precompose/', 'T/precompose/', 'A/precompose/'],
 }
@@ -213,7 +213,7 @@ function ownsText(tickets) {
 // ---------- context for every agent ----------
 
 const CONTEXT = `
-You are an engineer on Vwish Player (Flutter 3.44.2 / Dart 3.12 monorepo at ${ROOT}) working the ANDROID LANE on the owner's WINDOWS laptop (32 GB RAM, no Xcode). We are building a production video editor for iOS + Android per the FINAL docs:
+You are an engineer on Danaview Player (Flutter 3.44.2 / Dart 3.12 monorepo at ${ROOT}) working the ANDROID LANE on the owner's WINDOWS laptop (32 GB RAM, no Xcode). We are building a production video editor for iOS + Android per the FINAL docs:
 - ${ROOT}/docs/editor/ARCHITECTURE.md (source of truth; decisions D-1..D-45; D-43(e) signed off by the owner 2026-10-11, D-45 render-preview cache and multi-pass export; read only the sections your tickets cite)
 - ${ROOT}/docs/editor/BUILD_PLAN.md (§1 how to work a ticket, §2 ownership rules, §5 dependency index, §6 ticket bodies with acceptance criteria, §7 shared/integration file register)
 - ${ROOT}/docs/editor/spikes/AND-01.md (Android spike: verdict, measurements, what ENG-06 applies, rules carried into the AND tickets; read it before any AND ticket)
@@ -221,13 +221,13 @@ You are an engineer on Vwish Player (Flutter 3.44.2 / Dart 3.12 monorepo at ${RO
 
 SPLIT (decided by the owner; do not re-litigate): the build runs on two machines. The Mac keeps everything except the Android lane: all core/UI/UX/integration/QA tickets, all iOS tickets, ENG-01..07, ENG-09, ENG-02/03/04, ENG-06 (integration freeze), AI-05, IOS-01 and AND-01. This Windows laptop owns ONLY the Android lane: ENG-08, AI-04, AND-02..AND-19. Windows can never build or test iOS: never edit iOS/Swift/podspec files and never claim an iOS criterion. Cross-machine gates: ENG-08 (Windows) lands before ENG-06 (Mac); ENG-06 lands before AND-02..AND-19. Your group was started only after its Mac-side gates were merged into this working tree. If something you need from a Mac ticket is missing or wrong, report it in forMac and deferred as a defect against that ticket; never edit its files.
 
-GIT: the lane works on branch editor-android (from editor-wip, github.com/vecvel/vwish). Do NOT run state-changing git commands (no add, commit, stash, checkout/switch, reset, restore, merge, rebase, pull, push, clean, branch, tag, config). Read-only git (status, diff, log, show, ls-files) is fine. The lead commits each ticket after this run as 'feat(editor): <TICKET> <title>' with no co-author trailer, so report exact per-ticket file lists. Never create or commit secrets (android/key.properties, *.jks) or machine files (local.properties).
+GIT: the lane works on branch editor-android (from editor-wip, github.com/vecvel/danaview). Do NOT run state-changing git commands (no add, commit, stash, checkout/switch, reset, restore, merge, rebase, pull, push, clean, branch, tag, config). Read-only git (status, diff, log, show, ls-files) is fine. The lead commits each ticket after this run as 'feat(editor): <TICKET> <title>' with no co-author trailer, so report exact per-ticket file lists. Never create or commit secrets (android/key.properties, *.jks) or machine files (local.properties).
 
-OWNERSHIP: only create/edit files your tickets own (BUILD_PLAN §2 and the §6 owns lists) plus placeholders whose header says '// OWNER: <your ticket>' (replace the placeholder). The only §7 shared files the lane touches are ENG-08's own (build.gradle.kts, the manifest, the plugin class, glue/, lint.xml), and only inside ENG-08; every other §7 file is edited by Mac integration tickets. The Pigeon surface (packages/vwish_editor_engine/pigeons/, lib/src/pigeon/, android/.../pigeon/), the Kotlin glue (android/.../glue/), build.gradle.kts and lint.xml are frozen after ENG-06. Service tickets implement the service classes the glue already calls. Never run Pigeon generation and never change dependency versions (Media3 is pinned to 1.11.1; upgrading means rerunning AND-01). If a Pigeon/glue/Gradle/manifest change is truly needed, stop and report it in forMac as needing a lead-approved [INTEGRATION] ticket. When maxParallel > 1, other builders may be working in parallel in this same working tree on disjoint files and compiling the same Gradle module. If a build fails because of another ticket's half-written file, or Gradle reports a lock held by another build, wait a minute and retry; never edit their files.
+OWNERSHIP: only create/edit files your tickets own (BUILD_PLAN §2 and the §6 owns lists) plus placeholders whose header says '// OWNER: <your ticket>' (replace the placeholder). The only §7 shared files the lane touches are ENG-08's own (build.gradle.kts, the manifest, the plugin class, glue/, lint.xml), and only inside ENG-08; every other §7 file is edited by Mac integration tickets. The Pigeon surface (packages/danaview_editor_engine/pigeons/, lib/src/pigeon/, android/.../pigeon/), the Kotlin glue (android/.../glue/), build.gradle.kts and lint.xml are frozen after ENG-06. Service tickets implement the service classes the glue already calls. Never run Pigeon generation and never change dependency versions (Media3 is pinned to 1.11.1; upgrading means rerunning AND-01). If a Pigeon/glue/Gradle/manifest change is truly needed, stop and report it in forMac as needing a lead-approved [INTEGRATION] ticket. When maxParallel > 1, other builders may be working in parallel in this same working tree on disjoint files and compiling the same Gradle module. If a build fails because of another ticket's half-written file, or Gradle reports a lock held by another build, wait a minute and retry; never edit their files.
 
 RESUME RULE: always inspect what already exists for your tickets first (git status/diff, your owned paths, placeholders); an earlier attempt may have been cut off. Continue from there; never redo finished work.
 
-DOWNLOAD RULE: no internet downloads except normal package-manager resolution (pub, Gradle/Maven). Never download speech models, media or tools, and never install SDK components or software. Use fake HTTP servers and test fixtures. Reuse ENG-05's committed fixtures (packages/vwish_editor_engine/test_fixtures/, packed into the test APK by example/android/vwish_test_harness.gradle). Generate any new media locally with ffmpeg from PATH (not /opt/homebrew/bin/ffmpeg) or MediaCodec, inside your owned test directories, and record its provenance. whisper.cpp v1.9.4 is vendored at packages/vwish_whisper/third_party/whisper.cpp; never modify vendored sources.
+DOWNLOAD RULE: no internet downloads except normal package-manager resolution (pub, Gradle/Maven). Never download speech models, media or tools, and never install SDK components or software. Use fake HTTP servers and test fixtures. Reuse ENG-05's committed fixtures (packages/danaview_editor_engine/test_fixtures/, packed into the test APK by example/android/danaview_test_harness.gradle). Generate any new media locally with ffmpeg from PATH (not /opt/homebrew/bin/ffmpeg) or MediaCodec, inside your owned test directories, and record its provenance. whisper.cpp v1.9.4 is vendored at packages/danaview_whisper/third_party/whisper.cpp; never modify vendored sources.
 
 DEVICE RULE: there is no physical Android device. Verification runs as JVM unit tests and on x86_64 emulators: Pixel_9_Pro_XL_API_35 (default), plus Pixel_API_29, Pixel_API_34 and Pixel_Tablet_API_35 where a criterion names API 29, API 34 or a tablet. Check which exist with 'emulator -list-avds'; only when a needed AVD is missing, mark that criterion 'deferred: <AVD> not installed'. Mark criteria that need a real device, a named device class (Pixel 7a, 4 GB, low/mid tier) or real-hardware performance 'deferred: no device available', with the reason. Never fake them. Report emulator measurements as emulator measurements, never as device numbers. A test that is skipped, @Ignore'd or asserts nothing is not a pass.
 
@@ -239,7 +239,7 @@ TIME RULE (BUILD_PLAN §1.7, ARCH §5, D-35): any code that turns a platform clo
 WINDOWS: your Bash tool runs Git Bash. Run the repo's .sh scripts with Git Bash (e.g. bash scripts/ci/editor/android_unit.sh). Use PowerShell (powershell -NoProfile -Command "...") for other Windows-native work: gradlew.bat, starting/stopping the emulator, process checks. Use forward slashes in paths (C:/Users/...; Git Bash also accepts /c/Users/...). Files keep LF line endings (.gitattributes: * text=auto eol=lf; only .bat/.cmd/.ps1 are CRLF). Never convert line endings and never write absolute local paths into committed files. Android SDK: $ANDROID_HOME (default C:/Users/<you>/AppData/Local/Android/Sdk). The CI scripts only probe macOS/Linux default SDK paths, so pass ANDROID_HOME on the command line if it is unset. NDKs 27.0.12077973 and 28.2.13676358 are under <sdk>/ndk/. CMake 3.22.1 and Ninja are under <sdk>/cmake/3.22.1/bin/ (cmake.exe, ninja.exe). llvm-readelf is under <ndk>/toolchains/llvm/prebuilt/windows-x86_64/bin/. JDK 21 is installed; keep the JVM 17 source/target pins. If a Windows-specific problem blocks you (path length, a file locked by a Gradle daemon, a missing tool), report the ticket as blocked with the exact error. Do not change system settings, the registry, PATH or the global git config.
 
 EMULATOR: one emulator at a time, default Pixel_9_Pro_XL_API_35. Up to ${MAX_PARALLEL} builder(s) run at once; serialize instrumented runs with the lock directory ${LOCK}:
-- Take the lock with mkdir -p "${ROOT}/build/vwish_locks" && mkdir "${LOCK}". mkdir is atomic. If it fails, another builder is testing: wait and retry.
+- Take the lock with mkdir -p "${ROOT}/build/danaview_locks" && mkdir "${LOCK}". mkdir is atomic. If it fails, another builder is testing: wait and retry.
 - Write your group id into "${LOCK}/owner" and touch that file before each long run. A lock whose owner file is untouched for 60 minutes is stale; remove it.
 - If adb devices shows no emulator, start the default one headless in the background: <sdk>/emulator/emulator.exe -avd Pixel_9_Pro_XL_API_35 -no-window -no-audio -no-boot-anim -no-snapshot-save. Wait for adb wait-for-device and getprop sys.boot_completed = 1.
 - For an API 29, API 34 or tablet run: while holding the lock, stop the running emulator (adb emu kill), boot the named AVD the same way, run the scoped tests with ANDROID_SERIAL set to its serial from adb devices, then stop it.
@@ -248,10 +248,10 @@ EMULATOR: one emulator at a time, default Pixel_9_Pro_XL_API_35. Up to ${MAX_PAR
 - Never run two emulators at once.
 
 VERIFICATION (every group; report the commands and their final result lines):
-- The engine builds through the example host (packages/vwish_editor_engine/example/android: gradlew.bat :vwish_editor_engine:assembleDebug, or flutter build apk --debug in the example).
-- JVM unit tests: :vwish_editor_engine:testDebugUnitTest. Scope them with --tests while iterating; run the full suite once at the end.
-- Lint (:vwish_editor_engine:lintDebug), which enforces the Media3 opt-in.
-- Instrumented tests on the emulator, under the lock: :vwish_editor_engine:connectedDebugAndroidTest scoped with -Pandroid.testInstrumentationRunnerArguments.package=com.vecvel.vwish.editor.engine.<topic>.
+- The engine builds through the example host (packages/danaview_editor_engine/example/android: gradlew.bat :danaview_editor_engine:assembleDebug, or flutter build apk --debug in the example).
+- JVM unit tests: :danaview_editor_engine:testDebugUnitTest. Scope them with --tests while iterating; run the full suite once at the end.
+- Lint (:danaview_editor_engine:lintDebug), which enforces the Media3 opt-in.
+- Instrumented tests on the emulator, under the lock: :danaview_editor_engine:connectedDebugAndroidTest scoped with -Pandroid.testInstrumentationRunnerArguments.package=com.vecvel.danaview.editor.engine.<topic>.
 - At the end of the group, once each: scripts/ci/editor/android_unit.sh and android_emulator.sh (the latter under the lock).
 - flutter analyze and flutter test for any Dart you touch.
 When done, every acceptance criterion of your tickets must be met or explicitly listed in deferred with the reason.
@@ -287,19 +287,19 @@ const RESULT_SCHEMA = {
 const GROUPS = [
   {
     id: 'eng08', tickets: ['ENG-08'], deps: [], external: ['ENG-09'], model: 'opus',
-    note: `Thin Kotlin glue for every host API against ENG-01's generated Pigeon Kotlin (Mac-owned, read only). Write the engine core: EngineContext, ErrorCodes, EventHub, EngineThreads (vwish-preview, vwish-gl, vwish-export, vwish-jobs, vwish-io) and Paths. Create D-33 placeholders for every Android service file of ARCH §4.4 (AND-02..AND-17, incl. preview/{PausedFrameRenderer,LayerCompositorGl,StructuralDebouncer} and an empty preview/fallback/ package) returning notSupportedOnDevice, each with the header '// OWNER: <ticket>'. Also build.gradle.kts and lint.xml per the ticket spec, and the plugin manifest per ARCH §20.4. ENG-01 left minimal placeholders in build.gradle.kts, AndroidManifest.xml and VwishEditorEnginePlugin.kt (§7 order ENG-01 -> ENG-08 -> ENG-06); replace them. build.gradle.kts freezes at ENG-06, so declare every dependency the lane will need now (BUILD_PLAN §2, ANDROID_LANE.md §5 ENG-08): androidTestImplementation androidx.test:rules (AND-13/AND-14 permission rules) and androidx.test.uiautomator:uiautomator (AND-12's UiAutomator criterion), plus anything else AND-02..AND-17 will need. List them with versions and V-N14 compatibility in handoff and forMac. Do not pre-apply the AND-01 changes in docs/editor/spikes/AND-01.md §6 (minSdk 29, JNI shim and externalNativeBuild, extra Media3 artifacts, Kotlin opt-in flag): ENG-06 applies them on the Mac, so keep the files easy to amend. The ENG-09 example host (packages/vwish_editor_engine/example) is the harness: capabilities() must round-trip on the emulator through it, and the example's manifest merge must be clean. Lint must fail on a negative fixture missing the opt-in (keep that fixture out of the shipped source set). ARCHITECTURE.md is ENG-06's file. Put the V-N14 outcome, the glue class list, the placeholder list and every Gradle/manifest fact ENG-06 needs in forMac and handoff.`,
+    note: `Thin Kotlin glue for every host API against ENG-01's generated Pigeon Kotlin (Mac-owned, read only). Write the engine core: EngineContext, ErrorCodes, EventHub, EngineThreads (danaview-preview, danaview-gl, danaview-export, danaview-jobs, danaview-io) and Paths. Create D-33 placeholders for every Android service file of ARCH §4.4 (AND-02..AND-17, incl. preview/{PausedFrameRenderer,LayerCompositorGl,StructuralDebouncer} and an empty preview/fallback/ package) returning notSupportedOnDevice, each with the header '// OWNER: <ticket>'. Also build.gradle.kts and lint.xml per the ticket spec, and the plugin manifest per ARCH §20.4. ENG-01 left minimal placeholders in build.gradle.kts, AndroidManifest.xml and DanaviewEditorEnginePlugin.kt (§7 order ENG-01 -> ENG-08 -> ENG-06); replace them. build.gradle.kts freezes at ENG-06, so declare every dependency the lane will need now (BUILD_PLAN §2, ANDROID_LANE.md §5 ENG-08): androidTestImplementation androidx.test:rules (AND-13/AND-14 permission rules) and androidx.test.uiautomator:uiautomator (AND-12's UiAutomator criterion), plus anything else AND-02..AND-17 will need. List them with versions and V-N14 compatibility in handoff and forMac. Do not pre-apply the AND-01 changes in docs/editor/spikes/AND-01.md §6 (minSdk 29, JNI shim and externalNativeBuild, extra Media3 artifacts, Kotlin opt-in flag): ENG-06 applies them on the Mac, so keep the files easy to amend. The ENG-09 example host (packages/danaview_editor_engine/example) is the harness: capabilities() must round-trip on the emulator through it, and the example's manifest merge must be clean. Lint must fail on a negative fixture missing the opt-in (keep that fixture out of the shipped source set). ARCHITECTURE.md is ENG-06's file. Put the V-N14 outcome, the glue class list, the placeholder list and every Gradle/manifest fact ENG-06 needs in forMac and handoff.`,
   },
   {
     id: 'ai-android', tickets: ['AI-04'], deps: [], external: [], model: 'opus',
-    note: `whisper Android native build (ai.md §4.3). AI-03 is DONE: its C shim, src/CMakeLists.txt and host tests in packages/vwish_whisper/src/ are read-only for you, as are the vendored whisper.cpp sources. Gradle externalNativeBuild with src/cmake/android.cmake produces:
-- libvwish_whisper.so: arm64-v8a armv8-a baseline, plus x86_64
-- libvwish_whisper_v82.so: arm64-v8a armv8.2-a+fp16+dotprod (AI-07's Dart loader picks it at runtime from getauxval(AT_HWCAP); record the exact names and selection facts in handoff)
-Build settings: c++_static; 16 KB page alignment (pass -Wl,-z,max-page-size=16384 explicitly so it also holds on NDK 27); only vw_* exported via vw_exports.map; no armeabi-v7a (owner default D-43); -O3; no OpenMP. Use the SDK CMake 3.22.1 (version = "3.22.1") with its Ninja, and the NDK the build pins (flutter.ndkVersion or an explicit ndkVersion), which must be one of the installed 27.0.12077973 / 28.2.13676358; do not install another. Answer V-A8 (is the SDK's CMake 3.22.1 sufficient) in handoff and forMac; ARCHITECTURE.md is not your file.
+    note: `whisper Android native build (ai.md §4.3). AI-03 is DONE: its C shim, src/CMakeLists.txt and host tests in packages/danaview_whisper/src/ are read-only for you, as are the vendored whisper.cpp sources. Gradle externalNativeBuild with src/cmake/android.cmake produces:
+- libdanaview_whisper.so: arm64-v8a armv8-a baseline, plus x86_64
+- libdanaview_whisper_v82.so: arm64-v8a armv8.2-a+fp16+dotprod (AI-07's Dart loader picks it at runtime from getauxval(AT_HWCAP); record the exact names and selection facts in handoff)
+Build settings: c++_static; 16 KB page alignment (pass -Wl,-z,max-page-size=16384 explicitly so it also holds on NDK 27); only dv_* exported via dv_exports.map; no armeabi-v7a (owner default D-43); -O3; no OpenMP. Use the SDK CMake 3.22.1 (version = "3.22.1") with its Ninja, and the NDK the build pins (flutter.ndkVersion or an explicit ndkVersion), which must be one of the installed 27.0.12077973 / 28.2.13676358; do not install another. Answer V-A8 (is the SDK's CMake 3.22.1 sufficient) in handoff and forMac; ARCHITECTURE.md is not your file.
 check_native_libs.sh follows the scripts/ci/editor/README.md script contract and must run in Git Bash on Windows, in bash 3.2 on macOS and on Linux CI:
 - Locate llvm-readelf under the NDK's toolchains/llvm/prebuilt/<windows-x86_64|darwin-x86_64|linux-x86_64>/bin (.exe on Windows).
 - Unpack the AAB/APK with a tool present on all three platforms, and document the choice.
-- Check: ABIs present, no armeabi-v7a whisper library, 16 KB LOAD alignment, exported symbols exactly vw_*, size <= 3 MB per .so.
-Prove it against an AAB you built. The root app first pulls in vwish_whisper at INT-02 (Mac, later; through vwish_editor -> vwish_transcription, BUILD_PLAN note 7). If no in-repo host includes the plugin yet, build a throwaway host outside the repo at a short path such as C:/dev/scratch/whisper_host that depends on packages/vwish_whisper by path, and record that the app-level check repeats at INT-02. Use debug signing, never the release keystore. Never add media_kit to any host: its Gradle script downloads libmpv jars from github.com, which the owner has not approved. Record the 'no libc++_shared conflict with media_kit' criterion as 'checked by the Mac in INT-02'. The root .gitignore does not cover .cxx/, so set externalNativeBuild { cmake { buildStagingDirectory } } in your build.gradle.kts to a folder under the module's build directory; no .cxx/ tree may appear in the repo. Native compiles are CPU-heavy: cap parallel jobs at 8.`,
+- Check: ABIs present, no armeabi-v7a whisper library, 16 KB LOAD alignment, exported symbols exactly dv_*, size <= 3 MB per .so.
+Prove it against an AAB you built. The root app first pulls in danaview_whisper at INT-02 (Mac, later; through danaview_editor -> danaview_transcription, BUILD_PLAN note 7). If no in-repo host includes the plugin yet, build a throwaway host outside the repo at a short path such as C:/dev/scratch/whisper_host that depends on packages/danaview_whisper by path, and record that the app-level check repeats at INT-02. Use debug signing, never the release keystore. Never add media_kit to any host: its Gradle script downloads libmpv jars from github.com, which the owner has not approved. Record the 'no libc++_shared conflict with media_kit' criterion as 'checked by the Mac in INT-02'. The root .gitignore does not cover .cxx/, so set externalNativeBuild { cmake { buildStagingDirectory } } in your build.gradle.kts to a folder under the module's build directory; no .cxx/ tree may appear in the repo. Native compiles are CPU-heavy: cap parallel jobs at 8.`,
   },
   {
     id: 'and-m2a', tickets: ['AND-02', 'AND-03', 'AND-04', 'AND-05'], deps: ['eng08'], external: ['ENG-06'], model: 'opus',
@@ -316,11 +316,11 @@ Prove it against an AAB you built. The root app first pulls in vwish_whisper at 
 - Clip starts use the rule-frame PTS (the ε mechanism AND-01 chose).
 - Items faster than 1x use EditedMediaItem.setFrameRate(gridFps).
 - setDurationUs is the full source duration.
-Anchor every item and gap boundary at P(k). Include z-order and gating unit tests. Contract fixtures and vectors come from packages/vwish_editor_core/test/fixtures (frame_grid.json incl. androidSeekMsRounding, grid_cuts_30fps.json, expected_active.json, packing and classification vectors), plus API-03's render-math vectors in packages/vwish_editor_engine_api. Read them; never edit them. Per-layer effect lists reference AND-09 classes; AND-09 may be built in parallel right now, so code against its ENG-08 placeholders/public names.`,
+Anchor every item and gap boundary at P(k). Include z-order and gating unit tests. Contract fixtures and vectors come from packages/danaview_editor_core/test/fixtures (frame_grid.json incl. androidSeekMsRounding, grid_cuts_30fps.json, expected_active.json, packing and classification vectors), plus API-03's render-math vectors in packages/danaview_editor_engine_api. Read them; never edit them. Per-layer effect lists reference AND-09 classes; AND-09 may be built in parallel right now, so code against its ENG-08 placeholders/public names.`,
   },
   {
     id: 'and-m3-text', tickets: ['AND-09'], deps: ['eng08'], external: ['ENG-06'], model: 'opus',
-    note: `GL effects in GLSL ES 1.00 per ARCH §13.3 'GL effects' and §11.6 math. Render-math vectors and parity goldens come from API-03, and the .vsprite codec from API-04 (both done, in packages/vwish_editor_engine_api, Mac-owned, read only). Expose a small ShaderPrograms API that AND-17's LayerCompositorGl, the PausedFrameRenderer and AND-16 reuse. Only the vwish-gl thread touches GL (assert it), and resources are released on effect release. Run the goldens on the API 35 emulator; its GPU path differs from devices. If a golden misses only because of emulator rendering, record the measured error and defer the device check; never loosen a tolerance silently. GL timer-query numbers from the emulator are emulator numbers; the 1080p <= 8 ms mid-device budget is deferred: no device available.`,
+    note: `GL effects in GLSL ES 1.00 per ARCH §13.3 'GL effects' and §11.6 math. Render-math vectors and parity goldens come from API-03, and the .vsprite codec from API-04 (both done, in packages/danaview_editor_engine_api, Mac-owned, read only). Expose a small ShaderPrograms API that AND-17's LayerCompositorGl, the PausedFrameRenderer and AND-16 reuse. Only the danaview-gl thread touches GL (assert it), and resources are released on effect release. Run the goldens on the API 35 emulator; its GPU path differs from devices. If a golden misses only because of emulator rendering, record the measured error and defer the device check; never loosen a tolerance silently. GL timer-query numbers from the emulator are emulator numbers; the 1080p <= 8 ms mid-device budget is deferred: no device available.`,
   },
   {
     id: 'and-m3-paused', tickets: ['AND-17'], deps: ['and-m3-render', 'and-m3-text', 'and-m2b'], external: [], model: 'opus',
@@ -350,7 +350,7 @@ Port from spikes/android_engine (ContingencyEngineProto.kt, ContingencyEngineTes
   },
   {
     id: 'and-m4-rpreview', tickets: ['AND-18'], deps: ['and-m3-fallback'], external: ['INT-06'], model: 'opus',
-    note: `Render-preview renderer and playback swap-in (owner decision 2026-10-11, ARCH D-45, §13.3 'Over-budget layers and the render-preview cache'; BUILD_PLAN AND-18). RenderPreviewJob registered with AND-05's job registry: a Transformer export of a range plan through AND-08's mapper (target export at the preview canvas size and project fps, same effects, gating and working space) into <cache>/vwish/editor/renders/, H.264 all-intra (I-frame interval 0) or <= 0.5 s, video only, hardware encoder first; progress, cancel deletes the partial file, thermal SEVERE pauses, never runs during an export. RenderedRangeSwap implements AND-16's RenderedRangeHook: during playback one deck plays the cached file in place of every slot of the range, pre-rolled like a standby deck and switched at the range's exact frame boundaries under the hold/miss rule; paused, scrub and exact seek keep the normal decks; a patch touching a range drops it until the next setRenderedRanges. The Pigeon/glue additions (JobKindMsg.renderPreview, PreviewHostApi.setRenderedRanges, the powerState signal) come from the Mac's INT-06 ([INTEGRATION], ARCH D-45, §12.6), which this group waits for: INT-06 leaves notSupportedOnDevice placeholders headed // OWNER: AND-18 in preview/render/ (render-preview job service, rendered-range handler, power signal); replace them keeping their names and signatures, never edit glue or Pigeon files, and report a signature mismatch in forMac as an INT-06 defect. Never edit AND-16's, AND-10's or AND-11's files. Tests in src/test/.../render/ and src/androidTest/.../render/: rendered range vs live (barcode exact, SSIM >= 0.99), 0 wrong frames across range boundaries at 24/30/60 fps, param patch inside a range falls back to live on the next frame, cancel and process death leave no partial file. Emulator numbers recorded; device numbers deferred: no device available.`,
+    note: `Render-preview renderer and playback swap-in (owner decision 2026-10-11, ARCH D-45, §13.3 'Over-budget layers and the render-preview cache'; BUILD_PLAN AND-18). RenderPreviewJob registered with AND-05's job registry: a Transformer export of a range plan through AND-08's mapper (target export at the preview canvas size and project fps, same effects, gating and working space) into <cache>/danaview/editor/renders/, H.264 all-intra (I-frame interval 0) or <= 0.5 s, video only, hardware encoder first; progress, cancel deletes the partial file, thermal SEVERE pauses, never runs during an export. RenderedRangeSwap implements AND-16's RenderedRangeHook: during playback one deck plays the cached file in place of every slot of the range, pre-rolled like a standby deck and switched at the range's exact frame boundaries under the hold/miss rule; paused, scrub and exact seek keep the normal decks; a patch touching a range drops it until the next setRenderedRanges. The Pigeon/glue additions (JobKindMsg.renderPreview, PreviewHostApi.setRenderedRanges, the powerState signal) come from the Mac's INT-06 ([INTEGRATION], ARCH D-45, §12.6), which this group waits for: INT-06 leaves notSupportedOnDevice placeholders headed // OWNER: AND-18 in preview/render/ (render-preview job service, rendered-range handler, power signal); replace them keeping their names and signatures, never edit glue or Pigeon files, and report a signature mismatch in forMac as an INT-06 defect. Never edit AND-16's, AND-10's or AND-11's files. Tests in src/test/.../render/ and src/androidTest/.../render/: rendered range vs live (barcode exact, SSIM >= 0.99), 0 wrong frames across range boundaries at 24/30/60 fps, param patch inside a range falls back to live on the next frame, cancel and process death leave no partial file. Emulator numbers recorded; device numbers deferred: no device available.`,
   },
   {
     id: 'and-m4-precomp', tickets: ['AND-19'], deps: ['and-m4-export'], external: [], model: 'opus',
@@ -358,7 +358,7 @@ Port from spikes/android_engine (ContingencyEngineProto.kt, ContingencyEngineTes
   },
   {
     id: 'and-m5', tickets: ['AND-12'], deps: ['and-m4-export'], external: [], model: 'opus',
-    note: `ExportService foreground service: type mediaProcessing on API 35+, dataSync on 29-34. It shows a determinate progress notification with a Cancel action that works with the activity destroyed; API 35 onTimeout -> interrupted. BackgroundGuard leases live in the same service. MediaStoreSaver uses RELATIVE_PATH Movies/Vwish and IS_PENDING. FileHandoff uses ACTION_CREATE_DOCUMENT and ACTION_SEND via the FileProvider '<applicationId>.vwish.editor.files' declared in ENG-08's manifest. Implement detached completion (D-39) with AND-11's ActiveExportStore. Check the FGS types on Pixel_9_Pro_XL_API_35, Pixel_API_34 and Pixel_API_29 per the EMULATOR rule; defer only an AVD that is missing. Run the swipe-from-recents case with UiAutomator on the emulator, and verify the gallery insert with a MediaStore query. If the emulator image has no Photos app, defer that visual check.`,
+    note: `ExportService foreground service: type mediaProcessing on API 35+, dataSync on 29-34. It shows a determinate progress notification with a Cancel action that works with the activity destroyed; API 35 onTimeout -> interrupted. BackgroundGuard leases live in the same service. MediaStoreSaver uses RELATIVE_PATH Movies/Danaview and IS_PENDING. FileHandoff uses ACTION_CREATE_DOCUMENT and ACTION_SEND via the FileProvider '<applicationId>.danaview.editor.files' declared in ENG-08's manifest. Implement detached completion (D-39) with AND-11's ActiveExportStore. Check the FGS types on Pixel_9_Pro_XL_API_35, Pixel_API_34 and Pixel_API_29 per the EMULATOR rule; defer only an AVD that is missing. Run the swipe-from-recents case with UiAutomator on the emulator, and verify the gallery insert with a MediaStore query. If the emulator image has no Photos app, defer that visual check.`,
   },
 ]
 
@@ -622,8 +622,8 @@ ${ownsText(ALL_LANE_TICKETS)}
 
 CHECK:
 - Kotlin/Media3 1.11.1 correctness: API use, @file:OptIn, Transformer/FrameExtractor/ExoPlayer/MediaCodec/MediaExtractorCompat lifecycles and release, frame grid D-35 (P(k) anchoring, frameIndexNearest, androidSeekMsRounding), AND-01's carried rules.
-- Threading and lifecycle: GL only on vwish-gl; no main-thread blocking beyond the 500 ms surface latch; HandlerThread/Looper teardown; leaked codecs, surfaces, EGL contexts or SurfaceTextures; cancellation and partial-file cleanup; activity/Flutter engine detach and reattach.
-- Contract drift against the Dart engine API (packages/vwish_editor_engine_api) and the frozen Pigeon surface (packages/vwish_editor_engine/pigeons/engine_api.dart and the generated Kotlin): field meanings, units, error codes, events.
+- Threading and lifecycle: GL only on danaview-gl; no main-thread blocking beyond the 500 ms surface latch; HandlerThread/Looper teardown; leaked codecs, surfaces, EGL contexts or SurfaceTextures; cancellation and partial-file cleanup; activity/Flutter engine detach and reattach.
+- Contract drift against the Dart engine API (packages/danaview_editor_engine_api) and the frozen Pigeon surface (packages/danaview_editor_engine/pigeons/engine_api.dart and the generated Kotlin): field meanings, units, error codes, events.
 - Missing or weak tests against each ticket's acceptance criteria, and anything faking a result: device runs or measurements that did not happen, emulator numbers reported as device numbers, skipped/@Ignore'd or assertion-free tests counted as green, criteria marked done that should be deferred.
 - Windows artefacts: CRLF in LF files, backslash or absolute local paths in committed files, local.properties or secrets.
 Re-run the Gradle build, the JVM tests, lint and, holding the emulator lock, the affected instrumented tests to confirm claims; stop the emulator afterwards if no lock exists. Report only real defects with evidence. Do not edit files.`, { label: 'review', phase: 'Review', schema: REVIEW_SCHEMA, model: 'opus' })
@@ -662,7 +662,7 @@ For each finding below:
 - Fix the real ones with minimal changes inside the owning lane tickets' files.
 - Skip the rest with a reason.
 - Findings in Mac-owned or frozen files are needs_mac: describe them in forMac and do not edit those files.
-Then rerun, all green: the Gradle build through the example host, the full :vwish_editor_engine:testDebugUnitTest, lint, and the affected instrumented tests on the emulator (under the lock; stop the emulator afterwards if no lock exists). Report each finding as fixed, skipped or needs_mac, with the files you changed.
+Then rerun, all green: the Gradle build through the example host, the full :danaview_editor_engine:testDebugUnitTest, lint, and the affected instrumented tests on the emulator (under the lock; stop the emulator afterwards if no lock exists). Report each finding as fixed, skipped or needs_mac, with the files you changed.
 Findings:
 ${findings.map((f, i) => `${i + 1}. [${f.severity}] ${f.ticket} ${f.file}: ${f.issue}\n   evidence: ${f.evidence}\n   fix: ${f.fix}`).join('\n')}`, { label: 'fix', phase: 'Fix', schema: FIX_SCHEMA, model: 'opus' }) : null
 

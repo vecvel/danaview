@@ -5,8 +5,8 @@
 # API 35 x86_64 through reactivecircus/android-emulator-runner):
 #
 #   1. the plugin's instrumented tests through the example's Gradle build:
-#      ./gradlew :vwish_editor_engine:connectedDebugAndroidTest. The example's
-#      vwish_test_harness.gradle packs the shared fixtures into the test APK's assets
+#      ./gradlew :danaview_editor_engine:connectedDebugAndroidTest. The example's
+#      danaview_test_harness.gradle packs the shared fixtures into the test APK's assets
 #      (fixtures/engine, fixtures/core, fixtures/engine_api; see TestFixtures.kt);
 #   2. integration_test/engine_smoke_test.dart of the example host on the same device.
 #
@@ -15,11 +15,11 @@
 #
 # Environment:
 #   ANDROID_SERIAL     the device to use (default: the only/first device `adb devices` lists)
-#   VWISH_GRADLE_ARGS  extra Gradle arguments (CI adds --no-daemon)
+#   DANAVIEW_GRADLE_ARGS  extra Gradle arguments (CI adds --no-daemon)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-EXAMPLE="$ROOT/packages/vwish_editor_engine/example"
+EXAMPLE="$ROOT/packages/danaview_editor_engine/example"
 
 GHA="${GITHUB_ACTIONS:-}"
 group() { if [ "$GHA" = true ]; then echo "::group::$1"; else echo "==> $1"; fi; }
@@ -57,15 +57,15 @@ endgroup
 
 declare -a GRADLE_ARGS=()
 if [ "$GHA" = true ]; then GRADLE_ARGS+=(--no-daemon); fi
-for a in ${VWISH_GRADLE_ARGS:-}; do GRADLE_ARGS+=("$a"); done
+for a in ${DANAVIEW_GRADLE_ARGS:-}; do GRADLE_ARGS+=("$a"); done
 
 group "flutter pub get + Gradle config (example)"
 (cd "$EXAMPLE" && flutter pub get && flutter build apk --debug --config-only)
 [ -x "$EXAMPLE/android/gradlew" ] || die "example/android/gradlew missing after flutter build apk --config-only"
 endgroup
 
-group "plugin instrumented tests (:vwish_editor_engine:connectedDebugAndroidTest)"
-(cd "$EXAMPLE/android" && ./gradlew "${GRADLE_ARGS[@]+"${GRADLE_ARGS[@]}"}" :vwish_editor_engine:connectedDebugAndroidTest)
+group "plugin instrumented tests (:danaview_editor_engine:connectedDebugAndroidTest)"
+(cd "$EXAMPLE/android" && ./gradlew "${GRADLE_ARGS[@]+"${GRADLE_ARGS[@]}"}" :danaview_editor_engine:connectedDebugAndroidTest)
 endgroup
 
 group "integration_test/engine_smoke_test.dart"

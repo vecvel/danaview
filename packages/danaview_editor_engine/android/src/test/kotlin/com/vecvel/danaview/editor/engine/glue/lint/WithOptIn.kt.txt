@@ -1,0 +1,23 @@
+@file:OptIn(UnstableApi::class, ExperimentalApi::class)
+// OWNER: ENG-08
+//
+// Lint positive control for MissingOptIn.kt.txt: the same unstable Media3 calls WITH the file-level
+// opt-in every Media3 file of the engine carries (ARCH §3.2), through androidx.annotation.OptIn:
+// lint does not accept the implicit kotlin.OptIn for androidx RequiresOptIn markers. The negative run
+//   ./gradlew :danaview_editor_engine:lintDebug -PdanaviewLintNegativeFixture=true
+// copies both files; its errors must all point at MissingOptIn.kt, none at WithOptIn.kt.
+
+package com.vecvel.danaview.editor.engine.lintfixture
+
+import androidx.annotation.OptIn
+import androidx.media3.common.util.ExperimentalApi
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
+import androidx.media3.effect.Presentation
+
+/** Calls unstable Media3 APIs with the opt-in. */
+class WithOptIn {
+    fun presentation(): Presentation = Presentation.createForHeight(540)
+
+    fun sdk(): Int = Util.SDK_INT
+}

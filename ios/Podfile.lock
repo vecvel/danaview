@@ -1,39 +1,39 @@
 PODS:
+  - danaview_editor_engine (1.1.0):
+    - Flutter
+  - danaview_whisper (1.1.0):
+    - Flutter
   - Flutter (1.0.0)
   - media_kit_libs_ios_video (1.0.4):
     - Flutter
   - media_kit_video (0.0.1):
     - Flutter
-  - vwish_editor_engine (1.1.0):
-    - Flutter
-  - vwish_whisper (1.1.0):
-    - Flutter
 
 DEPENDENCIES:
+  - danaview_editor_engine (from `.symlinks/plugins/danaview_editor_engine/ios`)
+  - danaview_whisper (from `.symlinks/plugins/danaview_whisper/ios`)
   - Flutter (from `Flutter`)
   - media_kit_libs_ios_video (from `.symlinks/plugins/media_kit_libs_ios_video/ios`)
   - media_kit_video (from `.symlinks/plugins/media_kit_video/ios`)
-  - vwish_editor_engine (from `.symlinks/plugins/vwish_editor_engine/ios`)
-  - vwish_whisper (from `.symlinks/plugins/vwish_whisper/ios`)
 
 EXTERNAL SOURCES:
+  danaview_editor_engine:
+    :path: ".symlinks/plugins/danaview_editor_engine/ios"
+  danaview_whisper:
+    :path: ".symlinks/plugins/danaview_whisper/ios"
   Flutter:
     :path: Flutter
   media_kit_libs_ios_video:
     :path: ".symlinks/plugins/media_kit_libs_ios_video/ios"
   media_kit_video:
     :path: ".symlinks/plugins/media_kit_video/ios"
-  vwish_editor_engine:
-    :path: ".symlinks/plugins/vwish_editor_engine/ios"
-  vwish_whisper:
-    :path: ".symlinks/plugins/vwish_whisper/ios"
 
 SPEC CHECKSUMS:
+  danaview_editor_engine: 1ad18f0cc056003d20e5a6f67ee29aa80009d5de
+  danaview_whisper: bf70bbab49c665b622873ed0c1cd8f8c83fe8c1a
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   media_kit_libs_ios_video: 5a18affdb97d1f5d466dc79988b13eff6c5e2854
   media_kit_video: 1746e198cb697d1ffb734b1d05ec429d1fcd1474
-  vwish_editor_engine: dad2fad14b374c3106dad58583818c2432b10875
-  vwish_whisper: 9352c2afbacc03057c2fcafd5887dd6ace2ae2fe
 
 PODFILE CHECKSUM: 836047a8e5f97a25b840d0f0e73a313b331c331a
 

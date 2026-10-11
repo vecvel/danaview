@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_domain/vwish_domain.dart';
-import 'package:vwish_engine/vwish_engine.dart';
-import 'package:vwish_features/vwish_features.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_engine/danaview_engine.dart';
+import 'package:danaview_features/danaview_features.dart';
 
 import 'library_test_utils.dart';
 
@@ -232,7 +232,7 @@ void main() {
 
   group('Sidecar subtitles', () {
     late Directory dir;
-    setUp(() => dir = Directory.systemTemp.createTempSync('vwish_subs'));
+    setUp(() => dir = Directory.systemTemp.createTempSync('danaview_subs'));
     tearDown(() => dir.deleteSync(recursive: true));
 
     test('only match the video name, in its folder and Subs folders, without duplicates', () async {

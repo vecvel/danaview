@@ -1,0 +1,6 @@
+name: danaview_features
+dependencies:
+  flutter:
+    sdk: flutter
+  danaview_ui_kit:
+    path: ../danaview_ui_kit

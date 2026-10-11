@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:vwish_editor/vwish_editor.dart';
-import 'package:vwish_features/vwish_features.dart';
+import 'package:danaview_editor/danaview_editor.dart';
+import 'package:danaview_features/danaview_features.dart';
 
 String folderLocation(String path) => '/folder?path=${Uri.encodeQueryComponent(path)}';
 
@@ -25,7 +25,7 @@ String editorLocation(ProjectId id, {TimeUs? initialPlayhead}) {
 /// Opens the Projects screen (Home edit button, Settings › Storage "Open projects").
 void openProjects(BuildContext context) => context.push(projectsLocation);
 
-/// Whether the editor is reachable: iOS/Android with `VWISH_EDITOR` (D-17, D-31) and wired by
+/// Whether the editor is reachable: iOS/Android with `DANAVIEW_EDITOR` (D-17, D-31) and wired by
 /// `EditorBootstrap` (a failed wiring hides it like an unsupported platform).
 bool editorReachable(BuildContext context) {
   if (!EditorAvailability.showsEntryPoints) return false;
@@ -46,19 +46,19 @@ void _back(BuildContext context) => context.canPop() ? context.pop() : context.g
 Widget _settingsPage(BuildContext context, SettingsDestination destination) {
   void back() => _back(context);
   return switch (destination) {
-    SettingsDestination.profile => VwishProfileScreen(onBack: back),
-    SettingsDestination.speedTest => VwishSpeedTestScreen(onBack: back),
-    SettingsDestination.streamCheck => VwishStreamCheckScreen(onBack: back, onOpenPlayer: () => context.push('/player')),
-    SettingsDestination.mediaInfo => VwishMediaInfoScreen(onBack: back),
-    SettingsDestination.dataUsage => VwishDataUsageScreen(onBack: back),
-    SettingsDestination.storage => VwishStorageScreen(onBack: back),
-    SettingsDestination.about => VwishAboutScreen(
+    SettingsDestination.profile => DanaviewProfileScreen(onBack: back),
+    SettingsDestination.speedTest => DanaviewSpeedTestScreen(onBack: back),
+    SettingsDestination.streamCheck => DanaviewStreamCheckScreen(onBack: back, onOpenPlayer: () => context.push('/player')),
+    SettingsDestination.mediaInfo => DanaviewMediaInfoScreen(onBack: back),
+    SettingsDestination.dataUsage => DanaviewDataUsageScreen(onBack: back),
+    SettingsDestination.storage => DanaviewStorageScreen(onBack: back),
+    SettingsDestination.about => DanaviewAboutScreen(
         onBack: back,
         onOpenPrivacy: () => context.push(settingsLocation(SettingsDestination.privacy)),
         onOpenTerms: () => context.push(settingsLocation(SettingsDestination.terms)),
       ),
-    SettingsDestination.privacy => VwishLegalScreen(document: LegalDocument.privacy, onBack: back),
-    SettingsDestination.terms => VwishLegalScreen(document: LegalDocument.terms, onBack: back),
+    SettingsDestination.privacy => DanaviewLegalScreen(document: LegalDocument.privacy, onBack: back),
+    SettingsDestination.terms => DanaviewLegalScreen(document: LegalDocument.terms, onBack: back),
   };
 }
 
@@ -71,7 +71,7 @@ GoRouter createAppRouter() => GoRouter(
         GoRoute(
           path: '/',
           name: 'home',
-          builder: (context, state) => VwishHomeScreen(
+          builder: (context, state) => DanaviewHomeScreen(
             onOpenPlayer: () => context.push('/player'),
             onOpenFolder: (path) => context.push(folderLocation(path)),
             onOpenPlaylist: (name) => context.push(playlistLocation(name)),
@@ -82,7 +82,7 @@ GoRouter createAppRouter() => GoRouter(
             GoRoute(
               path: 'settings',
               name: 'settings',
-              builder: (context, state) => VwishSettingsScreen(
+              builder: (context, state) => DanaviewSettingsScreen(
                 onBack: () => _back(context),
                 onNavigate: (destination) => context.push(settingsLocation(destination)),
                 onOpenEditorSettings: editorReachable(context) ? () => context.push(editorSettingsLocation) : null,
@@ -129,7 +129,7 @@ GoRouter createAppRouter() => GoRouter(
             GoRoute(
               path: 'player',
               name: 'player',
-              builder: (context, state) => VwishPlayerScreen(onBack: () => _back(context)),
+              builder: (context, state) => DanaviewPlayerScreen(onBack: () => _back(context)),
             ),
             GoRoute(
               path: 'folder',
@@ -137,7 +137,7 @@ GoRouter createAppRouter() => GoRouter(
               redirect: (context, state) => (state.uri.queryParameters['path'] ?? '').isEmpty ? '/' : null,
               builder: (context, state) {
                 final path = state.uri.queryParameters['path']!;
-                return VwishFolderScreen(
+                return DanaviewFolderScreen(
                   key: ValueKey(path),
                   path: path,
                   onBack: () => _back(context),
@@ -152,7 +152,7 @@ GoRouter createAppRouter() => GoRouter(
               name: 'playlist',
               builder: (context, state) {
                 final name = state.pathParameters['name']!;
-                return VwishPlaylistScreen(
+                return DanaviewPlaylistScreen(
                   key: ValueKey(name),
                   name: name,
                   onBack: () => _back(context),

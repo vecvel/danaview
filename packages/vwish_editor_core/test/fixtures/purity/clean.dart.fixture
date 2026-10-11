@@ -1,5 +1,0 @@
-// Positive fixture: pure imports pass.
-import 'dart:convert';
-import 'dart:typed_data';
-import 'package:collection/collection.dart';
-import 'package:vwish_editor_core/model.dart';

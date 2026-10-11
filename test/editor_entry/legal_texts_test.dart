@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_features/src/more/legal_texts.dart';
+import 'package:danaview_features/src/more/legal_texts.dart';
 
 Iterable<String> _allText(LegalDocumentText doc) sync* {
   yield doc.summary;

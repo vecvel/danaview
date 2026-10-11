@@ -1,7 +1,7 @@
 // OWNER: UX-04
 //
 // Settings › Storage contributors and the Settings "Video editor" row (ARCH §17.10, ux.md §4.8):
-// `vwish_features` renders storage owned by other packages through `StorageContributor` without
+// `danaview_features` renders storage owned by other packages through `StorageContributor` without
 // depending on them. Fake contributors stand in for the editor and speech ones.
 
 import 'dart:async';
@@ -10,9 +10,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_features/storage.dart';
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_features/storage.dart';
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../library_test_utils.dart';
 
@@ -115,7 +115,7 @@ _FakeContributor _cache({StorageContributorUsage usage = const StorageContributo
       icon: Icons.auto_awesome_motion_rounded,
       usage: usage,
       withClear: true,
-      owned: {'/cache/vwish/editor'},
+      owned: {'/cache/danaview/editor'},
     );
 
 Future<(LibraryTestEnv, _FakeStorage)> _pumpStorage(
@@ -129,7 +129,7 @@ Future<(LibraryTestEnv, _FakeStorage)> _pumpStorage(
   final storage = _FakeStorage();
   await tester.pumpWidget(libraryTestApp(
     env,
-    VwishStorageScreen(onBack: () {}),
+    DanaviewStorageScreen(onBack: () {}),
     textScale: s.textScale,
     overrides: [
       storageUsageServiceProvider.overrideWithValue(storage),
@@ -148,7 +148,7 @@ Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
 }
 
 Future<void> _finish(WidgetTester tester, LibraryTestEnv env) async {
-  VwishToast.dismiss();
+  DanaviewToast.dismiss();
   await tester.pumpWidget(const SizedBox());
   await env.dispose();
 }
@@ -308,7 +308,7 @@ void main() {
   group('StorageUsageService and contributor-owned folders', () {
     late Directory root;
 
-    setUp(() => root = Directory.systemTemp.createTempSync('vwish_storage_contributors_'));
+    setUp(() => root = Directory.systemTemp.createTempSync('danaview_storage_contributors_'));
     tearDown(() => root.deleteSync(recursive: true));
 
     File write(String rel, int bytes) {
@@ -321,14 +321,14 @@ void main() {
     test("owned folders are left out of the cache figure and survive the app's Clear cache", () async {
       final cache = Directory(joinPath([root.path, 'cache']))..createSync();
       final appTemp = write('cache/picked/movie.mp4', 1000);
-      final thumb = write('cache/vwish/editor/thumbs/a.jpg', 300);
-      final work = write('cache/vwish/editor/work/picks/x/clip.mov', 500);
-      final sibling = write('cache/vwish/other.bin', 70);
+      final thumb = write('cache/danaview/editor/thumbs/a.jpg', 300);
+      final work = write('cache/danaview/editor/work/picks/x/clip.mov', 500);
+      final sibling = write('cache/danaview/other.bin', 70);
       final service = StorageUsageService(
         deviceDirectory: () async => null,
         cacheDirectories: () async => [cache],
         excludedPaths: {
-          joinPath([cache.path, 'vwish', 'editor'])
+          joinPath([cache.path, 'danaview', 'editor'])
         },
       );
 
@@ -350,7 +350,7 @@ void main() {
         deviceDirectory: () async => null,
         cacheDirectories: () async => [cache],
         excludedPaths: {
-          joinPath([cache.path, 'vwish', 'editor'])
+          joinPath([cache.path, 'danaview', 'editor'])
         },
       );
       expect((await service.measure()).cache, const FolderUsage(files: 1, bytes: 10));
@@ -364,7 +364,7 @@ void main() {
       ]);
       addTearDown(container.dispose);
       addTearDown(env.dispose);
-      expect(container.read(storageUsageServiceProvider).excludedPaths, {'/cache/vwish/editor'});
+      expect(container.read(storageUsageServiceProvider).excludedPaths, {'/cache/danaview/editor'});
     });
   });
 
@@ -375,7 +375,7 @@ void main() {
       final env = await LibraryTestEnv.create();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishSettingsScreen(onBack: () {}, onNavigate: (_) {}, onOpenEditorSettings: onOpenEditorSettings),
+        DanaviewSettingsScreen(onBack: () {}, onNavigate: (_) {}, onOpenEditorSettings: onOpenEditorSettings),
         textScale: s.textScale,
       ));
       await pumpFrames(tester);

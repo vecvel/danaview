@@ -11,11 +11,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_domain/vwish_domain.dart';
-import 'package:vwish_engine/vwish_engine.dart';
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_engine/danaview_engine.dart';
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 const _local = MediaRef(id: '/videos/holiday.mp4', title: 'Holiday at the lake', pathOrUri: '/videos/holiday.mp4');
 const _remote = MediaRef(
@@ -64,7 +64,7 @@ Future<_Player> _pump(
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: VwishTheme.darkTheme,
+        theme: DanaviewTheme.darkTheme,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(textScale),
@@ -73,11 +73,11 @@ Future<_Player> _pump(
           ),
           child: child!,
         ),
-        home: VwishPlayerScreen(onBack: () {}, onEditVideo: withEdit ? requests.add : null),
+        home: DanaviewPlayerScreen(onBack: () {}, onEditVideo: withEdit ? requests.add : null),
       ),
     ),
   );
-  final container = ProviderScope.containerOf(tester.element(find.byType(VwishPlayerScreen)));
+  final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewPlayerScreen)));
   final player = _Player(engine, requests, container);
   // Phones have no desktop title bar; fullscreen hides it on the macOS test host as well.
   player.controller.toggleFullscreen().ignore();
@@ -97,7 +97,7 @@ Future<void> _settle(WidgetTester tester, {int frames = 6}) async {
 }
 
 Future<void> _finish(WidgetTester tester, _Player player) async {
-  VwishToast.dismiss();
+  DanaviewToast.dismiss();
   await tester.pumpWidget(const SizedBox());
   await player.engine.dispose();
 }
@@ -121,7 +121,7 @@ Future<void> _openShortcuts(WidgetTester tester) async {
   await tester.sendKeyEvent(LogicalKeyboardKey.comma);
   await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
   await _settle(tester);
-  final tile = find.descendant(of: find.byType(VwishSettingsPanel), matching: find.text('Keyboard Shortcuts'));
+  final tile = find.descendant(of: find.byType(DanaviewSettingsPanel), matching: find.text('Keyboard Shortcuts'));
   await tester.ensureVisible(tile);
   await _settle(tester, frames: 2);
   await tester.tap(tile);
@@ -133,7 +133,7 @@ void main() {
     testWidgets('local media with the callback: Edit is the first trailing top-bar button', (tester) async {
       final player = await _pump(tester);
       expect(find.byKey(_editKey), findsOneWidget);
-      final button = tester.widget<VwishIconButton>(find.byKey(_editKey));
+      final button = tester.widget<DanaviewIconButton>(find.byKey(_editKey));
       expect(button.icon, Icons.movie_edit);
       expect(button.iconSize, 20);
       expect(button.tooltip, 'Edit video (E)');
@@ -263,16 +263,16 @@ void main() {
     testWidgets('lists "E – Edit video" with the callback', (tester) async {
       final player = await _pump(tester, size: const Size(1280, 800));
       await _openShortcuts(tester);
-      final panel = find.byType(VwishSettingsPanel);
+      final panel = find.byType(DanaviewSettingsPanel);
       expect(find.descendant(of: panel, matching: find.text('Edit video')), findsOneWidget);
-      expect(find.descendant(of: panel, matching: find.widgetWithText(VwishBadge, 'E')), findsOneWidget);
+      expect(find.descendant(of: panel, matching: find.widgetWithText(DanaviewBadge, 'E')), findsOneWidget);
       await _finish(tester, player);
     });
 
     testWidgets('has no Edit line without the callback', (tester) async {
       final player = await _pump(tester, size: const Size(1280, 800), withEdit: false);
       await _openShortcuts(tester);
-      final panel = find.byType(VwishSettingsPanel);
+      final panel = find.byType(DanaviewSettingsPanel);
       expect(find.descendant(of: panel, matching: find.text('Open files')), findsOneWidget);
       expect(find.descendant(of: panel, matching: find.text('Edit video')), findsNothing);
       await _finish(tester, player);

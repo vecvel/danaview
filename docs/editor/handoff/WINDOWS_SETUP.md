@@ -145,23 +145,23 @@ git config --global core.longpaths true
 git config --global user.name  "<same as on the Mac>"
 git config --global user.email "<same as on the Mac>"
 mkdir -p /c/dev && cd /c/dev
-git clone --branch editor-wip https://github.com/vecvel/vwish.git vwish_player
-cd vwish_player
+git clone --branch editor-wip https://github.com/vecvel/danaview.git danaview_player
+cd danaview_player
 test -f .gitattributes && git status --short   # prints nothing
 git switch -c editor-android                   # if origin/editor-android exists already: git switch editor-android
 git push -u origin editor-android              # the first push opens a GitHub sign-in window; the owner signs in
 ```
 
 - Clone only after the Mac has pushed the hand-off commit. That commit adds `.gitattributes`, `docs/editor/handoff/` and `tool/handoff/`. If `test -f .gitattributes` fails, the clone is too early.
-- Keep the folder `C:\dev\vwish_player`. Claude's notes folder name comes from this path (A8).
+- Keep the folder `C:\dev\danaview_player`. Claude's notes folder name comes from this path (A8).
 - If `git status` shows modified files right after cloning, Git converted the line endings. Delete the folder, check the settings, and clone again (P2).
 
 ### A7. Signing files (USB, optional)
 
 Skip this unless you later want Windows release builds of the root app. Lane work doesn't need them. If you do, copy two files from the Mac:
 
-- `android/key.properties` to `C:\dev\vwish_player\android\key.properties`
-- `android/app/release.jks` to `C:\dev\vwish_player\android\app\release.jks`
+- `android/key.properties` to `C:\dev\danaview_player\android\key.properties`
+- `android/app/release.jks` to `C:\dev\danaview_player\android\app\release.jks`
 
 Then check that Git ignores them. `git check-ignore -v android/key.properties android/app/release.jks` must print two rules from `android/.gitignore`, and `git status --short` must stay empty.
 
@@ -171,19 +171,19 @@ Lane work doesn't need them: without them, release builds of the app use the deb
 
 ### A8. Claude's notes
 
-1. In the Claude app, open the Code tab, open `C:\dev\vwish_player` once, then close that session.
-2. In PowerShell, in `C:\dev\vwish_player`, run:
+1. In the Claude app, open the Code tab, open `C:\dev\danaview_player` once, then close that session.
+2. In PowerShell, in `C:\dev\danaview_player`, run:
    ```powershell
    powershell -ExecutionPolicy Bypass -File tool\handoff\install_claude_memory.ps1
    ```
-   The script copies `docs/editor/handoff/claude-memory/*.md` into `%USERPROFILE%\.claude\projects\C--dev-vwish-player\memory\`. The folder name is the repo path with every character that isn't a letter or digit replaced by `-`. Notes already in that folder are backed up first.
+   The script copies `docs/editor/handoff/claude-memory/*.md` into `%USERPROFILE%\.claude\projects\C--dev-danaview-player\memory\`. The folder name is the repo path with every character that isn't a letter or digit replaced by `-`. Notes already in that folder are backed up first.
 3. Start a new Code session in the same folder and paste the first message from README.md.
 
 If Claude reports that it can't find Git Bash, set the user variable `CLAUDE_CODE_GIT_BASH_PATH=C:\Program Files\Git\bin\bash.exe` and restart the app.
 
 ---
 
-## Part B: Smoke checks (Claude runs them in Git Bash from `/c/dev/vwish_player`)
+## Part B: Smoke checks (Claude runs them in Git Bash from `/c/dev/danaview_player`)
 
 Run them in order and stop at the first failure. Ask the owner before installing anything.
 
@@ -222,7 +222,7 @@ git status --short     # still nothing (see C4 "Generated files" if registrants 
 
 **B5. Pure Dart core**
 ```bash
-cd packages/vwish_editor_core
+cd packages/danaview_editor_core
 dart pub get
 dart run tool/gen_frame_vectors.dart --check     # exit 0: the LF fixture is byte-exact
 dart test -r failures-only test/time test/formats test/model test/eval test/plan test/ops test/validate test/session
@@ -233,15 +233,15 @@ If a `*_benchmark_test.dart` fails, rerun once (P14). If the only failures are g
 
 Then record the Windows baseline of the whole suite, outside the repo:
 ```bash
-dart test -r failures-only > ~/vwish_core_windows_baseline.txt 2>&1; tail -n 3 ~/vwish_core_windows_baseline.txt
+dart test -r failures-only > ~/danaview_core_windows_baseline.txt 2>&1; tail -n 3 ~/danaview_core_windows_baseline.txt
 cd ../..
 ```
 Failures in `test/store/**` and in the two `container_paths_test.dart` files are expected (P10). Report anything else. From now on, judge core runs against this baseline, not against "all green".
 
 **B6. Flutter packages**
 ```bash
-bash scripts/ci/editor/flutter_packages.sh vwish_editor_engine_api architecture   # summary: failed: none
-bash scripts/ci/editor/flutter_packages.sh vwish_editor_engine
+bash scripts/ci/editor/flutter_packages.sh danaview_editor_engine_api architecture   # summary: failed: none
+bash scripts/ci/editor/flutter_packages.sh danaview_editor_engine
 ```
 In the first run, a last-digit mismatch in `test/reference/regen_check_test.dart` would be P15, not a toolchain problem.
 In the second run, the only expected failure is `committed Pigeon output equals a fresh regeneration` (P11). Its ffmpeg tests (`test/testing/frame_barcode_test.dart`, `test/fixtures/fixtures_semantic_test.dart`) must run, not skip. A skip means `FFMPEG` or `FFPROBE` isn't set (P12).
@@ -257,9 +257,9 @@ This compiles the spike's C++ with NDK 28.2.13676358 and CMake 3.22.1. The first
 
 The spike has no `gradlew.bat` and no `local.properties` (it's git-ignored), so it needs Git Bash and `ANDROID_HOME` (P16).
 
-**B8. Example host and JVM tests** (the `android-unit` CI job; needs ENG-09's `packages/vwish_editor_engine/example/`)
+**B8. Example host and JVM tests** (the `android-unit` CI job; needs ENG-09's `packages/danaview_editor_engine/example/`)
 ```bash
-VWISH_ANDROID_APK_MODE=debug bash scripts/ci/editor/android_unit.sh   # android-unit: OK
+DANAVIEW_ANDROID_APK_MODE=debug bash scripts/ci/editor/android_unit.sh   # android-unit: OK
 ```
 
 **B9. Emulator and instrumented tests** (Claude: start the emulator in the background)
@@ -284,26 +284,26 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 
 **P1. Symlinks need Developer Mode.** Blocker.
 - **Symptom:** `flutter pub get` at the root stops with "Building with plugins requires symlink support. Please enable Developer Mode…". Core tests that create links fail with `ERROR_PRIVILEGE_NOT_HELD` (1314).
-- **Cause:** the root app has `windows/` and `linux/` folders and desktop plugins in `pubspec.yaml` (`window_manager`, `desktop_drop`, `file_selector`). Every `pub get` links these plugins into `windows/flutter/ephemeral/.plugin_symlinks` (flutter_tools `createPluginSymlinks`). Tests under `packages/vwish_editor_core/test/store/**` also call `Link.createSync`. Without admin rights, Windows only allows symlinks in Developer Mode.
+- **Cause:** the root app has `windows/` and `linux/` folders and desktop plugins in `pubspec.yaml` (`window_manager`, `desktop_drop`, `file_selector`). Every `pub get` links these plugins into `windows/flutter/ephemeral/.plugin_symlinks` (flutter_tools `createPluginSymlinks`). Tests under `packages/danaview_editor_core/test/store/**` also call `Link.createSync`. Without admin rights, Windows only allows symlinks in Developer Mode.
 - **Fix:** A4.1. Keep the Flutter SDK, the pub cache and the repo on the same NTFS drive. Otherwise Flutter fails with `ERROR_INVALID_FUNCTION`.
 
 **P2. CRLF line endings.** Blocker.
 - **Symptom:**
   - Scripts fail with `$'\r': command not found` or `set: pipefail\r: invalid option name`.
   - `./gradlew` fails with `/bin/sh^M: bad interpreter`.
-  - `gen_frame_vectors.dart --check`, the golden tests, the Pigeon check or the `kitchen_sink.vwproj` checksum fail.
+  - `gen_frame_vectors.dart --check`, the golden tests, the Pigeon check or the `kitchen_sink.dnproj` checksum fail.
   - `git status` shows hundreds of modified files.
 - **Cause:** Git for Windows can be set to `core.autocrlf=true`, which rewrites text files to CRLF. The repo needs exact LF bytes in:
-  - every `.sh` (`scripts/ci/editor/*.sh`, `spikes/android_engine/tool/*.sh`, `packages/vwish_whisper/tool/vendor_whisper.sh`) and `spikes/android_engine/gradlew`;
-  - `packages/vwish_editor_core/test/fixtures/vectors/` (string-compared by `tool/gen_frame_vectors.dart --check`);
-  - `packages/vwish_editor_core/test/plan/compile_lowering/goldens/`, `.../compile_visual/goldens/` and `test/ops/*/goldens/*.golden`;
-  - `packages/vwish_editor_core/test/codec/fixtures/kitchen_sink.vwproj` (its header carries `bodyBytes` and `bodySha256`);
-  - `packages/vwish_transcription/test/segmentation/goldens/`;
-  - the committed Pigeon output in `packages/vwish_editor_engine` (compared with a fresh run);
-  - `packages/vwish_whisper/third_party/whisper.cpp` (tree digest in `vendor_whisper.sh`);
+  - every `.sh` (`scripts/ci/editor/*.sh`, `spikes/android_engine/tool/*.sh`, `packages/danaview_whisper/tool/vendor_whisper.sh`) and `spikes/android_engine/gradlew`;
+  - `packages/danaview_editor_core/test/fixtures/vectors/` (string-compared by `tool/gen_frame_vectors.dart --check`);
+  - `packages/danaview_editor_core/test/plan/compile_lowering/goldens/`, `.../compile_visual/goldens/` and `test/ops/*/goldens/*.golden`;
+  - `packages/danaview_editor_core/test/codec/fixtures/kitchen_sink.dnproj` (its header carries `bodyBytes` and `bodySha256`);
+  - `packages/danaview_transcription/test/segmentation/goldens/`;
+  - the committed Pigeon output in `packages/danaview_editor_engine` (compared with a fresh run);
+  - `packages/danaview_whisper/third_party/whisper.cpp` (tree digest in `vendor_whisper.sh`);
   - `test/architecture/fixtures/`.
 
-  Some fixtures contain CR or CRLF on purpose and must never be converted: `packages/vwish_editor_core/test/fixtures/subtitles/` (`basic.srt`, `bom_utf8.srt`, `cp1252.srt`, `cr_only.srt`, `vtt_bom_crlf.vtt`, the UTF-16 files) and `test/fixtures/luts/adobe_identity_4.cube`.
+  Some fixtures contain CR or CRLF on purpose and must never be converted: `packages/danaview_editor_core/test/fixtures/subtitles/` (`basic.srt`, `bom_utf8.srt`, `cp1252.srt`, `cr_only.srt`, `vtt_bom_crlf.vtt`, the UTF-16 files) and `test/fixtures/luts/adobe_identity_4.cube`.
 - **Fix:** apply the A6 settings before cloning. `.gitattributes` adds `* text=auto eol=lf` and `-text` for `**/test/fixtures/**`, `**/test_fixtures/**`, `test/architecture/fixtures/**`, `*.golden`, `*.srt`, `*.vtt` and `*.cube`, plus binary rules. `*.ps1`, `*.bat` and `*.cmd` stay CRLF. With both in place, Windows checks out LF and can't commit CRLF.
 
   Goldens outside `test/fixtures/` stay text with `eol=lf`. They contain no CR, so normalisation leaves them byte-identical.
@@ -322,49 +322,49 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 
 **P4. Paths with spaces, non-ASCII letters, OneDrive or a second drive.** Blocker.
 - **Symptom:** Gradle, CMake or NDK path errors, native link errors, random "file in use" errors, or Flutter's `ERROR_INVALID_FUNCTION` when linking plugins.
-- **Cause:** NDK and CMake command lines break on unquoted spaces. AI-04's linker version script `packages/vwish_whisper/src/vw_exports.map` is one example. OneDrive syncs and locks `build/` folders. Flutter's plugin links need the same drive.
-- **Fix:** use `C:\dev\flutter` and `C:\dev\vwish_player`, keep the SDK path free of spaces, and do the A5 extra step if your user folder has a space or a non-English letter.
+- **Cause:** NDK and CMake command lines break on unquoted spaces. AI-04's linker version script `packages/danaview_whisper/src/dv_exports.map` is one example. OneDrive syncs and locks `build/` folders. Flutter's plugin links need the same drive.
+- **Fix:** use `C:\dev\flutter` and `C:\dev\danaview_player`, keep the SDK path free of spaces, and do the A5 extra step if your user folder has a space or a non-English letter.
 
 **P5. Long paths.** Risk.
 - **Symptom:** git reports "Filename too long". CMake warns or fails about object paths. aapt2 or `flutter clean` can't create or delete files.
-- **Cause:** Gradle intermediates get very deep. On the Mac, one file under `packages/vwish_editor_engine/example/build/vwish_editor_engine/.transforms/…/bundleLibRuntimeToDirDebug_global-synthetics/…` sits 360 characters below the repo root, and Windows' classic limit is 260 for the whole path. Java (Gradle, D8, Kotlin) handles long paths itself; native tools may not. The longest tracked path is 138 characters, so checkout itself is fine.
-- **Fix:** `core.longpaths true` (A6), LongPathsEnabled (A4.3) and the short root `C:\dev\vwish_player`. If a tool still fails, report the path. Don't move the repo deeper.
+- **Cause:** Gradle intermediates get very deep. On the Mac, one file under `packages/danaview_editor_engine/example/build/danaview_editor_engine/.transforms/…/bundleLibRuntimeToDirDebug_global-synthetics/…` sits 360 characters below the repo root, and Windows' classic limit is 260 for the whole path. Java (Gradle, D8, Kotlin) handles long paths itself; native tools may not. The longest tracked path is 138 characters, so checkout itself is fine.
+- **Fix:** `core.longpaths true` (A6), LongPathsEnabled (A4.3) and the short root `C:\dev\danaview_player`. If a tool still fails, report the path. Don't move the repo deeper.
 
 ### C2. Mac-only (hand these to the Mac)
 
 **P6. whisper host tests.**
 - `scripts/ci/editor/whisper_host.sh` (AI-03) needs a host C/C++ compiler and targets macOS and Linux:
-  - `packages/vwish_whisper/src/CMakeLists.txt` says "Host build (macOS / Linux, CPU only)" and uses `-fsanitize=…` and `Threads`;
+  - `packages/danaview_whisper/src/CMakeLists.txt` says "Host build (macOS / Linux, CPU only)" and uses `-fsanitize=…` and `Threads`;
   - the macOS leg runs Apple `leaks`.
 - Windows has no host compiler (the NDK's clang only targets Android), so the configure step fails even though `cmake` is on PATH.
-- For AI-04: keep changes inside AI-04's own files (`packages/vwish_whisper/android/build.gradle.kts`, `android/src/main/AndroidManifest.xml`, `src/cmake/android.cmake`, `src/vw_exports.map`, `scripts/ci/editor/check_native_libs.sh`). If a shim source `packages/vwish_whisper/src/vw_*` must change, ask the Mac to run `whisper_host.sh` before the merge.
+- For AI-04: keep changes inside AI-04's own files (`packages/danaview_whisper/android/build.gradle.kts`, `android/src/main/AndroidManifest.xml`, `src/cmake/android.cmake`, `src/dv_exports.map`, `scripts/ci/editor/check_native_libs.sh`). If a shim source `packages/danaview_whisper/src/dv_*` must change, ask the Mac to run `whisper_host.sh` before the merge.
 
-**P7. Engine media fixtures.** `packages/vwish_editor_engine/tool/make_fixtures.swift` (ENG-05) needs macOS: AVFoundation, Core Text and `say` (see `test_fixtures/media/README.md`). Use the committed files and never regenerate them on Windows. If a lane ticket needs new media, generate it locally with ffmpeg in Git Bash. No downloads.
+**P7. Engine media fixtures.** `packages/danaview_editor_engine/tool/make_fixtures.swift` (ENG-05) needs macOS: AVFoundation, Core Text and `say` (see `test_fixtures/media/README.md`). Use the committed files and never regenerate them on Windows. If a lane ticket needs new media, generate it locally with ffmpeg in Git Bash. No downloads.
 
 **P8. iOS.** Leave all of it to the Mac: `ios/`, `packages/*/ios/`, `scripts/ci/editor/ios.sh`, `check_ios_min_os.sh`, XCTest and CocoaPods.
 
-**P9. Re-vendoring whisper.cpp.** `packages/vwish_whisper/tool/vendor_whisper.sh` (AI-01) downloads the upstream tarball, even with `--check`. It would run in Git Bash, but the download rule keeps it on the Mac.
+**P9. Re-vendoring whisper.cpp.** `packages/danaview_whisper/tool/vendor_whisper.sh` (AI-01) downloads the upstream tarball, even with `--check`. It would run in Git Bash, but the download rule keeps it on the Mac.
 
 ### C3. Expected on Windows (not regressions)
 
-**P10. `vwish_editor_core` store tests fail.**
-- **Symptom:** failures under `packages/vwish_editor_core/test/store/**`, `test/store/repository/container_paths_test.dart` and `test/codec/container_paths_test.dart`. This also makes `scripts/ci/editor/core.sh` fail on Windows, so don't use it as a gate here.
+**P10. `danaview_editor_core` store tests fail.**
+- **Symptom:** failures under `packages/danaview_editor_core/test/store/**`, `test/store/repository/container_paths_test.dart` and `test/codec/container_paths_test.dart`. This also makes `scripts/ci/editor/core.sh` fail on Windows, so don't use it as a gate here.
 - **Cause:** the persistence layer ships only on iOS and Android and assumes POSIX:
   - `lib/src/store/store_fs.dart` maps POSIX errno values (`_eexist = 17`, 13, 28). Windows reports 80, 5 and 112, so `copyExclusive` throws instead of returning false.
-  - `lib/src/store/store_roots.dart` joins paths with the platform separator (`\`). The in-memory fake in `lib/testing.dart` uses `p.posix`, and tests assert POSIX strings such as `'/journal/'` and `'/vwish/editor/media/'` under roots like `/mem/…` and `/var/mobile/…`.
+  - `lib/src/store/store_roots.dart` joins paths with the platform separator (`\`). The in-memory fake in `lib/testing.dart` uses `p.posix`, and tests assert POSIX strings such as `'/journal/'` and `'/danaview/editor/media/'` under roots like `/mem/…` and `/var/mobile/…`.
   - The symlink tests need Developer Mode, and Windows treats file and directory links differently.
-- **Fix:** none on Windows. The CORE tickets belong to the Mac, so never edit core to make these pass. Compare against the B5 baseline. Any `packages/vwish_editor` widget test that uses the in-memory fake repository may fail the same way.
+- **Fix:** none on Windows. The CORE tickets belong to the Mac, so never edit core to make these pass. Compare against the B5 baseline. Any `packages/danaview_editor` widget test that uses the in-memory fake repository may fail the same way.
 
 **P11. The Pigeon regeneration test fails.**
-- **Cause:** `packages/vwish_editor_engine/test/glue/pigeon_regeneration_test.dart` runs `<flutter>/bin/dart`. On Windows that file is a bash script, so `Process.run` throws.
+- **Cause:** `packages/danaview_editor_engine/test/glue/pigeon_regeneration_test.dart` runs `<flutter>/bin/dart`. On Windows that file is a bash script, so `Process.run` throws.
 - **On Windows:** record it as expected and move on. Don't run Pigeon here: it writes straight into the generated files, which belong to ENG-01/ENG-06. The Mac and CI run this test.
 - **Mac follow-up:** the test's owner (ENG-01) could use `bin\dart.bat` with `runInShell: true`, or `bin/cache/dart-sdk/bin/dart.exe`, on Windows.
 
 **P12. Skipped tests.**
-- **ffmpeg tests:** `packages/vwish_editor_engine/test/fixtures/support/media_tools.dart` searches `/opt/homebrew/bin`, `/usr/local/bin` and `/usr/bin`, and splits PATH on `:` without adding `.exe`. Without `FFMPEG` and `FFPROBE` (A5), every ffmpeg test skips.
-- **ffigen:** `packages/vwish_whisper/test/abi/ffigen_regen_test.dart` skips because it runs `dart` (a `.bat` on Windows) and needs libclang. The Mac and Linux CI run it.
-- **Fallback fonts:** `packages/vwish_editor_engine_api/test/render_prep/support.dart` only knows macOS and Linux font paths, so those cases skip.
-- **macOS-only:** `packages/vwish_whisper/test/device/ios_profiler_host_test.dart` and the fixture regeneration group skip.
+- **ffmpeg tests:** `packages/danaview_editor_engine/test/fixtures/support/media_tools.dart` searches `/opt/homebrew/bin`, `/usr/local/bin` and `/usr/bin`, and splits PATH on `:` without adding `.exe`. Without `FFMPEG` and `FFPROBE` (A5), every ffmpeg test skips.
+- **ffigen:** `packages/danaview_whisper/test/abi/ffigen_regen_test.dart` skips because it runs `dart` (a `.bat` on Windows) and needs libclang. The Mac and Linux CI run it.
+- **Fallback fonts:** `packages/danaview_editor_engine_api/test/render_prep/support.dart` only knows macOS and Linux font paths, so those cases skip.
+- **macOS-only:** `packages/danaview_whisper/test/device/ios_profiler_host_test.dart` and the fixture regeneration group skip.
 
 **P13. This emulator isn't the Mac's, CI's or a phone.**
 - **ABI:** x86_64 here, arm64 on the Mac. AI-04's two arm64 libraries (`armv8-a` and `armv8.2-a+fp16+dotprod`) never load here; the x86_64 library does. Record arm64 runtime-selection checks as "deferred: no device available". (The Mac's arm64 AVD has no free `/data` space until the Mac clears it.)
@@ -373,20 +373,20 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 - **Spike APK:** the spike is arm64-only (`abiFilters += listOf("arm64-v8a")`), so its native code only works here through ARM translation, if at all.
 
 **P14. Timing tests are flaky under load.**
-- `*_benchmark_test.dart` files assert millisecond budgets. One example is `packages/vwish_editor_core/test/plan/diff/incremental_benchmark_test.dart`.
+- `*_benchmark_test.dart` files assert millisecond budgets. One example is `packages/danaview_editor_core/test/plan/diff/incremental_benchmark_test.dart`.
 - During this audit, the B5 subset failed 3 tests on the Mac once and passed on the rerun.
 - Defender scanning adds load. Rerun once before you treat a failure as real.
 
 **P15. Last-digit golden differences.** Risk.
-- **Cause:** plan goldens hold full-precision doubles and are compared as exact strings. Some of these values go through `dart:math` `sin`, `cos`, `exp` and `log` (`lib/src/plan/lowering_audio.dart`, `lowering_transitions.dart`, `lib/src/eval/speed_math.dart`), and the math library can round the last bit differently on Windows. The API-03 tool already allows for this in PNGs (`packages/vwish_editor_engine_api/tool/regen_goldens.dart`), but compares JSON and binaries byte for byte.
-- **Fix:** if a golden fails only in trailing digits, record it in the baseline and tell the Mac. Never run `VWISH_UPDATE_GOLDENS=1` or `regen_goldens.dart` on Windows.
+- **Cause:** plan goldens hold full-precision doubles and are compared as exact strings. Some of these values go through `dart:math` `sin`, `cos`, `exp` and `log` (`lib/src/plan/lowering_audio.dart`, `lowering_transitions.dart`, `lib/src/eval/speed_math.dart`), and the math library can round the last bit differently on Windows. The API-03 tool already allows for this in PNGs (`packages/danaview_editor_engine_api/tool/regen_goldens.dart`), but compares JSON and binaries byte for byte.
+- **Fix:** if a golden fails only in trailing digits, record it in the baseline and tell the Mac. Never run `DANAVIEW_UPDATE_GOLDENS=1` or `regen_goldens.dart` on Windows.
 
 **P16. The AND-01 spike tools assume the Mac.**
 - `spikes/android_engine/tool/gen_media.sh` defaults ffmpeg to `/opt/homebrew/bin/ffmpeg`. It ends with a `python3` check, and on Windows `python3` may be the Microsoft Store stub.
 - `spikes/android_engine/tool/run_spike.sh` defaults the SDK to `$HOME/Library/Android/sdk`. It also pulls `/sdcard/Android/data/…/results/.`, which Git Bash rewrites to `C:/Program Files/Git/sdcard/…`. The error is hidden (`>/dev/null 2>&1 || true`), so `results/` stays stale.
 - The spike belongs to the Mac (AND-01); on Windows, use it only for B7. If you ever run it, pull the results by hand from `spikes/android_engine`:
   ```bash
-  MSYS_NO_PATHCONV=1 adb pull /sdcard/Android/data/com.vecvel.vwish.spike.engine/files/results/. results/
+  MSYS_NO_PATHCONV=1 adb pull /sdcard/Android/data/com.vecvel.danaview.spike.engine/files/results/. results/
   ```
 
 ### C4. Working rules on Windows (for Claude)
@@ -408,8 +408,8 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 - **File locks.** If deleting `build/` or running `flutter clean` fails with "being used by another process", run `./gradlew --stop` in that Android project, close Android Studio, and retry.
 - **Line separator.**
   - Set Android Studio > Settings > Editor > Code Style > Line separator to "Unix and macOS (\n)".
-  - `.gitattributes` normalises commits, but some tests read the files in the working tree, such as `test/architecture/dependency_rules_test.dart` and `packages/vwish_editor_core/test/purity_test.dart`.
-- **Prefer the example host for Android checks.** The root app's Android build downloads libmpv jars from GitHub through the Gradle script of `media_kit_libs_android_video` 1.3.8 (MD5-checked; the Mac does the same). The example (`packages/vwish_editor_engine/example/pubspec.yaml`) has no media_kit.
+  - `.gitattributes` normalises commits, but some tests read the files in the working tree, such as `test/architecture/dependency_rules_test.dart` and `packages/danaview_editor_core/test/purity_test.dart`.
+- **Prefer the example host for Android checks.** The root app's Android build downloads libmpv jars from GitHub through the Gradle script of `media_kit_libs_android_video` 1.3.8 (MD5-checked; the Mac does the same). The example (`packages/danaview_editor_engine/example/pubspec.yaml`) has no media_kit.
 - **Java.** `android_unit.sh` says "install JDK 17" in its error text, but it only checks that `java` exists. JDK 21 is fine (see A2).
 
 ---
@@ -418,13 +418,13 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 
 | Area | Checked | Result |
 |---|---|---|
-| Symlinks in git | `git ls-tree -r origin/editor-wip` | three, iOS only: `packages/vwish_editor_engine/example/ios/TestFixtures/{core,engine,engine_api}`. Windows may check them out as small text files; never commit changes to them |
+| Symlinks in git | `git ls-tree -r origin/editor-wip` | three, iOS only: `packages/danaview_editor_engine/example/ios/TestFixtures/{core,engine,engine_api}`. Windows may check them out as small text files; never commit changes to them |
 | Names that clash on Windows | the whole tree, for case-only duplicates, `CON`/`NUL`/`AUX`/`COMn`/`LPTn`, and `<>:"\|?*` | none |
 | Longest tracked path | the whole tree | 138 characters (`test/architecture/fixtures/m_features_material_in_interpolation/…`) |
-| Files containing CR | tracked and new files | only `packages/vwish_editor_core/test/fixtures/{subtitles,luts}/…`, covered by `-text` |
+| Files containing CR | tracked and new files | only `packages/danaview_editor_core/test/fixtures/{subtitles,luts}/…`, covered by `-text` |
 | `.bat`/`.cmd`/`.ps1` | the whole tree | only `tool/handoff/install_claude_memory.ps1` (ASCII, CRLF by rule) |
-| Gradle setup | `android/`, `packages/vwish_editor_engine{,/example}/android`, `packages/vwish_whisper/android`, `spikes/android_engine` | AGP 9.0.1, Kotlin 2.3.20, Gradle wrapper 9.1.0, `compileSdk` 36. NDK is `flutter.ndkVersion` (28.2.13676358) or pinned 28.2 in the spike; CMake is pinned 3.22.1. `sdk.dir` comes from untracked `local.properties`: Flutter writes it for the app and the example, and the spike needs `ANDROID_HOME` |
-| Host tests that handle `\` correctly | `test/architecture/dependency_rules_test.dart`, `packages/vwish_editor_core/test/purity_test.dart`, `packages/vwish_whisper/test/abi/abi_contract_test.dart`, `packages/vwish_editor/test/architecture/arch_scan.dart`, `packages/vwish_transcription/lib/src/models_store/model_manifest.dart` | they normalise or reject `\` |
+| Gradle setup | `android/`, `packages/danaview_editor_engine{,/example}/android`, `packages/danaview_whisper/android`, `spikes/android_engine` | AGP 9.0.1, Kotlin 2.3.20, Gradle wrapper 9.1.0, `compileSdk` 36. NDK is `flutter.ndkVersion` (28.2.13676358) or pinned 28.2 in the spike; CMake is pinned 3.22.1. `sdk.dir` comes from untracked `local.properties`: Flutter writes it for the app and the example, and the spike needs `ANDROID_HOME` |
+| Host tests that handle `\` correctly | `test/architecture/dependency_rules_test.dart`, `packages/danaview_editor_core/test/purity_test.dart`, `packages/danaview_whisper/test/abi/abi_contract_test.dart`, `packages/danaview_editor/test/architecture/arch_scan.dart`, `packages/danaview_transcription/lib/src/models_store/model_manifest.dart` | they normalise or reject `\` |
 | Host tests that don't | see P10, P11, P12 | expected on Windows |
-| Test HTTP servers | `packages/vwish_transcription/test/models_store/support/fake_model_server.dart` | bind loopback only, so no firewall prompt |
+| Test HTTP servers | `packages/danaview_transcription/test/models_store/support/fake_model_server.dart` | bind loopback only, so no firewall prompt |
 | What ran | B5's core subset, on the Mac | green on rerun (P14). Nothing in this document has been run on Windows |

@@ -4,12 +4,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_domain/vwish_domain.dart';
-import 'package:vwish_engine/vwish_engine.dart';
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_platform/vwish_platform.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_engine/danaview_engine.dart';
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_platform/danaview_platform.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 const String _longTitle =
     'An Extraordinarily Long Episode Title That Keeps Going Well Past Any Reasonable Width '
@@ -67,7 +67,7 @@ Future<_Harness> _pumpPlayer(WidgetTester tester, _Surface surface, double textS
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: VwishTheme.darkTheme,
+        theme: DanaviewTheme.darkTheme,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(textScale),
@@ -76,7 +76,7 @@ Future<_Harness> _pumpPlayer(WidgetTester tester, _Surface surface, double textS
           ),
           child: child!,
         ),
-        home: VwishPlayerScreen(onBack: () => backCalls.add(1)),
+        home: DanaviewPlayerScreen(onBack: () => backCalls.add(1)),
       ),
     ),
   );
@@ -93,7 +93,7 @@ Future<void> _settle(WidgetTester tester, {int frames = 6}) async {
 }
 
 ProviderContainer _container(WidgetTester tester) =>
-    ProviderScope.containerOf(tester.element(find.byType(VwishPlayerScreen)));
+    ProviderScope.containerOf(tester.element(find.byType(DanaviewPlayerScreen)));
 
 Rect _safeRect(_Surface surface) => Rect.fromLTRB(
       surface.padding.left,
@@ -136,7 +136,7 @@ double _effectiveOpacity(WidgetTester tester, Finder finder) {
 /// What the controls sit on at global [y] when the video frame behind them is pure white.
 Color _backdropOverWhite(WidgetTester tester, double y) {
   final scrim = find.descendant(
-    of: find.byType(VwishControlsOverlay),
+    of: find.byType(DanaviewControlsOverlay),
     matching: find.byWidgetPredicate(
       (w) => w is DecoratedBox && w.decoration is BoxDecoration && (w.decoration as BoxDecoration).gradient != null,
     ),
@@ -157,7 +157,7 @@ Color _backdropOverWhite(WidgetTester tester, double y) {
 }
 
 double _worstContrast(WidgetTester tester, Color foreground, Rect rect) => [rect.top, rect.center.dy, rect.bottom]
-    .map((y) => VwishColors.contrastRatio(foreground, _backdropOverWhite(tester, y)))
+    .map((y) => DanaviewColors.contrastRatio(foreground, _backdropOverWhite(tester, y)))
     .reduce((a, b) => a < b ? a : b);
 
 PlayerSnapshot _endedSnapshot(Duration position) => PlayerSnapshot(
@@ -202,13 +202,13 @@ PlayerSnapshot _stressSnapshot() => const PlayerSnapshot(
 Future<void> _openSettingsCategories(WidgetTester tester, _Surface surface) async {
   const categories = ['Video', 'Color', 'Audio & Equalizer', 'Subtitles', 'Playback', 'Keyboard Shortcuts'];
   for (final category in categories) {
-    final tile = _inPanel(VwishSettingsPanel, find.text(category));
+    final tile = _inPanel(DanaviewSettingsPanel, find.text(category));
     await tester.ensureVisible(tile);
     await _settle(tester, frames: 2);
     await tester.tap(tile);
     await _settle(tester, frames: 4);
-    _expectWithin(tester, find.byType(VwishSettingsPanel), _safeRect(surface));
-    await tester.tap(_inPanel(VwishSettingsPanel, find.byIcon(Icons.arrow_back_ios_new_rounded)));
+    _expectWithin(tester, find.byType(DanaviewSettingsPanel), _safeRect(surface));
+    await tester.tap(_inPanel(DanaviewSettingsPanel, find.byIcon(Icons.arrow_back_ios_new_rounded)));
     await _settle(tester, frames: 4);
   }
 }
@@ -220,8 +220,8 @@ Future<void> _runFullFlow(WidgetTester tester, _Surface surface, double textScal
   expect(find.text('No Media Loaded'), findsOneWidget);
   expect(find.text('Open file'), findsOneWidget);
   // The same icon as Home's Open file action; the open-folder glyph is kept for folders.
-  expect(find.widgetWithIcon(VwishButton, Icons.video_file_rounded), findsOneWidget);
-  expect(find.byType(VwishSeekBar), findsNothing);
+  expect(find.widgetWithIcon(DanaviewButton, Icons.video_file_rounded), findsOneWidget);
+  expect(find.byType(DanaviewSeekBar), findsNothing);
 
   final container = _container(tester);
   final playerCtrl = container.read(playerControllerProvider.notifier);
@@ -232,13 +232,13 @@ Future<void> _runFullFlow(WidgetTester tester, _Surface surface, double textScal
   container.read(queueControllerProvider.notifier).playFrom(_queueItems(30));
   await _settle(tester);
   expect(find.text('No Media Loaded'), findsNothing);
-  expect(find.byType(VwishSeekBar), findsOneWidget);
+  expect(find.byType(DanaviewSeekBar), findsOneWidget);
   expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
   if (touch) expect(find.text('1. $_longTitle'), findsOneWidget);
 
   engine.emitMockSnapshot(_stressSnapshot());
   await _settle(tester);
-  expect(find.byType(VwishControlsOverlay), findsOneWidget);
+  expect(find.byType(DanaviewControlsOverlay), findsOneWidget);
   expect(find.byIcon(Icons.play_arrow_rounded), findsWidgets);
 
   final more = find.byIcon(Icons.more_horiz_rounded);
@@ -252,7 +252,7 @@ Future<void> _runFullFlow(WidgetTester tester, _Surface surface, double textScal
     await _settle(tester);
     expect(find.text('Volume'), findsNothing);
   } else {
-    expect(find.byType(VwishVolumeSlider), findsOneWidget);
+    expect(find.byType(DanaviewVolumeSlider), findsOneWidget);
   }
 
   final settingsButton = find.byIcon(Icons.settings_rounded);
@@ -264,12 +264,12 @@ Future<void> _runFullFlow(WidgetTester tester, _Surface surface, double textScal
     await _tapVisible(tester, find.text('Settings'));
   }
   await _settle(tester);
-  expect(find.byType(VwishSettingsPanel), findsOneWidget);
-  _expectWithin(tester, find.byType(VwishSettingsPanel), _safeRect(surface));
+  expect(find.byType(DanaviewSettingsPanel), findsOneWidget);
+  _expectWithin(tester, find.byType(DanaviewSettingsPanel), _safeRect(surface));
   await _openSettingsCategories(tester, surface);
-  await tester.tap(_inPanel(VwishSettingsPanel, find.byTooltip('Close')));
+  await tester.tap(_inPanel(DanaviewSettingsPanel, find.byTooltip('Close')));
   await _settle(tester);
-  expect(find.byType(VwishSettingsPanel), findsNothing);
+  expect(find.byType(DanaviewSettingsPanel), findsNothing);
 
   final queueButton = find.byIcon(Icons.playlist_play_rounded);
   if (queueButton.evaluate().isNotEmpty) {
@@ -280,31 +280,31 @@ Future<void> _runFullFlow(WidgetTester tester, _Surface surface, double textScal
     await _tapVisible(tester, find.text('Queue'));
   }
   await _settle(tester);
-  expect(find.byType(VwishQueueSheet), findsOneWidget);
-  _expectWithin(tester, find.byType(VwishQueueSheet), _safeRect(surface));
-  await tester.drag(_inPanel(VwishQueueSheet, find.byType(Scrollable)).first, const Offset(0, -400));
+  expect(find.byType(DanaviewQueueSheet), findsOneWidget);
+  _expectWithin(tester, find.byType(DanaviewQueueSheet), _safeRect(surface));
+  await tester.drag(_inPanel(DanaviewQueueSheet, find.byType(Scrollable)).first, const Offset(0, -400));
   await _settle(tester);
-  await tester.tap(_inPanel(VwishQueueSheet, find.byTooltip('Close')));
+  await tester.tap(_inPanel(DanaviewQueueSheet, find.byTooltip('Close')));
   await _settle(tester);
 
   await tester.tap(find.byIcon(Icons.info_outline_rounded));
   await _settle(tester);
   expect(find.text('Stats for Nerds'), findsOneWidget);
-  _expectWithin(tester, find.byType(VwishSurface).last, _safeRect(surface));
-  await tester.tap(_inPanel(VwishDiagnosticsOverlay, find.byIcon(Icons.close_rounded)));
+  _expectWithin(tester, find.byType(DanaviewSurface).last, _safeRect(surface));
+  await tester.tap(_inPanel(DanaviewDiagnosticsOverlay, find.byIcon(Icons.close_rounded)));
   await _settle(tester);
   expect(find.text('Stats for Nerds'), findsNothing);
 
   await tester.tap(find.byIcon(Icons.lock_open_rounded));
   await _settle(tester);
   expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
-  expect(find.byType(VwishSeekBar), findsNothing);
-  expect(find.descendant(of: find.byType(VwishControlsOverlay), matching: find.byType(Text)), findsNothing);
+  expect(find.byType(DanaviewSeekBar), findsNothing);
+  expect(find.descendant(of: find.byType(DanaviewControlsOverlay), matching: find.byType(Text)), findsNothing);
   expect(find.bySemanticsLabel('Unlock controls'), findsOneWidget);
   _expectWithin(tester, find.byIcon(Icons.lock_rounded), _safeRect(surface));
   await tester.tap(find.byIcon(Icons.lock_rounded));
   await _settle(tester);
-  expect(find.byType(VwishSeekBar), findsOneWidget);
+  expect(find.byType(DanaviewSeekBar), findsOneWidget);
 
   playerCtrl.play();
   await _settle(tester, frames: 2);
@@ -342,7 +342,7 @@ void main() {
       final harness = await _pumpPlayer(tester, const _Surface('wide', Size(1280, 800)), 1.0);
       _container(tester).read(queueControllerProvider.notifier).playFrom(_queueItems(3));
       await _settle(tester);
-      expect(find.byType(VwishVolumeSlider), findsOneWidget);
+      expect(find.byType(DanaviewVolumeSlider), findsOneWidget);
       expect(find.byIcon(Icons.fullscreen_rounded), findsOneWidget);
       expect(find.byIcon(Icons.more_horiz_rounded), findsNothing);
       expect(find.byIcon(Icons.skip_next_rounded), findsOneWidget);
@@ -410,7 +410,7 @@ void main() {
     await _settle(tester);
     expect(find.text(notice), findsOneWidget);
     expect(find.text(failure), findsNothing);
-    final toast = find.ancestor(of: find.text(notice), matching: find.byType(VwishSurface)).first;
+    final toast = find.ancestor(of: find.text(notice), matching: find.byType(DanaviewSurface)).first;
     expect(find.descendant(of: toast, matching: find.byIcon(Icons.info_rounded)), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
     await _settle(tester);
@@ -436,10 +436,10 @@ void main() {
         const message = "Couldn't find this video. It may have been moved or deleted.";
         harness.engine.emitMockError(const FileNotFound('/videos/missing.mkv'));
         await _settle(tester);
-        final toast = find.ancestor(of: find.text(message), matching: find.byType(VwishSurface)).first;
-        final controlsTop = tester.getRect(find.byType(VwishSeekBar)).top;
+        final toast = find.ancestor(of: find.text(message), matching: find.byType(DanaviewSurface)).first;
+        final controlsTop = tester.getRect(find.byType(DanaviewSeekBar)).top;
         expect(tester.getRect(toast).bottom, lessThanOrEqualTo(controlsTop));
-        VwishToast.dismiss();
+        DanaviewToast.dismiss();
         await harness.engine.dispose();
       });
     }
@@ -451,7 +451,7 @@ void main() {
     harness.engine.emitMockError(const GenericPlayerError('Failed to open the file'));
     await _settle(tester);
     expect(find.text(failure), findsOneWidget);
-    VwishToast.dismiss();
+    DanaviewToast.dismiss();
     await _settle(tester);
 
     harness.engine.open(MediaSource.file('/videos/a.mkv', title: 'a.mkv'));
@@ -472,10 +472,10 @@ void main() {
       const message = "Couldn't find this video. It may have been moved or deleted.";
       harness.engine.emitMockError(const FileNotFound('/videos/missing.mkv'));
       await _settle(tester);
-      final toast = tester.getRect(find.ancestor(of: find.text(message), matching: find.byType(VwishSurface)).first);
-      final centre = tester.getRect(find.byWidgetPredicate((w) => w is VwishIconButton && w.size == 64));
+      final toast = tester.getRect(find.ancestor(of: find.text(message), matching: find.byType(DanaviewSurface)).first);
+      final centre = tester.getRect(find.byWidgetPredicate((w) => w is DanaviewIconButton && w.size == 64));
       expect(toast.overlaps(centre), isFalse, reason: 'toast $toast vs centre button $centre');
-      VwishToast.dismiss();
+      DanaviewToast.dismiss();
       await harness.engine.dispose();
     });
   }
@@ -571,9 +571,9 @@ void main() {
     // Let the auto-hide start, then lock while the controls are fading out.
     await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(milliseconds: 100));
-    final lockButton = find.widgetWithIcon(VwishIconButton, Icons.lock_open_rounded);
+    final lockButton = find.widgetWithIcon(DanaviewIconButton, Icons.lock_open_rounded);
     expect(_effectiveOpacity(tester, lockButton), inExclusiveRange(0.0, 1.0));
-    tester.widget<VwishIconButton>(lockButton).onPressed!();
+    tester.widget<DanaviewIconButton>(lockButton).onPressed!();
     await tester.pump();
     expect(_effectiveOpacity(tester, lockedIcon), 1.0);
     await tester.pump(const Duration(milliseconds: 100));
@@ -637,10 +637,10 @@ void main() {
     await _settle(tester);
     await tester.tap(find.byTooltip('Settings'));
     await _settle(tester);
-    await tester.tap(_inPanel(VwishSettingsPanel, find.text('Playback')));
+    await tester.tap(_inPanel(DanaviewSettingsPanel, find.text('Playback')));
     await _settle(tester);
-    expect(_inPanel(VwishSettingsPanel, find.text('Double-tap to seek')), findsOneWidget);
-    await tester.tap(_inPanel(VwishSettingsPanel, find.text('15s')));
+    expect(_inPanel(DanaviewSettingsPanel, find.text('Double-tap to seek')), findsOneWidget);
+    await tester.tap(_inPanel(DanaviewSettingsPanel, find.text('15s')));
     await _settle(tester);
     final container = _container(tester);
     expect(container.read(doubleTapSeekProvider), 15);
@@ -661,7 +661,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
     MockStreamHandlerEventSink? device;
     var listening = false;
-    const channel = EventChannel('vwish/device_orientation');
+    const channel = EventChannel('danaview/device_orientation');
     messenger.setMockStreamHandler(
       channel,
       MockStreamHandler.inline(
@@ -777,24 +777,24 @@ void main() {
       await _settle(tester);
       await _container(tester).read(playerControllerProvider.notifier).pause();
       await _settle(tester);
-      final overlay = find.byType(VwishControlsOverlay);
+      final overlay = find.byType(DanaviewControlsOverlay);
       final height = surface.size.height;
       bool inBars(Rect r) => r.center.dy < height * 0.3 || r.center.dy > height * 0.7;
 
       final time = find.descendant(of: overlay, matching: find.textContaining(' / '));
-      expect(tester.widget<Text>(time).style!.color, VwishColors.textPrimary);
+      expect(tester.widget<Text>(time).style!.color, DanaviewColors.textPrimary);
       var checked = 0;
       for (final element in find.descendant(of: overlay, matching: find.byType(Text)).evaluate()) {
         final rect = tester.getRect(find.byWidget(element.widget));
         if (!inBars(rect)) continue;
-        final color = (element.widget as Text).style?.color ?? VwishColors.textPrimary;
+        final color = (element.widget as Text).style?.color ?? DanaviewColors.textPrimary;
         expect(_worstContrast(tester, color, rect), greaterThanOrEqualTo(4.5), reason: '${element.widget}');
         checked++;
       }
       for (final element in find.descendant(of: overlay, matching: find.byType(Icon)).evaluate()) {
         final rect = tester.getRect(find.byWidget(element.widget));
         if (!inBars(rect)) continue;
-        final color = (element.widget as Icon).color ?? VwishColors.textPrimary;
+        final color = (element.widget as Icon).color ?? DanaviewColors.textPrimary;
         expect(_worstContrast(tester, color, rect), greaterThanOrEqualTo(3), reason: '${element.widget}');
         checked++;
       }
@@ -810,7 +810,7 @@ void main() {
       final items = _queueItems(1);
       _container(tester).read(queueControllerProvider.notifier).playFrom(items);
       await _settle(tester);
-      final titleBar = find.byType(VwishTitleBar);
+      final titleBar = find.byType(DanaviewTitleBar);
       expect(find.descendant(of: titleBar, matching: find.text(items.single.title)), findsOneWidget);
       expect(find.descendant(of: titleBar, matching: find.byTooltip('Pin window on top (T)')), findsOneWidget);
 

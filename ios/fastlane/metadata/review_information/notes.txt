@@ -1,1 +1,1 @@
-Vwish is a local and network media player. No account or login credentials are required to review the app. You can test video playback by tapping 'Open link' on the home screen and entering a sample video stream or by selecting any local video file.
+Danaview is a local and network media player. No account or login credentials are required to review the app. You can test video playback by tapping 'Open link' on the home screen and entering a sample video stream or by selecting any local video file.

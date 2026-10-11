@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_data/vwish_data.dart';
+import 'package:danaview_data/danaview_data.dart';
 
 void main() {
   group('op_data Natural Sort & Episode Parser Tests', () {

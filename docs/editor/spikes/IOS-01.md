@@ -18,8 +18,8 @@ needs a real iPhone is listed as *deferred* below with what to run.
 | Item | Question | Outcome (simulator) | Device |
 |---|---|---|---|
 | V-N9 | `-fcikernel` metallib from a CocoaPods static-library target, loaded with `CIKernel(functionName:fromMetalLibraryData:)` | **Yes.** Loads and matches the CPU reference within 1/255 on iOS 26.5 and 18.2 (static-library linkage); `[[stitchable]]` alternative also works. Metallibs are **prebuilt** (Xcode 26 ships no Metal compiler). | Device *build* OK (arm64 iphoneos, unsigned, all 3 linkages, `tools/verify_pod_linkage.sh`); device *load* deferred: no device available |
-| V-N10 | Exact-seek ack 200/200 with a `vwish.frame` attachment | **200/200 acked, 0 content errors** on iOS 26.5 (half-res and 1080p) and iOS 18.2 (with the Metal-texture source path, §2.4). Final runs p50 11.6–14.0 ms, p95 17.2–21.6 ms, all ≤ 70 ms (earlier loaded runs up to p95 89 ms). | iPhone 7 / iOS 15.8: deferred (no lab device) |
-| V-N11 | iOS background GPU failure mode | **Simulator does not reproduce it** (measured, `VWSpikeBackground` on iOS 26.5): GPU export keeps running in the background with `backgroundTimeRemaining` = `Double.greatestFiniteMagnitude`, no encoder or Metal error, writer `.completed` (§2.6). | Deferred: real iPhone on iOS 18 and 26 (no device available) |
+| V-N10 | Exact-seek ack 200/200 with a `danaview.frame` attachment | **200/200 acked, 0 content errors** on iOS 26.5 (half-res and 1080p) and iOS 18.2 (with the Metal-texture source path, §2.4). Final runs p50 11.6–14.0 ms, p95 17.2–21.6 ms, all ≤ 70 ms (earlier loaded runs up to p95 89 ms). | iPhone 7 / iOS 15.8: deferred (no lab device) |
+| V-N11 | iOS background GPU failure mode | **Simulator does not reproduce it** (measured, `DVSpikeBackground` on iOS 26.5): GPU export keeps running in the background with `backgroundTimeRemaining` = `Double.greatestFiniteMagnitude`, no encoder or Metal error, writer `.completed` (§2.6). | Deferred: real iPhone on iOS 18 and 26 (no device available) |
 | V-N20 | Export backgrounded > 30 s: encoder error, writer status, segmented resume, `BGTaskScheduler.supportedResources.contains(.gpu)` | Segmented writer interrupt + resume + passthrough concat proven frame-exact (XCTest 90/90, SPS/PPS shared; UI test: interrupted on `didEnterBackground`, resumed on return, 1200/1200 frames). Simulator (iPhone 17 Pro, iOS 26.5): `supportedResources.contains(.gpu)` = **false**; plain and `beginBackgroundTask` exports complete in the background (writer status 2, no error) — not device behaviour. | Deferred: real iPhone on iOS 18 and 26 (no device available) |
 | V-N21 | `MTAudioProcessingTap` sees composition-time ranges after `scaleTimeRange`; gain 2.0 = +6.02 ± 0.1 dB in AVPlayer and AVAssetReaderAudioMixOutput | **Yes, with `.timeDomain`**: +6.0206 dB in all three segments (1×, 2×, 0.5×) in the reader and +6.02 dB in AVPlayer; range starts are composition time (error ≤ 0.04 ms). **`.spectral` and `.varispeed` are broken in the reader over scaled ranges** (silence after the first rate change, occasional hangs). | Deferred (level/timing are not device-specific, but confirm once) |
 | V-N22 | Metal CI kernels on a `.useSoftwareRenderer` CIContext, ≥ 0.2× real time? | **Runs, output identical** (barcode decodes, mean diff 0). Simulator speed at 1080p: look 11.7× RT, look + blur σ4 2.8× (iOS 26.5 final run, fixed blur DOD; earlier 18.2 run 14.4× / 2.3×). Simulator CPU is the Mac's, so the speed is not representative. | Deferred: device speed decides the D-22 software background path |
@@ -31,8 +31,8 @@ needs a real iPhone is listed as *deferred* below with what to run.
 | Export | AVAssetReader(composition) → AVAssetWriter with the same compositor | **Yes**: grid case 90/90 frames in order, all correct after encode + read-back. | n/a |
 | Blur DOD | (found by the spike) placed + blurred layer | **Bug found and fixed**: a general Metal CI kernel that samples a `clampedToExtent()` input must declare an **infinite** output extent and then crop; declared at the source extent, Core Image dropped the crop and a scaled/translated blurred PiP covered the whole canvas (§2.5). | n/a |
 
-Test status (XCTest `VWSpikeTests`, 26 tests incl. diagnostics): **26/26 green on the iOS 26.5
-simulator** (final run 2026-10-11) and on the iOS 18.2 simulator (§4); `VWSpikeBackground`
+Test status (XCTest `DVSpikeTests`, 26 tests incl. diagnostics): **26/26 green on the iOS 26.5
+simulator** (final run 2026-10-11) and on the iOS 18.2 simulator (§4); `DVSpikeBackground`
 UI tests 3/3 green on iOS 26.5 (§2.6). Raw measurements: `spikes/ios_engine/results/*.metrics.jsonl`
 (git-ignored; regenerate with `tools/run_spike_tests.sh`).
 
@@ -45,7 +45,7 @@ UI tests 3/3 green on iOS 26.5 (§2.6). Raw measurements: `spikes/ios_engine/res
   ~700 MB). The app build must therefore **not** compile `.metal` files. The kernels are compiled
   ahead of time by `tools/build_metallibs.sh` into one metallib per SDK and committed:
   - `-fcikernel` kernels: `metal -c -fcikernel -target air64-apple-ios15.0[-simulator] -isysroot <sdk>`
-    then `metallib -cikernel` → `vw_spike_kernels.{iphoneos,iphonesimulator}.metallib` (8,396 bytes each).
+    then `metallib -cikernel` → `dv_spike_kernels.{iphoneos,iphonesimulator}.metallib` (8,396 bytes each).
   - `[[stitchable]]` kernels: `metal -c` then link with `metal -framework CoreImage` (plain
     `metallib` fails with "Undefined symbol: _ZNK9coreimage7Sampler6sampleEDv2_f").
   - The prebuilt metallibs used here were built with Apple metal 32023.883 from the 26.4 toolchain
@@ -54,7 +54,7 @@ UI tests 3/3 green on iOS 26.5 (§2.6). Raw measurements: `spikes/ios_engine/res
 - The simulator needs its own metallib (`air64-apple-ios15.0-simulator`); the loader picks
   `<name>.iphonesimulator` / `<name>.iphoneos` with `#if targetEnvironment(simulator)`.
 - A static library cannot carry resources: the metallibs ship in a **resource bundle**
-  (`s.resource_bundles`) and are found at `VWSpikeHost.app/VWSpikeKernels.bundle/…` (static lib)
+  (`s.resource_bundles`) and are found at `DVSpikeHost.app/DVSpikeKernels.bundle/…` (static lib)
   or inside the framework bundle (`use_frameworks!`). Kernel creation from the data: 1.5–3 ms.
 - Both `-fcikernel` (`CIColorKernel` + general `CIKernel` with ROI callbacks) and `[[stitchable]]`
   load and render correctly. **Recommendation: keep `-fcikernel`** (ARCH §13.2) — no runtime
@@ -84,7 +84,7 @@ correct, cut frames 30, 31, 32, 60, 61, 62 seen. The same plan built with µs `C
 
 `seek(to: CMTime(k, 30), toleranceBefore/After: .zero)` with
 `seekingWaitsForVideoCompositionRendering = true`, then poll `AVPlayerItemVideoOutput` until the
-buffer's `vwish.frame` attachment == k. The attachment set with `.shouldPropagate` survives the
+buffer's `danaview.frame` attachment == k. The attachment set with `.shouldPropagate` survives the
 video output (same buffer). 200 seeded random seeks over an 8 s 1080p30 composition with a 720p25
 PiP over [2 s, 6 s):
 
@@ -106,7 +106,7 @@ PiP over [2 s, 6 s):
   correct, a CPU copy of the sources fixes it, and so does the zero-copy path
   **`CVMetalTextureCacheCreateTextureFromImage` → `CIImage(mtlTexture:)`** (flip y), which is now the
   spike's default and is 200/200 on 18.2 and 26.5. iOS 26.5 is correct with either path.
-  Recommendation: VWCompositor builds source images through a `CVMetalTextureCache` (keep the
+  Recommendation: DVCompositor builds source images through a `CVMetalTextureCache` (keep the
   `CVMetalTexture` alive until the render task completes). Whether real iOS 18 devices show the
   bug is unknown (deferred), but the Metal path costs nothing.
   `ExactSeekTests.testDirectPixelBufferSourcesDiagnostic` keeps measuring the direct path.
@@ -124,7 +124,7 @@ PiP over [2 s, 6 s):
   kernel once at session start** (render a 16×16 image through each kernel) so the first paused
   edit stays ≤ 30 ms.
 - **Finding (affects IOS-03 kernels and IOS-09 compositor): kernel extent (DOD) with clamped
-  inputs.** `vw_blur_h/v` sample `image.clampedToExtent()`, so their output is non-zero
+  inputs.** `dv_blur_h/v` sample `image.clampedToExtent()`, so their output is non-zero
   everywhere. With the kernel output declared at the source extent (`apply(extent: extent, …)`)
   followed by `cropped(to: extent)`, Core Image treats the crop as a no-op and drops it; once the
   blurred layer was scaled/translated into its placement, it covered the **whole canvas** with its
@@ -136,7 +136,7 @@ PiP over [2 s, 6 s):
   variant is correct (`KernelTests.testTwoLayerCompositeWithBlurKeepsPlacement`: base and PiP
   barcodes decode, canvas corner stays base orange, Metal-texture and CVPixelBuffer sources). The
   rule applies to every production kernel that samples outside the destination pixel
-  (`vw_blur_h/v`, `vw_sharpen`, `vw_reveal` if it reads neighbours). Earlier redraw/V-N22
+  (`dv_blur_h/v`, `dv_sharpen`, `dv_reveal` if it reads neighbours). Earlier redraw/V-N22
   measurements only checked content on unblurred frames, which is why this was missed.
 - HLG (HEVC Main10, BT.2020/HLG, generated with VideoToolbox on the simulator; ffmpeg fallback
   script `tools/make_hlg_fixture.sh`): with `supportsHDRSourceFrames = false` the compositor
@@ -153,8 +153,8 @@ PiP over [2 s, 6 s):
   a sync sample; passthrough concat (`AVAssetReaderTrackOutput(nil)` → one writer input with the
   first segment's format description as `sourceFormatHint`) gives 90 frames on the grid, all correct,
   duration exactly 3.000 s, SPS/PPS identical across segments.
-- **Background export on the simulator (V-N11/V-N20 harness, `VWSpikeBackground` UI tests,
-  iPhone 17 Pro simulator, iOS 26.5, `TEST_RUNNER_VW_SECONDS=40` = 1200 frames of 1080p30, base +
+- **Background export on the simulator (V-N11/V-N20 harness, `DVSpikeBackground` UI tests,
+  iPhone 17 Pro simulator, iOS 26.5, `TEST_RUNNER_DV_SECONDS=40` = 1200 frames of 1080p30, base +
   PiP, look + blur σ4, Home pressed during the export, ~30 s in the background):**
   device facts logged `BGTaskScheduler.supportedResources.contains(.gpu)=false`, idiom phone.
 
@@ -244,14 +244,14 @@ multiplies by 2.0.
     ProMotion; the device number (60 Hz and 120 Hz, wired and Bluetooth audio routes;
     `AVAudioSession.outputLatency` was 0.1 ms on the simulator) is deferred (§5).
 
-## 3. Build settings ENG-06 must apply (vwish_editor_engine podspec)
+## 3. Build settings ENG-06 must apply (danaview_editor_engine podspec)
 
 ```ruby
 s.platform         = :ios, '15.0'
 s.frameworks       = 'AVFoundation', 'CoreImage', 'CoreMedia', 'CoreVideo', 'Metal',
                      'MediaToolbox', 'VideoToolbox', 'BackgroundTasks'
 # Prebuilt Core Image kernels (no Metal compiler in the app build; Xcode 26 ships none):
-s.resource_bundles = { 'VWEditorKernels' => ['Kernels/Prebuilt/*.metallib'] }
+s.resource_bundles = { 'DVEditorKernels' => ['Kernels/Prebuilt/*.metallib'] }
 s.preserve_paths   = 'Kernels/*.ci.metal', 'Kernels/Prebuilt/BUILD_INFO.txt'
 s.pod_target_xcconfig = {
   'DEFINES_MODULE' => 'YES',
@@ -261,21 +261,21 @@ s.pod_target_xcconfig = {
 
 - Kernel build (developer step, not Xcode): `metal -c -fcikernel -target air64-apple-ios15.0 …`
   and `-target air64-apple-ios15.0-simulator …`, then `metallib -cikernel`, one metallib per SDK
-  (`vw_kernels.iphoneos.metallib`, `vw_kernels.iphonesimulator.metallib`); a script equivalent to
+  (`dv_kernels.iphoneos.metallib`, `dv_kernels.iphonesimulator.metallib`); a script equivalent to
   `spikes/ios_engine/tools/build_metallibs.sh` plus a CI check that `BUILD_INFO.txt`'s source hash
   matches the `.ci.metal` source. Do **not** use `MTL_COMPILER_FLAGS`/`MTLLINKER_FLAGS` build
   settings (they need the Metal Toolchain on every build machine).
-- Loader: `Bundle(for:)` → `VWEditorKernels.bundle`, pick `.iphonesimulator`/`.iphoneos` with
+- Loader: `Bundle(for:)` → `DVEditorKernels.bundle`, pick `.iphonesimulator`/`.iphoneos` with
   `#if targetEnvironment(simulator)`, `CIKernel(functionName:fromMetalLibraryData:)` /
   `CIColorKernel(functionName:fromMetalLibraryData:)`.
 - Works with static libraries and with `use_frameworks!` (static and dynamic): verified by
   `tools/verify_pod_linkage.sh` — 6/6 Release builds OK (library, static and dynamic linkage ×
-  iphonesimulator and iphoneos, unsigned); the bundle lands at `VWSpikeHost.app/VWSpikeKernels.bundle/`
-  (library, static) or `VWSpikeHost.app/Frameworks/VWSpikeKernels.framework/VWSpikeKernels.bundle/`
+  iphonesimulator and iphoneos, unsigned); the bundle lands at `DVSpikeHost.app/DVSpikeKernels.bundle/`
+  (library, static) or `DVSpikeHost.app/Frameworks/DVSpikeKernels.framework/DVSpikeKernels.bundle/`
   (dynamic), so the loader must use `Bundle(for: <class in the pod>)`, never `Bundle.main`. Both
   per-SDK metallibs ship in every build (8 KB each); acceptable, no per-SDK resource filtering needed.
 - Info.plist (app): `UIBackgroundModes` not needed for the iPhone `paused` kind; iPad `continued`
-  needs `BGTaskSchedulerPermittedIdentifiers` covering `com.vecvel.vwish.export.*` and Apple's GPU
+  needs `BGTaskSchedulerPermittedIdentifiers` covering `com.vecvel.danaview.export.*` and Apple's GPU
   continued-processing entitlement (exact key to be taken from the iOS 26 SDK when IOS-13 enables
   it) — enable only after the device run of V-N20; the spike did not exercise it.
 - No Pigeon change is required by this spike. Pass to IOS-03/08/09/10/12/18 (not ENG-06): retain
@@ -292,9 +292,9 @@ averages are recorded per metric because the Mac was shared with other engineers
 
 | Run | Destination | Result | Log |
 |---|---|---|---|
-| XCTest `VWSpikeTests` (26 tests) | iOS 26.5 sim (iPhone 17 Pro), load 9–15 | **26/26 passed** | `results/ios26-final.*` |
-| XCTest `VWSpikeTests` (26 tests) | iOS 18.2 sim (iPhone 16 Pro), load 17–43 | **26/26 passed** | `results/ios18.2-final.*` |
-| UI tests `VWSpikeBackground` (3) | iOS 26.5 sim | **3/3 passed** (plain, bgtask before the blur fix; segmented after it, 1200/1200 frames) | `results/ios26-background*.log` |
+| XCTest `DVSpikeTests` (26 tests) | iOS 26.5 sim (iPhone 17 Pro), load 9–15 | **26/26 passed** | `results/ios26-final.*` |
+| XCTest `DVSpikeTests` (26 tests) | iOS 18.2 sim (iPhone 16 Pro), load 17–43 | **26/26 passed** | `results/ios18.2-final.*` |
+| UI tests `DVSpikeBackground` (3) | iOS 26.5 sim | **3/3 passed** (plain, bgtask before the blur fix; segmented after it, 1200/1200 frames) | `results/ios26-background*.log` |
 | `run_texture_latency.sh` (Flutter, V-N23) | iOS 26.5 sim, 60 Hz | 3 runs, numbers in §2.8 | `results/ios26*.texture_latency.jsonl` |
 | `verify_pod_linkage.sh` (V-N9) | library / static / dynamic × iphonesimulator / iphoneos | **6/6 BUILD OK**, metallibs bundled in each | `results/linkage.summary.txt` |
 
@@ -326,9 +326,9 @@ lists exactly what to run on it.
 ## 5. Deferred (needs a real device)
 
 All need a signed build on a physical iPhone; the host app and UI tests are ready
-(`VWSpikeHost` scheme for XCTest, `VWSpikeBackground` scheme for the background UI tests —
-default 120 s export, `TEST_RUNNER_VW_SECONDS=<n>` to change it; launch arguments
-`-vwExperiment plain|bgtask|segmented -vwSeconds 120` for a manual run, log written to
+(`DVSpikeHost` scheme for XCTest, `DVSpikeBackground` scheme for the background UI tests —
+default 120 s export, `TEST_RUNNER_DV_SECONDS=<n>` to change it; launch arguments
+`-dvExperiment plain|bgtask|segmented -dvSeconds 120` for a manual run, log written to
 `Documents/background_experiment.log`).
 
 Owner default 2026-10-08 (D-43, revisable): no lab devices, so every item below is **deferred:
@@ -355,10 +355,10 @@ no device available**; nothing here was faked or estimated from the simulator.
 ```sh
 cd spikes/ios_engine
 tools/bootstrap.sh                                   # generate project + pod install (local pods)
-tools/run_spike_tests.sh <sim-udid> ios26 -only-testing:VWSpikeTests
+tools/run_spike_tests.sh <sim-udid> ios26 -only-testing:DVSpikeTests
 tools/run_texture_latency.sh <sim-udid> ios26        # V-N23 Flutter half
 tools/verify_pod_linkage.sh                          # V-N9 linkage matrix incl. iphoneos build
-TEST_RUNNER_VW_SECONDS=40 xcodebuild -workspace VWSpikeHost.xcworkspace -scheme VWSpikeBackground \
+TEST_RUNNER_DV_SECONDS=40 xcodebuild -workspace DVSpikeHost.xcworkspace -scheme DVSpikeBackground \
   -destination id=<udid> -derivedDataPath build/DerivedData test   # V-N11/V-N20 (device for real answers)
 tools/build_metallibs.sh                             # only when kernel sources change (needs a Metal toolchain)
 ```

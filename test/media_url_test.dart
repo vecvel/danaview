@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_domain/vwish_domain.dart';
+import 'package:danaview_domain/danaview_domain.dart';
 
 void main() {
   group('MediaUrl.tryParse', () {
@@ -82,7 +82,7 @@ void main() {
         'data:text/html;base64,AAAA',
         'mailto:someone@example.com',
         'ftp://example.com/a.mp4',
-        'vwish://open',
+        'danaview://open',
       ]) {
         expect(MediaUrl.tryParse(input), isNull, reason: input);
         expect(MediaUrl.validationError(input), contains("can't be played"), reason: input);

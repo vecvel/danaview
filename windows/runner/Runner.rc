@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "Vwish" "\0"
-            VALUE "FileDescription", "Vwish" "\0"
+            VALUE "CompanyName", "Danaview" "\0"
+            VALUE "FileDescription", "Danaview" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "vwish" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 Vwish. All rights reserved." "\0"
-            VALUE "OriginalFilename", "vwish.exe" "\0"
-            VALUE "ProductName", "Vwish" "\0"
+            VALUE "InternalName", "danaview" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Danaview. All rights reserved." "\0"
+            VALUE "OriginalFilename", "danaview.exe" "\0"
+            VALUE "ProductName", "Danaview" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

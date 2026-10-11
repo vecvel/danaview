@@ -1,6 +1,0 @@
-import 'dart:io';
-
-import 'package:test/test.dart';
-import 'package:vwish_editor_core/model.dart';
-
-void main() => test('tests may use dart:io', () => expect(Directory.systemTemp, isNotNull));

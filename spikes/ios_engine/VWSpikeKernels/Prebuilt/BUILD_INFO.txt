@@ -1,7 +1,0 @@
-source: vw_spike_kernels.ci.metal
-source_sha256: a56d8f90d0967fadc48c830ef6b4e5d5eff0635f8cfc2d9e9489f599f79be002
-compiler: Apple metal version 32023.883 (metalfe-32023.883)
-flags: -fcikernel / metallib -cikernel
-min_ios: 15.0
-vw_spike_kernels.iphoneos.metallib: d35c2575774ca7e44d3f7557ccc8902aa42b5102ec074ccca7c6cdd913234333
-vw_spike_kernels.iphonesimulator.metallib: a947470e5ee07d00ee4d9a55a01caec088048b99e8f3093a2c4dc4bb51a5d840

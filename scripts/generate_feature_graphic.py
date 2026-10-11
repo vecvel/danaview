@@ -185,7 +185,7 @@ html_content = f"""<!DOCTYPE html>
   <div class="container">
     <div class="left-content">
       <div class="eyebrow">VECVEL PRESENTS</div>
-      <h1 class="title">Vwish</h1>
+      <h1 class="title">Danaview</h1>
       <div class="subtitle">Pro HDR Media Player</div>
       <p class="desc">Universal hardware playback engine with 10-band equalizer, real-time stream diagnostics, and live frame color grading.</p>
       
@@ -199,7 +199,7 @@ html_content = f"""<!DOCTYPE html>
 
     <div class="right-content">
       <div class="icon-wrapper">
-        <img class="icon-img" src="{icon_b64}" alt="Vwish Icon">
+        <img class="icon-img" src="{icon_b64}" alt="Danaview Icon">
       </div>
     </div>
   </div>
