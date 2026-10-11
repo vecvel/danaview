@@ -1,0 +1,20 @@
+// OWNER: ENG-08
+//
+// Lint negative fixture (BUILD_PLAN ENG-08: "lint fails on a negative fixture missing the opt-in").
+// It uses Media3 @UnstableApi APIs WITHOUT `@file:OptIn(UnstableApi::class, ExperimentalApi::class)`.
+// The .txt extension keeps it out of every source set. Only
+//   ./gradlew :vwish_editor_engine:lintDebug -PvwishLintNegativeFixture=true
+// copies it into the main source set (as MissingOptIn.kt), and lint must then fail with
+// UnsafeOptInUsageError (lint.xml).
+
+package com.vecvel.vwish.editor.engine.lintfixture
+
+import androidx.media3.common.util.Util
+import androidx.media3.effect.Presentation
+
+/** Calls unstable Media3 APIs without opting in. */
+class MissingOptIn {
+    fun presentation(): Presentation = Presentation.createForHeight(540)
+
+    fun sdk(): Int = Util.SDK_INT
+}

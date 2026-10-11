@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- OWNER: ENG-08 (then ENG-06 [INTEGRATION], frozen; D-42)
+     Media3 1.11.1 marks UnstableApi and ExperimentalApi with androidx.annotation.RequiresOptIn(ERROR),
+     so every use must sit under an opt-in. Each Media3 file starts with
+         @file:OptIn(UnstableApi::class, ExperimentalApi::class)
+     AND imports androidx.annotation.OptIn: this lint check (androidx.annotation.experimental) does
+     not accept Kotlin's implicit kotlin.OptIn for androidx markers. Both opt-in issues are errors
+     and abortOnError is on (build.gradle.kts).
+     Do NOT add <option name="opt-in" value="...UnstableApi,...ExperimentalApi" /> as the AND-01
+     spike's app/lint.xml does: that option is a PROJECT-WIDE opt-in (lint's documentation of
+     UnsafeOptInUsageError) and silently disables the check.
+     Verified 2026-10-11 (ENG-08) with the fixtures in src/test/kotlin/.../glue/lint/:
+       ./gradlew :vwish_editor_engine:lintDebug -PvwishLintNegativeFixture=true
+     fails with 3 UnsafeOptInUsageError, all in MissingOptIn.kt (no opt-in); WithOptIn.kt
+     (androidx.annotation.OptIn at file level) is clean; with kotlin.OptIn it is flagged; with the
+     spike's option neither file is flagged. -->
+<lint>
+    <issue id="UnsafeOptInUsageError" severity="error" />
+    <issue id="UnsafeOptInUsageWarning" severity="error" />
+</lint>
