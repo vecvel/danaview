@@ -85,6 +85,8 @@ KEEP_TOKENS = {b"dvwC"}  # MP4 Dolby Vision configuration box
 KEEP_PATTERNS = [
     (re.compile(rb"^(?:qh_)?md_[A-Za-z0-9]+$"), "random media/test id"),
     (re.compile(rb"(?i)uvwxyz"), "alphabet string"),
+    # Base64 test data (e.g. Ac3Fixture.kt): long random strings where "vw" is a coincidence.
+    (re.compile(rb"^(?=[A-Za-z0-9]{24,}$)(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?!.*(?i:vwish|vwproj))[A-Za-z0-9]+$"), "base64 data"),
 ]
 
 TOKEN = re.compile(rb"[A-Za-z0-9_]+")
