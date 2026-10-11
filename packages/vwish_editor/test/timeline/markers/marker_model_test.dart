@@ -4,7 +4,6 @@
 // operations over a real EditorController: add at the playhead (frame grid, selection, one history
 // entry, never two markers on a frame), update (one entry) and delete.
 
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vwish_editor/src/editor/state/edit_transaction.dart' show EditApplied;
 import 'package:vwish_editor/src/editor/timeline/marker_sheet.dart';
@@ -84,7 +83,8 @@ void main() {
   group('MarkerStrings', () {
     test('there is a name for every palette colour, and the default name for a newer index', () {
       expect(MarkerStrings.colorNames, hasLength(markerPaletteSize));
-      expect(MarkerStrings.colorNames.toSet(), hasLength(markerPaletteSize), reason: 'colour never carries meaning alone, so the names differ');
+      expect(MarkerStrings.colorNames.toSet(), hasLength(markerPaletteSize),
+          reason: 'colour never carries meaning alone, so the names differ');
       expect(MarkerStrings.colorName(99), MarkerStrings.colorNames.first);
       expect(MarkerStrings.colorName(-1), MarkerStrings.colorNames.first);
     });

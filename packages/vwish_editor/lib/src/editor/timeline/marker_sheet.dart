@@ -30,6 +30,7 @@ import '../../app/editor_providers.dart';
 import '../contracts/contracts.dart';
 import '../state/editor_controller.dart';
 import '../state/editor_state.dart';
+import 'timeline_semantics.dart' show editorAnnounce;
 import 'timeline_style.dart';
 
 // -------------------------------------------------------------------------------------------------
@@ -336,8 +337,7 @@ final class MarkerRow {
   String get subtitle => note == null ? time : '$time · $note';
 
   @override
-  bool operator ==(Object other) =>
-      other is MarkerRow && other.marker == marker && other.selected == selected && other.time == time;
+  bool operator ==(Object other) => other is MarkerRow && other.marker == marker && other.selected == selected && other.time == time;
 
   @override
   int get hashCode => Object.hash(marker, selected, time);
@@ -408,7 +408,8 @@ class MarkerFlag extends StatelessWidget {
 /// The list of markers: pure, driven by [model].
 class MarkerListView extends StatelessWidget {
   /// Creates the list.
-  const MarkerListView({super.key, required this.model, required this.canEdit, required this.onJump, required this.onEdit, required this.onAdd});
+  const MarkerListView(
+      {super.key, required this.model, required this.canEdit, required this.onJump, required this.onEdit, required this.onAdd});
 
   /// What to show.
   final MarkerListModel model;
@@ -762,7 +763,7 @@ class _MarkerSheetState extends ConsumerState<MarkerSheet> {
 
   void _delete(Marker m) {
     _draft = null;
-    _ops.delete(m.id);
+    if (_ops.delete(m.id) != null) editorAnnounce(context, MarkerStrings.deleted);
     setState(() => _editing = null);
   }
 

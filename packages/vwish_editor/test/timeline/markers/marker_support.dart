@@ -5,11 +5,14 @@
 // opens the sheet, a few markers with names, colours and notes, and the registry with every
 // binding merged.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart' show Material;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vwish_editor/src/app/editor_providers.dart';
 import 'package:vwish_editor/src/editor/actions/editor_action_registry.dart';
+import 'package:vwish_editor/src/editor/actions/editor_shortcuts.dart';
 import 'package:vwish_editor/src/editor/contracts/contracts.dart';
 import 'package:vwish_editor/src/editor/state/edit_transaction.dart' show EditApplied;
 import 'package:vwish_editor/src/editor/timeline/marker_sheet.dart';
@@ -27,15 +30,26 @@ export '../../transport/transport_rig.dart' show TransportRig, s;
 const Key hostKey = ValueKey('marker-host');
 
 /// Pumps the host in the transport rig (a project with text items and one marker at 4 s).
+///
+/// With [shortcuts] the host sits in the editor's shortcut scope (keys reach the real actions);
+/// [extra] is shown above the host.
 Future<TransportRig> pumpMarkers(
   WidgetTester tester, {
   EditorSurface surface = SurfaceMatrix.phone,
   bool project = true,
   bool open = true,
+  bool shortcuts = false,
+  Widget? extra,
 }) =>
     TransportRig.pump(
       tester,
-      (id) => const Material(child: SizedBox.expand(key: hostKey)),
+      (id) {
+        Widget host = Material(
+          child: Column(children: [if (extra != null) extra, const Expanded(child: SizedBox.expand(key: hostKey))]),
+        );
+        if (shortcuts) host = EditorShortcuts(child: host);
+        return host;
+      },
       surface: surface,
       project: project,
       open: open,
@@ -43,7 +57,7 @@ Future<TransportRig> pumpMarkers(
 
 /// Opens the marker sheet (the list, or the editor of [marker]) from the host.
 Future<void> openSheet(WidgetTester tester, TransportRig rig, {MarkerId? marker}) async {
-  MarkerSheet.show(tester.element(find.byKey(hostKey)), projectId: rig.id, marker: marker);
+  unawaited(MarkerSheet.show(tester.element(find.byKey(hostKey)), projectId: rig.id, marker: marker));
   await tester.pumpAndSettle();
 }
 

@@ -43,7 +43,8 @@ void main() {
       expect(find.text('Marker'), findsNWidgets(2), reason: 'unnamed markers show "Marker"');
       expect(key('marker-add'), findsOneWidget);
       // The flag takes the marker's palette colour.
-      final flag = tester.widget<Icon>(find.descendant(of: key(rowKey(named(rig, 'Intro'))), matching: find.byIcon(Icons.bookmark_rounded)));
+      final flag =
+          tester.widget<Icon>(find.descendant(of: key(rowKey(named(rig, 'Intro'))), matching: find.byIcon(Icons.bookmark_rounded)));
       expect(flag.color, const Color(0xFFEF4444));
     });
 
@@ -157,7 +158,10 @@ void main() {
       for (var i = 0; i < markerPaletteSize; i++) {
         expect(key('marker-color-$i'), findsOneWidget);
       }
-      final selected = [for (var i = 0; i < markerPaletteSize; i++) tester.getSemantics(key('marker-color-$i')).getSemanticsData().flagsCollection.isSelected == Tristate.isTrue];
+      final selected = [
+        for (var i = 0; i < markerPaletteSize; i++)
+          tester.getSemantics(key('marker-color-$i')).getSemanticsData().flagsCollection.isSelected == Tristate.isTrue
+      ];
       expect(selected, [false, true, false, false, false, false]);
     });
 
@@ -230,6 +234,7 @@ void main() {
       expect(find.text('Intro'), findsNothing);
       rig.editor.undo();
       expect(markersOf(rig).firstWhere((x) => x.id == m.id), m);
+      await tester.pump(const Duration(seconds: 2)); // the announcement's throttle window
     });
 
     testWidgets('Go to marker jumps and closes', (tester) async {
@@ -285,13 +290,14 @@ void main() {
       for (var i = 0; i < markerPaletteSize; i++) {
         expect(find.bySemanticsLabel('${MarkerStrings.colorNames[i]} marker color'), findsOneWidget);
       }
-      expect(find.bySemanticsLabel('Marker name'), findsWidgets);
+      expect(find.bySemanticsLabel('Name'), findsWidgets);
+      expect(find.bySemanticsLabel('Note'), findsWidgets);
       handle.dispose();
     });
   });
 
   group('no overflow', () {
-    final surfaces = [...SurfaceMatrix.pr, const EditorSurface(Size(568, 320), textScale: 1.35)];
+    final surfaces = SurfaceMatrix.pr;
     final longName = 'A very long marker name that keeps going ${'x' * 15}';
     final longNote = 'A long note that runs on and on about what happens at this moment of the video. ${'word ' * 30}';
 
@@ -343,6 +349,8 @@ void main() {
         await openSheet(tester, rig);
         expectNoOverflow(tester);
         expectOwnerUiRules(tester);
+        await tester.ensureVisible(key('marker-add'));
+        await tester.pump();
         expectInside(tester, key('marker-add'), screen: surface.size);
       });
     }

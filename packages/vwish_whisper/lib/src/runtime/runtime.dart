@@ -1,31 +1,88 @@
 // OWNER: AI-07
 //
-// Placeholder (D-33). AI-02 declares the public API names of ai.md §4.7; AI-07 replaces the
-// private stand-in below with the real runtime: opening the native library through
-// `library_loader.dart` (never at import time), `WhisperModel` (async load, refcount), the polling
-// `WhisperJob` (250 ms timer, Finalizer) and the schema-1 segment decoder. Until then `open()`
-// reports `unsupported(platform)` on desktop and web and `unsupported(libraryUnavailable)` on
-// iOS and Android, and `loadModel` throws `WhisperException(libraryUnavailable)`.
+// Public runtime API of ai.md §4.7 (names declared by AI-02's skeleton). `WhisperRuntime.open()`
+// decides support and opens the native library through `library_loader.dart` (never at import
+// time):
+//   1. desktop/web -> unsupported(platform) (skipped when tests inject [VwBindingsFactory]);
+//   2. the native device profile, when the plugin answers: 32-bit (armeabi-v7a) -> unsupported(abi),
+//      old OS -> unsupported(osVersion);
+//   3. the library: missing -> unsupported(libraryUnavailable), `vw_abi_version()` differing from
+//      [vwAbiVersion] -> unsupported(libraryUnavailable) with `loadModel` failing `abiMismatch`;
+//   4. once per Dart program run (statics reset on hot restart) `vw_shutdown_all()` cancels and
+//      joins jobs and frees models left behind by the previous run, off the UI isolate.
+// `open()` never throws.
 
 library;
 
+import 'dart:async';
+
+import 'package:meta/meta.dart';
+
+import '../../vwish_whisper.dart' show vwAbiVersion;
 import '../device/device.dart';
+import '../ffi/library_loader.dart' show loadWhisperBindings;
 import '../support.dart';
+import 'native_runtime.dart';
+import 'vw_bindings.dart';
 import 'whisper_types.dart';
 
+export 'vw_bindings.dart' show VwBindings, VwBindingsFactory, VwLibraryUnavailable;
 export 'whisper_types.dart';
 
 /// The whisper runtime (ai.md §4.7).
 abstract interface class WhisperRuntime {
   /// Opens the runtime. Never throws; check [support]. [channel] defaults to the plugin's device
-  /// channel (tests pass a fake).
-  static Future<WhisperRuntime> open({WhisperDeviceChannel? channel}) async {
-    final platform = WhisperSupport.evaluate();
-    return _UnavailableRuntime(
-      platform is WhisperUnsupported ? platform : const WhisperUnsupported(WhisperUnsupportedReason.libraryUnavailable),
-      channel ?? WhisperDeviceChannel(),
-    );
+  /// channel and [bindings] to the platform library (tests pass fakes for both).
+  static Future<WhisperRuntime> open({WhisperDeviceChannel? channel, VwBindingsFactory? bindings}) async {
+    final device = channel ?? WhisperDeviceChannel();
+    if (bindings == null) {
+      final platform = WhisperSupport.evaluate();
+      if (platform is WhisperUnsupported) return UnavailableWhisperRuntime(platform, device);
+    }
+    try {
+      final profile = await device.deviceProfile();
+      if (profile.os == 'ios' || profile.os == 'android') {
+        final s = WhisperSupport.fromProfile(profile);
+        if (s is WhisperUnsupported) return UnavailableWhisperRuntime(s, device);
+      }
+    } catch (_) {
+      // The channel degrades by itself; an unexpected error must not make open() throw.
+    }
+    const unavailable = WhisperUnsupported(WhisperUnsupportedReason.libraryUnavailable);
+    final VwBindings b;
+    final int abi;
+    try {
+      b = await (bindings ?? loadWhisperBindings)();
+      abi = b.abiVersion();
+    } catch (_) {
+      return UnavailableWhisperRuntime(unavailable, device);
+    }
+    if (abi != vwAbiVersion) {
+      return UnavailableWhisperRuntime(
+        unavailable,
+        device,
+        failure: WhisperException(WhisperErrorKind.abiMismatch, 'library ABI $abi, bindings ABI $vwAbiVersion'),
+      );
+    }
+    await (_shutdownOnce ??= _shutdownAll(b));
+    return NativeWhisperRuntime(bindings: b, device: device);
   }
+
+  // Set on the first open() of this Dart program run; a hot restart resets it, so the next open()
+  // reclaims the native jobs and models of the previous run.
+  static Future<void>? _shutdownOnce;
+
+  static Future<void> _shutdownAll(VwBindings b) async {
+    try {
+      await b.shutdownAll();
+    } catch (_) {
+      // Nothing to reclaim is the normal case; a failure here must not block the runtime.
+    }
+  }
+
+  /// Forgets that `vw_shutdown_all()` already ran (tests simulate a hot restart).
+  @visibleForTesting
+  static void debugResetShutdownLatch() => _shutdownOnce = null;
 
   /// Support state.
   WhisperSupport get support;
@@ -36,16 +93,21 @@ abstract interface class WhisperRuntime {
   /// Device profile and thermal/memory/lifecycle events (ai.md §4.8).
   WhisperDeviceChannel get device;
 
-  /// Starts loading a model; completes when ready. [cancel] abandons the result (the native load
-  /// finishes, then frees itself). Throws [WhisperException].
+  /// Starts loading a model; completes when ready. Loading the same path with the same options
+  /// again returns another lease on the same native model. [cancel] abandons the result (the
+  /// native load finishes, then frees itself). Throws [WhisperException].
   Future<WhisperModel> loadModel(
     String modelPath, {
     WhisperModelOptions options = const WhisperModelOptions(),
     WhisperCancelToken? cancel,
   });
+
+  /// Releases every model no lease or job holds now, instead of after the 60 s grace period
+  /// (also done automatically on a memory warning).
+  Future<void> releaseIdleModels();
 }
 
-/// A loaded model. At most one job runs on a model at a time.
+/// A loaded model lease. At most one job runs on a model at a time.
 abstract interface class WhisperModel {
   /// What the model reports.
   WhisperModelInfo get info;
@@ -59,7 +121,8 @@ abstract interface class WhisperModel {
   /// Transcribes in chunks.
   WhisperJob transcribe(WhisperTranscribeRequest request);
 
-  /// Releases the model (refcounted natively; freed after the last job).
+  /// Drops this lease; the native model is released 60 s after nothing holds it (immediately on
+  /// low memory). Idempotent.
   Future<void> release();
 }
 
@@ -81,18 +144,22 @@ abstract interface class WhisperJob {
   /// Resumes.
   void resume();
 
-  /// Changes the thread count, applied at the next chunk.
+  /// Changes the thread count (clamped to 1..8), applied at the next chunk.
   set threads(int value);
 }
 
-final class _UnavailableRuntime implements WhisperRuntime {
-  const _UnavailableRuntime(this.support, this.device);
+/// The runtime when speech recognition cannot run here.
+final class UnavailableWhisperRuntime implements WhisperRuntime {
+  /// Creates the runtime; [failure] is what `loadModel` throws (default `libraryUnavailable`).
+  const UnavailableWhisperRuntime(this.support, this.device, {WhisperException? failure}) : _failure = failure;
 
   @override
-  final WhisperSupport support;
+  final WhisperUnsupported support;
 
   @override
   final WhisperDeviceChannel device;
+
+  final WhisperException? _failure;
 
   @override
   String get engineVersion => '';
@@ -103,5 +170,8 @@ final class _UnavailableRuntime implements WhisperRuntime {
     WhisperModelOptions options = const WhisperModelOptions(),
     WhisperCancelToken? cancel,
   }) =>
-      Future<WhisperModel>.error(const WhisperException(WhisperErrorKind.libraryUnavailable));
+      Future<WhisperModel>.error(_failure ?? const WhisperException(WhisperErrorKind.libraryUnavailable));
+
+  @override
+  Future<void> releaseIdleModels() async {}
 }

@@ -415,6 +415,19 @@ final class WhisperLanguageResult extends WhisperJobUpdate {
   final Duration? speechStart;
 }
 
+/// Diagnostic (ai.md §4.7): the job has been RUNNING for [unchangedFor] without its compute time
+/// advancing. Emitted once per stall; nothing is killed automatically.
+final class WhisperJobStalled extends WhisperJobUpdate {
+  /// Creates the update.
+  const WhisperJobStalled({required this.unchangedFor, required this.computeTime});
+
+  /// How long the compute time has not changed.
+  final Duration unchangedFor;
+
+  /// The compute time that stopped advancing.
+  final Duration computeTime;
+}
+
 /// Final result of a job.
 @immutable
 final class WhisperJobResult {
