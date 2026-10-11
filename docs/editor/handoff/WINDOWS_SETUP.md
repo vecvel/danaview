@@ -8,7 +8,7 @@ Read this with [README.md](README.md) (who builds what, how the branches sync) a
 2. Switch on three Windows settings (A4).
 3. Set up the environment variables (A5).
 4. Tell Git to leave line endings alone, and only then clone (A6).
-5. Copy the two signing files by USB (A7).
+5. Optional: the signing files (A7). Lane work doesn't need them.
 6. Install Claude's notes (A8).
 
 Then start Claude with the first message in README.md. Claude runs the checks in Part B and tells you if something is missing.
@@ -28,6 +28,7 @@ Then start Claude with the first message in README.md. Claude runs the checks in
 - **Processor type.** Open Settings > System > About. It should say "x64-based processor". If it says ARM-based, stop and tell the Mac session: the emulator image and the NDK host tools in this guide assume x64.
 - **Virtualization.** Open Task Manager > Performance > CPU. It should say "Virtualization: Enabled". If it says Disabled, turn on Intel VT-x or AMD SVM in the UEFI/BIOS.
 - **Folder locations.** Put everything on drive C: under `C:\dev\`. Don't use Desktop or Documents (OneDrive often syncs them) or Program Files, and avoid paths with spaces.
+- **Smart App Control.** Open Windows Security > App & browser control > Smart App Control. If it is On or in Evaluation mode, it can block unsigned tools (some ffmpeg builds, the SDK's `ninja.exe`) with "An Application Control policy has blocked this file". Turning it off is your decision: it can't be turned back on without reinstalling Windows.
 - **User name.** If your Windows user folder `C:\Users\<name>` contains a space or a non-English letter, also do the extra step at the end of A5.
 
 ### A2. Install
@@ -38,7 +39,7 @@ Then start Claude with the first message in README.md. Claude runs the checks in
 | Flutter | **3.44.2** stable (Dart 3.12) | The Windows zip from the Flutter SDK archive, extracted to `C:\dev\flutter`. Same version as the Mac and CI (`FLUTTER_VERSION: '3.44.2'` in `.github/workflows/editor-ci.yml`). |
 | JDK | **21**, for example Eclipse Temurin 21 (`winget install EclipseAdoptium.Temurin.21.JDK`) | The Mac also runs Java 21. CI uses 17. Every module targets Java 17 (`JavaVersion.VERSION_17`, `JvmTarget.JVM_17`), so both work. |
 | Android Studio | current stable (`winget install Google.AndroidStudio`) | Then install the SDK items in A3. |
-| ffmpeg | 7.x full build with libx264 and libx265 (`winget install Gyan.FFmpeg`) | Dev-only tool for test media and media tests. The Mac has 7.1.1. |
+| ffmpeg | **7.1.1** full build with libx264 and libx265 (`winget install Gyan.FFmpeg --version 7.1.1`; list versions with `winget show Gyan.FFmpeg --versions`, and take the newest 7.x if 7.1.1 isn't listed) | Dev-only tool for test media and media tests. The Mac has 7.1.1; the engine fixture tests compare ffprobe fields, so stay on 7.x. |
 | Claude desktop app | current | Sign in with the same account as on the Mac. |
 
 You don't need Visual Studio, Xcode, CocoaPods, WSL or Python. Only the Mac-owned AND-01 spike media script uses Python (P16).
@@ -51,14 +52,14 @@ In Android Studio, open Settings > Languages & Frameworks > Android SDK. Tick **
 |---|---|---|
 | SDK Platforms | Android 16 ("Baklava") > Android SDK Platform 36 | `compileSdk = 36` in every Android module |
 | SDK Platforms | Android 15 ("VanillaIceCream") > **Google APIs Intel x86_64 Atom System Image** | The emulator image. CI uses API 35, x86_64, `google_apis` (`editor-ci.yml`) |
-| SDK Platforms | Android 10 (API 29) and Android 14 (API 34) > Google APIs Intel x86_64 Atom System Image | Needed later: AND-02 checks the editor gate on API 29, and AND-12 runs on 29, 34 and 35 ([ANDROID_LANE.md](ANDROID_LANE.md)). It also asks for a tablet AVD for AND-15 |
+| SDK Platforms | Android 10 (API 29) and Android 14 (API 34) > Google APIs Intel x86_64 Atom System Image | Needed later: AND-02 checks the editor gate on API 29, and AND-12 runs on 29, 34 and 35 ([ANDROID_LANE.md](ANDROID_LANE.md)) |
 | SDK Tools | Android SDK Build-Tools 36.0.0 | AGP 9.0.1. The Mac also has 35.0.0 |
 | SDK Tools | NDK (Side by side) **28.2.13676358** | `flutter.ndkVersion` in Flutter 3.44.2 (`FlutterExtension.kt`) and `ndkVersion` in `spikes/android_engine/app/build.gradle.kts`. The whisper Android build (AI-04) uses it too |
 | SDK Tools | NDK (Side by side) **27.0.12077973** | Installed on the Mac. Nothing in the repo pins it today, so it's harmless |
 | SDK Tools | CMake **3.22.1** | Pinned by `externalNativeBuild { cmake { version = "3.22.1" } }` (spike, AI-04 plan). Ships `ninja.exe` |
 | SDK Tools | Android SDK Command-line Tools (latest), Android Emulator, Android SDK Platform-Tools | Provide `sdkmanager`, `avdmanager`, `emulator` and `adb`, and handle licence acceptance |
 
-The command-line equivalent is below. It downloads packages and accepts licences, so the owner runs it or approves it.
+The command-line equivalent is below. It downloads packages and accepts licences, so the owner runs it or approves it. Run it in Git Bash **after A5**, which puts `sdkmanager.bat` and `avdmanager.bat` on PATH and sets `JAVA_HOME`.
 
 ```bash
 sdkmanager.bat --install "platforms;android-36" "build-tools;36.0.0" "platform-tools" "emulator" \
@@ -67,12 +68,26 @@ sdkmanager.bat --install "platforms;android-36" "build-tools;36.0.0" "platform-t
   "system-images;android-29;google_apis;x86_64" "system-images;android-34;google_apis;x86_64"
 ```
 
-**Emulator.** In Device Manager, create a **Pixel 9 Pro XL, API 35, Google APIs x86_64** device and name it `Pixel_9_Pro_XL_API_35`. That's the same name as on the Mac, but not the same image: the Mac's AVD is `arm64-v8a` (`google_apis_playstore`), and an arm64 image can't run on this PC. Give it at least 2 GB of RAM. The command line:
+**Emulators.** In Device Manager, create four x86_64 Google APIs devices with these exact names:
+
+| Name | Device | Image | Used by |
+|---|---|---|---|
+| `Pixel_9_Pro_XL_API_35` | Pixel 9 Pro XL | API 35 | everything (default) |
+| `Pixel_API_29` | Pixel 6 | API 29 | AND-02, AND-12 |
+| `Pixel_API_34` | Pixel 6 | API 34 | AND-12 |
+| `Pixel_Tablet_API_35` | Pixel Tablet | API 35 | AND-15 |
+
+`Pixel_9_Pro_XL_API_35` has the same name as on the Mac, but not the same image: the Mac's AVD is `arm64-v8a` (`google_apis_playstore`), and an arm64 image can't run on this PC. Give each AVD at least 2 GB of RAM and **16 GB of internal storage** (Device Manager > Edit > Show Advanced Settings). The Mac's emulator ran out of `/data` space, and the lane's test APKs carry the fixture media. The command line (Git Bash, after A5):
 
 ```bash
 avdmanager.bat create avd -n Pixel_9_Pro_XL_API_35 -k "system-images;android-35;google_apis;x86_64" -d pixel_9_pro_xl
-# if the id is missing: avdmanager.bat list device
+avdmanager.bat create avd -n Pixel_API_29 -k "system-images;android-29;google_apis;x86_64" -d pixel_6
+avdmanager.bat create avd -n Pixel_API_34 -k "system-images;android-34;google_apis;x86_64" -d pixel_6
+avdmanager.bat create avd -n Pixel_Tablet_API_35 -k "system-images;android-35;google_apis;x86_64" -d pixel_tablet
+# if an id is missing: avdmanager.bat list device
 ```
+
+On the command line, set the storage before the first boot: in `%USERPROFILE%\.android\avd\<name>.avd\config.ini`, set `disk.dataPartition.size=16G` (replace the line if it exists).
 
 The editor gate is ≥ 2 GB RAM (ARCHITECTURE.md §3.2, D-43), and Android reports a little less than the AVD's configured RAM. If the engine reports `insufficient_memory` on this AVD, raise its RAM to 3 GB.
 
@@ -141,9 +156,9 @@ git push -u origin editor-android              # the first push opens a GitHub s
 - Keep the folder `C:\dev\vwish_player`. Claude's notes folder name comes from this path (A8).
 - If `git status` shows modified files right after cloning, Git converted the line endings. Delete the folder, check the settings, and clone again (P2).
 
-### A7. Signing files (USB)
+### A7. Signing files (USB, optional)
 
-Copy two files from the Mac:
+Skip this unless you later want Windows release builds of the root app. Lane work doesn't need them. If you do, copy two files from the Mac:
 
 - `android/key.properties` to `C:\dev\vwish_player\android\key.properties`
 - `android/app/release.jks` to `C:\dev\vwish_player\android\app\release.jks`
@@ -178,7 +193,7 @@ flutter --version            # Flutter 3.44.2, Dart 3.12.x
 java -version                # version "21..."
 cmake --version              # cmake version 3.22.1
 adb version
-ffmpeg -version | head -1    # ffmpeg version 7.x
+ffmpeg -version | head -1    # ffmpeg version 7.x (record the exact version in the B5 baseline)
 ls "$FFMPEG" "$FFPROBE"      # both exist (full .exe paths)
 ```
 
@@ -186,6 +201,7 @@ ls "$FFMPEG" "$FFPROBE"      # both exist (full .exe paths)
 ```bash
 flutter doctor -v            # Flutter, Android toolchain (licences accepted), Android Studio ticked. Ignore Visual Studio and Chrome.
 emulator -accel-check        # reports WHPX as installed and usable
+emulator -list-avds          # Pixel_9_Pro_XL_API_35, Pixel_API_29, Pixel_API_34, Pixel_Tablet_API_35
 ```
 
 **B3. Git and line endings**
@@ -253,8 +269,10 @@ adb wait-for-device
 adb shell getprop sys.boot_completed               # 1 once booted (repeat until it is)
 adb shell getprop ro.product.cpu.abi               # x86_64
 adb shell dumpsys SurfaceFlinger | grep -m1 GLES   # mentions OpenGL ES 3.x (editor gate, ARCHITECTURE.md §3.2)
+MSYS_NO_PATHCONV=1 adb shell df -h /data           # several GB free (A3: 16 GB storage)
 bash scripts/ci/editor/android_emulator.sh         # android-emulator: OK
 ```
+This is the first Android run of ENG-09's `engine_smoke_test.dart`; it has never passed on an emulator (the Mac's ran out of storage). If the instrumented tests pass and only the smoke step fails, report it to the Mac as an ENG-09 defect with the error, and continue: it isn't a toolchain blocker. If the install fails with `INSTALL_FAILED_INSUFFICIENT_STORAGE`, raise the AVD's storage or start it once with `-wipe-data`.
 
 ---
 
@@ -297,6 +315,11 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 - **Cause:** WHPX is off or virtualization is disabled, or the Mac's arm64 AVD was copied over.
 - **Fix:** A1, A4.2 and an x86_64 image (A3). Check with `emulator -accel-check`.
 
+**P17. Smart App Control blocks a tool.** Blocker.
+- **Symptom:** a tool such as `ffmpeg.exe` or `ninja.exe` won't start: "An Application Control policy has blocked this file".
+- **Cause:** Smart App Control (On or Evaluation) blocks unsigned executables without reputation.
+- **Fix:** tell the owner (A1). Only the owner decides whether to turn it off.
+
 **P4. Paths with spaces, non-ASCII letters, OneDrive or a second drive.** Blocker.
 - **Symptom:** Gradle, CMake or NDK path errors, native link errors, random "file in use" errors, or Flutter's `ERROR_INVALID_FUNCTION` when linking plugins.
 - **Cause:** NDK and CMake command lines break on unquoted spaces. AI-04's linker version script `packages/vwish_whisper/src/vw_exports.map` is one example. OneDrive syncs and locks `build/` folders. Flutter's plugin links need the same drive.
@@ -334,11 +357,7 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 
 **P11. The Pigeon regeneration test fails.**
 - **Cause:** `packages/vwish_editor_engine/test/glue/pigeon_regeneration_test.dart` runs `<flutter>/bin/dart`. On Windows that file is a bash script, so `Process.run` throws.
-- **Windows check instead:** run this in `packages/vwish_editor_engine`. No output means the committed Pigeon files are in sync:
-  ```bash
-  dart run pigeon --input pigeons/engine_api.dart && git diff --exit-code -- lib/src/pigeon ios/Classes/Pigeon android/src/main/kotlin/com/vecvel/vwish/editor/engine/pigeon
-  ```
-  The generated files belong to ENG-01/ENG-06. If anything differs, restore it with `git restore` and tell the Mac.
+- **On Windows:** record it as expected and move on. Don't run Pigeon here: it writes straight into the generated files, which belong to ENG-01/ENG-06. The Mac and CI run this test.
 - **Mac follow-up:** the test's owner (ENG-01) could use `bin\dart.bat` with `runInShell: true`, or `bin/cache/dart-sdk/bin/dart.exe`, on Windows.
 
 **P12. Skipped tests.**
@@ -348,7 +367,7 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 - **macOS-only:** `packages/vwish_whisper/test/device/ios_profiler_host_test.dart` and the fixture regeneration group skip.
 
 **P13. This emulator isn't the Mac's, CI's or a phone.**
-- **ABI:** x86_64 here, arm64 on the Mac. AI-04's two arm64 libraries (`armv8-a` and `armv8.2-a+fp16+dotprod`) never load here; the x86_64 library does. Record arm64 runtime-selection checks as "deferred: no device available", unless the Mac runs them on its arm64 AVD.
+- **ABI:** x86_64 here, arm64 on the Mac. AI-04's two arm64 libraries (`armv8-a` and `armv8.2-a+fp16+dotprod`) never load here; the x86_64 library does. Record arm64 runtime-selection checks as "deferred: no device available". (The Mac's arm64 AVD has no free `/data` space until the Mac clears it.)
 - **GPU:** the Windows host GPU here, a Metal translator on the Mac, and SwiftShader in CI (`-gpu swiftshader_indirect` in `editor-ci.yml`). GL extensions and decoders can differ from the target row in `docs/editor/spikes/AND-01.md`. Probe them again instead of copying the Mac's results. If a GL test disagrees with CI, rerun the emulator with `-gpu swiftshader_indirect`.
 - **Timings:** numbers aren't comparable between machines.
 - **Spike APK:** the spike is arm64-only (`abiFilters += listOf("arm64-v8a")`), so its native code only works here through ARM translation, if at all.
@@ -399,7 +418,7 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 
 | Area | Checked | Result |
 |---|---|---|
-| Symlinks in git | `git ls-tree -r origin/editor-wip` | none |
+| Symlinks in git | `git ls-tree -r origin/editor-wip` | three, iOS only: `packages/vwish_editor_engine/example/ios/TestFixtures/{core,engine,engine_api}`. Windows may check them out as small text files; never commit changes to them |
 | Names that clash on Windows | the whole tree, for case-only duplicates, `CON`/`NUL`/`AUX`/`COMn`/`LPTn`, and `<>:"\|?*` | none |
 | Longest tracked path | the whole tree | 138 characters (`test/architecture/fixtures/m_features_material_in_interpolation/…`) |
 | Files containing CR | tracked and new files | only `packages/vwish_editor_core/test/fixtures/{subtitles,luts}/…`, covered by `-text` |

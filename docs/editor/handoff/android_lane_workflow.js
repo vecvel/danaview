@@ -26,47 +26,54 @@ export const meta = {
  *      Start from a clean tree, or from leftovers of an interrupted run that you want resumed.
  *   2. Decide which Mac tickets are in the tree now and pass them as args.landed. Ask the owner,
  *      or read BUILD_STATE.md and the hand-off notes the Mac pushes. If you're unsure about a
- *      ticket, leave it out. The groups that need it just wait.
+ *      ticket, leave it out. The groups that need it just wait. ENG-09, API-04 and AI-03 were
+ *      done at hand-off and always count as landed.
  *   3. Close anything heavy (Android Studio builds, a second emulator).
  *
  * RUN
  *   Workflow({
- *     scriptPath: 'C:/Users/<you>/Desktop/vwish_player/docs/editor/handoff/android_lane_workflow.js',
+ *     scriptPath: 'C:/dev/vwish_player/docs/editor/handoff/android_lane_workflow.js',
  *     args: {
- *       root: 'C:/Users/<you>/Desktop/vwish_player',   // required: repo root, forward slashes
- *       landed: ['ENG-09'],                              // Mac tickets merged into this tree
+ *       root: 'C:/dev/vwish_player',                     // required: repo root, forward slashes
+ *       landed: ['ENG-09', 'API-04'],                    // Mac tickets merged into this tree
  *       preloaded: {},                                   // finished groups, see RESUME
- *       // optional: only: ['ai-android'], maxParallel: 2, review: true
+ *       // optional: only: ['ai-android'], maxParallel: 1, review: true
  *     },
  *   })
  *
  * ARGS
- *   root         Required. Absolute repo root on this machine, e.g. 'C:/Users/<you>/Desktop/vwish_player'.
- *   landed       Ticket ids merged into this working tree from editor-wip. These are the Mac gates:
- *                ENG-09 (eng08), ENG-06 (every AND group), API-04 (and-m3-text),
- *                ENG-02 (and-m3-preview), ENG-03 (and-m4-services) and ENG-04 (and-m4-export).
+ *   root         Required. Absolute repo root on this machine, e.g. 'C:/dev/vwish_player'.
+ *   landed       Ticket ids merged into this working tree from editor-wip, plus owner tokens.
+ *                ENG-09, API-04 and AI-03 are done and always counted. Gates still to come:
+ *                ENG-06 (every AND group), ENG-02 (and-m3-preview), ENG-03 (and-m4-services) and
+ *                ENG-04 (and-m4-export). and-m3-fallback (AND-16) also needs two owner tokens, added
+ *                only on the owner's word: D-43E (the owner signed AND-01 §7) and AND16-SHIM
+ *                (ENG-06 assigned android/src/main/cpp/ and added the externalNativeBuild block).
  *                A group runs only when all of its gates are listed. Otherwise the group, and every
- *                group that depends on it, is logged as 'waiting for Mac: ...' and skipped.
- *                A lane group whose own tickets are all listed (e.g. ENG-08 finished on the Mac)
- *                counts as finished.
+ *                group that depends on it, is logged as 'waiting for Mac/owner: ...' and skipped.
+ *                ENG-06 listed means ENG-08 has landed too (ENG-06 depends on it), so eng08 counts
+ *                as finished and is never rebuilt against the frozen files.
  *   preloaded    {groupId: result} for groups that are already finished and committed. They are
  *                not re-run, and their hand-off goes to the groups that depend on them. A result
  *                can be a builder's returned object (from this script's preloadForNextRun, or from
  *                journal.jsonl), a plain hand-off string, or true.
  *   only         Optional list of group ids to run this time. Others are skipped unless preloaded.
- *   maxParallel  Optional number of builders at once (default 2, max 4). They share one Gradle
- *                module and one emulator.
+ *   maxParallel  Optional number of builders at once (default 1, max 4). ANDROID_LANE.md §3 runs one
+ *                group at a time; more than 1 is an opt-in, and those builders share one Gradle
+ *                module, one working tree and the emulator lock.
  *   review       Optional. false skips the review and fix agents.
  *
- * GROUPS            tickets                          Windows deps                          Mac gates
- *   eng08           ENG-08                           -                                     ENG-09
+ * GROUPS            tickets                          Windows deps                          Mac/owner gates
+ *   eng08           ENG-08                           -                                     ENG-09 (done)
  *   ai-android      AI-04                            -                                     - (AI-03 done)
- *   and-m2a         AND-02, AND-03, AND-04, AND-05   -                                     ENG-06
+ *   and-m2a         AND-02, AND-03, AND-04, AND-05   eng08                                 ENG-06
  *   and-m2b         AND-06, AND-07                   and-m2a                               (ENG-06)
- *   and-m3-render   AND-08                           -                                     ENG-06
- *   and-m3-text     AND-09                           -                                     ENG-06, API-04
- *   and-m3-preview  AND-17, AND-10, AND-16           and-m3-render, and-m3-text, and-m2b   ENG-02
- *   and-m4-services AND-13, AND-14, AND-15           -                                     ENG-03
+ *   and-m3-render   AND-08                           eng08                                 ENG-06
+ *   and-m3-text     AND-09                           eng08                                 ENG-06 (API-04 done)
+ *   and-m3-paused   AND-17                           and-m3-render, and-m3-text, and-m2b   (ENG-06)
+ *   and-m3-preview  AND-10                           and-m3-paused                         ENG-02
+ *   and-m3-fallback AND-16                           and-m3-preview                        ENG-06, D-43E, AND16-SHIM
+ *   and-m4-services AND-13, AND-14, AND-15           eng08                                 ENG-06, ENG-03
  *   and-m4-export   AND-11                           and-m3-render, and-m3-text,           ENG-04
  *                                                    and-m3-preview
  *   and-m5          AND-12                           and-m4-export                         (ENG-04)
@@ -76,12 +83,14 @@ export const meta = {
  *   (gitignored). Delete it if a killed run leaves it behind.
  *
  * AFTER A RUN (the lead does this; builder agents never change git state)
- *   - The result has commitPlan: one entry per ticket with a commit message and its files.
- *     Commit each ticket on its own, e.g.
+ *   - The result has commitPlan: one entry per finished (done or not_needed) ticket with a commit
+ *     message and its files. Review fixes are folded into that ticket's entry; a fix to a ticket
+ *     committed in an earlier run gets its own 'fix(editor): <TICKET> review fixes' entry.
+ *     Commit each entry on its own, e.g.
  *       git add <files> && git commit -m "feat(editor): AND-02 Android probe, compatibility, ..."
- *     Commit the fixer's changes the same way, using the message in their commitPlan entry. Never
- *     add a co-author trailer (owner rule). Never commit android/key.properties, *.jks or
- *     local.properties.
+ *     Partial or blocked tickets get no entry: their files (leftInTree) stay uncommitted and the
+ *     next run resumes them. Never add a co-author trailer (owner rule). Never commit
+ *     android/key.properties, *.jks or local.properties.
  *   - Push editor-android and tell the owner which tickets landed. The Mac session merges
  *     editor-android into editor-wip. ENG-08 is urgent because it gates the Mac's ENG-06.
  *   - Pass forMac (defects against Mac tickets, ENG-06 inputs, needed [INTEGRATION] changes) to
@@ -115,7 +124,7 @@ function parseMaybeJson(value, name) {
 
 const A = parseMaybeJson(args, '') || {}
 if (!A.root || typeof A.root !== 'string') {
-  throw new Error("android_lane_workflow: args.root is required (absolute repo root with forward slashes), e.g. Workflow({scriptPath: '<repo>/docs/editor/handoff/android_lane_workflow.js', args: {root: 'C:/Users/<you>/Desktop/vwish_player', landed: ['ENG-09'], preloaded: {}}})")
+  throw new Error("android_lane_workflow: args.root is required (absolute repo root with forward slashes), e.g. Workflow({scriptPath: '<repo>/docs/editor/handoff/android_lane_workflow.js', args: {root: 'C:/dev/vwish_player', landed: ['ENG-09', 'API-04'], preloaded: {}}})")
 }
 const ROOT = A.root.replace(/\\/g, '/').replace(/\/+$/, '')
 
@@ -127,8 +136,12 @@ function toIdList(value, name) {
 }
 
 const LANDED = new Set(toIdList(A.landed, 'landed').map((s) => s.toUpperCase()))
+// Done and pushed on editor-wip at hand-off (BUILD_STATE.md).
+for (const t of ['ENG-09', 'API-04', 'AI-03']) LANDED.add(t)
+// ENG-06 depends on ENG-08, so ENG-06 landed means ENG-08 is landed and frozen.
+if (LANDED.has('ENG-06')) LANDED.add('ENG-08')
 const ONLY = A.only ? new Set(toIdList(A.only, 'only')) : null
-const MAX_PARALLEL = Math.max(1, Math.min(4, Number.isFinite(Number(A.maxParallel)) && A.maxParallel ? Math.floor(Number(A.maxParallel)) : 2))
+const MAX_PARALLEL = Math.max(1, Math.min(4, Number.isFinite(Number(A.maxParallel)) && A.maxParallel ? Math.floor(Number(A.maxParallel)) : 1))
 const RUN_REVIEW = A.review !== false
 const RAW_PRELOADED = parseMaybeJson((A && A.preloaded) || {}, 'preloaded') || {}
 const LOCK = `${ROOT}/build/vwish_locks/emulator`
@@ -202,13 +215,13 @@ SPLIT (decided by the owner; do not re-litigate): the build runs on two machines
 
 GIT: the lane works on branch editor-android (from editor-wip, github.com/vecvel/vwish). Do NOT run state-changing git commands (no add, commit, stash, checkout/switch, reset, restore, merge, rebase, pull, push, clean, branch, tag, config). Read-only git (status, diff, log, show, ls-files) is fine. The lead commits each ticket after this run as 'feat(editor): <TICKET> <title>' with no co-author trailer, so report exact per-ticket file lists. Never create or commit secrets (android/key.properties, *.jks) or machine files (local.properties).
 
-OWNERSHIP: only create/edit files your tickets own (BUILD_PLAN §2 and the §6 owns lists) plus placeholders whose header says '// OWNER: <your ticket>' (replace the placeholder). Shared files in §7 get minimal targeted insertions only (re-read right before editing; never rewrite the whole file). The Pigeon surface (packages/vwish_editor_engine/pigeons/, lib/src/pigeon/, android/.../pigeon/), the Kotlin glue (android/.../glue/), build.gradle.kts and lint.xml are frozen after ENG-06. Service tickets implement the service classes the glue already calls. Never run Pigeon generation and never change dependency versions (Media3 is pinned to 1.11.1; upgrading means rerunning AND-01). If a Pigeon/glue/Gradle/manifest change is truly needed, stop and report it in forMac as needing a lead-approved [INTEGRATION] ticket. Other builders may be working IN PARALLEL in this same working tree on disjoint files and compiling the same Gradle module. If a build fails because of another ticket's half-written file, or Gradle reports a lock held by another build, wait a minute and retry; never edit their files.
+OWNERSHIP: only create/edit files your tickets own (BUILD_PLAN §2 and the §6 owns lists) plus placeholders whose header says '// OWNER: <your ticket>' (replace the placeholder). The only §7 shared files the lane touches are ENG-08's own (build.gradle.kts, the manifest, the plugin class, glue/, lint.xml), and only inside ENG-08; every other §7 file is edited by Mac integration tickets. The Pigeon surface (packages/vwish_editor_engine/pigeons/, lib/src/pigeon/, android/.../pigeon/), the Kotlin glue (android/.../glue/), build.gradle.kts and lint.xml are frozen after ENG-06. Service tickets implement the service classes the glue already calls. Never run Pigeon generation and never change dependency versions (Media3 is pinned to 1.11.1; upgrading means rerunning AND-01). If a Pigeon/glue/Gradle/manifest change is truly needed, stop and report it in forMac as needing a lead-approved [INTEGRATION] ticket. When maxParallel > 1, other builders may be working in parallel in this same working tree on disjoint files and compiling the same Gradle module. If a build fails because of another ticket's half-written file, or Gradle reports a lock held by another build, wait a minute and retry; never edit their files.
 
 RESUME RULE: always inspect what already exists for your tickets first (git status/diff, your owned paths, placeholders); an earlier attempt may have been cut off. Continue from there; never redo finished work.
 
 DOWNLOAD RULE: no internet downloads except normal package-manager resolution (pub, Gradle/Maven). Never download speech models, media or tools, and never install SDK components or software. Use fake HTTP servers and test fixtures. Reuse ENG-05's committed fixtures (packages/vwish_editor_engine/test_fixtures/, packed into the test APK by example/android/vwish_test_harness.gradle). Generate any new media locally with ffmpeg from PATH (not /opt/homebrew/bin/ffmpeg) or MediaCodec, inside your owned test directories, and record its provenance. whisper.cpp v1.9.4 is vendored at packages/vwish_whisper/third_party/whisper.cpp; never modify vendored sources.
 
-DEVICE RULE: there is no physical Android device. Verification runs as JVM unit tests and on the Pixel_9_Pro_XL_API_35 emulator (API 35, x86_64). Mark acceptance criteria that need a real device, an emulator that is not installed (e.g. API 29/34, tablet), a named device class (Pixel 7a, 4 GB, low/mid tier) or real-hardware performance 'deferred: no device available' (or 'deferred: <emulator> not installed'), with the reason. Never fake them. Report emulator measurements as emulator measurements, never as device numbers. A test that is skipped, @Ignore'd or asserts nothing is not a pass.
+DEVICE RULE: there is no physical Android device. Verification runs as JVM unit tests and on x86_64 emulators: Pixel_9_Pro_XL_API_35 (default), plus Pixel_API_29, Pixel_API_34 and Pixel_Tablet_API_35 where a criterion names API 29, API 34 or a tablet. Check which exist with 'emulator -list-avds'; only when a needed AVD is missing, mark that criterion 'deferred: <AVD> not installed'. Mark criteria that need a real device, a named device class (Pixel 7a, 4 GB, low/mid tier) or real-hardware performance 'deferred: no device available', with the reason. Never fake them. Report emulator measurements as emulator measurements, never as device numbers. A test that is skipped, @Ignore'd or asserts nothing is not a pass.
 
 OWNER DEFAULTS (D-43, owner defaults 2026-10-08, revisable): Android editor gate API 29 + GLES3 + 2 GB RAM (devices below 3 GB run the minimal tier, D-40); no auto captions on armeabi-v7a; Android editor data excluded from backup.
 
@@ -216,13 +229,14 @@ TIME RULE (BUILD_PLAN §1.7, ARCH §5, D-35): any code that turns a platform clo
 
 WINDOWS: your Bash tool runs Git Bash. Run the repo's .sh scripts with Git Bash (e.g. bash scripts/ci/editor/android_unit.sh). Use PowerShell (powershell -NoProfile -Command "...") for other Windows-native work: gradlew.bat, starting/stopping the emulator, process checks. Use forward slashes in paths (C:/Users/...; Git Bash also accepts /c/Users/...). Files keep LF line endings (.gitattributes: * text=auto eol=lf; only .bat/.cmd/.ps1 are CRLF). Never convert line endings and never write absolute local paths into committed files. Android SDK: $ANDROID_HOME (default C:/Users/<you>/AppData/Local/Android/Sdk). The CI scripts only probe macOS/Linux default SDK paths, so pass ANDROID_HOME on the command line if it is unset. NDKs 27.0.12077973 and 28.2.13676358 are under <sdk>/ndk/. CMake 3.22.1 and Ninja are under <sdk>/cmake/3.22.1/bin/ (cmake.exe, ninja.exe). llvm-readelf is under <ndk>/toolchains/llvm/prebuilt/windows-x86_64/bin/. JDK 21 is installed; keep the JVM 17 source/target pins. If a Windows-specific problem blocks you (path length, a file locked by a Gradle daemon, a missing tool), report the ticket as blocked with the exact error. Do not change system settings, the registry, PATH or the global git config.
 
-EMULATOR: one shared emulator, Pixel_9_Pro_XL_API_35. Up to ${MAX_PARALLEL} builders run at once, so serialize instrumented runs with the lock directory ${LOCK}:
-- Take the lock with mkdir -p ${ROOT}/build/vwish_locks && mkdir ${LOCK}. mkdir is atomic. If it fails, another builder is testing: wait and retry.
-- Write your group id into ${LOCK}/owner and touch that file before each long run. A lock whose owner file is untouched for 60 minutes is stale; remove it.
+EMULATOR: one emulator at a time, default Pixel_9_Pro_XL_API_35. Up to ${MAX_PARALLEL} builder(s) run at once; serialize instrumented runs with the lock directory ${LOCK}:
+- Take the lock with mkdir -p "${ROOT}/build/vwish_locks" && mkdir "${LOCK}". mkdir is atomic. If it fails, another builder is testing: wait and retry.
+- Write your group id into "${LOCK}/owner" and touch that file before each long run. A lock whose owner file is untouched for 60 minutes is stale; remove it.
+- If adb devices shows no emulator, start the default one headless in the background: <sdk>/emulator/emulator.exe -avd Pixel_9_Pro_XL_API_35 -no-window -no-audio -no-boot-anim -no-snapshot-save. Wait for adb wait-for-device and getprop sys.boot_completed = 1.
+- For an API 29, API 34 or tablet run: while holding the lock, stop the running emulator (adb emu kill), boot the named AVD the same way, run the scoped tests with ANDROID_SERIAL set to its serial from adb devices, then stop it.
 - Remove the lock right after your connected test run.
-- If adb devices shows no emulator, start it headless in the background: <sdk>/emulator/emulator.exe -avd Pixel_9_Pro_XL_API_35 -no-window -no-audio -no-boot-anim -no-snapshot-save. Wait for adb wait-for-device and getprop sys.boot_completed = 1.
 - When your group is finished and no lock exists, stop the emulator (adb emu kill).
-- Never start a second emulator.
+- Never run two emulators at once.
 
 VERIFICATION (every group; report the commands and their final result lines):
 - The engine builds through the example host (packages/vwish_editor_engine/example/android: gradlew.bat :vwish_editor_engine:assembleDebug, or flutter build apk --debug in the example).
@@ -264,7 +278,7 @@ const RESULT_SCHEMA = {
 const GROUPS = [
   {
     id: 'eng08', tickets: ['ENG-08'], deps: [], external: ['ENG-09'], model: 'opus',
-    note: `Thin Kotlin glue for every host API against ENG-01's generated Pigeon Kotlin (Mac-owned, read only). Write the engine core: EngineContext, ErrorCodes, EventHub, EngineThreads (vwish-preview, vwish-gl, vwish-export, vwish-jobs, vwish-io) and Paths. Create D-33 placeholders for every Android service file of ARCH §4.4 (AND-02..AND-17, incl. preview/{PausedFrameRenderer,LayerCompositorGl,StructuralDebouncer} and an empty preview/fallback/ package) returning notSupportedOnDevice, each with the header '// OWNER: <ticket>'. Also build.gradle.kts and lint.xml per the ticket spec, and the plugin manifest per ARCH §20.4. ENG-01 left minimal placeholders in build.gradle.kts, AndroidManifest.xml and VwishEditorEnginePlugin.kt (§7 order ENG-01 -> ENG-08 -> ENG-06); replace them. Build to the ENG-08 spec only. The AND-01 changes in docs/editor/spikes/AND-01.md §6 (minSdk 29, JNI shim, extra Media3 artifacts, Kotlin opt-in flag) are applied by ENG-06 on the Mac: don't pre-apply them, but keep the files easy to amend. The ENG-09 example host (packages/vwish_editor_engine/example) is the harness: capabilities() must round-trip on the emulator through it, and the example's manifest merge must be clean. Lint must fail on a negative fixture missing the opt-in (keep that fixture out of the shipped source set). ARCHITECTURE.md is ENG-06's file. Put the V-N14 outcome, the glue class list, the placeholder list and every Gradle/manifest fact ENG-06 needs in forMac and handoff. The Mac may have started ENG-08 before the split, so apply the resume rule.`,
+    note: `Thin Kotlin glue for every host API against ENG-01's generated Pigeon Kotlin (Mac-owned, read only). Write the engine core: EngineContext, ErrorCodes, EventHub, EngineThreads (vwish-preview, vwish-gl, vwish-export, vwish-jobs, vwish-io) and Paths. Create D-33 placeholders for every Android service file of ARCH §4.4 (AND-02..AND-17, incl. preview/{PausedFrameRenderer,LayerCompositorGl,StructuralDebouncer} and an empty preview/fallback/ package) returning notSupportedOnDevice, each with the header '// OWNER: <ticket>'. Also build.gradle.kts and lint.xml per the ticket spec, and the plugin manifest per ARCH §20.4. ENG-01 left minimal placeholders in build.gradle.kts, AndroidManifest.xml and VwishEditorEnginePlugin.kt (§7 order ENG-01 -> ENG-08 -> ENG-06); replace them. build.gradle.kts freezes at ENG-06, so declare every dependency the lane will need now (BUILD_PLAN §2, ANDROID_LANE.md §5 ENG-08): androidTestImplementation androidx.test:rules (AND-13/AND-14 permission rules) and androidx.test.uiautomator:uiautomator (AND-12's UiAutomator criterion), plus anything else AND-02..AND-17 will need. List them with versions and V-N14 compatibility in handoff and forMac. Do not pre-apply the AND-01 changes in docs/editor/spikes/AND-01.md §6 (minSdk 29, JNI shim and externalNativeBuild, extra Media3 artifacts, Kotlin opt-in flag): ENG-06 applies them on the Mac, so keep the files easy to amend. The ENG-09 example host (packages/vwish_editor_engine/example) is the harness: capabilities() must round-trip on the emulator through it, and the example's manifest merge must be clean. Lint must fail on a negative fixture missing the opt-in (keep that fixture out of the shipped source set). ARCHITECTURE.md is ENG-06's file. Put the V-N14 outcome, the glue class list, the placeholder list and every Gradle/manifest fact ENG-06 needs in forMac and handoff.`,
   },
   {
     id: 'ai-android', tickets: ['AI-04'], deps: [], external: [], model: 'opus',
@@ -276,51 +290,58 @@ check_native_libs.sh follows the scripts/ci/editor/README.md script contract and
 - Locate llvm-readelf under the NDK's toolchains/llvm/prebuilt/<windows-x86_64|darwin-x86_64|linux-x86_64>/bin (.exe on Windows).
 - Unpack the AAB/APK with a tool present on all three platforms, and document the choice.
 - Check: ABIs present, no armeabi-v7a whisper library, 16 KB LOAD alignment, exported symbols exactly vw_*, size <= 3 MB per .so.
-Prove it against an AAB you built. The root app gets vwish_whisper only at INT-04 (Mac, later). If no in-repo host includes the plugin yet, build a throwaway host outside the repo (e.g. in the temp dir) that depends on packages/vwish_whisper by path, and record that the app-level check repeats at INT-04/INT-05. The release keystore is not on this machine, so use debug signing. Check that there is no libc++_shared conflict with media_kit where a host includes both. Native compiles are CPU-heavy: cap parallel jobs at 8.`,
+Prove it against an AAB you built. The root app first pulls in vwish_whisper at INT-02 (Mac, later; through vwish_editor -> vwish_transcription, BUILD_PLAN note 7). If no in-repo host includes the plugin yet, build a throwaway host outside the repo at a short path such as C:/dev/scratch/whisper_host that depends on packages/vwish_whisper by path, and record that the app-level check repeats at INT-02. Use debug signing, never the release keystore. Never add media_kit to any host: its Gradle script downloads libmpv jars from github.com, which the owner has not approved. Record the 'no libc++_shared conflict with media_kit' criterion as 'checked by the Mac in INT-02'. The root .gitignore does not cover .cxx/, so set externalNativeBuild { cmake { buildStagingDirectory } } in your build.gradle.kts to a folder under the module's build directory; no .cxx/ tree may appear in the repo. Native compiles are CPU-heavy: cap parallel jobs at 8.`,
   },
   {
-    id: 'and-m2a', tickets: ['AND-02', 'AND-03', 'AND-04', 'AND-05'], deps: [], external: ['ENG-06'], model: 'opus',
-    note: `Android native media services on Media3 1.11.1, as ENG-06 froze build.gradle.kts and lint.xml. Read AND-01.md §6-7 (AND-02: HDR editability depends on GL_EXT_YUV_target and a 10-bit decoder; V-N5 is deferred to a device) and the ARCH §13.3/§15 rows these tickets cite. They follow the same contracts as IOS-02..IOS-05: read those iOS ticket bodies, and the iOS code if present, for parity only; never edit iOS files. Use ENG-05's fixtures (incl. MKV/WebM). Unit-test AND-02's gate and tier logic with injected profiles. Run the GLES 3 and maxTextureSize checks on the API 35 emulator; the API 29 run is 'deferred: API 29 emulator not installed'. Record performance criteria (cache hit/miss times, >= 60x realtime) as emulator numbers and defer the device-tier criterion. Order: AND-02 first (the others depend on it), then AND-03, AND-04 and AND-05.`,
+    id: 'and-m2a', tickets: ['AND-02', 'AND-03', 'AND-04', 'AND-05'], deps: ['eng08'], external: ['ENG-06'], model: 'opus',
+    note: `Android native media services on Media3 1.11.1, as ENG-06 froze build.gradle.kts and lint.xml. Read AND-01.md §6-7 (AND-02: HDR editability depends on GL_EXT_YUV_target and a 10-bit decoder; V-N5 is deferred to a device) and the ARCH §13.3/§15 rows these tickets cite. They follow the same contracts as IOS-02..IOS-05: read those iOS ticket bodies, and the iOS code if present, for parity only; never edit iOS files. Use ENG-05's fixtures (incl. MKV/WebM). Unit-test AND-02's gate and tier logic with injected profiles. Run the GLES 3 and maxTextureSize checks on the API 35 emulator, and the GLES 3 check again on Pixel_API_29 per the EMULATOR rule (defer only if that AVD is missing). Record performance criteria (cache hit/miss times, >= 60x realtime) as emulator numbers and defer the device-tier criterion. Order: AND-02 first (the others depend on it), then AND-03, AND-04 and AND-05.`,
   },
   {
     id: 'and-m2b', tickets: ['AND-06', 'AND-07'], deps: ['and-m2a'], external: [], model: 'opus',
     note: `AND-06: FrameExtractor with SeekParameters.EXACT, PNG still at the Dart path, SourceFrameCache. LayerLookEffect overrides apply once AND-09 lands; it may be built in parallel right now. Use it if it is complete in the tree, otherwise return unprocessed frames as the ticket allows and say so in handoff. AND-07: chunked reverse with the same algorithm and preflight as IOS-07 (read it for parity only). Use AND-04's PcmDecoder and AND-05's JobRegistry from the hand-off below.`,
   },
   {
-    id: 'and-m3-render', tickets: ['AND-08'], deps: [], external: ['ENG-06'], model: 'opus',
-    note: `Plan reader, ParamSnapshot and CompositionMapper. ARCH §11 overrides native.md §4.2: the plan is a flat, fully lowered layer list. AND-01 recorded NO-GO for CompositionPlayer as the preview engine (AND-16 active) and GO for Transformer export. Read AND-01.md and ENG-06's ARCH §13.3 record for what the mapper must serve (Transformer export for AND-11, and the plan/ParamSnapshot types that AND-16's slot players, AND-17 and AND-10 consume). Apply AND-01.md §7:
+    id: 'and-m3-render', tickets: ['AND-08'], deps: ['eng08'], external: ['ENG-06'], model: 'opus',
+    note: `Plan reader, ParamSnapshot and CompositionMapper. ARCH §11 overrides native.md §4.2: the plan is a flat, fully lowered layer list. AND-01 recorded NO-GO for CompositionPlayer as the preview engine (AND-16 active) and GO for Transformer export. Read AND-01.md and ENG-06's ARCH §13.3 record for what the mapper must serve (Transformer export for AND-11, and the plan/ParamSnapshot types that AND-16's slot players, AND-17 and AND-10 consume). Apply AND-01.md §6 item 7:
 - Gaps in video sequences are transparent image items at the output fps, not addGap.
 - Clip starts use the rule-frame PTS (the ε mechanism AND-01 chose).
 - Items faster than 1x use EditedMediaItem.setFrameRate(gridFps).
 - setDurationUs is the full source duration.
-Anchor every item and gap boundary at P(k). Contract fixtures and vectors come from packages/vwish_editor_core/test/fixtures (frame_grid.json incl. androidSeekMsRounding, grid_cuts_30fps.json, expected_active.json, packing and classification vectors), plus API-03's render-math vectors in packages/vwish_editor_engine_api. Read them; never edit them. Per-layer effect lists reference AND-09 classes; AND-09 may be built in parallel right now, so code against its ENG-08 placeholders/public names.`,
+Anchor every item and gap boundary at P(k). Include z-order and gating unit tests. Contract fixtures and vectors come from packages/vwish_editor_core/test/fixtures (frame_grid.json incl. androidSeekMsRounding, grid_cuts_30fps.json, expected_active.json, packing and classification vectors), plus API-03's render-math vectors in packages/vwish_editor_engine_api. Read them; never edit them. Per-layer effect lists reference AND-09 classes; AND-09 may be built in parallel right now, so code against its ENG-08 placeholders/public names.`,
   },
   {
-    id: 'and-m3-text', tickets: ['AND-09'], deps: [], external: ['ENG-06', 'API-04'], model: 'opus',
-    note: `GL effects in GLSL ES 1.00 per ARCH §13.3 'GL effects' and §11.6 math. Render-math vectors and parity goldens come from API-03, and the .vsprite codec from API-04 (both in packages/vwish_editor_engine_api, Mac-owned, read only). Expose a small ShaderPrograms API that AND-17's LayerCompositorGl, the PausedFrameRenderer and AND-16 reuse. Only the vwish-gl thread touches GL (assert it), and resources are released on effect release. Run the goldens on the API 35 emulator; its GPU path differs from devices. If a golden misses only because of emulator rendering, record the measured error and defer the device check; never loosen a tolerance silently. GL timer-query numbers from the emulator are emulator numbers; the 1080p <= 8 ms mid-device budget is deferred: no device available.`,
+    id: 'and-m3-text', tickets: ['AND-09'], deps: ['eng08'], external: ['ENG-06'], model: 'opus',
+    note: `GL effects in GLSL ES 1.00 per ARCH §13.3 'GL effects' and §11.6 math. Render-math vectors and parity goldens come from API-03, and the .vsprite codec from API-04 (both done, in packages/vwish_editor_engine_api, Mac-owned, read only). Expose a small ShaderPrograms API that AND-17's LayerCompositorGl, the PausedFrameRenderer and AND-16 reuse. Only the vwish-gl thread touches GL (assert it), and resources are released on effect release. Run the goldens on the API 35 emulator; its GPU path differs from devices. If a golden misses only because of emulator rendering, record the measured error and defer the device check; never loosen a tolerance silently. GL timer-query numbers from the emulator are emulator numbers; the 1080p <= 8 ms mid-device budget is deferred: no device available.`,
   },
   {
-    id: 'and-m3-preview', tickets: ['AND-17', 'AND-10', 'AND-16'], deps: ['and-m3-render', 'and-m3-text', 'and-m2b'], external: ['ENG-02'], model: 'opus',
-    note: `Order: AND-17, then AND-10, then AND-16. AND-01 reported NO-GO for CompositionPlayer preview. Read docs/editor/spikes/AND-01.md (§1-2 and §5-7) and what ENG-06 recorded (ARCH §13.3/§13.4 and AND-16's ticket status).
-If ENG-06 activated AND-16:
-- AND-10 ships the PreviewSession shell, SurfaceBridge, SeekController, QualityGovernor, PreviewSessionManager and the PreviewBackend interface, and meets its playback criteria through AND-16's MultiPlayerBackend.
-- The MultiPlayerBackend has one ExoPlayer per packing slot into a SurfaceTexture (OES), plus audio slot players. AND-17's LayerCompositorGl composites them on a Choreographer frame clock. Drift above half a frame is corrected by seeking the late player.
-- AND-01's prototype in spikes/android_engine is the reference (read only).
-- AND-16 also needs the JNI shim (android/src/main/cpp/, AND-01 §6.3). Use the owner ENG-06/BUILD_PLAN records. If none is recorded, AND-16 creates it and says so in forMac, so the lead can update BUILD_PLAN §6/§7.
-If ENG-06 recorded GO instead, close AND-16 with status not_needed, citing AND-01's report.
-With any CompositionPlayer, detach with clearVideoSurface(surface); the no-arg overload throws in 1.11.1. Report the owner's D-43e sign-off status (AND-01 §7, as recorded in ARCHITECTURE) in forMac, and build anyway. example/integration_test/android_preview_test.dart drives MobileEditorEngine and ENG-02's mobile_preview_session.dart on the emulator. Record emulator numbers for the ARCH §13.4 mid/low device budgets; the device criteria are deferred: no device available.`,
+    id: 'and-m3-paused', tickets: ['AND-17'], deps: ['and-m3-render', 'and-m3-text', 'and-m2b'], external: [], model: 'opus',
+    note: `AND-01 reported NO-GO for CompositionPlayer preview, so the paused-frame reference cannot come from CompositionPlayer: use the Transformer export of the same plan (AND-08's mapper) and state it in handoff. Port from spikes/android_engine/.../PausedFrameRendererProto.kt (read only). Reuse AND-09's ShaderPrograms. AND-16 later composites its slot textures through LayerCompositorGl, so record its API in handoff. With any player, detach with clearVideoSurface(surface); the no-arg overload throws in 1.11.1. Record emulator numbers for the paused budgets; the mid/low device criteria are deferred: no device available.`,
   },
   {
-    id: 'and-m4-services', tickets: ['AND-13', 'AND-14', 'AND-15'], deps: [], external: ['ENG-03'], model: 'opus',
-    note: `Recorder, pickers/URI grants/permissions and drop target behind the calls ENG-03's Dart glue makes (mobile_jobs.dart, mobile_recorder.dart and the platform services; Mac-owned). Implement the service classes ENG-08's glue already calls. AND-13: the emulator mic is virtual; verify the WAV format, that an interruption keeps a valid file, and the denied/permanently-denied states; latency is an emulator number. AND-14: Photo Picker and V-D2 (persistence across relaunch, grant budget) on the API 35 emulator; API < 33 permission flows are deferred unless such an emulator exists; quickHash must equal the core fixtures. AND-15: synthesized DragEvents with ClipData from a test ContentProvider; the cross-app tablet drag is a manual checklist item, deferred: no tablet device/emulator available.`,
+    id: 'and-m3-preview', tickets: ['AND-10'], deps: ['and-m3-paused'], external: ['ENG-02'], model: 'opus',
+    note: `AND-01 reported NO-GO for CompositionPlayer preview and ENG-06 activates AND-16 (read docs/editor/spikes/AND-01.md §1-2 and §6-7, and what ENG-06 recorded in ARCH §13.3/§13.4). AND-10 ships the PreviewSession shell, SurfaceBridge (resetInBackground, latch <= 500 ms), SeekController, QualityGovernor, PreviewSessionManager and the PreviewBackend interface that AND-16's MultiPlayerBackend implements. Meet the 'hand back now' criteria in ANDROID_LANE.md §5 AND-10. The playback criteria (exact seek ack, scrub coalescing, transient, A/V offset) are met through AND-16 later: list them in deferred as 're-run when AND-16 lands' and mark AND-10 done when everything else passes. example/integration_test/android_preview_test.dart drives MobileEditorEngine and ENG-02's mobile_preview_session.dart on the emulator. With any CompositionPlayer, detach with clearVideoSurface(surface); the no-arg overload throws in 1.11.1. Record emulator numbers for the ARCH §13.4 mid/low budgets; the device criteria are deferred: no device available.`,
+  },
+  {
+    id: 'and-m3-fallback', tickets: ['AND-16'], deps: ['and-m3-preview'], external: ['ENG-06', 'D-43E', 'AND16-SHIM'], model: 'opus',
+    note: `Contingency preview engine, active because AND-01 was NO-GO. This group runs only after the owner signed D-43e and ENG-06 assigned android/src/main/cpp/ (the JNI shim) and added its externalNativeBuild block. If ENG-06 recorded GO instead, close AND-16 with status not_needed, citing AND-01's report. Build MultiPlayerBackend : PreviewBackend to the scope in AND-01.md §7. It overrides ARCH §13.3's pre-ENG-06 'Contingency' bullet and BUILD_PLAN's AND-16 spec text (one player per slot into a SurfaceTexture, drift fixed by seeking), which AND-01 measured as showing wrong frames:
+- a deck pool with 2 decks per packing slot, each an ExoPlayer rendering into a PRIVATE ImageReader, imported as an OES texture through the HardwareBuffer JNI shim, with epoch-tagged frames;
+- a Choreographer frame clock on the preview thread with a 2-frame lead, the hold/miss rule (drop a frame, never show a late one) and drift correction, following the audio master;
+- audio slots: one ExoPlayer per audio interval colour with AND-08's speed and GainProcessor chain and a signed sink offset (V-N23);
+- exact seek and scrub through the decks, structural re-plan by slot diff (setMediaItems on affected decks only), surface lifecycle, quality steps (ImageReader size) and thermal SEVERE;
+- compositing through AND-17's LayerCompositorGl and AND-09's shaders; never edit their files or AND-10's.
+Port from spikes/android_engine (ContingencyEngineProto.kt, ContingencyEngineTest.kt; read only) and split the code inside preview/fallback/. Write shim sources only where ENG-06 assigned them to AND-16, and never touch Gradle. If the shim directory or the Gradle block is missing from the tree, return AND-16 as blocked with a forMac request. Re-run AND-10's playback list through this backend (tests in androidTest/fallback/). Record emulator numbers; the mid-device transition/PiP criterion is deferred: no device available.`,
+  },
+  {
+    id: 'and-m4-services', tickets: ['AND-13', 'AND-14', 'AND-15'], deps: ['eng08'], external: ['ENG-06', 'ENG-03'], model: 'opus',
+    note: `Recorder, pickers/URI grants/permissions and drop target behind the calls ENG-03's Dart glue makes (mobile_jobs.dart, mobile_recorder.dart and the platform services; Mac-owned). Implement the service classes ENG-08's glue already calls. AND-13: the emulator mic is virtual; verify the WAV format, that an interruption keeps a valid file, and the denied/permanently-denied states; latency is an emulator number. AND-14: Photo Picker and V-D2 (persistence across relaunch, grant budget) on the API 35 emulator; run the API < 33 permission flows on Pixel_API_29 per the EMULATOR rule (defer only if that AVD is missing); quickHash must equal the core fixtures. AND-15: synthesized DragEvents with ClipData from a test ContentProvider; the cross-app drag from Files is a manual checklist item: if Pixel_Tablet_API_35 exists, try it there per the EMULATOR rule and record the evidence; otherwise 'deferred: Pixel_Tablet_API_35 not installed', left for the owner.`,
   },
   {
     id: 'and-m4-export', tickets: ['AND-11'], deps: ['and-m3-render', 'and-m3-text', 'and-m3-preview'], external: ['ENG-04'], model: 'opus',
-    note: `Transformer export (AND-01: GO). ENG-04's mobile_export.dart (Mac) is the Dart side. Build export compositions with AND-08's mapper (target export) and AND-09's SpriteBandEffect. Define the ActiveExportStore format here; AND-12's service writes its detached records later (D-39). Test on the emulator: V-N13 (hvc1 tag) and V-N24 (no-audio, all-muted and images/text-only fixtures get a silent AAC 48 kHz stereo track). Record which encoder actually ran; the emulator may only have software HEVC, so defer the hardware-encoder criteria. Exercise the portrait retry path with an injected refusal. Check 'interrupted after process death' with am kill or force-stop from an instrumented test. Preview suspension on minimal/low/mid tiers goes through AND-10's PreviewSessionManager.`,
+    note: `Transformer export (AND-01: GO). ENG-04's mobile_export.dart (Mac) is the Dart side. Build export compositions with AND-08's mapper (target export) and AND-09's SpriteBandEffect. Define the ActiveExportStore format here; AND-12's service writes its detached records later (D-39). Test on the emulator: V-N13 (hvc1 tag) and V-N24 (no-audio, all-muted and images/text-only fixtures get a silent AAC 48 kHz stereo track). Record which encoder actually ran; the emulator may only have software HEVC, so defer the real-hardware preference. Test the selector with injected codec lists, including that a software or fallback encoder raises the preflight/progress warning. Exercise the portrait retry path with an injected refusal. Check 'interrupted after process death' with am kill or force-stop from an instrumented test. Preview suspension on minimal/low/mid tiers goes through AND-10's PreviewSessionManager.`,
   },
   {
     id: 'and-m5', tickets: ['AND-12'], deps: ['and-m4-export'], external: [], model: 'opus',
-    note: `ExportService foreground service: type mediaProcessing on API 35+, dataSync on 29-34. It shows a determinate progress notification with a Cancel action that works with the activity destroyed; API 35 onTimeout -> interrupted. BackgroundGuard leases live in the same service. MediaStoreSaver uses RELATIVE_PATH Movies/Vwish and IS_PENDING. FileHandoff uses ACTION_CREATE_DOCUMENT and ACTION_SEND via the FileProvider '<applicationId>.vwish.editor.files' declared in ENG-08's manifest. Implement detached completion (D-39) with AND-11's ActiveExportStore. Only the API 35 emulator exists: the API 29/34 FGS-type checks are 'deferred: API 29/34 emulators not installed'. Run the swipe-from-recents case with UiAutomator on the emulator, and verify the gallery insert with a MediaStore query. If the emulator image has no Photos app, defer that visual check.`,
+    note: `ExportService foreground service: type mediaProcessing on API 35+, dataSync on 29-34. It shows a determinate progress notification with a Cancel action that works with the activity destroyed; API 35 onTimeout -> interrupted. BackgroundGuard leases live in the same service. MediaStoreSaver uses RELATIVE_PATH Movies/Vwish and IS_PENDING. FileHandoff uses ACTION_CREATE_DOCUMENT and ACTION_SEND via the FileProvider '<applicationId>.vwish.editor.files' declared in ENG-08's manifest. Implement detached completion (D-39) with AND-11's ActiveExportStore. Check the FGS types on Pixel_9_Pro_XL_API_35, Pixel_API_34 and Pixel_API_29 per the EMULATOR rule; defer only an AVD that is missing. Run the swipe-from-recents case with UiAutomator on the emulator, and verify the gallery insert with a MediaStore query. If the emulator image has no Photos app, defer that visual check.`,
   },
 ]
 
@@ -367,7 +388,7 @@ for (const g of GROUPS) {
 if (ONLY) {
   for (const id of ONLY) if (!byId[id]) log(`ignoring unknown group '${id}' in args.only`)
 }
-for (const t of ['ENG-02', 'ENG-03', 'ENG-04']) {
+for (const t of ['ENG-02', 'ENG-03', 'ENG-04', 'D-43E', 'AND16-SHIM']) {
   if (LANDED.has(t) && !LANDED.has('ENG-06')) log(`warning: args.landed has ${t} but not ENG-06, which ${t} depends on; check args.landed`)
 }
 
@@ -387,7 +408,7 @@ const ready = []
 for (const g of GROUPS) {
   const label = `${g.id} (${g.tickets.join(', ')})`
   if (PRELOADED[g.id]) log(`finished earlier: ${label}`)
-  else if (macBlockers(g.id).length) log(`waiting for Mac: ${label} needs ${macBlockers(g.id).join(', ')}`)
+  else if (macBlockers(g.id).length) log(`waiting for Mac/owner: ${label} needs ${macBlockers(g.id).join(', ')}`)
   else if (ONLY && !ONLY.has(g.id)) log(`not selected (args.only): ${label}`)
   else ready.push(g.id)
 }
@@ -417,7 +438,7 @@ function releaseSlot() {
 
 function reasonFor(id) {
   if (results[id]) return 'has a blocked ticket'
-  if (macBlockers(id).length) return `waiting for Mac: ${macBlockers(id).join(', ')}`
+  if (macBlockers(id).length) return `waiting for Mac/owner: ${macBlockers(id).join(', ')}`
   if (notFinished[id] && notFinished[id].indexOf('dependency not finished') === 0) return 'skipped too'
   return notFinished[id] || 'not finished'
 }
@@ -496,16 +517,17 @@ for (const id of built) {
 const rerunNext = built.filter((id) => !preloadForNextRun[id])
 if (rerunNext.length) log(`partial or blocked (left out of preloadForNextRun, so they resume next run): ${rerunNext.join(', ')}`)
 
+// Only finished tickets are committed; partial or blocked work stays in the tree for the next run.
 const commitPlan = []
+const leftInTree = []
 for (const id of built) {
   for (const t of results[id].tickets) {
     if (!t.files || !t.files.length) continue
-    commitPlan.push({
-      ticket: t.id,
-      status: t.status,
-      message: `feat(editor): ${t.id} ${TITLES[t.id] || ''}`.trim() + (t.status === 'done' || t.status === 'not_needed' ? '' : ` (${t.status})`),
-      files: t.files,
-    })
+    if (t.status !== 'done' && t.status !== 'not_needed') {
+      leftInTree.push({ ticket: t.id, status: t.status, files: t.files })
+      continue
+    }
+    commitPlan.push({ ticket: t.id, status: t.status, message: `feat(editor): ${t.id} ${TITLES[t.id] || ''}`.trim(), files: t.files })
   }
 }
 
@@ -515,7 +537,7 @@ const forMac = built
 
 if (!built.length) {
   log('no lane group was built in this run')
-  return { built, preloaded: Object.keys(PRELOADED), waitingForMac, notFinished: notFinishedList, commitPlan, forMac, review: null, fix: null, preloadForNextRun }
+  return { built, preloaded: Object.keys(PRELOADED), waitingForMac, notFinished: notFinishedList, commitPlan, leftInTree, forMac, review: null, fix: null, preloadForNextRun }
 }
 
 if (!RUN_REVIEW) {
@@ -523,7 +545,7 @@ if (!RUN_REVIEW) {
   return {
     built, preloaded: Object.keys(PRELOADED), waitingForMac, notFinished: notFinishedList,
     groups: built.map((id) => ({ id, tickets: results[id].tickets.map((t) => `${t.id}:${t.status}`), deferred: results[id].deferred })),
-    commitPlan, forMac, review: null, fix: null, preloadForNextRun,
+    commitPlan, leftInTree, forMac, review: null, fix: null, preloadForNextRun,
   }
 }
 
@@ -537,8 +559,10 @@ const summary = GROUPS.filter((g) => results[g.id]).map((g) => {
 
 const ALL_LANE_TICKETS = GROUPS.flatMap((g) => g.tickets)
 const FROZEN = LANDED.has('ENG-06')
-  ? 'ENG-06 HAS landed: the Pigeon surface, glue, build.gradle.kts and lint.xml are frozen; findings in them go to forMac, not fixed here.'
-  : 'ENG-06 has NOT landed yet: ENG-08 still owns its glue, build.gradle.kts, lint.xml and manifest, so findings there can be fixed here.'
+  ? 'ENG-06 HAS landed: the Pigeon surface, glue, build.gradle.kts, lint.xml and manifest are frozen; findings in them go to forMac, not fixed here.'
+  : built.includes('eng08')
+    ? 'ENG-08 was built in this run and is not committed yet: findings in its glue, build.gradle.kts, lint.xml and manifest can be fixed here and go into its commit.'
+    : 'ENG-08 was committed in an earlier run and may already be on the Mac: do not edit its glue, build.gradle.kts, lint.xml or manifest. Report findings there as needs_mac with the exact fix; the lead agrees a fix(editor): ENG-08 commit with the owner before the Mac starts ENG-06.'
 
 const REVIEW_SCHEMA = {
   type: 'object',
@@ -626,10 +650,25 @@ Findings:
 ${findings.map((f, i) => `${i + 1}. [${f.severity}] ${f.ticket} ${f.file}: ${f.issue}\n   evidence: ${f.evidence}\n   fix: ${f.fix}`).join('\n')}`, { label: 'fix', phase: 'Fix', schema: FIX_SCHEMA, model: 'opus' }) : null
 
 if (fix && fix.results) {
-  const fixFiles = uniq(fix.results.filter((x) => x.outcome === 'fixed').flatMap((x) => x.files || []))
-  if (fixFiles.length) {
-    const tickets = uniq(fix.results.filter((x) => x.outcome === 'fixed').map((x) => (findings[x.finding - 1] || {}).ticket).filter(Boolean))
-    commitPlan.push({ ticket: tickets.join(', ') || 'review', status: 'done', message: `fix(editor): Android lane review fixes (${tickets.join(', ') || 'review'})`, files: fixFiles })
+  // Group fixed files by ticket. A ticket committed in this run takes its fixes into its own entry;
+  // a ticket left in the tree keeps them there; a ticket from an earlier run gets a fix(editor) entry.
+  const fixByTicket = {}
+  for (const x of fix.results) {
+    if (x.outcome !== 'fixed' || !(x.files || []).length) continue
+    const t = String((findings[x.finding - 1] || {}).ticket || 'review').trim()
+    fixByTicket[t] = uniq((fixByTicket[t] || []).concat(x.files))
+  }
+  const builtTickets = new Set(built.flatMap((id) => results[id].tickets.map((t) => t.id)))
+  const planned = new Set(commitPlan.flatMap((c) => c.files))
+  for (const t of Object.keys(fixByTicket)) {
+    const entry = commitPlan.find((c) => c.ticket === t)
+    if (entry) {
+      entry.files = uniq(entry.files.concat(fixByTicket[t]))
+      continue
+    }
+    if (builtTickets.has(t)) continue
+    const files = fixByTicket[t].filter((f) => !planned.has(f))
+    if (files.length) commitPlan.push({ ticket: t, status: 'done', message: `fix(editor): ${t} review fixes`, files })
   }
   if (fix.forMac && !/^\s*(none|n\/a)?\.?\s*$/i.test(fix.forMac)) forMac.push({ group: 'fix', note: fix.forMac })
 }
@@ -641,6 +680,7 @@ return {
   notFinished: notFinishedList,
   groups: built.map((id) => ({ id, tickets: results[id].tickets.map((t) => `${t.id}:${t.status}`), deferred: results[id].deferred })),
   commitPlan,
+  leftInTree,
   forMac,
   review: review ? { verdict: review.verdict, findings: review.findings } : null,
   fix: fix || (review ? 'no findings' : 'review did not return'),

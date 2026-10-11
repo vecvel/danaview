@@ -22,14 +22,8 @@ Windows can't build or test iOS: Xcode only runs on macOS.
 
 ## Owner checklist (Windows laptop)
 
-1. Follow [WINDOWS_SETUP.md](WINDOWS_SETUP.md) up to and including its smoke checks. That covers installing the tools, setting Git to keep LF line endings, cloning, and creating the `editor-android` branch.
-2. Copy `android/key.properties` and `android/app/release.jks` from the Mac by USB. Never commit or email them.
-3. Install the Claude desktop app and sign in with the same account. Open the `vwish_player` folder once in the Code tab, then close that session.
-4. In PowerShell, from the repo folder:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File tool\handoff\install_claude_memory.ps1
-   ```
-5. Start a new Code session in the `vwish_player` folder and paste the first message below.
+1. Follow [WINDOWS_SETUP.md](WINDOWS_SETUP.md) Part A (A1–A8). That covers installing the tools and the Claude app, setting Git to keep LF line endings, cloning to `C:\dev\vwish_player`, creating the `editor-android` branch and installing Claude's notes. The signing files (A7) are optional: lane work doesn't need them.
+2. Start a new Code session in `C:\dev\vwish_player` and paste the first message below. Claude runs the smoke checks (Part B) and tells you if anything is missing.
 
 Both machines share one Claude usage limit. The split removes the memory bottleneck, not the usage limit.
 
@@ -38,9 +32,9 @@ Both machines share one Claude usage limit. The split removes the memory bottlen
 ```
 You are the Windows Android-lane builder for the Vwish video editor.
 Read docs/editor/handoff/README.md, ANDROID_LANE.md, WINDOWS_SETUP.md and BUILD_STATE.md first.
-Run the smoke checks from WINDOWS_SETUP.md and fix anything missing in the toolchain (tell me before installing anything).
+Run the smoke checks (WINDOWS_SETUP.md Part B) and fix anything missing in the toolchain (tell me before installing anything).
 Then build the lane tickets whose gates are met, using docs/editor/handoff/android_lane_workflow.js
-(args: root = this repo path with forward slashes, landed = the Mac tickets already on editor-wip).
+(args: root = 'C:/dev/vwish_player', landed = ['ENG-09', 'API-04'] plus any of ENG-06, ENG-02, ENG-03, ENG-04 I tell you have landed).
 Work on branch editor-android; commit each finished ticket as "feat(editor): <TICKET> <title>" with no co-author trailer and push.
 Tell me after each ticket lands so the Mac can merge it. Use a workflow for the build.
 ```
@@ -49,8 +43,8 @@ Tell me after each ticket lands so the Mac can merge it. Use a workflow for the 
 
 - **Windows:**
   - Commits one ticket at a time to `editor-android` and pushes.
-  - Only edits files its tickets own (BUILD_PLAN §2/§7).
-  - Files on the shared-file register (§7) get small, targeted insertions.
+  - Edits only the files its tickets own (BUILD_PLAN §6) and placeholders headed `// OWNER: <ticket>`.
+  - The only shared-file register (§7) files it touches are ENG-08's own (Gradle, manifest, plugin class, glue, `lint.xml`), and only inside ENG-08.
 - **Mac:**
   - When the owner says a Windows ticket landed, the Mac session merges `origin/editor-android` into `editor-wip`.
   - The Mac pushes `editor-wip` after each batch of finished tickets.
@@ -72,6 +66,7 @@ Tell me after each ticket lands so the Mac can merge it. Use a workflow for the 
   | ENG-02 | Mac | AND-10 |
   | ENG-03 | Mac | AND-13, AND-14, AND-15 |
   | ENG-04 | Mac | AND-11 |
+  | D-43e sign-off, JNI shim set up by ENG-06 | Owner, Mac | AND-16 |
 
   ENG-08 and AI-04 can start as soon as the Windows toolchain works. ENG-08 first: the Mac's ENG-06, and through it every native ticket on both phones, waits for it.
 - **Line endings:** `.gitattributes` keeps every text file LF on all machines. Test fixtures, goldens and vectors are marked `-text` so they stay byte-for-byte; some subtitle and LUT fixtures contain CR on purpose.

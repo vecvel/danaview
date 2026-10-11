@@ -1,6 +1,7 @@
 # Android lane (Windows laptop): ticket plan
 
-> Status 2026-10-10. Sources: `docs/editor/BUILD_PLAN.md` §1, §2, §5, §6, §7; `docs/editor/spikes/AND-01.md`; `docs/editor/ARCHITECTURE.md` §3.2, §4.4, §13.3–13.5, §14.3, §15, §20.4, §24.2. When this file disagrees with BUILD_PLAN, BUILD_PLAN wins (and ARCHITECTURE wins over both).
+> Status 2026-10-11. Sources: `docs/editor/BUILD_PLAN.md` §1, §2, §5, §6, §7; `docs/editor/spikes/AND-01.md`; `docs/editor/ARCHITECTURE.md` §3.2, §4.4, §13.3–13.5, §14.3, §15, §20.4, §24.2.
+> When sources disagree: ARCHITECTURE as updated by ENG-06 wins, then the rules in AND-01.md §6 and §7, then BUILD_PLAN §6, then this file. ENG-06 records the AND-01 rules in ARCH §13.3 before any AND ticket starts. Until then, AND-01 beats older ARCH and BUILD_PLAN text, for example AND-08's gaps (transparent images, not `addGap`), AND-16's ImageReader decks (not a SurfaceTexture) and AND-17's reference frame.
 > Repo: github.com/vecvel/vwish. Windows branch: `editor-android`, created from `origin/editor-wip`.
 
 ## 1. Summary
@@ -10,21 +11,21 @@ The laptop builds the Android half of the editor's native engine inside the `vwi
 ## 2. Owner checklist (plain language)
 
 1. **Install** the agreed tools: Git for Windows, Flutter 3.44.2, Java 21, Android Studio with SDK 36, NDK 27.0.12077973 and 28.2.13676358, CMake 3.22.1, the `Pixel_9_Pro_XL_API_35` emulator, ffmpeg and the Claude desktop app. The lane also needs:
-   - **API 29 and API 34 emulator images and AVDs.** AND-02 checks GLES 3 on API 29, and AND-12 tests the export service on API 29, 34 and 35.
-   - **A tablet AVD**, for AND-15's manual drag test from the Files app.
-   - **An ffmpeg build with libx264 and libx265** (the spike's media script uses both).
-   - **Python 3 (optional).** The spike's media script ends with a Python self-check.
-   - **A short clone path** such as `C:\src\vwish` (recommended). Deep CMake and Gradle build folders can hit Windows path-length limits.
+   - **API 29 and API 34 AVDs** (`Pixel_API_29`, `Pixel_API_34`). AND-02 checks GLES 3 on API 29, and AND-12 tests the export service on API 29, 34 and 35.
+   - **A tablet AVD** (`Pixel_Tablet_API_35`), for AND-15's manual drag test from the Files app.
+   - **An ffmpeg build with libx264 and libx265**, for test media.
+   - **The clone at `C:\dev\vwish_player`** (WINDOWS_SETUP A6). Claude's notes folder name comes from that path, and a short path avoids Windows path-length limits.
 2. **Carry the gates between machines.**
-   - Tell the Windows session when each of these lands on `editor-wip`: ENG-09, ENG-06, API-04, ENG-02, ENG-03, ENG-04.
+   - Tell the Windows session when each of these lands on `editor-wip`: ENG-06, ENG-02, ENG-03, ENG-04. (ENG-09 and API-04 are already done.)
    - Tell the Mac session each time Windows reports a ticket pushed, so it can merge `editor-android`.
-3. **Sign off AND-16 (D-43e) before M1 ends.** AND-01 found Media3's multi-sequence preview player unusable, so the backup preview engine AND-16 is built. Read the 4 degradations in `docs/editor/spikes/AND-01.md` §7 and approve or reject them. AND-16 cannot start without your sign-off.
+3. **Sign off AND-16 (D-43e) before M1 ends.** AND-01 found Media3's multi-sequence preview player unusable, so the backup preview engine AND-16 is built. Read the 4 degradations in `docs/editor/spikes/AND-01.md` §7 and approve or reject them. AND-16 cannot start without your sign-off. Tell the Windows session when you have signed.
 4. **ENG-08 belongs to Windows** (owner decision, 2026-10-11). The Mac's builders no longer include it.
 5. **Optional.** The root app's Android build makes `media_kit_libs_android_video` download its libmpv jars from github.com (its own `build.gradle`; this is not pub or Maven). Windows will not build the root app unless you allow it. Only one AI-04 check needs that build ("no libc++_shared clash with media_kit"). Without your OK, the Mac covers it when INT-02 wires whisper into the app.
 
 **For the Mac to settle in ENG-06** (Windows does not decide these):
 - **AND-16 needs a ~60-line JNI shim** (HardwareBuffer → OES texture) built with CMake (AND-01 §6.3). No ticket owns `packages/vwish_editor_engine/android/src/main/cpp/`, and ENG-06 freezes `build.gradle.kts`. ENG-06 must add the `externalNativeBuild` block and assign the cpp directory before AND-16 starts.
 - **`minSdk` conflict.** ENG-08's spec and ARCH §3.2 keep the plugin at minSdk 24: the app is minSdk 24 and gates the editor at runtime. AND-01 §6.3 says 29. ENG-08 ships 24, and ENG-06 decides.
+- **Ignore `.cxx/`.** The root `.gitignore` covers `**/build/` but not `.cxx/`, where AGP stages CMake builds inside plugin modules. Add `**/.cxx/` before AND-16's shim build. AI-04 keeps its own staging folder under `build/`.
 - **AND-01.md still has `{{…}}` measurement placeholders** from the Mac's final reruns. The NO-GO verdict and the rules in its §6 do not depend on them.
 
 ## 3. Working rules (Windows Claude session)
@@ -44,7 +45,7 @@ The laptop builds the Android half of the editor's native engine inside the `vwi
 - **Media3 files.** Every file that uses Media3 starts with `@file:OptIn(UnstableApi::class, ExperimentalApi::class)`; lint enforces it. Media3 is pinned at 1.11.1.
 - **No logs of media paths, transcript text or user content** (BUILD_PLAN §1 rule 4).
 - **Read before coding:** ARCHITECTURE §1–§4, the sections your ticket cites, and `docs/editor/spikes/AND-01.md` §6 ("What ENG-06 must apply"). The spike code in `spikes/android_engine/` is a working reference for AND-08/09/10/16/17. Read it and port from it; do not edit it.
-- **One builder group at a time.** Groups share one emulator and one working tree.
+- **One builder group at a time** (the workflow's default `maxParallel: 1`). Groups share one emulator and one working tree.
 - **Git:**
   - one commit per ticket on `editor-android`, then push;
   - no `Co-Authored-By` trailer;
@@ -53,7 +54,7 @@ The laptop builds the Android half of the editor's native engine inside the `vwi
 
 ## 4. Ticket order and gates
 
-Statuses: **DONE** means on the Mac and finished. **MAC (pending)** means the Mac still has to land it on `editor-wip`. **WINDOWS** means this lane.
+Statuses: **DONE** means finished and on `origin/editor-wip`. **MAC (pending)** means the Mac still has to land it on `editor-wip`. **WINDOWS** means this lane.
 
 Verification keys:
 - **GRADLE**: the example host builds the plugin (`flutter build apk` inside `android_unit.sh`).
@@ -67,35 +68,35 @@ Commands are in §9.
 
 | # | Ticket | Title | M | Depends on | Can start when | Group | Verification |
 |---|---|---|---|---|---|---|---|
-| 1 | AI-04 | whisper Android native build | M2 | AI-03 DONE | Now, once the Mac's hand-off push puts AI-03's `packages/vwish_whisper/src/` on `origin/editor-wip` (§9 check) | W1 | NDK, whisper JVM tests via a scratch host, `flutter_packages.sh vwish_whisper` |
-| 2 | ENG-08 | Android plugin glue, engine core, Gradle, manifest and native service placeholders | M0 | ENG-09 MAC (pending) | ENG-09's `example/android/` is on `origin/editor-wip` and merged into `editor-android` | W2 | GRADLE, JVM, LINT (plus a negative fixture), EMU + `engine_smoke_test.dart` |
-| 3 | AND-02 | Android probe, compatibility, device profile, capabilities | M2 | ENG-06 MAC (pending), ENG-05 DONE | ENG-06 merged into `editor-android` | W3 | JVM, EMU on API 35 and API 29 |
-| 4 | AND-03 | Android thumbnails and disk cache | M2 | AND-02 WINDOWS | AND-02 committed | W3 | JVM, EMU |
-| 5 | AND-04 | Android PCM decoder, waveforms, speech audio extraction | M2 | AND-02 WINDOWS | AND-02 committed | W3 | JVM, EMU |
-| 6 | AND-05 | Android job registry, proxy job and registry | M2 | AND-02 WINDOWS | AND-02 committed | W4 | JVM, EMU |
-| 7 | AND-06 | Android freeze frame and source-frame cache | M2 | AND-05 WINDOWS | AND-05 committed | W4 | JVM, EMU |
-| 8 | AND-07 | Android reverse rendition job | M2 | AND-05 WINDOWS | AND-05 committed | W4 | JVM, EMU |
-| 9 | AND-08 | Android plan reader, ParamSnapshot, composition mapper, gating, speed and gain providers | M3 | ENG-06 MAC (pending); CORE-29, CORE-32, API-03 DONE | ENG-06 merged | W5 | JVM, EMU |
-| 10 | AND-09 | Android GL effects, shaders, LUT and sprite textures | M3 | ENG-06 MAC (pending), API-04 MAC (pending, in progress); API-03, CORE-21 DONE | ENG-06 **and** API-04 merged | W5 | JVM, EMU (GL, parity goldens) |
-| 11 | AND-17 | Android paused-frame renderer, layer GL compositor and structural debounce | M3 | AND-08, AND-09, AND-06 WINDOWS | All three committed | W6 | EMU |
-| 12 | AND-10 | Android preview session: SurfaceProducer, clock, seek/scrub, transients, redraw, quality, lifecycle | M3 | AND-08, AND-09, AND-06, AND-17 WINDOWS; ENG-02 MAC (pending) | AND-17 committed **and** ENG-02 merged | W6 | EMU, IT `android_preview_test.dart` |
-| 13 | AND-16 | Android contingency preview engine (active: AND-01 NO-GO) | M3 | AND-10, AND-17 WINDOWS; activation by ENG-06 MAC (pending); owner sign-off D-43e | AND-10 committed **and** ENG-06 has activated AND-16 **and** the owner has signed D-43e **and** ENG-06 has settled the JNI shim's Gradle and cpp ownership (§2) | W7 | EMU, IT (AND-10's playback list through this backend) |
-| 14 | AND-13 | Android voice recorder | M4 | ENG-03 MAC (pending) | ENG-03 merged | W8 | EMU |
-| 15 | AND-14 | Android pickers, URI grants (media access), permissions | M4 | ENG-03 MAC (pending) | ENG-03 merged | W8 | EMU (API 35, so API 33+ permission flows run) |
-| 16 | AND-15 | Android external drop target | M4 | ENG-03 MAC (pending) | ENG-03 merged | W8 | EMU, plus a manual check on the tablet AVD |
-| 17 | AND-11 | Android export: coordinator, Transformer, encoder settings, hardware selector, active store | M4 | AND-09, AND-08, AND-10 WINDOWS; ENG-04 MAC (pending) | AND-10 committed **and** ENG-04 merged | W9 | JVM, EMU |
-| 18 | AND-12 | Android export foreground service, notification, background guard, MediaStore, file handoff | M5 | AND-11 WINDOWS | AND-11 committed | W9 | EMU on API 29, 34 and 35 (UiAutomator) |
+| 1 | AI-04 | whisper Android native build | M2 | AI-03 DONE | Now (AI-03's `packages/vwish_whisper/src/` is on `origin/editor-wip`) | ai-android | NDK, whisper JVM tests via a scratch host, `flutter_packages.sh vwish_whisper` |
+| 2 | ENG-08 | Android plugin glue, engine core, Gradle, manifest and native service placeholders | M0 | ENG-09 DONE | Now (ENG-09's `example/android/` is on `origin/editor-wip`) | eng08 | GRADLE, JVM, LINT (plus a negative fixture), EMU + `engine_smoke_test.dart` |
+| 3 | AND-02 | Android probe, compatibility, device profile, capabilities | M2 | ENG-06 MAC (pending), ENG-05 DONE | ENG-06 merged into `editor-android` | and-m2a | JVM, EMU on API 35 and API 29 |
+| 4 | AND-03 | Android thumbnails and disk cache | M2 | AND-02 WINDOWS | AND-02 committed | and-m2a | JVM, EMU |
+| 5 | AND-04 | Android PCM decoder, waveforms, speech audio extraction | M2 | AND-02 WINDOWS | AND-02 committed | and-m2a | JVM, EMU |
+| 6 | AND-05 | Android job registry, proxy job and registry | M2 | AND-02 WINDOWS | AND-02 committed | and-m2a | JVM, EMU |
+| 7 | AND-06 | Android freeze frame and source-frame cache | M2 | AND-05 WINDOWS | AND-05 committed | and-m2b | JVM, EMU |
+| 8 | AND-07 | Android reverse rendition job | M2 | AND-05 WINDOWS | AND-05 committed | and-m2b | JVM, EMU |
+| 9 | AND-08 | Android plan reader, ParamSnapshot, composition mapper, gating, speed and gain providers | M3 | ENG-06 MAC (pending); CORE-29, CORE-32, API-03 DONE | ENG-06 merged | and-m3-render | JVM, EMU |
+| 10 | AND-09 | Android GL effects, shaders, LUT and sprite textures | M3 | ENG-06 MAC (pending); API-03, API-04, CORE-21 DONE | ENG-06 merged | and-m3-text | JVM, EMU (GL, parity goldens) |
+| 11 | AND-17 | Android paused-frame renderer, layer GL compositor and structural debounce | M3 | AND-08, AND-09, AND-06 WINDOWS | All three committed | and-m3-paused | EMU |
+| 12 | AND-10 | Android preview session: SurfaceProducer, clock, seek/scrub, transients, redraw, quality, lifecycle | M3 | AND-08, AND-09, AND-06, AND-17 WINDOWS; ENG-02 MAC (pending) | AND-17 committed **and** ENG-02 merged | and-m3-preview | EMU, IT `android_preview_test.dart` |
+| 13 | AND-16 | Android contingency preview engine (active: AND-01 NO-GO) | M3 | AND-10, AND-17 WINDOWS; activation by ENG-06 MAC (pending); owner sign-off D-43e | AND-10 committed **and** ENG-06 has activated AND-16 **and** the owner has signed D-43e **and** ENG-06 has settled the JNI shim's Gradle and cpp ownership (§2). The lead then adds `D-43E` and `AND16-SHIM` to the workflow's `landed` | and-m3-fallback | EMU, IT (AND-10's playback list through this backend) |
+| 14 | AND-13 | Android voice recorder | M4 | ENG-03 MAC (pending) | ENG-03 merged | and-m4-services | EMU |
+| 15 | AND-14 | Android pickers, URI grants (media access), permissions | M4 | ENG-03 MAC (pending) | ENG-03 merged | and-m4-services | EMU (API 35, so API 33+ permission flows run) |
+| 16 | AND-15 | Android external drop target | M4 | ENG-03 MAC (pending) | ENG-03 merged | and-m4-services | EMU, plus a manual check on the tablet AVD |
+| 17 | AND-11 | Android export: coordinator, Transformer, encoder settings, hardware selector, active store | M4 | AND-09, AND-08, AND-10 WINDOWS; ENG-04 MAC (pending) | AND-10 committed **and** ENG-04 merged | and-m4-export | JVM, EMU |
+| 18 | AND-12 | Android export foreground service, notification, background guard, MediaStore, file handoff | M5 | AND-11 WINDOWS | AND-11 committed | and-m5 | EMU on API 29, 34 and 35 (UiAutomator) |
 
 How groups map to builder agents:
-- Each group W1..W9 is sized for one builder agent and runs its tickets in the order listed.
-- W8 depends only on ENG-03. Run it whenever ENG-03 arrives, even before W5–W7.
+- The Group column is the group id in `android_lane_workflow.js` (pass it in the workflow's `only` argument to run one group). Each group is one builder agent and runs its tickets in the order listed.
+- and-m4-services needs only ENG-06 and ENG-03. Run it whenever ENG-03 arrives, even before the M3 groups.
 - Everything from AND-02 on waits for ENG-06. ENG-06 in turn waits for ENG-08 (Windows), ENG-07, IOS-01 and AND-01 (all Mac). ENG-08 is therefore the lane's most urgent ticket.
 
 ## 5. Tickets: owned files, shared files, acceptance criteria
 
 Every `AND-xx` main-source file below starts as a `// OWNER: AND-xx` placeholder that ENG-08 creates (D-33). The ticket replaces that placeholder; test directories start empty. §7 shared files come up only where listed.
 
-### AI-04 · whisper Android native build (W1)
+### AI-04 · whisper Android native build (ai-android)
 
 ```
 packages/vwish_whisper/android/build.gradle.kts
@@ -118,6 +119,7 @@ scripts/ci/editor/check_native_libs.sh
 - Compiler: `-O3`, no OpenMP, `GGML_NATIVE=OFF`.
 - `GGML_CPU_KLEIDIAI=OFF`: KleidiAI fetches sources at build time, which is a forbidden download.
 - Pin `ndkVersion` to an installed NDK. Flutter 3.44.2's default is 28.2.13676358, which the spike also uses.
+- Set `buildStagingDirectory` under the module's `build/` folder. The root `.gitignore` doesn't cover `.cxx/`, so the default staging folder would show up in `git status`.
 
 **`check_native_libs.sh`** must run under bash 3.2 (macOS), Ubuntu CI and Git Bash. It finds `llvm-readelf` under the NDK's `toolchains/llvm/prebuilt/{darwin-x86_64,linux-x86_64,windows-x86_64}/bin` (`.exe` on Windows). It follows the script contract in `scripts/ci/editor/README.md`.
 
@@ -135,7 +137,7 @@ scripts/ci/editor/check_native_libs.sh
 
 On-device loading is AI-07's (Mac), not AI-04's.
 
-### ENG-08 · Android plugin glue, engine core, Gradle, manifest and native service placeholders (W2)
+### ENG-08 · Android plugin glue, engine core, Gradle, manifest and native service placeholders (eng08)
 
 ```
 packages/vwish_editor_engine/android/build.gradle.kts
@@ -178,7 +180,7 @@ packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/eng
 - The example app's manifest merge is clean.
 - No device-only criteria.
 
-### AND-02 · Android probe, compatibility, device profile, capabilities (W3)
+### AND-02 · Android probe, compatibility, device profile, capabilities (and-m2a)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/Probe.kt
@@ -207,7 +209,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 - V-N7, a GLES 3 context on a real low-tier API 29 device.
 - The HDR tone-map path. The emulator has no HEVC Main10 decoder and no `GL_EXT_YUV_target`; re-check what the Windows emulator reports.
 
-### AND-03 · Android thumbnails and disk cache (W3)
+### AND-03 · Android thumbnails and disk cache (and-m2a)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/ThumbnailService.kt
@@ -227,7 +229,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 **Deferred: no device available:** a miss takes ≤ 400 ms on the low tier (QA-04).
 
-### AND-04 · Android PCM decoder, waveforms, speech audio extraction (W3)
+### AND-04 · Android PCM decoder, waveforms, speech audio extraction (and-m2a)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/PcmDecoder.kt
@@ -249,7 +251,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 **Deferred: no device available:** ≥ 60× real time on a mid-tier device. Record the emulator figure as indicative only.
 
-### AND-05 · Android job registry, proxy job and registry (W4)
+### AND-05 · Android job registry, proxy job and registry (and-m2a)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/core/JobRegistry.kt
@@ -268,7 +270,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 **Deferred: no device available:** HDR → SDR. `hlg_10bit_720p.mov` is HEVC Main10, which the emulator can't decode.
 
-### AND-06 · Android freeze frame and source-frame cache (W4)
+### AND-06 · Android freeze frame and source-frame cache (and-m2b)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/FreezeFrameJob.kt
@@ -287,7 +289,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 All of this is emulator-verifiable.
 
-### AND-07 · Android reverse rendition job (W4)
+### AND-07 · Android reverse rendition job (and-m2b)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/media/ReverseJob.kt
@@ -308,7 +310,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 All of this is emulator-verifiable.
 
-### AND-08 · Android plan reader, ParamSnapshot, composition mapper, gating, speed and gain providers (W5)
+### AND-08 · Android plan reader, ParamSnapshot, composition mapper, gating, speed and gain providers (and-m3-render)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/plan/
@@ -327,6 +329,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 - `grid_cuts_30fps.json` gating matches `expected_active.json` on every frame.
 - Sequence count equals slot count.
 - A no-audio plan still yields an audio track.
+- The z-order unit tests pass.
 - `SegmentSpeedProvider` is within ±1 µs.
 - The gain envelope is sample-exact.
 - The classification vectors pass.
@@ -341,7 +344,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 **Deferred: no device available:** 2,000-item mapping ≤ 150 ms on a mid-tier device.
 
-### AND-09 · Android GL effects, shaders, LUT and sprite textures (W5)
+### AND-09 · Android GL effects, shaders, LUT and sprite textures (and-m3-text)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/effects/
@@ -360,7 +363,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 **Deferred: no device available:** 1080p compose ≤ 8 ms on a mid-tier device (QA-04).
 
-### AND-17 · Android paused-frame renderer, layer GL compositor and structural debounce (W6)
+### AND-17 · Android paused-frame renderer, layer GL compositor and structural debounce (and-m3-paused)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/PausedFrameRenderer.kt
@@ -381,7 +384,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 **Deferred: no device available:** transient ≤ 2 frames on mid; paused structural edit ≤ 250 ms on mid and ≤ 400 ms on low. Record the emulator numbers.
 
-### AND-10 · Android preview session (W6)
+### AND-10 · Android preview session (and-m3-preview)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/PreviewSession.kt
@@ -412,7 +415,7 @@ packages/vwish_editor_engine/example/integration_test/android_preview_test.dart
 
 **Deferred: no device available:** the mid and low latency budgets of ARCH §13.4.
 
-### AND-16 · Android contingency preview engine (W7, active)
+### AND-16 · Android contingency preview engine (and-m3-fallback, active)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/fallback/
@@ -438,7 +441,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 **Deferred: no device available:** transitions and video-over-video PiP at 30 fps with ≤ 2% dropped on the mid device.
 
-### AND-13 · Android voice recorder (W8)
+### AND-13 · Android voice recorder (and-m4-services)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/recording/VoiceRecorder.kt
@@ -455,7 +458,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 **Deferred: no device available:** removing a real input device (headset or Bluetooth).
 
-### AND-14 · Android pickers, URI grants (media access), permissions (W8)
+### AND-14 · Android pickers, URI grants (media access), permissions (and-m4-services)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/platform/MediaPicker.kt
@@ -474,7 +477,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 All of this is emulator-verifiable.
 
-### AND-15 · Android external drop target (W8)
+### AND-15 · Android external drop target (and-m4-services)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/platform/DropTarget.kt
@@ -489,7 +492,7 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 - Disabling works.
 - **Manual:** a cross-app drag from Files on the **tablet AVD**, with recorded evidence (repeated in QA-02).
 
-### AND-11 · Android export (W9)
+### AND-11 · Android export (and-m4-export)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/ExportCoordinator.kt
@@ -510,11 +513,12 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 - A/V offset is ≤ 1 frame and ≤ 20 ms.
 - The portrait retry path works with an injected refusal.
 - The error-mapping tests pass.
+- A software or fallback encoder raises the preflight/progress warning (tested with an injected codec list).
 - The export reports `interrupted` after a process kill.
 
 **Deferred: no device available:** hardware-encoder preference against real hardware codecs. Test the selector logic with injected codec lists.
 
-### AND-12 · Android export foreground service, notification, background guard, MediaStore, file handoff (W9)
+### AND-12 · Android export foreground service, notification, background guard, MediaStore, file handoff (and-m5)
 
 ```
 packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/ExportService.kt
@@ -544,17 +548,9 @@ These can run before any Mac gate:
 1. **Owner setup** (§2, item 1).
 2. **Branch**, once the Mac's hand-off push is on `origin/editor-wip`:
    `git fetch origin && git switch -c editor-android origin/editor-wip && git push -u origin editor-android`.
-3. **Toolchain check with the AND-01 spike.** This only reads `spikes/`: don't commit anything there, and `media/`, `results/` and `local.properties` are git-ignored.
-   - `flutter doctor -v` shows the Android toolchain OK with Java 21. `ls "$ANDROID_HOME/ndk"` lists both NDKs. `"$ANDROID_HOME/cmake/3.22.1/bin/cmake" --version` works.
-   - JVM tests: `cd spikes/android_engine && printf 'sdk.dir=%s\n' "$(cygpath -m "$ANDROID_HOME")" > local.properties && ./gradlew :app:testDebugUnitTest`. Expected: `GridTimeTest` green. This proves Gradle 9.1, AGP 9.0.1, Java 21 and SDK 36 all work.
-   - Media: `FFMPEG=ffmpeg FFPROBE=ffprobe ./tool/gen_media.sh`. The last step is a Python self-check; without Python it fails after every file has been written, which is fine for this check.
-   - Emulator: boot `Pixel_9_Pro_XL_API_35`, then run `./tool/run_spike.sh SeekDiagnosticsTest#compositionPlayerSeekIsolation`. This proves NDK 28.2, CMake 3.22.1, adb and the emulator all work.
-     - **Expected: the test passes.** It asserts the Media3 seek failure behind the NO-GO.
-     - If it fails with "R1 may be a go, rerun AND-01", tell the owner at once.
-     - The spike builds `arm64-v8a` only. If install fails with `INSTALL_FAILED_NO_MATCHING_ABIS` on an x86_64 emulator image, tell the owner. A local, uncommitted `abiFilters` change is fine for this check only; revert it with `git restore`.
-   - Optional: `bash scripts/ci/editor/flutter_packages.sh vwish_editor_engine_api`. Report Windows-only failures in Mac packages to the owner; don't fix them.
-4. **AI-04 (W1).** Its only dependency, AI-03, is done.
-5. **ENG-08 (W2)**, as soon as `example/android/` from ENG-09 is on `origin/editor-wip` (§9 check). Merge `origin/editor-wip` in first, then run `bash scripts/ci/editor/android_unit.sh` and `android_emulator.sh` once on the untouched tree to confirm the example host works on Windows.
+3. **Toolchain check.** Run WINDOWS_SETUP.md Part B (B1–B9). The AND-01 spike is used only for B7; don't run its media or emulator scripts on Windows (P16).
+4. **AI-04 (ai-android).** Its only dependency, AI-03, is done.
+5. **ENG-08 (eng08).** ENG-09's `example/android/` is already on `origin/editor-wip`. Merge `origin/editor-wip` in first, then run `bash scripts/ci/editor/android_unit.sh` and `android_emulator.sh` once on the untouched tree to confirm the example host works on Windows. This is the first Android run of `engine_smoke_test.dart`: if the instrumented tests pass and only the smoke step fails, report it to the Mac as an ENG-09 defect with the error, and continue.
 
 Nothing else can start until ENG-06. Do not start AND tickets against the unfrozen Gradle file and glue.
 
@@ -568,7 +564,7 @@ Nothing else can start until ENG-06. Do not start AND tickets against the unfroz
 | `ENG-08` placeholders (`// OWNER: AND-xx`) | ENG-08 creates them → ENG-06 may update them with Pigeon amendments → the AND ticket replaces them | Merge `origin/editor-wip` after ENG-06 before starting any AND ticket. |
 | `packages/vwish_editor_core/test/fixtures/vectors/frame_grid.json` | CORE-02 → ENG-06 (`androidSeekMsRounding` only) | Read-only (AND-08 and AND-10 read it). |
 | `docs/editor/ARCHITECTURE.md` | INT-01 → ENG-06 → INT-05 (Mac) | Read-only. Put V-item answers in the commit body; the Mac records them. |
-| `packages/vwish_whisper/android/build.gradle.kts`, `.../src/main/AndroidManifest.xml` | AI-02 skeleton → AI-06 lines (Mac, done) → **AI-04** | Keep AI-06's `junit` and `ACCESS_NETWORK_STATE` lines. Start only after the Mac's push brings its uncommitted edits to these files. |
+| `packages/vwish_whisper/android/build.gradle.kts`, `.../src/main/AndroidManifest.xml` | AI-02 skeleton → AI-06 lines (Mac, done) → **AI-04** | Keep AI-06's `junit` and `ACCESS_NETWORK_STATE` lines (both are on `origin/editor-wip`). |
 | `packages/vwish_whisper/src/CMakeLists.txt` | AI-03 (Mac) | Read-only. AI-04 works through `src/cmake/android.cmake`. |
 | `packages/vwish_editor_engine/example/**`, `scripts/ci/editor/{android_unit,android_emulator}.sh` | ENG-09 (Mac) | Read-only. The one exception is AND-10's `example/integration_test/android_preview_test.dart`. |
 | `packages/vwish_editor_engine/test_fixtures/media/` | ENG-05 (Mac; generated with Swift and AVFoundation) | Read-only. Windows can't regenerate it. Ask the Mac for new shared fixtures, or generate ticket-local ones inside owned test directories. |
@@ -612,7 +608,7 @@ git cat-file -e origin/editor-wip:packages/vwish_whisper/src/vw_whisper.cpp && e
 git cat-file -e origin/editor-wip:packages/vwish_editor_engine/example/android/vwish_test_harness.gradle && echo "ENG-09 present (ENG-08 can start)"
 git show origin/editor-wip:packages/vwish_editor_core/test/fixtures/vectors/frame_grid.json | grep androidSeekMsRounding
 #   null before ENG-06, "floor" after. Also wait for the owner's word.
-#   API-04, ENG-02, ENG-03, ENG-04: the owner's word.
+#   ENG-02, ENG-03, ENG-04: the owner's word.
 
 # Receive gates
 git switch editor-android && git merge --no-edit origin/editor-wip
@@ -630,8 +626,13 @@ cd -
 # AND-10 integration test (serial from `adb devices`)
 cd packages/vwish_editor_engine/example && flutter test integration_test/android_preview_test.dart -d emulator-5554
 
-# Another emulator for one run (AND-02 on API 29, AND-12 on API 29/34)
-ANDROID_SERIAL=emulator-5556 bash scripts/ci/editor/android_emulator.sh
+# API 29 / API 34 / tablet runs (AND-02, AND-12, AND-15): one emulator at a time, under the workflow's lock
+emulator -list-avds              # Pixel_9_Pro_XL_API_35, Pixel_API_29, Pixel_API_34, Pixel_Tablet_API_35
+adb emu kill                     # stop the API 35 emulator first
+emulator -avd Pixel_API_29 -no-snapshot-save &
+adb wait-for-device
+ANDROID_SERIAL=emulator-5554 bash scripts/ci/editor/android_emulator.sh   # serial from `adb devices`
+adb emu kill
 ```
 
 Test packages per ticket:

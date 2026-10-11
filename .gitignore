@@ -68,3 +68,6 @@ app.*.map.json
 
 skills-lock.json
 brag-output/
+
+# Android NDK/CMake build staging
+**/.cxx/
