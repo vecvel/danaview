@@ -55,7 +55,7 @@ class MediaPicker(private val ctx: EngineContext) {
         val started = requests.startForResult(intent) { resultCode, data ->
             val uris = plan.parse(resultCode, data)
             if (uris.isEmpty()) return@startForResult done.succeed(emptyList())
-            ctx.threads.io.handler.post {
+            ctx.threads.io.execute {
                 try {
                     val items = uris.mapNotNull { describe(it, plan) }
                     if (items.size < uris.size) Log.i(TAG, "picker: ${uris.size - items.size} item(s) of an unrequested type dropped")

@@ -13,7 +13,8 @@
 //   time of the first read minus that block's duration. Never negative. Dart places the clip at
 //   playhead + latency.
 // - Interruptions keep the file: audio-focus loss (the recorder holds
-//   AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE, as Android recommends for voice memos), removal of the
+//   AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE, as Android recommends for voice memos; when the system
+//   refuses focus, e.g. no foreground activity on Android 12+, capture continues without it), removal of the
 //   routed input device, or a dead AudioRecord stop the capture, finalize the WAV, then emit an
 //   `interruption` event (interrupted | deviceRemoved). stop() afterwards returns the kept asset.
 // - Permission (RECORD_AUDIO, requested in context; the rationale UI is Dart's):
@@ -296,7 +297,8 @@ class VoiceRecorder(private val ctx: EngineContext) {
         @Volatile private var latencyUs = 0L
         @Volatile private var frames = 0L
         private var focusRequest: AudioFocusRequest? = null
-        private var routedDeviceId: Int? = null
+        @Volatile var routedDeviceId: Int? = null
+            private set
         private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
             if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
                 interrupt(RecordingInterruptionMsg.INTERRUPTED)
@@ -346,8 +348,11 @@ class VoiceRecorder(private val ctx: EngineContext) {
                 audioManager.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
             }
             if (granted == AudioManager.AUDIOFOCUS_REQUEST_FAILED) {
+                // Refused (Android 12+ refuses apps without a foreground activity; a call holds it).
+                // Capture anyway: the system silences the microphone where it must, and a later
+                // focus loss cannot be signalled without focus, which is what the user asked for.
                 abandonFocus()
-                throw EngineException(EngineErrorCode.busy, "audio focus denied (call in progress)")
+                Log.w(TAG, "recording without audio focus (request refused)")
             }
         }
 
@@ -379,7 +384,10 @@ class VoiceRecorder(private val ctx: EngineContext) {
                         break
                     }
                     if (n == 0) continue
-                    if (frames == 0L) latencyUs = measureLatencyUs(n / BYTES_PER_FRAME)
+                    if (frames == 0L) {
+                        latencyUs = measureLatencyUs(n / BYTES_PER_FRAME)
+                        if (routedDeviceId == null) routedDeviceId = record.routedDevice?.id
+                    }
                     writer.append(block, n)
                     frames += n / BYTES_PER_FRAME
                     sinceHeader += n / BYTES_PER_FRAME
@@ -478,6 +486,9 @@ class VoiceRecorder(private val ctx: EngineContext) {
 
     /** Test hook: the device callback of the running recording [recordingId]. */
     internal fun deviceCallbackOf(recordingId: String): AudioDeviceCallback? = synchronized(lock) { recordings[recordingId]?.deviceCallback }
+
+    /** Test hook: the routed input device id of the running recording [recordingId]. */
+    internal fun routedDeviceIdOf(recordingId: String): Int? = synchronized(lock) { recordings[recordingId]?.routedDeviceId }
 
     /** Test/diagnostic: where the last start latency came from ("timestamp" or "firstRead"). */
     @Volatile internal var lastLatencySource: String = "none"

@@ -129,7 +129,7 @@ class DropTarget(private val ctx: EngineContext) {
         val x = (event.x / density).toDouble()
         val y = (event.y / density).toDouble()
         val uris = urisOf(clip)
-        ctx.threads.io.handler.post {
+        ctx.threads.io.execute {
             val items = try {
                 copyAll(uris, description)
             } finally {
