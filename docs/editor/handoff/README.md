@@ -4,8 +4,8 @@ From 2026-10-10 the video editor is built on two machines at once. The Mac has o
 
 | Machine | Builds | Branch |
 |---|---|---|
-| **Mac** (Xcode 26.6) | Everything except the Android lane: editor core, editor screens, integration, QA, all iOS work, ENG-01..09 (including ENG-08, the Android plugin glue, which is already next in the Mac's queue), ENG-02/03/04, ENG-06, AI-05. It also finishes the two engine spikes, IOS-01 and AND-01. | `editor-wip` |
-| **Windows laptop** (32 GB, no Xcode) | The Android lane: AI-04, then AND-02..AND-17 (17 tickets). | `editor-android` |
+| **Mac** (Xcode 26.6) | Everything except the Android lane: editor core, editor screens, integration, QA, all iOS work, ENG-01..07, ENG-09, ENG-02/03/04, ENG-06, AI-05. It also finishes the two engine spikes, IOS-01 and AND-01. | `editor-wip` |
+| **Windows laptop** (32 GB, no Xcode) | The Android lane: ENG-08 and AI-04 first, then AND-02..AND-17 (18 tickets). | `editor-android` |
 
 Windows can't build or test iOS: Xcode only runs on macOS.
 
@@ -66,12 +66,14 @@ Tell me after each ticket lands so the Mac can merge it. Use a workflow for the 
   | Gate | Built on | Unblocks |
   |---|---|---|
   | ENG-06 (spike results folded in, Pigeon surface frozen) | Mac | AND-02 onward (Windows) |
-  | API-04 | Mac, in progress | AND-09 |
+  | ENG-09 (example host app) | Mac, done | ENG-08 (Windows) |
+  | ENG-08 (Android plugin glue) | Windows | ENG-06 (Mac) |
+  | API-04 | Mac, done | AND-09 |
   | ENG-02 | Mac | AND-10 |
   | ENG-03 | Mac | AND-13, AND-14, AND-15 |
   | ENG-04 | Mac | AND-11 |
 
-  AI-04 has no Mac gate. It can start as soon as the Windows toolchain works.
+  ENG-08 and AI-04 can start as soon as the Windows toolchain works. ENG-08 first: the Mac's ENG-06, and through it every native ticket on both phones, waits for it.
 - **Line endings:** `.gitattributes` keeps every text file LF on all machines. Test fixtures, goldens and vectors are marked `-text` so they stay byte-for-byte; some subtitle and LUT fixtures contain CR on purpose.
 
 ## Rules that apply on both machines

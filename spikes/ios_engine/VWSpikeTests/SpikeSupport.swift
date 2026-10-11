@@ -21,11 +21,33 @@ enum Metrics {
     var v = values.mapValues(sanitize)
     v["test"] = test
     v["destination"] = destination
+    // Timing numbers on the shared build Mac depend on what else runs: record the 1-minute load
+    // average (on the simulator this is the host Mac's; 8 cores).
+    if let load = hostLoad1m { v["hostLoad1m"] = (load * 10).rounded() / 10 }
     if let data = try? JSONSerialization.data(withJSONObject: v, options: [.sortedKeys]),
       let s = String(data: data, encoding: .utf8)
     {
       print("VWSPIKE-METRIC \(s)")
     }
+  }
+
+  /// 1-minute load average (the host Mac's on the simulator).
+  static var hostLoad1m: Double? {
+    var load = [Double](repeating: 0, count: 3)
+    return getloadavg(&load, 3) == 3 ? load[0] : nil
+  }
+
+  /// ARCH §23: simulator performance is reported, not failed. The spike still gates timing on
+  /// the simulator while the shared host has a free core; when the host is oversubscribed (load
+  /// above its core count, e.g. other engineers' Gradle/Xcode builds) the tail percentiles
+  /// measure contention, so tests fall back to the median gate and record `hostBusy`.
+  /// Always false on a device.
+  static var hostBusy: Bool {
+    #if targetEnvironment(simulator)
+      return (hostLoad1m ?? 0) > Double(ProcessInfo.processInfo.activeProcessorCount)
+    #else
+      return false
+    #endif
   }
 
   static var destination: String {

@@ -6,7 +6,7 @@ metadata:
 ---
 
 This machine is the **Windows laptop (32 GB RAM, no Xcode)** in the two-machine editor build ([[two-machine-split]]). It builds only the Android lane:
-- AI-04
+- ENG-08 (most urgent: it gates the Mac's ENG-06) and AI-04
 - AND-02..AND-07 (M2)
 - AND-08, AND-09, AND-17, AND-10, AND-16 (M3)
 - AND-11, AND-13, AND-14, AND-15 (M4)
@@ -26,7 +26,7 @@ It never takes iOS, core, UX, integration or QA tickets; the Mac does those.
   - Push after each ticket.
   - To receive Mac gates (ENG-06, API-04, ENG-02/03/04), run `git fetch` then `git merge origin/editor-wip`.
 - **Gates:**
-  - AI-04 can start immediately.
+  - ENG-08 and AI-04 can start immediately (ENG-09 is already on editor-wip).
   - AND-02+ start when ENG-06 is on editor-wip.
   - Tell the owner which ticket landed so the Mac session can merge it.
 - **Mac-only notes:** the paths and tools in [[video-editor-build]] and [[ios-simulator-testing-quirks]] are Mac-only. On this machine, use the Android SDK's CMake/NDK from local.properties, run .sh scripts in Git Bash, and use the Pixel_9_Pro_XL_API_35 emulator.

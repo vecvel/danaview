@@ -78,6 +78,13 @@ class ContingencyEngineProto(
      * late is not drawn (it becomes a dropped frame). false = draw the latest frame available.
      */
     private val holdLateFrames: Boolean = true,
+    /**
+     * The frame clock stops while a playing deck rebuffers (ExoPlayer STATE_BUFFERING: its own
+     * clock has stopped too), for at most [MAX_STALL_MS] at a time, like a player's rebuffer.
+     * false = the clock runs on and the late deck is dropped, then drift-corrected by a seek
+     * (which makes it rebuffer again on a starved decoder).
+     */
+    private val stallOnRebuffer: Boolean = true,
 ) : AutoCloseable {
     /** Where a slot player's decoded frames land. */
     enum class FrameSource {
@@ -102,6 +109,8 @@ class ContingencyEngineProto(
         var staleImages: Int = 0,
         var metadataCallbacks: Int = 0,
         var imagesAcquired: Int = 0,
+        /** Decks re-prepared after a player error (e.g. a decoder failure on a starved host). */
+        var recoveries: Int = 0,
     )
 
     data class Result(
@@ -115,6 +124,9 @@ class ContingencyEngineProto(
         val missedFrames: Int,
         val compositeMs: List<Double>,
         val slots: List<SlotStats>,
+        /** Times the frame clock stopped for a rebuffering deck ([stallOnRebuffer]) and the total stop time. */
+        val rebuffers: Int = 0,
+        val rebufferMs: Double = 0.0,
     )
 
     private val thread = HandlerThread("vwish-preview-contingency").apply { start() }
@@ -177,6 +189,16 @@ class ContingencyEngineProto(
             player.addListener(object : Player.Listener {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     lastError = "${error.errorCodeName}: ${generateSequence<Throwable>(error) { it.cause }.last().let { "${it.javaClass.simpleName} ${it.message}" }}"
+                    // Recover like the engine must (codec errors and reclaimed decoders happen on
+                    // devices too): re-prepare at the same item and position; frames of the old
+                    // epoch are dropped; the frame clock's drift correction re-aligns the deck.
+                    if (slot.stats.recoveries < MAX_RECOVERIES) {
+                        slot.stats.recoveries++
+                        epoch++
+                        queue.forEach { it.close() }
+                        queue.clear()
+                        player.prepare()
+                    }
                 }
             })
             player.setMediaItems(slot.items)
@@ -361,6 +383,14 @@ class ContingencyEngineProto(
     private lateinit var row: ByteBuffer
 
     private var playing = false
+    /** Frame clock and deck speed of the current [play] (1 = real time). */
+    private var clockRate = 1.0
+    private var lastTickNs = 0L
+    private var stallStartNs = 0L
+    private var rebuffers = 0
+    private var rebufferNs = 0L
+    /** Decks paused while the clock is stopped for a rebuffering deck. */
+    private val stallPaused = ArrayList<Deck>()
     private var startT = 0L
     private var wall0Ns = 0L
     private var lastK = -1L
@@ -452,7 +482,7 @@ class ContingencyEngineProto(
             Thread.sleep(10)
         }
         val states = onThread {
-            slots.joinToString { s -> "seq${s.seq}:" + s.decks.joinToString("/") { d -> "${d.assigned}@${d.player.playbackState}" } }
+            slots.joinToString { s -> "seq${s.seq}:" + s.decks.joinToString("/") { d -> "${d.assigned}@${d.player.playbackState}${d.lastError?.let { " ($it)" } ?: ""}" } }
         }
         error("slots not ready after $timeoutMs ms ($states)")
     }
@@ -465,9 +495,19 @@ class ContingencyEngineProto(
         }
     }
 
-    /** Plays from output frame [fromK] to the end on the frame clock; returns when ended or after [timeoutMs]. */
-    fun play(fromK: Long, timeoutMs: Long): Result {
+    /**
+     * Plays from output frame [fromK] to the end on the frame clock; returns when ended or after
+     * [timeoutMs]. [rate] < 1 runs the frame clock and every deck at that speed (a slow-clock
+     * correctness pass on an overloaded host: the same decks, pre-roll, lead and hold logic with
+     * 1/[rate] times the wall time per output frame).
+     */
+    fun play(fromK: Long, timeoutMs: Long, rate: Double = 1.0): Result {
+        require(rate > 0 && rate <= 1.0) { "rate must be in (0, 1]" }
         val t0 = GridTime.timeOfFrame(fromK, plan.fps)
+        onThread {
+            clockRate = rate
+            slots.forEach { s -> s.decks.forEach { it.player.setPlaybackSpeed(rate.toFloat()) } }
+        }
         preroll(t0, 60_000)
         Thread.sleep(300)
         holdReasons += "after preroll: " + debugState()
@@ -485,7 +525,12 @@ class ContingencyEngineProto(
             lastK = fromK - 1
             startT = t0
             // The players start now at t0; the compositor clock reaches t0 one lead later.
-            wall0Ns = System.nanoTime() + leadUs * 1000
+            wall0Ns = System.nanoTime() + (leadUs * 1000 / clockRate).toLong()
+            lastTickNs = System.nanoTime()
+            stallStartNs = 0L
+            rebuffers = 0
+            rebufferNs = 0L
+            stallPaused.clear()
             playing = true
             schedule(t0 - leadUs, t0)
             Choreographer.getInstance().postFrameCallback(tick)
@@ -494,7 +539,7 @@ class ContingencyEngineProto(
         return onThread {
             playing = false
             slots.forEach { s -> s.decks.forEach { it.player.pause() } }
-            Result(ended, (System.nanoTime() - started) / 1e6, composed, skipped, held, missed, compositeMs.toList(), slots.map { it.stats.copy() })
+            Result(ended, (System.nanoTime() - started) / 1e6, composed, skipped, held, missed, compositeMs.toList(), slots.map { it.stats.copy() }, rebuffers, rebufferNs / 1e6)
         }
     }
 
@@ -502,7 +547,33 @@ class ContingencyEngineProto(
         override fun doFrame(frameTimeNanos: Long) {
             if (!playing) return
             val now = System.nanoTime()
-            val tc = startT + (now - wall0Ns) / 1000
+            val buffering = stallOnRebuffer && rebuffering(startT + ((now - wall0Ns) / 1000 * clockRate).toLong() + leadUs)
+            if (buffering && (stallStartNs == 0L || (now - stallStartNs) / 1_000_000 < MAX_STALL_MS)) {
+                if (stallStartNs == 0L) {
+                    // Rebuffer: the other playing decks pause so they stay on the stopped clock.
+                    stallStartNs = now
+                    rebuffers++
+                    for (s in slots) for (d in s.decks) {
+                        if (d.player.playWhenReady && d.player.playbackState != Player.STATE_BUFFERING) {
+                            d.player.playWhenReady = false
+                            stallPaused += d
+                        }
+                    }
+                }
+                // Stop the clock: shift its origin by the time since the last vsync.
+                wall0Ns += now - lastTickNs
+                rebufferNs += now - lastTickNs
+                lastTickNs = now
+                Choreographer.getInstance().postFrameCallback(this)
+                return
+            }
+            if (stallPaused.isNotEmpty()) {
+                stallPaused.forEach { it.player.playWhenReady = true }
+                stallPaused.clear()
+            }
+            if (!buffering) stallStartNs = 0L
+            lastTickNs = now
+            val tc = startT + ((now - wall0Ns) / 1000 * clockRate).toLong()
             if (tc >= plan.durUs) {
                 skipped += (plan.durFrames - 1 - lastK).toInt().coerceAtLeast(0)
                 ended = true
@@ -534,6 +605,14 @@ class ContingencyEngineProto(
             }
             Choreographer.getInstance().postFrameCallback(this)
         }
+    }
+
+    /** True when a deck that plays the layer at player time [tp] is rebuffering (its clock has stopped). */
+    private fun rebuffering(tp: Long): Boolean = slots.any { s ->
+        val ip = s.activeAt(tp)
+        if (ip < 0) return@any false
+        val d = s.deckFor(ip)
+        d.assigned == ip && d.player.playWhenReady && d.player.playbackState == Player.STATE_BUFFERING
     }
 
     /**
@@ -751,6 +830,12 @@ class ContingencyEngineProto(
     companion object {
         /** A standby deck pre-rolls its next layer when that layer starts within this window (µs). */
         private const val PREROLL_WINDOW_US = 1_000_000L
+
+        /** Longest single frame-clock stop for a rebuffering deck before the clock runs on. */
+        private const val MAX_STALL_MS = 2_000L
+
+        /** Player-error recoveries per slot before the error is left standing. */
+        private const val MAX_RECOVERIES = 5
 
         private const val DRAWN = 0
         private const val WAIT = 1

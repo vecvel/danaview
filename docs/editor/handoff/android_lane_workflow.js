@@ -70,8 +70,10 @@ export const meta = {
  *   and-m4-export   AND-11                           and-m3-render, and-m3-text,           ENG-04
  *                                                    and-m3-preview
  *   and-m5          AND-12                           and-m4-export                         (ENG-04)
- *   Cross-machine order: ENG-08 (here) must land on editor-wip before the Mac's ENG-06, and
- *   ENG-06 must land here before any AND ticket.
+ *   A gate in parentheses comes from a Windows dependency. Cross-machine order: ENG-08 (here) must
+ *   land on editor-wip before the Mac's ENG-06, and ENG-06 must land here before any AND ticket.
+ *   Builders share one emulator through a lock directory at <root>/build/vwish_locks/emulator
+ *   (gitignored). Delete it if a killed run leaves it behind.
  *
  * AFTER A RUN (the lead does this; builder agents never change git state)
  *   - The result has commitPlan: one entry per ticket with a commit message and its files.
@@ -85,7 +87,8 @@ export const meta = {
  *   - Pass forMac (defects against Mac tickets, ENG-06 inputs, needed [INTEGRATION] changes) to
  *     the owner.
  *   - For the next run, copy preloadForNextRun into args.preloaded and add newly landed Mac
- *     tickets to args.landed.
+ *     tickets to args.landed. Groups with a partial or blocked ticket are left out of
+ *     preloadForNextRun, so the next run resumes them.
  *
  * RESUME
  *   - After a pause, a kill or a script edit, run Workflow({scriptPath, resumeFromRunId: '<runId>',

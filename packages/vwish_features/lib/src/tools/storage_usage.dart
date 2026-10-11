@@ -1,8 +1,9 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vwish_data/vwish_data.dart';
+import 'package:vwish_ui_kit/vwish_ui_kit.dart';
 
 import '../controllers/providers.dart';
 
@@ -58,9 +59,15 @@ class CacheClearResult {
 /// Measures the app's videos and cache, and empties the cache.
 ///
 /// Only the app's own cache folders are ever deleted from; videos (imported or not) are never
-/// touched (§7.0).
+/// touched (§7.0). Folders a [StorageContributor] owns ([excludedPaths], e.g. the video editor's
+/// cache with its in-progress work) are left out of the cache figures and never deleted by
+/// [clearCache]: their contributor measures and clears them itself.
 class StorageUsageService {
-  const StorageUsageService({required this.deviceDirectory, required this.cacheDirectories});
+  const StorageUsageService({
+    required this.deviceDirectory,
+    required this.cacheDirectories,
+    this.excludedPaths = const {},
+  });
 
   /// The app's Documents folder on iOS/Android; resolves to null on desktop.
   final Future<Directory?> Function() deviceDirectory;
@@ -69,26 +76,35 @@ class StorageUsageService {
   /// and tmp, where picked files are copied.
   final Future<List<Directory>> Function() cacheDirectories;
 
+  /// Absolute paths inside the cache folders that belong to a [StorageContributor]: not counted as
+  /// cache and kept by [clearCache].
+  final Set<String> excludedPaths;
+
   /// Stops counting after this many entries so a huge folder can't stall the page.
   static const int maxEntries = 100000;
 
   Future<StorageUsage> measure() async {
     final (device, caches) = await (_resolve(deviceDirectory), _cacheFolders()).wait;
+    final excluded = {for (final path in excludedPaths) _canonicalLoose(path)};
     final (videos, cached) = await (
       device == null ? Future<FolderUsage?>.value() : _walk(device, include: LibraryRepository.isVideoPath),
-      Future.wait([for (final path in caches) _walk(Directory(path), skipHidden: false)]),
+      Future.wait([for (final path in caches) _walkExcluding(Directory(path), excluded)]),
     ).wait;
     return StorageUsage(deviceVideos: videos, cache: caches.isEmpty ? null : _sum(cached));
   }
 
   /// Deletes everything inside the cache folders except the paths in [keep] (e.g. the video that
-  /// is playing). Never throws; entries that can't be deleted are counted in [CacheClearResult.kept].
+  /// is playing) and [excludedPaths]. Never throws; entries that can't be deleted are counted in
+  /// [CacheClearResult.kept].
   Future<CacheClearResult> clearCache({Set<String> keep = const {}}) async {
     final caches = await _cacheFolders();
     if (caches.isEmpty) return const CacheClearResult();
     final device = await _resolve(deviceDirectory);
     final documents = device == null ? null : _canonical(device.path);
-    final kept = {for (final path in keep) _canonical(path)};
+    final kept = {
+      for (final path in keep) _canonical(path),
+      for (final path in excludedPaths) _canonicalLoose(path),
+    };
     final result = _CacheClearCounter();
     for (final root in caches) {
       // A misconfigured cache folder must never take the user's videos (or a whole disk) with it.
@@ -218,6 +234,52 @@ class StorageUsageService {
     return FolderUsage(files: files, bytes: bytes, complete: complete);
   }
 
+  /// [dir]'s usage without the entries in [excluded] (canonical paths). Only the branches that lead
+  /// to an excluded path are listed level by level; everything else is walked as usual.
+  static Future<FolderUsage> _walkExcluding(Directory dir, Set<String> excluded) async {
+    final base = dir.path;
+    if (excluded.any((e) => _samePath(e, base))) return const FolderUsage();
+    if (!excluded.any((e) => _isWithin(base, e))) return _walk(dir, skipHidden: false);
+    final List<FileSystemEntity> children;
+    try {
+      children = await dir.list(followLinks: false).toList();
+    } catch (_) {
+      return const FolderUsage(complete: false);
+    }
+    final parts = <FolderUsage>[];
+    for (final child in children) {
+      if (child is Directory) {
+        parts.add(await _walkExcluding(child, excluded));
+      } else if (!excluded.any((e) => _samePath(e, child.path))) {
+        parts.add(await _fileUsage(child));
+      }
+    }
+    return _sum(parts);
+  }
+
+  /// [path] made canonical even when it doesn't exist yet: the nearest existing ancestor is resolved
+  /// and the rest appended, so an owned folder created later still matches its cache folder.
+  static String _canonicalLoose(String path) {
+    final absolute = _trimSeparators(File(path).absolute.path);
+    final tail = <String>[];
+    var current = absolute;
+    while (true) {
+      try {
+        if (FileSystemEntity.typeSync(current, followLinks: false) != FileSystemEntityType.notFound) {
+          final resolved = _canonical(current);
+          return tail.isEmpty ? resolved : [resolved, ...tail.reversed].join(Platform.pathSeparator);
+        }
+      } catch (_) {
+        break;
+      }
+      final cut = current.lastIndexOf(_separators);
+      if (cut <= 0) break;
+      tail.add(current.substring(cut + 1));
+      current = current.substring(0, cut);
+    }
+    return absolute;
+  }
+
   /// [path] with links resolved (iOS reaches the same folder through /var and /private/var).
   static String _canonical(String path) {
     try {
@@ -266,5 +328,168 @@ final storageUsageServiceProvider = Provider<StorageUsageService>((ref) {
       return folder == null ? null : Directory(folder.path);
     },
     cacheDirectories: AppStorage.appCacheDirectories,
+    excludedPaths: {
+      for (final contributor in ref.watch(storageContributorsProvider)) ...contributor.ownedPaths,
+    },
   );
 });
+
+// -------------------------------------------------------------------------------------------------
+// Storage contributors (ARCH §17.10, ux.md §4.8)
+// -------------------------------------------------------------------------------------------------
+
+/// What a [StorageContributor] currently holds.
+@immutable
+class StorageContributorUsage {
+  const StorageContributorUsage({required this.bytes, this.detail, this.complete = true, this.clearBlockedReason});
+
+  /// Bytes on this device.
+  final int bytes;
+
+  /// A short count shown before the size, e.g. `3 projects`; null shows the size alone.
+  final String? detail;
+
+  /// False when part of it couldn't be read, so the real figure may be higher.
+  final bool complete;
+
+  /// Why the contributor's clear action can't run right now (e.g. a project is open), shown instead
+  /// of the action; null when it can run.
+  final String? clearBlockedReason;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StorageContributorUsage &&
+      other.bytes == bytes &&
+      other.detail == detail &&
+      other.complete == complete &&
+      other.clearBlockedReason == clearBlockedReason;
+
+  @override
+  int get hashCode => Object.hash(bytes, detail, complete, clearBlockedReason);
+
+  @override
+  String toString() => 'StorageContributorUsage($bytes bytes${detail == null ? '' : ', $detail'}'
+      '${complete ? '' : ', incomplete'}${clearBlockedReason == null ? '' : ', blocked'})';
+}
+
+/// What a contributor's clear action did.
+@immutable
+class StorageClearOutcome {
+  /// The clean-up ran and freed [freedBytes]; [message] replaces the default "Freed …" toast.
+  const StorageClearOutcome.done({this.freedBytes = 0, this.message}) : blockedReason = null;
+
+  /// Nothing was deleted because something still uses the data ([blockedReason] is shown).
+  const StorageClearOutcome.blocked(String this.blockedReason)
+      : freedBytes = 0,
+        message = null;
+
+  /// Bytes freed.
+  final int freedBytes;
+
+  /// Toast text, or null for the default.
+  final String? message;
+
+  /// Why nothing was deleted, or null when the clean-up ran.
+  final String? blockedReason;
+
+  /// Whether the clean-up ran.
+  bool get done => blockedReason == null;
+}
+
+/// A clean-up a contributor offers on the Storage screen. The screen always asks first, with the
+/// contributor's own copy.
+@immutable
+class StorageClearAction {
+  const StorageClearAction({
+    required this.label,
+    required this.confirmTitle,
+    required this.confirmMessage,
+    required this.run,
+    this.confirmLabel = 'Clear',
+    this.destructive = false,
+    this.icon,
+  });
+
+  /// Row title, e.g. `Clear editor cache`.
+  final String label;
+
+  /// Confirmation title.
+  final String confirmTitle;
+
+  /// Confirmation message: what goes and what stays.
+  final String confirmMessage;
+
+  /// Confirmation button label.
+  final String confirmLabel;
+
+  /// Whether the confirmation is styled as destructive (deleting downloads rather than caches).
+  final bool destructive;
+
+  /// Row icon; null uses the Storage screen's clean-up icon.
+  final IconData? icon;
+
+  /// Performs the clean-up. It re-checks whatever blocks it and reports
+  /// [StorageClearOutcome.blocked] instead of deleting data in use.
+  final Future<StorageClearOutcome> Function() run;
+}
+
+/// Opens the place where this storage is managed (e.g. the editor's Projects screen).
+@immutable
+class StorageOpenAction {
+  const StorageOpenAction({required this.label, required this.onOpen});
+
+  /// Spoken after the row, e.g. `Opens Projects`.
+  final String label;
+
+  /// Navigates; called with the Storage screen's context.
+  final void Function(BuildContext context) onOpen;
+}
+
+/// Storage that another package (the video editor, the speech model) keeps on this device, shown on
+/// the Storage screen without `vwish_features` depending on that package (ARCH §17.10, ux.md §4.8).
+///
+/// The app root lists contributors by overriding [storageContributorsProvider]. Contributors that
+/// share a [section] are shown together under that header.
+abstract class StorageContributor {
+  const StorageContributor();
+
+  /// Stable id (widget keys, tests).
+  String get id;
+
+  /// Section header, e.g. `Video editor`.
+  String get section;
+
+  /// Row title, e.g. `Video editor projects`.
+  String get title;
+
+  /// One or two sentences on what it holds and what clearing does (shown under the section).
+  String get subtitle;
+
+  /// Row icon.
+  IconData get icon;
+
+  /// Icon tint.
+  Color get color => VwishColors.primaryLight;
+
+  /// The current usage first, then a new value whenever it changes (e.g. after [clearAction]). Each
+  /// call starts a fresh measurement.
+  Stream<StorageContributorUsage> watchUsage();
+
+  /// The clean-up offered here, or null when it can't be cleared from Storage (editor projects are
+  /// deleted in the editor's Projects screen).
+  StorageClearAction? get clearAction => null;
+
+  /// Opens the screen that manages this storage, or null.
+  StorageOpenAction? get openAction => null;
+
+  /// Absolute folders inside the app's cache folders that this contributor owns: the Storage
+  /// screen's own cache figure leaves them out and its "Clear cache" never deletes them.
+  Set<String> get ownedPaths => const {};
+}
+
+/// Contributors shown on the Storage screen; empty unless the app root overrides it (the editor and
+/// speech contributors on iOS/Android when the editor is available, D-17).
+final storageContributorsProvider = Provider<List<StorageContributor>>(
+  (ref) => const [],
+  name: 'storageContributorsProvider',
+);

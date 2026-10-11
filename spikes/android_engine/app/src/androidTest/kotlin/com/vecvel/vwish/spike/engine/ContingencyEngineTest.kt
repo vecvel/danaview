@@ -69,20 +69,30 @@ class ContingencyEngineTest {
         standby: Boolean = true,
         leadFrames: Int = 2,
         hold: Boolean = true,
+        rate: Double = 1.0,
+        stall: Boolean = true,
     ): JSONObject {
         val plan = Scenarios.gridCut(fps)
         val store = ParamStore(plan.gridFps).apply { loadFrom(plan) }
         val times = TestMedia.videoSampleTimesUs("barcode_$fps.mp4")
+        // Output frames on either side of every layer edge (cuts at k ≡ 1, 2 mod 3).
+        val edges = plan.layers.flatMap { listOf(it.k0, it.k1) }.filter { it in 1 until plan.durFrames }.toSortedSet()
+        val boundaryKs = edges.flatMap { listOf(it - 1, it) }.toSortedSet()
         Sink(plan.canvasW, plan.canvasH).use { sink ->
-            ContingencyEngineProto(ctx, plan, store, Scenarios.regions(1, 2, 3), source, leadFrames = leadFrames, standby = standby, holdLateFrames = hold).use { e ->
+            ContingencyEngineProto(ctx, plan, store, Scenarios.regions(1, 2, 3), source, leadFrames = leadFrames, standby = standby, holdLateFrames = hold, stallOnRebuffer = stall).use { e ->
                 e.attach(sink.reader.surface)
-                val r = e.play(0, plan.durUs / 1000 + 20_000)
+                val r = e.play(0, (plan.durUs / 1000 / rate).toLong() + 30_000, rate)
                 val frames = e.frames.toList()
                 val check = Scenarios.check(plan, frames, times, seqs)
                 val hist = errors(plan, frames, times)
                 val exactLayerFrames = hist["0"] ?: 0
                 val layerFrames = hist.filterKeys { it != "gapOk" && it != "gapShowsContent" }.values.sum()
-                return JSONObject().put("frameSource", source.name).put("standbyDecks", standby).put("leadFrames", leadFrames).put("holdLateFrames", hold).put("fps", fps).put("ended", r.ended).put("wallMs", r.wallMs)
+                val composedKs = frames.map { GridTime.frameIndexNearest(it.ptsUs, plan.fps) }.toSet()
+                val edgesSeen = edges.count { (it - 1) in composedKs && it in composedKs }
+                return JSONObject().put("frameSource", source.name).put("standbyDecks", standby).put("leadFrames", leadFrames).put("holdLateFrames", hold).put("fps", fps).put("clockRate", rate).put("stallOnRebuffer", stall).put("ended", r.ended).put("wallMs", r.wallMs)
+                    .put("rebuffers", r.rebuffers).put("rebufferMs", r.rebufferMs)
+                    .put("edges", edges.size).put("boundaryFrames", boundaryKs.size).put("boundaryFramesComposited", boundaryKs.count { it in composedKs })
+                    .put("edgesWithBothSidesComposited", edgesSeen)
                     .put("compositionMs", plan.durUs / 1000).put("expectedFrames", plan.durFrames)
                     .put("composedFrames", r.composedFrames).put("skippedOutputFrames", r.skippedFrames).put("heldAttempts", r.heldAttempts).put("missedFrames", r.missedFrames)
                     .put("firstHoldReasons", Results.arr(e.holdReasons.toList()))
@@ -90,7 +100,7 @@ class ContingencyEngineTest {
                     .put("compositeMs", Results.stats(r.compositeMs))
                     .put("sourceFrameErrorHistogram", JSONObject(hist as Map<*, *>))
                     .put("layerFramesExact", exactLayerFrames).put("layerFrames", layerFrames)
-                    .put("slots", JSONArray(r.slots.map { JSONObject().put("seq", it.seq).put("seeks", it.seeks).put("prerolls", it.prerolls).put("staleImages", it.staleImages).put("driftCorrections", it.driftCorrections).put("latched", it.latched).put("behind", it.behind).put("ahead", it.ahead) }))
+                    .put("slots", JSONArray(r.slots.map { JSONObject().put("seq", it.seq).put("seeks", it.seeks).put("prerolls", it.prerolls).put("staleImages", it.staleImages).put("driftCorrections", it.driftCorrections).put("latched", it.latched).put("behind", it.behind).put("ahead", it.ahead).put("recoveries", it.recoveries) }))
                     .put("barcode", check.json())
             }
         }
@@ -100,19 +110,29 @@ class ContingencyEngineTest {
      * The grid-cut case on the contingency path. The AND-16 configuration (IMAGE_READER decks, a
      * standby deck per slot, players 2 frames ahead, late output frames held instead of drawn
      * with a wrong slot frame) must show the rule frame of every layer on every composited frame
-     * at 24, 30 and 60 fps (V-N18 playback); late frames are dropped, never shown wrong (the drop
-     * rate depends on the shared emulator host and is recorded; device budgets are QA-04's). The same
-     * engine without holding, and the two weaker configurations (one ImageReader deck without
-     * lead; one SurfaceTexture per slot), are recorded for the report.
+     * at 24, 30 and 60 fps (V-N18 playback); late frames are dropped, never shown wrong.
+     *
+     * Real time (`and16`): the drop and rebuffer rates depend on the shared emulator host
+     * (recorded; the device budgets are QA-04's). Slow clock (`and16_slow_clock`, frame clock and
+     * decks at 0.25×): the same engine with 4× the wall time per frame, so most frames — including
+     * both sides of every cut — are composited and verified even on an overloaded host. The same
+     * engine without the rebuffer stall or without holding, and ARCH's original contingency (one
+     * deck per slot, no lead, no hold, no stall; with ImageReader or SurfaceTexture), run in real
+     * time and are recorded for the report.
      */
     @Test
     fun gridCutPlayback_contingency() {
         val runs = JSONArray()
         for (fps in listOf(24, 30, 60)) runs.put(playback(fps, ContingencyEngineProto.FrameSource.IMAGE_READER).put("config", "and16"))
+        for (fps in listOf(24, 30, 60)) runs.put(playback(fps, ContingencyEngineProto.FrameSource.IMAGE_READER, rate = SLOW_CLOCK).put("config", "and16_slow_clock"))
+        runs.put(playback(30, ContingencyEngineProto.FrameSource.IMAGE_READER, stall = false).put("config", "and16_no_stall"))
         runs.put(playback(30, ContingencyEngineProto.FrameSource.IMAGE_READER, hold = false).put("config", "and16_no_hold"))
-        runs.put(playback(30, ContingencyEngineProto.FrameSource.IMAGE_READER, standby = false, leadFrames = 0, hold = false).put("config", "single_deck_no_lead"))
-        runs.put(playback(30, ContingencyEngineProto.FrameSource.SURFACE_TEXTURE, standby = false, leadFrames = 0, hold = false).put("config", "surface_texture"))
+        runs.put(playback(30, ContingencyEngineProto.FrameSource.IMAGE_READER, standby = false, leadFrames = 0, hold = false, stall = false).put("config", "single_deck_no_lead"))
+        runs.put(playback(30, ContingencyEngineProto.FrameSource.SURFACE_TEXTURE, standby = false, leadFrames = 0, hold = false, stall = false).put("config", "surface_texture"))
         Results.write("AND16_proto_playback", JSONObject().put("device", android.os.Build.MODEL).put("runs", runs))
+        var verified = 0
+        var edgesBothSides = 0
+        var edges = 0
         for (i in 0 until runs.length()) {
             val r = runs.getJSONObject(i)
             // Plays through every secondary boundary to the end (the CompositionPlayer stall is gone).
@@ -120,13 +140,26 @@ class ContingencyEngineTest {
             val hist = r.getJSONObject("sourceFrameErrorHistogram")
             // Gating follows the plan: a gap never shows content.
             assertEquals(r.toString(), 0, hist.optInt("gapShowsContent", 0))
-            if (r.getString("config") == "and16") {
+            val config = r.getString("config")
+            if (config.startsWith("and16") && config != "and16_no_hold") {
+                // Held, never wrong: every composited frame shows every layer's rule frame.
                 assertEquals("grid-cut playback: $r", 0, r.getJSONObject("barcode").getInt("mismatches"))
-                // Non-vacuous: frames were verified. The drop rate depends on the shared emulator
-                // host (recorded; the device budgets are QA-04's).
-                assertTrue("composited too few frames to verify: $r", r.getInt("composedFrames") >= 10)
+            }
+            if (config == "and16_slow_clock") {
+                verified += r.getInt("composedFrames")
+                edgesBothSides += r.getInt("edgesWithBothSidesComposited")
+                edges += r.getInt("edges")
             }
         }
+        // Non-vacuous: the slow-clock runs verified most frames, and both sides of most cuts.
+        val expected = listOf(24, 30, 60).sumOf { it * 4 }
+        assertTrue("slow clock verified $verified of $expected frames: $runs", verified * 2 >= expected)
+        assertTrue("slow clock verified both sides of $edgesBothSides of $edges cuts: $runs", edgesBothSides * 2 >= edges)
+    }
+
+    private companion object {
+        /** Frame clock and deck speed of the slow-clock correctness pass. */
+        const val SLOW_CLOCK = 0.25
     }
 
     /** V-N18 exact seek 200/200 on the grid-cut composition (contingency path). */

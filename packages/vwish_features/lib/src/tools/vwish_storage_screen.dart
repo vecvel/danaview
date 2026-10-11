@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vwish_data/vwish_data.dart';
@@ -14,10 +16,25 @@ import 'media_tool_widgets.dart';
 import 'storage_usage.dart';
 
 export 'storage_usage.dart'
-    show CacheClearResult, FolderUsage, StorageUsage, StorageUsageService, storageUsageServiceProvider;
+    show
+        CacheClearResult,
+        FolderUsage,
+        StorageClearAction,
+        StorageClearOutcome,
+        StorageContributor,
+        StorageContributorUsage,
+        StorageOpenAction,
+        StorageUsage,
+        StorageUsageService,
+        storageContributorsProvider,
+        storageUsageServiceProvider;
 
 /// Storage & history: space used by the app's videos and cache, what the library remembers, and
 /// ways to clear history, resume points and the cache. Videos themselves are never deleted.
+///
+/// Storage kept by other packages (the video editor, the speech model) appears in its own sections
+/// through [storageContributorsProvider] (ARCH §17.10): each contributor shows its size, can open
+/// the screen that manages it, and offers its own confirmed clean-up when it has one.
 class VwishStorageScreen extends ConsumerStatefulWidget {
   const VwishStorageScreen({super.key, required this.onBack});
 
@@ -35,10 +52,57 @@ class _VwishStorageScreenState extends ConsumerState<VwishStorageScreen> {
   /// Bumped by every measurement so a slow, superseded one can't replace a newer result.
   int _token = 0;
 
+  List<StorageContributor> _contributors = const [];
+  final Map<String, StreamSubscription<StorageContributorUsage>> _subscriptions = {};
+  final Map<String, StorageContributorUsage> _contributorUsage = {};
+  final Set<String> _contributorFailed = {};
+
   @override
   void initState() {
     super.initState();
     _measure();
+    ref.listenManual<List<StorageContributor>>(
+      storageContributorsProvider,
+      (_, next) => _watchContributors(next),
+      fireImmediately: true,
+    );
+  }
+
+  @override
+  void dispose() {
+    _cancelContributors();
+    super.dispose();
+  }
+
+  void _cancelContributors() {
+    for (final subscription in _subscriptions.values) {
+      subscription.cancel();
+    }
+    _subscriptions.clear();
+  }
+
+  /// (Re)starts measuring every contributor; the last figures stay on screen meanwhile.
+  void _watchContributors(List<StorageContributor> contributors) {
+    _cancelContributors();
+    _contributors = contributors;
+    final ids = {for (final contributor in contributors) contributor.id};
+    _contributorUsage.removeWhere((id, _) => !ids.contains(id));
+    _contributorFailed.removeWhere((id) => !ids.contains(id));
+    for (final contributor in contributors) {
+      _subscriptions[contributor.id] = contributor.watchUsage().listen(
+        (usage) {
+          if (!mounted) return;
+          setState(() {
+            _contributorUsage[contributor.id] = usage;
+            _contributorFailed.remove(contributor.id);
+          });
+        },
+        onError: (Object e) {
+          debugPrint('[Storage] Measuring ${contributor.id} failed: $e');
+          if (mounted) setState(() => _contributorFailed.add(contributor.id));
+        },
+      );
+    }
   }
 
   Future<void> _measure() async {
@@ -58,6 +122,7 @@ class _VwishStorageScreenState extends ConsumerState<VwishStorageScreen> {
   }
 
   Future<void> _refresh() async {
+    _watchContributors(_contributors);
     await ref.read(libraryControllerProvider.notifier).refresh();
     await _measure();
   }
@@ -84,6 +149,8 @@ class _VwishStorageScreenState extends ConsumerState<VwishStorageScreen> {
       if (mounted) {
         VwishToast.show(context, message, kind: VwishToastKind.success, icon: Icons.check_circle_rounded);
       }
+    } on _ClearBlocked catch (blocked) {
+      if (mounted) VwishToast.show(context, blocked.reason, icon: Icons.info_outline_rounded);
     } catch (e) {
       debugPrint('[Storage] $failure: $e');
       if (mounted) {
@@ -156,6 +223,41 @@ class _VwishStorageScreenState extends ConsumerState<VwishStorageScreen> {
     });
   }
 
+  /// Asks with the contributor's own copy, then runs its clean-up and measures it again.
+  Future<void> _clearContributor(StorageContributor contributor, StorageClearAction action) async {
+    final blocked = _contributorUsage[contributor.id]?.clearBlockedReason;
+    if (blocked != null) {
+      VwishToast.show(context, blocked, icon: Icons.info_outline_rounded);
+      return;
+    }
+    final confirmed = await showVwishConfirm(
+      context,
+      title: action.confirmTitle,
+      message: action.confirmMessage,
+      confirmLabel: action.confirmLabel,
+      destructive: action.destructive,
+      icon: action.icon ?? Icons.cleaning_services_rounded,
+    );
+    if (!confirmed || !mounted) return;
+    await _run(failure: "Couldn't finish: ${action.label}.", () async {
+      final outcome = await action.run();
+      if (mounted) _watchContributors(_contributors);
+      final reason = outcome.blockedReason;
+      if (reason != null) throw _ClearBlocked(reason);
+      final freed = outcome.freedBytes;
+      return outcome.message ?? (freed > 0 ? 'Freed ${formatDataSize(freed)}' : 'Cleared');
+    });
+  }
+
+  /// Contributors grouped by section, in the order they were listed.
+  Map<String, List<StorageContributor>> get _sections {
+    final sections = <String, List<StorageContributor>>{};
+    for (final contributor in _contributors) {
+      (sections[contributor.section] ??= []).add(contributor);
+    }
+    return sections;
+  }
+
   @override
   Widget build(BuildContext context) {
     final library = ref.watch(libraryControllerProvider);
@@ -178,6 +280,11 @@ class _VwishStorageScreenState extends ConsumerState<VwishStorageScreen> {
           _summary(usage),
           const VwishLibrarySectionHeader('Videos'),
           ..._videos(usage),
+          for (final MapEntry(key: section, value: contributors) in _sections.entries) ...[
+            VwishLibrarySectionHeader(section),
+            _contributorGroup(contributors),
+            MediaToolFootnote(contributors.map((contributor) => contributor.subtitle).join(' ')),
+          ],
           const VwishLibrarySectionHeader('History & library'),
           MediaInfoGroup(
             rows: [
@@ -231,19 +338,97 @@ class _VwishStorageScreenState extends ConsumerState<VwishStorageScreen> {
   Widget _summary(StorageUsage? usage) {
     final videos = usage?.deviceVideos;
     final cache = usage?.cache;
+    final sections = _sections;
+    final contributorBytes = _contributorUsage.values.fold(0, (total, usage) => total + usage.bytes);
+    final caption = switch (usage) {
+      null when _measuring => 'Adding up videos and temporary files.',
+      null => "The app's folders couldn't be read.",
+      StorageUsage(deviceVideos: null) => 'Temporary files only. Your videos stay in their own folders.',
+      _ => 'Videos on this device and temporary files.',
+    };
     return MediaResultCard(
       eyebrow: 'Space used by Vwish',
-      value: usage == null ? (_measuring ? 'Calculating…' : 'Unavailable') : formatDataSize(usage.totalBytes),
-      caption: switch (usage) {
-        null when _measuring => 'Adding up videos and temporary files.',
-        null => "The app's folders couldn't be read.",
-        StorageUsage(deviceVideos: null) => 'Temporary files only. Your videos stay in their own folders.',
-        _ => 'Videos on this device and temporary files.',
-      },
+      value: usage == null
+          ? (_measuring ? 'Calculating…' : 'Unavailable')
+          : formatDataSize(usage.totalBytes + contributorBytes),
+      caption: usage == null || sections.isEmpty
+          ? caption
+          : '$caption ${sections.keys.join(', ')} ${sections.length == 1 ? 'is' : 'are'} included.',
       stats: [
         if (videos != null) (label: 'Videos', value: _size(videos)),
         if (cache != null) (label: 'Cache', value: _size(cache)),
+        for (final MapEntry(key: section, value: contributors) in sections.entries)
+          if (contributors.any((contributor) => _contributorUsage.containsKey(contributor.id)))
+            (label: section, value: formatDataSize(_bytesOf(contributors))),
       ],
+    );
+  }
+
+  int _bytesOf(List<StorageContributor> contributors) =>
+      contributors.fold(0, (total, contributor) => total + (_contributorUsage[contributor.id]?.bytes ?? 0));
+
+  /// One row per contributor (its size, and a chevron when it opens a screen), plus a row for its
+  /// clean-up when it has one.
+  Widget _contributorGroup(List<StorageContributor> contributors) {
+    return VwishLibraryGroup(
+      children: [
+        for (final contributor in contributors) ...[
+          _contributorRow(contributor),
+          if (contributor.clearAction case final action?) _contributorClearRow(contributor, action),
+        ],
+      ],
+    );
+  }
+
+  bool _contributorMeasuring(StorageContributor contributor) =>
+      !_contributorUsage.containsKey(contributor.id) && !_contributorFailed.contains(contributor.id);
+
+  String _contributorSize(StorageContributor contributor) {
+    final usage = _contributorUsage[contributor.id];
+    if (usage == null) return _contributorMeasuring(contributor) ? 'Calculating…' : "Couldn't be measured";
+    final size = formatDataSize(usage.bytes);
+    final amount = usage.complete ? size : 'At least $size';
+    return usage.detail == null ? amount : '${usage.detail} · $amount';
+  }
+
+  Widget _contributorRow(StorageContributor contributor) {
+    final open = contributor.openAction;
+    final size = _contributorSize(contributor);
+    return VwishLibraryRow(
+      key: ValueKey('storage-contributor-${contributor.id}'),
+      leading: VwishTileIcon(contributor.icon, color: contributor.color, size: 40),
+      title: contributor.title,
+      subtitle: size,
+      subtitleMaxLines: 2,
+      trailing: _contributorMeasuring(contributor)
+          ? const Padding(padding: EdgeInsets.all(VwishSpacing.sm), child: VwishSpinner(size: 18))
+          : open == null
+              ? null
+              : const Icon(Icons.chevron_right_rounded, color: VwishColors.textMuted),
+      onTap: open == null ? null : () => open.onOpen(context),
+      semanticLabel: open == null ? '${contributor.title}. $size' : '${contributor.title}. $size. ${open.label}',
+    );
+  }
+
+  Widget _contributorClearRow(StorageContributor contributor, StorageClearAction action) {
+    final usage = _contributorUsage[contributor.id];
+    final blocked = usage?.clearBlockedReason;
+    final subtitle = switch (usage) {
+      null => _contributorMeasuring(contributor) ? 'Calculating…' : "Couldn't be measured",
+      _ when blocked != null => blocked,
+      StorageContributorUsage(bytes: 0) => 'Nothing to clear',
+      _ => 'Frees ${usage.complete ? 'about' : 'at least'} ${formatDataSize(usage.bytes)}',
+    };
+    final enabled = usage != null && usage.bytes > 0 && blocked == null;
+    return KeyedSubtree(
+      key: ValueKey('storage-contributor-${contributor.id}-clear'),
+      child: _actionRow(
+        icon: action.icon ?? Icons.cleaning_services_rounded,
+        color: action.destructive ? VwishColors.errorLight : contributor.color,
+        title: action.label,
+        subtitle: subtitle,
+        onTap: enabled ? () => _clearContributor(contributor, action) : null,
+      ),
     );
   }
 
@@ -337,4 +522,11 @@ class _VwishStorageScreenState extends ConsumerState<VwishStorageScreen> {
 String _size(FolderUsage usage) {
   final size = formatDataSize(usage.bytes);
   return usage.complete ? size : 'At least $size';
+}
+
+/// A contributor's clean-up reported that something still uses its data.
+class _ClearBlocked implements Exception {
+  const _ClearBlocked(this.reason);
+
+  final String reason;
 }

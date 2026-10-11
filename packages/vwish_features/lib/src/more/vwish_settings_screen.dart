@@ -14,10 +14,20 @@ import 'settings_widgets.dart';
 /// Settings hub: the profile card, built-in tools, playback preferences (touch screens only) and
 /// the about pages. Each row is named like the page it opens.
 class VwishSettingsScreen extends StatelessWidget {
-  const VwishSettingsScreen({super.key, required this.onBack, required this.onNavigate});
+  const VwishSettingsScreen({
+    super.key,
+    required this.onBack,
+    required this.onNavigate,
+    this.onOpenEditorSettings,
+  });
 
   final VoidCallback onBack;
   final ValueChanged<SettingsDestination> onNavigate;
+
+  /// Opens the video editor's settings (`/settings/editor`). The router passes it only where the
+  /// editor is available (ARCH §17.1, D-17); null hides the "Video editor" row. Routes stay
+  /// explicit, so [SettingsDestination] has no editor value.
+  final VoidCallback? onOpenEditorSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +83,15 @@ class VwishSettingsScreen extends StatelessWidget {
                       Icons.storage_rounded,
                       VwishColors.success,
                     ),
+                    if (onOpenEditorSettings case final openEditorSettings?)
+                      SettingsNavRow(
+                        key: const ValueKey('settings-video-editor'),
+                        icon: Icons.movie_edit,
+                        color: VwishColors.purple,
+                        title: 'Video editor',
+                        subtitle: 'Proxy media, preview quality and new projects',
+                        onTap: openEditorSettings,
+                      ),
                   ],
                 ),
                 // Desktops have no double-tap: a double-click there toggles fullscreen.

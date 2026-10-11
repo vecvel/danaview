@@ -13,17 +13,17 @@ On 2026-10-10 the owner split the video editor build across two machines because
 - **Mac:** this repo at /Users/besaoct/Desktop/vwish_player. It does everything except the Android lane:
   - core, UI/UX, integration and QA
   - all iOS work
-  - ENG-01..09 incl. ENG-08 (Android glue, already next in the Mac queue), ENG-02/03/04, ENG-06 (integration freeze), AI-05
+  - ENG-01..07, ENG-09, ENG-02/03/04, ENG-06 (integration freeze), AI-05
   - finishing the IOS-01 and AND-01 spikes
 - **Windows laptop (32 GB, no Xcode):** the Android lane:
-  - AI-04
+  - ENG-08 (Android plugin glue; moved back to Windows 2026-10-11 because the Mac emulator is out of storage and the Mac queue had it behind ENG-07) and AI-04
   - AND-02..AND-07 (M2), AND-08/09/17/10/16 (M3), AND-11/13/14/15 (M4), AND-12 (M5)
 - **Hand-off docs:** in the repo at docs/editor/handoff/ (README, ANDROID_LANE.md, WINDOWS_SETUP.md, BUILD_STATE.md, android_lane_workflow.js, plus a copy of these notes under claude-memory/).
 - **Git:**
   - Mac work goes to branch `editor-wip`.
   - Windows works on `editor-android`, branched from editor-wip, with one commit per ticket.
   - The Mac session merges editor-android into editor-wip, and Windows merges editor-wip back to receive gates.
-- **Gates:** ENG-06 (Mac) must land before AND-02+. Other Mac-side deps are API-04, ENG-02, ENG-03 and ENG-04. AI-04 has no Mac gate.
+- **Gates:** ENG-08 (Windows) must land before ENG-06 (Mac), and ENG-06 must land before AND-02+. Other Mac-side deps are API-04 (done), ENG-02, ENG-03 and ENG-04. ENG-09 (done) gates ENG-08. AI-04 has no Mac gate.
 - `.gitattributes` keeps LF everywhere and marks test fixtures `-text` (some SRT/LUT fixtures contain CR on purpose).
 
 **Why:** emulator + simulator + Xcode at once overloads 8 GB, so tests time out and get rerun, wasting usage.
