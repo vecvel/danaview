@@ -1,6 +1,6 @@
 // OWNER: AND-09
-// Shared GLSL ES 1.00 helpers of ARCH §11.6, prepended to every fragment shader by ShaderSources
-// (after the program's #extension and #define lines). Colours are gamma-encoded BT.709 with colour
+// Shared GLSL ES 1.00 helpers of ARCH 11.6, prepended to every fragment shader by ShaderSources
+// (after the program's extension and define lines). Colours are gamma-encoded BT.709 with colour
 // management off; smoothstep is spelled out because GLSL leaves it undefined for e0 >= e1.
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
