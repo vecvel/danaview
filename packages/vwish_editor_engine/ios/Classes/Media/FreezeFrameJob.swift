@@ -89,7 +89,30 @@ enum FrameGrab {
         guard hasVideo else { throw EngineError(.unsupportedMedia, "no video track") }
         let generator = generator(for: asset, maximumSize: maximumSize)
         control?.onStop { _ in generator.cancelAllCGImageGeneration() }
-        return try image(generator, at: requestTime(sourceTimeUs: sourceTimeUs, durationUs: Probe.microseconds(duration)))
+        let frame = try image(generator, at: requestTime(sourceTimeUs: sourceTimeUs, durationUs: Probe.microseconds(duration)))
+        return try normalized(frame)
+    }
+
+    /// The engine's still format: 8 bits per component, gamma-encoded SDR RGB. A frame that is
+    /// already 8-bit SDR RGB is returned untouched (no colour conversion: ARCH §13 runs with colour
+    /// management off, so a still must hold the same R'G'B' values as the video frame). Deeper or
+    /// HDR images (the generator may hand out 16-bit buffers for 10-bit sources) are converted to
+    /// 8-bit BT.709.
+    static func normalized(_ image: CGImage) throws -> CGImage {
+        let space = image.colorSpace
+        let isRGB = space?.model == .rgb
+        let isHDR = space.map { $0.isHDR() } ?? false
+        if image.bitsPerComponent == 8 && isRGB && !isHDR { return image }
+        let target = (isRGB && !isHDR ? space : nil) ?? CGColorSpace(name: CGColorSpace.itur_709)!
+        guard let context = CGContext(
+            data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0, space: target,
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        else {
+            throw EngineError(.internal, "still context failed")
+        }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        guard let converted = context.makeImage() else { throw EngineError(.internal, "still conversion failed") }
+        return converted
     }
 
     /// Generates one image synchronously (call from a job queue).

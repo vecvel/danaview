@@ -47,6 +47,15 @@ final class TapEnvelope {
     /// Length of a seam crossfade (5 ms, centred on the seam).
     static let seamCrossfadeUs: Int64 = 5_000
 
+    /// Whether IOS-08 lays speed-ramp audio out with the ramp-seam option (segments alternating
+    /// across two composition tracks, each extended 2.5 ms over its seams, envelopes built with
+    /// `withSeamCrossfades(alternatingSeams(…))`). ENABLED by IOS-18 (2026-10-11, iOS 26.5
+    /// simulator): the crossfade layout keeps seam transients 59 dB under the tone (AC: −40 dBFS),
+    /// while the plain single-track layout over 7 `.timeDomain` scaleTimeRange segments could not be
+    /// read reliably through AVAssetReaderAudioMixOutput (silent windows, a hang; 3 of 4 reads bad).
+    /// RampSeamTests re-measures both layouts on every run.
+    static let rampSeamCrossfadesEnabled = true
+
     /// The unity envelope (gain 1 everywhere, no seams).
     static let unity = TapEnvelope(keys: [])
 

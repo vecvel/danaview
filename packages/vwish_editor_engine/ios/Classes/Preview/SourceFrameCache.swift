@@ -3,7 +3,8 @@
 // Small LRU of decoded source frames (ARCH §15) for the preview session (IOS-11):
 // - `showSourceFrame` (trim-edge preview): the exact source frame, scaled to the preview size;
 // - `sampleColor` (chroma key picker): the pre-key source frame at full size, 3×3 average at a
-//   normalized point (display orientation, top-left origin), sRGB components 0...1;
+//   normalized point (display orientation, top-left origin), gamma-encoded R'G'B' components
+//   0...1 of the decoded frame without colour conversion (ARCH §13 colour management off);
 // - look stills (UX-29 / IOS-11 `renderLookStills`): the unprocessed source frame at a height.
 // Frames are decoded with FrameGrab (zero tolerance, preferred transform, SDR) and kept as
 // CGImages; the cache is bounded by a byte budget per device tier and evicts least recently used
@@ -85,7 +86,7 @@ final class SourceFrameCache {
         let full = try frame(url: url, media: media, sourceTimeUs: sourceTimeUs, maxLongSide: nil)
         guard heightPx > 0, heightPx < full.height else { return full }
         let width = max(1, Int((Double(full.width) * Double(heightPx) / Double(full.height)).rounded()))
-        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        let space = full.colorSpace.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpace(name: CGColorSpace.itur_709)!
         guard let context = CGContext(
             data: nil, width: width, height: heightPx, bitsPerComponent: 8, bytesPerRow: 0, space: space,
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
@@ -99,14 +100,14 @@ final class SourceFrameCache {
     }
 
     /// The 3×3 average colour at normalized ([x], [y]) (0...1, top-left origin, display
-    /// orientation) of the full-size frame, in sRGB.
+    /// orientation) of the full-size frame, as decoded R'G'B' (no colour conversion).
     func sampleColor(url: URL, media: String? = nil, sourceTimeUs: Int64, x: Double, y: Double) throws -> ColorMsg {
         guard x.isFinite, y.isFinite else { throw EngineError.invalidArgument("point", "not finite") }
         let image = try frame(url: url, media: media, sourceTimeUs: sourceTimeUs, maxLongSide: nil)
         return try SourceFrameCache.averageColor(of: image, x: x, y: y)
     }
 
-    /// 3×3 average around the pixel at normalized ([x], [y]) of [image], converted to sRGB.
+    /// 3×3 average around the pixel at normalized ([x], [y]) of [image], in the image's own RGB space.
     static func averageColor(of image: CGImage, x: Double, y: Double) throws -> ColorMsg {
         let w = image.width, h = image.height
         guard w > 0, h > 0 else { throw EngineError(.decodeFailed, "empty frame") }
@@ -118,7 +119,9 @@ final class SourceFrameCache {
             throw EngineError(.internal, "crop failed")
         }
         var pixels = [UInt8](repeating: 0, count: rw * rh * 4)
-        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        // Read the values in the frame's own RGB space: no colour conversion (ARCH §13 maths runs
+        // on gamma-encoded BT.709 R'G'B' with colour management off).
+        let space = image.colorSpace.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpace(name: CGColorSpace.itur_709)!
         let drawn: Bool = pixels.withUnsafeMutableBytes { raw in
             guard let context = CGContext(
                 data: raw.baseAddress, width: rw, height: rh, bitsPerComponent: 8, bytesPerRow: rw * 4, space: space,

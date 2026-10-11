@@ -67,8 +67,10 @@ final class RampSeamTests: XCTestCase {
         return SeamReport(floor: floor, seams: seams)
     }
 
-    /// (a) One track, per-segment scaleTimeRange.
-    private func singleTrackRead() async throws -> AudioTapSupport.MixRead {
+    /// (a) One track, per-segment scaleTimeRange. Nil when no good read came back: on the iOS 26.5
+    /// simulator this layout often reads with silent windows or hangs (IOS-18 run 2026-10-11: 3 of 4
+    /// reads bad), which is itself a reason for the crossfade option.
+    private func singleTrackRead() async throws -> AudioTapSupport.MixRead? {
         let tone = try toneFixture()
         let segs = (0..<Self.speeds.count).map { k -> AudioTapSupport.Segment in
             let s = segment(k)
@@ -77,9 +79,9 @@ final class RampSeamTests: XCTestCase {
         let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: expectFrames, audible: [0..<expectFrames]) {
             try await AudioTapSupport.buildWithTaps(tracks: [segs], taps: [GainTap()])
         }
-        print("IOS-18 ramp single-track: \(reads) read(s)")
-        XCTAssertFalse(read.hung)
-        return read
+        let bad = AudioTapSupport.badReason(read, expectFrames: expectFrames, audible: [0..<expectFrames])
+        print("IOS-18 ramp single-track: \(reads) read(s), bad=\(bad ?? "no")")
+        return bad == nil ? read : nil
     }
 
     /// (b) The ramp-seam option: alternate tracks, ±2.5 ms overlap, 5 ms equal-power crossfades.
@@ -106,15 +108,22 @@ final class RampSeamTests: XCTestCase {
     }
 
     func testRampSeamClickTestWithKeepPitch() async throws {
-        let single = measure(try await singleTrackRead())
-        let crossfade = measure(try await crossfadeRead())
+        let single = try await singleTrackRead().map(measure)
+        let crossfadeRead = try await crossfadeRead()
+        XCTAssertNil(
+            AudioTapSupport.badReason(crossfadeRead, expectFrames: expectFrames, audible: [0..<expectFrames]),
+            "crossfade layout: no good read")
+        let crossfade = measure(crossfadeRead)
+        let singleText = single.map { "floor \($0.floor) seams \($0.seams) worst excess \($0.worstExcessDb) dBFS" } ?? "no good read"
         print(
-            "IOS-18 ramp seams: single-track floor \(single.floor) seams \(single.seams) worst excess \(single.worstExcessDb) dBFS; "
+            "IOS-18 ramp seams: single-track \(singleText); "
                 + "crossfade floor \(crossfade.floor) seams \(crossfade.seams) worst excess \(crossfade.worstExcessDb) dBFS")
+        // The fallback must always pass, so IOS-08 can use it.
         XCTAssertTrue(crossfade.passes, "crossfade option: seam transient \(crossfade.worstExcessDb) dBFS above the tone")
+        // AC: the single-track layout passes, or the crossfade option is enabled (and passing).
         XCTAssertTrue(
-            single.passes || crossfade.passes,
-            "neither layout keeps seam transients below −40 dBFS: \(single.worstExcessDb) / \(crossfade.worstExcessDb)")
+            TapEnvelope.rampSeamCrossfadesEnabled || single?.passes == true,
+            "single-track ramp seams fail (\(singleText)) and the crossfade option is disabled")
     }
 
     /// The detector itself: a hard 1 kHz phase jump of 90° at 0.5 s is far above −40 dBFS, a steady

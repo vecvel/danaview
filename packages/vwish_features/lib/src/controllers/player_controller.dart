@@ -311,6 +311,48 @@ class PlayerController extends StateNotifier<PlayerState> {
   Future<Uint8List?> captureScreenshot({bool includeSubtitles = true}) =>
       _engine.screenshot(includeSubtitles: includeSubtitles);
 
+  // ---- Editor handoff (ARCH §17.1, ux.md §4.6). `vwish_features` never imports the editor; the
+  // app root adapts these calls to the editor launcher's port.
+
+  /// Pauses (and with [PlayerHandoffMode.release] stops the engine) and returns where to come back
+  /// to, or null when nothing is open. [position] overrides the current position (the Edit
+  /// request's snapshot).
+  Future<PlayerResumeToken?> suspendForEditor(PlayerHandoffMode mode, {Duration? position}) async {
+    final media = state.currentMediaRef;
+    if (media == null) return null;
+    final wasPlaying = state.isPlaying;
+    final at = position ?? state.position;
+    await pause();
+    _saveCurrentResume();
+    final release = mode == PlayerHandoffMode.release;
+    if (release) {
+      // A superseded open must not resume behind the editor.
+      _openToken++;
+      await _engine.stop();
+      PlatformBridge.setSleepInhibited(false);
+    }
+    return PlayerResumeToken(media: media, position: at, released: release, wasPlaying: wasPlaying);
+  }
+
+  /// Restores the player after the editor closed: the same media, paused at the original position
+  /// (a released engine reopens the file there). Playback never starts on its own.
+  Future<void> resumeAfterEditor(PlayerResumeToken token) async {
+    if (token.released) {
+      final current = state.currentMediaRef;
+      // The queue moved on (e.g. the item was removed): nothing to restore.
+      if (current != null && current.id != token.media.id) return;
+      // mpv keeps `pause` across loads, so the reopened file starts paused.
+      await pause();
+      await openMedia(token.media, startAt: token.position);
+      await pause();
+      return;
+    }
+    await pause();
+    if (state.currentMediaRef?.id != token.media.id) return;
+    final drift = (state.position - token.position).abs();
+    if (drift > const Duration(milliseconds: 40)) await seek(token.position, mode: SeekMode.exact);
+  }
+
   @override
   void dispose() {
     _resumeSaveTimer?.cancel();
@@ -318,4 +360,45 @@ class PlayerController extends StateNotifier<PlayerState> {
     _errorSub?.cancel();
     super.dispose();
   }
+}
+
+// -------------------------------------------------------------------------------------------------
+// Editor handoff (ARCH §17.1, ux.md §4.6)
+// -------------------------------------------------------------------------------------------------
+
+/// How the player steps aside while the video editor is open (ux.md §4.6).
+enum PlayerHandoffMode {
+  /// Pause and keep the engine loaded, so returning is instant.
+  pause,
+
+  /// Pause, save the resume point and stop the engine, so the editor's decoders get the hardware
+  /// and memory (low-memory devices). The queue keeps the item, so Home still shows it.
+  release,
+}
+
+/// Where the player was when the editor opened; [PlayerController.resumeAfterEditor] restores it.
+@immutable
+final class PlayerResumeToken {
+  /// Creates a token.
+  const PlayerResumeToken({
+    required this.media,
+    required this.position,
+    required this.released,
+    this.wasPlaying = false,
+  });
+
+  /// The media that was showing.
+  final MediaRef media;
+
+  /// The playback position when the editor opened.
+  final Duration position;
+
+  /// Whether the engine was stopped ([PlayerHandoffMode.release]).
+  final bool released;
+
+  /// Whether it was playing before the handoff (playback is never restarted on return).
+  final bool wasPlaying;
+
+  @override
+  String toString() => 'PlayerResumeToken(${position.inMilliseconds} ms, released: $released)';
 }

@@ -33,12 +33,51 @@ class OpenFileIntent extends Intent { const OpenFileIntent(); }
 class SpeedDeltaIntent extends Intent { final double delta; const SpeedDeltaIntent(this.delta); }
 class CycleSubtitleIntent extends Intent { const CycleSubtitleIntent(); }
 class CycleAudioTrackIntent extends Intent { const CycleAudioTrackIntent(); }
+class EditVideoIntent extends Intent { const EditVideoIntent(); }
+
+/// What the player's Edit action hands to the video editor (ARCH §17.1, ux.md §4.4). Plain data:
+/// `vwish_features` never imports the editor.
+@immutable
+class PlayerEditRequest {
+  const PlayerEditRequest({required this.media, required this.position, required this.wasPlaying});
+
+  /// The local media showing in the player.
+  final MediaRef media;
+
+  /// The player's last position snapshot; the editor opens there.
+  final Duration position;
+
+  /// Whether it was playing when Edit was chosen.
+  final bool wasPlaying;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlayerEditRequest && other.media == media && other.position == position && other.wasPlaying == wasPlaying;
+
+  @override
+  int get hashCode => Object.hash(media, position, wasPlaying);
+
+  @override
+  String toString() => 'PlayerEditRequest(${media.title}, ${position.inMilliseconds} ms, wasPlaying: $wasPlaying)';
+}
+
+/// Whether the Edit action applies to what the player shows: something local is open and it did
+/// not fail. Remote streams are hidden (the user can't fix that); local files the editor can't use
+/// keep the action, and the editor explains on tap.
+bool playerCanEditVideo(PlayerState state) {
+  final media = state.currentMediaRef;
+  return media != null && !media.isRemote && playerHasMedia(state) && state.status != PlaybackStatus.error;
+}
 
 class VwishPlayerScreen extends ConsumerStatefulWidget {
   /// Returns to the previous screen (e.g. Home); the back control is hidden when null.
   final VoidCallback? onBack;
 
-  const VwishPlayerScreen({super.key, this.onBack});
+  /// Opens the video editor on the current local video (ARCH §17.1). Null hides the Edit action
+  /// everywhere: the top-bar button, the Playback sheet row, the E key and its cheat-sheet line.
+  final ValueChanged<PlayerEditRequest>? onEditVideo;
+
+  const VwishPlayerScreen({super.key, this.onBack, this.onEditVideo});
 
   @override
   ConsumerState<VwishPlayerScreen> createState() => _VwishPlayerScreenState();
@@ -67,6 +106,11 @@ class _VwishPlayerScreenState extends ConsumerState<VwishPlayerScreen> {
     SingleActivator(LogicalKeyboardKey.bracketRight): SpeedDeltaIntent(0.1),
     SingleActivator(LogicalKeyboardKey.comma, control: true): ToggleSettingsIntent(),
     SingleActivator(LogicalKeyboardKey.comma, meta: true): ToggleSettingsIntent(),
+  };
+
+  static const Map<ShortcutActivator, Intent> _editShortcuts = <ShortcutActivator, Intent>{
+    ..._shortcuts,
+    SingleActivator(LogicalKeyboardKey.keyE): EditVideoIntent(),
   };
 
   late final PlayerController _playerCtrl;
@@ -154,6 +198,19 @@ class _VwishPlayerScreenState extends ConsumerState<VwishPlayerScreen> {
     });
   }
 
+  /// Hands the current video to the editor; ignored while locked or when the action doesn't apply.
+  void _editVideo() {
+    final onEdit = widget.onEditVideo;
+    if (onEdit == null || _isLocked) return;
+    final state = ref.read(playerControllerProvider);
+    if (!playerCanEditVideo(state)) return;
+    setState(() {
+      _showSettings = false;
+      _showQueue = false;
+    });
+    onEdit(PlayerEditRequest(media: state.currentMediaRef!, position: state.position, wasPlaying: state.isPlaying));
+  }
+
   void _cycleSubtitles() {
     final tracks = ref.read(playerControllerProvider).tracks;
     final ids = ['no', for (final track in tracks.subtitleTracks) track.id];
@@ -194,13 +251,18 @@ class _VwishPlayerScreenState extends ConsumerState<VwishPlayerScreen> {
     final insets = MediaQuery.paddingOf(context);
     final titleBarVisible = hasDesktopWindowChrome(context) && state.viewMode != ViewMode.fullscreen;
     final topInset = titleBarVisible ? VwishTitleBar.height : 0.0;
+    final canEdit = widget.onEditVideo != null && playerCanEditVideo(state);
 
     return DropTarget(
       onDragEntered: _isLocked ? null : (_) => setState(() => _isDraggingFile = true),
       onDragExited: _isLocked ? null : (_) => setState(() => _isDraggingFile = false),
       onDragDone: _isLocked ? null : _onDragDone,
       child: Shortcuts(
-        shortcuts: _isLocked ? const <ShortcutActivator, Intent>{} : _shortcuts,
+        shortcuts: _isLocked
+            ? const <ShortcutActivator, Intent>{}
+            : canEdit
+                ? _editShortcuts
+                : _shortcuts,
         child: Actions(
           actions: <Type, Action<Intent>>{
             PlayPauseIntent: CallbackAction<PlayPauseIntent>(onInvoke: (_) => _playerCtrl.togglePlay()),
@@ -227,6 +289,7 @@ class _VwishPlayerScreenState extends ConsumerState<VwishPlayerScreen> {
             ),
             CycleSubtitleIntent: CallbackAction<CycleSubtitleIntent>(onInvoke: (_) => _cycleSubtitles()),
             CycleAudioTrackIntent: CallbackAction<CycleAudioTrackIntent>(onInvoke: (_) => _cycleAudioTracks()),
+            EditVideoIntent: CallbackAction<EditVideoIntent>(onInvoke: (_) => _editVideo()),
           },
           child: Focus(
             autofocus: true,
@@ -243,6 +306,7 @@ class _VwishPlayerScreenState extends ConsumerState<VwishPlayerScreen> {
                       isLocked: _isLocked,
                       onToggleLock: _toggleLock,
                       onBack: widget.onBack == null ? null : _handleBack,
+                      onEditVideo: canEdit && !_isLocked ? _editVideo : null,
                       topInset: topInset,
                     ),
                   ),
@@ -262,7 +326,10 @@ class _VwishPlayerScreenState extends ConsumerState<VwishPlayerScreen> {
                       topInset: topInset,
                       maxWidth: 360,
                       maxHeight: 640,
-                      child: VwishSettingsPanel(onClose: () => setState(() => _showSettings = false)),
+                      child: VwishSettingsPanel(
+                        onClose: () => setState(() => _showSettings = false),
+                        showEditShortcut: widget.onEditVideo != null,
+                      ),
                     ),
                   if (_showQueue)
                     _PanelSlot(

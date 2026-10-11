@@ -222,22 +222,31 @@ enum AudioTapSupport {
             if jumps == 0, isGood(read, expectFrames: expectFrames, audible: audible) { return (read, attempt) }
             print(
                 "IOS-18 bad read \(attempt)/\(attempts): hung=\(read.hung) frames=\(read.frames) "
-                    + "status=\(read.status.rawValue) rangeJumps=\(jumps) good=\(isGood(read, expectFrames: expectFrames, audible: audible))")
+                    + "status=\(read.status.rawValue) rangeJumps=\(jumps) bad=\(badReason(read, expectFrames: expectFrames, audible: audible) ?? "no")")
         }
         return (try XCTUnwrap(last), attempts)
     }
 
     static func isGood(_ read: MixRead, expectFrames: Int, audible: [Range<Int>]) -> Bool {
-        guard !read.hung, read.frames >= expectFrames, !read.interleaved.contains(where: { $0.isNaN }) else { return false }
-        if rmsDb(read, channel: 0, 0, read.frames) < -60 && rmsDb(read, channel: 1, 0, read.frames) < -60 { return false }
+        badReason(read, expectFrames: expectFrames, audible: audible) == nil
+    }
+
+    /// Why a read is bad (nil = good).
+    static func badReason(_ read: MixRead, expectFrames: Int, audible: [Range<Int>]) -> String? {
+        if read.hung { return "hung" }
+        if read.frames < expectFrames { return "short (\(read.frames) < \(expectFrames))" }
+        if read.interleaved.contains(where: { $0.isNaN }) { return "NaN" }
+        if rmsDb(read, channel: 0, 0, read.frames) < -60 && rmsDb(read, channel: 1, 0, read.frames) < -60 { return "silent" }
         for range in audible {
             var a = range.lowerBound
             while a + 4_800 <= min(range.upperBound, read.frames) {
-                if rmsDb(read, channel: 0, a, a + 4_800) < -60 && rmsDb(read, channel: 1, a, a + 4_800) < -60 { return false }
+                if rmsDb(read, channel: 0, a, a + 4_800) < -60 && rmsDb(read, channel: 1, a, a + 4_800) < -60 {
+                    return "silent 100 ms window at frame \(a)"
+                }
                 a += 4_800
             }
         }
-        return true
+        return nil
     }
 
     // MARK: - Levels

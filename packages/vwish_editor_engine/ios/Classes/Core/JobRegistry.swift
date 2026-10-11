@@ -429,7 +429,17 @@ final class JobRegistry: JobScheduling {
                 entry.state = .queued
                 Log.info(.jobs, "job \(entry.body.kind) paused (pre-empted)")
             case .background?:
-                entry.state = entry.foregroundSeen ? .queued : .waitingForForeground
+                // `unregister` above also dropped the id from the re-queue list: put it back while
+                // the app is still in the background, so willEnterForeground re-queues it.
+                if entry.foregroundSeen || !interruption.isBackgrounded {
+                    entry.state = .queued
+                } else if interruption.register(RegistryJobHandle(jobId: entry.id, control: nil)) {
+                    // The foreground arrived in between.
+                    interruption.unregister(jobId: entry.id)
+                    entry.state = .queued
+                } else {
+                    entry.state = .waitingForForeground
+                }
                 Log.info(.jobs, "job \(entry.body.kind) paused (background)")
             case nil:
                 if engineError.code == .interrupted && entry.interruptionRetries < JobRegistry.maxInterruptionRetries {

@@ -35,6 +35,10 @@ class VwishControlsOverlay extends ConsumerStatefulWidget {
   /// Space taken at the top by the desktop title bar, which also shows the title.
   final double topInset;
 
+  /// Opens the video editor (ARCH §17.1). Null hides the top-bar Edit button and the Playback
+  /// sheet's "Edit video" row; the screen passes null for remote media and while locked.
+  final VoidCallback? onEditVideo;
+
   const VwishControlsOverlay({
     super.key,
     required this.onOpenSettings,
@@ -44,6 +48,7 @@ class VwishControlsOverlay extends ConsumerStatefulWidget {
     required this.onToggleLock,
     this.onBack,
     this.topInset = 0,
+    this.onEditVideo,
   });
 
   @override
@@ -384,6 +389,15 @@ class _VwishControlsOverlayState extends ConsumerState<VwishControlsOverlay> {
                   ),
           ),
           if (hasMedia) ...[
+            if (widget.onEditVideo != null)
+              VwishIconButton(
+                key: const ValueKey('player-edit-video'),
+                icon: Icons.movie_edit,
+                iconSize: 20,
+                tooltip: 'Edit video (E)',
+                semanticLabel: 'Edit this video',
+                onPressed: widget.onEditVideo,
+              ),
             VwishIconButton(
               icon: Icons.lock_open_rounded,
               iconSize: 20,
@@ -717,6 +731,15 @@ class _VwishControlsOverlayState extends ConsumerState<VwishControlsOverlay> {
               const SizedBox(height: 16),
               Container(height: VwishBorders.width, color: VwishColors.hairline),
               const SizedBox(height: 8),
+              if (widget.onEditVideo case final onEdit?)
+                VwishListTile(
+                  key: const ValueKey('player-sheet-edit-video'),
+                  leading: const VwishTileIcon(Icons.movie_edit),
+                  title: 'Edit video',
+                  subtitle: 'Trim, add text, captions and more',
+                  showChevron: true,
+                  onTap: () => closeThen(onEdit),
+                ),
               VwishListTile(
                 leading: const VwishTileIcon(Icons.playlist_play_rounded),
                 title: 'Queue',

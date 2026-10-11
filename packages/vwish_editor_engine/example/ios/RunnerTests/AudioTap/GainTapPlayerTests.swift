@@ -77,7 +77,10 @@ final class GainTapPlayerTests: XCTestCase {
         XCTAssertEqual(b.preDb, -15.01, accuracy: 0.5)
         XCTAssertEqual(u.postDb - u.preDb, 0, accuracy: 0.01)
         XCTAssertEqual(b.postDb - b.preDb, 6.0206, accuracy: 0.1)
-        XCTAssertEqual(b.postDb - u.postDb, 6.0206, accuracy: 0.1)
+        // 200% vs 100% across the two runs, normalised by their input levels: the two plays meter
+        // slightly different spans of the 1× / 2× segments (under load, IOS-18 saw the raw inputs
+        // differ by 0.19 dB while each run's own gain was exact).
+        XCTAssertEqual((b.postDb - u.postDb) - (b.preDb - u.preDb), 6.0206, accuracy: 0.1)
         // Composition-time ranges arrive (V-N21); an invalid first range is tolerated.
         XCTAssertTrue(boost.calls.contains { ($0.startUs ?? -1) >= 1_000_000 }, "no call inside the 2× segment")
         XCTAssertTrue(boost.failures.isEmpty, "GetSourceAudio failed: \(boost.failures)")

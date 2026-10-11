@@ -22,7 +22,10 @@ enum SettingsCategory {
 class VwishSettingsPanel extends ConsumerStatefulWidget {
   final VoidCallback onClose;
 
-  const VwishSettingsPanel({super.key, required this.onClose});
+  /// Lists "E – Edit video" in the Keyboard Shortcuts cheat sheet (the player has an Edit action).
+  final bool showEditShortcut;
+
+  const VwishSettingsPanel({super.key, required this.onClose, this.showEditShortcut = false});
 
   @override
   ConsumerState<VwishSettingsPanel> createState() => _VwishSettingsPanelState();
@@ -444,6 +447,7 @@ class _VwishSettingsPanelState extends ConsumerState<VwishSettingsPanel> {
       (['I'], 'Stats for nerds'),
       (['P'], 'Queue'),
       (['O'], 'Open files'),
+      if (widget.showEditShortcut) (['E'], 'Edit video'),
       ([apple ? '⌘ ,' : 'Ctrl ,'], 'Settings'),
     ];
     return LayoutBuilder(
