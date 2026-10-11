@@ -5,7 +5,7 @@ From 2026-10-10 the video editor is built on two machines at once. The Mac has o
 | Machine | Builds | Branch |
 |---|---|---|
 | **Mac** (Xcode 26.6) | Everything except the Android lane: editor core, editor screens, integration, QA, all iOS work, ENG-01..07, ENG-09, ENG-02/03/04, ENG-06, AI-05. It also finishes the two engine spikes, IOS-01 and AND-01. | `editor-wip` |
-| **Windows laptop** (32 GB, no Xcode) | The Android lane: ENG-08 and AI-04 first, then AND-02..AND-17 (18 tickets). | `editor-android` |
+| **Windows laptop** (32 GB, no Xcode) | The Android lane: ENG-08 and AI-04 first, then AND-02..AND-17, AND-18 and AND-19 (20 tickets; AND-18 and AND-19 added by the owner's D-43(e) decision of 2026-10-11, ARCH D-45). | `editor-android` |
 
 Windows can't build or test iOS: Xcode only runs on macOS.
 
@@ -15,7 +15,7 @@ Windows can't build or test iOS: Xcode only runs on macOS.
 |---|---|
 | [ANDROID_LANE.md](ANDROID_LANE.md) | The Windows ticket plan: order, gates, owned files, verification, conflict hot-spots |
 | [WINDOWS_SETUP.md](WINDOWS_SETUP.md) | Installing the toolchain on Windows, cloning without line-ending damage, smoke checks, known Windows pitfalls |
-| [BUILD_STATE.md](BUILD_STATE.md) | Status of all 158 tickets, plus the notes, deferrals and hand-off facts from every finished builder |
+| [BUILD_STATE.md](BUILD_STATE.md) | Status of all 164 tickets, plus the notes, deferrals and hand-off facts from every finished builder |
 | [android_lane_workflow.js](android_lane_workflow.js) | The builder workflow the Windows Claude session runs for the Android lane |
 | [claude-memory/](claude-memory/) | A copy of Claude's project notes, so the Windows session knows the rules and history |
 | [../../../tool/handoff/install_claude_memory.ps1](../../../tool/handoff/install_claude_memory.ps1) | Installs those notes into Claude's folder on Windows |
@@ -66,20 +66,24 @@ Tell me after each ticket lands so the Mac can merge it. Use a workflow for the 
   | ENG-02 | Mac | AND-10 |
   | ENG-03 | Mac | AND-13, AND-14, AND-15 |
   | ENG-04 | Mac | AND-11 |
-  | D-43e sign-off, JNI shim set up by ENG-06 | Owner, Mac | AND-16 |
+  | JNI shim set up by ENG-06 (the D-43e sign-off is done: owner decision 2026-10-11) | Mac | AND-16 |
+  | AND-16 | Windows | AND-18 |
+  | AND-11 | Windows | AND-19 |
+  | D-45 contract amendment (`renderPreview`, `setRenderedRanges`, `powerState`; lead [INTEGRATION]) | Mac | wiring AND-18 into the glue (not a start gate: AND-18 builds behind its own interfaces until it lands) |
 
   ENG-08 and AI-04 can start as soon as the Windows toolchain works. ENG-08 first: the Mac's ENG-06, and through it every native ticket on both phones, waits for it.
 - **Line endings:** `.gitattributes` keeps every text file LF on all machines. Test fixtures, goldens and vectors are marked `-text` so they stay byte-for-byte; some subtitle and LUT fixtures contain CR on purpose.
 
 ## Rules that apply on both machines
 
-- **Sources of truth:** `docs/editor/ARCHITECTURE.md` (decisions D-1..D-44) and `docs/editor/BUILD_PLAN.md`.
+- **Sources of truth:** `docs/editor/ARCHITECTURE.md` (decisions D-1..D-45) and `docs/editor/BUILD_PLAN.md`.
 - **Owner defaults (D-43, revisable):**
   - iOS 15.0 target.
   - Android editor gate: API 29 + GLES3 + 2 GB.
   - No auto captions on armeabi-v7a.
   - Android editor data excluded from backup.
   - No MKV/WebM remux on iOS.
+- **Owner decision D-43(e), 2026-10-11 (signed off; ARCH D-43, D-45):** preview adapts to the device, export is always full quality and never refused (only slower on weak devices). Proxies on by default on the minimal and low tiers; adaptive preview quality unless pinned; layers over the live decode budget show paused-exact stills during playback only; exact seek may be +30% on AND-16; drop a frame rather than show a late or wrong one; `maxVisualSequences` limits live preview only, and above the decoder limit export runs a multi-pass precompose (AND-19, IOS-20); a render-preview cache for heavy ranges (CORE-37, UX-44, AND-18, IOS-19).
 - **Downloads:** only normal pub/Gradle/CocoaPods dependency resolution. Never download speech models or media; generate test media locally with ffmpeg.
 - **Device-only checks:** recorded as "deferred: no device available", never faked.
 - **Commits:** no Claude co-author trailer.

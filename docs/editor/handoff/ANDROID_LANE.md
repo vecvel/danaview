@@ -6,7 +6,7 @@
 
 ## 1. Summary
 
-The laptop builds the Android half of the editor's native engine inside the `vwish_editor_engine` plugin (`packages/vwish_editor_engine/android/`), plus the Android build of the on-device speech library (`packages/vwish_whisper`). That covers the plugin glue that connects Dart to Kotlin (ENG-08), the whisper `.so` build (AI-04), and the media services: probe, thumbnails, waveforms, speech audio, proxies, freeze frames and reverse (AND-02..07). It also covers the live preview: plan reader, GL effects, paused-frame renderer, preview session, and the contingency preview engine AND-16, which is active because AND-01 was a NO-GO for Media3's `CompositionPlayer`. Last come export, the export foreground service, the voice recorder, pickers and drag-and-drop (AND-11 to AND-15). Everything is checked with Gradle builds, JVM unit tests and instrumented tests on the Android emulator. Anything that needs a real phone is written down as "deferred: no device available". The Mac builds everything else, including ENG-06, which freezes the plugin's Gradle file and glue after ENG-08. The Mac merges the laptop's branch.
+The laptop builds the Android half of the editor's native engine inside the `vwish_editor_engine` plugin (`packages/vwish_editor_engine/android/`), plus the Android build of the on-device speech library (`packages/vwish_whisper`). That covers the plugin glue that connects Dart to Kotlin (ENG-08), the whisper `.so` build (AI-04), and the media services: probe, thumbnails, waveforms, speech audio, proxies, freeze frames and reverse (AND-02..07). It also covers the live preview: plan reader, GL effects, paused-frame renderer, preview session, and the contingency preview engine AND-16, which is active because AND-01 was a NO-GO for Media3's `CompositionPlayer`. Last come export, the export foreground service, the voice recorder, pickers and drag-and-drop (AND-11 to AND-15), then the render-preview renderer (AND-18) and the multi-pass export precompose (AND-19), both added by the owner's D-43(e) decision of 2026-10-11 (ARCH D-45). Everything is checked with Gradle builds, JVM unit tests and instrumented tests on the Android emulator. Anything that needs a real phone is written down as "deferred: no device available". The Mac builds everything else, including ENG-06, which freezes the plugin's Gradle file and glue after ENG-08. The Mac merges the laptop's branch.
 
 ## 2. Owner checklist (plain language)
 
@@ -18,7 +18,7 @@ The laptop builds the Android half of the editor's native engine inside the `vwi
 2. **Carry the gates between machines.**
    - Tell the Windows session when each of these lands on `editor-wip`: ENG-06, ENG-02, ENG-03, ENG-04. (ENG-09 and API-04 are already done.)
    - Tell the Mac session each time Windows reports a ticket pushed, so it can merge `editor-android`.
-3. **Sign off AND-16 (D-43e) before M1 ends.** AND-01 found Media3's multi-sequence preview player unusable, so the backup preview engine AND-16 is built. Read the 4 degradations in `docs/editor/spikes/AND-01.md` §7 and approve or reject them. AND-16 cannot start without your sign-off. Tell the Windows session when you have signed.
+3. **AND-16 sign-off (D-43e): done, owner decision 2026-10-11** (ARCH D-43(e), D-45). Preview adapts to the device; export is always full quality and never refused, only slower on weak devices. Proxies are on by default on the minimal and low tiers; preview quality adapts full → 1/2 → 1/4 unless pinned; layers over the live decode budget show paused-exact stills during playback only; exact seek may be +30% on AND-16 (nearest frame first, then exact); frames are dropped rather than shown late or wrong; `maxVisualSequences` limits live preview only, and export above the device's decoder limit runs a multi-pass precompose (AND-19). Heavy ranges can be pre-rendered into a render-preview cache (AND-18). AND-16 no longer waits for a sign-off.
 4. **ENG-08 belongs to Windows** (owner decision, 2026-10-11). The Mac's builders no longer include it.
 5. **Optional.** The root app's Android build makes `media_kit_libs_android_video` download its libmpv jars from github.com (its own `build.gradle`; this is not pub or Maven). Windows will not build the root app unless you allow it. Only one AI-04 check needs that build ("no libc++_shared clash with media_kit"). Without your OK, the Mac covers it when INT-02 wires whisper into the app.
 
@@ -80,12 +80,14 @@ Commands are in §9.
 | 10 | AND-09 | Android GL effects, shaders, LUT and sprite textures | M3 | ENG-06 MAC (pending); API-03, API-04, CORE-21 DONE | ENG-06 merged | and-m3-text | JVM, EMU (GL, parity goldens) |
 | 11 | AND-17 | Android paused-frame renderer, layer GL compositor and structural debounce | M3 | AND-08, AND-09, AND-06 WINDOWS | All three committed | and-m3-paused | EMU |
 | 12 | AND-10 | Android preview session: SurfaceProducer, clock, seek/scrub, transients, redraw, quality, lifecycle | M3 | AND-08, AND-09, AND-06, AND-17 WINDOWS; ENG-02 MAC (pending) | AND-17 committed **and** ENG-02 merged | and-m3-preview | EMU, IT `android_preview_test.dart` |
-| 13 | AND-16 | Android contingency preview engine (active: AND-01 NO-GO) | M3 | AND-10, AND-17 WINDOWS; activation by ENG-06 MAC (pending); owner sign-off D-43e | AND-10 committed **and** ENG-06 has activated AND-16 **and** the owner has signed D-43e **and** ENG-06 has settled the JNI shim's Gradle and cpp ownership (§2). The lead then adds `D-43E` and `AND16-SHIM` to the workflow's `landed` | and-m3-fallback | EMU, IT (AND-10's playback list through this backend) |
+| 13 | AND-16 | Android contingency preview engine (active: AND-01 NO-GO) | M3 | AND-10, AND-17 WINDOWS; activation by ENG-06 MAC (pending); owner sign-off D-43e DONE (2026-10-11) | AND-10 committed **and** ENG-06 has activated AND-16 **and** ENG-06 has settled the JNI shim's Gradle and cpp ownership (§2). The lead then adds `AND16-SHIM` to the workflow's `landed` | and-m3-fallback | EMU, IT (AND-10's playback list through this backend) |
 | 14 | AND-13 | Android voice recorder | M4 | ENG-03 MAC (pending) | ENG-03 merged | and-m4-services | EMU |
 | 15 | AND-14 | Android pickers, URI grants (media access), permissions | M4 | ENG-03 MAC (pending) | ENG-03 merged | and-m4-services | EMU (API 35, so API 33+ permission flows run) |
 | 16 | AND-15 | Android external drop target | M4 | ENG-03 MAC (pending) | ENG-03 merged | and-m4-services | EMU, plus a manual check on the tablet AVD |
 | 17 | AND-11 | Android export: coordinator, Transformer, encoder settings, hardware selector, active store | M4 | AND-09, AND-08, AND-10 WINDOWS; ENG-04 MAC (pending) | AND-10 committed **and** ENG-04 merged | and-m4-export | JVM, EMU |
 | 18 | AND-12 | Android export foreground service, notification, background guard, MediaStore, file handoff | M5 | AND-11 WINDOWS | AND-11 committed | and-m5 | EMU on API 29, 34 and 35 (UiAutomator) |
+| 19 | AND-18 | Android render-preview renderer and playback swap-in | M4 | AND-16, AND-10 WINDOWS | AND-16 committed (its gates cover the rest). The Pigeon/glue additions it is called through are a Mac [INTEGRATION] amendment (ARCH D-45): until they land, build behind its own interfaces and report the wiring in forMac | and-m4-rpreview | JVM, EMU |
+| 20 | AND-19 | Android multi-pass export precompose | M4 | AND-11 WINDOWS | AND-11 committed | and-m4-precomp | JVM, EMU |
 
 How groups map to builder agents:
 - The Group column is the group id in `android_lane_workflow.js` (pass it in the workflow's `only` argument to run one group). Each group is one builder agent and runs its tickets in the order listed.
@@ -441,6 +443,13 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 **Deferred: no device available:** transitions and video-over-video PiP at 30 fps with ≤ 2% dropped on the mid device.
 
+**Owner decision 2026-10-11 (D-43(e); BUILD_PLAN AND-16 amended criteria):**
+- Layers beyond the tier's live decode budget play as paused-exact stills during playback only; paused, scrub and exact seek are exact for every layer (barcode test).
+- An exact seek while playing may show the nearest decoded frame first, then refines; it acks only the exact frame, within +30% of ARCH §13.4.
+- Under injected load frames are dropped, never late or wrong.
+- Adaptive quality steps full → 1/2 → 1/4 under load and recovers (degraded/recovered events); a pinned quality never changes.
+- Provide a `RenderedRangeHook` (no-op by default) inside `preview/fallback/` for AND-18, called at range boundaries (test double).
+
 ### AND-13 · Android voice recorder (and-m4-services)
 
 ```
@@ -518,6 +527,8 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 
 **Deferred: no device available:** hardware-encoder preference against real hardware codecs. Test the selector logic with injected codec lists.
 
+**Owner decision 2026-10-11 (D-45; BUILD_PLAN AND-11 amended):** preflight never refuses for sequence or layer counts. When the packed export plan needs more decoders than the device allows, `ExportCoordinator` hands the job to a `MultiPassExport` hook (interface in AND-11's coordinator, implemented by AND-19) instead of failing; test the routing with a test double.
+
 ### AND-12 · Android export foreground service, notification, background guard, MediaStore, file handoff (and-m5)
 
 ```
@@ -541,6 +552,51 @@ packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/edi
 - The gallery insert is visible in Photos.
 - The share intent grants read access only to the chosen target.
 
+### AND-18 · Android render-preview renderer and playback swap-in (and-m4-rpreview)
+
+```
+packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/preview/render/
+packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/render/
+packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/render/
+```
+
+**§7 files:** none. It is called through `JobKindMsg.renderPreview` and `PreviewHostApi.setRenderedRanges`, which a Mac [INTEGRATION] amendment adds to the frozen Pigeon surface and glue (ARCH D-45). Never edit Pigeon or glue files; if the amendment is not in the tree, build behind your own interfaces and report the wiring in forMac. Never edit AND-16's, AND-10's or AND-11's files: plug into AND-16's `RenderedRangeHook`.
+
+**Design:** ARCH D-45 and §13.3 'Over-budget layers and the render-preview cache'.
+- `RenderPreviewJob` (AND-05's job registry): a `Transformer` export of the range plan through AND-08's mapper at the preview canvas size and project fps into `<cache>/vwish/editor/renders/`, H.264 all-intra or ≤ 0.5 s GOP, video only; cancel deletes the partial file; thermal `SEVERE` pauses; never runs during an export.
+- `RenderedRangeSwap`: during playback one deck plays the cached file in place of every slot of the range, pre-rolled like a standby deck, switched at the range's exact frame boundaries under the hold/miss rule. Paused, scrub and exact seek keep the normal decks. A patch touching a range drops it until the next `setRenderedRanges`.
+
+**Acceptance criteria:**
+- A rendered range matches live composition at preview size (barcode exact, SSIM ≥ 0.99).
+- 0 wrong frames across range boundaries at 24/30/60 fps.
+- A param patch inside a range falls back to live on the next frame.
+- Cancel and process death leave no partial file in the index.
+- Export plans never reference render files.
+
+**Deferred: no device available:** the minimal/low-tier smoothness numbers on real devices (QA-04). Record emulator numbers for a 6-layer chroma-key range.
+
+### AND-19 · Android multi-pass export precompose (and-m4-precomp)
+
+```
+packages/vwish_editor_engine/android/src/main/kotlin/com/vecvel/vwish/editor/engine/export/precompose/
+packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/engine/precompose/
+packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/precompose/
+```
+
+**§7 files:** none. Plug into AND-11's `MultiPassExport` hook; never edit AND-11's files (a missing hook is a FIX-AND-11 request).
+
+**Design:** ARCH D-45(B) and §14.3 'Multi-pass precompose'. Replaces "export refuses until reduced".
+- `PrecomposePlanner`: from the packed export plan and `maxVisualSequences` / codec `maxSupportedInstances` − 2, decide how many bottom slots each pass renders.
+- `PrecomposePass`: a video-only `Transformer` export of the background plus those slots (AND-08 mapper, `target = export`, same frame processor, HDR mode and working colour space) at the export size to `work/export-<jobId>/pre-<n>.mp4`, all-intra or ≥ 4× the export bitrate. Repeat until the rest fits; the final pass uses the intermediate as an ordinary bottom layer on the export frame grid and mixes audio once.
+- One progress fraction over all passes; cancel, failure and process death delete intermediates; disk preflight counts them; AND-12's service covers every pass.
+
+**Acceptance criteria:**
+- A precomposed export equals a single-pass export of the same plan: SSIM ≥ 0.995 per frame, grid-cut barcodes 100% at 24/30/60 fps, identical frame count, audio within the QA-11 tolerances.
+- With `maxVisualSequences` forced to 2, a 6-slot project exports instead of being refused.
+- HDR/tone-mapped and rotated sources match single pass.
+- Cancel during each pass leaves no intermediates.
+- JVM tests for the planner (slot split, disk estimate).
+
 ## 6. Start now
 
 These can run before any Mac gate:
@@ -559,7 +615,7 @@ Nothing else can start until ENG-06. Do not start AND tickets against the unfroz
 | Path | Who edits, in order | Rule for Windows |
 |---|---|---|
 | `packages/vwish_editor_engine/android/build.gradle.kts`, `android/lint.xml` | ENG-01 → **ENG-08 (Windows)** → ENG-06 (Mac), then frozen | Edit only in ENG-08. After that, every dependency, NDK, CMake or test-dependency need goes to the owner as a request for the Mac. |
-| `android/src/main/AndroidManifest.xml`, `.../engine/VwishEditorEnginePlugin.kt`, `.../engine/glue/` | ENG-01 → **ENG-08** → ENG-06 (glue amendments), then frozen | Edit only in ENG-08. Service tickets implement the classes the glue already calls. A signature mismatch is a defect report, not an edit. |
+| `android/src/main/AndroidManifest.xml`, `.../engine/VwishEditorEnginePlugin.kt`, `.../engine/glue/` | ENG-01 → **ENG-08** → ENG-06 (glue amendments), then frozen → D-45 amendment (Mac lead, [INTEGRATION]: `renderPreview` job kind, `setRenderedRanges`, `powerState`) | Edit only in ENG-08. Service tickets implement the classes the glue already calls. A signature mismatch is a defect report, not an edit. |
 | `pigeons/`, `lib/src/pigeon/`, `lib/src/mobile_editor_engine.dart`, `android/.../engine/pigeon/` | ENG-01 → ENG-06 (Mac only) | Read-only. Never regenerate. |
 | `ENG-08` placeholders (`// OWNER: AND-xx`) | ENG-08 creates them → ENG-06 may update them with Pigeon amendments → the AND ticket replaces them | Merge `origin/editor-wip` after ENG-06 before starting any AND ticket. |
 | `packages/vwish_editor_core/test/fixtures/vectors/frame_grid.json` | CORE-02 → ENG-06 (`androidSeekMsRounding` only) | Read-only (AND-08 and AND-10 read it). |
@@ -656,5 +712,7 @@ Test packages per ticket:
 | AND-15 | `drop` |
 | AND-11 | `export` |
 | AND-12 | `service` |
+| AND-18 | `render` |
+| AND-19 | `precompose` |
 
 Each package is under `com.vecvel.vwish.editor.engine`.

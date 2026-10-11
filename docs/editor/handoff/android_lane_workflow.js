@@ -1,6 +1,6 @@
 export const meta = {
   name: 'editor-android-lane',
-  description: 'Build the Vwish editor Android lane on the Windows laptop (ENG-08, AI-04, AND-02..AND-17) in dependency order, gated on Mac tickets merged from editor-wip, then one review and one fix pass',
+  description: 'Build the Vwish editor Android lane on the Windows laptop (ENG-08, AI-04, AND-02..AND-19) in dependency order, gated on Mac tickets merged from editor-wip, then one review and one fix pass',
   whenToUse: 'On the Windows laptop, on branch editor-android after merging origin/editor-wip. Args: {root, landed, preloaded}; see the comment block below the meta.',
   phases: [
     { title: 'Build', detail: 'Android lane ticket groups in dependency order; groups waiting on Mac tickets are skipped', model: 'opus' },
@@ -13,7 +13,7 @@ export const meta = {
  * ANDROID LANE WORKFLOW (Windows laptop)
  * ======================================
  * Builds the Android lane of the Vwish editor (docs/editor/BUILD_PLAN.md): ENG-08, AI-04 and
- * AND-02..AND-17. One builder agent per ticket group, then one reviewer and one fixer. The Mac
+ * AND-02..AND-19. One builder agent per ticket group, then one reviewer and one fixer. The Mac
  * keeps every other ticket. Lane plan: ANDROID_LANE.md. Windows setup and pitfalls:
  * WINDOWS_SETUP.md. Ticket status at hand-off time: BUILD_STATE.md (all in docs/editor/handoff/).
  * The meta block stays first because the Workflow tool requires the script to start with it.
@@ -46,9 +46,10 @@ export const meta = {
  *   landed       Ticket ids merged into this working tree from editor-wip, plus owner tokens.
  *                ENG-09, API-04 and AI-03 are done and always counted. Gates still to come:
  *                ENG-06 (every AND group), ENG-02 (and-m3-preview), ENG-03 (and-m4-services) and
- *                ENG-04 (and-m4-export). and-m3-fallback (AND-16) also needs two owner tokens, added
- *                only on the owner's word: D-43E (the owner signed AND-01 §7) and AND16-SHIM
- *                (ENG-06 assigned android/src/main/cpp/ and added the externalNativeBuild block).
+ *                ENG-04 (and-m4-export). and-m3-fallback (AND-16) also needs one token, added only
+ *                on the lead's word: AND16-SHIM (ENG-06 assigned android/src/main/cpp/ and added the
+ *                externalNativeBuild block). The owner signed D-43(e) on 2026-10-11 (ARCH D-43, D-45),
+ *                so there is no D-43E gate any more.
  *                A group runs only when all of its gates are listed. Otherwise the group, and every
  *                group that depends on it, is logged as 'waiting for Mac/owner: ...' and skipped.
  *                ENG-06 listed means ENG-08 has landed too (ENG-06 depends on it), so eng08 counts
@@ -72,10 +73,12 @@ export const meta = {
  *   and-m3-text     AND-09                           eng08                                 ENG-06 (API-04 done)
  *   and-m3-paused   AND-17                           and-m3-render, and-m3-text, and-m2b   (ENG-06)
  *   and-m3-preview  AND-10                           and-m3-paused                         ENG-02
- *   and-m3-fallback AND-16                           and-m3-preview                        ENG-06, D-43E, AND16-SHIM
+ *   and-m3-fallback AND-16                           and-m3-preview                        ENG-06, AND16-SHIM
  *   and-m4-services AND-13, AND-14, AND-15           eng08                                 ENG-06, ENG-03
  *   and-m4-export   AND-11                           and-m3-render, and-m3-text,           ENG-04
  *                                                    and-m3-preview
+ *   and-m4-rpreview AND-18                           and-m3-fallback                       (ENG-06, AND16-SHIM)
+ *   and-m4-precomp  AND-19                           and-m4-export                         (ENG-04)
  *   and-m5          AND-12                           and-m4-export                         (ENG-04)
  *   A gate in parentheses comes from a Windows dependency. Cross-machine order: ENG-08 (here) must
  *   land on editor-wip before the Mac's ENG-06, and ENG-06 must land here before any AND ticket.
@@ -167,6 +170,8 @@ const TITLES = {
   'AND-14': 'Android pickers, URI grants (media access), permissions',
   'AND-15': 'Android external drop target',
   'AND-12': 'Android export foreground service, notification, background guard, MediaStore, file handoff',
+  'AND-18': 'Android render-preview renderer and playback swap-in',
+  'AND-19': 'Android multi-pass export precompose',
 }
 
 const OWNS_LEGEND = `Path prefixes:
@@ -196,6 +201,8 @@ const OWNS = {
   'AND-14': ['K/platform/MediaPicker.kt', 'K/platform/MediaAccess.kt', 'K/platform/Permissions.kt', 'A/platform/'],
   'AND-15': ['K/platform/DropTarget.kt', 'A/drop/'],
   'AND-12': ['K/export/ExportService.kt', 'K/export/ExportNotification.kt', 'K/platform/BackgroundGuard.kt', 'K/platform/MediaStoreSaver.kt', 'K/platform/FileHandoff.kt', 'E/android/src/main/res/drawable/vwish_export_notification.xml', 'A/service/'],
+  'AND-18': ['K/preview/render/', 'T/render/', 'A/render/'],
+  'AND-19': ['K/export/precompose/', 'T/precompose/', 'A/precompose/'],
 }
 
 function ownsText(tickets) {
@@ -206,12 +213,12 @@ function ownsText(tickets) {
 
 const CONTEXT = `
 You are an engineer on Vwish Player (Flutter 3.44.2 / Dart 3.12 monorepo at ${ROOT}) working the ANDROID LANE on the owner's WINDOWS laptop (32 GB RAM, no Xcode). We are building a production video editor for iOS + Android per the FINAL docs:
-- ${ROOT}/docs/editor/ARCHITECTURE.md (source of truth; decisions D-1..D-44; read only the sections your tickets cite)
+- ${ROOT}/docs/editor/ARCHITECTURE.md (source of truth; decisions D-1..D-45; D-43(e) signed off by the owner 2026-10-11, D-45 render-preview cache and multi-pass export; read only the sections your tickets cite)
 - ${ROOT}/docs/editor/BUILD_PLAN.md (§1 how to work a ticket, §2 ownership rules, §5 dependency index, §6 ticket bodies with acceptance criteria, §7 shared/integration file register)
 - ${ROOT}/docs/editor/spikes/AND-01.md (Android spike: verdict, measurements, what ENG-06 applies, rules carried into the AND tickets; read it before any AND ticket)
 - ${ROOT}/docs/editor/handoff/ (ANDROID_LANE.md lane plan, WINDOWS_SETUP.md Windows pitfalls, BUILD_STATE.md status and hand-off facts of finished tickets; read the parts relevant to you)
 
-SPLIT (decided by the owner; do not re-litigate): the build runs on two machines. The Mac keeps everything except the Android lane: all core/UI/UX/integration/QA tickets, all iOS tickets, ENG-01..07, ENG-09, ENG-02/03/04, ENG-06 (integration freeze), AI-05, IOS-01 and AND-01. This Windows laptop owns ONLY the Android lane: ENG-08, AI-04, AND-02..AND-17. Windows can never build or test iOS: never edit iOS/Swift/podspec files and never claim an iOS criterion. Cross-machine gates: ENG-08 (Windows) lands before ENG-06 (Mac); ENG-06 lands before AND-02..AND-17. Your group was started only after its Mac-side gates were merged into this working tree. If something you need from a Mac ticket is missing or wrong, report it in forMac and deferred as a defect against that ticket; never edit its files.
+SPLIT (decided by the owner; do not re-litigate): the build runs on two machines. The Mac keeps everything except the Android lane: all core/UI/UX/integration/QA tickets, all iOS tickets, ENG-01..07, ENG-09, ENG-02/03/04, ENG-06 (integration freeze), AI-05, IOS-01 and AND-01. This Windows laptop owns ONLY the Android lane: ENG-08, AI-04, AND-02..AND-19. Windows can never build or test iOS: never edit iOS/Swift/podspec files and never claim an iOS criterion. Cross-machine gates: ENG-08 (Windows) lands before ENG-06 (Mac); ENG-06 lands before AND-02..AND-19. Your group was started only after its Mac-side gates were merged into this working tree. If something you need from a Mac ticket is missing or wrong, report it in forMac and deferred as a defect against that ticket; never edit its files.
 
 GIT: the lane works on branch editor-android (from editor-wip, github.com/vecvel/vwish). Do NOT run state-changing git commands (no add, commit, stash, checkout/switch, reset, restore, merge, rebase, pull, push, clean, branch, tag, config). Read-only git (status, diff, log, show, ls-files) is fine. The lead commits each ticket after this run as 'feat(editor): <TICKET> <title>' with no co-author trailer, so report exact per-ticket file lists. Never create or commit secrets (android/key.properties, *.jks) or machine files (local.properties).
 
@@ -224,6 +231,7 @@ DOWNLOAD RULE: no internet downloads except normal package-manager resolution (p
 DEVICE RULE: there is no physical Android device. Verification runs as JVM unit tests and on x86_64 emulators: Pixel_9_Pro_XL_API_35 (default), plus Pixel_API_29, Pixel_API_34 and Pixel_Tablet_API_35 where a criterion names API 29, API 34 or a tablet. Check which exist with 'emulator -list-avds'; only when a needed AVD is missing, mark that criterion 'deferred: <AVD> not installed'. Mark criteria that need a real device, a named device class (Pixel 7a, 4 GB, low/mid tier) or real-hardware performance 'deferred: no device available', with the reason. Never fake them. Report emulator measurements as emulator measurements, never as device numbers. A test that is skipped, @Ignore'd or asserts nothing is not a pass.
 
 OWNER DEFAULTS (D-43, owner defaults 2026-10-08, revisable): Android editor gate API 29 + GLES3 + 2 GB RAM (devices below 3 GB run the minimal tier, D-40); no auto captions on armeabi-v7a; Android editor data excluded from backup.
+OWNER DECISION D-43(e) (2026-10-11, ARCH D-43 and D-45): preview adapts to the device, export is always full quality and never refused (only slower on weak devices). Proxies on by default on minimal/low; adaptive preview quality full -> 1/2 -> 1/4 unless pinned; layers over the live decode budget show paused-exact stills during playback only (paused, scrub and seek always exact); exact seek may be +30% on AND-16 (nearest frame first, then exact); drop a frame rather than show a late or wrong one; maxVisualSequences limits live preview only, and above the device's decoder limit export runs a multi-pass precompose (AND-19); heavy ranges can be pre-rendered into the render-preview cache (AND-18).
 
 TIME RULE (BUILD_PLAN §1.7, ARCH §5, D-35): any code that turns a platform clock or presentation time into a frame uses frameIndexNearest and evaluates at timeOfFrame(k); boundaries are anchored at P(k) = round(k*1e6/gridFps); never compare a raw platform microsecond value with a plan edge. Every Media3 file starts with @file:OptIn(UnstableApi::class, ExperimentalApi::class). Nothing logs media paths, transcript text or user content.
 
@@ -322,8 +330,8 @@ Anchor every item and gap boundary at P(k). Include z-order and gating unit test
     note: `AND-01 reported NO-GO for CompositionPlayer preview and ENG-06 activates AND-16 (read docs/editor/spikes/AND-01.md §1-2 and §6-7, and what ENG-06 recorded in ARCH §13.3/§13.4). AND-10 ships the PreviewSession shell, SurfaceBridge (resetInBackground, latch <= 500 ms), SeekController, QualityGovernor, PreviewSessionManager and the PreviewBackend interface that AND-16's MultiPlayerBackend implements. Meet the 'hand back now' criteria in ANDROID_LANE.md §5 AND-10. The playback criteria (exact seek ack, scrub coalescing, transient, A/V offset) are met through AND-16 later: list them in deferred as 're-run when AND-16 lands' and mark AND-10 done when everything else passes. example/integration_test/android_preview_test.dart drives MobileEditorEngine and ENG-02's mobile_preview_session.dart on the emulator. With any CompositionPlayer, detach with clearVideoSurface(surface); the no-arg overload throws in 1.11.1. Record emulator numbers for the ARCH §13.4 mid/low budgets; the device criteria are deferred: no device available.`,
   },
   {
-    id: 'and-m3-fallback', tickets: ['AND-16'], deps: ['and-m3-preview'], external: ['ENG-06', 'D-43E', 'AND16-SHIM'], model: 'opus',
-    note: `Contingency preview engine, active because AND-01 was NO-GO. This group runs only after the owner signed D-43e and ENG-06 assigned android/src/main/cpp/ (the JNI shim) and added its externalNativeBuild block. If ENG-06 recorded GO instead, close AND-16 with status not_needed, citing AND-01's report. Build MultiPlayerBackend : PreviewBackend to the scope in AND-01.md §7. It overrides ARCH §13.3's pre-ENG-06 'Contingency' bullet and BUILD_PLAN's AND-16 spec text (one player per slot into a SurfaceTexture, drift fixed by seeking), which AND-01 measured as showing wrong frames:
+    id: 'and-m3-fallback', tickets: ['AND-16'], deps: ['and-m3-preview'], external: ['ENG-06', 'AND16-SHIM'], model: 'opus',
+    note: `Contingency preview engine, active because AND-01 was NO-GO. The owner signed its degradations on 2026-10-11 (ARCH D-43(e), D-45); this group runs only after ENG-06 assigned android/src/main/cpp/ (the JNI shim) and added its externalNativeBuild block. Owner decision points that shape AND-16 (BUILD_PLAN AND-16 amended criteria): layers beyond the tier's live decode budget play as paused-exact stills during playback only, while paused, scrub and exact seek are exact for every layer; an exact seek while playing may show the nearest decoded frame first, then refine (+30% allowed); under load drop a frame, never show a late or wrong one; adaptive quality full -> 1/2 -> 1/4 and back unless pinned; maxVisualSequences limits live preview only. Also provide a RenderedRangeHook (no-op by default) inside preview/fallback/ that AND-18 implements. If ENG-06 recorded GO instead, close AND-16 with status not_needed, citing AND-01's report. Build MultiPlayerBackend : PreviewBackend to the scope in AND-01.md §7. It overrides ARCH §13.3's pre-ENG-06 'Contingency' bullet and BUILD_PLAN's AND-16 spec text (one player per slot into a SurfaceTexture, drift fixed by seeking), which AND-01 measured as showing wrong frames:
 - a deck pool with 2 decks per packing slot, each an ExoPlayer rendering into a PRIVATE ImageReader, imported as an OES texture through the HardwareBuffer JNI shim, with epoch-tagged frames;
 - a Choreographer frame clock on the preview thread with a 2-frame lead, the hold/miss rule (drop a frame, never show a late one) and drift correction, following the audio master;
 - audio slots: one ExoPlayer per audio interval colour with AND-08's speed and GainProcessor chain and a signed sink offset (V-N23);
@@ -337,7 +345,15 @@ Port from spikes/android_engine (ContingencyEngineProto.kt, ContingencyEngineTes
   },
   {
     id: 'and-m4-export', tickets: ['AND-11'], deps: ['and-m3-render', 'and-m3-text', 'and-m3-preview'], external: ['ENG-04'], model: 'opus',
-    note: `Transformer export (AND-01: GO). ENG-04's mobile_export.dart (Mac) is the Dart side. Build export compositions with AND-08's mapper (target export) and AND-09's SpriteBandEffect. Define the ActiveExportStore format here; AND-12's service writes its detached records later (D-39). Test on the emulator: V-N13 (hvc1 tag) and V-N24 (no-audio, all-muted and images/text-only fixtures get a silent AAC 48 kHz stereo track). Record which encoder actually ran; the emulator may only have software HEVC, so defer the real-hardware preference. Test the selector with injected codec lists, including that a software or fallback encoder raises the preflight/progress warning. Exercise the portrait retry path with an injected refusal. Check 'interrupted after process death' with am kill or force-stop from an instrumented test. Preview suspension on minimal/low/mid tiers goes through AND-10's PreviewSessionManager.`,
+    note: `Transformer export (AND-01: GO). ENG-04's mobile_export.dart (Mac) is the Dart side. Build export compositions with AND-08's mapper (target export) and AND-09's SpriteBandEffect. Define the ActiveExportStore format here; AND-12's service writes its detached records later (D-39). Test on the emulator: V-N13 (hvc1 tag) and V-N24 (no-audio, all-muted and images/text-only fixtures get a silent AAC 48 kHz stereo track). Record which encoder actually ran; the emulator may only have software HEVC, so defer the real-hardware preference. Test the selector with injected codec lists, including that a software or fallback encoder raises the preflight/progress warning. Exercise the portrait retry path with an injected refusal. Check 'interrupted after process death' with am kill or force-stop from an instrumented test. Preview suspension on minimal/low/mid tiers goes through AND-10's PreviewSessionManager. Owner decision 2026-10-11 (ARCH D-45, BUILD_PLAN AND-11 amended): preflight never refuses for sequence or layer counts; when the packed export plan needs more decoders than the device allows, ExportCoordinator hands the job to a MultiPassExport hook (interface in AND-11's coordinator, implemented later by AND-19) instead of failing; test it with a test double.`,
+  },
+  {
+    id: 'and-m4-rpreview', tickets: ['AND-18'], deps: ['and-m3-fallback'], external: [], model: 'opus',
+    note: `Render-preview renderer and playback swap-in (owner decision 2026-10-11, ARCH D-45, §13.3 'Over-budget layers and the render-preview cache'; BUILD_PLAN AND-18). RenderPreviewJob registered with AND-05's job registry: a Transformer export of a range plan through AND-08's mapper (target export at the preview canvas size and project fps, same effects, gating and working space) into <cache>/vwish/editor/renders/, H.264 all-intra (I-frame interval 0) or <= 0.5 s, video only, hardware encoder first; progress, cancel deletes the partial file, thermal SEVERE pauses, never runs during an export. RenderedRangeSwap implements AND-16's RenderedRangeHook: during playback one deck plays the cached file in place of every slot of the range, pre-rolled like a standby deck and switched at the range's exact frame boundaries under the hold/miss rule; paused, scrub and exact seek keep the normal decks; a patch touching a range drops it until the next setRenderedRanges. The Pigeon/glue additions (JobKindMsg.renderPreview, PreviewHostApi.setRenderedRanges) are a Mac-side [INTEGRATION] amendment: if they are not in the tree, build and test behind your own interfaces in preview/render/, never edit glue or Pigeon files, and put 'wire renderPreview/setRenderedRanges glue (D-45 amendment)' in forMac. Never edit AND-16's, AND-10's or AND-11's files. Tests in src/test/.../render/ and src/androidTest/.../render/: rendered range vs live (barcode exact, SSIM >= 0.99), 0 wrong frames across range boundaries at 24/30/60 fps, param patch inside a range falls back to live on the next frame, cancel and process death leave no partial file. Emulator numbers recorded; device numbers deferred: no device available.`,
+  },
+  {
+    id: 'and-m4-precomp', tickets: ['AND-19'], deps: ['and-m4-export'], external: [], model: 'opus',
+    note: `Multi-pass export precompose (owner decision 2026-10-11, ARCH D-45(B), §14.3 'Multi-pass precompose'; BUILD_PLAN AND-19). Export never refuses for sequence counts. PrecomposePlanner: from the packed export plan and maxVisualSequences / codec maxSupportedInstances - 2, decide how many bottom slots each pass renders. PrecomposePass: a video-only Transformer export of the background plus those slots through AND-08's mapper (target export, same frame processor, HDR mode and working colour space) at the export size into work/export-<jobId>/pre-<n>.mp4, all-intra (I-frame interval 0) or >= 4x the export bitrate; repeat until the rest fits; the final pass maps the intermediate as an ordinary bottom video layer on the export frame grid (rule-frame clipping, ARCH §13.3) and mixes audio once. One progress fraction over all passes; cancel, failure and process death delete intermediates; disk preflight counts them. Plug into AND-11's MultiPassExport hook; never edit AND-11's files (if the hook is missing, return blocked with a FIX-AND-11 request in forMac). Tests in src/test/.../precompose/ and src/androidTest/.../precompose/: precomposed vs single-pass export of the same plan (SSIM >= 0.995 per frame, grid-cut 100% at 24/30/60 fps, identical frame count, audio within QA-11 tolerances); maxVisualSequences forced to 2 exports a 6-slot project; HDR/tone-mapped and rotated sources match; cancel in each pass leaves no intermediates.`,
   },
   {
     id: 'and-m5', tickets: ['AND-12'], deps: ['and-m4-export'], external: [], model: 'opus',
@@ -388,7 +404,7 @@ for (const g of GROUPS) {
 if (ONLY) {
   for (const id of ONLY) if (!byId[id]) log(`ignoring unknown group '${id}' in args.only`)
 }
-for (const t of ['ENG-02', 'ENG-03', 'ENG-04', 'D-43E', 'AND16-SHIM']) {
+for (const t of ['ENG-02', 'ENG-03', 'ENG-04', 'AND16-SHIM']) {
   if (LANDED.has(t) && !LANDED.has('ENG-06')) log(`warning: args.landed has ${t} but not ENG-06, which ${t} depends on; check args.landed`)
 }
 
