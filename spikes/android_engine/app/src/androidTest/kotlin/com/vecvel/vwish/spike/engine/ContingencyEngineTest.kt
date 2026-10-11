@@ -265,6 +265,8 @@ class ContingencyEngineTest {
             val mismatches = ArrayList<String>()
             var coldMs: Double
             var coldTimeoutState: String? = null
+            var coldReseeks = 0
+            var warmReseeks = 0
             Sink(plan.canvasW, plan.canvasH).use { sink ->
                 val t0 = System.nanoTime()
                 ContingencyEngineProto(ctx, plan, store, regions).use { e ->
@@ -272,29 +274,33 @@ class ContingencyEngineTest {
                     val ms = e.seekExact(15, 90_000)
                     coldMs = if (ms < 0) -1.0 else (System.nanoTime() - t0) / 1e6
                     if (ms < 0) coldTimeoutState = e.debugState()
+                    coldReseeks = e.slotStats().sumOf { it.reseeks }
                     e.frames.lastOrNull()?.let { mismatches += Scenarios.checkFrame(plan, 15, it.regions, times, (1..n).toList()) }
                     for (k in listOf(45L, 20L, 70L, 33L, 52L)) {
                         val w = e.seekExact(k, 10_000)
                         warm += w
                         e.frames.lastOrNull()?.let { mismatches += Scenarios.checkFrame(plan, k, it.regions, times, (1..n).toList()) }
                     }
+                    warmReseeks = e.slotStats().sumOf { it.reseeks } - coldReseeks
                 }
             }
             runs.put(
                 JSONObject().put("slots", n).put("decoders", 2 * n).put("coldRebuildToFrameMs", coldMs)
                     .put("coldTimeoutState", coldTimeoutState ?: JSONObject.NULL)
+                    .put("coldStuckDeckReseeks", coldReseeks).put("warmStuckDeckReseeks", warmReseeks)
                     .put("warmExactSeekMs", Results.stats(warm.filter { it >= 0 })).put("warmTimeouts", warm.count { it < 0 })
                     .put("mismatches", Results.arr(mismatches)),
             )
         }
         Results.write("VN19_contingency_rebuild", JSONObject().put("device", android.os.Build.MODEL).put("runs", runs))
-        // Correctness is asserted; cold timing is recorded (on the shared, swapping emulator host the
-        // decoders of a 6-slot cold start can take longer than the 90 s timeout to produce a frame).
+        // Correctness and completion are asserted; timing is recorded (it depends on the shared host).
+        // Without the stuck-deck watchdog in seekExact, a 4- or 6-slot cold start on the loaded
+        // emulator left a deck in BUFFERING with no frame for the whole 90 s timeout.
         for (i in 0 until runs.length()) {
             val r = runs.getJSONObject(i)
             assertEquals(r.toString(), 0, r.getJSONArray("mismatches").length())
             assertEquals(r.toString(), 0, r.getInt("warmTimeouts"))
+            assertTrue(r.toString(), r.getDouble("coldRebuildToFrameMs") > 0)
         }
-        assertTrue(runs.toString(), runs.getJSONObject(0).getDouble("coldRebuildToFrameMs") > 0)
     }
 }

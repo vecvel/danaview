@@ -6,7 +6,6 @@
 
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show Velocity, kMinFlingVelocity;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,6 +63,20 @@ void main() {
       expect(c.pxPerSecond, closeTo(400 * 0.9 / 60, 1e-9));
       expect(c.xOf(0), closeTo(20, 1e-6));
       expect(c.xOf(60 * _s), closeTo(380, 1e-6));
+    });
+
+    test('a long project fits at the smallest zoom, centred (5 s each side); every fit shows the whole project', () {
+      final long = _vp(width: 480, duration: 20 * 60 * _s);
+      expect(long.pxPerSecond, closeTo(long.minPxPerSecond, 1e-12));
+      expect(long.xOf(0), closeTo(5 * long.pxPerSecond, 1e-6));
+      expect(long.xOf(20 * 60 * _s), closeTo(480 - 5 * long.pxPerSecond, 1e-6));
+      for (final width in [236.0, 400.0, 1280.0]) {
+        for (final seconds in [1, 30, 95, 600, 4 * 3600]) {
+          final c = _vp(width: width, duration: seconds * _s)..zoomToFit();
+          expect(c.xOf(0), greaterThanOrEqualTo(-1e-6), reason: '$width px, $seconds s');
+          expect(c.xOf(seconds * _s), lessThanOrEqualTo(width + 1e-6), reason: '$width px, $seconds s');
+        }
+      }
     });
 
     test('a fit requested before the first layout applies on layout', () {

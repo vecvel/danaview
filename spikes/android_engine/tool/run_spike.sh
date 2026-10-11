@@ -23,7 +23,8 @@ fi
 # The loaded emulator sometimes fails to start the instrumentation process right after install
 # ("failed to attach"); retry a few times.
 for attempt in 1 2 3; do
-  "$ADB" -s "$SERIAL" shell am instrument -w -r "${ARGS[@]}" "$PKG.test/androidx.test.runner.AndroidJUnitRunner" > "$HERE/build/last_run.txt" || true
+  # ${ARGS[@]+...}: an empty array is "unbound" under set -u in macOS's bash 3.2.
+  "$ADB" -s "$SERIAL" shell am instrument -w -r ${ARGS[@]+"${ARGS[@]}"} "$PKG.test/androidx.test.runner.AndroidJUnitRunner" > "$HERE/build/last_run.txt" || true
   grep -q "failed to attach" "$HERE/build/last_run.txt" || break
   sleep 5
 done

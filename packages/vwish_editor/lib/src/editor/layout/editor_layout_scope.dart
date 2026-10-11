@@ -2,8 +2,12 @@
 //
 // EditorLayoutScope: the resolved EditorLayoutSpec for the widgets of the editor's regions
 // (ux.md §6). Region owners read it instead of re-deriving the layout:
-// * UX-16: `toolTileHeight` and `iconOnlyTools` (step 3) for the tool strip/rail, `dockHeight` for
-//   `VwishDockedPanel.standardHeight`, `inspectorPlacement`.
+// * UX-16: `toolTileHeight` and `iconOnlyTools` (step 3) for the tool strip/rail, `toolPlacement`
+//   (the ToolRail widget also fills the side pane in compactLandscape/medium while the inspector is
+//   closed), `inspectorPlacement`, and `dockHeight` for `VwishDockedPanel.standardHeight`: the
+//   scaffold's dock slot sits at the screen bottom with the full MediaQuery and lays InspectorDock
+//   out with unbounded height and a minimum of dockHeight + keyboard, so the panel lifts itself
+//   above the keyboard and can expand over the timeline.
 // * UX-14: `transportInTopBar` (step 4): the TransportBar is then placed in the top bar's title slot
 //   and shows play/pause and a compact time only.
 // * UX-12: `headerWidth`, `rulerHeight` and `kind` for the timeline.

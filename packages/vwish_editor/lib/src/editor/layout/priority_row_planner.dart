@@ -108,7 +108,8 @@ abstract final class PriorityRowPlanner {
 
 /// Width of [text] in [style] under [textScaler] (one line), rounded up to whole pixels; the same
 /// measurement the player uses for its time label.
-double measureTextWidth(String text, TextStyle style, {TextScaler textScaler = TextScaler.noScaling, TextDirection textDirection = TextDirection.ltr}) {
+double measureTextWidth(String text, TextStyle style,
+    {TextScaler textScaler = TextScaler.noScaling, TextDirection textDirection = TextDirection.ltr}) {
   final painter = TextPainter(
     text: TextSpan(text: text, style: style),
     textDirection: textDirection,

@@ -109,16 +109,21 @@ public final class SpikeKernels {
     let extent = image.extent
     let r = CGFloat(ceil(3 * sigma))
     let clamped = image.clampedToExtent()
+    // The kernels read clamped (infinite) inputs, so their output is non-zero everywhere. Declare
+    // that honestly (infinite DOD) and crop afterwards: when the kernel output was declared with
+    // the source extent, Core Image dropped the following `cropped(to: extent)` as a no-op and a
+    // placed (scaled/translated) blurred layer covered the whole canvas with its clamped edges
+    // (report §2.5; KernelTests.testTwoLayerCompositeWithBlurKeepsPlacement).
     let h =
       blurH.apply(
-        extent: extent.insetBy(dx: 0, dy: -r),
+        extent: .infinite,
         roiCallback: { _, rect in rect.insetBy(dx: -r, dy: 0) },
         arguments: [clamped, sigma]) ?? image
     let v =
       blurV.apply(
-        extent: extent,
+        extent: .infinite,
         roiCallback: { _, rect in rect.insetBy(dx: 0, dy: -r) },
-        arguments: [h.clampedToExtent(), sigma]) ?? h
+        arguments: [h, sigma]) ?? h
     return v.cropped(to: extent)
   }
 }

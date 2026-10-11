@@ -11,8 +11,10 @@
 //   major that would sit closer than one step to the next second, so spacing never shrinks.
 // * Minor ticks subdivide a major by 5, or by 2 when fifths would be closer than 8 px (frame steps
 //   only by whole frames); none when halves would be.
-// * Labels: `m:ss` (or `h:mm:ss`) for second steps, `m:ss:ff` for frame steps; laid-out paragraphs
-//   are cached in an LRU (256) keyed by (text, scale).
+// * Labels: `m:ss` for second steps, `m:ss:ff` for frame steps; once the ruler reaches one hour
+//   every label carries the hours (`h:mm:ss`, `h:mm:ss:ff`, so `0:00:00` at the start of a long
+//   project) and keeps one width. Laid-out paragraphs are cached in an LRU (256) keyed by (text,
+//   scale).
 // * Markers: a 10 px flag in the marker colour on a pole; the selected one is outlined.
 
 import 'dart:collection';
@@ -66,8 +68,16 @@ final class RulerStep {
 /// The chosen ruler scale: a major [step] and its minor subdivision.
 @immutable
 final class RulerScale {
-  /// A scale of [step] on [rate] with [minorDivisions] (1 = no minor ticks).
-  const RulerScale(this.step, this.rate, {this.minorDivisions = 1});
+  /// A scale of [step] on [rate] with [minorDivisions] (1 = no minor ticks); [hours] makes every
+  /// label carry the hours (see [hoursFor]).
+  const RulerScale(this.step, this.rate, {this.minorDivisions = 1, this.hours = false});
+
+  /// One hour in µs.
+  static const TimeUs hour = 3600 * microsPerSecond;
+
+  /// Whether a ruler whose latest time is [maxTime] labels every tick with hours (it reaches one
+  /// hour).
+  static bool hoursFor(TimeUs maxTime) => maxTime >= hour;
 
   /// The major step.
   final RulerStep step;
@@ -77,6 +87,9 @@ final class RulerScale {
 
   /// Minor intervals per major interval (5, 2 or 1).
   final int minorDivisions;
+
+  /// Whether every label carries the hours, so labels before and after one hour look alike.
+  final bool hours;
 
   int get _perSecond => math.max(1, rate.fps.round());
 
@@ -117,14 +130,22 @@ final class RulerScale {
   /// before the next second.
   bool isMajorFrame(int frameInSecond) => frameInSecond % step.frames == 0 && _perSecond - frameInSecond >= step.frames;
 
-  /// The label of a major tick at [t]: `m:ss` / `h:mm:ss` for second steps, `m:ss:ff` /
-  /// `h:mm:ss:ff` for frame steps.
-  String label(TimeUs t) => step.isFrameStep ? frameLabel(t, rate) : Timecode.clock(t);
+  /// The label of a major tick at [t]: `m:ss` for second steps, `m:ss:ff` for frame steps; with
+  /// the hours (`h:mm:ss`, `h:mm:ss:ff`) from one hour on, or always when [hours] is set.
+  String label(TimeUs t) => step.isFrameStep ? frameLabel(t, rate, hours: hours) : secondLabel(t, hours: hours);
 
-  /// `m:ss:ff` (from `Timecode.format`, without the leading zero of the minutes).
-  static String frameLabel(TimeUs t, FrameRate rate) {
+  /// `m:ss`, or `h:mm:ss` from one hour or when [hours] is set (from `Timecode.clock`).
+  static String secondLabel(TimeUs t, {bool hours = false}) {
+    final s = Timecode.clock(t);
+    return hours && t < hour ? '0:${s.padLeft(5, '0')}' : s;
+  }
+
+  /// `m:ss:ff`, or `h:mm:ss:ff` from one hour or when [hours] is set (from `Timecode.format`,
+  /// without the leading zero of the minutes).
+  static String frameLabel(TimeUs t, FrameRate rate, {bool hours = false}) {
     final s = Timecode.format(t, rate);
-    return s.length == 8 && s.startsWith('0') ? s.substring(1) : s;
+    if (t >= hour || s.length != 8) return s;
+    return hours ? '0:$s' : (s.startsWith('0') ? s.substring(1) : s);
   }
 
   /// The widest label this scale can show up to [maxTime], with every digit as `0` (labels use
@@ -133,13 +154,13 @@ final class RulerScale {
 
   @override
   bool operator ==(Object other) =>
-      other is RulerScale && other.step == step && other.rate == rate && other.minorDivisions == minorDivisions;
+      other is RulerScale && other.step == step && other.rate == rate && other.minorDivisions == minorDivisions && other.hours == hours;
 
   @override
-  int get hashCode => Object.hash(step, rate, minorDivisions);
+  int get hashCode => Object.hash(step, rate, minorDivisions, hours);
 
   @override
-  String toString() => 'RulerScale($step / $minorDivisions)';
+  String toString() => 'RulerScale($step / $minorDivisions${hours ? ', hours' : ''})';
 }
 
 /// The ruler's tick ladder (ux.md §8.5).
@@ -172,13 +193,15 @@ abstract final class RulerLadder {
   }
 
   /// The scale at [pxPerSecond]: the smallest step whose spacing is at least the label width
-  /// ([frameLabelWidth] for frame steps, [secondLabelWidth] for second steps) + [labelGap]; the
-  /// largest step when none is. Minor ticks per [minorDivisionsFor].
+  /// ([frameLabelWidth] for frame steps, [secondLabelWidth] for second steps, both measured from
+  /// the [RulerScale.labelTemplate] of [maxTime]) + [labelGap]; the largest step when none is.
+  /// Minor ticks per [minorDivisionsFor]; labels carry hours when [maxTime] reaches one hour.
   static RulerScale choose({
     required double pxPerSecond,
     required FrameRate rate,
     required double frameLabelWidth,
     required double secondLabelWidth,
+    TimeUs maxTime = 0,
   }) {
     final steps = stepsFor(rate);
     var chosen = steps.last;
@@ -189,7 +212,12 @@ abstract final class RulerLadder {
         break;
       }
     }
-    return RulerScale(chosen, rate, minorDivisions: minorDivisionsFor(chosen, chosen.minSpacingSec(rate) * pxPerSecond));
+    return RulerScale(
+      chosen,
+      rate,
+      minorDivisions: minorDivisionsFor(chosen, chosen.minSpacingSec(rate) * pxPerSecond),
+      hours: RulerScale.hoursFor(maxTime),
+    );
   }
 
   /// 5 when fifths of [majorSpacing] are at least 8 px apart, else 2 when halves are, else 1; frame
@@ -344,6 +372,7 @@ class RulerPainter {
       rate: rate,
       frameLabelWidth: labels.widthOf(frameTemplate, scale, style),
       secondLabelWidth: labels.widthOf(secondTemplate, scale, style),
+      maxTime: maxTime,
     );
   }
 
@@ -670,12 +699,13 @@ class RenderTimelineRuler extends RenderBox {
   @override
   bool get isRepaintBoundary => true;
 
-  @override
-  bool get sizedByParent => true;
-
+  // Not `sizedByParent`: the height follows [rulerHeight], so a change must reach `performLayout`.
   @override
   Size computeDryLayout(BoxConstraints constraints) =>
       constraints.constrain(Size(constraints.hasBoundedWidth ? constraints.maxWidth : 0, _rulerHeight));
+
+  @override
+  void performLayout() => size = computeDryLayout(constraints);
 
   @override
   double computeMinIntrinsicHeight(double width) => _rulerHeight;

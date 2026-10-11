@@ -11,7 +11,8 @@ The report with the measurements and the verdict is `docs/editor/spikes/AND-01.m
     sequences, P(k)-anchored boundaries, ε mechanisms, gap fills), `LayerGatingCompositorSettings`,
     `PlaceEffect` (canvas-size straight-alpha output with early exit), `ProbeEffect` (barcode reader)
   - `PausedFrameRendererProto` (AND-17 prototype: FrameExtractor EXACT frames + the same shader)
-  - `ContingencyEngineProto` (AND-16 prototype: two decks per packing slot, frame clock, lead, hold)
+  - `ContingencyEngineProto` (AND-16 prototype: two decks per packing slot, frame clock, lead, hold,
+    stuck-deck watchdog)
   - `OffsetAudioSink` (V-N23 compensation probe), `GridTime` (ARCH §5 rules), `HwbImport` + `src/main/cpp`
     (HardwareBuffer → EGLImage → OES texture)
 - `app/src/androidTest/kotlin/…/engine/`: one test class per question group (see the report's V-N table)
@@ -30,4 +31,6 @@ cd spikes/android_engine
 ```
 
 Measured on the `Pixel_9_Pro_XL_API_35` emulator. Timing numbers depend on host load; correctness
-assertions do not.
+assertions do not. `ContingencyEngineTest.gridCutPlayback_contingency` also checks that enough frames
+were composited to verify anything (both sides of most cuts); on a host with a load average above
+about 20 it fails that check with 0 wrong frames, so rerun it on a quieter host.

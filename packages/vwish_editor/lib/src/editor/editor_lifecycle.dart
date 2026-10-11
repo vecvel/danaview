@@ -7,11 +7,16 @@
 //   EditorController API of ux.md §16.3 (open, close, undo, redo, saveNow, onApp*) plus three shell
 //   hooks (shellStatus, dismissForBack, flushBeforeClose), so UX-08's controller can implement it
 //   directly; `editorShellProvider` (editor_screen.dart) picks it up from editorControllerProvider.
-// * Back order (Android back, the iOS edge swipe, Esc through EditorBackDispatcher.handleBack):
+// * Back order (Android back and predictive back, Esc through EditorBackDispatcher.handleBack):
 //   cancel gesture -> close panel -> clear selection -> exit fullscreen -> close the editor with a
 //   flush ("Saving…" in the top bar, up to 3 s; on failure "Leave anyway?"). PopScope(canPop:
-//   false) keeps the route from popping on its own; the iOS back swipe is disabled with it (V-U3).
+//   false) keeps the route from popping on its own and disables the iOS edge back-swipe (V-U3,
+//   verified on Flutter 3.44.2: ModalRoute.popGestureEnabled is false while the pop disposition is
+//   doNotPop), so a swipe from the edge never leaves the editor or loses edits.
 //   The close button skips the dismiss steps: it always closes the editor (with the flush).
+//   "Go to Projects" (unknown project) leaves through `requestClose(exitWith: onOpenProjects)`.
+//   When the route is removed without the close flow (the router replaced the stack), dispose
+//   still calls delegate.close() once.
 // * Regions register their own steps (UX-13 cancels a drag, UX-18 leaves fullscreen) with
 //   `EditorBackDispatcher.of(context).register(step, handler)`; the delegate is asked after them.
 // * App lifecycle: inactive -> delegate.onAppInactive (+ registered gestures cancelled), hidden ->
@@ -244,8 +249,7 @@ abstract interface class EditorBackDispatcher {
   }
 
   /// The dispatcher of the enclosing editor, or null.
-  static EditorBackDispatcher? maybeOf(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<_EditorLifecycleScope>()?.dispatcher;
+  static EditorBackDispatcher? maybeOf(BuildContext context) => context.getInheritedWidgetOfExactType<_EditorLifecycleScope>()?.dispatcher;
 
   /// Registers [handler] for [step]; it returns true when it dismissed something. Handlers
   /// registered later run first; the delegate is asked after every handler of the step. Returns a
@@ -258,8 +262,9 @@ abstract interface class EditorBackDispatcher {
   Future<EditorBackStep?> handleBack();
 
   /// The close button: flushes ("Saving…", up to 3 s), asks "Leave anyway?" when the flush failed,
-  /// then leaves through the screen's `onClose`.
-  Future<void> requestClose();
+  /// then leaves through the screen's `onClose`, or through [exitWith] when given ("Go to
+  /// Projects"). Nothing is flushed when the project never opened (`notFound`, `failed`).
+  Future<void> requestClose({VoidCallback? exitWith});
 
   /// True while the editor is closing (the top bar shows "Saving…").
   ValueListenable<bool> get closing;
@@ -309,6 +314,8 @@ class _EditorLifecycleState extends State<EditorLifecycle> with WidgetsBindingOb
   final ValueNotifier<bool> _closing = ValueNotifier<bool>(false);
   late final AppLifecycleListener _appLifecycle;
   bool _leaving = false;
+  bool _released = false;
+  VoidCallback? _exitWith;
 
   EditorShellDelegate get _delegate => widget.delegate;
 
@@ -339,6 +346,12 @@ class _EditorLifecycleState extends State<EditorLifecycle> with WidgetsBindingOb
     WidgetsBinding.instance.removeObserver(this);
     _appLifecycle.dispose();
     unawaited(ScreenOrientationPolicy.release(this));
+    if (!_released) {
+      // The route went away without the close flow (the router replaced the stack): release the
+      // session anyway; close() flushes and never throws.
+      _released = true;
+      unawaited(Future<void>.sync(_delegate.close).catchError((Object e, StackTrace s) => _report(e, s, 'closing the editor')));
+    }
     _closing.dispose();
     super.dispose();
   }
@@ -389,8 +402,9 @@ class _EditorLifecycleState extends State<EditorLifecycle> with WidgetsBindingOb
   }
 
   @override
-  Future<void> requestClose() async {
+  Future<void> requestClose({VoidCallback? exitWith}) async {
     if (_closing.value || _leaving || !mounted) return;
+    _exitWith = exitWith;
     final phase = _delegate.shellStatus.value.phase;
     if (phase == EditorShellPhase.notFound || phase == EditorShellPhase.failed) {
       // Nothing was opened, so there is nothing to save.
@@ -421,6 +435,8 @@ class _EditorLifecycleState extends State<EditorLifecycle> with WidgetsBindingOb
   }
 
   Future<void> _release() async {
+    if (_released) return;
+    _released = true;
     try {
       await _delegate.close().timeout(EditorLifecycle.flushTimeout);
     } catch (e, s) {
@@ -431,7 +447,8 @@ class _EditorLifecycleState extends State<EditorLifecycle> with WidgetsBindingOb
   void _exit() {
     if (_leaving || !mounted) return;
     setState(() => _leaving = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) => widget.onExit());
+    final exit = _exitWith ?? widget.onExit;
+    WidgetsBinding.instance.addPostFrameCallback((_) => exit());
     WidgetsBinding.instance.scheduleFrame();
   }
 

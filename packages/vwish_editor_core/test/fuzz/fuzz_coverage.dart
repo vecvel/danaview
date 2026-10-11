@@ -121,14 +121,38 @@ final class CommandCoverage {
 
   /// Records one top-level run of [c] (children of a composite are not counted separately: the
   /// generator also emits every subtype on its own).
-  void record(EditCommand c, CommandResult result, {String? rejectionCode}) {
-    final counts = _counts.putIfAbsent(commandName(c), () => List<int>.filled(CommandResult.values.length, 0));
-    counts[result.index]++;
+  void record(EditCommand c, CommandResult result, {String? rejectionCode}) => recordName(commandName(c), result, rejectionCode: rejectionCode);
+
+  /// Records one run of the subtype [name], which must be listed in [allCommandNames].
+  void recordName(String name, CommandResult result, {String? rejectionCode, int times = 1}) {
+    if (!_listed.contains(name)) throw StateError('$name is missing from allCommandNames');
+    final counts = _counts.putIfAbsent(name, () => List<int>.filled(CommandResult.values.length, 0));
+    counts[result.index] += times;
     if (rejectionCode != null) {
-      final byCode = _rejections.putIfAbsent(commandName(c), () => {});
-      byCode[rejectionCode] = (byCode[rejectionCode] ?? 0) + 1;
+      final byCode = _rejections.putIfAbsent(name, () => {});
+      byCode[rejectionCode] = (byCode[rejectionCode] ?? 0) + times;
     }
   }
+
+  static final Set<String> _listed = allCommandNames.toSet();
+
+  /// Reads [toJson] (worker isolates send their coverage as JSON).
+  factory CommandCoverage.fromJson(Map<String, Object?> j) {
+    final cov = CommandCoverage();
+    (j['commands']! as Map<String, Object?>).forEach((name, value) {
+      final m = value! as Map<String, Object?>;
+      final counts = cov._counts.putIfAbsent(name, () => List<int>.filled(CommandResult.values.length, 0));
+      for (final r in CommandResult.values) {
+        counts[r.index] += m[r.name]! as int;
+      }
+      final rej = m['rejections'] as Map<String, Object?>?;
+      if (rej != null) cov._rejections[name] = {for (final e in rej.entries) e.key: e.value! as int};
+    });
+    return cov;
+  }
+
+  /// Creates an empty report.
+  CommandCoverage();
 
   /// Adds every count of [other].
   void addAll(CommandCoverage other) {

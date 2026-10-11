@@ -26,6 +26,7 @@ RulerScale _choose(double pps, FrameRate rate, TimeUs maxTime, double scale) {
     rate: rate,
     frameLabelWidth: _width(frameTemplate, scale),
     secondLabelWidth: _width(secondTemplate, scale),
+    maxTime: maxTime,
   );
 }
 
@@ -153,7 +154,29 @@ void main() {
     expect(seconds.label(65 * _s), '1:05');
     expect(seconds.label(3725 * _s), '1:02:05');
     expect(seconds.labelTemplate(3725 * _s), '0:00:00');
-    expect(frames.labelTemplate(75 * 60 * _s), '00:00:00');
+    expect(frames.labelTemplate(75 * _s), '0:00:00');
+    expect(frames.labelTemplate(75 * 60 * _s), '0:00:00:00');
+  });
+
+  test('once the ruler reaches one hour every label carries the hours (one label width)', () {
+    const fps30 = FrameRate.fps30;
+    final seconds = _choose(20, fps30, 2 * 3600 * _s, 1);
+    expect(seconds.hours, isTrue);
+    expect(seconds.label(0), '0:00:00');
+    expect(seconds.label(65 * _s), '0:01:05');
+    expect(seconds.label(3725 * _s), '1:02:05');
+    final frames = _choose(fps30.fps * 48, fps30, 2 * 3600 * _s, 1);
+    expect(frames.hours, isTrue);
+    expect(frames.label(0), '0:00:00:00');
+    expect(frames.label(fps30.timeOfFrame(30 * 65 + 12)), '0:01:05:12');
+    expect(frames.label(fps30.timeOfFrame(30 * 3725 + 3)), '1:02:05:03');
+    // Shorter rulers keep the short form.
+    expect(_choose(20, fps30, 3599 * _s, 1).hours, isFalse);
+    for (final scale in [seconds, frames]) {
+      final widths = <int>{};
+      scale.forEachTick(3590, 3610, (t, major) => major ? widths.add(scale.label(t).length) : null);
+      expect(widths, hasLength(1), reason: '$scale');
+    }
   });
 
   test('4 h projects: the smallest zoom at the narrowest width still separates hour labels', () {

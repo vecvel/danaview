@@ -1,8 +1,8 @@
 // OWNER: UX-07
 //
-// Placeholder (D-33) created by UX-01. UX-07 replaces this file:
-// EditorScope, the InheritedWidget that supplies the ProjectId (ARCH §17.3).
-// Until then it declares only the public names other files compile against.
+// EditorScope (ARCH §17.3, ux.md §16.1): the InheritedWidget EditorScreen places above every
+// region, so widgets get the open project's id with `EditorScope.idOf(context)` instead of
+// threading it through constructors. Dependents rebuild only when the id changes.
 
 import 'package:flutter/widgets.dart';
 import 'package:vwish_editor_core/model.dart' show ProjectId;

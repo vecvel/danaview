@@ -95,14 +95,27 @@ final class LatencyProbe: NSObject, FlutterTexture {
     lock.unlock()
     let ticks = self.ticks
     self.ticks.removeAll()
-    let frames = timings.map { (vsync: Double($0[0]) / 1e6, rs: Double($0[1]) / 1e6, rf: Double($0[2]) / 1e6) }
     let period = median(zip(ticks, ticks.dropFirst()).map { $1.timestamp - $0.timestamp })
-    // Clock check: Dart vsyncStart vs the nearest native vsync timestamp.
+    // Clock domains: FrameTiming timestamps come from the engine's fml::TimePoint (libc++
+    // steady_clock = CLOCK_MONOTONIC_RAW on Apple, which keeps counting while the machine
+    // sleeps), CADisplayLink/CACurrentMediaTime are mach_absolute_time (stops during sleep). The
+    // first run without conversion saw a 1448 s offset (the host Mac's accumulated sleep). Pick
+    // the candidate clock whose converted vsyncStart lands on our own display-link timestamps.
     let vsyncs = ticks.map(\.timestamp)
-    let clockDiffs = frames.prefix(200).compactMap { f -> Double? in
-      guard let n = vsyncs.min(by: { abs($0 - f.vsync) < abs($1 - f.vsync) }) else { return nil }
-      return (f.vsync - n) * 1000
+    let raw = timings.map { (vsync: Double($0[0]) / 1e6, rs: Double($0[1]) / 1e6, rf: Double($0[2]) / 1e6) }
+    func residuals(_ offset: Double) -> [Double] {
+      raw.prefix(200).compactMap { f -> Double? in
+        let v = f.vsync - offset
+        guard let n = vsyncs.min(by: { abs($0 - v) < abs($1 - v) }) else { return nil }
+        return (v - n) * 1000
+      }
     }
+    let candidates = Self.clockOffsets()
+    let best = candidates.min(by: {
+      median(residuals($0.offset).map(abs)) < median(residuals($1.offset).map(abs))
+    })!
+    let clockDiffs = residuals(best.offset)
+    let frames = raw.map { (vsync: $0.vsync - best.offset, rs: $0.rs - best.offset, rf: $0.rf - best.offset) }
     let targets = ticks.map(\.target).sorted()
     var offsets: [Double] = []
     var textureLatency: [Double] = []
@@ -123,9 +136,18 @@ final class LatencyProbe: NSObject, FlutterTexture {
       "compensationMs": round2(compensation * 1000),
       "textureFrames": copies.count, "matched": offsets.count, "unmatched": unmatched,
       "displayPeriodMs": round2(period * 1000),
+      "engineClock": best.name, "engineClockOffsetS": round2(best.offset),
       "clockDiffMsP50": round2(median(clockDiffs)),
+      "clockDiffMsP95abs": round2(percentile(clockDiffs.map(abs), 95)),
+      "flutterFrames": raw.count,
       "avOffsetMsP50": round2(median(offsets)), "avOffsetMsP95abs": round2(percentile(offsets.map(abs), 95)),
       "avOffsetMsMin": round2(offsets.min() ?? .nan), "avOffsetMsMax": round2(offsets.max() ?? .nan),
+      "avOffsetMsMean": round2(offsets.isEmpty ? .nan : offsets.reduce(0, +) / Double(offsets.count)),
+      // Preview tolerance (§12.7): ≤ 1 frame (33.3 ms at 30 fps) and ≤ 40 ms. Offsets are taken
+      // at a frame's first display; a 30 fps frame stays up for two 60 Hz vsyncs, so the offset
+      // averaged over its display interval is about half a vsync larger.
+      "avWithin40ms": offsets.filter { abs($0) <= 40 }.count,
+      "avWithin1Frame": offsets.filter { abs($0) <= 1000.0 / 30 }.count,
       "textureLatencyMsP50": round2(median(textureLatency)),
       "textureLatencyMsP95": round2(percentile(textureLatency, 95)),
       "destination": Self.destination,
@@ -135,6 +157,30 @@ final class LatencyProbe: NSObject, FlutterTexture {
     ]
     if let c = nextCompensation { compensation = c }
     return result
+  }
+
+  /// Offset (s) of each candidate engine clock against CACurrentMediaTime, sampled with the
+  /// tightest bracket of five reads.
+  private static func clockOffsets() -> [(name: String, offset: Double)] {
+    func offset(_ id: clockid_t) -> Double {
+      var bestSpan = Double.infinity
+      var off = 0.0
+      for _ in 0..<5 {
+        let a = CACurrentMediaTime()
+        let c = Double(clock_gettime_nsec_np(id)) / 1e9
+        let b = CACurrentMediaTime()
+        if b - a < bestSpan {
+          bestSpan = b - a
+          off = c - (a + b) / 2
+        }
+      }
+      return off
+    }
+    return [
+      ("CLOCK_MONOTONIC_RAW", offset(CLOCK_MONOTONIC_RAW)),
+      ("CLOCK_UPTIME_RAW", offset(CLOCK_UPTIME_RAW)),
+      ("CLOCK_MONOTONIC", offset(CLOCK_MONOTONIC)),
+    ]
   }
 
   private static var destination: String {

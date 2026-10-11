@@ -108,8 +108,7 @@ _FakeContributor _projects() => _FakeContributor(
       withOpen: true,
     );
 
-_FakeContributor _cache({StorageContributorUsage usage = const StorageContributorUsage(bytes: 240000000)}) =>
-    _FakeContributor(
+_FakeContributor _cache({StorageContributorUsage usage = const StorageContributorUsage(bytes: 240000000)}) => _FakeContributor(
       id: 'editor.cache',
       title: 'Editor cache',
       subtitle: 'Thumbnails and waveforms, made again when needed.',
@@ -154,6 +153,14 @@ Future<void> _finish(WidgetTester tester, LibraryTestEnv env) async {
   await env.dispose();
 }
 
+/// The library matrix plus the narrowest phone and a short landscape phone at the largest text
+/// scale (ARCH §1.3 rule 5: 280–1280 px wide).
+final List<TestSurface> _surfaces = [
+  ...librarySurfaces,
+  const TestSurface(Size(280, 500), 1.35),
+  const TestSurface(Size(568, 320), 1.35, padding: EdgeInsets.only(left: 20, right: 20)),
+];
+
 Finder _row(String id) => find.byKey(ValueKey('storage-contributor-$id'));
 
 Finder _clearRow(String id) => find.byKey(ValueKey('storage-contributor-$id-clear'));
@@ -171,8 +178,7 @@ void main() {
       expect(find.text('3 projects · 1.2 GB'), findsOneWidget);
       expect(find.text('Editor cache'), findsOneWidget);
       expect(find.text('240 MB'), findsOneWidget);
-      final footnote =
-          find.text('Delete projects in Projects to free this space. Thumbnails and waveforms, made again when needed.');
+      final footnote = find.text('Delete projects in Projects to free this space. Thumbnails and waveforms, made again when needed.');
       await tester.scrollUntilVisible(footnote, 200, scrollable: find.byType(Scrollable).first);
       expect(footnote, findsOneWidget);
       // 3 GB videos + 50 MB cache + 1.2 GB projects + 240 MB editor cache.
@@ -186,8 +192,7 @@ void main() {
       await _finish(tester, env);
     });
 
-    testWidgets('a contributor with an open action opens its screen; one without a clear action has no clean-up row',
-        (tester) async {
+    testWidgets('a contributor with an open action opens its screen; one without a clear action has no clean-up row', (tester) async {
       final projects = _projects();
       final (env, _) = await _pumpStorage(tester, [projects, _cache()]);
 
@@ -269,7 +274,7 @@ void main() {
       await _finish(tester, env);
     });
 
-    for (final surface in librarySurfaces) {
+    for (final surface in _surfaces) {
       testWidgets('contributors without overflow at $surface', (tester) async {
         final long = _FakeContributor(
           id: 'long',
@@ -322,7 +327,9 @@ void main() {
       final service = StorageUsageService(
         deviceDirectory: () async => null,
         cacheDirectories: () async => [cache],
-        excludedPaths: {joinPath([cache.path, 'vwish', 'editor'])},
+        excludedPaths: {
+          joinPath([cache.path, 'vwish', 'editor'])
+        },
       );
 
       final usage = await service.measure();
@@ -342,7 +349,9 @@ void main() {
       final service = StorageUsageService(
         deviceDirectory: () async => null,
         cacheDirectories: () async => [cache],
-        excludedPaths: {joinPath([cache.path, 'vwish', 'editor'])},
+        excludedPaths: {
+          joinPath([cache.path, 'vwish', 'editor'])
+        },
       );
       expect((await service.measure()).cache, const FolderUsage(files: 1, bytes: 10));
     });
@@ -394,7 +403,7 @@ void main() {
       await _finish(tester, env);
     });
 
-    for (final surface in librarySurfaces) {
+    for (final surface in _surfaces) {
       testWidgets('without overflow at $surface', (tester) async {
         final env = await pumpSettings(tester, onOpenEditorSettings: () {}, surface: surface);
         await tester.scrollUntilVisible(

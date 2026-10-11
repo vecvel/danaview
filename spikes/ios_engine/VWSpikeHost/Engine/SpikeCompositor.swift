@@ -28,6 +28,15 @@ final class SpikeCompositor: NSObject, AVVideoCompositing {
   /// decoded sources were composited (101/200 exact seeks wrong); this path is 200/200 on 18.2 and
   /// 26. `false` = the direct path (kept for the diagnostic test).
   nonisolated(unsafe) static var sourcesViaMetalTextureCache = true
+  /// Crop every placed layer to its destination rectangle after the transform (defensive; layer
+  /// masks and crops need it anyway). It did NOT fix the blurred-layer leak of report §2.5: Core
+  /// Image elides a crop equal to the declared extent; the fix is the infinite kernel DOD in
+  /// `SpikeKernels.applyBlur`. Diagnostic switch for the blur placement test.
+  nonisolated(unsafe) static var cropLayersToPlacement = true
+  /// Blur implementation / position (diagnostic switch for
+  /// KernelTests.testTwoLayerCompositeWithBlurKeepsPlacement).
+  enum BlurImpl: String, CaseIterable { case kernels, kernelsIntermediate, builtin, kernelsAfterPlacement }
+  nonisolated(unsafe) static var blurImpl = BlurImpl.kernels
   static let textureCache: CVMetalTextureCache = {
     var c: CVMetalTextureCache?
     CVMetalTextureCacheCreate(nil, nil, device, nil, &c)
@@ -195,7 +204,15 @@ final class SpikeCompositor: NSObject, AVVideoCompositing {
       var img = sourceImage(buffer, keepAlive: &keepAlive)
       if useKernels, let kernels = kernels {
         img = kernels.applyLook(img, look)
-        if blur > 0 { img = kernels.applyBlur(img, sigma: blur) }
+        if blur > 0 {
+          switch blurImpl {
+          case .kernels: img = kernels.applyBlur(img, sigma: blur)
+          case .kernelsIntermediate: img = kernels.applyBlur(img, sigma: blur).insertingIntermediate(cache: false)
+          case .builtin:
+            img = img.clampedToExtent().applyingGaussianBlur(sigma: Double(blur)).cropped(to: img.extent)
+          case .kernelsAfterPlacement: break
+          }
+        }
       }
       let r = plan.placementRect(layer)
       let rect = CGRect(
@@ -204,6 +221,12 @@ final class SpikeCompositor: NSObject, AVVideoCompositing {
       let sy = rect.height / img.extent.height
       img = img.transformed(by: CGAffineTransform(scaleX: sx, y: sy))
         .transformed(by: CGAffineTransform(translationX: rect.minX, y: size.height - rect.maxY))
+      if useKernels, blur > 0, blurImpl == .kernelsAfterPlacement, let kernels = kernels {
+        img = kernels.applyBlur(img, sigma: blur)
+      }
+      if cropLayersToPlacement {
+        img = img.cropped(to: CGRect(x: rect.minX, y: size.height - rect.maxY, width: rect.width, height: rect.height))
+      }
       image = img.composited(over: image)
     }
     let dest = CIRenderDestination(pixelBuffer: out)

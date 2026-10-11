@@ -43,6 +43,9 @@ class EditorTopBar extends StatelessWidget {
   /// Horizontal padding on each side.
   static const double sidePadding = 8;
 
+  /// Height of the title button's tap target (every top bar is at least this tall).
+  static const double titleMinHeight = 44;
+
   /// Layout kind (close icon, one- or two-line title).
   final EditorLayoutKind kind;
 
@@ -116,7 +119,7 @@ class EditorTopBar extends StatelessWidget {
                   iconSize: 20,
                   tooltip: EditorShellStrings.undoTooltip(status.undoLabel, apple: apple),
                   onPressed: status.canUndo && !closing ? onUndo : null,
-                  onLongPress: closing ? null : onHistory,
+                  onLongPress: closing || !(status.canUndo || status.canRedo) ? null : onHistory,
                 ),
                 VwishIconButton(
                   icon: Icons.redo_rounded,
@@ -192,17 +195,21 @@ class EditorTopBar extends StatelessWidget {
         isButton: false,
         borderRadius: VwishRadius.smAll,
         pressedScale: 1,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: VwishSpacing.xs),
-          child: Row(
-            children: [
-              Flexible(child: text),
-              if (onTap != null && !failed)
-                const Padding(
-                  padding: EdgeInsets.only(left: VwishSpacing.xxs),
-                  child: Icon(Icons.expand_more_rounded, size: 18, color: VwishColors.textSecondary),
-                ),
-            ],
+        // A full 44 px tap target (also keeps the standard corners from reading as a pill).
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: titleMinHeight),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: VwishSpacing.xs),
+            child: Row(
+              children: [
+                Flexible(child: text),
+                if (onTap != null && !failed)
+                  const Padding(
+                    padding: EdgeInsets.only(left: VwishSpacing.xxs),
+                    child: Icon(Icons.expand_more_rounded, size: 18, color: VwishColors.textSecondary),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

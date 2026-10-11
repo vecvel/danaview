@@ -8,6 +8,7 @@ import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.File
+import kotlin.math.abs
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -65,6 +66,35 @@ class PackingTest {
         return out
     }
 
+    /**
+     * For each composited mismatch: what the sequence carrying that lane's clip handed the
+     * compositor around that output frame (sequence-level probe readings at k − 1, k, k + 1), and
+     * every source frame of a clip that never reached the compositor.
+     */
+    private fun diagnose(plan: SpikePlan, mm: List<String>, seqProbes: Map<Int, ProbeEffect>): JSONObject {
+        val times = TestMedia.videoSampleTimesUs("barcode_30.mp4")
+        val near = JSONArray()
+        for (m in mm.take(6)) {
+            val k = m.substringAfter("k=").substringBefore(" ").toLong()
+            val l = m.substringAfter("lane").substringBefore(" ").toInt()
+            val clip = plan.layers.firstOrNull { lane(it.id.drop(1).toInt()) == l && k >= it.k0 && k < it.k1 } ?: continue
+            val frames = seqProbes[clip.seq]?.frames?.toList().orEmpty()
+                .filter { abs(GridTime.frameIndexNearest(it.ptsUs, plan.fps) - k) <= 1 }
+                .map { "k=${GridTime.frameIndexNearest(it.ptsUs, plan.fps)} pts=${it.ptsUs} ${it.regions["lane$l"]?.reading}" }
+            near.put(JSONObject().put("mismatch", m).put("seq", clip.seq).put("sequenceFrames", Results.arr(frames)))
+        }
+        val missing = JSONArray()
+        for (clip in plan.layers) {
+            val l = lane(clip.id.drop(1).toInt())
+            val seen = seqProbes[clip.seq]?.frames?.toList().orEmpty().mapNotNull { (it.regions["lane$l"]?.reading as? Barcode.Value)?.n }.toSet()
+            for (k in clip.k0 until clip.k1) {
+                val want = TestMedia.ruleFrame(times, clip.srcStartUs + GridTime.timeOfFrame(k, 30) - GridTime.timeOfFrame(clip.k0, 30))
+                if (want !in seen) missing.put("${clip.id} seq${clip.seq} k=$k src=$want")
+            }
+        }
+        return JSONObject().put("nearMismatches", near).put("sourceFramesNeverHandedToCompositor", missing)
+    }
+
     private fun avcMaxInstances(): Int = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
         .filter { !it.isEncoder && it.supportedTypes.any { t -> t.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
         .maxOfOrNull { it.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).maxSupportedInstances } ?: -1
@@ -107,6 +137,45 @@ class PackingTest {
             assertTrue(r.toString(), r.getBoolean("exported"))
             assertEquals(r.toString(), 0, r.getInt("mismatches"))
         }
+    }
+
+    /**
+     * The packed_2 export (the configuration AND-08 produces for this case) repeated, with
+     * sequence-level probes on both slots: frame-exact every time? A one-frame error under heavy
+     * host load (load average 35–48) in one sixLanePip_export_vn25 run (k=68 showed the previous
+     * source frame mid-clip) is the question; the probes tell a frame lost before the compositor
+     * from a wrong secondary-frame choice in it.
+     */
+    @Test
+    fun packedExport_repeated_vn25() {
+        val runs = JSONArray()
+        val plan = plan { c -> c % 2 + 1 }
+        var total = 0
+        repeat(REPEATS) { i ->
+            val store = ParamStore(plan.gridFps).apply { loadFrom(plan) }
+            val probe = ProbeEffect(plan.canvasW, plan.canvasH, plan.bgRgb(), lanes())
+            val seqProbes = (1..plan.visualSequenceCount).associateWith { ProbeEffect(plan.canvasW, plan.canvasH, plan.bgRgb(), lanes()) }
+            val c = mapper.build(
+                plan, store,
+                MapperOptions(probe = probe, includeAudio = false, epsilon = EpsilonMode.SNAP_TO_RULE_FRAME, gapFill = GapFill.TRANSPARENT_IMAGE, sequenceProbes = seqProbes),
+            )
+            val o = ExportHarness(ctx).export(c, File(TestMedia.outDir, "pip_packed_2_repeat.mp4"), timeoutSec = 600)
+            val mm = mismatches(plan, probe.frames.toList())
+            total += mm.size
+            val diag = diagnose(plan, mm, seqProbes)
+            runs.put(
+                JSONObject().put("run", i).put("wallMs", o.wallMs).put("frames", o.result.videoFrameCount).put("mismatches", mm.size)
+                    .put("firstMismatches", Results.arr(mm.take(6)))
+                    .put("sequenceFrames", JSONObject(seqProbes.mapKeys { "seq${it.key}" }.mapValues { it.value.frames.size } as Map<*, *>))
+                    .put("diagnosis", diag),
+            )
+        }
+        Results.write("VN25_pip_export_repeat", JSONObject().put("repeats", REPEATS).put("mismatches", total).put("runs", runs))
+        assertEquals(runs.toString(), 0, total)
+    }
+
+    private companion object {
+        const val REPEATS = 8
     }
 
     /**

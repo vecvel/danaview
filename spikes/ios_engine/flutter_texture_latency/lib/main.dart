@@ -4,6 +4,11 @@
 // raster that sampled a texture frame minus the display-link target time it was fetched for).
 // Phase 2 applies that latency as `targetTimestamp + compensation` (ARCH §12.7) and measures the
 // remaining A/V offset. Results are printed by the native side as `VWSPIKE-METRIC {json}`.
+//
+// A texture-only update (`textureFrameAvailable`) re-rasterizes the last layer tree without a
+// Dart frame and reports no FrameTiming (first run: 0-3 timings per phase). The editor repaints
+// its playhead every vsync while playing (ARCH §13.1), so the probe does the same with a ticker:
+// every raster then belongs to a Dart frame with a FrameTiming.
 import 'dart:async';
 import 'dart:ui';
 
@@ -28,12 +33,22 @@ class _LatencyAppState extends State<LatencyApp> {
   int? _textureId;
   String _status = 'starting';
   final List<FrameTiming> _timings = [];
+  late final Ticker _ticker;
+  Duration _elapsed = Duration.zero;
 
   @override
   void initState() {
     super.initState();
     SchedulerBinding.instance.addTimingsCallback(_timings.addAll);
+    // Stand-in for the playhead painter: one rebuild per vsync.
+    _ticker = Ticker((elapsed) => setState(() => _elapsed = elapsed))..start();
     unawaited(_run());
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
   }
 
   List<List<int>> _drain() {
@@ -70,6 +85,7 @@ class _LatencyAppState extends State<LatencyApp> {
     await _channel.invokeMethod<Object?>(
         'report', {'phase': 'compensated', 'timings': _drain()});
     setState(() => _status = 'done');
+    _ticker.stop();
     await _channel.invokeMethod<Object?>('exit');
   }
 
@@ -89,7 +105,10 @@ class _LatencyAppState extends State<LatencyApp> {
             ),
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text(_status, style: const TextStyle(color: Color(0xFFFFFFFF))),
+              child: Text(
+                '$_status  ${(_elapsed.inMilliseconds / 1000).toStringAsFixed(2)} s',
+                style: const TextStyle(color: Color(0xFFFFFFFF)),
+              ),
             ),
           ],
         ),

@@ -9,7 +9,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vwish_editor/src/app/editor_prefs.dart';
 import 'package:vwish_editor/src/app/editor_providers.dart';
-import 'package:vwish_editor/src/editor/timeline/timeline_viewport.dart';
 import 'package:vwish_editor_core/model.dart';
 
 import '../../support/support.dart';

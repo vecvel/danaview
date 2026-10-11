@@ -214,7 +214,7 @@ enum FuzzCheck {
 /// The first failure of a run.
 final class FuzzFailure {
   /// Creates a failure.
-  const FuzzFailure(this.check, this.step, this.message, {this.action});
+  const FuzzFailure(this.check, this.step, this.message, {this.action, this.codes = const [], this.defect});
 
   /// What failed.
   final FuzzCheck check;
@@ -228,9 +228,45 @@ final class FuzzFailure {
   /// The action of the step, if any.
   final String? action;
 
+  /// Stable details of the failure: the sorted violation codes (validator, refusals) or the
+  /// exception type. Ids and times are left out, so the minimizer can keep the failure while it
+  /// changes them.
+  final List<String> codes;
+
+  /// The open defect of fuzz_known_defects.dart this failure matches, or null. Set even when the
+  /// run does not tolerate known defects (regression fixtures and their minimization use it).
+  final String? defect;
+
+  /// What the minimizer keeps fixed: the check, the known defect and [codes].
+  String get signature => [check.name, if (defect != null) defect!, if (codes.isNotEmpty) codes.join(',')].join(':');
+
+  /// JSON for fixtures and reports.
+  Map<String, Object?> toJson() => {
+        'check': check.name,
+        'step': step,
+        if (action != null) 'action': action,
+        if (codes.isNotEmpty) 'codes': codes,
+        if (defect != null) 'defect': defect,
+        'signature': signature,
+        'message': message,
+      };
+
+  /// Reads [toJson].
+  factory FuzzFailure.fromJson(Map<String, Object?> j) => FuzzFailure(
+        FuzzCheck.values.byName(j['check']! as String),
+        j['step']! as int,
+        j['message']! as String,
+        action: j['action'] as String?,
+        codes: [for (final c in (j['codes'] as List<Object?>?) ?? const []) c! as String],
+        defect: j['defect'] as String?,
+      );
+
   @override
-  String toString() => '${check.name} at step $step${action == null ? '' : ' ($action)'}: $message';
+  String toString() => '$signature at step $step${action == null ? '' : ' ($action)'}: $message';
 }
+
+/// The sorted, distinct codes of [violations] (a failure signature).
+List<String> violationCodes(Iterable<Violation> violations) => ({for (final v in violations) v.code.name}.toList()..sort());
 
 /// The result of a run.
 final class FuzzResult {
@@ -260,10 +296,12 @@ typedef FuzzTrace = void Function(int step, FuzzAction action, EditSession sessi
 
 /// Internal: a failed check (unwinds the step).
 final class _Fail implements Exception {
-  _Fail(this.check, this.message, {this.violations = const []});
+  _Fail(this.check, this.message, {this.violations = const [], this.codes = const [], this.defect});
   final FuzzCheck check;
   final String message;
   final List<Violation> violations;
+  final List<String> codes;
+  final String? defect;
 }
 
 /// Plan assets of the fuzz: every pool asset resolves except a deterministic ~8% (offline);
@@ -405,38 +443,44 @@ final class FuzzRunner {
       _checkProject(_s.project);
       _walk();
     } on _Fail catch (e) {
-      final known = _tolerateKnown && e.check == FuzzCheck.validator
-          ? knownDefectOf(DefectContext(validator: true, action: current, violations: e.violations))
+      // A known validator defect leaves the project invalid: the run stops there.
+      final known = e.check == FuzzCheck.validator
+          ? knownDefectOf(DefectContext(kind: DefectKind.validator, action: current, violations: e.violations))
           : null;
-      if (known != null && known.terminal) {
+      if (known != null && _tolerateKnown) {
         _count('known:${known.id}');
         _stats['stoppedAtStep'] = step;
       } else {
-        failure = FuzzFailure(e.check, step, e.message, action: action);
+        failure = FuzzFailure(e.check, step, e.message, action: action, codes: e.codes, defect: known?.id ?? e.defect);
       }
     } catch (e, st) {
-      failure = FuzzFailure(FuzzCheck.exception, step, '$e\n${_trim(st)}', action: action);
+      failure = FuzzFailure(FuzzCheck.exception, step, '$e\n${_trim(st)}', action: action, codes: ['${e.runtimeType}']);
     }
     _stats['historyEntries'] = _states.length - 1;
     _stats['plans'] = _planRev;
     return FuzzResult._(failure, _choices, _coverage, _stats);
   }
 
-  /// Whether an open refusal defect explains [cmd] being refused with [r] (counted in the stats).
-  bool _known(EditCommand cmd, InternalInconsistency r) {
-    if (!_tolerateKnown) return false;
-    final d = knownDefectOf(DefectContext(validator: false, command: cmd, rejection: r));
-    if (d == null || d.terminal) return false;
-    _count('known:${d.id}');
-    return true;
+  /// Fails unless an open refusal defect explains [cmd] being refused with [r] and the run
+  /// tolerates known defects (then it is counted in the stats).
+  void _refused(String what, EditCommand cmd, InternalInconsistency r, EditProject project) {
+    final known = knownDefectOf(
+        DefectContext(kind: DefectKind.refusal, command: cmd, rejection: r, project: project, policy: _s.editPolicy));
+    if (known != null && _tolerateKnown) {
+      _count('known:${known.id}');
+      return;
+    }
+    _fail(FuzzCheck.internalInconsistency, '$what$cmd -> $r ${r.violations.take(3).toList()} ${r.detail}',
+        codes: violationCodes(r.violations), defect: known?.id);
   }
 
   static int _mix(int seed, int step) => (seed * 1000003 + step * 7919 + 12345) & 0x7fffffff;
 
   static String _trim(StackTrace st) => st.toString().split('\n').take(12).join('\n');
 
-  static Never _fail(FuzzCheck check, String message, {List<Violation> violations = const []}) =>
-      throw _Fail(check, message, violations: violations);
+  static Never _fail(FuzzCheck check, String message,
+          {List<Violation> violations = const [], List<String> codes = const [], String? defect}) =>
+      throw _Fail(check, message, violations: violations, codes: codes, defect: defect);
 
   // -------------------------------------------------------------------------------------------
   // Actions.
@@ -497,8 +541,8 @@ final class FuzzRunner {
     if (a.expect == ApplyExpectation.internalInconsistency) {
       // The limits run before the post-step validation, so an overlap may also exceed a D-14 cap.
       if (r is! InternalInconsistency && r is! LimitExceeded) _fail(FuzzCheck.expectation, 'an invalid raw edit was not refused: $out');
-    } else if (r is InternalInconsistency && !_known(cmd, r)) {
-      _fail(FuzzCheck.internalInconsistency, '$cmd -> $r ${r.violations.take(3).toList()} ${r.detail}');
+    } else if (r is InternalInconsistency) {
+      _refused('', cmd, r, committed);
     }
     _compareDryRun(pre, out, _s.committedProject, 'apply');
     if (!out.changed) {
@@ -551,9 +595,7 @@ final class FuzzRunner {
       final r = o.rejection;
       _coverage.record(cmd, r != null ? CommandResult.rejected : (o.noop ? CommandResult.noop : CommandResult.applied),
           rejectionCode: r?.code);
-      if (r is InternalInconsistency && !_known(cmd, r)) {
-        _fail(FuzzCheck.internalInconsistency, 'transaction update $cmd -> $r ${r.violations.take(3).toList()} ${r.detail}');
-      }
+      if (r is InternalInconsistency) _refused('transaction update ', cmd, r, base);
       _ids.position = mark;
       final pv = tx.preview;
       if (pv == null) _fail(FuzzCheck.dryRun, 'no transaction preview after an update');
@@ -598,7 +640,7 @@ final class FuzzRunner {
     final out = _s.applyPoolEdit(a.edit, adjust: a.adjust);
     final r = out.rejection;
     if (r is InternalInconsistency && a.edit is! RelinkAssets) {
-      _fail(FuzzCheck.internalInconsistency, '${a.describe()} -> $r');
+      _fail(FuzzCheck.internalInconsistency, '${a.describe()} -> $r', codes: violationCodes(r.violations));
     }
     if (out.changed) {
       if (out.project.meta.editCount != before.meta.editCount + 1) _fail(FuzzCheck.history, 'a pool edit did not count as an edit');
@@ -736,7 +778,8 @@ final class FuzzRunner {
     final violations = validate(p);
     _took('validate', t0);
     if (violations.isNotEmpty) {
-      _fail(FuzzCheck.validator, '${violations.length} violations: ${violations.take(4).toList()}', violations: violations);
+      _fail(FuzzCheck.validator, '${violations.length} violations: ${violations.take(4).toList()}',
+          violations: violations, codes: violationCodes(violations));
     }
     _checkStamps(p);
     final probe = _probe;
@@ -811,7 +854,15 @@ final class FuzzRunner {
     final rev = ++_planRev;
     final plan = _memo.compile(p, PlanTarget.preview, resolver, base: CompileOptions(rev: rev)).plan;
     final pv = PlanValidator.validate(plan);
-    if (pv.isNotEmpty) _fail(FuzzCheck.plan, 'plan violations ${pv.take(4).toList()}');
+    if (pv.isNotEmpty) {
+      final d = knownDefectOf(DefectContext(kind: DefectKind.plan, planViolations: pv, project: p));
+      if (d != null && _tolerateKnown) {
+        _count('known:${d.id}');
+      } else {
+        _fail(FuzzCheck.plan, 'plan violations ${pv.take(4).toList()}',
+            codes: ({for (final v in pv) v.code.name}.toList()..sort()), defect: d?.id);
+      }
+    }
     if (rev % _case.config.freshCompileEvery == 0) {
       final fresh = compilePlan(p, PlanTarget.preview, resolver, options: CompileOptions(rev: rev, stages: standardLoweringStages())).plan;
       if (fresh != plan) _fail(FuzzCheck.plan, 'the memoized plan differs from a fresh compile');

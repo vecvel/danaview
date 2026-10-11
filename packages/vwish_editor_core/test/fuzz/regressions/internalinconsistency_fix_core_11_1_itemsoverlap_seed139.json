@@ -1,0 +1,14 @@
+{
+  "format": "vwish-core-fuzz-regression",
+  "version": 1,
+  "name": "internalinconsistency_fix_core_11_1_itemsoverlap_seed139",
+  "note": "Minimized by fuzz_main.dart from seed 139 (500 steps): minimized {steps 175, draws 2491 (sum 7084468903), tracks 7, items 40, markers 2, assets 14} -> {steps 1, draws 33 (sum 203), tracks 1, items 1, markers 0, assets 1} in 98 replays.",
+  "defect": "FIX-CORE-11-1",
+  "seed": 139,
+  "failure": {"check":"internalInconsistency","step":0,"action":"apply CompositeCommand(Fuzz composite, [PasteItems(3 items, at: 0, preferTrack: null, ripple: false), MoveItems({it_Xcw9VRW1LGmg}, 0, toTrack: null, ripple: false, clamp: false)])","codes":["itemsOverlap"],"defect":"FIX-CORE-11-1","signature":"internalInconsistency:FIX-CORE-11-1:itemsOverlap","message":"CompositeCommand(Fuzz composite, [PasteItems(3 items, at: 0, preferTrack: null, ripple: false), MoveItems({it_Xcw9VRW1LGmg}, 0, toTrack: null, ripple: false, clamp: false)]) -> InternalInconsistency(Violation(I2 itemsOverlap track tr_jrZcjRteWOBm it_Fz002F000001)) [Violation(I2 itemsOverlap track tr_jrZcjRteWOBm it_Fz002F000001)] "},
+  "config": {"history":{"maxEntries":20,"maxApproxBytes":50331648},"policy":{"overlap":"newLane","defaultImageUs":3000000,"defaultTextUs":3000000,"defaultCueUs":2000000,"maxConcurrentVideoLayers":4,"maxVisualSequences":6,"maxItems":5000}},
+  "project": {"id":"pr_7UrIBh2FBCYA","meta":{"name":"Random","created":"2026-10-09T12:00:00.000Z","updated":"2026-10-09T12:00:00.000Z"},"settings":{"canvas":{"aspect":[4,3]},"fps":25,"bg":{"blur":0.04181784500876751}},"tracks":[{"id":"tr_jrZcjRteWOBm","kind":"video","main":true,"items":[{"t":"clip","id":"it_Xcw9VRW1LGmg","start":40640000,"dur":800000,"media":"md_vMRmiQ7WeAWn","in":1250143,"speed":{"c":4},"visual":{"mask":{"r":26.72117406388537}},"audio":{"vol":0.65},"kf":{"adjust.brightness":[[-120000,0.36829650649413725],[440000,-0.14245793764713444]],"mask.feather":[[80000,0.8898199272946131],[160000,0.39129354253163506],[240000,0.796947781630521],[800000,0.44315428244819255]]}}]}],"markers":[],"pool":{"assets":[{"id":"md_vMRmiQ7WeAWn","kind":"video","name":"video 2","loc":{"app":"documents","rel":"media/md_vMRmiQ7WeAWn"},"own":"managedCopy","fp":{"size":226883577,"qh":"md_vMRmiQ7WeAWn0000000000000000000000000","dur":16194462},"probe":{"kind":"video","dur":16194462,"video":true,"audio":true,"w":3840,"h":2160,"streams":1},"origin":"files","added":"2026-10-09T12:00:00.000Z"}]},"view":{}},
+  "steps": [
+    [0,0,0,110,0,27,25,3,2,0,5,1,6,2,4,0,0,0,0,1,0,0,17,0,0,0,0,0,0,0,0,0,0]
+  ]
+}

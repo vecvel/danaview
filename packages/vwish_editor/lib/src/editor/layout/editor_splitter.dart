@@ -6,7 +6,6 @@
 // an adjustable "Preview size, 50 percent" with increase/decrease (5% steps); Up/Down do the same
 // when it has keyboard focus. The scaffold persists the ratio per layout kind.
 
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:vwish_ui_kit/vwish_ui_kit.dart';

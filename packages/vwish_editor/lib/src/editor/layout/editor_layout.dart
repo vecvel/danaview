@@ -191,8 +191,9 @@ final class EditorLayoutSpec {
   /// Dock height wanted while the keyboard is up (the text panel pins above the keyboard).
   static const double dockKeyboardDefault = 160;
 
-  /// The dock never goes below this while the keyboard is up.
-  static const double dockKeyboardFloor = 132;
+  /// The dock never goes below this while the keyboard is up: the handle, the panel header and
+  /// one text field row (the text panel shows a one-line live preview chip in its header).
+  static const double dockKeyboardFloor = 120;
 
   /// Height of a compact video lane, the main lane every timeline minimum keeps.
   static const double compactVideoLane = 52;
@@ -216,6 +217,19 @@ final class EditorLayoutSpec {
     if (usable.width < 600) return EditorLayoutKind.compactPortrait;
     if (usable.width < 1000) return EditorLayoutKind.medium;
     return EditorLayoutKind.expanded;
+  }
+
+  /// The kind [resolve] picks for a screen of [size] with the safe area [padding] (the keyboard
+  /// never changes it). The scaffold uses it to look up the user's splitter ratio for that kind
+  /// before resolving.
+  static EditorLayoutKind kindOf({required Size size, required EdgeInsets padding}) {
+    final w = _nn(size.width);
+    final h = _nn(size.height);
+    final left = math.min(_nn(padding.left), w);
+    final top = math.min(_nn(padding.top), h);
+    final right = math.max(left, w - _nn(padding.right));
+    final bottom = math.max(top, h - _nn(padding.bottom));
+    return kindFor(Size(right - left, bottom - top));
   }
 
   // ---- Inputs -----------------------------------------------------------------------------------
@@ -381,7 +395,8 @@ final class EditorLayoutSpec {
     final right = math.max(left, w - pad.right);
     final usableBottom = math.max(top, h - pad.bottom);
     final usableWidth = right - left;
-    final kind = kindFor(Size(usableWidth, usableBottom - top));
+    final kind = kindOf(size: Size(w, h), padding: pad);
+    assert(kind == kindFor(Size(usableWidth, usableBottom - top)));
     final m = _Metrics(textScaler, kind, touch);
 
     // The keyboard takes height away from the content; the dock reaches the keyboard (or the
@@ -432,8 +447,13 @@ final class EditorLayoutSpec {
     var y = top;
     Rect row(double height, {double x0 = double.nan, double x1 = double.nan}) =>
         Rect.fromLTWH(x0.isNaN ? left : x0, y, (x1.isNaN ? right : x1) - (x0.isNaN ? left : x0), height);
+    // Below the matrix the fixed rows alone can be taller than the screen: rows are clipped to the
+    // content area (the dock to the keyboard or the screen bottom) and dropped when nothing is left.
+    final contentBounds = Rect.fromLTRB(0, top, w, contentBottom);
+    final dockBounds = Rect.fromLTRB(0, top, w, dockBottom);
     void put(EditorRegion region, Rect rect) {
-      if (rect.height > 0 && rect.width > 0) regions[region] = rect;
+      final clipped = rect.intersect(region == EditorRegion.dock ? dockBounds : contentBounds);
+      if (clipped.height > 0 && clipped.width > 0) regions[region] = clipped;
     }
 
     put(EditorRegion.topBar, row(s.topBar));

@@ -111,6 +111,8 @@ class ContingencyEngineProto(
         var imagesAcquired: Int = 0,
         /** Decks re-prepared after a player error (e.g. a decoder failure on a starved host). */
         var recoveries: Int = 0,
+        /** Exact seeks re-issued to a deck stuck in BUFFERING without its target frame ([STUCK_RESEEK_MS]). */
+        var reseeks: Int = 0,
     )
 
     data class Result(
@@ -209,11 +211,14 @@ class ContingencyEngineProto(
         /** Last player error (diagnostics). */
         var lastError: String? = null
 
-        /** Seeks to layer [i] at item position [ms] (exact); drops queued frames of the old position. */
-        fun position(i: Int, ms: Long) {
+        /**
+         * Seeks to layer [i] at item position [ms] (exact); drops queued frames of the old position.
+         * [force] re-issues the seek even when the player already reports that position (watchdog).
+         */
+        fun position(i: Int, ms: Long, force: Boolean = false) {
             // ExoPlayer ignores a seek to the position it is paused at (no new frame would come):
             // keep the frame it already rendered there.
-            if (assigned == i && !player.playWhenReady && player.currentMediaItemIndex == i && player.currentPosition == ms) {
+            if (!force && assigned == i && !player.playWhenReady && player.currentMediaItemIndex == i && player.currentPosition == ms) {
                 return
             }
             epoch++
@@ -784,13 +789,14 @@ class ContingencyEngineProto(
                     // Exact seek shows the first frame at or after the position (V-N18), so floor to ms.
                     d.position(i, (rule - s.clipStart[i]) / 1000)
                     s.stats.seeks++
-                    d to rule
+                    Triple(d, rule, i)
                 } else {
                     null
                 }
             }
         }
         val end = SystemClock.elapsedRealtime() + timeoutMs
+        var lastIssue = SystemClock.elapsedRealtime()
         while (SystemClock.elapsedRealtime() < end) {
             val done = onThread {
                 targets.all { t ->
@@ -803,10 +809,34 @@ class ContingencyEngineProto(
                 onThread { composite(k) }
                 return (System.nanoTime() - started) / 1e6
             }
+            // Watchdog: a deck that sits in BUFFERING without its target frame for STUCK_RESEEK_MS
+            // (seen on cold starts of 4 and 6 slots on the loaded emulator: the decoder never
+            // outputs) gets its exact seek re-issued. ExoPlayer drops a seek to the ms it already
+            // reports while BUFFERING/READY, so the re-issue alternates between ms − 1 and ms: both
+            // land on the rule frame (first frame with pts ≥ position, V-N18; frames are > 1 ms apart).
+            if (SystemClock.elapsedRealtime() - lastIssue >= STUCK_RESEEK_MS) {
+                lastIssue = SystemClock.elapsedRealtime()
+                onThread {
+                    for (t in targets) {
+                        if (t == null) continue
+                        val (d, rule, i) = t
+                        d.latchNewest()
+                        if (d.latchedPts != rule && d.player.playbackState == Player.STATE_BUFFERING) {
+                            val ms = (rule - d.slot.clipStart[i]) / 1000
+                            val nudge = d.slot.stats.reseeks % 2 == 0 && ms > 0
+                            d.position(i, if (nudge) ms - 1 else ms, force = true)
+                            d.slot.stats.reseeks++
+                        }
+                    }
+                }
+            }
             Thread.sleep(2)
         }
         return -1.0
     }
+
+    /** Copies of the per-slot counters (seeks, re-seeks, recoveries, ...). */
+    fun slotStats(): List<SlotStats> = onThread { slots.map { it.stats.copy() } }
 
     override fun close() {
         try {
@@ -836,6 +866,9 @@ class ContingencyEngineProto(
 
         /** Player-error recoveries per slot before the error is left standing. */
         private const val MAX_RECOVERIES = 5
+
+        /** A deck stuck in BUFFERING without its exact-seek target this long gets the seek re-issued. */
+        private const val STUCK_RESEEK_MS = 3_000L
 
         private const val DRAWN = 0
         private const val WAIT = 1

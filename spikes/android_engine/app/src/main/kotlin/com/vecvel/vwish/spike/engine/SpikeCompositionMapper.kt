@@ -83,6 +83,11 @@ data class MapperOptions(
     /** Diagnostics only: no per-item effects (no PlaceEffect). */
     val noItemEffects: Boolean = false,
     val gapFill: GapFill = GapFill.GAP,
+    /**
+     * Diagnostics only: a probe appended after the place effect of every item of these visual
+     * sequences, recording what each sequence hands the compositor (pts + barcode per region).
+     */
+    val sequenceProbes: Map<Int, ProbeEffect> = emptyMap(),
 )
 
 /**
@@ -164,7 +169,7 @@ class SpikeCompositionMapper(private val context: Context) {
             }
             val png = pngFile("transparent_${plan.canvasW}x${plan.canvasH}.png", plan.canvasW, plan.canvasH, Color.TRANSPARENT)
             val item = MediaItem.Builder().setUri(Uri.fromFile(png)).setImageDurationMs(GridTime.ceilDiv(durUs, 1000)).build()
-            val effects = if (options.noItemEffects) emptyList() else listOf<Effect>(place)
+            val effects = (if (options.noItemEffects) emptyList() else listOf<Effect>(place)) + listOfNotNull<Effect>(options.sequenceProbes[seq])
             b.addItem(EditedMediaItem.Builder(item).setDurationUs(durUs).setFrameRate(plan.fps).setEffects(Effects(emptyList(), effects)).build())
         }
         for (l in plan.layersOf(seq)) {
@@ -205,6 +210,7 @@ class SpikeCompositionMapper(private val context: Context) {
             effects += FrameDropEffect.createDefaultFrameDropEffect(plan.gridFps.toFloat())
         }
         if (!options.noItemEffects) effects += place
+        options.sequenceProbes[l.seq]?.let { effects += it }
         // CompositionPlayer needs the full source duration of every item (EditedMediaItem
         // .getPresentationDurationUs checkState); Transformer does not (found in AND-01).
         val eb = EditedMediaItem.Builder(item)

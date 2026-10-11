@@ -193,4 +193,80 @@ final class KernelTests: XCTestCase {
     Metrics.record("composite.twoLayerOffline", results)
     XCTAssertEqual(failures, [])
   }
+
+  /// Blur (σ 4) on both layers of the base + PiP composite: the PiP must stay inside its placement
+  /// rectangle and the base barcode must stay readable. Added after the VWSpikeBackground
+  /// simulator run, whose blurred exports did not decode: with the kernel output declared at the
+  /// source extent, the scaled/translated blurred PiP covered the whole canvas (Core Image elided
+  /// the `cropped(to: extent)`), with every blur position and an intermediate; the built-in
+  /// CIGaussianBlur was correct. Fixed by declaring an infinite DOD and cropping (report §2.5).
+  func testTwoLayerCompositeWithBlurKeepsPlacement() throws {
+    let plan = SeekCase.plan()
+    let layers = plan.activeLayers(at: Grid.timeOfFrame(100, fps: 30))
+    let base = Pixels.makeBGRA(width: 1920, height: 1080)
+    Barcode.draw(into: base, frame: 100, clip: 1, color: (200, 90, 40))
+    let pip = Pixels.makeBGRA(width: 1280, height: 720)
+    Barcode.draw(into: pip, frame: 83, clip: 2, color: (40, 160, 220))
+    let size = CGSize(width: 1920, height: 1080)
+    var results: [String: Any] = [:]
+    var failures: [String] = []
+    // (blur, source path, crop to placement): the uncropped blurred variants are the diagnostic
+    // that found the problem and are recorded, not asserted.
+    var variants: [(Float, String, Bool)] = []
+    for blur: Float in [0, 4] {
+      for source in ["metalTexture", "cvPixelBuffer"] { variants.append((blur, source, true)) }
+    }
+    variants.append((4, "metalTexture", false))
+    for (blur, source, crop) in variants {
+      do {
+        SpikeCompositor.sourcesViaMetalTextureCache = source == "metalTexture"
+        SpikeCompositor.cropLayersToPlacement = crop
+        defer {
+          SpikeCompositor.sourcesViaMetalTextureCache = true
+          SpikeCompositor.cropLayersToPlacement = true
+        }
+        let out = Pixels.makeBGRA(width: 1920, height: 1080)
+        try SpikeCompositor.renderComposite(
+          context: SpikeCompositor.makeContext(), plan: plan, layers: layers,
+          sources: ["base": base, "pip": pip], look: .identity, blur: blur, size: size, into: out)
+        let pipRect = plan.placementRect(layers[1])
+        let baseCode = Barcode.decode(out, rect: CGRect(origin: .zero, size: size)).map { "\($0)" } ?? "unreadable"
+        let pipCode = Barcode.decode(out, rect: pipRect).map { "\($0)" } ?? "unreadable"
+        // Top-left corner of the canvas is base orange, never PiP blue.
+        let corner = Pixels.mean(out, rect: CGRect(x: 100, y: 20, width: 200, height: 40))
+        let name = "blur=\(Int(blur)).\(source).crop=\(crop)"
+        results[name] = [
+          "base": baseCode, "pip": pipCode,
+          "cornerRGB": [corner.r, corner.g, corner.b].map { ($0 * 10).rounded() / 10 },
+        ]
+        guard crop else { continue }
+        if baseCode != "clip 1 frame 100" { failures.append("\(name): base \(baseCode)") }
+        if pipCode != "clip 2 frame 83" { failures.append("\(name): pip \(pipCode)") }
+        if abs(corner.r - 200) > 12 || abs(corner.b - 40) > 12 {
+          failures.append("\(name): corner \(corner) is not base orange")
+        }
+      }
+    }
+    // Single-layer diagnostics: which layer goes wrong, per blur implementation.
+    for impl in SpikeCompositor.BlurImpl.allCases {
+    for (name, only) in [("baseOnly", [layers[0]]), ("pipOnly", [layers[1]]), ("both", layers)] {
+      SpikeCompositor.blurImpl = impl
+      defer { SpikeCompositor.blurImpl = .kernels }
+      let out = Pixels.makeBGRA(width: 1920, height: 1080)
+      try SpikeCompositor.renderComposite(
+        context: SpikeCompositor.makeContext(), plan: plan, layers: only,
+        sources: ["base": base, "pip": pip], look: .identity, blur: 4, size: size, into: out)
+      let corner = Pixels.mean(out, rect: CGRect(x: 100, y: 20, width: 200, height: 40))
+      let mid = Pixels.mean(out, rect: CGRect(x: 1300, y: 150, width: 100, height: 60))
+      results["blur=4.\(impl.rawValue).\(name)"] = [
+        "full": Barcode.decode(out, rect: CGRect(origin: .zero, size: size)).map { "\($0)" } ?? "unreadable",
+        "pipRect": Barcode.decode(out, rect: plan.placementRect(layers[1])).map { "\($0)" } ?? "unreadable",
+        "cornerRGB": [corner.r, corner.g, corner.b].map { $0.rounded() },
+        "pipTopRGB": [mid.r, mid.g, mid.b].map { $0.rounded() },
+      ]
+    }
+    }
+    Metrics.record("composite.twoLayerBlur", results)
+    XCTAssertEqual(failures, [])
+  }
 }

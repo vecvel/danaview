@@ -220,7 +220,10 @@ final class BackgroundExperiment {
     } catch {
       log("experiment error \(error)")
     }
-    log("done")
+    // `running` must be false before the last update: the status label reads "done <line>" only
+    // then, and the VWSpikeBackground UI test waits for that prefix (the first simulator run
+    // timed out after 600 s because "done" was logged while still running).
     running = false
+    log("done")
   }
 }

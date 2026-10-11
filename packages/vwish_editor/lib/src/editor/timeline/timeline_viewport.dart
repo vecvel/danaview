@@ -417,9 +417,10 @@ class TimelineViewportController extends ChangeNotifier {
   /// Zooms out one step (÷1.5).
   void zoomOut() => setPxPerSecond(_effectivePps / zoomStep);
 
-  /// Fits the whole project with a 5 % margin on each side (clamped to the zoom range). Free mode
-  /// scrolls to the start; centre-locked mode keeps the playhead on the centre line. Before the
-  /// first layout the fit is applied when the size is known.
+  /// Fits the whole project with a 5 % margin on each side (clamped to the zoom range; long
+  /// projects get the smallest zoom, which shows them plus 10 s). Free mode centres the project;
+  /// centre-locked mode keeps the playhead on the centre line. Before the first layout the fit is
+  /// applied when the size is known.
   void zoomToFit() {
     if (!hasLayout) {
       _fitPending = true;
@@ -469,6 +470,10 @@ class TimelineViewportController extends ChangeNotifier {
     if (centerLocked) {
       final anchor = _playhead != null ? _clampSec(_playhead!.value / microsPerSecond) : _clampSec(_scrollSec);
       _scrollSec = _clampScroll(anchor - _width / 2 / _pps);
+    } else if (d > 0) {
+      // Centre the project: a 5 % margin each side, or half of the smallest zoom's 10 s for long
+      // projects (where the 5 % margins would need a zoom below the smallest).
+      _scrollSec = _clampScroll(d / 2 - _width / 2 / _pps);
     } else {
       _scrollSec = _clampScroll(-fitMargin * _width / _pps);
     }

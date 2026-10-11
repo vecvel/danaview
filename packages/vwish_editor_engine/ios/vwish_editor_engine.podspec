@@ -1,10 +1,12 @@
-# OWNER: ENG-07 (minimal placeholder created by ENG-01's scaffold; frozen by ENG-06)
+# OWNER: ENG-07 (from ENG-01's placeholder; ENG-06 adds the IOS-01 spike build settings, then freezes it)
 #
-# Placeholder podspec so the plugin builds from M0. The platform is already iOS 15.0 (INT-01 raised
-# the app target; D-29, D-43(c) owner defaults 2026-10-08, revisable). ENG-07 adds OTHER_CFLAGS
-# -Werror=unguarded-availability-new, the PrivacyInfo.xcprivacy resource bundle (FileTimestamp
-# C617.1, DiskSpace E174.1, SystemBootTime 35F9.1); ENG-06 the Metal CI kernel build settings. No
-# bundled media resources: the spacer is generated at runtime by IOS-08.
+# iOS side of the editor engine plugin (ARCH §4.4, §12.6). Platform iOS 15.0, the app's
+# IOS_DEPLOYMENT_TARGET (ARCH §3.1, D-29, D-41; D-43(c) owner defaults 2026-10-08, revisable).
+# OTHER_CFLAGS turns unguarded uses of newer C/ObjC APIs into errors (D-41); Swift already rejects
+# unguarded newer APIs. The privacy manifest ships in its own resource bundle (ARCH §20.4). No
+# bundled media resources: the composition spacer is generated at runtime by IOS-08. ENG-06 adds the
+# frameworks and the prebuilt Core Image kernel metallibs (IOS-01 §3; no .metal sources under
+# Classes/, Xcode 26 has no Metal toolchain).
 Pod::Spec.new do |s|
   s.name             = 'vwish_editor_engine'
   s.version          = '1.1.0'
@@ -14,10 +16,14 @@ Pod::Spec.new do |s|
   s.license          = { :type => 'Proprietary', :text => 'Copyright Vecvel' }
   s.author           = { 'Vecvel' => 'support@vecvel.com' }
   s.source           = { :path => '.' }
-  s.source_files     = 'Classes/**/*'
+  s.source_files     = 'Classes/**/*.swift'
   s.dependency 'Flutter'
-  # Same as the app's IOS_DEPLOYMENT_TARGET (ios/Podfile, ARCH §3.1, D-41).
-  s.platform = :ios, '15.0'
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
-  s.swift_version = '5.0'
+  s.platform         = :ios, '15.0'
+  s.swift_version    = '5.0'
+  s.resource_bundles = { 'vwish_editor_engine_privacy' => ['Resources/PrivacyInfo.xcprivacy'] }
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
+    'OTHER_CFLAGS' => '$(inherited) -Werror=unguarded-availability-new',
+  }
 end
