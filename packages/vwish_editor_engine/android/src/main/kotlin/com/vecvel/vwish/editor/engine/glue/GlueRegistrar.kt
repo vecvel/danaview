@@ -8,6 +8,7 @@
 package com.vecvel.vwish.editor.engine.glue
 
 import com.vecvel.vwish.editor.engine.core.EngineContext
+import com.vecvel.vwish.editor.engine.core.LaneSpec
 import com.vecvel.vwish.editor.engine.pigeon.EngineHostApi
 import com.vecvel.vwish.editor.engine.pigeon.EngineEventsStreamHandler
 import com.vecvel.vwish.editor.engine.pigeon.ExportHostApi
@@ -36,6 +37,8 @@ class GlueRegistrar private constructor(
         PlatformHostApi.setUp(messenger, null)
         EventChannel(messenger, EVENTS_CHANNEL).setStreamHandler(null)
         events.detach()
+        // Nothing to release (and no lane to start) when this process never opened a preview.
+        if (ctx.threads.started().none { it.spec == LaneSpec.PREVIEW }) return
         try {
             ctx.threads.preview.execute {
                 try {
@@ -71,7 +74,7 @@ class GlueRegistrar private constructor(
             val events = EngineEventsHandler(ctx.events)
             EngineEventsStreamHandler.register(messenger, events)
 
-            MemorySignals.installOnce(ctx.appContext, ctx.events) { level -> root.trimCaches(level) }
+            MemorySignals.installOnce(ctx.appContext, ctx.events, { ctx.pathsOrNull != null }) { level -> root.trimCaches(level) }
             return GlueRegistrar(ctx, messenger, previewPort, events)
         }
     }

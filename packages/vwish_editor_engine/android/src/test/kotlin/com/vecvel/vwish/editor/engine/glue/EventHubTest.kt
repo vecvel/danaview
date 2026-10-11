@@ -1,8 +1,9 @@
 // OWNER: ENG-08
 //
 // The multiplexed event stream (ARCH §12.6): main-thread delivery, native rate limits (clock
-// <= 10 Hz, progress <= 4 Hz, recorder levels 20 Hz) with trailing delivery, terminal ordering,
-// buffering while no Dart listener is attached, and several engines.
+// <= 10 Hz, progress <= 4 Hz, recorder levels 20 Hz) with trailing delivery, state-changing samples
+// passing at once, route ordering of non-sample events, terminal ordering, buffering while no Dart
+// listener is attached, and several engines. The rules match event_router.dart (ENG-01).
 
 package com.vecvel.vwish.editor.engine.glue
 
@@ -15,6 +16,9 @@ import com.vecvel.vwish.editor.engine.pigeon.EngineEventKindMsg
 import com.vecvel.vwish.editor.engine.pigeon.EngineEventMsg
 import com.vecvel.vwish.editor.engine.pigeon.ExportPhaseMsg
 import com.vecvel.vwish.editor.engine.pigeon.ExportProgressMsg
+import com.vecvel.vwish.editor.engine.pigeon.ExportWarningMsg
+import com.vecvel.vwish.editor.engine.pigeon.RecordingInterruptionMsg
+import com.vecvel.vwish.editor.engine.pigeon.ThermalLevelMsg
 import com.vecvel.vwish.editor.engine.pigeon.JobKindMsg
 import com.vecvel.vwish.editor.engine.pigeon.JobResultMsg
 import com.vecvel.vwish.editor.engine.pigeon.PreviewEventKindMsg
@@ -40,7 +44,16 @@ class EventHubTest {
         }
     }
 
-    private fun clock(t: Long) = ClockMsg(timeUs = t, playing = true, rate = 1.0, seq = 1)
+    private fun clock(t: Long, playing: Boolean = true, rate: Double = 1.0, seq: Long = 1) =
+        ClockMsg(timeUs = t, playing = playing, rate = rate, seq = seq)
+
+    private fun export(
+        fraction: Double,
+        phase: ExportPhaseMsg = ExportPhaseMsg.RENDERING,
+        backgrounded: Boolean = false,
+        paused: Boolean = false,
+        warnings: List<ExportWarningMsg> = emptyList(),
+    ) = ExportProgressMsg(phase, fraction, (fraction * 100).toLong(), 100, backgrounded, paused, warnings)
 
     private fun attach(): Collect = Collect(trace).also { sink -> main.onMain { hub.attach(sink) } }
 
@@ -103,8 +116,9 @@ class EventHubTest {
         val sink = attach()
         hub.exportProgress("e1", ExportProgressMsg(ExportPhaseMsg.RENDERING, 0.1, 1, 10, false, false, emptyList()))
         main.drain()
-        hub.exportProgress("e1", ExportProgressMsg(ExportPhaseMsg.FINISHING, 0.9, 9, 10, false, false, emptyList()))
+        hub.exportProgress("e1", ExportProgressMsg(ExportPhaseMsg.RENDERING, 0.9, 9, 10, false, false, emptyList()))
         main.drain()
+        assertEquals("the second sample is pending", 1, sink.events.size)
         hub.jobDone("e1", JobResultMsg(kind = JobKindMsg.EXPORT))
         main.drain()
         assertEquals(
@@ -165,5 +179,147 @@ class EventHubTest {
         assertEquals(2, b.events.size)
         main.onMain { hub.detach(b) }
         assertFalse(hub.hasListener)
+    }
+
+    @Test
+    fun stateChangingClockSamplesPassAtOnceAndSupersedeThePendingOne() {
+        val sink = attach()
+        hub.clock("s1", clock(0))
+        main.drain()
+        main.advance(20)
+        hub.clock("s1", clock(1))
+        main.drain()
+        assertEquals("same state: coalesced", 1, sink.events.size)
+
+        // Pause inside the interval: delivered at once, the pending playing sample is dropped.
+        main.advance(10)
+        hub.clock("s1", clock(2, playing = false))
+        main.drain()
+        assertEquals(listOf(0L, 2L), sink.events.map { it.clock!!.timeUs })
+
+        // A new seq and a new rate also pass at once.
+        main.advance(10)
+        hub.clock("s1", clock(3, playing = false, seq = 2))
+        main.drain()
+        main.advance(10)
+        hub.clock("s1", clock(4, playing = false, seq = 2, rate = 2.0))
+        main.drain()
+        assertEquals(listOf(0L, 2L, 3L, 4L), sink.events.map { it.clock!!.timeUs })
+
+        main.advance(1000)
+        assertEquals("nothing superseded is delivered later", 4, sink.events.size)
+    }
+
+    @Test
+    fun stateChangingExportAndProgressSamplesPassAtOnce() {
+        val sink = attach()
+        hub.exportProgress("e1", export(0.1))
+        main.drain()
+        main.advance(10)
+        hub.exportProgress("e1", export(0.2))
+        main.drain()
+        assertEquals("same state: coalesced", 1, sink.events.size)
+
+        val warning = ExportWarningMsg(code = "w", message = "m")
+        val changes = listOf(
+            export(0.3, phase = ExportPhaseMsg.FINISHING),
+            export(0.4, phase = ExportPhaseMsg.FINISHING, backgrounded = true),
+            export(0.5, phase = ExportPhaseMsg.FINISHING, backgrounded = true, paused = true),
+            export(0.6, phase = ExportPhaseMsg.FINISHING, backgrounded = true, paused = true, warnings = listOf(warning)),
+            export(1.0, phase = ExportPhaseMsg.FINISHING, backgrounded = true, paused = true, warnings = listOf(warning)),
+        )
+        for (change in changes) {
+            main.advance(10)
+            hub.exportProgress("e1", change)
+            main.drain()
+        }
+        assertEquals(listOf(0.1, 0.3, 0.4, 0.5, 0.6, 1.0), sink.events.map { it.exportProgress!!.fraction })
+        main.advance(1000)
+        assertEquals("the superseded 0.2 sample is never delivered", 6, sink.events.size)
+
+        sink.events.clear()
+        hub.progress("j1", 0.5)
+        main.drain()
+        main.advance(10)
+        hub.progress("j1", 0.6)
+        main.drain()
+        main.advance(10)
+        hub.progress("j1", 1.0)
+        main.drain()
+        assertEquals("reaching 1 passes at once", listOf(0.5, 1.0), sink.events.map { it.progress!! })
+        main.advance(1000)
+        assertEquals(2, sink.events.size)
+    }
+
+    @Test
+    fun nonSampleEventsPassAfterThePendingSamplesOfTheirRoute() {
+        val sink = attach()
+        hub.clock("s1", clock(0))
+        hub.clock("s2", clock(0))
+        main.drain()
+        main.advance(20)
+        hub.clock("s1", clock(1))
+        hub.clock("s2", clock(1))
+        main.drain()
+        hub.preview("s1", PreviewEventMsg(kind = PreviewEventKindMsg.FIRST_FRAME))
+        main.drain()
+        assertEquals(
+            listOf("CLOCK s1 0", "CLOCK s2 0", "CLOCK s1 1", "PREVIEW s1"),
+            sink.events.map { e -> "${e.kind.name} ${e.sessionId}" + (e.clock?.let { c -> " ${c.timeUs}" } ?: "") },
+        )
+
+        // The flushed sample counts as delivered: a same-state sample right after it is rate limited.
+        main.advance(10)
+        hub.clock("s1", clock(5))
+        main.drain()
+        assertEquals(4, sink.events.size)
+
+        // The other session's sample stays pending until its interval ends; the flushed one is not repeated.
+        main.advance(1000)
+        assertEquals(listOf("s2 1", "s1 5"), sink.events.drop(4).map { "${it.sessionId} ${it.clock!!.timeUs}" })
+
+        // Later samples keep their trailing delivery around non-sample events.
+        sink.events.clear()
+        hub.clock("s1", clock(2))
+        main.drain()
+        hub.preview("s1", PreviewEventMsg(kind = PreviewEventKindMsg.FIRST_FRAME))
+        main.drain()
+        main.advance(5)
+        hub.clock("s1", clock(3))
+        main.drain()
+        assertEquals(listOf(EngineEventKindMsg.CLOCK, EngineEventKindMsg.PREVIEW), sink.events.map { it.kind })
+        main.advance(1000)
+        assertEquals(3L, sink.events.last().clock!!.timeUs)
+
+        sink.events.clear()
+        hub.recorderLevel("r1", 0.1)
+        main.drain()
+        main.advance(5)
+        hub.recorderLevel("r1", 0.2)
+        main.drain()
+        hub.interruption("r1", RecordingInterruptionMsg.INTERRUPTED)
+        main.drain()
+        assertEquals(
+            listOf(EngineEventKindMsg.RECORDER_LEVEL, EngineEventKindMsg.RECORDER_LEVEL, EngineEventKindMsg.INTERRUPTION),
+            sink.events.map { it.kind },
+        )
+        assertEquals(0.2, sink.events[1].recorderLevel!!, 1e-9)
+        main.advance(1000)
+        assertEquals(3, sink.events.size)
+    }
+
+    @Test
+    fun onlyTheLatestSignalOfEachKindIsBuffered() {
+        repeat(3) { hub.signal(SignalMsg(kind = SignalKindMsg.MEMORY_WARNING)) }
+        hub.signal(SignalMsg(kind = SignalKindMsg.THERMAL, thermalLevel = ThermalLevelMsg.FAIR))
+        hub.leaseExpiring("l1")
+        hub.signal(SignalMsg(kind = SignalKindMsg.THERMAL, thermalLevel = ThermalLevelMsg.SERIOUS))
+        main.drain()
+        val sink = attach()
+        assertEquals(
+            listOf("SIGNAL MEMORY_WARNING", "LEASE_EXPIRING null", "SIGNAL THERMAL"),
+            sink.events.map { "${it.kind.name} ${it.signal?.kind?.name}" },
+        )
+        assertEquals(ThermalLevelMsg.SERIOUS, sink.events.last().signal!!.thermalLevel)
     }
 }

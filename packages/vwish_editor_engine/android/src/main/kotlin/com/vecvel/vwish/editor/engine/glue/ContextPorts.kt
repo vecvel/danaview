@@ -73,6 +73,8 @@ class ContextEngineRootPort(private val ctx: EngineContext) : EngineRootPort {
     }
 
     override fun trimCaches(level: CacheTrimLevelMsg) {
+        // Before `initialize` no cache exists; do not start lanes or services just to trim nothing.
+        if (ctx.pathsOrNull == null) return
         val threads = ctx.threads
         threads.jobs.execute { guarded { ctx.thumbnails.trim(level) } }
         threads.preview.execute {
