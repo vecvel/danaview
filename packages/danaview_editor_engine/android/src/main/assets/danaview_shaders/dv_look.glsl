@@ -4,12 +4,10 @@
 // outW x outH raster (uTaps.x x uTaps.y bilinear taps per texel, the API-03 reference renderer's
 // footprint supersampling), then chroma key + spill, grade and LUT run on the straight colour.
 // Output: premultiplied RGBA, GL-oriented (framebuffer row 0 = bottom of the image).
-// DV_EXTERNAL selects a samplerExternalOES source (HardwareBuffer / SurfaceTexture frames).
-#ifdef DV_EXTERNAL
-uniform samplerExternalOES uTex;
-#else
+// The external-texture variant (HardwareBuffer / SurfaceTexture frames) is assembled by
+// ShaderSources, which rewrites the uTex declaration below; this file names no external sampler
+// type at all because the emulator's GLES encoder scans shader text for it, ignoring #ifdef.
 uniform sampler2D uTex;
-#endif
 uniform mat3 uSrcXform;        // normalized top-down source position -> texture coordinate
 uniform vec2 uSrcSize;         // source size in px (display oriented)
 uniform float uSrcPremultiplied;

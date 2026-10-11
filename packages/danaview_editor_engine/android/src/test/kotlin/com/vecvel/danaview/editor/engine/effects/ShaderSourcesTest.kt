@@ -35,6 +35,9 @@ class ShaderSourcesTest {
             assertTrue("$name is ASCII", text.all { it.code in 9..126 || it == '\n' || it == '\r' })
             assertFalse("$name has no #version", text.contains("#version"))
             assertFalse("$name has no #extension (added by the assembly)", text.contains("#extension"))
+            // The emulator's GLES encoder scans shader text for the external sampler type, even in
+            // inactive #ifdef branches; only the assembled external variant may name it.
+            assertFalse("$name never names the external sampler type", text.contains("samplerExternalOES"))
             assertTrue("$name owner header", text.startsWith("// OWNER: AND-09"))
         }
         assertTrue(read(ShaderSources.COMMON).contains("precision highp float"))
@@ -43,13 +46,18 @@ class ShaderSourcesTest {
     @Test
     fun assemblyOrdersExtensionDefinesCommonBody() {
         val ext = ShaderSources.fragmentSource(ShaderSources.Program.LOOK_EXTERNAL, read)
-        assertTrue(ext.startsWith("#extension GL_OES_EGL_image_external : require\n#define DV_EXTERNAL 1\n"))
+        assertTrue(ext.startsWith("#extension GL_OES_EGL_image_external : require\n// OWNER: AND-09"))
         val sprite = ShaderSources.fragmentSource(ShaderSources.Program.SPRITE, read)
         assertTrue(sprite.startsWith("#define DV_SPRITE 1\n// OWNER: AND-09"))
         val look = ShaderSources.fragmentSource(ShaderSources.Program.LOOK_2D, read)
         assertTrue(look.indexOf("dvSmooth") < look.indexOf("void main"))
         assertTrue(look.contains("uniform sampler2D uTex;"))
+        assertFalse(look.contains("samplerExternalOES"))
         assertTrue(ext.contains("uniform samplerExternalOES uTex;"))
+        assertFalse(ext.contains("uniform sampler2D uTex;"))
+        for (p in ShaderSources.Program.values()) {
+            if (!p.externalTexture) assertFalse("$p", ShaderSources.fragmentSource(p, read).contains("samplerExternalOES"))
+        }
     }
 
     /** Uniforms the program effectively declares (preprocessor branches of its defines resolved). */

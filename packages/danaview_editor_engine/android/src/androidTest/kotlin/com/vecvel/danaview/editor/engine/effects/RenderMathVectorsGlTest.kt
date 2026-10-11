@@ -253,54 +253,7 @@ class RenderMathVectorsGlTest {
                 val target = GlTarget.rgba32f(8, 8)
                 target.bind()
                 programs.drawLook(SourceTexture(tex, 8, 8), LookFrame(8, 8, 0.0, 0.0, 1.0, 1.0, 1, 1, null, null, "lut", p.getDouble("i"), false), l)
-                val got = GlTestEnv.readRgbaF(8, 8)
-                val s = stats(got, want)
-                if (s[0] > ParityStats.MEAN) {
-                    Log.w(TAG, "RGBA8 ${r.getString("name")}: got ${got.take(4)} want ${want.take(4)} input ${input.take(4)} ids tex=$tex lut=${l.texture} target=${target.texture}/${target.framebuffer}")
-                    val l2 = LutTexture.upload(lut(p.getString("lut")), halfFloat = true)
-                    val tex2 = GlTestEnv.uploadRgbaF(input, 8, 8)
-                    target.bind()
-                    programs.drawLook(SourceTexture(tex2, 8, 8), LookFrame(8, 8, 0.0, 0.0, 1.0, 1.0, 1, 1, null, null, "lut", p.getDouble("i"), false), l2)
-                    Log.w(TAG, "  with half: ${GlTestEnv.readRgbaF(8, 8).take(4)}")
-                    programs.drawLook(SourceTexture(tex2, 8, 8), LookFrame(8, 8, 0.0, 0.0, 1.0, 1.0, 1, 1, null, null, "lut", p.getDouble("i"), false), l)
-                    Log.w(TAG, "  rgba8 again: ${GlTestEnv.readRgbaF(8, 8).take(4)}")
-                    l2.release()
-                    GlResources.deleteTexture(tex2)
-                    val lf = LookFrame(8, 8, 0.0, 0.0, 1.0, 1.0, 1, 1, null, null, "lut", p.getDouble("i"), false)
-                    val table = lut(p.getString("lut"))
-                    run {
-                        val a = GlTestEnv.uploadRgbaF(input, 8, 8); val la = LutTexture.upload(table, false)
-                        target.bind(); programs.drawLook(SourceTexture(a, 8, 8), lf, la); Log.w(TAG, "  A tex,lut8: ${GlTestEnv.readRgbaF(8, 8).take(4)}")
-                        la.release(); GlResources.deleteTexture(a)
-                    }
-                    run {
-                        val a = GlTestEnv.uploadRgbaF(input, 8, 8); val la = LutTexture.upload(table, true)
-                        target.bind(); programs.drawLook(SourceTexture(a, 8, 8), lf, la); Log.w(TAG, "  B tex,lutHalf: ${GlTestEnv.readRgbaF(8, 8).take(4)}")
-                        la.release(); GlResources.deleteTexture(a)
-                    }
-                    run {
-                        val la = LutTexture.upload(table, false); val a = GlTestEnv.uploadRgbaF(input, 8, 8)
-                        target.bind(); programs.drawLook(SourceTexture(a, 8, 8), lf, la); Log.w(TAG, "  C lut8,tex: ${GlTestEnv.readRgbaF(8, 8).take(4)}")
-                        la.release(); GlResources.deleteTexture(a)
-                    }
-                    run {
-                        val a = GlTestEnv.uploadRgbaF(input, 8, 8); val la = LutTexture.upload(table, false)
-                        target.bind(); programs.drawLook(SourceTexture(a, 8, 8), lf.copy(lutIntensity = 0.0, lutAsset = null), null); Log.w(TAG, "  D tex,lut8 unused: ${GlTestEnv.readRgbaF(8, 8).take(4)}")
-                        programs.drawLook(SourceTexture(a, 8, 8), lf, la); Log.w(TAG, "  D2 then with lut8: ${GlTestEnv.readRgbaF(8, 8).take(4)}")
-                        la.release(); GlResources.deleteTexture(a)
-                    }
-                    run {
-                        val bytes = ByteArray(256) { i -> (input[i % 4] * 255).toInt().toByte() }
-                        val a = GlTestEnv.uploadRgba8(bytes, 8, 8); val la = LutTexture.upload(table, false)
-                        target.bind(); programs.drawLook(SourceTexture(a, 8, 8), lf.copy(lutIntensity = 0.0, lutAsset = null), null); Log.w(TAG, "  E rgba8 tex,lut8 unused: ${GlTestEnv.readRgbaF(8, 8).take(4)}")
-                        la.release(); GlResources.deleteTexture(a)
-                    }
-                    run {
-                        val a = GlTestEnv.uploadRgbaF(input, 8, 8); android.opengl.GLES20.glFinish(); val la = LutTexture.upload(table, false)
-                        target.bind(); programs.drawLook(SourceTexture(a, 8, 8), lf.copy(lutIntensity = 0.0, lutAsset = null), null); Log.w(TAG, "  F float tex,finish,lut8 unused: ${GlTestEnv.readRgbaF(8, 8).take(4)}")
-                        la.release(); GlResources.deleteTexture(a)
-                    }
-                }
+                val s = stats(GlTestEnv.readRgbaF(8, 8), want)
                 worstMean = maxOf(worstMean, s[0])
                 worstP99 = maxOf(worstP99, s[1])
                 target.release()
@@ -314,50 +267,38 @@ class RenderMathVectorsGlTest {
         assertTrue("RGBA8 LUT within parity: mean=${worst[0] * 255}/255 p99=${worst[1] * 255}/255", worst[0] <= ParityStats.MEAN && worst[1] <= ParityStats.P99)
     }
 
+    /**
+     * Regression (emulator GLES encoder, see ShaderSources): every pass samples the texture bound
+     * for it even when other textures were created after it.
+     */
     @Test
-    fun probeTextureOrder() {
-        env.run {
+    fun passesSampleTheirOwnTextureAfterLaterUploads() {
+        val results = env.run {
             val programs = ShaderPrograms.acquire(GlTestEnv.shaders)
             val target = GlTarget.rgba32f(8, 8)
-            fun raw(w: Int, h: Int, v: Byte, unbind: Boolean, fmt: Int = GLES20.GL_RGBA): Int {
-                val ids = IntArray(1)
-                GLES20.glGenTextures(1, ids, 0)
-                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ids[0])
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
-                val n = if (fmt == GLES20.GL_RGBA) 4 else 2
-                val buf = java.nio.ByteBuffer.allocateDirect(w * h * n)
-                for (i in 0 until w * h * n) buf.put(if (i % n == n - 1) -1 else v)
-                buf.position(0)
-                GLES20.glPixelStorei(GLES20.GL_UNPACK_ALIGNMENT, 1)
-                GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, fmt, w, h, 0, fmt, GLES20.GL_UNSIGNED_BYTE, buf)
-                if (unbind) GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
-                return ids[0]
+            val a = GlTestEnv.uploadRgba8(ByteArray(256) { (if (it % 4 == 3) 255 else 100).toByte() }, 8, 8)
+            val b = GlTestEnv.uploadRgba8(ByteArray(32) { (if (it % 4 == 3) 255 else 30).toByte() }, 4, 2)
+            val lut = LutTexture.upload(LutTable.fromFloats(2, DoubleArray(24) { 0.0 }), programs.caps.isEs3)
+            val c = GlTestEnv.uploadRgba8(ByteArray(256) { (if (it % 4 == 3) 255 else 200).toByte() }, 8, 8)
+            val out = ArrayList<Float>()
+            for (tex in listOf(a, c)) {
+                target.bind()
+                programs.drawLook(SourceTexture(tex, 8, 8), LookFrame(8, 8, 0.0, 0.0, 1.0, 1.0, 1, 1, null, null, null, 0.0, false), null)
+                out += GlTestEnv.readRgbaF(8, 8)[0]
+                programs.drawLook(SourceTexture(tex, 8, 8), LookFrame(8, 8, 0.0, 0.0, 1.0, 1.0, 1, 1, null, null, "lut", 0.5, false), lut)
+                out += GlTestEnv.readRgbaF(8, 8)[0]
             }
-            val lf = LookFrame(8, 8, 0.0, 0.0, 1.0, 1.0, 1, 1, null, null, null, 0.0, false)
-            fun sample(tex: Int): List<Float> {
-                target.bind(); programs.drawLook(SourceTexture(tex, 8, 8), lf, null); return GlTestEnv.readRgbaF(8, 8).take(3)
-            }
-            for ((label, unbind, w2, fmt2) in listOf(
-                listOf("unbind,4x2 rgba", true, 4, GLES20.GL_RGBA), listOf("nounbind,4x2 rgba", false, 4, GLES20.GL_RGBA),
-                listOf("unbind,8x8 rgba", true, 8, GLES20.GL_RGBA), listOf("unbind,8x8 LA", true, 8, GLES20.GL_LUMINANCE_ALPHA),
-            )) {
-                val a = raw(8, 8, 100, unbind as Boolean)
-                val b = raw(w2 as Int, if (w2 == 4) 2 else 8, 30, true, fmt2 as Int)
-                Log.w(TAG, "probe $label: a=$a b=$b sample(a)=${sample(a)} (want 0.39) sample(b)=${sample(b)} (want 0.12)")
-                val pf = PlaceFrame(Affine(1.0, 0.0, 0.0, 1.0, 0.0, 0.0), 8.0, 8.0, 1.0, 1.0, 8, 8, 0.0, 0.0, 1.0, null, 1.0, 1.0, 1.0, emptyList(), false, null, null)
-                target.bind(); programs.drawPlace(a, 8, 8, pf, 8, 8)
-                Log.w(TAG, "   place(a)=${GlTestEnv.readRgbaF(8, 8).take(3)}")
-                target.bind(); programs.drawLook(SourceTexture(a, 8, 8), lf, null)
-                Log.w(TAG, "   look(a) after place=${GlTestEnv.readRgbaF(8, 8).take(3)}")
-                GLES20.glFinish()
-                target.bind(); programs.drawLook(SourceTexture(a, 8, 8), lf, null)
-                Log.w(TAG, "   look(a) after finish=${GlTestEnv.readRgbaF(8, 8).take(3)}")
-                GLES20.glDeleteTextures(2, intArrayOf(a, b), 0)
-            }
+            lut.release()
+            for (t in listOf(a, b, c)) GlResources.deleteTexture(t)
             target.release()
             programs.release()
+            out
         }
+        // Without LUT: the source; with an all-black LUT at intensity 0.5: mix(c, 0, 0.5).
+        assertEquals(100 / 255f, results[0], 1e-3f)
+        assertEquals(50 / 255f, results[1], 1e-3f)
+        assertEquals(200 / 255f, results[2], 1e-3f)
+        assertEquals(100 / 255f, results[3], 1e-3f)
     }
 
     companion object {

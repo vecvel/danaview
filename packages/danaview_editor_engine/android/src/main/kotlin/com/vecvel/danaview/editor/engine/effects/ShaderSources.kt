@@ -6,8 +6,13 @@
 //   #define <DEFINE> 1 …
 //   dv_common.glsl
 //   <program>.glsl
-// so every program shares the §11.6 helpers. The assembly is pure (JVM-tested); [assetReader]
-// reads the files through the app's AssetManager.
+// so every program shares the §11.6 helpers. The external-texture variant of the look pass is made
+// by rewriting `uniform sampler2D uTex;` to the external sampler type: the shader files never
+// contain that type's name, not even in an inactive #ifdef branch, because the Android emulator's
+// GLES encoder scans shader text for it (ignoring the preprocessor) and then rebinds the sampler's
+// unit as an external texture at every draw, which made the 2D look pass sample the wrong texture
+// on Pixel_9_Pro_XL_API_35 (measured 2026-10-11). The assembly is pure (JVM-tested);
+// [assetReader] reads the files through the app's AssetManager.
 
 package com.vecvel.danaview.editor.engine.effects
 
@@ -39,7 +44,7 @@ object ShaderSources {
         LOOK_2D(LOOK, emptyList(), false),
 
         /** Look pass over a GL_TEXTURE_EXTERNAL_OES source (HardwareBuffer / SurfaceTexture frames). */
-        LOOK_EXTERNAL(LOOK, listOf("DV_EXTERNAL"), true),
+        LOOK_EXTERNAL(LOOK, emptyList(), true),
 
         /** One direction of the separable Gaussian blur. */
         BLUR(ShaderSources.BLUR, emptyList(), false),
@@ -57,13 +62,25 @@ object ShaderSources {
     /** The vertex source. */
     fun vertexSource(read: (String) -> String): String = read(VERTEX)
 
+    /** The 2D source declaration the external variant rewrites. */
+    const val SOURCE_SAMPLER_2D = "uniform sampler2D uTex;"
+
+    /** Its external-texture replacement. */
+    const val SOURCE_SAMPLER_EXTERNAL = "uniform samplerExternalOES uTex;"
+
     /** The assembled fragment source of [program] (file header). */
     fun fragmentSource(program: Program, read: (String) -> String): String = buildString {
         if (program.externalTexture) append("#extension GL_OES_EGL_image_external : require\n")
         for (d in program.defines) append("#define ").append(d).append(" 1\n")
         append(read(COMMON))
         append('\n')
-        append(read(program.fragment))
+        val body = read(program.fragment)
+        if (program.externalTexture) {
+            check(body.contains(SOURCE_SAMPLER_2D)) { "${program.fragment} has no rewritable source sampler" }
+            append(body.replace(SOURCE_SAMPLER_2D, SOURCE_SAMPLER_EXTERNAL))
+        } else {
+            append(body)
+        }
     }
 
     /** Reads `danaview_shaders/<name>` from [context]'s assets (UTF-8). */

@@ -94,6 +94,8 @@ class ParityGoldensGlTest {
                         for (layer in plan.layers.sortedWith(PlanValidator::compareLayers)) {
                             if (!layer.covers(t)) continue
                             val p = ParamSnapshot.evaluate(layer, plan, t)
+                            // Like the reference: a layer at opacity 0 (or scale 0) draws nothing and reads no source.
+                            if (LayerFrames.place(p, geometry, programs.caps.maxTextureSize) == null) continue
                             val asset = layer.asset?.let { plan.assets[it] }
                             var srcTex = 0
                             var srcW = 0
@@ -161,7 +163,9 @@ class ParityGoldensGlTest {
                         check(want.width == w && want.height == h && want.channels == 3) { "$name golden size" }
                         val wantUnit = DoubleArray(want.samples.size) { want.samples[it] / 255.0 }
                         val edges = edgeMask(edgeFrames, w, h)
-                        results += FrameResult(name, k, ParityMetrics.compare(got, wantUnit, 3, w, h, edges))
+                        val stats = ParityMetrics.compare(got, wantUnit, 3, w, h, edges)
+                        results += FrameResult(name, k, stats)
+                        if (dump && !stats.withinParity()) dumpFrame("${sizing}_${name}_f$k", got, wantUnit, edges, w, h)
                     }
                 } finally {
                     target.release()
@@ -173,6 +177,32 @@ class ParityGoldensGlTest {
             programs.release()
             results
         }
+    }
+
+    /** Instrumentation argument `danaviewDumpGoldens=true`: write failing frames for inspection. */
+    private val dump: Boolean =
+        androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("danaviewDumpGoldens") == "true"
+
+    /** Writes got | want | 8× |diff| (edges blue) side by side, 4× enlarged, to the app's cache. */
+    private fun dumpFrame(label: String, got: DoubleArray, want: DoubleArray, edges: BooleanArray, w: Int, h: Int) {
+        val z = 4
+        val bmp = android.graphics.Bitmap.createBitmap(w * 3 * z, h * z, android.graphics.Bitmap.Config.ARGB_8888)
+        fun b(v: Double) = (v.coerceIn(0.0, 1.0) * 255 + 0.5).toInt()
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = y * w + x
+            val g = android.graphics.Color.rgb(b(got[i * 4]), b(got[i * 4 + 1]), b(got[i * 4 + 2]))
+            val wv = android.graphics.Color.rgb(b(want[i * 3]), b(want[i * 3 + 1]), b(want[i * 3 + 2]))
+            val d = (0 until 3).maxOf { abs(got[i * 4 + it] - want[i * 3 + it]) }
+            val dv = if (edges[i]) android.graphics.Color.rgb(0, 0, 90) else android.graphics.Color.rgb(b(d * 8), b(d * 8), b(d * 8))
+            for (yy in 0 until z) for (xx in 0 until z) {
+                bmp.setPixel(x * z + xx, y * z + yy, g)
+                bmp.setPixel((w + x) * z + xx, y * z + yy, wv)
+                bmp.setPixel((2 * w + x) * z + xx, y * z + yy, dv)
+            }
+        }
+        val dir = java.io.File(TestFixtures.targetContext.cacheDir, "and09_goldens").apply { mkdirs() }
+        java.io.FileOutputStream(java.io.File(dir, "$label.png")).use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        bmp.recycle()
     }
 
     /** Pixels within 1 px of a hard boundary of a drawn layer (file header). */
