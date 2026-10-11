@@ -6,6 +6,8 @@
 // drops from engine.drops are imported through the import sheet (preflight, errors, cancel) and
 // placed at the drop position.
 
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' show Override;
@@ -407,6 +409,19 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
       expect(t.rig.engine.drops.enabled, isFalse);
+    });
+
+    _test('drops are paused while an opaque route covers the editor and resume when it is visible again', (tester) async {
+      final t = await _pump(tester);
+      expect(t.rig.engine.drops.enabled, isTrue);
+      final context = tester.element(find.byType(TimelineDropTarget));
+      final navigator = Navigator.of(context);
+      unawaited(navigator.push(PageRouteBuilder<void>(opaque: true, pageBuilder: (_, __, ___) => const SizedBox.expand())));
+      await tester.pumpAndSettle();
+      expect(t.rig.engine.drops.enabled, isFalse, reason: 'a full-screen route covers the editor');
+      navigator.pop();
+      await tester.pumpAndSettle();
+      expect(t.rig.engine.drops.enabled, isTrue);
     });
 
     _test('a drop is imported through the sheet and placed at the drop position and lane', (tester) async {

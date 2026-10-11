@@ -14,7 +14,8 @@
 //   editor explains why (toast, haptic) and records nothing.
 // * Auto-scroll: within 48 px of an edge of the lanes the timeline scrolls (up to 1.5 viewports per
 //   second) and the ghost follows the pointer's new time.
-// * External: while mounted (the editor is visible) the target enables `engine.drops`; a drop is
+// * External: while the editor is visible (the timeline is mounted and not covered by an opaque
+//   route) the target enables `engine.drops`; a drop is
 //   imported as managed copies through UX-06's ImportMediaSheet (free-space preflight, progress,
 //   cancel) and the imported media is placed at the drop position (time and lane under it; at the
 //   playhead when it landed outside the lanes). Drops that arrive while an import is running wait
@@ -149,6 +150,7 @@ class TimelineDropTargetState extends ConsumerState<TimelineDropTarget> with Sin
   Ticker? _ticker;
   Duration _lastTick = Duration.zero;
   Offset _scrollVelocity = Offset.zero;
+  bool _dropsEnabled = false;
   bool _disposed = false;
 
   /// The drop ghost of the drag in progress, or null.
@@ -162,9 +164,20 @@ class TimelineDropTargetState extends ConsumerState<TimelineDropTarget> with Sin
     super.initState();
     final EditorEngine engine = ref.read(editorEngineProvider);
     _engine = engine;
-    // External drops are accepted while the editor is visible (the timeline is mounted).
-    unawaited(_enableDrops(engine, true));
     _drops = engine.drops.drops.listen(_onExternalDrop, onError: (Object _) {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // External drops are accepted while the editor is visible: the timeline is mounted and no
+    // opaque route (Settings, a full-screen player) covers it (`TickerMode` follows that).
+    final visible = TickerMode.valuesOf(context).enabled;
+    final engine = _engine;
+    if (engine != null && visible != _dropsEnabled) {
+      _dropsEnabled = visible;
+      unawaited(_enableDrops(engine, visible));
+    }
   }
 
   @override
@@ -175,7 +188,7 @@ class TimelineDropTargetState extends ConsumerState<TimelineDropTarget> with Sin
     _ticker = null;
     unawaited(_drops?.cancel());
     final engine = _engine;
-    if (engine != null) unawaited(_enableDrops(engine, false));
+    if (engine != null && _dropsEnabled) unawaited(_enableDrops(engine, false));
     _snap?.release();
     _ghost.dispose();
     super.dispose();

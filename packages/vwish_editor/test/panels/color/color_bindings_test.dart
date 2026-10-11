@@ -32,6 +32,14 @@ WidgetActionContext ctxOf(ColorRig rig, WidgetTester tester) => WidgetActionCont
 
 EditorActionRegistry registryOf(ColorRig rig) => rig.container.read(editorActionRegistryProvider);
 
+Future<void> tapTile(WidgetTester tester, String key) async {
+  final tile = find.byKey(ValueKey<String>(key), skipOffstage: false);
+  await tester.ensureVisible(tile);
+  await tester.pump();
+  await tester.tap(tile);
+  await tester.pump();
+}
+
 void main() {
   test('adjust and filters are bound once, by color_bindings (UX-24), and nothing else is', () {
     expect({for (final b in colorBindings) b.id}, {EditorActionId.adjust, EditorActionId.filters});
@@ -153,8 +161,7 @@ void main() {
         (_) => const RegionFrame(regions: {EditorRegion.toolStrip: ToolStrip()}),
       );
       await rig.seek(9 * s);
-      await tester.tap(find.byKey(const ValueKey<String>('tile.tool.effects')));
-      await tester.pump();
+      await tapTile(tester, 'tile.tool.effects');
       expect(rig.state.tool, ToolId.effects);
       expect(rig.state.inspector, AdjustInspector(ColorIds.c));
       expect(rig.state.selection.primary, ColorIds.c);
@@ -167,10 +174,7 @@ void main() {
         (_) => const RegionFrame(regions: {EditorRegion.toolStrip: ToolStrip()}),
       );
       await rig.select(ColorIds.b);
-      final adjust = find.byKey(const ValueKey<String>('tile.adjust'), skipOffstage: false);
-      await tester.ensureVisible(adjust);
-      await tester.tap(adjust);
-      await tester.pump();
+      await tapTile(tester, 'tile.adjust');
       expect(rig.state.inspector, AdjustInspector(ColorIds.b));
     });
   });

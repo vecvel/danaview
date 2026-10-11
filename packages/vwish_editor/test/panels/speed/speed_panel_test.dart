@@ -71,6 +71,8 @@ double scrollPixels(WidgetTester tester) =>
     tester.state<ScrollableState>(find.descendant(of: key('speed.scroll'), matching: find.byType(Scrollable)).first).position.pixels;
 
 Future<void> switchToCurve(WidgetTester tester) async {
+  await tester.ensureVisible(find.text(SpeedStrings.modeCurve));
+  await tester.pumpAndSettle();
   await tester.tap(find.text(SpeedStrings.modeCurve));
   await tester.pump();
 }
@@ -259,7 +261,8 @@ void main() {
       await tester.pump();
       final clip = rig.clip(SpeedIds.video);
       expect(clip.duration, coreDuration(clip));
-      expect(tester.widget<Text>(key('speed.duration')).data, 'Duration ${Timecode.format(coreNormal(clip), rate)} → ${Timecode.format(clip.duration, rate)}');
+      expect(tester.widget<Text>(key('speed.duration')).data,
+          'Duration ${Timecode.format(coreNormal(clip), rate)} → ${Timecode.format(clip.duration, rate)}');
       expect(clip.duration, isNot(12 * s));
     });
   });
@@ -382,8 +385,7 @@ void main() {
     double scrollOffset(WidgetTester tester) =>
         tester.state<ScrollableState>(find.descendant(of: key('speed.scroll'), matching: find.byType(Scrollable)).first).position.pixels;
 
-    testSpeed('dragging a point is one history entry; the ramp stays valid and becomes custom; the panel does not scroll',
-        (tester) async {
+    testSpeed('dragging a point is one history entry; the ramp stays valid and becomes custom; the panel does not scroll', (tester) async {
       final rig = await heroRig(tester);
       final before = rig.entries;
       final start = pointAt(tester, rampOf(rig), 2);
@@ -581,6 +583,9 @@ void main() {
       expect(rampOf(rig).points[2].x, 0.5);
       expect(rig.entries, before + 2);
       expect(speedRampIssues(rampOf(rig)), isEmpty);
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(key('speed.curve'));
       await tester.pumpAndSettle();
       await tester.tapAt(pointAt(tester, rampOf(rig), 0));
       await tester.pumpAndSettle();
@@ -616,7 +621,9 @@ void main() {
       SemanticsNode node(WidgetTester tester, int i, int n) => tester.getSemantics(find.bySemanticsLabel('Point $i of $n'));
 
       void perform(WidgetTester tester, SemanticsNode n, SemanticsAction action, [Object? arguments]) {
-        SemanticsBinding.instance.performSemanticsAction(SemanticsActionEvent(type: action, nodeId: n.id, viewId: tester.view.viewId, arguments: arguments));
+        // ignore: invalid_use_of_protected_member
+        SemanticsBinding.instance
+            .performSemanticsAction(SemanticsActionEvent(type: action, nodeId: n.id, viewId: tester.view.viewId, arguments: arguments));
       }
 
       testSpeed('each point is a node with its speed and position, increase/decrease change the speed', (tester) async {
@@ -930,19 +937,22 @@ void main() {
     testSpeedSurfaces('curve with a selected point', (tester, surface) async {
       final rig = await SpeedRig.pump(tester, surface: surface);
       await switchToCurve(tester);
-      await tester.tap(preset('flashIn'), warnIfMissed: false);
-      await tester.pump();
-      await tester.ensureVisible(key('speed.curve'));
-      await tester.pump();
-      await tester.tapAt(pointAt(tester, rampOf(rig), 1));
-      await tester.pump();
-      expect(find.byKey(const ValueKey<String>('speed.pointSpeed')), findsOneWidget);
+      await tap(tester, preset('flashIn'));
+      await tap(tester, key('speed.addPoint'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey<String>('speed.pointSpeed')), findsOneWidget, reason: 'the added point is selected');
       expectNoOverflow(tester);
       expectOwnerUiRules(tester);
-      for (final k in ['speed.curve', 'speed.addPoint']) {
+      final curve = tester.getRect(key('speed.curve'));
+      expect(curve.left, greaterThanOrEqualTo(0));
+      expect(curve.right, lessThanOrEqualTo(surface.size.width));
+      expect(curve.width, greaterThan(150), reason: 'the plot has room to draw');
+      for (final k in ['speed.addPoint', 'speed.deletePoint', 'speed.pointSpeed', 'speed.pointPosition']) {
         await tester.ensureVisible(key(k));
-        await tester.pump();
-        expectInside(tester, key(k));
+        await tester.pumpAndSettle();
+        final r = tester.getRect(key(k));
+        expect(r.left, greaterThanOrEqualTo(0), reason: k);
+        expect(r.right, lessThanOrEqualTo(surface.size.width), reason: k);
       }
       expectNoOverflow(tester);
     });

@@ -30,7 +30,8 @@ ItemId? speedTarget(EditorActionContext ctx, {bool unlocked = false}) {
   return primary;
 }
 
-bool _canOpen(EditorActionContext ctx) => ctx.read(editorControllerProvider(ctx.projectId).notifier).canEdit && speedTarget(ctx, unlocked: true) != null;
+bool _canOpen(EditorActionContext ctx) =>
+    ctx.read(editorControllerProvider(ctx.projectId).notifier).canEdit && speedTarget(ctx, unlocked: true) != null;
 
 String? _reason(EditorActionContext ctx) {
   if (!ctx.read(editorControllerProvider(ctx.projectId).notifier).canEdit) return SpeedStrings.notEditable;

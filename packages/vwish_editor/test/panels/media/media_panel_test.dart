@@ -14,11 +14,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meta/meta.dart' show isTestGroup;
 import 'package:vwish_editor/src/app/strings/media_strings.dart';
 import 'package:vwish_editor/src/editor/actions/bindings/media_bindings.dart';
+import 'package:vwish_editor/src/editor/actions/editor_action_registry.dart';
 import 'package:vwish_editor/src/editor/contracts/contracts.dart';
 import 'package:vwish_editor/src/editor/panels/media_panel.dart';
 import 'package:vwish_editor/src/editor/state/editor_events.dart' show EditorToast;
 import 'package:vwish_editor/src/editor/state/plan_compiler_port.dart';
-import 'package:vwish_editor/src/editor/wiring/action_bindings.dart' show editorActionBindingsProvider;
+import 'package:vwish_editor/src/editor/wiring/action_bindings.dart' show editorActionBindingsProvider, mergeEditorActionBindings;
 import 'package:vwish_editor/src/editor/timeline/timeline_drop_target.dart';
 import 'package:vwish_editor_core/model.dart';
 import 'package:vwish_editor_core/ops.dart';
@@ -663,12 +664,23 @@ void main() {
       expect(identical(mediaBindings, mediaBindings), isTrue);
     });
 
-    _test('opens the Media panel; "Add media here" seeks first so the bin adds there', (tester) async {
-      final rig = await _pump(tester, panel: const SizedBox.shrink());
+    _test('runs through the registry: it opens the Media panel, and is refused before the editor is ready', (tester) async {
+      final rig = await _pump(tester);
+      final registry = EditorActionRegistry(bindings: mergeEditorActionBindings());
+      final ctx = WidgetActionContext.container(
+        projectId: rig.id,
+        context: tester.element(find.byType(MediaPanel)),
+        container: rig.container,
+        source: EditorActionSource.toolTile,
+      );
+      expect(registry.spec(EditorActionId.media).isBound, isTrue);
       expect(rig.state.inspector, isNull);
-      rig.editor.openInspector(const MediaInspector());
+      expect(registry.invoke(EditorActionId.media, ctx), EditorActionResult.ran);
       await tester.pump();
       expect(rig.state.inspector, isA<MediaInspector>());
+      await rig.real(() async => rig.editor.close());
+      expect(registry.spec(EditorActionId.media).isEnabled(ctx), isFalse);
+      expect(registry.spec(EditorActionId.media).disabledReason(ctx), MediaStrings.notEditable);
     });
   });
 }

@@ -72,8 +72,7 @@ abstract final class SpeedStrings {
   static String audioMutedAbove(double maxAudioSpeed) => 'Audio is muted above ${rate(maxAudioSpeed)} on this device';
 
   /// Capability note of a curve that goes above what the device plays audio at.
-  static String audioMutedWhere(double maxAudioSpeed) =>
-      'Audio is muted where the speed is above ${rate(maxAudioSpeed)} on this device';
+  static String audioMutedWhere(double maxAudioSpeed) => 'Audio is muted where the speed is above ${rate(maxAudioSpeed)} on this device';
 
   // ---- Entry points (UX-35 actions) ---------------------------------------------------------
 

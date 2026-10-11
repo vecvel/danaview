@@ -42,8 +42,12 @@ Widget _panel(Size size, {double? height}) => Align(
       child: SizedBox(width: size.width, height: height ?? size.height, child: const MediaPanel(route: MediaInspector())),
     );
 
+/// Scrolls the bin until [f] can be hit, then taps it.
 Future<void> _tap(WidgetTester tester, Finder f) async {
-  await tester.ensureVisible(f);
+  for (var i = 0; i < 30 && f.hitTestable().evaluate().isEmpty; i++) {
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -120));
+    await tester.pump();
+  }
   await tester.tap(f);
   await tester.pumpAndSettle();
 }
@@ -150,5 +154,6 @@ void main() {
     await g.up();
     await tester.pump();
     expectNoOverflow(tester);
+    await tester.pump(const Duration(seconds: 4)); // the announcement gate
   });
 }

@@ -759,7 +759,8 @@ class SpeedCurvePainter extends CustomPainter {
         canvas.drawCircle(c, _pointRadius + 6, Paint()..color = VwishColors.primary.withValues(alpha: 0.28 * dim));
       }
       canvas.drawCircle(c, _pointRadius + 1.5, Paint()..color = VwishColors.surface.withValues(alpha: dim));
-      canvas.drawCircle(c, _pointRadius, Paint()..color = (isSelected ? VwishColors.primary : VwishColors.primaryLight).withValues(alpha: dim));
+      canvas.drawCircle(
+          c, _pointRadius, Paint()..color = (isSelected ? VwishColors.primary : VwishColors.primaryLight).withValues(alpha: dim));
       canvas.drawCircle(
         c,
         _pointRadius,

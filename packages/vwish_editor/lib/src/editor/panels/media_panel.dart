@@ -372,7 +372,8 @@ class _MediaPanelState extends ConsumerState<MediaPanel> {
   @override
   Widget build(BuildContext context) {
     final id = _id;
-    final pool = ref.watch(editorControllerProvider(id).select((s) => s.project?.pool)) ?? MediaPool.empty;
+    final poolOrNull = ref.watch(editorControllerProvider(id).select((s) => s.project?.pool));
+    final pool = poolOrNull ?? MediaPool.empty;
     final usage = ref
         .watch(editorControllerProvider(id).select((s) {
           final p = s.project;
@@ -407,6 +408,8 @@ class _MediaPanelState extends ConsumerState<MediaPanel> {
     final scale = MediaQuery.textScalerOf(context).scale(1);
     // Thumbnail 16:9 at the card width, then the name and usage lines at the current text scale.
     final cardHeight = 78 + (13 + 12) * 1.35 * scale + 2 * VwishSpacing.sm + VwishSpacing.xs;
+
+    if (poolOrNull == null) return const SizedBox.shrink(); // the editor is still opening
 
     return KeyedSubtree(
       key: const ValueKey('media-panel'),
