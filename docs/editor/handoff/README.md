@@ -15,7 +15,7 @@ Windows can't build or test iOS: Xcode only runs on macOS.
 |---|---|
 | [ANDROID_LANE.md](ANDROID_LANE.md) | The Windows ticket plan: order, gates, owned files, verification, conflict hot-spots |
 | [WINDOWS_SETUP.md](WINDOWS_SETUP.md) | Installing the toolchain on Windows, cloning without line-ending damage, smoke checks, known Windows pitfalls |
-| [BUILD_STATE.md](BUILD_STATE.md) | Status of all 164 tickets, plus the notes, deferrals and hand-off facts from every finished builder |
+| [BUILD_STATE.md](BUILD_STATE.md) | Status of all 166 tickets, plus the notes, deferrals and hand-off facts from every finished builder |
 | [android_lane_workflow.js](android_lane_workflow.js) | The builder workflow the Windows Claude session runs for the Android lane |
 | [claude-memory/](claude-memory/) | A copy of Claude's project notes, so the Windows session knows the rules and history |
 | [../../../tool/handoff/install_claude_memory.ps1](../../../tool/handoff/install_claude_memory.ps1) | Installs those notes into Claude's folder on Windows |
@@ -69,7 +69,7 @@ Tell me after each ticket lands so the Mac can merge it. Use a workflow for the 
   | JNI shim set up by ENG-06 (the D-43e sign-off is done: owner decision 2026-10-11) | Mac | AND-16 |
   | AND-16 | Windows | AND-18 |
   | AND-11 | Windows | AND-19 |
-  | D-45 contract amendment (`renderPreview`, `setRenderedRanges`, `powerState`; lead [INTEGRATION]) | Mac | wiring AND-18 into the glue (not a start gate: AND-18 builds behind its own interfaces until it lands) |
+  | INT-06 ([INTEGRATION] engine interface additions for render preview: `renderPreview`, `setRenderedRanges`, `powerState`; ARCH D-45) | Mac | AND-18 (Windows; AND-18 waits for both AND-16 and INT-06) |
 
   ENG-08 and AI-04 can start as soon as the Windows toolchain works. ENG-08 first: the Mac's ENG-06, and through it every native ticket on both phones, waits for it.
 - **Line endings:** `.gitattributes` keeps every text file LF on all machines. Test fixtures, goldens and vectors are marked `-text` so they stay byte-for-byte; some subtitle and LUT fixtures contain CR on purpose.

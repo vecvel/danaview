@@ -2,7 +2,7 @@
 
 Generated 2026-10-11 07:22 IST on the Mac from the builder logs. Regenerated at each hand-off; the code on `editor-wip` is the ground truth.
 
-**Totals:** 100 not started, 55 done, 9 in progress (of 164). Six M4 tickets (CORE-37, UX-44, IOS-19, IOS-20 on the Mac; AND-18, AND-19 on Windows) were added on 2026-10-11 by the owner's D-43(e) decision (ARCH D-43, D-45; BUILD_PLAN §9 item 11). D-43(e) is signed off, so M1 exit and AND-16 no longer wait for it.
+**Totals:** 102 not started, 55 done, 9 in progress (of 166). Six M4 tickets (CORE-37, UX-44, IOS-19, IOS-20 on the Mac; AND-18, AND-19 on Windows) were added on 2026-10-11 by the owner's D-43(e) decision (ARCH D-43, D-45; BUILD_PLAN §9 item 11). D-43(e) is signed off, so M1 exit and AND-16 no longer wait for it. Two more Mac tickets followed the same day (BUILD_PLAN §9 item 12): CORE-38 (edits allowed above the live-preview cap; after CORE-09, CORE-37) and INT-06 ([INTEGRATION] engine interface additions for render preview; after ENG-06, CORE-37). UX-44, IOS-19 and AND-18 now also depend on INT-06, and QA-11 on CORE-38.
 
 "Machine" is who builds the ticket after the split: the Mac does everything except the Android lane; the Windows laptop does the Android lane (see ANDROID_LANE.md). "In progress" means a Mac builder was working on it when this file was generated; its files may be incomplete.
 
@@ -136,7 +136,7 @@ Generated 2026-10-11 07:22 IST on the Mac from the builder logs. Regenerated at 
 | 108 | UX-21 | Waveform cache and painting | UX-10 | ⏳ not started | Mac |
 | 109 | UX-22 | Canvas geometry, manipulation overlay (move/scale/rotate), snap guides | UX-18, CORE-13, CORE-32 | ⏳ not started | Mac |
 
-## M4 (0/30 done)
+## M4 (0/32 done)
 
 | # | Ticket | Title | Depends on | Status | Machine |
 |---|---|---|---|---|---|
@@ -165,46 +165,48 @@ Generated 2026-10-11 07:22 IST on the Mac from the builder logs. Regenerated at 
 | 132 | UX-35 | Freeze, reverse, replace, clip info, background tasks | UX-16, CORE-12, CORE-11 | ⏳ not started | Mac |
 | 133 | UX-36 | Media panel (bin), add/replace, in-app and external drag and drop | UX-06, UX-13 | ⏳ not started | Mac |
 | 134 | CORE-37 | Render-preview cache model: range hashing, invalidation, cache index | CORE-32 | ⏳ not started | Mac |
-| 135 | UX-44 | Render-preview UI: timeline render marker, action, settings, tier defaults | UX-18, UX-04, CORE-37 | ⏳ not started | Mac |
-| 136 | IOS-19 | iOS render-preview renderer and playback swap-in | IOS-11 | ⏳ not started | Mac |
-| 137 | IOS-20 | iOS multi-pass export fallback (precompose above the decoder limit) | IOS-12 | ⏳ not started | Mac |
-| 138 | AND-18 | Android render-preview renderer and playback swap-in | AND-16, AND-10 | ⏳ not started | Windows |
-| 139 | AND-19 | Android multi-pass export precompose | AND-11 | ⏳ not started | Windows |
+| 135 | CORE-38 | Allow edits above the live-preview sequence cap | CORE-09, CORE-37 | ⏳ not started | Mac |
+| 136 | INT-06 | [INTEGRATION] Engine interface additions for render preview | ENG-06, CORE-37 | ⏳ not started | Mac |
+| 137 | UX-44 | Render-preview UI: timeline render marker, action, settings, tier defaults | UX-18, UX-04, CORE-37, INT-06 | ⏳ not started | Mac |
+| 138 | IOS-19 | iOS render-preview renderer and playback swap-in | IOS-11, INT-06 | ⏳ not started | Mac |
+| 139 | IOS-20 | iOS multi-pass export fallback (precompose above the decoder limit) | IOS-12 | ⏳ not started | Mac |
+| 140 | AND-18 | Android render-preview renderer and playback swap-in | AND-16, AND-10, INT-06 | ⏳ not started | Windows |
+| 141 | AND-19 | Android multi-pass export precompose | AND-11 | ⏳ not started | Windows |
 
 ## M5 (0/10 done)
 
 | # | Ticket | Title | Depends on | Status | Machine |
 |---|---|---|---|---|---|
-| 140 | IOS-13 | iOS background export, active-export store, Photos and Files handoff | IOS-12 | ⏳ not started | Mac |
-| 141 | INT-03 | [INTEGRATION] iOS app declarations: Info.plist, entitlements, privacy manifest, BG task ids | INT-01, IOS-13, IOS-14, IOS-15 | ⏳ not started | Mac |
-| 142 | AND-12 | Android export foreground service, notification, background guard, MediaStore, file handoff | AND-11 | ⏳ not started | Windows |
-| 143 | UX-37 | Auto captions flow: sheet, controller, language picker, consent, progress | UX-31, AI-08, CORE-15 | ⏳ not started | Mac |
-| 144 | UX-38 | Regenerate captions, interrupted-job notice, captions settings, speech storage contributor | UX-37, UX-04 | ⏳ not started | Mac |
-| 145 | UX-39 | Export sheet, export controller, progress, handoff | UX-08, CORE-33, API-04 | ⏳ not started | Mac |
-| 146 | UX-40 | Missing media, relink, recovery and migration UX | UX-05, UX-08, CORE-26, CORE-28 | ⏳ not started | Mac |
-| 147 | UX-41 | Player 'Edit' action, EditorLauncher and player handoff | UX-02, UX-07, UX-08, CORE-25 | ⏳ not started | Mac |
-| 148 | UX-42 | Privacy policy and terms update, custom licences screen, About row | — | ⏳ not started | Mac |
-| 149 | INT-04 | [INTEGRATION] App wiring v2: auto captions service, adapters, player Edit, licences route | INT-02, AI-13, UX-38, UX-41, UX-42, ENG-03, ENG-04 | ⏳ not started | Mac |
+| 142 | IOS-13 | iOS background export, active-export store, Photos and Files handoff | IOS-12 | ⏳ not started | Mac |
+| 143 | INT-03 | [INTEGRATION] iOS app declarations: Info.plist, entitlements, privacy manifest, BG task ids | INT-01, IOS-13, IOS-14, IOS-15 | ⏳ not started | Mac |
+| 144 | AND-12 | Android export foreground service, notification, background guard, MediaStore, file handoff | AND-11 | ⏳ not started | Windows |
+| 145 | UX-37 | Auto captions flow: sheet, controller, language picker, consent, progress | UX-31, AI-08, CORE-15 | ⏳ not started | Mac |
+| 146 | UX-38 | Regenerate captions, interrupted-job notice, captions settings, speech storage contributor | UX-37, UX-04 | ⏳ not started | Mac |
+| 147 | UX-39 | Export sheet, export controller, progress, handoff | UX-08, CORE-33, API-04 | ⏳ not started | Mac |
+| 148 | UX-40 | Missing media, relink, recovery and migration UX | UX-05, UX-08, CORE-26, CORE-28 | ⏳ not started | Mac |
+| 149 | UX-41 | Player 'Edit' action, EditorLauncher and player handoff | UX-02, UX-07, UX-08, CORE-25 | ⏳ not started | Mac |
+| 150 | UX-42 | Privacy policy and terms update, custom licences screen, About row | — | ⏳ not started | Mac |
+| 151 | INT-04 | [INTEGRATION] App wiring v2: auto captions service, adapters, player Edit, licences route | INT-02, AI-13, UX-38, UX-41, UX-42, ENG-03, ENG-04 | ⏳ not started | Mac |
 
 ## M6 (0/15 done)
 
 | # | Ticket | Title | Depends on | Status | Machine |
 |---|---|---|---|---|---|
-| 150 | CORE-35 | Core benchmarks, large-project fixture, README | CORE-26, CORE-32, CORE-34, CORE-33 | ⏳ not started | Mac |
-| 151 | QA-00 | Shared on-device E2E suite (integration_test/editor) | INT-04, ENG-05, UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, IOS-13, IOS-14, IOS-15, IOS-16, AND-12, AND-13, AND-14, AND-15 | ⏳ not started | Mac |
-| 152 | QA-01 | Run and certify the E2E suite on the iOS Simulator | QA-00, INT-03 | ⏳ not started | Mac |
-| 153 | QA-02 | Run and certify the E2E suite on an Android Emulator | QA-00 | ⏳ not started | Mac |
-| 154 | QA-03 | Frame accuracy, grid-cut, A/V sync and render parity suite | IOS-11, AND-10, IOS-12, AND-11, API-03, ENG-05 | ⏳ not started | Mac |
-| 155 | QA-11 | Export conformance, preset matrix and audio measurement suite | IOS-13, AND-12, IOS-18, API-03, ENG-05, IOS-20, AND-19 | ⏳ not started | Mac |
-| 156 | QA-04 | Performance and memory budgets (profile mode, device lab) | INT-04, CORE-35, UX-44, AND-18, IOS-19 | ⏳ not started | Mac |
-| 157 | UX-43 | Timeline picture-tile cache (conditional on QA-04 budget miss) | QA-04 | ⏳ not started | Mac |
-| 158 | QA-05 | Robustness soak | QA-00 | ⏳ not started | Mac |
-| 159 | QA-06 | Auto captions benchmarks, accuracy evaluation and tuning | AI-13, AI-07 | ⏳ not started | Mac |
-| 160 | QA-07 | Auto captions on-device E2E and AI device matrix | QA-06, UX-38, INT-04 | ⏳ not started | Mac |
-| 161 | QA-08 | Accessibility pass (guidelines, VoiceOver, TalkBack) | UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, UX-44 | ⏳ not started | Mac |
-| 162 | QA-09 | No-overflow matrix suite (full nightly, PR subset) | UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, UX-44 | ⏳ not started | Mac |
-| 163 | QA-10 | Persistence, crash recovery and media-access survival on device | INT-04, IOS-15, AND-14, CORE-26, CORE-28 | ⏳ not started | Mac |
-| 164 | INT-05 | [INTEGRATION] Release 1.1.0: flags, version, release pipelines, store metadata, docs | QA-01, QA-02, QA-03, QA-04, QA-05, QA-07, QA-08, QA-09, QA-10, CORE-35, UX-43, INT-03, INT-04, QA-11 | ⏳ not started | Mac |
+| 152 | CORE-35 | Core benchmarks, large-project fixture, README | CORE-26, CORE-32, CORE-34, CORE-33 | ⏳ not started | Mac |
+| 153 | QA-00 | Shared on-device E2E suite (integration_test/editor) | INT-04, ENG-05, UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, IOS-13, IOS-14, IOS-15, IOS-16, AND-12, AND-13, AND-14, AND-15 | ⏳ not started | Mac |
+| 154 | QA-01 | Run and certify the E2E suite on the iOS Simulator | QA-00, INT-03 | ⏳ not started | Mac |
+| 155 | QA-02 | Run and certify the E2E suite on an Android Emulator | QA-00 | ⏳ not started | Mac |
+| 156 | QA-03 | Frame accuracy, grid-cut, A/V sync and render parity suite | IOS-11, AND-10, IOS-12, AND-11, API-03, ENG-05 | ⏳ not started | Mac |
+| 157 | QA-11 | Export conformance, preset matrix and audio measurement suite | IOS-13, AND-12, IOS-18, API-03, ENG-05, IOS-20, AND-19, CORE-38 | ⏳ not started | Mac |
+| 158 | QA-04 | Performance and memory budgets (profile mode, device lab) | INT-04, CORE-35, UX-44, AND-18, IOS-19 | ⏳ not started | Mac |
+| 159 | UX-43 | Timeline picture-tile cache (conditional on QA-04 budget miss) | QA-04 | ⏳ not started | Mac |
+| 160 | QA-05 | Robustness soak | QA-00 | ⏳ not started | Mac |
+| 161 | QA-06 | Auto captions benchmarks, accuracy evaluation and tuning | AI-13, AI-07 | ⏳ not started | Mac |
+| 162 | QA-07 | Auto captions on-device E2E and AI device matrix | QA-06, UX-38, INT-04 | ⏳ not started | Mac |
+| 163 | QA-08 | Accessibility pass (guidelines, VoiceOver, TalkBack) | UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, UX-44 | ⏳ not started | Mac |
+| 164 | QA-09 | No-overflow matrix suite (full nightly, PR subset) | UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, UX-44 | ⏳ not started | Mac |
+| 165 | QA-10 | Persistence, crash recovery and media-access survival on device | INT-04, IOS-15, AND-14, CORE-26, CORE-28 | ⏳ not started | Mac |
+| 166 | INT-05 | [INTEGRATION] Release 1.1.0: flags, version, release pipelines, store metadata, docs | QA-01, QA-02, QA-03, QA-04, QA-05, QA-07, QA-08, QA-09, QA-10, CORE-35, UX-43, INT-03, INT-04, QA-11 | ⏳ not started | Mac |
 
 ## Notes from finished tickets
 

@@ -86,11 +86,12 @@ Commands are in §9.
 | 16 | AND-15 | Android external drop target | M4 | ENG-03 MAC (pending) | ENG-03 merged | and-m4-services | EMU, plus a manual check on the tablet AVD |
 | 17 | AND-11 | Android export: coordinator, Transformer, encoder settings, hardware selector, active store | M4 | AND-09, AND-08, AND-10 WINDOWS; ENG-04 MAC (pending) | AND-10 committed **and** ENG-04 merged | and-m4-export | JVM, EMU |
 | 18 | AND-12 | Android export foreground service, notification, background guard, MediaStore, file handoff | M5 | AND-11 WINDOWS | AND-11 committed | and-m5 | EMU on API 29, 34 and 35 (UiAutomator) |
-| 19 | AND-18 | Android render-preview renderer and playback swap-in | M4 | AND-16, AND-10 WINDOWS | AND-16 committed (its gates cover the rest). The Pigeon/glue additions it is called through are a Mac [INTEGRATION] amendment (ARCH D-45): until they land, build behind its own interfaces and report the wiring in forMac | and-m4-rpreview | JVM, EMU |
+| 19 | AND-18 | Android render-preview renderer and playback swap-in | M4 | AND-16, AND-10 WINDOWS; INT-06 MAC (pending) | AND-16 committed **and** INT-06 merged. INT-06 is the Mac [INTEGRATION] ticket that adds the Pigeon/glue calls AND-18 is reached through (`renderPreview` job kind, `setRenderedRanges`, power signal; ARCH D-45, §12.6) and leaves `// OWNER: AND-18` placeholders in `preview/render/` | and-m4-rpreview | JVM, EMU |
 | 20 | AND-19 | Android multi-pass export precompose | M4 | AND-11 WINDOWS | AND-11 committed | and-m4-precomp | JVM, EMU |
 
 How groups map to builder agents:
 - The Group column is the group id in `android_lane_workflow.js` (pass it in the workflow's `only` argument to run one group). Each group is one builder agent and runs its tickets in the order listed.
+- and-m4-rpreview (AND-18) also waits for INT-06 (Mac): the engine interface additions for render preview.
 - and-m4-services needs only ENG-06 and ENG-03. Run it whenever ENG-03 arrives, even before the M3 groups.
 - Everything from AND-02 on waits for ENG-06. ENG-06 in turn waits for ENG-08 (Windows), ENG-07, IOS-01 and AND-01 (all Mac). ENG-08 is therefore the lane's most urgent ticket.
 
@@ -560,7 +561,7 @@ packages/vwish_editor_engine/android/src/test/kotlin/com/vecvel/vwish/editor/eng
 packages/vwish_editor_engine/android/src/androidTest/kotlin/com/vecvel/vwish/editor/engine/render/
 ```
 
-**§7 files:** none. It is called through `JobKindMsg.renderPreview` and `PreviewHostApi.setRenderedRanges`, which a Mac [INTEGRATION] amendment adds to the frozen Pigeon surface and glue (ARCH D-45). Never edit Pigeon or glue files; if the amendment is not in the tree, build behind your own interfaces and report the wiring in forMac. Never edit AND-16's, AND-10's or AND-11's files: plug into AND-16's `RenderedRangeHook`.
+**§7 files:** none. It is called through `JobKindMsg.renderPreview`, `PreviewHostApi.setRenderedRanges` and the power signal (`powerState`), which the Mac's INT-06 ([INTEGRATION]) adds to the frozen Pigeon surface and glue (ARCH D-45, §12.6); AND-18 depends on INT-06 and starts only after it is merged. INT-06 leaves `notSupportedOnDevice` placeholders headed `// OWNER: AND-18` in `preview/render/` (the render-preview job service, the rendered-range handler and the power signal); replace them, keeping their names and signatures. Never edit Pigeon or glue files; a signature mismatch is a defect report against INT-06. Never edit AND-16's, AND-10's or AND-11's files: plug into AND-16's `RenderedRangeHook`.
 
 **Design:** ARCH D-45 and §13.3 'Over-budget layers and the render-preview cache'.
 - `RenderPreviewJob` (AND-05's job registry): a `Transformer` export of the range plan through AND-08's mapper at the preview canvas size and project fps into `<cache>/vwish/editor/renders/`, H.264 all-intra or ≤ 0.5 s GOP, video only; cancel deletes the partial file; thermal `SEVERE` pauses; never runs during an export.
@@ -615,7 +616,7 @@ Nothing else can start until ENG-06. Do not start AND tickets against the unfroz
 | Path | Who edits, in order | Rule for Windows |
 |---|---|---|
 | `packages/vwish_editor_engine/android/build.gradle.kts`, `android/lint.xml` | ENG-01 → **ENG-08 (Windows)** → ENG-06 (Mac), then frozen | Edit only in ENG-08. After that, every dependency, NDK, CMake or test-dependency need goes to the owner as a request for the Mac. |
-| `android/src/main/AndroidManifest.xml`, `.../engine/VwishEditorEnginePlugin.kt`, `.../engine/glue/` | ENG-01 → **ENG-08** → ENG-06 (glue amendments), then frozen → D-45 amendment (Mac lead, [INTEGRATION]: `renderPreview` job kind, `setRenderedRanges`, `powerState`) | Edit only in ENG-08. Service tickets implement the classes the glue already calls. A signature mismatch is a defect report, not an edit. |
+| `android/src/main/AndroidManifest.xml`, `.../engine/VwishEditorEnginePlugin.kt`, `.../engine/glue/` | ENG-01 → **ENG-08** → ENG-06 (glue amendments), then frozen → INT-06 (Mac, [INTEGRATION]: `renderPreview` job kind, `setRenderedRanges`, `powerState`) | Edit only in ENG-08. Service tickets implement the classes the glue already calls. A signature mismatch is a defect report, not an edit. |
 | `pigeons/`, `lib/src/pigeon/`, `lib/src/mobile_editor_engine.dart`, `android/.../engine/pigeon/` | ENG-01 → ENG-06 (Mac only) | Read-only. Never regenerate. |
 | `ENG-08` placeholders (`// OWNER: AND-xx`) | ENG-08 creates them → ENG-06 may update them with Pigeon amendments → the AND ticket replaces them | Merge `origin/editor-wip` after ENG-06 before starting any AND ticket. |
 | `packages/vwish_editor_core/test/fixtures/vectors/frame_grid.json` | CORE-02 → ENG-06 (`androidSeekMsRounding` only) | Read-only (AND-08 and AND-10 read it). |
@@ -664,7 +665,7 @@ git cat-file -e origin/editor-wip:packages/vwish_whisper/src/vw_whisper.cpp && e
 git cat-file -e origin/editor-wip:packages/vwish_editor_engine/example/android/vwish_test_harness.gradle && echo "ENG-09 present (ENG-08 can start)"
 git show origin/editor-wip:packages/vwish_editor_core/test/fixtures/vectors/frame_grid.json | grep androidSeekMsRounding
 #   null before ENG-06, "floor" after. Also wait for the owner's word.
-#   ENG-02, ENG-03, ENG-04: the owner's word.
+#   ENG-02, ENG-03, ENG-04, INT-06: the owner's word.
 
 # Receive gates
 git switch editor-android && git merge --no-edit origin/editor-wip

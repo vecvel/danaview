@@ -46,7 +46,8 @@ export const meta = {
  *   landed       Ticket ids merged into this working tree from editor-wip, plus owner tokens.
  *                ENG-09, API-04 and AI-03 are done and always counted. Gates still to come:
  *                ENG-06 (every AND group), ENG-02 (and-m3-preview), ENG-03 (and-m4-services) and
- *                ENG-04 (and-m4-export). and-m3-fallback (AND-16) also needs one token, added only
+ *                ENG-04 (and-m4-export), INT-06 (and-m4-rpreview: the render-preview engine
+ *                interface additions, ARCH D-45). and-m3-fallback (AND-16) also needs one token, added only
  *                on the lead's word: AND16-SHIM (ENG-06 assigned android/src/main/cpp/ and added the
  *                externalNativeBuild block). The owner signed D-43(e) on 2026-10-11 (ARCH D-43, D-45),
  *                so there is no D-43E gate any more.
@@ -77,7 +78,7 @@ export const meta = {
  *   and-m4-services AND-13, AND-14, AND-15           eng08                                 ENG-06, ENG-03
  *   and-m4-export   AND-11                           and-m3-render, and-m3-text,           ENG-04
  *                                                    and-m3-preview
- *   and-m4-rpreview AND-18                           and-m3-fallback                       (ENG-06, AND16-SHIM)
+ *   and-m4-rpreview AND-18                           and-m3-fallback                       INT-06 (ENG-06, AND16-SHIM)
  *   and-m4-precomp  AND-19                           and-m4-export                         (ENG-04)
  *   and-m5          AND-12                           and-m4-export                         (ENG-04)
  *   A gate in parentheses comes from a Windows dependency. Cross-machine order: ENG-08 (here) must
@@ -348,8 +349,8 @@ Port from spikes/android_engine (ContingencyEngineProto.kt, ContingencyEngineTes
     note: `Transformer export (AND-01: GO). ENG-04's mobile_export.dart (Mac) is the Dart side. Build export compositions with AND-08's mapper (target export) and AND-09's SpriteBandEffect. Define the ActiveExportStore format here; AND-12's service writes its detached records later (D-39). Test on the emulator: V-N13 (hvc1 tag) and V-N24 (no-audio, all-muted and images/text-only fixtures get a silent AAC 48 kHz stereo track). Record which encoder actually ran; the emulator may only have software HEVC, so defer the real-hardware preference. Test the selector with injected codec lists, including that a software or fallback encoder raises the preflight/progress warning. Exercise the portrait retry path with an injected refusal. Check 'interrupted after process death' with am kill or force-stop from an instrumented test. Preview suspension on minimal/low/mid tiers goes through AND-10's PreviewSessionManager. Owner decision 2026-10-11 (ARCH D-45, BUILD_PLAN AND-11 amended): preflight never refuses for sequence or layer counts; when the packed export plan needs more decoders than the device allows, ExportCoordinator hands the job to a MultiPassExport hook (interface in AND-11's coordinator, implemented later by AND-19) instead of failing; test it with a test double.`,
   },
   {
-    id: 'and-m4-rpreview', tickets: ['AND-18'], deps: ['and-m3-fallback'], external: [], model: 'opus',
-    note: `Render-preview renderer and playback swap-in (owner decision 2026-10-11, ARCH D-45, §13.3 'Over-budget layers and the render-preview cache'; BUILD_PLAN AND-18). RenderPreviewJob registered with AND-05's job registry: a Transformer export of a range plan through AND-08's mapper (target export at the preview canvas size and project fps, same effects, gating and working space) into <cache>/vwish/editor/renders/, H.264 all-intra (I-frame interval 0) or <= 0.5 s, video only, hardware encoder first; progress, cancel deletes the partial file, thermal SEVERE pauses, never runs during an export. RenderedRangeSwap implements AND-16's RenderedRangeHook: during playback one deck plays the cached file in place of every slot of the range, pre-rolled like a standby deck and switched at the range's exact frame boundaries under the hold/miss rule; paused, scrub and exact seek keep the normal decks; a patch touching a range drops it until the next setRenderedRanges. The Pigeon/glue additions (JobKindMsg.renderPreview, PreviewHostApi.setRenderedRanges) are a Mac-side [INTEGRATION] amendment: if they are not in the tree, build and test behind your own interfaces in preview/render/, never edit glue or Pigeon files, and put 'wire renderPreview/setRenderedRanges glue (D-45 amendment)' in forMac. Never edit AND-16's, AND-10's or AND-11's files. Tests in src/test/.../render/ and src/androidTest/.../render/: rendered range vs live (barcode exact, SSIM >= 0.99), 0 wrong frames across range boundaries at 24/30/60 fps, param patch inside a range falls back to live on the next frame, cancel and process death leave no partial file. Emulator numbers recorded; device numbers deferred: no device available.`,
+    id: 'and-m4-rpreview', tickets: ['AND-18'], deps: ['and-m3-fallback'], external: ['INT-06'], model: 'opus',
+    note: `Render-preview renderer and playback swap-in (owner decision 2026-10-11, ARCH D-45, §13.3 'Over-budget layers and the render-preview cache'; BUILD_PLAN AND-18). RenderPreviewJob registered with AND-05's job registry: a Transformer export of a range plan through AND-08's mapper (target export at the preview canvas size and project fps, same effects, gating and working space) into <cache>/vwish/editor/renders/, H.264 all-intra (I-frame interval 0) or <= 0.5 s, video only, hardware encoder first; progress, cancel deletes the partial file, thermal SEVERE pauses, never runs during an export. RenderedRangeSwap implements AND-16's RenderedRangeHook: during playback one deck plays the cached file in place of every slot of the range, pre-rolled like a standby deck and switched at the range's exact frame boundaries under the hold/miss rule; paused, scrub and exact seek keep the normal decks; a patch touching a range drops it until the next setRenderedRanges. The Pigeon/glue additions (JobKindMsg.renderPreview, PreviewHostApi.setRenderedRanges, the powerState signal) come from the Mac's INT-06 ([INTEGRATION], ARCH D-45, §12.6), which this group waits for: INT-06 leaves notSupportedOnDevice placeholders headed // OWNER: AND-18 in preview/render/ (render-preview job service, rendered-range handler, power signal); replace them keeping their names and signatures, never edit glue or Pigeon files, and report a signature mismatch in forMac as an INT-06 defect. Never edit AND-16's, AND-10's or AND-11's files. Tests in src/test/.../render/ and src/androidTest/.../render/: rendered range vs live (barcode exact, SSIM >= 0.99), 0 wrong frames across range boundaries at 24/30/60 fps, param patch inside a range falls back to live on the next frame, cancel and process death leave no partial file. Emulator numbers recorded; device numbers deferred: no device available.`,
   },
   {
     id: 'and-m4-precomp', tickets: ['AND-19'], deps: ['and-m4-export'], external: [], model: 'opus',
@@ -404,7 +405,7 @@ for (const g of GROUPS) {
 if (ONLY) {
   for (const id of ONLY) if (!byId[id]) log(`ignoring unknown group '${id}' in args.only`)
 }
-for (const t of ['ENG-02', 'ENG-03', 'ENG-04', 'AND16-SHIM']) {
+for (const t of ['ENG-02', 'ENG-03', 'ENG-04', 'INT-06', 'AND16-SHIM']) {
   if (LANDED.has(t) && !LANDED.has('ENG-06')) log(`warning: args.landed has ${t} but not ENG-06, which ${t} depends on; check args.landed`)
 }
 
