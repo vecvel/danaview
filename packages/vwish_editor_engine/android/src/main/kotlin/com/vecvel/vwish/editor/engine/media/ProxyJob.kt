@@ -11,6 +11,16 @@
 // - audio: AAC 128 kb/s (no audio track when the source has none);
 // - timing: the same presentation timestamps as the source. Transformer keeps every input frame
 //   and its timestamp (no frame-rate change, no trim), so VFR sources stay VFR.
+//   KNOWN LIMITATION (open investigation, not yet accepted as a decoder defect): "proxy PTS equal
+//   to the source" is verified only with SOFTWARE decoders first (the platform software H.264 on the
+//   API 35 emulator). With the decoders production picks (no override), the proxy loses source
+//   frames of the ENG-05 B-pyramid fixtures: frame 1 of vfr_720p.mp4 on the API 35 emulator, and
+//   frames 1-5 on the API 29 emulator with both OMX decoders, including OMX.google.h264.decoder,
+//   the software decoder real API 29 phones ship too. Every delivered frame keeps its source
+//   timestamp. To be compared against Media3 1.11.1's B-pyramid handling with and without
+//   clipping and decode-only flags; frame-exactness of the production decoder path on a real API
+//   29 device and on a mid-tier device is deferred (QA-04). If it reproduces on hardware, prefer
+//   software decoders or add a frame-count check after the transcode as a production fallback.
 // - output: written to `work/proxy-<jobId>.mp4.part` (protected from the launch wipe while it
 //   runs), then renamed into `proxies/<quickHash>-540.mp4`; ProxyRegistry then enforces the
 //   proxies/ cap with the new file kept.

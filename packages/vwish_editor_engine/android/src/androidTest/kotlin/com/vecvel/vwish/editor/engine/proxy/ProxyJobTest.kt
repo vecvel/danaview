@@ -13,7 +13,12 @@
 //   nothing left behind (the x86_64 emulator has no HEVC Main10 decoder: HDR -> SDR itself is
 //   deferred to a device, AND-01 V-N5).
 // The PTS tests use software decoders first (ProxyTestSupport: the emulator's goldfish H.264 decoder
-// drops a B-frame); defaultDecodersKeepTimestamps runs the production decoder choice. Timings are
+// drops a B-frame), so the criterion "proxy PTS equal on the VFR fixture" is met ONLY with software
+// decoders on the API 35 emulator. defaultDecodersKeepTimestamps runs the production decoder choice:
+// it checks that no delivered frame changes its timestamp and bounds the loss measured on API 35
+// (frame 1); it is not evidence of frame-exactness. On the API 29 emulator the production path
+// loses frames 1-5 (both OMX decoders), so that bound fails there: see ProxyJob.kt "KNOWN
+// LIMITATION" (deferred to a real API 29 device and a mid-tier device, QA-04). Timings are
 // emulator numbers.
 
 package com.vecvel.vwish.editor.engine.proxy
@@ -268,8 +273,10 @@ class ProxyJobTest {
 
     @Test
     fun defaultDecodersKeepTimestamps() {
-        // Production decoder choice (Media3 default). On the emulator the goldfish H.264 decoder may
-        // lose a B-frame (see ProxyTestSupport); whatever it delivers keeps the source timestamps.
+        // Production decoder choice (Media3 default). On the API 35 emulator it loses source frame 1
+        // of vfr_720p.mp4 (ProxyJob.kt KNOWN LIMITATION, an open investigation); whatever it
+        // delivers keeps the source timestamps. The loss bound below is the API 35 measurement, a
+        // regression guard, not the AND-05 criterion (that one is met with software decoders only).
         val hook = ctx.proxyJob.assetLoaderFactory
         ctx.proxyJob.assetLoaderFactory = null
         try {

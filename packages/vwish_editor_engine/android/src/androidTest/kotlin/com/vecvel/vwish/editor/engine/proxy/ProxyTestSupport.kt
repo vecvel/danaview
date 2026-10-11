@@ -6,7 +6,9 @@
 // proxy made through it has one frame fewer than the source (measured on Pixel_9_Pro_XL_API_35,
 // 2026-10-11; AND-08 recorded the same defect). The PTS tests therefore run the proxy Transformer
 // with software decoders first; `ProxyJobTest.defaultDecodersKeepTimestamps` shows that the
-// production default still never changes a timestamp.
+// production default still never changes a timestamp. The production decoder path is NOT shown to
+// be frame-exact (API 29 emulator: frames 1-5 lost with both OMX decoders, including the software
+// OMX.google.h264.decoder); see ProxyJob.kt "KNOWN LIMITATION".
 
 package com.vecvel.vwish.editor.engine.proxy
 

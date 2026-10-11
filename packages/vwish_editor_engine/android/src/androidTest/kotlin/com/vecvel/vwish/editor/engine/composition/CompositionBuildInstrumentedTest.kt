@@ -194,6 +194,22 @@ class CompositionBuildInstrumentedTest {
     }
 
     @Test
+    fun audioItemsCarryTheirStreamTag() {
+        // effects_every_static_key.json plays audio stream 1: its AUDIO item is tagged for
+        // AudioStreamAssetLoaderFactory and the build reports that it selects streams.
+        val plan = plans().getValue("effects_every_static_key.json")
+        assertTrue(plan.audio.any { it.stream == 1 })
+        val result = build(plan)
+        assertTrue(result.selectsAudioStreams)
+        val tagged = result.spec.audioSequences.zip(result.composition.sequences.takeLast(result.spec.audioSequences.size))
+            .flatMap { (s, m3) -> s.items.zip(m3.editedMediaItems).filter { it.first.kind == ItemKind.AUDIO } }
+        assertTrue(tagged.isNotEmpty())
+        for ((item, edited) in tagged) assertEquals(item.segmentId, item.stream, edited.mediaItem.audioStream())
+        val plain = plans().getValue("grid_cuts_30fps.json")
+        assertFalse(build(plain).selectsAudioStreams)
+    }
+
+    @Test
     fun emptyAndHoldPlansAreRefusedForExport() {
         val all = plans()
         for (name in listOf("empty_plan.json", "hold_pending_still.json")) {

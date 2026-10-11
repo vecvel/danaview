@@ -10,6 +10,8 @@
 // stereo (mono duplicated, 3–8 channels ITU −3 dB with LFE dropped, the API-03 reference matrix).
 // HDR sources are tone-mapped (`setHdrMode`; the caller picks OpenGL where the device has
 // GL_EXT_YUV_target and a 10-bit decoder, else MediaCodec or proxies, AND-02 / AND-01 V-N5).
+// AUDIO items of audio stream n > 0 carry an AudioStreamTag; the exporter installs
+// AudioStreamAssetLoaderFactory when `Built.selectsAudioStreams` (AudioStreamSelection.kt).
 
 package com.vecvel.vwish.editor.engine.composition
 
@@ -49,7 +51,13 @@ object Media3Composition {
     )
 
     /** The built composition and the gating settings it uses. */
-    class Built(val composition: Composition, val compositorSettings: LayerGatingCompositorSettings, val spec: CompositionSpec)
+    class Built(val composition: Composition, val compositorSettings: LayerGatingCompositorSettings, val spec: CompositionSpec) {
+        /**
+         * Some AUDIO item plays an audio stream other than 0: the exporter must install
+         * [AudioStreamAssetLoaderFactory] (AudioStreamSelection.kt), or stream 0 would be exported.
+         */
+        val selectsAudioStreams: Boolean get() = spec.audioSequences.any { s -> s.items.any { it.kind == ItemKind.AUDIO && it.stream != 0 } }
+    }
 
     /** Output sample rate of the composition audio (ARCH §11.6 Audio). */
     const val OUTPUT_SAMPLE_RATE = 48_000
@@ -211,6 +219,7 @@ object Media3Composition {
             }
             ItemKind.AUDIO -> {
                 val sourceDuration = item.sourceDurationUs ?: throw EngineErrors.invalidPlan("audio duration unknown")
+                if (item.stream < 0) throw EngineErrors.invalidPlan("negative audio stream")
                 val mediaItem = MediaItem.Builder()
                     .setUri(requireNotNull(item.uri).toUri())
                     .setClippingConfiguration(
@@ -219,6 +228,8 @@ object Media3Composition {
                             .setEndPositionUs(item.clipEndUs)
                             .build(),
                     )
+                    // Stream n > 0 is selected by AudioStreamAssetLoaderFactory (AudioStreamSelection.kt).
+                    .apply { if (item.stream != 0) setTag(AudioStreamTag(item.stream)) }
                     .build()
                 val processors = ArrayList<AudioProcessor>()
                 item.gain?.let { processors += GainProcessor(KeyframedGainProvider.forItem(it, item.startUs)) }

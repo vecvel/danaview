@@ -16,9 +16,17 @@
 //   with a gain step at 1.25 s (timeline) is quiet before the step and loud after it, which pins
 //   GainProcessor's sample positions to the item start after the speed change
 //   (KeyframedGainProvider.originForItem).
+// - Audio stream (ARCH §11.2 AudioSeg.stream): a two-audio-track MP4 muxed on the device from two
+//   ENG-05 fixtures (track 0: tone_under_video.mp4's 1 kHz AAC; track 1: sample_h264_aac.mkv's
+//   440 Hz AAC; MediaMuxer stream copy, no re-encode) exports the tone of the stream the segment
+//   names, through AudioStreamAssetLoaderFactory with the production decoder factory.
 
 package com.vecvel.vwish.editor.engine.composition
 
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.C
@@ -55,6 +63,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import kotlin.math.log10
@@ -206,6 +215,85 @@ class CompositionExportTest {
         assertTrue("silence before the item", silence < 0.003)
         assertEquals("gain 0.25 before the step (−12.04 dB)", db(toneRms * 0.25), db(quiet), 1.5)
         assertEquals("gain 1 after the step", db(toneRms), db(loud), 1.5)
+    }
+
+    /**
+     * An audio-only MP4 with two AAC tracks, stream-copied from two fixtures: track 0 = the 1 kHz
+     * tone of tone_under_video.mp4, track 1 = the 440 Hz tone of sample_h264_aac.mkv.
+     */
+    private fun twoStreamFile(): File {
+        val out = File(outDir, "two_streams.mp4")
+        out.parentFile?.mkdirs()
+        val muxer = MediaMuxer(out.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        val sources = listOf("tone_under_video.mp4", "sample_h264_aac.mkv").map { name ->
+            MediaExtractor().apply {
+                setDataSource(TestFixtures.copyToCache(FixtureTree.ENGINE, "media/$name").absolutePath)
+                val track = (0 until trackCount).first { getTrackFormat(it).getString(MediaFormat.KEY_MIME) == MimeTypes.AUDIO_AAC }
+                selectTrack(track)
+            }
+        }
+        try {
+            val tracks = sources.map { muxer.addTrack(it.getTrackFormat((0 until it.trackCount).first { t -> it.getTrackFormat(t).getString(MediaFormat.KEY_MIME) == MimeTypes.AUDIO_AAC })) }
+            muxer.start()
+            val buffer = ByteBuffer.allocate(1 shl 20)
+            val info = MediaCodec.BufferInfo()
+            for ((source, track) in sources.zip(tracks)) {
+                while (true) {
+                    val size = source.readSampleData(buffer, 0)
+                    if (size < 0) break
+                    info.set(0, size, source.sampleTime, if (source.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+                    muxer.writeSampleData(track, buffer, info)
+                    source.advance()
+                }
+            }
+            muxer.stop()
+        } finally {
+            muxer.release()
+            sources.forEach { it.release() }
+        }
+        return out
+    }
+
+    /** Zero-crossing frequency of channel 0 of [pcm] over [fromUs, toUs). */
+    private fun toneHz(pcm: OutputReader.Pcm, fromUs: Long, toUs: Long): Double {
+        val a = ((fromUs - pcm.firstPtsUs) * pcm.sampleRate / 1_000_000L).toInt().coerceAtLeast(0)
+        val b = ((toUs - pcm.firstPtsUs) * pcm.sampleRate / 1_000_000L).toInt().coerceAtMost(pcm.samples.size / pcm.channels)
+        var crossings = 0
+        for (i in a + 1 until b) {
+            val prev = pcm.samples[(i - 1) * pcm.channels]
+            val cur = pcm.samples[i * pcm.channels]
+            if ((prev < 0f) != (cur < 0f)) crossings++
+        }
+        return crossings / 2.0 / ((b - a).toDouble() / pcm.sampleRate)
+    }
+
+    @Test
+    fun audioSegmentExportsTheStreamItNames() {
+        val file = twoStreamFile()
+        val g = FrameGrid.of(30)
+        val t1 = g.timeOfFrame(60) // 2 s
+        fun exportStream(stream: Int): Double {
+            val plan = RenderPlan(
+                rev = 1, target = PlanTarget.EXPORT, canvas = PlanCanvas(1280, 720, 30), durUs = t1,
+                assets = mapOf("md_two" to PlanAsset(PlanAssetKind.AUDIO, "file://" + file.absolutePath, fp = "two")),
+                layers = emptyList(),
+                audio = listOf(
+                    AudioSeg(id = "it_two#a", asset = "md_two", stream = stream, t0 = 0, t1 = t1, map = listOf(MapSegment(0, t1, 0, t1)), gain = Keyframes.of(0L to 1.0)),
+                ),
+            )
+            assertEquals(emptyList<Any>(), PlanValidator.validate(plan))
+            val spec = ExtractorSourceTimeline(ctx).use { CompositionMapper(it).map(plan) }
+            val built = Media3Composition.build(spec, images, EffectChainFactory.NONE, AtomicReference(ParamSnapshot.of(plan)))
+            assertEquals(stream != 0, built.selectsAudioStreams)
+            val out = File(outDir, "stream_$stream.mp4")
+            ExportRunner.exportWith(built.composition, out) { it.setAssetLoaderFactory(AudioStreamAssetLoaderFactory(ctx)) }
+            val pcm = requireNotNull(OutputReader.decodeAudio(out)) { "no audio track" }
+            val hz = toneHz(pcm, 300_000, 1_700_000)
+            Log.i(TAG, "audio stream $stream: ${"%.1f".format(hz)} Hz")
+            return hz
+        }
+        assertEquals("stream 0 is the 1 kHz track", 1000.0, exportStream(0), 25.0)
+        assertEquals("stream 1 is the 440 Hz track", 440.0, exportStream(1), 15.0)
     }
 
     private companion object {

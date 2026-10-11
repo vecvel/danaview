@@ -284,6 +284,7 @@ class ThumbnailServiceTest {
         val z = "vis-${ids.incrementAndGet()}"
         val holdOld = CountDownLatch(1)
         val holdNew = CountDownLatch(1)
+        val holdZ = CountDownLatch(1)
         val oldBlocked = CountDownLatch(1)
         val newBlocked = CountDownLatch(1)
         val dupFrames = AtomicInteger()
@@ -299,7 +300,12 @@ class ThumbnailServiceTest {
                         holdNew.await(30, TimeUnit.SECONDS)
                     }
                 }
-                x, z -> if (index == 0) order.add(requestId)
+                x -> if (index == 0) order.add(requestId)
+                z -> if (index == 0) {
+                    order.add(requestId)
+                    // Holds its worker so only a wrongly started third render could decode next.
+                    holdZ.await(30, TimeUnit.SECONDS)
+                }
             }
         }
         val answers = CountDownLatch(4)
@@ -319,6 +325,7 @@ class ThumbnailServiceTest {
             Thread.sleep(1000)
             assertEquals("only the visible request took the freed worker while the replacement still ran", listOf(z), order.toList())
             holdNew.countDown()
+            holdZ.countDown()
             assertTrue("all four answered", answers.await(60, TimeUnit.SECONDS))
             assertEquals(EngineErrorCode.cancelled, (results["old"]!!.exceptionOrNull() as EngineException).code)
             listOf("new", "x", "z").forEach { assertTrue("$it rendered", results[it]!!.isSuccess) }
@@ -326,6 +333,7 @@ class ThumbnailServiceTest {
         } finally {
             holdOld.countDown()
             holdNew.countDown()
+            holdZ.countDown()
             service.onFrameDecoded = null
         }
     }
