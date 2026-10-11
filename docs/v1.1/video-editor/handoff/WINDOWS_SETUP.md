@@ -152,7 +152,7 @@ git switch -c editor-android                   # if origin/editor-android exists
 git push -u origin editor-android              # the first push opens a GitHub sign-in window; the owner signs in
 ```
 
-- Clone only after the Mac has pushed the hand-off commit. That commit adds `.gitattributes`, `docs/editor/handoff/` and `tool/handoff/`. If `test -f .gitattributes` fails, the clone is too early.
+- Clone only after the Mac has pushed the hand-off commit. That commit adds `.gitattributes`, `docs/v1.1/video-editor/handoff/` and `tool/handoff/`. If `test -f .gitattributes` fails, the clone is too early.
 - Keep the folder `C:\dev\danaview`. Claude's notes folder name comes from this path (A8).
 - If `git status` shows modified files right after cloning, Git converted the line endings. Delete the folder, check the settings, and clone again (P2).
 
@@ -176,7 +176,7 @@ Lane work doesn't need them: without them, release builds of the app use the deb
    ```powershell
    powershell -ExecutionPolicy Bypass -File tool\handoff\install_claude_memory.ps1
    ```
-   The script copies `docs/editor/handoff/claude-memory/*.md` into `%USERPROFILE%\.claude\projects\C--dev-danaview\memory\`. The folder name is the repo path with every character that isn't a letter or digit replaced by `-`. Notes already in that folder are backed up first.
+   The script copies `docs/v1.1/video-editor/handoff/claude-memory/*.md` into `%USERPROFILE%\.claude\projects\C--dev-danaview\memory\`. The folder name is the repo path with every character that isn't a letter or digit replaced by `-`. Notes already in that folder are backed up first.
 3. Start a new Code session in the same folder and paste the first message from README.md.
 
 If Claude reports that it can't find Git Bash, set the user variable `CLAUDE_CODE_GIT_BASH_PATH=C:\Program Files\Git\bin\bash.exe` and restart the app.
@@ -368,7 +368,7 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 
 **P13. This emulator isn't the Mac's, CI's or a phone.**
 - **ABI:** x86_64 here, arm64 on the Mac. AI-04's two arm64 libraries (`armv8-a` and `armv8.2-a+fp16+dotprod`) never load here; the x86_64 library does. Record arm64 runtime-selection checks as "deferred: no device available". (The Mac's arm64 AVD has no free `/data` space until the Mac clears it.)
-- **GPU:** the Windows host GPU here, a Metal translator on the Mac, and SwiftShader in CI (`-gpu swiftshader_indirect` in `editor-ci.yml`). GL extensions and decoders can differ from the target row in `docs/editor/spikes/AND-01.md`. Probe them again instead of copying the Mac's results. If a GL test disagrees with CI, rerun the emulator with `-gpu swiftshader_indirect`.
+- **GPU:** the Windows host GPU here, a Metal translator on the Mac, and SwiftShader in CI (`-gpu swiftshader_indirect` in `editor-ci.yml`). GL extensions and decoders can differ from the target row in `docs/v1.1/video-editor/spikes/AND-01.md`. Probe them again instead of copying the Mac's results. If a GL test disagrees with CI, rerun the emulator with `-gpu swiftshader_indirect`.
 - **Timings:** numbers aren't comparable between machines.
 - **Spike APK:** the spike is arm64-only (`abiFilters += listOf("arm64-v8a")`), so its native code only works here through ARM translation, if at all.
 

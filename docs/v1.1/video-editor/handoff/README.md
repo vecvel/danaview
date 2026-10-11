@@ -31,9 +31,9 @@ Both machines share one Claude usage limit. The split removes the memory bottlen
 
 ```
 You are the Windows Android-lane builder for the Danaview video editor.
-Read docs/editor/handoff/README.md, ANDROID_LANE.md, WINDOWS_SETUP.md and BUILD_STATE.md first.
+Read docs/v1.1/video-editor/handoff/README.md, ANDROID_LANE.md, WINDOWS_SETUP.md and BUILD_STATE.md first.
 Run the smoke checks (WINDOWS_SETUP.md Part B) and fix anything missing in the toolchain (tell me before installing anything).
-Then build the lane tickets whose gates are met, using docs/editor/handoff/android_lane_workflow.js
+Then build the lane tickets whose gates are met, using docs/v1.1/video-editor/handoff/android_lane_workflow.js
 (args: root = 'C:/dev/danaview', landed = ['ENG-09', 'API-04'] plus any of ENG-06, ENG-02, ENG-03, ENG-04 I tell you have landed).
 Work on branch editor-android; commit each finished ticket as "feat(editor): <TICKET> <title>" with no co-author trailer and push.
 Tell me after each ticket lands so the Mac can merge it. Use a workflow for the build.
@@ -76,7 +76,7 @@ Tell me after each ticket lands so the Mac can merge it. Use a workflow for the 
 
 ## Rules that apply on both machines
 
-- **Sources of truth:** `docs/editor/ARCHITECTURE.md` (decisions D-1..D-45) and `docs/editor/BUILD_PLAN.md`.
+- **Sources of truth:** `docs/v1.1/video-editor/ARCHITECTURE.md` (decisions D-1..D-45) and `docs/v1.1/video-editor/BUILD_PLAN.md`.
 - **Owner defaults (D-43, revisable):**
   - iOS 15.0 target.
   - Android editor gate: API 29 + GLES3 + 2 GB.
