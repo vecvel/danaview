@@ -123,14 +123,22 @@ class PickerFlowTest {
         val stamp = System.currentTimeMillis()
         val png = TestFixtures.open(FixtureTree.ENGINE, "media/alpha.png").use { it.readBytes() }
         val mp4 = TestFixtures.open(FixtureTree.ENGINE, "media/frame_counter_720p24.mp4").use { it.readBytes() }
-        insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "dv_pick_$stamp.png", "image/png", "Pictures/DanaviewTest", png)
-        insert(MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "dv_pick_$stamp.mp4", "video/mp4", "Movies/DanaviewTest", mp4)
+        val photoPicker = ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(app)
+        if (photoPicker) {
+            insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "dv_pick_$stamp.png", "image/png", "Pictures/DanaviewTest", png)
+            insert(MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "dv_pick_$stamp.mp4", "video/mp4", "Movies/DanaviewTest", mp4)
+        } else {
+            // DocumentsUI's Recent hides the app's own media: both go to Downloads, one folder.
+            val downloads = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            insert(downloads, "dv_pick_$stamp.png", "image/png", "Download/", png)
+            insert(downloads, "dv_pick_$stamp.mp4", "video/mp4", "Download/", mp4)
+        }
         Thread.sleep(1_000)
 
         val pending = startOnMain<List<PickedMediaMsg>> {
             picker.pick(MediaPickRequestMsg(MediaPickSourceMsg.PHOTOS, listOf(MediaPickKindMsg.VIDEO, MediaPickKindMsg.IMAGE), multiple = true), it)
         }
-        if (ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(app)) {
+        if (photoPicker) {
             selectInPhotoPicker(2)
         } else {
             // Documented fallback (API 29 emulator: no platform picker, no Play backport):
@@ -244,33 +252,33 @@ class PickerFlowTest {
 
     /** Multi-selects [names] in DocumentsUI (long press, tap, Select). */
     private fun selectSeveralInDocumentsUi(names: List<String>) {
+        openDownloadsIfNeeded(names[0])
         val first = SystemUi.waitAny(10_000, SystemUi.byText(java.util.regex.Pattern.quote(names[0])))
-            ?: error("${names[0]} not listed:
-" + SystemUi.dump())
+            ?: error("${names[0]} not listed:\n" + SystemUi.dump())
         first.longClick()
         Thread.sleep(600)
         for (name in names.drop(1)) {
-            (SystemUi.waitAny(5_000, SystemUi.byText(java.util.regex.Pattern.quote(name))) ?: error("$name not listed:
-" + SystemUi.dump())).click()
+            (SystemUi.waitAny(5_000, SystemUi.byText(java.util.regex.Pattern.quote(name))) ?: error("$name not listed:\n" + SystemUi.dump())).click()
             Thread.sleep(400)
         }
         val select = SystemUi.waitAny(5_000, SystemUi.byRes(".*:id/action_menu_select"), SystemUi.byText("(?i)^select$"))
-            ?: error("no Select action:
-" + SystemUi.dump())
+            ?: error("no Select action:\n" + SystemUi.dump())
         select.click()
+    }
+
+    /** Opens the Downloads root in DocumentsUI unless [name] is already listed. */
+    private fun openDownloadsIfNeeded(name: String) {
+        if (SystemUi.waitAny(6_000, SystemUi.byText(java.util.regex.Pattern.quote(name))) != null) return
+        val roots = SystemUi.waitAny(5_000, SystemUi.byDesc("(?i)show roots")) ?: error("no roots button:\n" + SystemUi.dump())
+        roots.click()
+        val downloads = SystemUi.waitAny(5_000, SystemUi.byText("(?i)^downloads?$")) ?: error("no Downloads root:\n" + SystemUi.dump())
+        downloads.click()
     }
 
     /** Opens Downloads in DocumentsUI and picks [name]. */
     private fun selectInDocumentsUi(name: String) {
-        val nameRegex = java.util.regex.Pattern.quote(name)
-        var file = SystemUi.waitAny(8_000, SystemUi.byText(nameRegex))
-        if (file == null) {
-            val roots = SystemUi.waitAny(5_000, SystemUi.byDesc("(?i)show roots")) ?: error("no roots button:\n" + SystemUi.dump())
-            roots.click()
-            val downloads = SystemUi.waitAny(5_000, SystemUi.byText("(?i)^downloads?$")) ?: error("no Downloads root:\n" + SystemUi.dump())
-            downloads.click()
-            file = SystemUi.waitAny(10_000, SystemUi.byText(nameRegex)) ?: error("file not listed:\n" + SystemUi.dump())
-        }
+        openDownloadsIfNeeded(name)
+        val file = SystemUi.waitAny(10_000, SystemUi.byText(java.util.regex.Pattern.quote(name))) ?: error("file not listed:\n" + SystemUi.dump())
         file.click()
     }
 }
