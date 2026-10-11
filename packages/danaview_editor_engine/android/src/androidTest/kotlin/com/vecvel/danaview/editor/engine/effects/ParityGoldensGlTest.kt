@@ -12,8 +12,9 @@
 // frame shown is the greatest PTS ≤ s + 500 µs, ARCH §11.5), images, sprites (premultiplied on load,
 // 16-bit glyph maps) and .vlut tables. Edge pixels: pixels within 1 px of a hard geometric boundary
 // of a drawn layer (its box, an item mask or canvas mask with zero feather): a pixel whose 5 × 5
-// sample grid INCLUDING its four corners is not all on one side of a boundary, dilated by 1 px (a
-// straight boundary crossing a pixel always separates two of its corners); the reference has no
+// sample grid INCLUDING the corners of the half-open pixel square is not all on one side of a
+// boundary, dilated by 1 px (a straight boundary crossing a pixel always separates two of its
+// corners; 4 × 4 interior samples missed a box edge at y = 10.94, api03_detail); the reference has no
 // antialiasing and ours has a 1 px AA edge.
 // Two paths run:
 // - FOOTPRINT: LayerRenderer (AND-17's paused-frame / compositor path), rasters at
@@ -233,8 +234,9 @@ class ParityGoldensGlTest {
                 var first: Int? = null
                 var varies = false
                 for (sy in 0 until n) for (sx in 0 until n) {
-                    val px = x + sx / (n - 1.0)
-                    val py = y + sy / (n - 1.0)
+                    // Half-open pixel [x, x + 1): a boundary on the far pixel edge belongs to the next pixel.
+                    val px = x + min(sx / (n - 1.0), CORNER)
+                    val py = y + min(sy / (n - 1.0), CORNER)
                     val (lx, ly) = inv.apply(px, py)
                     var bits = if (lx >= 0 && lx < place.baseW && ly >= 0 && ly < place.baseH) 1 else 0
                     if (mask != null) {
@@ -293,6 +295,9 @@ class ParityGoldensGlTest {
 
     companion object {
         private const val TAG = "AND09.goldens"
+
+        /** The far corner of a half-open pixel. */
+        private const val CORNER = 1 - 1e-6
         private lateinit var env: GlTestEnv
 
         @BeforeClass

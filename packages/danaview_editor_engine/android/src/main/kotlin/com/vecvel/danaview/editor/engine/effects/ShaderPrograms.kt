@@ -382,6 +382,8 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
             if (key != null) registry.remove(key)
         }
         released = true
+        // A program still current is only flagged for deletion; unbind so it really goes.
+        GLES20.glUseProgram(0)
         for (p in programs.values) GlResources.deleteProgram(p.id)
         programs.clear()
         GlResources.deleteBuffer(quad)

@@ -2,10 +2,11 @@
 //
 // GL object bookkeeping of the effects package (ARCH §13.3 "GL effects": resources are released on
 // effect release). Every texture, framebuffer, buffer and program this package creates goes
-// through [GlResources], which counts the live ones per kind; the GL leak test (androidTest
-// effects/GlLeakTest) checks that the counts return to their baseline after create → draw →
-// release cycles and that released names are no longer GL objects. Textures Media3 owns (effect
-// input/output textures) are never created or deleted here.
+// through [GlResources], which counts the live ones per kind; the GL leak tests (androidTest
+// effects/EffectsLifecycleGlTest; Media3ChainGlTest for the Media3-hosted programs) check that the
+// counts return to their baseline after create → draw → release cycles and that released names are
+// no longer GL objects. Textures Media3 owns (effect input/output textures) are never created or
+// deleted here.
 
 package com.vecvel.danaview.editor.engine.effects
 

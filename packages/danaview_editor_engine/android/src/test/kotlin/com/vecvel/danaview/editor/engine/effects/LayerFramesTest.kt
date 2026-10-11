@@ -155,12 +155,19 @@ class LayerFramesTest {
         val base = PlanSize(1920.0, 1080.0)
         assertEquals(Pair(96, 54), LayerFrames.rasterSize(RasterSizing.FOOTPRINT, base, 1.0, PlanCrop.FULL, 128, 72, g, 4096))
         assertEquals(Pair(48, 27), LayerFrames.rasterSize(RasterSizing.FOOTPRINT, base, -0.5, PlanCrop.FULL, 128, 72, g, 4096))
-        // Max scale 8: round(1920·8·0.05) = 768 but never above the 128 px source crop.
-        assertEquals(Pair(128, 72), LayerFrames.rasterSize(RasterSizing.MAX_SCALE, base, 8.0, PlanCrop.FULL, 128, 72, g, 4096))
-        // A 4K source on a 1080p export is downscaled first: min(3840, 1920·1·1).
+        // Max scale 8: the largest footprint round(1920·8·0.05) = 768, also above a 128 px source
+        // (sharpen runs at render resolution, so the look pass upsamples like the reference).
+        assertEquals(Pair(768, 432), LayerFrames.rasterSize(RasterSizing.MAX_SCALE, base, 8.0, PlanCrop.FULL, 128, 72, g, 4096))
+        // A 4K source on a 1080p export is downscaled first: 1920·1·1 < 3840.
         val full = RenderGeometry(1920, 1080, 1920, 1080)
         assertEquals(Pair(1920, 1080), LayerFrames.rasterSize(RasterSizing.MAX_SCALE, base, 1.0, PlanCrop.FULL, 3840, 2160, full, 4096))
         assertEquals(Pair(3840, 2160), LayerFrames.rasterSize(RasterSizing.MAX_SCALE, base, 2.0, PlanCrop.FULL, 3840, 2160, full, 4096))
+        // 4096 (API-03 maxLayerRasterSide) caps an 8× zoom of a 1080p layer.
+        assertEquals(Pair(4096, 4096), LayerFrames.rasterSize(RasterSizing.MAX_SCALE, base, 8.0, PlanCrop.FULL, 3840, 2160, full, 16384))
+        // Each frame of a Media3 chain draws its own footprint into the top-left of that texture.
+        val p = LayerFrames.place(params(PlanTransform(s = 2.0), base), full, 4096)!!
+        assertEquals(Pair(3840, 2160), LayerFrames.chainRaster(p, 4096, 4096))
+        assertEquals(Pair(3000, 2160), LayerFrames.chainRaster(p, 3000, 4096))
         // maxTextureSize caps every side.
         assertEquals(Pair(2048, 2048), LayerFrames.rasterSize(RasterSizing.MAX_SCALE, PlanSize(4000.0, 4000.0), 1.0, PlanCrop.FULL, 4000, 4000, RenderGeometry(4000, 4000, 4000, 4000), 2048))
         val crop = PlanCrop(0.25, 0.0, 0.75, 0.5)
