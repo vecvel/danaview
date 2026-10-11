@@ -147,8 +147,8 @@ class RenderMathVectorsGlTest {
                                 programs.drawBlur(t.texture, w, h, false, GaussianKernel.of(sigma))
                             }
                         }
-                        "sharpen", "vignette", "mask", "canvasMask", "place" -> {
-                            gotPremultiplied = false
+                        "sharpen", "vignette", "mask" -> {
+                            // The raster pass (dv_place DV_DETAIL) at the 8 × 8 texel centres.
                             var frame = identityPlace(w.toDouble(), h.toDouble(), w, h)
                             when (stage) {
                                 "sharpen" -> frame = frame.copy(sharpenGain = p.getDouble("amount") * 1.5)
@@ -163,21 +163,24 @@ class RenderMathVectorsGlTest {
                                         m.getDouble("cx"), m.getDouble("cy"), m.getDouble("w"), m.getDouble("h"), m.getDouble("r"),
                                         m.getDouble("corner"), m.getDouble("feather"), m.getDouble("op"), m.getBoolean("inv"),
                                     )
-                                    frame = identityPlace(bw, bh, w, h, Affine(bw / w, 0.0, 0.0, bh / h, 0.0, 0.0)).copy(mask = LayerFrames.mask(mask, bw, bh))
+                                    frame = identityPlace(bw, bh, w, h).copy(mask = LayerFrames.mask(mask, bw, bh))
                                 }
-                                "canvasMask" -> {
-                                    val m = p.getJSONObject("cmask")
-                                    val cm = CanvasMask(m.getDouble("cx"), m.getDouble("cy"), m.getDouble("w"), m.getDouble("h"), m.getDouble("r"), m.getDouble("feather"), m.getBoolean("inv"))
-                                    frame = frame.copy(canvasMasks = listOf(LayerFrames.canvasMask(cm)))
-                                }
-                                "place" -> {
-                                    val b = p.getJSONArray("base")
-                                    val mArr = p.getJSONArray("M")
-                                    val m = Affine(mArr.getDouble(0), mArr.getDouble(1), mArr.getDouble(2), mArr.getDouble(3), mArr.getDouble(4), mArr.getDouble(5))
-                                    val bw = b.getDouble(0)
-                                    val bh = b.getDouble(1)
-                                    frame = identityPlace(bw, bh, w, h, m.inverse()!!).copy(opacity = p.getJSONObject("xf").getDouble("op"))
-                                }
+                            }
+                            target.bind()
+                            programs.drawDetail(srcTex(), w, h, w, h, frame, h)
+                        }
+                        "canvasMask", "place" -> {
+                            gotPremultiplied = false
+                            var frame = identityPlace(w.toDouble(), h.toDouble(), w, h)
+                            if (stage == "canvasMask") {
+                                val m = p.getJSONObject("cmask")
+                                val cm = CanvasMask(m.getDouble("cx"), m.getDouble("cy"), m.getDouble("w"), m.getDouble("h"), m.getDouble("r"), m.getDouble("feather"), m.getBoolean("inv"))
+                                frame = frame.copy(canvasMasks = listOf(LayerFrames.canvasMask(cm)))
+                            } else {
+                                val b = p.getJSONArray("base")
+                                val mArr = p.getJSONArray("M")
+                                val m = Affine(mArr.getDouble(0), mArr.getDouble(1), mArr.getDouble(2), mArr.getDouble(3), mArr.getDouble(4), mArr.getDouble(5))
+                                frame = identityPlace(b.getDouble(0), b.getDouble(1), w, h, m.inverse()!!).copy(opacity = p.getJSONObject("xf").getDouble("op"))
                             }
                             target.bind()
                             programs.drawPlace(srcTex(), w, h, frame, w, h, blend = false)

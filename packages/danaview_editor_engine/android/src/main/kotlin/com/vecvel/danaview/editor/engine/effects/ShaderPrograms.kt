@@ -259,9 +259,54 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
     }
 
     /**
+     * dv_look over a premultiplied GL-oriented [texture] ([texW] × [texH], the whole texture):
+     * box-resampled to an [outW] × [outH] raster (≤ 8 × 8 taps per texel) in the top-left of the
+     * bound framebuffer of height [targetHeight]. Used to bring a Media3 raster sized for a larger
+     * animated scale down to the reference raster before the detail and place passes.
+     */
+    fun drawResample(texture: Int, texW: Int, texH: Int, outW: Int, outH: Int, targetHeight: Int) {
+        val sh = program(ShaderSources.Program.LOOK_2D)
+        sh.use()
+        val stepX = texW.toDouble() / outW
+        val stepY = texH.toDouble() / outH
+        val look = LookFrame(outW, outH, 0.0, 0.0, stepX, stepY, LayerFrames.taps(stepX), LayerFrames.taps(stepY), null, null, null, 0.0, false)
+        setLookUniforms(sh, SourceTexture(texture, texW, texH, premultiplied = true), look, null, targetHeight)
+        drawQuad()
+    }
+
+    /**
+     * dv_place with DV_DETAIL: sharpen, vignette and item mask of [place] on the [rasterW] ×
+     * [rasterH] raster in the top-left of [texture] ([texW] × [texH]), at its texel centres, into
+     * the top-left of the bound framebuffer of height [targetHeight] (premultiplied).
+     */
+    fun drawDetail(texture: Int, texW: Int, texH: Int, rasterW: Int, rasterH: Int, place: PlaceFrame, targetHeight: Int) {
+        val sh = program(ShaderSources.Program.DETAIL)
+        sh.use()
+        GLES20.glDisable(GLES20.GL_BLEND)
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
+        sh.sampler("uTex", 0, GLES20.GL_TEXTURE_2D, texture)
+        sh.f2("uTexSize", texW.toFloat(), texH.toFloat())
+        sh.f2("uRasterSize", rasterW.toFloat(), rasterH.toFloat())
+        sh.f2("uOutSize", rasterW.toFloat(), targetHeight.toFloat())
+        sh.f2("uBase", place.baseW.toFloat(), place.baseH.toFloat())
+        sh.f1("uSharpen", place.sharpenGain.toFloat())
+        sh.f2("uVignette", place.vignette.toFloat(), place.aspect.toFloat())
+        val m = place.mask
+        if (m != null) {
+            sh.f4("uMaskA", m.cx.toFloat(), m.cy.toFloat(), m.hx.toFloat(), m.hy.toFloat())
+            sh.f4("uMaskB", m.cos.toFloat(), m.sin.toFloat(), m.radius.toFloat(), m.feather.toFloat())
+            sh.f4("uMaskC", if (m.shape == PlanMaskShape.RECT) 1f else 2f, m.op.toFloat(), if (m.inv) 1f else 0f, 0f)
+        } else {
+            sh.f4("uMaskC", 0f, 1f, 0f, 0f)
+        }
+        drawQuad()
+    }
+
+    /**
      * dv_place of the layer raster [texture] ([texW] × [texH], premultiplied; the raster fills its
      * top-left [rasterW] × [rasterH] px; ignored for solids) into the bound [renderW] × [renderH]
-     * framebuffer; [blend] composites onto it instead of overwriting.
+     * framebuffer, sampled bilinearly; [blend] composites onto it instead of overwriting. Sharpen,
+     * vignette and mask are not applied here ([drawDetail] runs first when [PlaceFrame.needsDetail]).
      */
     fun drawPlace(
         texture: Int,
@@ -279,18 +324,14 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
         setSourceOverBlend(blend)
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
         val solid = place.solid
-        val rw = if (solid != null) 1 else rasterW
-        val rh = if (solid != null) 1 else rasterH
         sh.sampler("uTex", 0, GLES20.GL_TEXTURE_2D, if (solid != null) 0 else texture)
         sh.f2("uTexSize", (if (solid != null) 1 else texW).toFloat(), (if (solid != null) 1 else texH).toFloat())
-        sh.f2("uRasterSize", rw.toFloat(), rh.toFloat())
+        sh.f2("uRasterSize", (if (solid != null) 1 else rasterW).toFloat(), (if (solid != null) 1 else rasterH).toFloat())
         sh.f2("uOutSize", renderW.toFloat(), renderH.toFloat())
         val inv = place.inverse
         sh.f4("uInv", inv.a.toFloat(), inv.b.toFloat(), inv.c.toFloat(), inv.d.toFloat())
         sh.f2("uInvT", inv.tx.toFloat(), inv.ty.toFloat())
         sh.f2("uBase", place.baseW.toFloat(), place.baseH.toFloat())
-        val taps = if (solid != null) 1 else place.placeTaps(rw, rh)
-        sh.f4("uSample", (rw / place.baseW).toFloat(), (rh / place.baseH).toFloat(), taps.toFloat(), 0f)
         sh.f1("uOpacity", place.opacity.toFloat())
         sh.f2("uCanvasPerRender", place.canvasPerRenderX.toFloat(), place.canvasPerRenderY.toFloat())
         val n = place.canvasMasks.size
@@ -311,17 +352,6 @@ class ShaderPrograms private constructor(private val read: (String) -> String, p
             sh.f4("uSolid", solid[0], solid[1], solid[2], solid[3])
         } else {
             sh.f1("uSolidOn", 0f)
-        }
-        sh.f1("uSharpen", if (solid != null) 0f else place.sharpenGain.toFloat())
-        sh.f2("uSharpStep", place.sharpStepX.toFloat(), place.sharpStepY.toFloat())
-        sh.f2("uVignette", if (solid != null) 0f else place.vignette.toFloat(), place.aspect.toFloat())
-        val m = place.mask
-        if (m != null && solid == null) {
-            sh.f4("uMaskA", m.cx.toFloat(), m.cy.toFloat(), m.hx.toFloat(), m.hy.toFloat())
-            sh.f4("uMaskB", m.cos.toFloat(), m.sin.toFloat(), m.radius.toFloat(), m.feather.toFloat())
-            sh.f4("uMaskC", if (m.shape == PlanMaskShape.RECT) 1f else 2f, m.op.toFloat(), if (m.inv) 1f else 0f, 0f)
-        } else {
-            sh.f4("uMaskC", 0f, 1f, 0f, 0f)
         }
         drawQuad()
         if (blend) setSourceOverBlend(false)

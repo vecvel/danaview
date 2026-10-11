@@ -49,8 +49,11 @@ object ShaderSources {
         /** One direction of the separable Gaussian blur. */
         BLUR(ShaderSources.BLUR, emptyList(), false),
 
-        /** Placement of a layer raster or solid onto the canvas. */
+        /** Placement of a layer raster or solid onto the canvas (bilinear, opacity, canvas masks, AA edge). */
         PLACE(ShaderSources.PLACE, emptyList(), false),
+
+        /** Sharpen, vignette and item mask on the layer raster (LayerPlaceEffect's raster pass). */
+        DETAIL(ShaderSources.PLACE, listOf("DV_DETAIL"), false),
 
         /** A sprite resampled onto its layer raster with the reveal map (SpriteBandEffect pass 1). */
         SPRITE_RASTER(LOOK, listOf("DV_REVEAL"), false),

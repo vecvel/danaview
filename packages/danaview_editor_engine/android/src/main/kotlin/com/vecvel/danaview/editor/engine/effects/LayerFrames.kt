@@ -233,24 +233,18 @@ data class PlaceFrame(
     /** Sprite reveal: glyphs shown (`floor(reveal)`), or null when every texel is drawn. */
     val revealShown: Double?,
 ) {
-    /** Local px per reference raster px (the sharpen box step). */
-    val sharpStepX: Double get() = baseW / refRasterW
-    val sharpStepY: Double get() = baseH / refRasterH
-
     /** Edge AA scale: render px per local px (min of both axes). */
     val edgeScale: Double get() = min(pxPerLocalX, pxPerLocalY)
 
+    /** Whether the raster pass (sharpen, vignette, item mask) runs. */
+    val needsDetail: Boolean get() = sharpenGain > 0 || vignette > 0 || mask != null
+
     /**
-     * Footprint taps per axis when a [rasterW] × [rasterH] raster is minified by the placement:
-     * `round(raster px per output px)` in 1..8. A raster at footprint size (ratio ≈ 1, the reference
-     * renderer's case) is sampled once, bilinearly; a raster sized for a larger animated scale
-     * (Media3 `configure`) is averaged over each output pixel.
+     * Whether a [rasterW] × [rasterH] raster is first resampled to the reference raster size: it is
+     * larger than the reference in some axis (a Media3 raster sized for a larger animated scale).
      */
-    fun placeTaps(rasterW: Int, rasterH: Int): Int {
-        val r = max(rasterW / (baseW * pxPerLocalX), rasterH / (baseH * pxPerLocalY))
-        if (!r.isFinite()) return LayerFrames.MAX_TAPS
-        return floor(r + 0.5).toInt().coerceIn(1, LayerFrames.MAX_TAPS)
-    }
+    fun needsResample(rasterW: Int, rasterH: Int): Boolean =
+        (rasterW > refRasterW || rasterH > refRasterH) && (rasterW != refRasterW || rasterH != refRasterH)
 
     override fun equals(other: Any?): Boolean = other is PlaceFrame && other.inverse == inverse && other.baseW == baseW && other.baseH == baseH &&
         other.opacity == opacity && other.canvasMasks == canvasMasks && other.mask == mask && other.solid.contentEquals(solid)

@@ -1,23 +1,35 @@
 // OWNER: AND-09
-// dv_place: LayerPlaceEffect (ARCH 13.3 "GL effects", 11.6 rows sharpen .. canvas mask), also
-// the second pass of SpriteBandEffect. Every pixel of the canvas-render-size output is mapped to
-// base-local px with the inverse of the placement matrix
-// M = T(cx, cy) R(r) S(s (fx ? -1 : 1), s (fy ? -1 : 1)) T(-base / 2) (uInv already includes the
-// render scale); inside the layer box the layer raster is sampled (bilinear, averaged over the
-// pixel footprint when the raster is minified), then sharpen (at render resolution), vignette,
-// item mask, opacity, canvas masks and a 1 px antialiased box edge. Output: STRAIGHT alpha,
-// GL-oriented, transparent outside the layer (the Media3 compositor and LayerCompositorGl blend
-// with glBlendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ONE_MINUS_SRC_ALPHA)).
-// The raster may fill only the top-left uRasterSize px of a larger texture (sprite rasters drawn
-// into a reused target); samples are clamped to it, which equals clamp-to-edge.
+// dv_place: LayerPlaceEffect (ARCH 13.3 "GL effects", 11.6 rows sharpen .. canvas mask), also the
+// placement pass of SpriteBandEffect. Two programs, as the API-03 reference renderer works:
+//
+// DV_DETAIL (raster pass): sharpen, vignette and the item mask on the layer raster at its texel
+//   centres (sharpen = premultiplied RGB + sharpen * 1.5 * (c - box3x3(c)), clamp-to-edge, clamped
+//   to [0, alpha]; vignette over the layer box; mask SDF in base px). Output: premultiplied, into
+//   the top-left uRasterSize px of the bound target of height uOutSize.y.
+// default (place pass): every pixel of the canvas-render-size output is mapped to base-local px
+//   with the inverse of M = T(cx, cy) R(r) S(s (fx ? -1 : 1), s (fy ? -1 : 1)) T(-base / 2) (uInv
+//   already includes the render scale); inside the layer box the raster is sampled bilinearly, then
+//   opacity, canvas masks and a 1 px antialiased box edge. Output: STRAIGHT alpha, GL-oriented,
+//   transparent outside the layer (the Media3 compositor and LayerCompositorGl blend with
+//   glBlendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ONE_MINUS_SRC_ALPHA)).
+// The raster may fill only the top-left uRasterSize px of a larger texture (scratch targets reused
+// across frames); reads are clamped to it, which equals clamp-to-edge.
+// No early returns and no dynamically indexed uniform arrays: the emulator's GLSL translator
+// (SwiftShader, Pixel_9_Pro_XL_API_35) dropped pixels with either (measured 2026-10-11).
 uniform sampler2D uTex;        // layer raster (premultiplied)
 uniform vec2 uTexSize;         // texture size in px
 uniform vec2 uRasterSize;      // raster size in px (top-left part of the texture)
-uniform vec2 uOutSize;         // render size in px
+uniform vec2 uOutSize;         // place: render size; detail: target size
+uniform vec2 uBase;            // layer box in base-local px
+#ifdef DV_DETAIL
+uniform float uSharpen;        // sharpen * 1.5
+uniform vec2 uVignette;        // amount, aspect = base.w / base.h
+uniform vec4 uMaskA;           // centre, half size (base px)
+uniform vec4 uMaskB;           // cos, sin (unrotate), corner radius, feather f
+uniform vec4 uMaskC;           // shape (0 none, 1 rect, 2 ellipse), opacity, inverted, unused
+#else
 uniform vec4 uInv;             // local.x = x*X + z*Y + uInvT.x, local.y = y*X + w*Y + uInvT.y
 uniform vec2 uInvT;
-uniform vec2 uBase;            // layer box in base-local px
-uniform vec4 uSample;          // raster px per local px (x, y), footprint taps, unused
 uniform float uOpacity;
 uniform vec2 uCanvasPerRender; // canvas px per render px
 uniform vec4 uCm[8];           // canvas masks: centre (canvas px), half size
@@ -26,40 +38,13 @@ uniform float uCmCount;
 uniform vec2 uAa;              // antialiased edge on, render px per local px
 uniform float uSolidOn;
 uniform vec4 uSolid;           // premultiplied solid colour
-uniform float uSharpen;        // sharpen * 1.5
-uniform vec2 uSharpStep;       // local px per reference raster px
-uniform vec2 uVignette;        // amount, aspect = base.w / base.h
-uniform vec4 uMaskA;           // centre, half size (base px)
-uniform vec4 uMaskB;           // cos, sin (unrotate), corner radius, feather f
-uniform vec4 uMaskC;           // shape (0 none, 1 rect, 2 ellipse), opacity, inverted, unused
+#endif
 
-vec4 dvTex(vec2 t) {
-  vec2 c = clamp(t, vec2(0.5), uRasterSize - 0.5);
+#ifdef DV_DETAIL
+// Raster texel (i, j) (top-down), clamped to the raster.
+vec4 dvTexel(vec2 ij) {
+  vec2 c = clamp(ij, vec2(0.0), uRasterSize - 1.0) + 0.5;
   return texture2D(uTex, vec2(c.x / uTexSize.x, 1.0 - c.y / uTexSize.y));
-}
-
-// The layer raster at local px L, averaged over the output pixel's footprint when minified.
-vec4 dvSample(vec2 L) {
-  vec2 t = L * uSample.xy;
-  vec4 acc = vec4(0.0);
-  if (uSample.z <= 1.0) {
-    acc = dvTex(t);
-  } else {
-    vec2 dx = vec2(uInv.x, uInv.y) * uSample.xy;
-    vec2 dy = vec2(uInv.z, uInv.w) * uSample.xy;
-    for (int sy = 0; sy < 8; sy++) {
-      if (float(sy) < uSample.z) {
-        for (int sx = 0; sx < 8; sx++) {
-          if (float(sx) < uSample.z) {
-            vec2 o = (vec2(float(sx), float(sy)) + 0.5) / uSample.z - 0.5;
-            acc += dvTex(t + dx * o.x + dy * o.y);
-          }
-        }
-      }
-    }
-    acc /= uSample.z * uSample.z;
-  }
-  return acc;
 }
 
 float dvVignetteFactor(vec2 uv) {
@@ -76,14 +61,35 @@ float dvMaskAlpha(vec2 L) {
   return mix(1.0, a, uMaskC.y);
 }
 
+void main() {
+  vec2 ij = vec2(gl_FragCoord.x - 0.5, uOutSize.y - gl_FragCoord.y - 0.5);
+  vec4 c = dvTexel(ij);
+  if (uSharpen > 0.0) {
+    vec3 box = vec3(0.0);
+    for (int j = -1; j <= 1; j++) {
+      for (int i = -1; i <= 1; i++) {
+        box += dvTexel(ij + vec2(float(i), float(j))).rgb;
+      }
+    }
+    c.rgb = clamp(c.rgb + uSharpen * (c.rgb - box / 9.0), vec3(0.0), vec3(c.a));
+  }
+  vec2 uv = (ij + 0.5) / uRasterSize;
+  if (uVignette.x > 0.0) c.rgb *= dvVignetteFactor(uv);
+  if (uMaskC.x > 0.5) c *= dvMaskAlpha(uv * uBase);
+  gl_FragColor = c;
+}
+#else
+vec4 dvTex(vec2 t) {
+  vec2 c = clamp(t, vec2(0.5), uRasterSize - 0.5);
+  return texture2D(uTex, vec2(c.x / uTexSize.x, 1.0 - c.y / uTexSize.y));
+}
+
 float dvCanvasMask(vec2 P, vec4 m, vec4 n) {
   vec2 p = dvUnrotate(P - m.xy, n.xy);
   float a = dvEdgeAlpha(dvRoundedBoxSdf(p, m.zw, 0.0), n.z);
   return n.w > 0.5 ? 1.0 - a : a;
 }
 
-// No early return: the emulator's GLSL translator (SwiftShader, Pixel_9_Pro_XL_API_35) dropped
-// pixels when an early return preceded the canvas-mask loop (measured 2026-10-11).
 void main() {
   vec2 X = vec2(gl_FragCoord.x, uOutSize.y - gl_FragCoord.y);
   vec2 L = vec2(uInv.x * X.x + uInv.z * X.y, uInv.y * X.x + uInv.w * X.y) + uInvT;
@@ -95,30 +101,18 @@ void main() {
   } else {
     cov = (uv.x >= 0.0 && uv.x < 1.0 && uv.y >= 0.0 && uv.y < 1.0) ? 1.0 : 0.0;
   }
-  vec4 c = vec4(0.0);
-  if (cov > 0.0) {
-    if (uSolidOn > 0.5) {
-      c = uSolid;
-    } else {
-      c = dvSample(L);
-      if (uSharpen > 0.0) {
-        vec4 box = vec4(0.0);
-        for (int j = -1; j <= 1; j++) {
-          for (int i = -1; i <= 1; i++) {
-            box += dvSample(L + vec2(float(i), float(j)) * uSharpStep);
-          }
-        }
-        c.rgb = clamp(c.rgb + uSharpen * (c.rgb - box.rgb / 9.0), vec3(0.0), vec3(c.a));
-      }
-      if (uVignette.x > 0.0) c.rgb *= dvVignetteFactor(uv);
-      if (uMaskC.x > 0.5) c *= dvMaskAlpha(L);
-    }
-    float k = uOpacity * cov;
-    vec2 P = X * uCanvasPerRender;
-    for (int i = 0; i < 8; i++) {
-      if (float(i) < uCmCount) k *= dvCanvasMask(P, uCm[i], uCmB[i]);
-    }
-    c *= k;
-  }
+  vec4 c = uSolidOn > 0.5 ? uSolid : dvTex(uv * uRasterSize);
+  float k = uOpacity * cov;
+  vec2 P = X * uCanvasPerRender;
+  if (uCmCount > 0.5) k *= dvCanvasMask(P, uCm[0], uCmB[0]);
+  if (uCmCount > 1.5) k *= dvCanvasMask(P, uCm[1], uCmB[1]);
+  if (uCmCount > 2.5) k *= dvCanvasMask(P, uCm[2], uCmB[2]);
+  if (uCmCount > 3.5) k *= dvCanvasMask(P, uCm[3], uCmB[3]);
+  if (uCmCount > 4.5) k *= dvCanvasMask(P, uCm[4], uCmB[4]);
+  if (uCmCount > 5.5) k *= dvCanvasMask(P, uCm[5], uCmB[5]);
+  if (uCmCount > 6.5) k *= dvCanvasMask(P, uCm[6], uCmB[6]);
+  if (uCmCount > 7.5) k *= dvCanvasMask(P, uCm[7], uCmB[7]);
+  c *= k;
   gl_FragColor = c.a > 0.0 ? vec4(clamp(c.rgb / c.a, 0.0, 1.0), c.a) : vec4(0.0);
 }
+#endif

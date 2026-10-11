@@ -2,8 +2,9 @@
 //
 // LayerRenderer: one layer through the whole effect chain outside Media3 (ARCH §13.3: AND-17's
 // LayerCompositorGl / PausedFrameRenderer and AND-16's compositor reuse the same shaders):
-// look → (blur H → blur V) → place for media and image layers, place for solids, sprite raster →
-// place for sprites, into a canvas-render-size target, overwriting it or blending onto it. Intermediate
+// look → (blur H → blur V) → (resample to the reference raster when the raster is larger) →
+// (detail: sharpen, vignette, mask) → place for media and image layers, place for solids, sprite
+// raster → place for sprites, into a canvas-render-size target, overwriting it or blending onto it. Intermediate
 // rasters come from a small pool of RGBA8 targets (the format of Media3's effect textures, so the
 // paused frame and the player's frame quantize alike). GlAssetTextures caches LUT and sprite
 // textures of plan assets per GL context. Both are confined to their GL thread and release every
@@ -96,26 +97,36 @@ class LayerRenderer(val programs: ShaderPrograms) {
             PlanLayerKind.MEDIA, PlanLayerKind.IMAGE -> {
                 val look = requireNotNull(frame.look) { "picture layer without look" }
                 val src = requireNotNull(source) { "picture layer without source" }
-                val raster = obtain(look.rasterW, look.rasterH)
+                val used = ArrayList<GlTarget>(3)
                 try {
+                    var raster = obtain(look.rasterW, look.rasterH).also { used += it }
                     raster.bind()
                     programs.drawLook(src, look, lut)
                     val blur = frame.blur
                     if (blur != null) {
-                        val tmp = obtain(look.rasterW, look.rasterH)
-                        try {
-                            tmp.bind()
-                            programs.drawBlur(raster.texture, raster.width, raster.height, true, blur.x)
-                            raster.bind()
-                            programs.drawBlur(tmp.texture, tmp.width, tmp.height, false, blur.y)
-                        } finally {
-                            recycle(tmp)
-                        }
+                        val tmp = obtain(look.rasterW, look.rasterH).also { used += it }
+                        tmp.bind()
+                        programs.drawBlur(raster.texture, raster.width, raster.height, true, blur.x)
+                        raster.bind()
+                        programs.drawBlur(tmp.texture, tmp.width, tmp.height, false, blur.y)
+                    }
+                    val p = frame.place
+                    if (p.needsResample(raster.width, raster.height)) {
+                        val small = obtain(p.refRasterW, p.refRasterH).also { used += it }
+                        small.bind()
+                        programs.drawResample(raster.texture, raster.width, raster.height, small.width, small.height, small.height)
+                        raster = small
+                    }
+                    if (p.needsDetail) {
+                        val detail = obtain(raster.width, raster.height).also { used += it }
+                        detail.bind()
+                        programs.drawDetail(raster.texture, raster.width, raster.height, raster.width, raster.height, p, detail.height)
+                        raster = detail
                     }
                     bindOutput()
-                    programs.drawPlace(raster.texture, raster.width, raster.height, frame.place, renderW, renderH, blend)
+                    programs.drawPlace(raster.texture, raster.width, raster.height, p, renderW, renderH, blend)
                 } finally {
-                    recycle(raster)
+                    for (t in used) recycle(t)
                 }
             }
         }
@@ -133,7 +144,7 @@ class LayerRenderer(val programs: ShaderPrograms) {
     }
 
     private companion object {
-        const val MAX_FREE = 4
+        const val MAX_FREE = 6
     }
 }
 

@@ -51,7 +51,7 @@ class ShaderSourcesTest {
         assertTrue(sprite.startsWith("#define DV_REVEAL 1\n// OWNER: AND-09"))
         // GLSL ES 1.00 shaders that loop after an early return were miscompiled on the emulator.
         for (p in ShaderSources.Program.values()) {
-            val src = ShaderSources.fragmentSource(p, read)
+            val src = active(p)
             val main = src.substring(src.indexOf("void main()"))
             assertFalse("$p main has no return", Regex("""\breturn\b""").containsMatchIn(main.replace(Regex("//[^\n]*"), "")))
         }
@@ -67,7 +67,10 @@ class ShaderSourcesTest {
     }
 
     /** Uniforms the program effectively declares (preprocessor branches of its defines resolved). */
-    private fun declared(program: ShaderSources.Program): Set<String> {
+    private fun declared(program: ShaderSources.Program): Set<String> = ShaderSources.declaredUniforms(active(program))
+
+    /** The program's source with the preprocessor branches of its defines resolved. */
+    private fun active(program: ShaderSources.Program): String {
         val src = ShaderSources.fragmentSource(program, read)
         val defined = program.defines.toSet()
         val out = StringBuilder()
@@ -82,7 +85,7 @@ class ShaderSourcesTest {
                 stack.all { it } -> out.append(line).append('\n')
             }
         }
-        return ShaderSources.declaredUniforms(out.toString())
+        return out.toString()
     }
 
     /** Uniform names ShaderPrograms sets inside [function] (from its Kotlin source). */
@@ -105,6 +108,7 @@ class ShaderSourcesTest {
             ShaderSources.Program.SPRITE_RASTER to setIn("drawSpriteRaster") + look,
             ShaderSources.Program.BLUR to setIn("drawBlur"),
             ShaderSources.Program.PLACE to setIn("drawPlace"),
+            ShaderSources.Program.DETAIL to setIn("drawDetail"),
         )
         for ((program, set) in cases) {
             val decl = declared(program)
