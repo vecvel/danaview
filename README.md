@@ -23,7 +23,7 @@
 - 🎥 **The Player** (available now): plays almost any video file or network stream on Android, iOS, macOS, Windows and Linux, with a 10-band equalizer, volume boost up to 300%, subtitles, playlists, a queue, diagnostics and built-in network and media tools.
 - ✂️ **The Editor** (in development, v1.1.0): a multi-track editor for iPhone, iPad and Android, with frame-accurate cuts, text, subtitles, effects, color and LUTs, transitions, picture-in-picture, chroma key, masks, keyframes, real video export, and **on-device AI subtitles** that never send audio to the cloud.
 
-**Legend:** ✅ available now · 🚧 in development · 🗓️ planned
+**Legend:** ✅ available now · 🚧 in development 
 
 ---
 
