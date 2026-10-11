@@ -244,19 +244,6 @@ Built natively for **iPhone, iPad and Android** (iOS 15+, Android 10+):
 
 ---
 
-## 🗓️ Planned
-
-- 🔒 **Lock & hide folders and playlists:**
-  - Locking:
-    - A password for each folder.
-    - Face ID, Touch ID, fingerprint or device PIN to view or export the saved passwords.
-    - An app lock option.
-  - Hiding:
-    - Hide and unhide with a secret gesture on the player screen, for example drawing a pattern or holding for a set time.
-  - Optionally, move videos into a private vault.
-
----
-
 ## ⌨️ Keyboard Shortcuts
 
 **Player** ✅
