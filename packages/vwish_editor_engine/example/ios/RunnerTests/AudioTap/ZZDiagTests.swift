@@ -35,7 +35,7 @@ final class ZZDiagTests: XCTestCase {
             tracks[k % 2].append(.init(source: tone, t0: Double(k) * seg - pre, t1: Double(k + 1) * seg + post, s0: s0 - pre * r, s1: s0 + r * seg + post * r))
         }
         let b: [Int64] = (1..<n).map { Int64(Double($0) * seg) }
-        for solo in [0, 1, -1] {
+        for solo in [-1, 0, 1] {
             let meters = [GainTapMeter(), GainTapMeter()]
             let taps = (0..<2).map { t in
                 GainTap(envelope: solo >= 0 && solo != t ? TapEnvelope(planGain: [[0, 0]]) :
