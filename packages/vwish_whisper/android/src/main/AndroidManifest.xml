@@ -1,4 +1,5 @@
-<!-- OWNER: AI-04 (skeleton by AI-02, device permission by AI-06): no CMake yet. -->
+<!-- OWNER: AI-04 (skeleton by AI-02, device permission by AI-06). The native libraries come from
+     externalNativeBuild (build.gradle.kts); they need no manifest entries. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Normal permission (no prompt): "Wi-Fi only" download advice via ConnectivityManager.isActiveNetworkMetered. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
