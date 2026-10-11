@@ -95,7 +95,7 @@ class ProxyJob(private val ctx: EngineContext) {
     fun build(uri: String, fingerprint: String, paths: Paths, control: JobControl): GeneratedAssetMsg {
         ProxyRegistry.readyProxy(fingerprint, paths)?.let { existing ->
             control.reportProgress(1.0)
-            return GeneratedAssetMsg(path = existing.absolutePath, sizeBytes = existing.length(), durationUs = null)
+            return GeneratedAssetMsg(path = existing.absolutePath, sizeBytes = existing.length(), durationUs = durationUs(existing))
         }
         control.throwIfCancelled()
         val formats = Compatibility.trackFormats(ctx.appContext, uri)
@@ -117,18 +117,32 @@ class ProxyJob(private val ctx: EngineContext) {
             target.setLastModified(System.currentTimeMillis())
             ProxyRegistry.enforceCap(paths, keep = target)
             control.reportProgress(1.0)
-            val durationMs = result.approximateDurationMs
-            val durationUs = if (durationMs > 0 && durationMs != C.TIME_UNSET) durationMs * 1000 else null
             Log.i(
                 EngineContext.TAG,
                 "proxy done: ${result.width}x${result.height}, ${result.videoFrameCount} frames, " +
                     "${result.averageVideoBitrate / 1000} kb/s, tone map ${settings.hdrMode}",
             )
-            return GeneratedAssetMsg(path = target.absolutePath, sizeBytes = target.length(), durationUs = durationUs)
+            return GeneratedAssetMsg(path = target.absolutePath, sizeBytes = target.length(), durationUs = durationUs(target))
         } finally {
             part.delete()
             DiskCache.unmarkActive(part)
         }
+    }
+
+    /** The container duration of [file] (longest track, last sample end), or null when unknown. */
+    private fun durationUs(file: File): Long? = try {
+        val extractor = MediaSources.extractor(ctx.appContext, file.absolutePath)
+        try {
+            (0 until extractor.trackCount)
+                .map { extractor.getTrackFormat(it) }
+                .filter { it.containsKey(android.media.MediaFormat.KEY_DURATION) }
+                .maxOfOrNull { it.getLong(android.media.MediaFormat.KEY_DURATION) }
+                ?.takeIf { it > 0 }
+        } finally {
+            extractor.release()
+        }
+    } catch (e: RuntimeException) {
+        null
     }
 
     /** What the Transformer is asked for. */

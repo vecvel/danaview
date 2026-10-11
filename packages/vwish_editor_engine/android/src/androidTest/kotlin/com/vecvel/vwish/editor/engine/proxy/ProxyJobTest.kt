@@ -12,7 +12,9 @@
 // - hlg_10bit_720p.mov: an SDR proxy where the device can tone-map; otherwise a typed failure with
 //   nothing left behind (the x86_64 emulator has no HEVC Main10 decoder: HDR -> SDR itself is
 //   deferred to a device, AND-01 V-N5).
-// Timings are emulator numbers.
+// The PTS tests use software decoders first (ProxyTestSupport: the emulator's goldfish H.264 decoder
+// drops a B-frame); defaultDecodersKeepTimestamps runs the production decoder choice. Timings are
+// emulator numbers.
 
 package com.vecvel.vwish.editor.engine.proxy
 
@@ -194,6 +196,9 @@ class ProxyJobTest {
 
     private fun partFiles(): List<File> = paths.work.listFiles().orEmpty().filter { it.name.endsWith(".part") }
 
+    /** The durationUs of the last proxy() asset. */
+    private var lastDurationUs: Long? = null
+
     /** Runs a proxy to completion and returns the proxy file. */
     private fun proxy(name: String, fingerprint: String): File {
         val jobs = JobRegistry(ctx, concurrency = 1)
@@ -202,6 +207,7 @@ class ProxyJobTest {
         val end = awaitTerminal(id)
         assertEquals("job ${end.failure?.code} ${end.failure?.message}", EngineEventKindMsg.JOB_DONE, end.kind)
         val asset = end.jobDone!!.asset!!
+        lastDurationUs = asset.durationUs
         val file = File(asset.path)
         assertEquals(ProxyRegistry.proxyFile(fingerprint, paths).absoluteFile, file.absoluteFile)
         assertTrue(file.isFile)
@@ -257,6 +263,7 @@ class ProxyJobTest {
         assertTrue("sync frames every 0.33 s (GOP about 10 frames): ${proxy.syncUs.size}", proxy.syncUs.size >= 20)
         assertTrue("max sync gap ${syncGaps.max()} µs", syncGaps.max() <= 400_000)
         assertEquals(null, proxy.audioMime)
+        assertEquals("asset duration (240 frames at 30 fps)", 8_000_000.0, lastDurationUs!!.toDouble(), 34_000.0)
     }
 
     @Test
