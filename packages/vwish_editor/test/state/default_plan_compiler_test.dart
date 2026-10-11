@@ -90,7 +90,7 @@ void main() {
   MediaAvailabilityReport? report;
 
   setUp(() {
-    access = FakeEditorEngine().access as FakeMediaAccess;
+    access = FakeEditorEngine().access;
     existing = {};
     report = null;
   });
