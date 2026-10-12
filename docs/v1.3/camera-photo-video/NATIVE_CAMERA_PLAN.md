@@ -1,7 +1,7 @@
 # Danaview 1.3.0: In-House Native Camera (Photo & Video Capture Engine)
 
 > **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12. **Status:** Proposal & Architectural Draft.
-> **Baseline:** `docs/v1.1/video-editor/ARCHITECTURE.md` (D-01 to D-44), `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` (D-45 to D-70), `docs/v1.2/editor-desktop/DESKTOP_EDITOR_PLAN.md` (D-71 to D-85), and `docs/v1.3/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md` (D-86 to D-98).
+> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` (D-01 to D-44), `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` (D-45 to D-70), `docs/v1.2/editor-desktop/DESKTOP_EDITOR_PLAN.md` (D-71 to D-85), and `docs/v1.3/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md` (D-86 to D-98).
 > **Scope:** A high-performance, in-house native camera for capturing photos and videos. Built directly on native OS camera APIs without bloated third-party wrappers. Features real-time beauty & face reshaping, cinematic capture, manual pro configurations, live overlay texts/masks/fonts, dual front+back multicam capture, and flexible device background audio vs external microphone recording.
 > **Decisions:** Proposes decisions **D-99 to D-115**. Decisions marked **[OWNER]** require confirmation from the product owner.
 
@@ -44,7 +44,7 @@ The camera provides professional-grade manual capture controls alongside cutting
 | **G-C3** | **Hardware-Aware Dual Capture**: Concurrent front and back camera recording on supported hardware with customizable PIP size, ratio, and shape.            | D-106; CAM-09        |
 | **G-C4** | **Flexible Audio Routing**: Ability to capture background internal device audio while optionally muting or mixing the external microphone.                 | D-107; CAM-10        |
 | **G-C5** | **Strict Graceful Degradation**: If hardware lacks dual capture, manual shutter, or depth sensors, the controls are cleanly hidden from the UI.            | D-108; CAM-12        |
-| **G-C6** | **Seamless Non-Destructive Handoff**: Photos and videos captured pass directly into Danaview's Photo and Video Editors without intermediate re-encoding.   | D-109; CAM-14        |
+| **G-C6** | **Seamless Non-Destructive Handoff**: Photos and videos captured pass directly into Danaview's Unified Editor (Photo mode for stills, Timeline mode for clips) without intermediate re-encoding. | D-109; CAM-14        |
 
 ---
 
@@ -312,7 +312,7 @@ Creators often want to record videos while playing background music (Spotify, Ap
 | **CAM-11** | Build audio capture routing: Internal Device Audio, Mic opt-out, and multi-track audio writing.         | CAM-01, CAM-02      |
 | **CAM-12** | Implement hardware capability discovery probe and UI dynamic visibility gating.                         | CAM-01              |
 | **CAM-13** | Implement live dynamic text, aesthetic masks, and font overlay rendering.                               | CAM-01, FontCatalog |
-| **CAM-14** | Build direct capture handoff into Photo Editor and Video Editor timelines.                              | CAM-01, HOM-01      |
+| **CAM-14** | Build direct capture handoff into Unified Editor (Still Photo mode and Video Timeline mode).           | CAM-01, HOM-01      |
 | **CAM-15** | Implement zoom controller with smooth optical lens switching (0.5×, 1×, 2×, 3×, 5×).                    | CAM-01, CAM-02      |
 | **CAM-16** | Add exposure metering aids: live zebra stripes and RGB/luminance histogram.                             | CAM-08              |
 | **CAM-17** | Implement flash, torch, and soft front screen fill-light modes.                                         | CAM-01, CAM-02      |

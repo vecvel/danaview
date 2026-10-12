@@ -1,7 +1,7 @@
 # Danaview 1.3.0: Unified Media Home Screen (Photos & Videos)
 
 > **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12. **Status:** Proposal & Architectural Draft (Updated).
-> **Baseline:** `docs/v1.1/video-editor/ARCHITECTURE.md`, `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md`, `docs/v1.2/editor-desktop/DESKTOP_EDITOR_PLAN.md`, and current production `DanaviewHomeScreen` (`packages/danaview_features/lib/src/library/danaview_home_screen.dart`).
+> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md`, `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md`, `docs/v1.2/editor-desktop/DESKTOP_EDITOR_PLAN.md`, and current production `DanaviewHomeScreen` (`packages/danaview_features/lib/src/library/danaview_home_screen.dart`).
 > **Core Mandate:** **100% Preservation of Existing Player, Playlists, Queue, and Library Features**. Absolutely zero existing player functionality is removed, hidden, or compromised. The Home Screen expands additively to embrace photos and camera captures alongside the existing video playback ecosystem.
 > **Decisions:** Proposes decisions **D-86 to D-98**. Decisions marked **[OWNER]** require confirmation from the product owner.
 
@@ -20,7 +20,7 @@
    - 5.1 Default "Overview / Home" Experience (Full Player Hub Preserved)
    - 5.2 Filter Tabs: [Home / Overview], [All Media], [Videos], [Photos], [Playlists], [Folders], [Projects]
    - 5.3 Masonry & Adaptive Grid Views for Photos & Videos
-   - 5.4 Media Opening Flows: Player, Photo Viewer, Video Editor, Photo Editor
+   - 5.4 Media Opening Flows: Player, Photo Viewer, Unified Editor (Photo & Video Modes)
    - 5.5 Multi-Selection & Batch Actions (Video Montage / Slideshow Generation)
 6. Platform Matrix & Graceful Degradation
 7. Implementation Ticket Breakdown (HOM-01 to HOM-15)
@@ -32,7 +32,7 @@
 ### 1.1 Executive Summary
 Prior to v1.3.0, Danaview's Home Screen served as a beloved video player hub: "Now Playing" cards, quick actions ("Open file", "Open folder", "Open link"), "Continue watching" with resume progress bars, playlists management, and folder browsing.
 
-In v1.3.0, with the arrival of the **In-House Native Camera** and the **Photo Editor**, Danaview evolves into a **Unified Visual Media Hub**. Crucially, **all existing player, playlist, queue, folder, and streaming features remain 100% active, prominent, and unchanged**. The user loses nothing; instead, photo viewing, album browsing, and creation tools are seamlessly integrated as additive capabilities.
+In v1.3.0, with the arrival of the **In-House Native Camera** and the **Unified Photo & Video Editor**, Danaview evolves into a **Unified Visual Media Hub**. Crucially, **all existing player, playlist, queue, folder, and streaming features remain 100% active, prominent, and unchanged**. The user loses nothing; instead, photo viewing, album browsing, and creation tools are seamlessly integrated as additive capabilities.
 
 ### 1.2 Absolute Preservation Guarantees
 
@@ -54,7 +54,7 @@ In v1.3.0, with the arrival of the **In-House Native Camera** and the **Photo Ed
 | **G-H1** | **Seamless Media Coexistence**: Photos and videos live harmoniously with clear badges, instant filtering, and consistent thumbnail quality. | D-86, D-87; HOM-02 |
 | **G-H2** | **Smooth Performance at Scale**: 60/120 fps scrolling across libraries with 50,000+ mixed media items via virtualized viewport loading. | D-89; HOM-04 |
 | **G-H3** | **Non-Destructive & Read-Only**: Original media files are treated as immutable. Scanning and caching never alter timestamps or directories. | ARCH G2, D-88; HOM-05 |
-| **G-H4** | **Bridge to Creators**: One-tap action to edit photos in Photo Editor, play videos in Player, or select mixed media to build a Video Editor timeline. | D-91, D-92; HOM-07 |
+| **G-H4** | **Bridge to Creators**: One-tap action to edit photos or videos in the Unified Editor, play media in Player, or select mixed media to build a Video Editor timeline. | D-91, D-92; HOM-07 |
 
 ---
 
@@ -66,7 +66,7 @@ To ensure no code or UX regressions occur, the v1.3.0 Home Screen architecture m
 +---------------------------------------------------------------------------------------------------+
 |                                  DANAVIEW HOME SCREEN ARCHITECTURE                                |
 +---------------------------------------------------------------------------------------------------+
-|  [Header] Danaview Logo | [📷 Camera] | [✂️ Video Editor] | [🎨 Photo Editor] | [⚙️ Settings]     |
+|  [Header] Danaview Logo | [📷 Camera] | [✂️ Editor] | [⚙️ Settings]                                   |
 +---------------------------------------------------------------------------------------------------+
 |  [NAVIGATION TABS]                                                                                |
 |  [ ⭐ Home / Overview ]  [ 🎬 Videos ]  [ 📷 Photos ]  [ 🗂️ All Media ]  [ 🎵 Playlists ]  [ 📁 Folders ]|
@@ -95,7 +95,7 @@ To ensure no code or UX regressions occur, the v1.3.0 Home Screen architecture m
 |                                                                                                   |
 |  6. NEW: RECENT PHOTOS & CAMERA CAPTURES TRAY (Additive)                                          |
 |     - Horizontal carousel of latest photos, stills, and camera recordings.                        |
-|     - Single tap opens Photo Viewer / Photo Editor.                                               |
+|     - Single tap opens Photo Viewer / Edit in Unified Editor.                                     |
 |                                                                                                   |
 +---------------------------------------------------------------------------------------------------+
 ```
@@ -195,7 +195,7 @@ When the user launches Danaview, the default view is **"Home / Overview"**. This
 
 ```
 +---------------------------------------------------------------------------------------------------+
-|  🎬 Danaview             [ 📷 Camera ]  [ ✂️ Video Editor ]  [ 🎨 Photo Editor ]  [ 🔍 ]  [ ⚙️ ]   |
+|  🎬 Danaview             [ 📷 Camera ]  [ ✂️ Editor ]  [ 🔍 ]  [ ⚙️ ]                             |
 +---------------------------------------------------------------------------------------------------+
 |  [ ⭐ Home ]   [ 🎬 Videos ]   [ 📷 Photos ]   [ 🗂️ All Media ]   [ 🎵 Playlists ]   [ 📁 Folders ]  |
 +---------------------------------------------------------------------------------------------------+
@@ -237,17 +237,17 @@ When the user launches Danaview, the default view is **"Home / Overview"**. This
 
 ### 5.2 Filter Views
 - **`Videos` Tab**: Pure video focus. Displays `Now Playing`, `Continue watching`, video playlists, video folders, and a video-only grid with duration pills and resolution badges.
-- **`Photos` Tab**: Pure photo gallery. High-speed Masonry grid, system albums (Favorites, Panoramas, RAW, Bursts), and one-tap photo editing.
+- **`Photos` Tab**: Pure photo gallery. High-speed Masonry grid, system albums (Favorites, Panoramas, RAW, Bursts), and one-tap editing in the Unified Editor (Still Photo mode).
 - **`All Media` Tab**: Chronological timeline combining all captured and imported photos and videos.
 - **`Playlists` Tab**: Comprehensive playlist manager with drag reordering, track queuing, and playlist sharing.
 - **`Folders` Tab**: Complete folder hierarchy exploring local storage, SD cards, and external drives for both video files and photo directories.
 
 ### 5.3 Multi-Selection Actions: "Make Video Montage"
 Selecting a mixture of photos and videos activates the bottom action bar:
-- **"Make Video Montage"**: Automatically launches the Video Editor (`danaview_editor`), laying out photos as 3-second animated stills and videos as chronological clips on the main track.
+- **"Make Video Montage"**: Automatically launches the Unified Editor in timeline mode (`danaview_editor`), laying out photos as 3-second animated stills and videos as chronological clips on the main track.
 - **"Play in Player"**: Immediately queues selected media into the player queue as a seamless mixed playback slideshow.
 - **"Add to Playlist"**: Adds the selected video items into any existing or new playlist.
-- **"Batch Edit Photos"**: Opens the Photo Editor in batch mode to apply adjustments across all selected photos.
+- **"Batch Edit in Editor"**: Opens the Unified Editor in still batch mode to apply adjustments across all selected photos.
 
 ---
 
@@ -278,7 +278,7 @@ Selecting a mixture of photos and videos activates the bottom action bar:
 | **HOM-08** | Preserve and test `Folders` section (Device storage, custom roots, breadcrumbs, Play all). | HOM-05 |
 | **HOM-09** | Build the "Recent Photos & Stills" additive carousel for the default Overview tab. | HOM-04, HOM-05 |
 | **HOM-10** | Implement Masonry and adaptive photo grid view for the dedicated `Photos` tab. | HOM-04 |
-| **HOM-11** | Build Fullscreen Photo Viewer with pinch-to-zoom, EXIF metadata sheet, and "Edit Photo" action button. | HOM-10 |
+| **HOM-11** | Build Fullscreen Photo Viewer with pinch-to-zoom, EXIF metadata sheet, and "Edit in Editor" action button. | HOM-10 |
 | **HOM-12** | Implement multi-select bar with "Make Video Montage" bridge and "Play in Player" slideshow. | HOM-05, v1.1 Editor |
 | **HOM-13** | Add media badges (Duration pill, 4K/60fps, RAW, HDR, Live Photo indicators). | HOM-10 |
 | **HOM-14** | Stress test: verify smooth 60/120 fps scrolling with 50,000+ mixed photos and videos. | HOM-04 |

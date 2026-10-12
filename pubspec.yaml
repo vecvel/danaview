@@ -1,5 +1,5 @@
 name: danaview
-description: "Danaview - All-in-one cross-platform media player, native camera, photo editor, and on-device video editor."
+description: "Danaview - All-in-one cross-platform media player, native camera, and unified photo & video editor."
 publish_to: 'none'
 
 version: 1.0.0+1

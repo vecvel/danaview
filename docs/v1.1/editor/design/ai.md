@@ -3,7 +3,7 @@
 > **Area:** AI subtitles ("Auto captions" in the UI): model management, on-device speech-to-text, cue segmentation, timeline insertion, regenerate, and how they connect to SRT/VTT export and burn-in.
 > **Status:** Design draft for the Editor release. There is no production code in this document. Dart, C, Swift and Kotlin snippets are interface sketches.
 > **Date:** 2026-10-07. **Baseline:** `main` @ `19cae59`, Flutter 3.44.2 / Dart 3.12.2.
-> **Sibling docs** in `docs/v1.1/video-editor/design/`: `ux.md` (exists; owns the screens, the `TranscriptionService` minimum contract in its §2.4, and the caption flow files), plus Domain & project model, Persistence & media management, iOS engine, and Android engine (file names not final when this was written). **Where a type belongs to another area, that area's final name wins.** Section 17 lists every interface where this area meets another.
+> **Sibling docs** in `docs/v1.1/editor/design/`: `ux.md` (exists; owns the screens, the `TranscriptionService` minimum contract in its §2.4, and the caption flow files), plus Domain & project model, Persistence & media management, iOS engine, and Android engine (file names not final when this was written). **Where a type belongs to another area, that area's final name wins.** Section 17 lists every interface where this area meets another.
 >
 > **Markers used below.** **[VERIFIED]** means I checked it against a primary source on 2026-10-07: the GitHub API, the pinned source tree, the Hugging Face API and headers, Google Maven artifacts, or this repo. **[VERIFY]** means I believe it but did not check it. Each [VERIFY] item has a ticket acceptance criterion that confirms or refutes it. **[ASSUMPTION]** marks a guess about a sibling area's design.
 
@@ -1455,7 +1455,7 @@ All failures are typed. Raw `PlatformException`s and `WhisperException`s are map
   - LibriVox (PD),
   - 5 in-house screen recordings.
 - It reports WER/CER per tier and language, cue boundary error vs human-timed references, CPS distribution, and hallucination rate on silence/music clips.
-- It runs nightly and on any change to shim parameters, normalizer, segmenter or catalog. Results are committed to `docs/v1.1/video-editor/ai-eval.md`. This tunes VAD and threshold defaults, CJK CPS values and `qualityHint`.
+- It runs nightly and on any change to shim parameters, normalizer, segmenter or catalog. Results are committed to `docs/v1.1/editor/ai-eval.md`. This tunes VAD and threshold defaults, CJK CPS values and `qualityHint`.
 
 ---
 
@@ -1618,7 +1618,7 @@ Size: S ≤ 2 days, M ≤ 1 week, L ≤ 2 weeks. All tickets land behind the com
 ### Milestone M4: hardening
 
 **AI-19 · Benchmarks, accuracy eval, tuning** · L
-- Files: `packages/danaview_transcription/tool/eval/**`, `integration_test/ai_benchmark_test.dart`, `docs/v1.1/video-editor/ai-eval.md`, catalog constants.
+- Files: `packages/danaview_transcription/tool/eval/**`, `integration_test/ai_benchmark_test.dart`, `docs/v1.1/editor/ai-eval.md`, catalog constants.
 - Depends on: AI-14.
 - Acceptance:
   - The §14.1 table is replaced by measured values on the §16.4 matrix.
@@ -1626,7 +1626,7 @@ Size: S ≤ 2 days, M ≤ 1 week, L ≤ 2 weeks. All tickets land behind the com
   - The nightly eval job is green.
 
 **AI-20 · On-device E2E and release checklist** · M
-- Files: `integration_test/ai_captions_test.dart`, `docs/v1.1/video-editor/release-checklist.md` (AI section).
+- Files: `integration_test/ai_captions_test.dart`, `docs/v1.1/editor/release-checklist.md` (AI section).
 - Depends on: AI-16 through AI-19.
 - Acceptance:
   - All §16.4 scenarios pass on the device matrix.

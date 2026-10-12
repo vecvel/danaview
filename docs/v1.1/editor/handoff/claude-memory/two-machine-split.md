@@ -18,7 +18,7 @@ On 2026-10-10 the owner split the video editor build across two machines because
 - **Windows laptop (32 GB, no Xcode):** the Android lane:
   - ENG-08 (Android plugin glue; moved back to Windows 2026-10-11 because the Mac emulator is out of storage and the Mac queue had it behind ENG-07) and AI-04
   - AND-02..AND-07 (M2), AND-08/09/17/10/16 (M3), AND-11/13/14/15 (M4), AND-12 (M5)
-- **Hand-off docs:** in the repo at docs/v1.1/video-editor/handoff/ (README, ANDROID_LANE.md, WINDOWS_SETUP.md, BUILD_STATE.md, android_lane_workflow.js, plus a copy of these notes under claude-memory/).
+- **Hand-off docs:** in the repo at docs/v1.1/editor/handoff/ (README, ANDROID_LANE.md, WINDOWS_SETUP.md, BUILD_STATE.md, android_lane_workflow.js, plus a copy of these notes under claude-memory/).
 - **Git:**
   - Mac work goes to branch `editor-wip`.
   - Windows works on `editor-android`, branched from editor-wip, with one commit per ticket.

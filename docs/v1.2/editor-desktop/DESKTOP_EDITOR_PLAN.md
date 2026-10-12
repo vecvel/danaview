@@ -1,7 +1,7 @@
 # Danaview 1.2.0: Desktop Video Editor (macOS, Windows & Linux)
 
 > **Release:** Danaview 1.2.0 (app version `1.2.0+N`). **Date:** 2026-10-12. **Status:** Proposal & Architectural Draft.
-> **Baseline:** `docs/v1.1/video-editor/ARCHITECTURE.md` (decisions D-01 to D-44, "ARCH"), `docs/v1.1/video-editor/BUILD_PLAN.md` (M0–M6), and `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` (decisions D-45 to D-70, "AIS").
+> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` (decisions D-01 to D-44, "ARCH"), `docs/v1.1/editor/BUILD_PLAN.md` (M0–M6), and `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` (decisions D-45 to D-70, "AIS").
 > **Context:** ARCH §25 explicitly laid out the foundation for desktop editing ("Desktop later (designed now, not built)"). This document formalizes the architecture, native engines, UX enhancements, and rollout plan for **macOS, Windows, and Linux**, shipping alongside the AI Studio initiative in Danaview 1.2.0.
 > **Decisions:** Proposes decisions **D-71 to D-85**. Decisions marked **[OWNER]** require confirmation from the product owner.
 

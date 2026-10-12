@@ -2,7 +2,7 @@
 
 # 🎬 Danaview
 
-**The all-in-one media player, in-house native camera, non-destructive photo editor, and on-device video editor.**
+**The all-in-one media player, in-house native camera, and unified photo & on-device video editor.**
 *Powered by Flutter, libmpv, native GPU capture & render engines, and on-device AI.*
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.44-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
@@ -21,10 +21,9 @@
 **Danaview** is an all-in-one visual media ecosystem bringing playback, creation, capture, and editing into a unified, privacy-first application across mobile and desktop.
 
 - 🎥 **The Player** (available now, v1.0): plays almost any video file or network stream on Android, iOS, macOS, Windows and Linux, with a 10-band equalizer, volume boost up to 300%, subtitles, playlists, a queue, diagnostics and built-in network and media tools.
-- ✂️ **The Video Editor** (in development, v1.1.0 mobile · v1.2.0 desktop): a non-destructive multi-track editor for iOS, Android, macOS, Windows and Linux with frame-accurate cuts, text overlays, color grading, 3D LUTs, transitions, picture-in-picture, chroma key, masks, keyframes, hardware export, and **on-device AI subtitles** that never send audio to the cloud.
+- ✂️ **The Unified Photo & Video Editor** (in development, v1.1.0 mobile · v1.2.0 desktop · v1.3.0 photo & beauty updates): a single, high-performance editor serving both photo editing and multi-track video editing dynamically based on user intent. Includes still photo post-processing (16-bit float pipeline, pro tone adjustments, 8-channel HSL color mixer, RGB curves, selective masks, perspective keystone, batch export), multi-track video timeline editing (frame-accurate cuts, transitions, keyframes, hardware export, and **on-device AI subtitles**), and the **complete 8-category Beauty & Retouching Suite** (face slimming, feature reshaping, blemish healing, virtual makeup, body slimming) with temporal One-Euro landmark tracking for moving video.
 - 🤖 **AI Studio** (v1.2.0): optional bring-your-own-key intelligence for transcripts, translation, emotion detection, and advanced word-by-word karaoke styling.
-- 📷 **The In-House Native Camera** (v1.3.0): high-performance capture built directly on native OS APIs (`AVFoundation`, `Camera2/CameraX`), featuring an **8-category real-time beauty & face reshaping suite**, cinematic portrait bokeh, pro manual controls (ISO, shutter, focus peaking), live overlays & masks, dual front+back simultaneous capture, and background device audio recording with external mic opt-out.
-- 🎨 **The Photo Editor** (v1.3.0): non-destructive still-image post-processing with a 16-bit float pipeline, 8-channel HSL color mixer, RGB curves, portrait retouching with face/body slimming, selective gradient/brush masks, perspective keystone correction, and batch export.
+- 📷 **The In-House Native Camera** (v1.3.0): high-performance capture built directly on native OS APIs (`AVFoundation`, `Camera2/CameraX`), featuring the **8-category real-time beauty & face reshaping suite**, cinematic portrait bokeh, pro manual controls (ISO, shutter, focus peaking), live overlays & masks, dual front+back simultaneous capture, and background device audio recording with external mic opt-out.
 - 🗂️ **Unified Media Home** (v1.3.0): a unified visual media hub for browsing both photos and videos, system albums, and device folders—while **strictly preserving 100% of existing player, playlist, queue, and streaming features**.
 
 **Legend:** ✅ available now · 🚧 in development · 🗓️ planned 
@@ -301,19 +300,28 @@ A high-performance capture engine built directly on native OS APIs (`AVFoundatio
 
 ---
 
-## 🎨 Photo & Image Editor 🚧 (v1.3.0)
+## ✂️🎨 Unified Photo & Video Editor 🚧 (v1.3.0 Updates)
 
-A professional, non-destructive still-image post-processing studio:
-- **Strict Non-Destructive Pipeline:** edits saved as lightweight `.dnphoto` recipes; original files are never altered.
-- **High-Bitness Color Engine:** 16-bit float internal processing in Display P3 / Rec.709.
+The Danaview Editor seamlessly serves both photo editing and multi-track video editing dynamically based on user intent:
+
+### 1. Still Photo Editing Mode
+- **Strict Non-Destructive Pipeline:** edits saved as lightweight `.dnphoto` recipes; original image files are never altered or compressed.
+- **High-Bitness Color Engine:** 16-bit half-float (`RGBA16F`) internal processing in Display P3 / Rec.709 color space.
 - **Pro Tonal Controls:** Exposure ($\pm 5.0$ EV), Contrast, Highlights, Shadows, Whites, Blacks, Clarity, Dehaze, Vignette, Grain.
 - **Color Mastery:** 8-channel HSL color mixer with Target Adjustment Tool (TAT) and interactive spline RGB curves.
-- **Portrait Retouching:** embeds the full 8-category beauty suite (face slimming, feature reshaping, blemish removal, teeth whitening) evaluated at full sensor resolution.
+- **Portrait Retouching:** full 8-category beauty suite (face slimming, feature reshaping, blemish removal, teeth whitening) evaluated at full sensor resolution.
 - **Crop, Transform & Keystone:** free crop, standard aspect ratios, auto-horizon leveler, horizontal/vertical perspective keystone correction.
 - **Selective Masking:** linear gradient, radial spotlight, brush masks, and luminance range masks with localized adjustments.
 - **Typography & Overlays:** multi-layer text with Danaview font catalog, stickers, and vintage borders.
 - **Batch Productivity:** copy/paste adjustment recipes across multiple photos and batch export (JPEG, PNG, WebP, HEIC).
-- **Bridge to Video:** one-tap "Add to Video Timeline" with automated Ken Burns pan-and-zoom animation.
+- **One-Tap Bridge to Video:** "Add to Video Project" instantly turns any edited photo into a timeline still clip with optional Ken Burns pan-and-zoom motion.
+
+### 2. Video Timeline Mode & Moving Beauty Suite
+- **Timeline Beauty Integration:** complete 8-category beauty & retouching suite applied directly to moving video clips on the timeline.
+- **Temporal One-Euro Landmark Stabilization:** velocity-adaptive landmark smoothing eliminates inter-frame mesh jitter.
+- **Multi-Subject Video Tracking:** detects, isolates, and independently beautifies up to 4 distinct faces per clip.
+- **Timeline Keyframe Automation:** animate any beauty parameter over time with linear and bezier easing curves.
+- **Hardware 4K 60fps Video Export:** real-time GPU evaluation during scrubbing and hardware-accelerated master export.
 
 ---
 
@@ -372,13 +380,13 @@ A unified visual media hub for all photos and videos on your device:
 
 ## 📱 Supported Platforms
 
-| Platform | Media Player | Video Editor | Native Camera | Photo Editor | AI Studio |
-|---|---|---|---|---|---|
-| **iOS / iPadOS** | ✅ | 🚧 (v1.1) | 🚧 (v1.3) | 🚧 (v1.3) | 🚧 (v1.2) |
-| **Android** | ✅ | 🚧 (v1.1) | 🚧 (v1.3) | 🚧 (v1.3) | 🚧 (v1.2) |
-| **macOS** | ✅ | 🚧 (v1.2) | 🚧 (v1.3 Webcams) | 🚧 (v1.3) | 🚧 (v1.2) |
-| **Windows** | ✅ | 🚧 (v1.2) | 🚧 (v1.3 Webcams) | 🚧 (v1.3) | 🚧 (v1.2) |
-| **Linux** | ✅ | 🚧 (v1.2) | 🚧 (v1.3 Webcams) | 🚧 (v1.3) | 🚧 (v1.2) |
+| Platform | Media Player | Unified Photo & Video Editor | Native Camera | AI Studio |
+|---|---|---|---|---|
+| **iOS / iPadOS** | ✅ | 🚧 (v1.1 video · v1.3 photo & beauty) | 🚧 (v1.3) | 🚧 (v1.2) |
+| **Android** | ✅ | 🚧 (v1.1 video · v1.3 photo & beauty) | 🚧 (v1.3) | 🚧 (v1.2) |
+| **macOS** | ✅ | 🚧 (v1.2 desktop · v1.3 photo & beauty) | 🚧 (v1.3 Webcams) | 🚧 (v1.2) |
+| **Windows** | ✅ | 🚧 (v1.2 desktop · v1.3 photo & beauty) | 🚧 (v1.3 Webcams) | 🚧 (v1.2) |
+| **Linux** | ✅ | 🚧 (v1.2 desktop · v1.3 photo & beauty) | 🚧 (v1.3 Webcams) | 🚧 (v1.2) |
 
 *Note: Features not supported on a specific hardware device (e.g. concurrent multicam, LiDAR depth, manual shutter on basic webcams) degrade gracefully and are cleanly hidden from the UI.*
 
@@ -415,7 +423,7 @@ danaview/
 ├── docs/
 │   ├── v1.1/                          # Video Editor baseline architecture & build plan
 │   ├── v1.2/                          # AI Studio & Desktop Editor (macOS, Windows, Linux)
-│   └── v1.3/                          # Unified Home, Native Camera, Photo Editor & Video Updates
+│   └── v1.3/                          # Unified Home, Native Camera & Unified Editor Updates
 └── test/                              # Unit, widget, and render parity tests
 ```
 

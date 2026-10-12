@@ -3,9 +3,9 @@
 > **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12. **Status:** Master Roadmap & Architectural Overview.
 > **Baseline Releases:**
 > - Danaview 1.0: Cross-platform media player (libmpv, equalizers, subtitles, hardware decode).
-> - Danaview 1.1: Multi-track video editor on iOS and Android (`docs/v1.1/video-editor/ARCHITECTURE.md`, `BUILD_PLAN.md`).
+> - Danaview 1.1: Multi-track video editor on iOS and Android (`docs/v1.1/editor/ARCHITECTURE.md`, `BUILD_PLAN.md`).
 > - Danaview 1.2: AI Studio & Advanced Subtitles (`docs/v1.2/ai-studio/AI_STUDIO_PLAN.md`) + Desktop Video Editors for macOS, Windows, and Linux (`docs/v1.2/editor-desktop/DESKTOP_EDITOR_PLAN.md`).
-> **Core Theme:** **Complete Media Symmetry**. Unifying Photos and Videos into a single cohesive ecosystem: a unified home library, an in-house native capture camera with real-time beauty & dual capture, and a professional non-destructive photo editor.
+> **Core Theme:** **Complete Media Symmetry**. Unifying Photos and Videos into a single cohesive ecosystem: a unified home library, an in-house native capture camera with real-time beauty & dual capture, and a unified photo and video editor serving both still post-processing and timeline video editing based on user intent.
 
 ---
 
@@ -17,38 +17,35 @@
                       |                 The Visual Creation Suite                     |
                       +---------------------------------------------------------------+
                                                       |
-         +--------------------+-----------------------+-----------------------+
-         |                    |                       |                       |
-         v                    v                       v                       v
-+------------------+  +-------------------+  +-------------------+  +-------------------+
-|     PILLAR 1     |  |     PILLAR 2      |  |     PILLAR 3      |  |     PILLAR 4      |
-|   Unified Home   |  |   Native Camera   |  |   Photo Editor    |  | Video Editor Upd  |
-|  Photos & Videos |  | Capture & Beauty  |  |  Non-Destructive  |  | Beauty Timeline   |
-+------------------+  +-------------------+  +-------------------+  +-------------------+
-| • All Media view |  | • Photo & Video   |  | • Pro adjustments |  | • 8-Category Suite|
-| • Folder browser |  | • Face slimming   |  | • HSL color mixer |  | • One-Euro filter |
-| • Album explorer |  | • Face reshaping  |  | • RGB curves      |  | • Multi-face track|
-| • Fast thumbnails|  | • Pro manual mode |  | • Beauty retouch  |  | • Keyframe curves |
-| • Montage maker  |  | • Dual front+back |  | • Masks & text    |  | • Before/After    |
-| • Direct editor  |  | • Device BG audio |  | • Batch export    |  | • 4K 60fps export |
-+------------------+  +-------------------+  +-------------------+  +-------------------+
+                         +----------------------------+----------------------------+
+                         |                            |                            |
+                         v                            v                            v
+              +--------------------+       +--------------------+       +--------------------+
+              |      PILLAR 1      |       |      PILLAR 2      |       |      PILLAR 3      |
+              | Unified Home Media |       |   Native Camera    |       | Unified Editor     |
+              |  Photos & Videos   |       |  Capture & Beauty  |       | Photo & Video Edit |
+              +--------------------+       +--------------------+       +--------------------+
+              | • All Media view   |       | • Photo & Video    |       | • Still Photo Mode |
+              | • Folder browser   |       | • Face slimming    |       | • Timeline Video   |
+              | • Album explorer   |       | • Face reshaping   |       | • 16-bit float tone|
+              | • Fast thumbnails  |       | • Pro manual mode  |       | • HSL & RGB curves |
+              | • Montage maker    |       | • Dual front+back  |       | • 8-Category Beauty|
+              | • Direct editor    |       | • Device BG audio  |       | • One-Euro filter  |
+              | • Player preserved |       | • Dynamic overlays |       | • Batch & 4K export|
+              +--------------------+       +--------------------+       +--------------------+
 ```
 
 ### Pillar 1: Unified Media Home Screen
 - **Document:** [`docs/v1.3/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md`](file:///Users/besaoct/Desktop/danaview/docs/v1.3/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md)
-- **Summary:** Expands the Danaview Home Screen into a unified media browser. Users can explore all photos and videos on their device, browse physical folders or system albums, view high-res previews, and launch playback, photo editing, or multi-track video editing with a single tap. Multi-selection allows instant creation of video montages from chosen photos and clips.
+- **Summary:** Expands the Danaview Home Screen into a unified media browser. Users can explore all photos and videos on their device, browse physical folders or system albums, view high-res previews, and launch playback or open the editor with a single tap. Multi-selection allows instant creation of video montages from chosen photos and clips. Crucially, 100% of player, playlist, queue, continue watching, and folder features remain intact and active.
 
 ### Pillar 2: In-House Native Camera Engine (Photo & Video Capture)
 - **Document:** [`docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md`](file:///Users/besaoct/Desktop/danaview/docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md)
 - **Summary:** A custom camera built directly on native OS frameworks (`AVFoundation`, `Camera2/CameraX`, `DirectShow/MediaCapture`, `V4L2`). Highlights include the **8-category Beauty & Retouching Suite** (real-time face slimming, V-line jaw, chin/forehead contouring, eye enlargement & brightening, nose & lip reshaping, skin smoothing, acne/dark-spot removal, virtual makeup, body & leg slimming), cinematic 24 fps recording with synthetic bokeh, pro manual exposure/focus controls, dynamic live text/mask overlays, concurrent dual front+back camera recording with customizable PIP shapes and ratios, and internal background device audio recording with mic opt-out.
 
-### Pillar 3: Non-Destructive Photo & Image Editor (Cross-Editor Beauty Integration)
-- **Document:** [`docs/v1.3/photo-editor/PHOTO_EDITOR_PLAN.md`](file:///Users/besaoct/Desktop/danaview/docs/v1.3/photo-editor/PHOTO_EDITOR_PLAN.md)
-- **Summary:** A full-featured still-image editor sharing the proven GPU color grading, 3D LUT, and typography engines of Danaview. Features 16-bit float internal processing, exposure and light controls, 8-channel HSL color mixer, interactive RGB curves, selective gradient/brush masks, and the **identical 8-category Beauty, Retouching, Makeup & Body Slimming Suite** evaluated at full sensor resolution. Allows saving custom beauty presets, batch export, and seamless transfer of retouched photos into the Video Editor timeline with automated Ken Burns animations.
-
-### Pillar 4: Video Editor Updates (Timeline Beauty, Retouching & Tracking)
+### Pillar 3: Unified Photo & Video Editor (Still Photo Mode & Multi-Track Timeline)
 - **Document:** [`docs/v1.3/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md`](file:///Users/besaoct/Desktop/danaview/docs/v1.3/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md)
-- **Summary:** Extends the multi-track video editor to support the complete 8-category beauty and retouching suite on moving video clips. Features temporal One-Euro landmark stabilization to eliminate inter-frame mesh jitter, multi-subject tracking (up to 4 independent faces per clip), keyframable beauty automation over time, split-screen comparison preview, and hardware-accelerated 4K 60fps export.
+- **Summary:** Upgrades the Danaview Editor to dynamically handle both photo editing and video editing based on user intent. When opening photos, it provides a 16-bit half-float still-image workspace with pro exposure/light controls, 8-channel HSL color mixer, spline RGB curves, selective gradient/brush masks, perspective keystone correction, batch export, and instant "Add to Timeline" conversion. For video clips and projects, it provides multi-track timeline editing, frame-accurate trimming, transitions, keyframing, and the **complete 8-category Beauty & Retouching Suite** stabilized across moving frames with temporal One-Euro landmark filtering.
 
 ---
 
@@ -76,6 +73,5 @@
 | **AI Studio (v1.2)** | `docs/v1.2/ai-studio/` | [AI_STUDIO_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.2/ai-studio/AI_STUDIO_PLAN.md) |
 | **Unified Home Media (v1.3)** | `docs/v1.3/home-photo-video-view/` | [HOME_PHOTO_VIDEO_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.3/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) |
 | **In-House Native Camera (v1.3)**| `docs/v1.3/camera-photo-video/` | [NATIVE_CAMERA_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md) |
-| **Photo & Image Editor (v1.3)** | `docs/v1.3/photo-editor/` | [PHOTO_EDITOR_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.3/photo-editor/PHOTO_EDITOR_PLAN.md) |
-| **Video Editor Updates (v1.3)** | `docs/v1.3/video-editor-update/` | [VIDEO_EDITOR_UPDATE_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.3/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
+| **Unified Photo & Video Editor (v1.3)** | `docs/v1.3/video-editor-update/` | [VIDEO_EDITOR_UPDATE_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.3/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
 | **v1.3 Master Roadmap** | `docs/v1.3/` | [V1_3_ROADMAP.md](file:///Users/besaoct/Desktop/danaview/docs/v1.3/V1_3_ROADMAP.md) |

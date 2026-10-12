@@ -1,8 +1,8 @@
 # Danaview Editor: Architecture (single source of truth)
 
 > **Release:** Danaview 1.1.0, "Editor". **Date:** 2026-10-07. **Baseline:** `main` @ `19cae59`, Flutter 3.44.2, Dart 3.12.2, Xcode 26.6, AGP 9.0.1, Kotlin 2.3.20.
-> **Status:** approved by the lead architect; revised 2026-10-08 after the architecture review (decisions D-35 to D-44; resolutions listed in `BUILD_PLAN.md` §11). Implementation follows `docs/v1.1/video-editor/BUILD_PLAN.md`.
-> **Authority:** this document wins over `BUILD_PLAN.md`, and both win over the area designs in `docs/v1.1/video-editor/design/` (`domain.md`, `native.md`, `ux.md`, `ai.md`). The area designs remain the detailed reference for anything this document doesn't restate; §2 lists every point where they disagreed and how it was settled. Later changes to this file are made only by tickets marked **[INTEGRATION]**.
+> **Status:** approved by the lead architect; revised 2026-10-08 after the architecture review (decisions D-35 to D-44; resolutions listed in `BUILD_PLAN.md` §11). Implementation follows `docs/v1.1/editor/BUILD_PLAN.md`.
+> **Authority:** this document wins over `BUILD_PLAN.md`, and both win over the area designs in `docs/v1.1/editor/design/` (`domain.md`, `native.md`, `ux.md`, `ai.md`). The area designs remain the detailed reference for anything this document doesn't restate; §2 lists every point where they disagreed and how it was settled. Later changes to this file are made only by tickets marked **[INTEGRATION]**.
 > **Corrections to the brief, confirmed in the repo:** the iOS bundle id and the Android `applicationId`/namespace are both `com.vecvel.danaview` (not `com.vecvel.danaviewplayer` / `com.vecvel.danaview`). Android `minSdk = flutter.minSdkVersion`, which is **24** in Flutter 3.44.2, not 21. The iOS deployment target is 13.0 today and this release raises it to 15.0 (§3).
 
 ---
@@ -1343,7 +1343,7 @@ The shared app-level suite lives in `integration_test/editor/` (QA-00) and runs 
 
 ---
 
-## 23. Release checklist (INT-05 owns `docs/v1.1/video-editor/release-checklist.md`)
+## 23. Release checklist (INT-05 owns `docs/v1.1/editor/release-checklist.md`)
 
 1. All tickets merged; `editor-ci.yml` green on `main`; existing player tests green; app builds for iOS, Android, macOS, Windows, Linux (desktop with the editor hidden).
 2. QA-01 (iOS Simulator) and QA-02 (Android Emulator) reports attached with every scenario passing; QA-03 parity/accuracy/A-V and QA-11 export conformance, preset matrix and audio measurements green on simulator, emulator and device lab; QA-04 budgets met (or renegotiated in writing); QA-05 soak clean; QA-06 eval within thresholds; QA-07 AI device matrix green; QA-08 a11y checklist (VoiceOver + TalkBack) done; QA-09 full overflow matrix green; QA-10 persistence/bookmark/grant survival verified.

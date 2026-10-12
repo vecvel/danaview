@@ -10,7 +10,7 @@ metadata:
 
 The owner (2026-10-07) asked for a full CapCut-class video editor shipped in ONE release: iOS + Android first, native engines (AVFoundation/Core Image, Media3), on-device whisper.cpp AI subtitles. Desktop editor later.
 
-- Source of truth: `docs/v1.1/video-editor/ARCHITECTURE.md` (decisions D-1..D-45) and `docs/editor/BUILD_PLAN.md` (166 tickets, milestones M0–M6, §8 feature coverage).
+- Source of truth: `docs/v1.1/editor/ARCHITECTURE.md` (decisions D-1..D-45) and `docs/editor/BUILD_PLAN.md` (166 tickets, milestones M0–M6, §8 feature coverage).
 - Defaults applied 2026-10-08 because the owner skipped the sign-off questions (revisable; D-43): iOS target 15.0, Android editor API 29+/GLES3/2 GB, no auto captions on armeabi-v7a, Android editor data excluded from backup, no MKV/WebM remux on iOS, iOS 15/16 checked by compile-time guards only (no lab devices).
 - 2026-10-08: the owner approved downloading whisper.cpp v1.9.4 from github.com/ggml-org/whisper.cpp (AI-01, vendored into packages/danaview_whisper). Speech models are still downloaded at runtime only, with in-app user consent.
 - Build rounds run as workflows with dependency-ordered ticket groups, resume-aware prompts, Opus for native/complex and Sonnet for mechanical tickets, one review + fix per round. Session limits interrupt often.
