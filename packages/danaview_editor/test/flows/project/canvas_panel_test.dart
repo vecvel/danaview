@@ -5,8 +5,6 @@
 // a project with content asks first (requantize warning); 4K is capability-gated; the panel is
 // disabled until the project accepts edits; the `format` action opens it; surface matrix.
 
-import 'dart:ui' show Size;
-
 import 'package:flutter/widgets.dart' hide AspectRatio;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/app/strings/project_strings.dart';
@@ -99,7 +97,11 @@ void main() {
       testFormat('the $a chip runs SetCanvas: one "Canvas" entry and the Transform toast', (tester) async {
         final rig = await ProjectRig.pump(tester, openFormat: true);
         final before = rig.entries;
-        await tap(tester, key('canvas.aspect.${a.w}x${a.h}'));
+        await tester.ensureVisible(key('canvas.aspect.${a.w}x${a.h}'));
+        await tester.pumpAndSettle();
+        await tester.tap(key('canvas.aspect.${a.w}x${a.h}'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
         expect(rig.settings.canvas.aspect, a);
         expect(rig.settings.canvas.baseShortSide, 1080, reason: 'the resolution base is kept');
         expect(rig.entries, before + 1);

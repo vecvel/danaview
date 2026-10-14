@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/app/editor_providers.dart';
 import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart';
+import 'package:danaview_editor/src/editor/actions/editor_shortcuts.dart';
 import 'package:danaview_editor/src/editor/contracts/contracts.dart';
 import 'package:danaview_editor/src/editor/editor_scope.dart';
 import 'package:danaview_editor/src/editor/inspector/inspector_dock.dart';
@@ -177,7 +178,8 @@ class ProjectRig {
   EditorActionRegistry get registry => container.read(editorActionRegistryProvider);
 
   /// Pumps the rig. [withPanel] places the inspector region; [openFormat] opens the Format panel;
-  /// [open] opens the editor; [readOnly] opens the project read-only (newer schema).
+  /// [open] opens the editor; [readOnly] opens the project read-only (newer schema); [shortcuts] wraps the frame in the
+  /// editor's keyboard shortcuts.
   static Future<ProjectRig> pump(
     WidgetTester tester, {
     EditorSurface surface = const EditorSurface(Size(1280, 900)),
@@ -186,6 +188,7 @@ class ProjectRig {
     bool open = true,
     bool empty = false,
     bool readOnly = false,
+    bool shortcuts = false,
     String name = 'Holiday edit',
     EditorCapabilities? caps,
     List<Override> overrides = const [],
@@ -227,7 +230,12 @@ class ProjectRig {
       ],
     );
     rig = ProjectRig._(harness, project.id, tester);
-    await harness.pumpApp(tester, EditorScope(projectId: project.id, child: _RigHome(withPanel: withPanel)), surface: surface);
+    final home = _RigHome(withPanel: withPanel);
+    await harness.pumpApp(
+      tester,
+      EditorScope(projectId: project.id, child: shortcuts ? EditorShortcuts(child: home) : home),
+      surface: surface,
+    );
     if (open) await rig.real(() => rig.editor.open());
     if (openFormat) {
       rig.editor.openInspector(const CanvasInspector());
