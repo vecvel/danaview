@@ -90,7 +90,8 @@ final class QualityGovernorTests: XCTestCase {
         XCTAssertEqual(G.renderSize(canvasWidth: 1920, canvasHeight: 1080, level: .quarter, maxLongSide: 1920), CGSize(width: 480, height: 270))
         XCTAssertEqual(G.renderSize(canvasWidth: 1920, canvasHeight: 1080, level: .full, maxLongSide: 1280), CGSize(width: 1280, height: 720))
         XCTAssertEqual(G.renderSize(canvasWidth: 1080, canvasHeight: 1920, level: .full, maxLongSide: 640), CGSize(width: 360, height: 640))
-        XCTAssertEqual(G.renderSize(canvasWidth: 1080, canvasHeight: 1350, level: .quarter, maxLongSide: 960), CGSize(width: 270, height: 338))
+        XCTAssertEqual(G.renderSize(canvasWidth: 1080, canvasHeight: 1350, level: .quarter, maxLongSide: 960), CGSize(width: 192, height: 240))
+        XCTAssertEqual(G.renderSize(canvasWidth: 1920, canvasHeight: 1080, level: .half, maxLongSide: 1280), CGSize(width: 640, height: 360))
     }
 }
 

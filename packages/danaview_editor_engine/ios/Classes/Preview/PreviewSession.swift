@@ -246,6 +246,9 @@ final class PreviewSession {
     private(set) var rebuildCount = 0
     /// Redraws pushed to the texture (tests).
     private(set) var redrawCount = 0
+    /// Phases of the last rebuild in ms (build, ready, seek; diagnostics and tests).
+    private(set) var lastRebuildPhases: [String: Double] = [:]
+    private var rebuildStart: TimeInterval = 0
 
     init(id: String, config: PreviewConfigMsg, queue: DispatchQueue, dependencies: Dependencies) throws {
         self.id = id
@@ -433,6 +436,8 @@ final class PreviewSession {
         let gen = rebuildGeneration
         rebuilding = true
         wantsPlaying = resumePlaying
+        rebuildStart = deps.now()
+        lastRebuildPhases = [:]
         let compositionPlan = target.plan
         if CompositionBuilder.frameTotal(compositionPlan) == 0 {
             // Nothing to play: an empty timeline shows its background only.
@@ -469,6 +474,7 @@ final class PreviewSession {
             case .failure(let error):
                 self.finishRebuild(gen, .failure(EngineError.from(error)), completion)
             case .success(let b):
+                self.lastRebuildPhases["build"] = (self.deps.now() - self.rebuildStart) * 1000
                 self.install(b, stills: target.stills, frame: frame, gen: gen, completion: completion)
             }
         }
@@ -507,8 +513,11 @@ final class PreviewSession {
                 case .readyToPlay:
                     started = true
                     self.statusObservation = nil
+                    self.lastRebuildPhases["ready"] = (self.deps.now() - self.rebuildStart) * 1000
                     self.seeks.exact(k, requireNew: true) { [weak self] outcome in
                         guard let self else { return }
+                        self.lastRebuildPhases["seek"] = (self.deps.now() - self.rebuildStart) * 1000
+                        self.lastRebuildPhases["seekReached"] = outcome.reached ? 1 : 0
                         old?.releaseMedia()
                         guard gen == self.rebuildGeneration else { return completion(.success(())) }
                         self.currentFrame = outcome.frame
@@ -586,9 +595,11 @@ final class PreviewSession {
             redrawDirty = true
             return
         }
+        // Transient-only redraws run at most once per output frame; an acked edit (param patch,
+        // editing mode) redraws as soon as the previous redraw is done.
         let interval = 1.0 / Double(max(1, config.fps))
         let wait = lastRedrawStart + interval - deps.now()
-        if wait > 0.0005 {
+        if wait > 0.0005, redrawWaiters.isEmpty {
             redrawInFlight = true
             queue.asyncAfter(deadline: .now() + wait) { [weak self] in
                 guard let self else { return }

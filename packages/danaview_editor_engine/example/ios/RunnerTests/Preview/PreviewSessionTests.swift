@@ -54,6 +54,7 @@ final class PreviewSessionTests: XCTestCase {
     func testFirstFrameAndExactSeekAck200of200AroundTheGridCuts() async throws {
         let h = try await open()
         XCTAssertGreaterThanOrEqual(h.textureId, 0)
+        await PreviewHarness.wait(2) { h.previewEvents.contains { $0.kind == .firstFrame } }
         let first = try XCTUnwrap(h.previewEvents.first { $0.kind == .firstFrame })
         XCTAssertEqual(first.width, 960)
         XCTAssertEqual(first.height, 540)
@@ -219,7 +220,7 @@ final class PreviewSessionTests: XCTestCase {
         XCTAssertTrue(s.structural)
         XCTAssertEqual(s.rev, rev)
         XCTAssertEqual(blank.value, 0, "the old frame stays until the new one")
-        print("IOS11 structural patch (paused) applyMs \(s.applyMs) (simulator)")
+        print("IOS11 structural patch (paused) applyMs \(s.applyMs) phases \(h.onQueue { $0.lastRebuildPhases }) (simulator)")
         XCTAssertLessThanOrEqual(s.applyMs, 1000, "simulator bound; mid-device budget 250 ms is QA-04's")
         var removed = plan!
         removed.layers.removeAll { $0.id == pip.id }
@@ -243,6 +244,7 @@ final class PreviewSessionTests: XCTestCase {
         _ = await PreviewHarness.wait(2) { (h.session.bridge.current?.k ?? 0) >= 10 }
         var bg = plan.layers.first { $0.id == "it_gridA0000001#v" }!
         bg.t1 = 1_000_000  // structural (timing)
+        bg.map = [MapSegment(0, 1_000_000, 0, 1_000_000)]
         var p = RenderPlanPatch(from: plan.rev, to: plan.rev + 1)
         p.layers = PatchSet(upsert: [bg], remove: [])
         let ack = try await h.patch(p)
@@ -265,19 +267,21 @@ final class PreviewSessionTests: XCTestCase {
         XCTAssertEqual(CVPixelBufferGetWidth(try frame(h)), 480)
         XCTAssertTrue(h.previewEvents.contains { $0.kind == .frameSize && $0.width == 480 && $0.height == 270 })
         // The governor never changes a pinned quality.
-        h.queue.sync { for i in 0..<300 { h.session.governorSample(missed: true, at: 100 + Double(i) / 30) } }
+        h.queue.sync { for i in 0..<300 { h.session.governorSample(missed: true, at: CACurrentMediaTime() + Double(i) / 30) } }
         XCTAssertEqual(h.onQueue { $0.renderSize }, CGSize(width: 480, height: 270))
         XCTAssertFalse(h.previewEvents.contains { $0.kind == .degraded })
 
         // Auto: missed frames step down with degraded(q); clean playback recovers.
         try await h.call { (s: PreviewSession, r: @escaping EngineReply<Void>) in s.setQuality(.auto, reply: r) }
         XCTAssertEqual(h.onQueue { $0.renderSize }, CGSize(width: 960, height: 540))
-        h.queue.sync { for i in 0..<90 { h.session.governorSample(missed: i % 4 == 0, at: 200 + Double(i) / 30) } }
+        let t0 = CACurrentMediaTime()
+        h.queue.sync { for i in 0..<90 { h.session.governorSample(missed: i % 4 == 0, at: t0 + Double(i) / 30) } }
         _ = await PreviewHarness.wait(2) { CVPixelBufferGetWidth((h.session.bridge.current?.buffer)!) == 480 }
         XCTAssertTrue(h.previewEvents.contains { $0.kind == .degraded && $0.quality == .half })
         XCTAssertEqual(CVPixelBufferGetWidth(try frame(h)), 480)
-        h.queue.sync { for i in 0..<330 { h.session.governorSample(missed: false, at: 203 + Double(i) / 30) } }
+        h.queue.sync { for i in 0..<330 { h.session.governorSample(missed: false, at: t0 + 3 + Double(i) / 30) } }
         _ = await PreviewHarness.wait(2) { CVPixelBufferGetWidth((h.session.bridge.current?.buffer)!) == 960 }
+        print("IOS11 quality after recovery: renderSize \(h.onQueue { $0.renderSize }) level \(h.onQueue { $0.governor.level }) frame \(CVPixelBufferGetWidth(try frame(h))) events \(h.previewEvents.map(\.kind))")
         XCTAssertTrue(h.previewEvents.contains { $0.kind == .degraded && $0.quality == .full })
         XCTAssertTrue(h.previewEvents.contains { $0.kind == .recovered })
         XCTAssertEqual(try PreviewHarness.check(frame(h), k: 0, plan: plan), [])

@@ -3,8 +3,8 @@
 // QualityGovernor (ARCH §12.2 'Adaptive preview', §13.2 'Session', §13.4; D-43(e)): the preview
 // render scale of one session.
 //
-// - Render size = canvas × {1, ½, ¼}, then capped so its long side is ≤ `maxPreviewLongSide`
-//   (tier), rounded to even pixels.
+// - Render size = the canvas capped so its long side is ≤ `maxPreviewLongSide` (tier), × {1, ½, ¼},
+//   rounded to even pixels (so every step really lowers the cost, also on capped canvases).
 // - `PreviewQuality.auto` (default) adapts: during playback it steps down one level after more
 //   than 10% of the frames of the last 2 s were missed, and back up one level after 10 s of
 //   playback without a missed frame. Thermal `.serious` or worse caps auto at ½ until it eases.
@@ -144,16 +144,18 @@ final class QualityGovernor {
 
     // MARK: Size
 
-    /// The render size of [canvas] at [level], long side ≤ [maxLongSide] (0 = no cap), even px.
+    /// The render size of [canvas] capped to [maxLongSide] (0 = no cap), then scaled by [level], even px.
     static func renderSize(canvasWidth: Int, canvasHeight: Int, level: Level, maxLongSide: Int) -> CGSize {
-        var w = Double(max(1, canvasWidth)) * level.scale
-        var h = Double(max(1, canvasHeight)) * level.scale
+        var w = Double(max(1, canvasWidth))
+        var h = Double(max(1, canvasHeight))
         let long = max(w, h)
         if maxLongSide > 0, long > Double(maxLongSide) {
             let k = Double(maxLongSide) / long
             w *= k
             h *= k
         }
+        w *= level.scale
+        h *= level.scale
         func even(_ v: Double) -> CGFloat { CGFloat(max(2, Int((v / 2).rounded()) * 2)) }
         return CGSize(width: even(w), height: even(h))
     }

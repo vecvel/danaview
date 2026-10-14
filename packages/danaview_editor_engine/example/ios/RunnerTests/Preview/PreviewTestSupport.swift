@@ -244,6 +244,9 @@ final class PreviewHarness: @unchecked Sendable {
     /// Problems of a 960×540 grid_cuts frame claimed to be output frame [k] (empty: correct).
     static func check(_ pb: CVPixelBuffer, k: Int64, plan: RenderPlan, checkPip: Bool = true) -> [String] {
         var problems: [String] = []
+        guard CVPixelBufferGetWidth(pb) == 960, CVPixelBufferGetHeight(pb) == 540 else {
+            return ["frame \(k): size \(CVPixelBufferGetWidth(pb))x\(CVPixelBufferGetHeight(pb))"]
+        }
         let layers = ParamSnapshot(plan: plan).evaluate(atFrame: k)
         if DVRenderSession.frameIndex(of: pb) != k { problems.append("frame \(k): stamp \(String(describing: DVRenderSession.frameIndex(of: pb)))") }
         if let base = layers.first(where: { $0.seq == 0 }) {
