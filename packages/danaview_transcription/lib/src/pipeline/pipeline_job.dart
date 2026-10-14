@@ -181,6 +181,7 @@ final class PipelineJob implements TranscriptionJob {
   WhisperModel? _whisperModel;
   WhisperJob? _currentWhisper;
   String? _vadPath;
+  String? _modelPath;
   JobRecord? _record;
   SpeechBackgroundLease? _lease;
   StreamSubscription<void>? _governorSub;
@@ -214,9 +215,10 @@ final class PipelineJob implements TranscriptionJob {
     answer.complete(code);
   }
 
-  /// Runs the job; [result] completes when it ends.
+  /// Runs the job (from the next microtask, so listeners attached after `start` see every
+  /// phase); [result] completes when it ends.
   void start() {
-    unawaited(_run().then(_succeed, onError: _fail));
+    unawaited(Future<TranscriptionResult>.microtask(_run).then(_succeed, onError: _fail));
   }
 
   // -------------------------------------------------------------------------------------------
@@ -225,7 +227,8 @@ final class PipelineJob implements TranscriptionJob {
 
   Future<TranscriptionResult> _run() async {
     _setPhase(TranscriptionPhase.preparing);
-    final runtime = _runtime = await _guard(_env.runtime());
+    final runtime = await _guard(_env.runtime());
+    _runtime = runtime;
     if (runtime.support case WhisperUnsupported(:final reason)) throw UnsupportedDeviceFailure(reason.name);
     _engineVersion = runtime.engineVersion;
     final spec = SpeechModelCatalog.byId(request.modelId);
@@ -265,6 +268,7 @@ final class PipelineJob implements TranscriptionJob {
       // 3. Model.
       final files = await _ensureModel(spec);
       _vadPath = files.vadPath;
+      _modelPath = files.modelPath;
       await _acquireLease();
       _governorSub = _env.governor.changes.listen((_) => _applyGovernor());
       await _loadModel(files.modelPath, preferGpu: true);
@@ -325,7 +329,8 @@ final class PipelineJob implements TranscriptionJob {
       generatedAt: _env.clock().toUtc(),
     );
     await _deleteRecord();
-    _log('job.done', {'cues': assembled.drafts.length, 'words': assembled.words, 'skipped': _skipped.length});
+    final wordCount = assembled.words;
+    _log('job.done', {'cues': assembled.drafts.length, 'words': wordCount, 'skipped': _skipped.length});
     return TranscriptionResult(
       drafts: assembled.drafts,
       provenance: provenance,
@@ -377,7 +382,7 @@ final class PipelineJob implements TranscriptionJob {
   }
 
   Future<SpeechModelFiles> _ensureModel(SpeechModelSpec spec) async {
-    var status = await _guard(_env.store.statusOf(spec.id));
+    SpeechModelStatus status = await _guard(_env.store.statusOf(spec.id));
     if (status is SpeechModelDownloading) {
       final download = _env.store.activeDownload;
       if (download != null) {
@@ -388,7 +393,7 @@ final class PipelineJob implements TranscriptionJob {
         } finally {
           await sub.cancel();
         }
-        status = await _guard(_env.store.statusOf(spec.id));
+        status = await _guard<SpeechModelStatus>(_env.store.statusOf(spec.id));
       }
     }
     if (status is SpeechModelCorrupt) throw const ModelCorruptFailure();
@@ -527,7 +532,7 @@ final class PipelineJob implements TranscriptionJob {
           gpuRetried = true;
           _log('unit.gpuRetry', {'unit': u.index});
           await _releaseModel();
-          await _loadModel(_spec!.id == _spec!.id ? (await _env.store.filesFor(_spec!.id))?.modelPath ?? '' : '', preferGpu: false);
+          await _loadModel(_modelPath!, preferGpu: false);
           _setPhase(TranscriptionPhase.transcribing);
           continue;
         }
@@ -558,7 +563,8 @@ final class PipelineJob implements TranscriptionJob {
     u.transcript = transcript;
     _model!.transcription(u.index, 1);
     await _setUnitState(u.index, JobUnitState.done);
-    _log('unit.done', {'unit': u.index, 'segments': normalized.segments.length});
+    final segmentCount = normalized.segments.length;
+    _log('unit.done', {'unit': u.index, 'segments': segmentCount});
     _emit(force: true);
   }
 
@@ -889,7 +895,6 @@ final class PipelineJob implements TranscriptionJob {
   Future<void> _fail(Object error, StackTrace stack) async {
     final failure = switch (error) {
       TranscriptionFailure() => error,
-      ModelDownloadFailure() => error,
       WhisperException() => _mapWhisper(error),
       _ => const InferenceFailure('internal'),
     };

@@ -12,7 +12,7 @@ import 'package:danaview_editor_core/model.dart';
 
 import '../contracts/timeline_view.dart';
 import '../segmentation/caption_segmenter.dart';
-import '../segmentation/timed_word.dart';
+import '../segmentation/timed_word.dart' show SegmentationContext;
 import '../timeline/word_mapper.dart';
 
 /// Mapped and segmented captions.
@@ -76,7 +76,3 @@ final class CaptionAssembler {
     return AssembledCaptions(drafts: drafts, words: words.length, mapped: mapped);
   }
 }
-
-/// Words of a list of timed words (re-exported for tests).
-@visibleForTesting
-int countWords(List<TimedWord> words) => words.length;
