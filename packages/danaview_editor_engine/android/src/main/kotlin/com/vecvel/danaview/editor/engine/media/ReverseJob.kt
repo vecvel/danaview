@@ -901,10 +901,6 @@ private class ReverseWriter(
     private var aacInputFrames = 0L
     private var aacEos = false
 
-    // Which decoded frame goes to the encoder (null: every frame, at its own time).
-    private var targetInputPts: Long? = null
-    private var targetOutputPts = 0L
-
     /** The decoder delivered no flexible YUV image (some vendor decoders): retry with a software decoder. */
     private class NoYuvImage : RuntimeException()
 
@@ -968,15 +964,22 @@ private class ReverseWriter(
         allIntra: Boolean,
     ): Int {
         var lost = 0
+        // (intermediate PTS, output PTS) in output order.
+        val targets = ArrayList<Pair<Long, Long>>()
         for (i in chunk.last downTo chunk.first) {
-            check()
             val q = mapping.intermediatePts[i - chunk.first]
-            if (q == null) {
-                lost++
-                continue
+            if (q == null) lost++ else targets += Pair(q, timeline.frames[i].outPtsUs)
+        }
+        if (allIntra) {
+            for ((q, outPts) in targets) {
+                check()
+                lost += feedIntra(extractor, q, outPts)
             }
-            val outPts = timeline.frames[i].outPtsUs
-            if (allIntra) feedIntra(extractor, q, outPts) else feedFromSync(extractor, q, outPts)
+        } else {
+            for (block in targets.chunked(blockFrames())) {
+                check()
+                lost += feedBlock(extractor, block)
+            }
         }
         endDecoderRun()
         return lost
@@ -1063,29 +1066,44 @@ private class ReverseWriter(
         codec.queueInputBuffer(index, 0, buffer.position(), 0, MediaCodec.BUFFER_FLAG_CODEC_CONFIG)
     }
 
-    /** All-intra: the sample at [q] alone decodes to its frame. */
-    private fun feedIntra(extractor: MediaExtractorCompat, q: Long, outPts: Long) {
+    /** All-intra: the sample at [q] alone decodes to its frame. Returns the frames lost (0 or 1). */
+    private fun feedIntra(extractor: MediaExtractorCompat, q: Long, outPts: Long): Int {
         extractor.seekTo(q, MediaExtractorCompat.SEEK_TO_PREVIOUS_SYNC)
-        if (extractor.sampleTime != q) {
-            feedFromSync(extractor, q, outPts)
-            return
-        }
+        if (extractor.sampleTime != q) return feedBlock(extractor, listOf(Pair(q, outPts)))
         queueSample(extractor, outPts)
         drainDecoder(false)
         drainEncoder(false)
+        return 0
+    }
+
+    /** Frames decoded per pass when the intermediate is not all-intra (YUV copies within [BLOCK_BYTES]). */
+    private fun blockFrames(): Int {
+        val frameBytes = max(1L, encoderWidth.toLong() * encoderHeight * 3 / 2)
+        return (BLOCK_BYTES / frameBytes).toInt().coerceIn(1, MAX_BLOCK_FRAMES)
     }
 
     /**
-     * General case: decode from the sync sample before [q] (after ending the decoder's current run),
-     * keep only the frame of [q]. The run ends with an end-of-stream so every decoder delivers it.
+     * General case (the intermediate's encoder ignored the all-intra request): decode forward once
+     * from the sync sample before the block's earliest frame to its latest, keep YUV copies of the
+     * block's frames, then encode them in output order. [block] is (intermediate PTS, output PTS)
+     * in output order (intermediate PTS descending). Returns the frames the decoder did not deliver.
      */
-    private fun feedFromSync(extractor: MediaExtractorCompat, q: Long, outPts: Long) {
+    private fun feedBlock(extractor: MediaExtractorCompat, block: List<Pair<Long, Long>>): Int {
         endDecoderRun()
-        extractor.seekTo(q, MediaExtractorCompat.SEEK_TO_PREVIOUS_SYNC)
-        targetInputPts = q
-        targetOutputPts = outPts
+        val last = block.first().first
+        val first = block.last().first
+        extractor.seekTo(first, MediaExtractorCompat.SEEK_TO_PREVIOUS_SYNC)
+        val collected = HashMap<Long, YuvFrame>()
+        val wanted = block.mapTo(HashSet()) { it.first }
+        collect = { image, pts ->
+            if (pts in wanted) {
+                val frame = pool.removeLastOrNull() ?: YuvFrame(encoderWidth, encoderHeight)
+                YuvCopy.toFrame(image, frame)
+                collected.put(pts, frame)?.let { pool += it }
+            }
+        }
         try {
-            // Decode order up to and including the target sample (frames reordered before it come first).
+            // Decode order up to and including the block's latest sample.
             while (true) {
                 check()
                 val t = extractor.sampleTime
@@ -1094,13 +1112,31 @@ private class ReverseWriter(
                 extractor.advance()
                 drainDecoder(false)
                 drainEncoder(false)
-                if (t == q) break
+                if (t == last) break
             }
             endDecoderRun()
         } finally {
-            targetInputPts = null
+            collect = null
         }
+        var lost = 0
+        for ((q, outPts) in block) {
+            val frame = collected.remove(q)
+            if (frame == null) {
+                lost++
+                continue
+            }
+            encodeYuv(frame, outPts)
+            pool += frame
+        }
+        pool += collected.values
+        return lost
     }
+
+    /** In block mode: where decoded frames go (by their intermediate PTS) instead of the encoder. */
+    private var collect: ((android.media.Image, Long) -> Unit)? = null
+
+    /** Reused YUV copies of block mode (at most one block's worth). */
+    private val pool = ArrayList<YuvFrame>()
 
     private fun queueSample(extractor: MediaExtractorCompat, ptsUs: Long) {
         val codec = decoder!!
@@ -1136,26 +1172,20 @@ private class ReverseWriter(
                 index >= 0 -> {
                     val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                     if (info.size > 0) {
-                        val target = targetInputPts
-                        val outPts = when {
-                            target == null -> info.presentationTimeUs
-                            info.presentationTimeUs == target -> targetOutputPts
-                            else -> null
+                        val pts = info.presentationTimeUs
+                        val image = codec.getOutputImage(index)
+                        if (image == null) {
+                            codec.releaseOutputBuffer(index, false)
+                            if (copiedByDecoder == 0L) throw NoYuvImage()
+                            throw EngineException(EngineErrorCode.decodeFailed, "decoded frame unavailable")
                         }
-                        if (outPts != null) {
-                            val image = codec.getOutputImage(index)
-                            if (image == null) {
-                                codec.releaseOutputBuffer(index, false)
-                                if (copiedByDecoder == 0L) throw NoYuvImage()
-                                throw EngineException(EngineErrorCode.decodeFailed, "decoded frame unavailable")
-                            }
-                            try {
-                                encodeFrame(image, outPts)
-                            } finally {
-                                image.close()
-                            }
-                            copiedByDecoder++
+                        try {
+                            val sink = collect
+                            if (sink != null) sink(image, pts) else encodeFrame(image, pts)
+                        } finally {
+                            image.close()
                         }
+                        copiedByDecoder++
                     }
                     codec.releaseOutputBuffer(index, false)
                     if (eos) return
@@ -1177,6 +1207,16 @@ private class ReverseWriter(
         val index = dequeueInput(codec)
         val target = codec.getInputImage(index) ?: throw EngineException(EngineErrorCode.encoderUnavailable, "the H.264 encoder takes no YUV images")
         YuvCopy.copy(image, target, encoderWidth, encoderHeight)
+        codec.queueInputBuffer(index, 0, encoderWidth * encoderHeight * 3 / 2, ptsUs, 0)
+        copied++
+    }
+
+    /** Copies a block-mode [frame] into the encoder's next input at [ptsUs]. */
+    private fun encodeYuv(frame: YuvFrame, ptsUs: Long) {
+        val codec = encoder!!
+        val index = dequeueInput(codec)
+        val target = codec.getInputImage(index) ?: throw EngineException(EngineErrorCode.encoderUnavailable, "the H.264 encoder takes no YUV images")
+        YuvCopy.fromFrame(frame, target)
         codec.queueInputBuffer(index, 0, encoderWidth * encoderHeight * 3 / 2, ptsUs, 0)
         copied++
     }
@@ -1438,6 +1478,10 @@ private class ReverseWriter(
     companion object {
         private const val DEQUEUE_US = 10_000L
         private const val CODEC_TIMEOUT_NS = 10_000_000_000L
+
+        /** YUV memory of one block-mode pass (16 MB: 5 frames at 1080p, 11 at 720p, 1 at 4K). */
+        private const val BLOCK_BYTES = 16L * 1024 * 1024
+        private const val MAX_BLOCK_FRAMES = 16
     }
 }
 
@@ -1483,27 +1527,54 @@ class IntermediateMapping(
     }
 }
 
-/** Copies the visible part of a flexible YUV 4:2:0 image into another (any pixel and row strides). */
+/** One YUV 4:2:0 frame held in memory (block mode): planes packed without padding. */
+class YuvFrame(val width: Int, val height: Int) {
+    val chromaWidth = (width + 1) / 2
+    val chromaHeight = (height + 1) / 2
+    val y = ByteArray(width * height)
+    val u = ByteArray(chromaWidth * chromaHeight)
+    val v = ByteArray(chromaWidth * chromaHeight)
+}
+
+/** Copies flexible YUV 4:2:0 images (any pixel and row strides) to images or [YuvFrame]s. */
 object YuvCopy {
     /** Copies [src] (its crop rectangle) into [dst] ([width] x [height]); the smaller size wins. */
     fun copy(src: android.media.Image, dst: android.media.Image, width: Int, height: Int) {
         val crop = src.cropRect
         val w = min(width, crop.width())
         val h = min(height, crop.height())
-        plane(src.planes[0], dst.planes[0], crop.left, crop.top, w, h)
         val cw = (w + 1) / 2
         val ch = (h + 1) / 2
-        plane(src.planes[1], dst.planes[1], crop.left / 2, crop.top / 2, cw, ch)
-        plane(src.planes[2], dst.planes[2], crop.left / 2, crop.top / 2, cw, ch)
+        plane(src.planes[0], crop.left, crop.top, dst.planes[0].buffer, dst.planes[0].pixelStride, dst.planes[0].rowStride, w, h)
+        plane(src.planes[1], crop.left / 2, crop.top / 2, dst.planes[1].buffer, dst.planes[1].pixelStride, dst.planes[1].rowStride, cw, ch)
+        plane(src.planes[2], crop.left / 2, crop.top / 2, dst.planes[2].buffer, dst.planes[2].pixelStride, dst.planes[2].rowStride, cw, ch)
     }
 
-    private fun plane(src: android.media.Image.Plane, dst: android.media.Image.Plane, x0: Int, y0: Int, w: Int, h: Int) {
-        val s = src.buffer
-        val d = dst.buffer
-        val sp = src.pixelStride
-        val dp = dst.pixelStride
-        val sr = src.rowStride
-        val dr = dst.rowStride
+    /** Copies [src] (its crop rectangle) into [frame]. */
+    fun toFrame(src: android.media.Image, frame: YuvFrame) {
+        val crop = src.cropRect
+        val w = min(frame.width, crop.width())
+        val h = min(frame.height, crop.height())
+        val cw = min(frame.chromaWidth, (w + 1) / 2)
+        val ch = min(frame.chromaHeight, (h + 1) / 2)
+        plane(src.planes[0], crop.left, crop.top, ByteBuffer.wrap(frame.y), 1, frame.width, w, h)
+        plane(src.planes[1], crop.left / 2, crop.top / 2, ByteBuffer.wrap(frame.u), 1, frame.chromaWidth, cw, ch)
+        plane(src.planes[2], crop.left / 2, crop.top / 2, ByteBuffer.wrap(frame.v), 1, frame.chromaWidth, cw, ch)
+    }
+
+    /** Copies [frame] into [dst]. */
+    fun fromFrame(frame: YuvFrame, dst: android.media.Image) {
+        val p = dst.planes
+        copyPlane(ByteBuffer.wrap(frame.y), 1, frame.width, 0, 0, p[0].buffer, p[0].pixelStride, p[0].rowStride, frame.width, frame.height)
+        copyPlane(ByteBuffer.wrap(frame.u), 1, frame.chromaWidth, 0, 0, p[1].buffer, p[1].pixelStride, p[1].rowStride, frame.chromaWidth, frame.chromaHeight)
+        copyPlane(ByteBuffer.wrap(frame.v), 1, frame.chromaWidth, 0, 0, p[2].buffer, p[2].pixelStride, p[2].rowStride, frame.chromaWidth, frame.chromaHeight)
+    }
+
+    private fun plane(src: android.media.Image.Plane, x0: Int, y0: Int, d: ByteBuffer, dp: Int, dr: Int, w: Int, h: Int) =
+        copyPlane(src.buffer, src.pixelStride, src.rowStride, x0, y0, d, dp, dr, w, h)
+
+    /** Copies a [w] x [h] plane region starting at ([x0], [y0]) of [s] to the origin of [d] (pure; JVM-tested). */
+    fun copyPlane(s: ByteBuffer, sp: Int, sr: Int, x0: Int, y0: Int, d: ByteBuffer, dp: Int, dr: Int, w: Int, h: Int) {
         if (sp == 1 && dp == 1) {
             val row = ByteArray(w)
             for (y in 0 until h) {

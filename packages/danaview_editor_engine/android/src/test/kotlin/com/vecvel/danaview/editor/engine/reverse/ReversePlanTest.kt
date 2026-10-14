@@ -22,6 +22,7 @@ import com.vecvel.danaview.editor.engine.media.IntermediateMapping
 import com.vecvel.danaview.editor.engine.media.ReverseMath
 import com.vecvel.danaview.editor.engine.media.ReverseTimeline
 import com.vecvel.danaview.editor.engine.media.ReverseWav
+import com.vecvel.danaview.editor.engine.media.YuvCopy
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -341,5 +342,21 @@ class ReversePlanTest {
         assertEquals(4, h.getShort(32).toInt())
         assertEquals(16, h.getShort(34).toInt())
         assertEquals(1_000, h.getInt(40))
+    }
+    @Test
+    fun planeCopyHandlesStridesAndCropOffsets() {
+        // Source: 4x3 plane with row stride 6, cropped at (1, 1); destination packed 2x2.
+        val src = ByteArray(18) { it.toByte() }
+        val dst = ByteArray(4)
+        YuvCopy.copyPlane(ByteBuffer.wrap(src), 1, 6, 1, 1, ByteBuffer.wrap(dst), 1, 2, 2, 2)
+        assertArrayEquals(byteArrayOf(7, 8, 13, 14), dst)
+        // Interleaved chroma (pixel stride 2, as NV12 exposes U and V) into a packed plane and back.
+        val nv = ByteArray(8) { (10 + it).toByte() } // U V U V / U V U V, row stride 4
+        val u = ByteArray(4)
+        YuvCopy.copyPlane(ByteBuffer.wrap(nv), 2, 4, 0, 0, ByteBuffer.wrap(u), 1, 2, 2, 2)
+        assertArrayEquals(byteArrayOf(10, 12, 14, 16), u)
+        val back = ByteArray(8)
+        YuvCopy.copyPlane(ByteBuffer.wrap(u), 1, 2, 0, 0, ByteBuffer.wrap(back), 2, 4, 2, 2)
+        assertArrayEquals(byteArrayOf(10, 0, 12, 0, 14, 0, 16, 0), back)
     }
 }
