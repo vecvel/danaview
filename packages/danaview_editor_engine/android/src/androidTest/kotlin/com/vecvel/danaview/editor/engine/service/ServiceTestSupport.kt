@@ -112,13 +112,16 @@ object ServiceTest {
             .distinct()
             .filter { it != app.packageName }
 
-    /** frame_counter_1080p30 at [w]x[h] for [frames] frames at 30 fps (no audio): a long enough export. */
-    fun counterPlan(frames: Long, w: Int = 1280, h: Int = 720): RenderPlan {
-        val g = FrameGrid.of(30)
+    /**
+     * frame_counter_1080p30 at [w]x[h] for [frames] output frames at [fps] (no audio), shown at its
+     * own speed (at most its 8 s): a long enough export for the service tests.
+     */
+    fun counterPlan(frames: Long, w: Int = 1280, h: Int = 720, fps: Int = 30): RenderPlan {
+        val g = FrameGrid.of(fps)
         return RenderPlan(
-            rev = 1, target = PlanTarget.EXPORT, canvas = PlanCanvas(w, h, 30), durUs = g.timeOfFrame(frames),
+            rev = 1, target = PlanTarget.EXPORT, canvas = PlanCanvas(w, h, fps), durUs = g.timeOfFrame(frames),
             assets = mapOf("md_src" to PlanAsset(PlanAssetKind.VIDEO, ExportPlans.media("frame_counter_1080p30.mp4"), fp = "fc1080", w = 1920, h = 1080, durUs = 8_000_000)),
-            layers = listOf(ExportPlans.mediaLayer("it_v#v", 10, 0, FrameGrid.of(30), 0, frames, 0, 30, base = PlanSize(w.toDouble(), h.toDouble()))),
+            layers = listOf(ExportPlans.mediaLayer("it_v#v", 10, 0, g, 0, frames, 0, 30, base = PlanSize(w.toDouble(), h.toDouble()))),
             audio = emptyList(),
         )
     }

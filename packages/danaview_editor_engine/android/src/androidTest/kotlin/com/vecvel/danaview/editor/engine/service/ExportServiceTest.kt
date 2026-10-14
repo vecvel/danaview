@@ -108,8 +108,11 @@ class ExportServiceTest {
         val dump = ServiceTest.dumpServices()
         Log.i(SERVICE_TEST_TAG, "API ${Build.VERSION.SDK_INT} dumpsys services:\n" + dump.lines().filter { it.contains("ExportService") || it.contains("isForeground") || it.contains("oregroundServiceType") || it.contains("types=") }.joinToString("\n"))
         assertTrue("dumpsys shows the service in the foreground", dump.contains("isForeground=true"))
-        // dumpsys prints the FGS types from API 30 on ("types=0000xxxx"); API 29 relies on getForegroundServiceType.
-        if (Build.VERSION.SDK_INT >= 30) assertTrue("dumpsys shows the type 0x%x".format(expected), dump.contains("types=%08x".format(expected), ignoreCase = true))
+        // dumpsys prints the FGS types from API 30 on ("types=00000001" on 34, "types=0x00002000" on 35);
+        // API 29 relies on getForegroundServiceType.
+        if (Build.VERSION.SDK_INT >= 30) {
+            assertTrue("dumpsys shows the type 0x%x".format(expected), Regex("types=(0x)?%08x".format(expected), RegexOption.IGNORE_CASE).containsMatchIn(dump))
+        }
 
         assertTrue("ongoing notification posted", ServiceTest.waitFor(5_000) { ServiceTest.foregroundNotification() != null })
         val n = ServiceTest.foregroundNotification()!!.notification
@@ -164,20 +167,26 @@ class ExportServiceTest {
         finishAndWait(relay)
         assertTrue("open the shade", device.openNotification())
         // Progress updates re-inflate the row, so the found button can go stale: re-find and retry.
-        var clicked = false
-        for (i in 0 until 5) {
-            val cancel = findCancelInShade() ?: continue
+        // Tap Cancel; a tap can miss while the row re-inflates with a progress update, so check that
+        // the job ended and tap again if not.
+        var taps = 0
+        for (i in 0 until 8) {
+            if (ServiceTest.ended(h, id)) break
+            val cancel = findCancelInShade()
+            if (cancel == null) {
+                if (!device.openNotification()) Thread.sleep(500)
+                continue
+            }
             try {
-                // Tap its position at once: the row re-inflates with each (<= 1 Hz) progress update.
                 val at = cancel.visibleCenter
                 device.click(at.x, at.y)
-                clicked = true
-                break
+                taps++
             } catch (e: androidx.test.uiautomator.StaleObjectException) {
-                Thread.sleep(200)
+                continue
             }
+            ServiceTest.waitFor(3_000) { ServiceTest.ended(h, id) }
         }
-        assertTrue("Cancel action of our notification clicked in the shade: " + SystemUi.dump(), clicked)
+        assertTrue("Cancel tapped in the shade: " + SystemUi.dump(), taps > 0)
         val outcome = h.await(id, timeoutSec = 60)
         device.pressBack()
         assertNull("no result", outcome.result)
@@ -185,7 +194,7 @@ class ExportServiceTest {
         assertFalse("partial output deleted", out.exists())
         assertTrue(ServiceTest.awaitStopped())
         assertNull(ServiceTest.foregroundNotification())
-        Log.i(SERVICE_TEST_TAG, "notification Cancel with the activity destroyed: job cancelled after ${outcome.progress.lastOrNull()?.fraction} progress")
+        Log.i(SERVICE_TEST_TAG, "notification Cancel with the activity destroyed: job cancelled after ${outcome.progress.lastOrNull()?.fraction} progress ($taps tap(s))")
     }
 
     @Test
@@ -195,7 +204,7 @@ class ExportServiceTest {
         val detach = DetachOnDestroy(h).apply { install() }
         try {
             val out = h.output("swipe")
-            val id = h.start(ServiceTest.counterPlan(240, 1920, 1080), settings(w = 1920, h = 1080), out, DetachedHandoffMsg.SAVE_TO_GALLERY)
+            val id = h.start(ServiceTest.counterPlan(480, 1920, 1080, fps = 60), settings(w = 1920, h = 1080, fps = 60), out, DetachedHandoffMsg.SAVE_TO_GALLERY)
             ServiceTest.awaitForeground()
             swipeAppFromRecents()
             assertTrue("the activity is destroyed by the swipe:\n" + SystemUi.dump(), detach.awaitDestroyed(15_000))
@@ -349,7 +358,7 @@ class ExportServiceTest {
                 Thread.sleep(2_000)
             }
             assertTrue("recents", device.pressRecentApps())
-            Thread.sleep(3_000)
+            Thread.sleep(4_000)
             device.takeScreenshot(File(ServiceTest.app.filesDir, "and12_recents_$attempt.png"))
             val w = device.displayWidth
             val hgt = device.displayHeight
