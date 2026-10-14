@@ -457,6 +457,11 @@ class ExportCoordinator(private val ctx: EngineContext) {
     @Volatile
     var multiPass: MultiPassExport? = null
 
+    /** False turns off the reflective [MULTI_PASS_CLASS] lookup (tests of the no-hook path). */
+    @VisibleForTesting
+    @Volatile
+    var discoverMultiPass: Boolean = true
+
     /** Handles completions without a Dart listener (D-39); AND-12 installs its MediaStore handoff. */
     @Volatile
     var detachedHandler: DetachedCompletionHandler = DetachedCompletionHandler { it.keepFile() }
@@ -579,7 +584,7 @@ class ExportCoordinator(private val ctx: EngineContext) {
     fun store(): ActiveExportStore = ActiveExportStore.of(ctx.requirePaths())
 
     /** The multi-pass hook in use (explicit, discovered, or null). */
-    fun multiPassExport(): MultiPassExport? = multiPass ?: discoveredMultiPass
+    fun multiPassExport(): MultiPassExport? = multiPass ?: if (discoverMultiPass) discoveredMultiPass else null
 
     // ---- internals ----
 

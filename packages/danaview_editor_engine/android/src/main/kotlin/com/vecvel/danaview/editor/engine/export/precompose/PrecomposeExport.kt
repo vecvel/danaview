@@ -144,9 +144,9 @@ class PrecomposeExport(@Suppress("unused") private val ctx: EngineContext) : Mul
             }
         }
 
-        /** Maps [file] (intermediate [number]) as a lane of a [durUs] composition. */
+        /** Maps [file] (intermediate [number]) as a lane shown over the whole [durUs] composition. */
         private fun intermediateLane(number: Int, file: File, durUs: Long, fileDurationUs: Long) =
-            PrecomposeSpecs.intermediate(job.plan, number, file, job.settings.width, job.settings.height, job.plan.durUs, fileDurationUs).let { layer ->
+            PrecomposeSpecs.intermediate(job.plan, number, file, job.settings.width, job.settings.height, durUs, fileDurationUs).let { layer ->
                 layer to PrecomposeSpecs.intermediateLane(job.map(PrecomposeSpecs.intermediatePlan(job.plan, durUs, layer)))
             }
 

@@ -10,11 +10,15 @@
 // region) and 20 ms window RMS of the decoded audio (QA-11's ±0.5 dB tolerance).
 // Diagnostic instrumentation arguments (am instrument -e …): and19Factor <n>, and19AllIntra
 // true|false and and19Color EXPORT|BT601 override PrecomposePlanner.Options for a run.
+// The recorder also scans every completed intermediate (MediaExtractor): sync samples against all
+// samples and the achieved video bitrate, so the all-intra / 4x-bitrate rule is checked on the
+// files the encoder actually wrote, not only on the requested EncoderSettings.
 // Every number logged here is an EMULATOR measurement (tag DanaviewPrecomposeTest).
 
 package com.vecvel.danaview.editor.engine.precompose
 
 import android.graphics.Bitmap
+import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.util.Log
@@ -56,14 +60,60 @@ import kotlin.math.log10
 
 const val PRECOMPOSE_TEST_TAG = "DanaviewPrecomposeTest"
 
+/** Log tag of every SSIM retry of PrecomposeExportTest (one line per retry; CI counts them). */
+const val PRECOMPOSE_RETRY_TAG = "DanaviewPrecomposeRetry"
+
 /** The production environment with the decoder budget replaced. */
 class ForcedBudgetEnvironment(private val base: ExportEnvironment, @Volatile var budget: DecoderBudget) : ExportEnvironment by base {
     override fun decoderBudget(): DecoderBudget = budget
 }
 
+/** Sync samples, all samples, video bytes and duration of one intermediate as written. */
+data class IntermediateStats(val number: Int, val syncSamples: Int, val samples: Int, val bytes: Long, val durationUs: Long) {
+    val allIntra: Boolean get() = samples > 0 && syncSamples == samples
+    val bitrate: Long get() = if (durationUs <= 0) 0 else bytes * 8 * 1_000_000 / durationUs
+
+    companion object {
+        fun scan(number: Int, f: File): IntermediateStats {
+            val ex = MediaExtractor()
+            try {
+                ex.setDataSource(f.absolutePath)
+                val t = (0 until ex.trackCount).first { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)!!.startsWith("video/") }
+                val format = ex.getTrackFormat(t)
+                ex.selectTrack(t)
+                var sync = 0
+                var samples = 0
+                var bytes = 0L
+                var first = Long.MAX_VALUE
+                var last = Long.MIN_VALUE
+                while (ex.sampleTime >= 0) {
+                    samples++
+                    if (ex.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) sync++
+                    bytes += maxOf(0L, ex.sampleSize)
+                    first = minOf(first, ex.sampleTime)
+                    last = maxOf(last, ex.sampleTime)
+                    if (!ex.advance()) break
+                }
+                // Duration: the track's, else the sample span plus one mean frame interval.
+                val dur = if (format.containsKey(MediaFormat.KEY_DURATION)) {
+                    format.getLong(MediaFormat.KEY_DURATION)
+                } else if (samples > 1) {
+                    (last - first) * samples / (samples - 1)
+                } else {
+                    0L
+                }
+                return IntermediateStats(number, sync, samples, bytes, dur)
+            } finally {
+                ex.release()
+            }
+        }
+    }
+}
+
 /**
- * Records the precompose passes of every job (observer hook; called on danaview-export), and the
- * colour standard each completed intermediate signals (read before the next pass consumes it).
+ * Records the precompose passes of every job (observer hook; called on danaview-export), the
+ * colour standard each completed intermediate signals and its sync-sample / bitrate scan (read
+ * before the next pass consumes it).
  */
 class PassRecorder(private val workDirOf: (String) -> File) : PrecomposeObserver {
     val plans = CopyOnWriteArrayList<Pair<PrecomposePlan, DiskEstimate>>()
@@ -71,6 +121,9 @@ class PassRecorder(private val workDirOf: (String) -> File) : PrecomposeObserver
 
     /** MediaFormat KEY_COLOR_STANDARD of each intermediate (−1 when not signalled). */
     val intermediateColorStandards = CopyOnWriteArrayList<Int>()
+
+    /** The scan of each completed intermediate ([IntermediateStats]). */
+    val intermediateStats = CopyOnWriteArrayList<IntermediateStats>()
 
     override fun onPlanned(jobId: String, plan: PrecomposePlan, disk: DiskEstimate) {
         plans += plan to disk
@@ -86,6 +139,7 @@ class PassRecorder(private val workDirOf: (String) -> File) : PrecomposeObserver
             val f = File(workDirOf(jobId), "pre-$number.mp4")
             val video = ExportedFile.video(f).format
             intermediateColorStandards += if (video.containsKey(MediaFormat.KEY_COLOR_STANDARD)) video.getInteger(MediaFormat.KEY_COLOR_STANDARD) else -1
+            intermediateStats += IntermediateStats.scan(number, f)
         }
     }
 

@@ -49,7 +49,7 @@ class PrecomposeSpecsTest {
         val out = ArrayList<CompositionSpec>()
         for (pass in split.passes) {
             val input = if (!pass.readsIntermediate) null else {
-                val layer = PrecomposeSpecs.intermediate(plan, pass.number - 1, PrecomposeSpecs.intermediateFile(work, pass.number - 1), 1280, 720, plan.durUs, padded.durUs)
+                val layer = PrecomposeSpecs.intermediate(plan, pass.number - 1, PrecomposeSpecs.intermediateFile(work, pass.number - 1), 1280, 720, padded.durUs, padded.durUs)
                 layer to PrecomposeSpecs.intermediateLane(PrecomposePlans.map(PrecomposeSpecs.intermediatePlan(plan, padded.durUs, layer)))
             }
             out += PrecomposeSpecs.passSpec(passFull, pass.from, pass.to, input?.second, input?.first)
@@ -167,6 +167,23 @@ class PrecomposeSpecsTest {
         assertNull("rate 1: no speed provider", media.speed)
         assertNull(media.frameRate)
         assertEquals(padded.durUs, lane.items[1].endUs)
+
+        // As PrecomposeExport reads it in pass n >= 2: shown up to the padded end, so the padding
+        // frame of every intermediate is the full composite too.
+        val readByPass = PrecomposeSpecs.intermediate(plan, 1, file, 1280, 720, padded.durUs, padded.durUs)
+        val passPlan = PrecomposeSpecs.intermediatePlan(plan, padded.durUs, readByPass)
+        assertEquals(emptyList<Any>(), PlanValidator.validate(passPlan))
+        val passLane = PrecomposeSpecs.intermediateLane(PrecomposePlans.map(passPlan))
+        assertEquals(listOf(ItemKind.MEDIA), passLane.items.map { it.kind })
+        assertEquals(padded.durUs, passLane.items[0].endUs)
+        assertEquals(padded.durUs, passLane.items[0].clipEndUs)
+        val passSpec = PrecomposeSpecs.passSpec(PrecomposePlans.map(padded), 2, 3, passLane, readByPass)
+        val passGating = LayerGating(passSpec)
+        val passIndex = passSpec.sequences.single { s -> s.active.any { it.layerId == readByPass.layer.id } }.index
+        val grid = FrameGrid.of(30)
+        val paddedFrames = grid.frameIndexOf(padded.durUs)
+        assertEquals(76L, paddedFrames)
+        for (k in 0 until paddedFrames) assertTrue("pass frame $k", passGating.isVisible(passIndex, grid.platformTimeOfFrame(k)))
 
         // In the final pass: exactly [0, durUs).
         val inFinal = PrecomposeSpecs.intermediateLane(PrecomposePlans.map(PrecomposeSpecs.intermediatePlan(plan, plan.durUs, layer)))

@@ -15,7 +15,11 @@
 //   barcode in its region). HDR (hlg_10bit_720p.mov) runs only where the device has a 10-bit HEVC
 //   decoder and a tone-mapping path (the x86_64 emulator has neither: deferred to a device).
 // - Cancel during each pass (1, 2 and the final) leaves no intermediate, no work dir and no output.
-// An SSIM shortfall alone is retried once with both exports redone and logged (see verified()).
+// An SSIM shortfall confined to ONE output frame is retried once with both exports redone, and
+// logged under its own tag DanaviewPrecomposeRetry so CI can count retries; a shortfall on two or
+// more frames, or on the retry, fails (see verified()). The asserted SSIM is studio-range Y-plane
+// SSIM (as ffmpeg/libvmaf on limited-range video); full-range luma SSIM is logged for reference
+// only (match60 measured min 0.986 full-range against 0.998 studio-range, emulator).
 // Software-first decoders as in AND-08/AND-11 frame checks (the goldfish H.264 decoder drops
 // B-pyramid frames). Times and SSIM values logged are EMULATOR measurements.
 
@@ -86,6 +90,19 @@ class PrecomposeExportTest {
         assertEquals("$name intermediates", expectPasses - 1, standards.size)
         val bt601 = setOf(MediaFormat.COLOR_STANDARD_BT601_PAL, MediaFormat.COLOR_STANDARD_BT601_NTSC)
         assertTrue("$name intermediates signal BT.601: $standards", standards.all { it in bt601 })
+        // All intra (every sample a sync sample) or else >= 4x the export bitrate, as written.
+        val stats = p.recorder.intermediateStats.toList()
+        assertEquals("$name intermediate scans", expectPasses - 1, stats.size)
+        for (st in stats) {
+            Compare.log(
+                "$name: pre-${st.number}.mp4 sync samples ${st.syncSamples}/${st.samples}, ${st.bytes} B over ${st.durationUs} us, " +
+                    "achieved ${st.bitrate} b/s vs export ${s.videoBitrate} b/s (x%.2f) (emulator)".format(st.bitrate.toDouble() / s.videoBitrate),
+            )
+            assertTrue(
+                "$name pre-${st.number}: neither all intra (${st.syncSamples}/${st.samples} sync) nor >= 4x the export bitrate (${st.bitrate} b/s)",
+                st.allIntra || st.bitrate >= 4L * s.videoBitrate,
+            )
+        }
         val exported = ExportedFile.video(File(mr.path)).format
         assertEquals("$name export keeps BT.709", MediaFormat.COLOR_STANDARD_BT709, exported.getInteger(MediaFormat.KEY_COLOR_STANDARD))
         assertEquals((1..expectPasses).flatMap { listOf("start $it/$expectPasses", "done $it/$expectPasses") }, p.recorder.events.toList())
@@ -127,7 +144,7 @@ class PrecomposeExportTest {
         Compare.log("$name: per-frame SSIM " + cmp.ssim.joinToString(",") { "%.4f".format(it) })
         Compare.log("$name: full-range luma SSIM (reference only) min %.5f, mean %.5f".format(cmp.ssimFullRange.min(), cmp.ssimFullRange.average()))
         val low = cmp.ssim.withIndex().filter { it.value < 0.995 }.map { "${it.index}:%.4f".format(it.value) }
-        if (low.isNotEmpty()) throw SsimMismatch("$name frames below SSIM 0.995: $low")
+        if (low.isNotEmpty()) throw SsimMismatch("$name frames below SSIM 0.995: $low", low.size)
         if (expectedCode != null) {
             val wrongSingle = (0 until frames).filter { cmp.barcodesA[it]?.toLong() != expectedCode(it.toLong()) }
             val wrongMulti = (0 until frames).filter { cmp.barcodesB[it]?.toLong() != expectedCode(it.toLong()) }
@@ -148,14 +165,15 @@ class PrecomposeExportTest {
         }
     }
 
-    private class SsimMismatch(message: String) : AssertionError(message)
+    private class SsimMismatch(message: String, val frames: Int) : AssertionError(message)
 
     /**
      * Exports [plan] both ways and checks them ([assertMatches]). Only an SSIM shortfall is retried,
      * once, with both exports redone: AND-01 recorded (ARCH §13.3 "Open observation") that a packed
      * export under heavy emulator load can sporadically composite the previous source frame at one
      * output frame, which no frame-exact check can tell from a precompose defect in a single run.
-     * The first failure is logged; the retry must pass every check.
+     * So only a shortfall on exactly one frame is retried; two or more frames fail at once. The
+     * retry is logged under [PRECOMPOSE_RETRY_TAG] (CI counts it) and must pass every check.
      */
     private fun verified(
         p: PrecomposeHarness,
@@ -170,11 +188,14 @@ class PrecomposeExportTest {
             assertMatches(p, plan, first, name, expectedCode, region)
             return first
         } catch (e: SsimMismatch) {
+            if (e.frames > 1) throw e
+            android.util.Log.w(PRECOMPOSE_RETRY_TAG, "$name: retry after a one-frame SSIM shortfall (emulator): ${e.message}")
             Compare.log("$name: RETRY after an SSIM shortfall on the first run (emulator; sporadic compositing glitch suspected): ${e.message}")
         }
         p.recorder.plans.clear()
         p.recorder.events.clear()
         p.recorder.intermediateColorStandards.clear()
+        p.recorder.intermediateStats.clear()
         val second = exportBoth(p, plan, "${name}_retry", visualSequences = 2, expectPasses = expectPasses)
         assertMatches(p, plan, second, "${name}_retry", expectedCode, region)
         return second
