@@ -5,9 +5,9 @@
 //   1. adb shell am instrument -w -e danaviewPrecomposeKillPhase start \
 //        -e class com.vecvel.danaview.editor.engine.precompose.PrecomposeProcessDeathTest#startPhase <test package>/androidx.test.runner.AndroidJUnitRunner
 //      starts a precomposed export (maxVisualSequences forced to 2, 4 slots → 3 passes) through
-//      the production coordinator, waits until pass 2 renders (pre-1.mp4 complete, pre-2.mp4
-//      being written), records the job id, work dir and output in the app's files dir and returns
-//      with the export still running;
+//      the production coordinator, waits until pass 2 renders (pre-1.mp4 complete on disk;
+//      pre-2.mp4 may not exist yet, InAppMp4Muxer creates its file late), records the job id,
+//      work dir and output in the app's files dir and returns with the export still running;
 //   2. adb shell am force-stop <test package>   (kills the process mid-pass)
 //   3. adb shell am instrument -w -e danaviewPrecomposeKillPhase verify \
 //        -e class com.vecvel.danaview.editor.engine.precompose.PrecomposeProcessDeathTest#verifyPhase <test package>/androidx.test.runner.AndroidJUnitRunner
@@ -55,7 +55,8 @@ class PrecomposeProcessDeathTest {
         assertTrue("pass 2 started", p.recorder.started(2))
         Thread.sleep(500)
         val alive = dir.list()?.sorted().orEmpty()
-        assertTrue("pre-1 complete and pre-2 being written: $alive", alive.contains("pre-1.mp4") && alive.contains("pre-2.mp4"))
+        // InAppMp4Muxer creates pre-2.mp4 late (AND-11 hand-off: 0 bytes at 50%), so only pre-1 is required.
+        assertTrue("pre-1 complete while pass 2 renders: $alive", alive.contains("pre-1.mp4") && File(dir, "pre-1.mp4").length() > 0)
         assertTrue("still running", p.h.coordinator.job(id) != null)
         assertEquals(listOf(ExportJobStateKindMsg.RUNNING), p.h.activeJobs().filter { it.jobId == id }.map { it.state })
         record.writeText(JSONObject().put("jobId", id).put("workDir", dir.absolutePath).put("output", out.absolutePath).toString())
