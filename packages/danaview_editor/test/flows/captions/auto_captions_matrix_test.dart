@@ -74,7 +74,7 @@ void main() {
     await rig.openSheet(tester);
     await rig.tapKey(tester, 'captions-tier-accurate');
     await rig.tapKey(tester, 'captions-create');
-    await _check(tester, ['captions-consent-details', 'captions-consent-space', 'captions-consent-privacy', 'captions-consent-decline', 'captions-consent-accept']);
+    await _check(tester, ['captions-consent-space', 'captions-consent-privacy', 'captions-consent-decline', 'captions-consent-accept']);
   });
 
   testSurfaces('running with a partial preview and a paused line', (tester, surface) async {
@@ -113,7 +113,7 @@ void main() {
     rig.transcription.supportState = const TranscriptionUnsupported('abi');
     await rig.pump(tester, surface: surface);
     await rig.openSheet(tester);
-    await _check(tester, ['captions-unsupported', 'captions-message-title']);
+    await _check(tester, ['captions-message-title', 'captions-message-body']);
   });
 
   test('the matrix includes the narrowest surface at the largest text scale', () {

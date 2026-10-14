@@ -3,8 +3,8 @@
 // The Auto captions action binding (merged by wiring/action_bindings.dart, ARCH §17.6):
 //
 // * `autoCaptions` opens the Auto captions sheet (the Captions panel's "Auto captions" button, the
-//   registry and the shortcuts sheet). From a clip's context menu, or with clips selected, the sheet
-//   preselects "This clip".
+//   registry and the shortcuts sheet). From a clip's context menu the sheet preselects "This clip";
+//   with clips selected it offers it.
 // * It is hidden unless `DANAVIEW_AUTO_CAPTIONS` is on (D-31) and the transcription service offers
 //   at least one tier on this device; it is enabled once the project has opened and is editable.
 

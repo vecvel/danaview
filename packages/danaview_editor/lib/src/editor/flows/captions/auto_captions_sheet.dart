@@ -179,11 +179,7 @@ class _AutoCaptionsSheetState extends ConsumerState<AutoCaptionsSheet> {
     return Semantics(
       container: true,
       label: CaptionsStrings.title,
-      child: AnimatedSize(
-        duration: DanaviewMotion.fast,
-        alignment: Alignment.topCenter,
-        child: KeyedSubtree(key: const ValueKey('captions-sheet'), child: body),
-      ),
+      child: KeyedSubtree(key: const ValueKey('captions-sheet'), child: body),
     );
   }
 }

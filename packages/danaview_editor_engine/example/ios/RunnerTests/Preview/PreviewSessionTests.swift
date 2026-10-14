@@ -265,7 +265,8 @@ final class PreviewSessionTests: XCTestCase {
         // Pinned half: frame size event, half-size frame, exact content.
         try await h.call { (s: PreviewSession, r: @escaping EngineReply<Void>) in s.setQuality(.half, reply: r) }
         XCTAssertEqual(CVPixelBufferGetWidth(try frame(h)), 480)
-        XCTAssertTrue(h.previewEvents.contains { $0.kind == .frameSize && $0.width == 480 && $0.height == 270 })
+        let ok1 = await PreviewHarness.wait(2) { h.previewEvents.contains { $0.kind == .frameSize && $0.width == 480 && $0.height == 270 } }
+        XCTAssertTrue(ok1)
         // The governor never changes a pinned quality.
         h.queue.sync { for i in 0..<300 { h.session.governorSample(missed: true, at: CACurrentMediaTime() + Double(i) / 30) } }
         XCTAssertEqual(h.onQueue { $0.renderSize }, CGSize(width: 480, height: 270))
@@ -277,13 +278,16 @@ final class PreviewSessionTests: XCTestCase {
         let t0 = CACurrentMediaTime()
         h.queue.sync { for i in 0...60 { h.session.governorSample(missed: i % 4 == 0, at: t0 + Double(i) / 30) } }
         _ = await PreviewHarness.wait(2) { CVPixelBufferGetWidth((h.session.bridge.current?.buffer)!) == 480 }
-        XCTAssertTrue(h.previewEvents.contains { $0.kind == .degraded && $0.quality == .half })
+        let ok2 = await PreviewHarness.wait(2) { h.previewEvents.contains { $0.kind == .degraded && $0.quality == .half } }
+        XCTAssertTrue(ok2)
         XCTAssertEqual(CVPixelBufferGetWidth(try frame(h)), 480)
         h.queue.sync { for i in 0..<330 { h.session.governorSample(missed: false, at: t0 + 2.1 + Double(i) / 30) } }
         _ = await PreviewHarness.wait(2) { CVPixelBufferGetWidth((h.session.bridge.current?.buffer)!) == 960 }
         print("IOS11 quality after recovery: renderSize \(h.onQueue { $0.renderSize }) level \(h.onQueue { $0.governor.level }) frame \(CVPixelBufferGetWidth(try frame(h))) events \(h.previewEvents.map(\.kind))")
-        XCTAssertTrue(h.previewEvents.contains { $0.kind == .degraded && $0.quality == .full })
-        XCTAssertTrue(h.previewEvents.contains { $0.kind == .recovered })
+        let ok3 = await PreviewHarness.wait(2) { h.previewEvents.contains { $0.kind == .degraded && $0.quality == .full } }
+        XCTAssertTrue(ok3)
+        let ok4 = await PreviewHarness.wait(2) { h.previewEvents.contains { $0.kind == .recovered } }
+        XCTAssertTrue(ok4)
         XCTAssertEqual(try PreviewHarness.check(frame(h), k: 0, plan: plan), [])
 
         // Thermal serious forces auto to at most half.

@@ -283,6 +283,11 @@ final class PreviewSession {
             canvasWidth: Int(config.canvasWidth), canvasHeight: Int(config.canvasHeight), level: qualityGovernor.level,
             maxLongSide: dependencies.maxPreviewLongSide)
         displayLink.onTick = { [weak self] t in self?.onDisplayTick(t) }
+        // The first frame on the texture (whichever path pushes it) reports firstFrame.
+        bridge.onFirstFrame = { [weak self] _ in
+            guard let self else { return }
+            self.queue.async { if !self.disposed { self.frameShown() } }
+        }
         if dependencies.observeLifecycle { observeLifecycle() }
         // Kernel pre-warm (IOS-01: the first blur compile took 1–3 s) off the control queue.
         let r = render
@@ -300,6 +305,11 @@ final class PreviewSession {
     }
 
     private var grid: FrameGrid { FrameGrid(fps: Int64(config.fps)) }
+
+    /// Ack timeout of the exact seek on a new player item: its first frame pays decoder and
+    /// compositor start-up (IOS-01: up to 1.9 s on a loaded simulator), so the rebuild waits for
+    /// the real frame instead of acking a stale one after 500 ms.
+    static let newItemSeekTimeoutMs: Double = 3000
 
     /// Output frames of the current plan.
     var frameCount: Int64 {
@@ -514,7 +524,7 @@ final class PreviewSession {
                     started = true
                     self.statusObservation = nil
                     self.lastRebuildPhases["ready"] = (self.deps.now() - self.rebuildStart) * 1000
-                    self.seeks.exact(k, requireNew: true) { [weak self] outcome in
+                    self.seeks.exact(k, requireNew: true, timeoutMs: PreviewSession.newItemSeekTimeoutMs) { [weak self] outcome in
                         guard let self else { return }
                         self.lastRebuildPhases["seek"] = (self.deps.now() - self.rebuildStart) * 1000
                         self.lastRebuildPhases["seekReached"] = outcome.reached ? 1 : 0

@@ -44,6 +44,7 @@ final class SeekController {
         let start: CFTimeInterval
         let startSerial: UInt64
         let requireNew: Bool
+        var timeoutMs: Double?
         var seekDone = false
 
         init(kind: Kind, k: Int64, completions: [Completion], startSerial: UInt64, requireNew: Bool) {
@@ -92,8 +93,9 @@ final class SeekController {
     // MARK: Exact
 
     /// Seeks exactly to output frame [k]; [requireNew] ignores the frame already on screen (after
-    /// a rebuild or quality change the same k must be composed again).
-    func exact(_ k: Int64, requireNew: Bool = false, completion: @escaping Completion) {
+    /// a rebuild or quality change the same k must be composed again). [timeoutMs] overrides the
+    /// ack timeout (a new player item pays decoder start-up first).
+    func exact(_ k: Int64, requireNew: Bool = false, timeoutMs: Double? = nil, completion: @escaping Completion) {
         var completions = [completion]
         if let pending = pendingScrub {
             completions += pending.completions
@@ -104,6 +106,7 @@ final class SeekController {
             finish(old, frame: displayedFrame(fallback: old.k), reached: false)
         }
         let request = Request(kind: .exact, k: k, completions: completions, startSerial: bridge.currentSerial, requireNew: requireNew)
+        request.timeoutMs = timeoutMs
         active = request
         guard let player else {
             finish(request, frame: displayedFrame(fallback: k), reached: false)
@@ -138,7 +141,7 @@ final class SeekController {
                 return
             }
         }
-        if elapsed >= timeoutMs {
+        if elapsed >= (r.timeoutMs ?? timeoutMs) {
             Log.info(.preview, "exact seek to \(r.k) timed out; showing \(String(describing: bridge.current?.k))")
             finish(r, frame: displayedFrame(fallback: r.k), reached: false)
             return
