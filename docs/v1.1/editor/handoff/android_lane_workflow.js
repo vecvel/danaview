@@ -12,10 +12,10 @@ export const meta = {
 /*
  * ANDROID LANE WORKFLOW (Windows laptop)
  * ======================================
- * Builds the Android lane of the Danaview editor (docs/editor/BUILD_PLAN.md): ENG-08, AI-04 and
+ * Builds the Android lane of the Danaview editor (docs/v1.1/editor/BUILD_PLAN.md): ENG-08, AI-04 and
  * AND-02..AND-19. One builder agent per ticket group, then one reviewer and one fixer. The Mac
  * keeps every other ticket. Lane plan: ANDROID_LANE.md. Windows setup and pitfalls:
- * WINDOWS_SETUP.md. Ticket status at hand-off time: BUILD_STATE.md (all in docs/editor/handoff/).
+ * WINDOWS_SETUP.md. Ticket status at hand-off time: BUILD_STATE.md (all in docs/v1.1/editor/handoff/).
  * The meta block stays first because the Workflow tool requires the script to start with it.
  *
  * BEFORE A RUN (the "lead" is the Windows Claude Code session that calls Workflow)
@@ -32,7 +32,7 @@ export const meta = {
  *
  * RUN
  *   Workflow({
- *     scriptPath: 'C:/dev/danaview/docs/editor/handoff/android_lane_workflow.js',
+ *     scriptPath: 'C:/dev/danaview/docs/v1.1/editor/handoff/android_lane_workflow.js',
  *     args: {
  *       root: 'C:/dev/danaview',                     // required: repo root, forward slashes
  *       landed: ['ENG-09', 'API-04'],                    // Mac tickets merged into this tree
@@ -128,7 +128,7 @@ function parseMaybeJson(value, name) {
 
 const A = parseMaybeJson(args, '') || {}
 if (!A.root || typeof A.root !== 'string') {
-  throw new Error("android_lane_workflow: args.root is required (absolute repo root with forward slashes), e.g. Workflow({scriptPath: '<repo>/docs/editor/handoff/android_lane_workflow.js', args: {root: 'C:/dev/danaview', landed: ['ENG-09', 'API-04'], preloaded: {}}})")
+  throw new Error("android_lane_workflow: args.root is required (absolute repo root with forward slashes), e.g. Workflow({scriptPath: '<repo>/docs/v1.1/editor/handoff/android_lane_workflow.js', args: {root: 'C:/dev/danaview', landed: ['ENG-09', 'API-04'], preloaded: {}}})")
 }
 const ROOT = A.root.replace(/\\/g, '/').replace(/\/+$/, '')
 
@@ -214,10 +214,10 @@ function ownsText(tickets) {
 
 const CONTEXT = `
 You are an engineer on Danaview (Flutter 3.44.2 / Dart 3.12 monorepo at ${ROOT}) working the ANDROID LANE on the owner's WINDOWS laptop (32 GB RAM, no Xcode). We are building a production video editor for iOS + Android per the FINAL docs:
-- ${ROOT}/docs/editor/ARCHITECTURE.md (source of truth; decisions D-1..D-45; D-43(e) signed off by the owner 2026-10-11, D-45 render-preview cache and multi-pass export; read only the sections your tickets cite)
-- ${ROOT}/docs/editor/BUILD_PLAN.md (§1 how to work a ticket, §2 ownership rules, §5 dependency index, §6 ticket bodies with acceptance criteria, §7 shared/integration file register)
-- ${ROOT}/docs/editor/spikes/AND-01.md (Android spike: verdict, measurements, what ENG-06 applies, rules carried into the AND tickets; read it before any AND ticket)
-- ${ROOT}/docs/editor/handoff/ (ANDROID_LANE.md lane plan, WINDOWS_SETUP.md Windows pitfalls, BUILD_STATE.md status and hand-off facts of finished tickets; read the parts relevant to you)
+- ${ROOT}/docs/v1.1/editor/ARCHITECTURE.md (source of truth; decisions D-1..D-45; D-43(e) signed off by the owner 2026-10-11, D-45 render-preview cache and multi-pass export; read only the sections your tickets cite)
+- ${ROOT}/docs/v1.1/editor/BUILD_PLAN.md (§1 how to work a ticket, §2 ownership rules, §5 dependency index, §6 ticket bodies with acceptance criteria, §7 shared/integration file register)
+- ${ROOT}/docs/v1.1/editor/spikes/AND-01.md (Android spike: verdict, measurements, what ENG-06 applies, rules carried into the AND tickets; read it before any AND ticket)
+- ${ROOT}/docs/v1.1/editor/handoff/ (ANDROID_LANE.md lane plan, WINDOWS_SETUP.md Windows pitfalls, BUILD_STATE.md status and hand-off facts of finished tickets; read the parts relevant to you)
 
 SPLIT (decided by the owner; do not re-litigate): the build runs on two machines. The Mac keeps everything except the Android lane: all core/UI/UX/integration/QA tickets, all iOS tickets, ENG-01..07, ENG-09, ENG-02/03/04, ENG-06 (integration freeze), AI-05, IOS-01 and AND-01. This Windows laptop owns ONLY the Android lane: ENG-08, AI-04, AND-02..AND-19. Windows can never build or test iOS: never edit iOS/Swift/podspec files and never claim an iOS criterion. Cross-machine gates: ENG-08 (Windows) lands before ENG-06 (Mac); ENG-06 lands before AND-02..AND-19. Your group was started only after its Mac-side gates were merged into this working tree. If something you need from a Mac ticket is missing or wrong, report it in forMac and deferred as a defect against that ticket; never edit its files.
 
@@ -287,7 +287,7 @@ const RESULT_SCHEMA = {
 const GROUPS = [
   {
     id: 'eng08', tickets: ['ENG-08'], deps: [], external: ['ENG-09'], model: 'opus',
-    note: `Thin Kotlin glue for every host API against ENG-01's generated Pigeon Kotlin (Mac-owned, read only). Write the engine core: EngineContext, ErrorCodes, EventHub, EngineThreads (danaview-preview, danaview-gl, danaview-export, danaview-jobs, danaview-io) and Paths. Create D-33 placeholders for every Android service file of ARCH §4.4 (AND-02..AND-17, incl. preview/{PausedFrameRenderer,LayerCompositorGl,StructuralDebouncer} and an empty preview/fallback/ package) returning notSupportedOnDevice, each with the header '// OWNER: <ticket>'. Also build.gradle.kts and lint.xml per the ticket spec, and the plugin manifest per ARCH §20.4. ENG-01 left minimal placeholders in build.gradle.kts, AndroidManifest.xml and DanaviewEditorEnginePlugin.kt (§7 order ENG-01 -> ENG-08 -> ENG-06); replace them. build.gradle.kts freezes at ENG-06, so declare every dependency the lane will need now (BUILD_PLAN §2, ANDROID_LANE.md §5 ENG-08): androidTestImplementation androidx.test:rules (AND-13/AND-14 permission rules) and androidx.test.uiautomator:uiautomator (AND-12's UiAutomator criterion), plus anything else AND-02..AND-17 will need. List them with versions and V-N14 compatibility in handoff and forMac. Do not pre-apply the AND-01 changes in docs/editor/spikes/AND-01.md §6 (minSdk 29, JNI shim and externalNativeBuild, extra Media3 artifacts, Kotlin opt-in flag): ENG-06 applies them on the Mac, so keep the files easy to amend. The ENG-09 example host (packages/danaview_editor_engine/example) is the harness: capabilities() must round-trip on the emulator through it, and the example's manifest merge must be clean. Lint must fail on a negative fixture missing the opt-in (keep that fixture out of the shipped source set). ARCHITECTURE.md is ENG-06's file. Put the V-N14 outcome, the glue class list, the placeholder list and every Gradle/manifest fact ENG-06 needs in forMac and handoff.`,
+    note: `Thin Kotlin glue for every host API against ENG-01's generated Pigeon Kotlin (Mac-owned, read only). Write the engine core: EngineContext, ErrorCodes, EventHub, EngineThreads (danaview-preview, danaview-gl, danaview-export, danaview-jobs, danaview-io) and Paths. Create D-33 placeholders for every Android service file of ARCH §4.4 (AND-02..AND-17, incl. preview/{PausedFrameRenderer,LayerCompositorGl,StructuralDebouncer} and an empty preview/fallback/ package) returning notSupportedOnDevice, each with the header '// OWNER: <ticket>'. Also build.gradle.kts and lint.xml per the ticket spec, and the plugin manifest per ARCH §20.4. ENG-01 left minimal placeholders in build.gradle.kts, AndroidManifest.xml and DanaviewEditorEnginePlugin.kt (§7 order ENG-01 -> ENG-08 -> ENG-06); replace them. build.gradle.kts freezes at ENG-06, so declare every dependency the lane will need now (BUILD_PLAN §2, ANDROID_LANE.md §5 ENG-08): androidTestImplementation androidx.test:rules (AND-13/AND-14 permission rules) and androidx.test.uiautomator:uiautomator (AND-12's UiAutomator criterion), plus anything else AND-02..AND-17 will need. List them with versions and V-N14 compatibility in handoff and forMac. Do not pre-apply the AND-01 changes in docs/v1.1/editor/spikes/AND-01.md §6 (minSdk 29, JNI shim and externalNativeBuild, extra Media3 artifacts, Kotlin opt-in flag): ENG-06 applies them on the Mac, so keep the files easy to amend. The ENG-09 example host (packages/danaview_editor_engine/example) is the harness: capabilities() must round-trip on the emulator through it, and the example's manifest merge must be clean. Lint must fail on a negative fixture missing the opt-in (keep that fixture out of the shipped source set). ARCHITECTURE.md is ENG-06's file. Put the V-N14 outcome, the glue class list, the placeholder list and every Gradle/manifest fact ENG-06 needs in forMac and handoff.`,
   },
   {
     id: 'ai-android', tickets: ['AI-04'], deps: [], external: [], model: 'opus',
@@ -328,7 +328,7 @@ Anchor every item and gap boundary at P(k). Include z-order and gating unit test
   },
   {
     id: 'and-m3-preview', tickets: ['AND-10'], deps: ['and-m3-paused'], external: ['ENG-02'], model: 'opus',
-    note: `AND-01 reported NO-GO for CompositionPlayer preview and ENG-06 activates AND-16 (read docs/editor/spikes/AND-01.md §1-2 and §6-7, and what ENG-06 recorded in ARCH §13.3/§13.4). AND-10 ships the PreviewSession shell, SurfaceBridge (resetInBackground, latch <= 500 ms), SeekController, QualityGovernor, PreviewSessionManager and the PreviewBackend interface that AND-16's MultiPlayerBackend implements. Meet the 'hand back now' criteria in ANDROID_LANE.md §5 AND-10. The playback criteria (exact seek ack, scrub coalescing, transient, A/V offset) are met through AND-16 later: list them in deferred as 're-run when AND-16 lands' and mark AND-10 done when everything else passes. example/integration_test/android_preview_test.dart drives MobileEditorEngine and ENG-02's mobile_preview_session.dart on the emulator. With any CompositionPlayer, detach with clearVideoSurface(surface); the no-arg overload throws in 1.11.1. Record emulator numbers for the ARCH §13.4 mid/low budgets; the device criteria are deferred: no device available.`,
+    note: `AND-01 reported NO-GO for CompositionPlayer preview and ENG-06 activates AND-16 (read docs/v1.1/editor/spikes/AND-01.md §1-2 and §6-7, and what ENG-06 recorded in ARCH §13.3/§13.4). AND-10 ships the PreviewSession shell, SurfaceBridge (resetInBackground, latch <= 500 ms), SeekController, QualityGovernor, PreviewSessionManager and the PreviewBackend interface that AND-16's MultiPlayerBackend implements. Meet the 'hand back now' criteria in ANDROID_LANE.md §5 AND-10. The playback criteria (exact seek ack, scrub coalescing, transient, A/V offset) are met through AND-16 later: list them in deferred as 're-run when AND-16 lands' and mark AND-10 done when everything else passes. example/integration_test/android_preview_test.dart drives MobileEditorEngine and ENG-02's mobile_preview_session.dart on the emulator. With any CompositionPlayer, detach with clearVideoSurface(surface); the no-arg overload throws in 1.11.1. Record emulator numbers for the ARCH §13.4 mid/low budgets; the device criteria are deferred: no device available.`,
   },
   {
     id: 'and-m3-fallback', tickets: ['AND-16'], deps: ['and-m3-preview'], external: ['ENG-06', 'AND16-SHIM'], model: 'opus',

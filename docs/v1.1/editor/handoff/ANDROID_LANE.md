@@ -1,6 +1,6 @@
 # Android lane (Windows laptop): ticket plan
 
-> Status 2026-10-11. Sources: `docs/editor/BUILD_PLAN.md` §1, §2, §5, §6, §7; `docs/editor/spikes/AND-01.md`; `docs/editor/ARCHITECTURE.md` §3.2, §4.4, §13.3–13.5, §14.3, §15, §20.4, §24.2.
+> Status 2026-10-11. Sources: `docs/v1.1/editor/BUILD_PLAN.md` §1, §2, §5, §6, §7; `docs/v1.1/editor/spikes/AND-01.md`; `docs/v1.1/editor/ARCHITECTURE.md` §3.2, §4.4, §13.3–13.5, §14.3, §15, §20.4, §24.2.
 > When sources disagree: ARCHITECTURE as updated by ENG-06 wins, then the rules in AND-01.md §6 and §7, then BUILD_PLAN §6, then this file. ENG-06 records the AND-01 rules in ARCH §13.3 before any AND ticket starts. Until then, AND-01 beats older ARCH and BUILD_PLAN text, for example AND-08's gaps (transparent images, not `addGap`), AND-16's ImageReader decks (not a SurfaceTexture) and AND-17's reference frame.
 > Repo: github.com/vecvel/danaview. Windows branch: `editor-android`, created from `origin/editor-wip`.
 
@@ -33,7 +33,7 @@ The laptop builds the Android half of the editor's native engine inside the `dan
 - **Repo scripts run in Git Bash:** `bash scripts/ci/editor/<script>.sh`.
 - **Line endings.** `.gitattributes` keeps LF everywhere and marks fixtures `-text`. Check with `git ls-files --eol scripts/ci/editor/android_unit.sh`, which should print `i/lf w/lf`.
 - **Edit only your ticket's `owns` paths** (§5 below, copied from BUILD_PLAN §6), plus files whose header says `// OWNER: <your ticket>`. Need a change in someone else's file? Report it as a defect against that ticket (BUILD_PLAN §1 rule 3) and tell the owner. Never edit:
-  - `docs/editor/**`, `spikes/**`
+  - `docs/v1.1/editor/**`, `spikes/**`
   - `packages/danaview_editor_engine/{pigeons,lib,example,test_fixtures}/**`, except AND-10's one integration test file
   - the root `pubspec.yaml` and `android/app/**`
 - **Never run `pigeon` or `tool/make_fixtures.swift`.** The generated code and fixtures belong to Mac tickets.
@@ -44,7 +44,7 @@ The laptop builds the Android half of the editor's native engine inside the `dan
   - Android editor and speech data are excluded from backup.
 - **Media3 files.** Every file that uses Media3 starts with `@file:OptIn(UnstableApi::class, ExperimentalApi::class)`; lint enforces it. Media3 is pinned at 1.11.1.
 - **No logs of media paths, transcript text or user content** (BUILD_PLAN §1 rule 4).
-- **Read before coding:** ARCHITECTURE §1–§4, the sections your ticket cites, and `docs/editor/spikes/AND-01.md` §6 ("What ENG-06 must apply"). The spike code in `spikes/android_engine/` is a working reference for AND-08/09/10/16/17. Read it and port from it; do not edit it.
+- **Read before coding:** ARCHITECTURE §1–§4, the sections your ticket cites, and `docs/v1.1/editor/spikes/AND-01.md` §6 ("What ENG-06 must apply"). The spike code in `spikes/android_engine/` is a working reference for AND-08/09/10/16/17. Read it and port from it; do not edit it.
 - **One builder group at a time** (the workflow's default `maxParallel: 1`). Groups share one emulator and one working tree.
 - **Git:**
   - one commit per ticket on `editor-android`, then push;
@@ -620,15 +620,15 @@ Nothing else can start until ENG-06. Do not start AND tickets against the unfroz
 | `pigeons/`, `lib/src/pigeon/`, `lib/src/mobile_editor_engine.dart`, `android/.../engine/pigeon/` | ENG-01 → ENG-06 (Mac only) | Read-only. Never regenerate. |
 | `ENG-08` placeholders (`// OWNER: AND-xx`) | ENG-08 creates them → ENG-06 may update them with Pigeon amendments → the AND ticket replaces them | Merge `origin/editor-wip` after ENG-06 before starting any AND ticket. |
 | `packages/danaview_editor_core/test/fixtures/vectors/frame_grid.json` | CORE-02 → ENG-06 (`androidSeekMsRounding` only) | Read-only (AND-08 and AND-10 read it). |
-| `docs/editor/ARCHITECTURE.md` | INT-01 → ENG-06 → INT-05 (Mac) | Read-only. Put V-item answers in the commit body; the Mac records them. |
+| `docs/v1.1/editor/ARCHITECTURE.md` | INT-01 → ENG-06 → INT-05 (Mac) | Read-only. Put V-item answers in the commit body; the Mac records them. |
 | `packages/danaview_whisper/android/build.gradle.kts`, `.../src/main/AndroidManifest.xml` | AI-02 skeleton → AI-06 lines (Mac, done) → **AI-04** | Keep AI-06's `junit` and `ACCESS_NETWORK_STATE` lines (both are on `origin/editor-wip`). |
 | `packages/danaview_whisper/src/CMakeLists.txt` | AI-03 (Mac) | Read-only. AI-04 works through `src/cmake/android.cmake`. |
 | `packages/danaview_editor_engine/example/**`, `scripts/ci/editor/{android_unit,android_emulator}.sh` | ENG-09 (Mac) | Read-only. The one exception is AND-10's `example/integration_test/android_preview_test.dart`. |
 | `packages/danaview_editor_engine/test_fixtures/media/` | ENG-05 (Mac; generated with Swift and AVFoundation) | Read-only. Windows can't regenerate it. Ask the Mac for new shared fixtures, or generate ticket-local ones inside owned test directories. |
 | `android/src/main/cpp/` (AND-16's JNI shim) | unowned; ENG-06 decides | Don't create it until ENG-06 assigns it. |
-| `spikes/android_engine/`, `docs/editor/spikes/AND-01.md` | AND-01 (Mac, final reruns) | Read-only reference. |
+| `spikes/android_engine/`, `docs/v1.1/editor/spikes/AND-01.md` | AND-01 (Mac, final reruns) | Read-only reference. |
 | Root `pubspec.yaml`, `lib/`, `android/app/**` | INT-02, INT-04, INT-05, CORE-28 (Mac) | Never commit. A local verification edit (owner item 5) must be reverted with `git restore`. |
-| `docs/editor/BUILD_PLAN.md`, `docs/editor/handoff/` | Mac | Read-only. Send corrections through the owner. |
+| `docs/v1.1/editor/BUILD_PLAN.md`, `docs/v1.1/editor/handoff/` | Mac | Read-only. Send corrections through the owner. |
 
 ## 8. Hand-back checklist (every ticket)
 

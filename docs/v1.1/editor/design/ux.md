@@ -3,7 +3,7 @@
 > **Area:** Editor UX, timeline UI, app integration (Flutter side).
 > **Status:** design draft for the "Editor" release. This document contains no production code. The Dart, Swift and Kotlin snippets are interface sketches.
 > **Date:** 2026-10-07. **Baseline:** `main` @ `19cae59`. Flutter 3.44.2, Dart 3.12, flutter_riverpod 2.6.1, go_router 14.8.1 (versions read from `pubspec.lock`).
-> **Sibling areas** (separate docs in `docs/editor/design/`): Domain & project model (timeline model, commands, history, keyframes, RenderPlan), Persistence & media management (project storage, autosave, recovery, migration, media pool, relink), iOS engine (AVFoundation / Core Image / Metal / CoreText), Android engine (Media3 Transformer / CompositionPlayer / GlEffect), AI subtitles (whisper.cpp). When this document names a type that another area owns, **that area's final name wins**. §2 lists the minimum the UI needs from each area, so any gap shows up when the docs are merged.
+> **Sibling areas** (separate docs in `docs/v1.1/editor/design/`): Domain & project model (timeline model, commands, history, keyframes, RenderPlan), Persistence & media management (project storage, autosave, recovery, migration, media pool, relink), iOS engine (AVFoundation / Core Image / Metal / CoreText), Android engine (Media3 Transformer / CompositionPlayer / GlEffect), AI subtitles (whisper.cpp). When this document names a type that another area owns, **that area's final name wins**. §2 lists the minimum the UI needs from each area, so any gap shows up when the docs are merged.
 
 ---
 
@@ -2352,7 +2352,7 @@ Cross-area dependency tags are written as `DOM:` (domain/model), `PER:` (persist
 | UX-44 | Performance instrumentation + profile tests | `integration_test/perf_*`, debug rebuild counters | M1–M3 | §22 budgets measured on the low-tier device; report artifact in CI |
 | UX-44b | Timeline picture-tile cache (conditional) | `timeline/timeline_tiles.dart` | UX-44 (budget miss) | Scroll/follow UI-thread time within budget; invalidation tests; visual parity with direct painting (golden) |
 | UX-45 | On-device E2E suite | `integration_test/e2e_*` | M4 | §21.5 scenarios 1–7 pass on the iOS and Android device set |
-| UX-46 | README + docs | `README.md`, `docs/editor/user-guide.md` (shortcuts, features) | M4 | Architecture tree updated; editor shortcuts table; user guide |
+| UX-46 | README + docs | `README.md`, `docs/v1.1/editor/user-guide.md` (shortcuts, features) | M4 | Architecture tree updated; editor shortcuts table; user guide |
 | UX-47 | Store metadata (fastlane) | `ios/fastlane/metadata`, `android/fastlane/metadata`, `publishing/screenshots` | M4 | Descriptions mention editing and auto captions; privacy labels unchanged; screenshots updated |
 
 ---

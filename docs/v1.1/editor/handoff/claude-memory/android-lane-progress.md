@@ -11,7 +11,7 @@ metadata:
 **Next run (when the owner says to resume; nothing from the Mac needed for the first three):** AND-06, AND-07 (group `and-m2b`), AND-09 (`and-m3-text`), then AND-17, AND-10, AND-16, AND-13/14/15, AND-11, AND-18, AND-19, AND-12.
 Args: `root = 'C:/dev/danaview'`, `landed = ["ENG-09","API-04","ENG-08","AI-04","ENG-06","ENG-02","ENG-03","ENG-04"]` (owner-given list, 2026-10-11; `D-43E` is no longer a gate, the workflow dropped it), plus `preloaded` for `eng08`, `ai-android`, `and-m2a`, `and-m3-render` (pass `true`). Before starting: `git fetch && git merge origin/editor-wip`, re-read ANDROID_LANE.md and the workflow script.
 
-**Local workflow copy:** the old patched copy (`android_lane_workflow.local.js`, `patch_wf.js`, `machine_note.txt`) lived in a scratchpad of the old OneDrive-path project and is no longer reachable. On resume, make a fresh local copy of `docs/editor/handoff/android_lane_workflow.js` with a machine note (source `~/danaview_env.sh`; the media_kit jar workaround in [[windows-machine-state]]).
+**Local workflow copy:** the old patched copy (`android_lane_workflow.local.js`, `patch_wf.js`, `machine_note.txt`) lived in a scratchpad of the old OneDrive-path project and is no longer reachable. On resume, make a fresh local copy of `docs/v1.1/editor/handoff/android_lane_workflow.js` with a machine note (source `~/danaview_env.sh`; the media_kit jar workaround in [[windows-machine-state]]).
 
 **Still gated on the Mac:** AND-16 is gated on ENG-06 + `AND16-SHIM`. Do NOT add `AND16-SHIM` to `landed` until the Mac lead confirms `android/src/main/cpp/` exists with the shim (owner, 2026-10-11). AND-18 needs INT-06 (and AND-16's gates).
 

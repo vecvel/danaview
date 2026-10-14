@@ -17,11 +17,11 @@ This machine is the **Windows laptop (32 GB RAM, no Xcode)** in the two-machine 
 - **Done and merged into editor-wip:** ENG-08, AI-04, AND-02, AND-03, AND-04, AND-05, AND-08.
 - **Landed Mac gates:** ENG-09, API-04, ENG-06, ENG-02, ENG-03, ENG-04.
 - **Next tickets on resume (owner's order):** AND-06, AND-07, AND-09, then AND-17, AND-10, AND-16, AND-13/14/15, AND-11, AND-18, AND-19, AND-12. (AND-16's design follows [[d43e-signoff]]; its gates are ENG-06 + AND16-SHIM; AND-18 also needs INT-06 from the Mac.)
-- **Lane workflow args (owner, 2026-10-11):** `root = 'C:/dev/danaview'`, `landed = ["ENG-09","API-04","ENG-08","AI-04","ENG-06","ENG-02","ENG-03","ENG-04"]`, plus `preloaded` for the done groups (`eng08`, `ai-android`, `and-m2a`, `and-m3-render`). Script: `docs/editor/handoff/android_lane_workflow.js` (already uses C:/dev/danaview paths).
+- **Lane workflow args (owner, 2026-10-11):** `root = 'C:/dev/danaview'`, `landed = ["ENG-09","API-04","ENG-08","AI-04","ENG-06","ENG-02","ENG-03","ENG-04"]`, plus `preloaded` for the done groups (`eng08`, `ai-android`, `and-m2a`, `and-m3-render`). Script: `docs/v1.1/editor/handoff/android_lane_workflow.js` (already uses C:/dev/danaview paths).
 - Only resume when the owner says so ("continue the editor build"); never start builders or the workflow otherwise.
 
 ## How to work
-- **Read first:** docs/editor/handoff/README.md, ANDROID_LANE.md (ticket order, gates, owned files), WINDOWS_SETUP.md, BUILD_STATE.md, android_lane_workflow.js.
+- **Read first:** docs/v1.1/editor/handoff/README.md, ANDROID_LANE.md (ticket order, gates, owned files), WINDOWS_SETUP.md, BUILD_STATE.md, android_lane_workflow.js.
 - **Git:**
   - Work on `editor-android`; the Mac merges it into `editor-wip`, and this branch pulls `editor-wip` back (`git fetch` then `git merge origin/editor-wip`, or `git pull` when in sync).
   - One commit per finished ticket: `feat(editor): <TICKET> <title>`, NO Claude co-author trailer ([[no-claude-coauthor]]). Continuous backups while builders run: `chore(editor): work-in-progress backup (Android lane)`.

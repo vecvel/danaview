@@ -1,8 +1,8 @@
 name: danaview
-description: "Danaview - Ultra-high performance cross-platform media player."
+description: "Danaview - All-in-one cross-platform media player, native camera, and unified photo & video editor."
 publish_to: 'none'
 
-version: 1.0.0+2
+version: 1.0.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
