@@ -91,7 +91,7 @@ enum CompositionTestSupport {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let video = AVAssetWriterInput(
             mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 64, AVVideoHeightKey: 64])
-        video.expectsMediaDataInRealTime = false
+        video.expectsMediaDataInRealTime = true
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: video,
             sourcePixelBufferAttributes: [
@@ -104,6 +104,7 @@ enum CompositionTestSupport {
             AVLinearPCMIsNonInterleaved: false,
         ]
         let audio = [AVAssetWriterInput(mediaType: .audio, outputSettings: pcm), AVAssetWriterInput(mediaType: .audio, outputSettings: pcm)]
+        audio.forEach { $0.expectsMediaDataInRealTime = true }
         writer.add(video)
         audio.forEach { writer.add($0) }
         XCTAssertTrue(writer.startWriting(), "synthetic writer: \(String(describing: writer.error))")
@@ -131,10 +132,11 @@ enum CompositionTestSupport {
                 waited += 1
             }
         }
-        // Interleaved per second: 30 video frames (flat grey level i % 256), then 1 s of each tone.
-        for second in 0..<syntheticSeconds {
-            for f in 0..<Int(fps) {
-                let i = second * Int(fps) + f
+        // Interleaved in 100 ms steps: 3 video frames (flat grey level i % 256), then 100 ms of each tone.
+        let chunk = 4_800
+        for step in 0..<(syntheticSeconds * 10) {
+            for f in 0..<3 {
+                let i = step * 3 + f
                 try await waitReady(video)
                 var pb: CVPixelBuffer?
                 CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &pb)
@@ -147,9 +149,9 @@ enum CompositionTestSupport {
             for (index, input) in audio.enumerated() {
                 let hz = index == 0 ? 1_000.0 : 440.0
                 try await waitReady(input)
-                var samples = [Int16](repeating: 0, count: 48_000)
-                for n in 0..<48_000 {
-                    let t = Double(second * 48_000 + n) / 48_000
+                var samples = [Int16](repeating: 0, count: chunk)
+                for n in 0..<chunk {
+                    let t = Double(step * chunk + n) / 48_000
                     samples[n] = Int16(8_200 * sin(2 * Double.pi * hz * t))
                 }
                 var block: CMBlockBuffer?
@@ -162,8 +164,8 @@ enum CompositionTestSupport {
                 }
                 var sample: CMSampleBuffer?
                 CMAudioSampleBufferCreateReadyWithPacketDescriptions(
-                    allocator: nil, dataBuffer: block!, formatDescription: formats[index], sampleCount: 48_000,
-                    presentationTimeStamp: CMTime(value: CMTimeValue(second * 48_000), timescale: 48_000), packetDescriptions: nil,
+                    allocator: nil, dataBuffer: block!, formatDescription: formats[index], sampleCount: chunk,
+                    presentationTimeStamp: CMTime(value: CMTimeValue(step * chunk), timescale: 48_000), packetDescriptions: nil,
                     sampleBufferOut: &sample)
                 XCTAssertTrue(input.append(try XCTUnwrap(sample)))
             }

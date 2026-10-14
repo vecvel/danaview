@@ -9,8 +9,8 @@
 //   keyframes" and a key strip: the item's duration with one diamond per key. A tap selects a key
 //   (`EditorController.selectKeyframe`, the same selection the timeline diamonds make); dragging a
 //   diamond moves it, snapped to frames and to the playhead, as one `EditTransaction` (one history
-//   entry, label "Move keyframe"). Assistive technology gets each diamond as a node with select and
-//   frame-nudge actions.
+//   entry, label "Move keyframe"). Assistive technology gets each diamond as a node with a select action
+//   and the custom actions "Move one frame earlier" / "Move one frame later".
 // * The selected key opens a card under its property: time with -1 / +1 frame nudges (a MoveKeyframe
 //   each, joined into one history entry while they come less than 500 ms apart), the value in
 //   `InspectorNumberRow`s (SetKeyframeValue), the interpolation ("Linear", read-only in v1), "Jump
@@ -28,6 +28,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart' show Icons;
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_editor_core/eval.dart' show evaluate;
@@ -255,6 +256,12 @@ class KeyframeStrip extends StatefulWidget {
   /// Distance within which a dragged diamond snaps to the playhead.
   static const double snapSlop = 8;
 
+  /// The assistive-technology action that moves a key one frame earlier.
+  static const CustomSemanticsAction nudgeEarlierAction = CustomSemanticsAction(label: KeyframeStrings.nudgeEarlier);
+
+  /// The assistive-technology action that moves a key one frame later.
+  static const CustomSemanticsAction nudgeLaterAction = CustomSemanticsAction(label: KeyframeStrings.nudgeLater);
+
   /// Where a key at item-local [t] sits in a strip [width] wide for an item of [duration].
   static double xOf(double width, TimeUs t, TimeUs duration) =>
       pad + (duration <= 0 ? 0 : t / duration) * math.max(1.0, width - 2 * pad);
@@ -304,7 +311,7 @@ class KeyframeStrip extends StatefulWidget {
   /// The drag ended with the key at [to] (equal to [from] when it did not move).
   final void Function(TimeUs from, TimeUs to)? onDragEnd;
 
-  /// The semantics action moved the key at the time by one frame (-1 earlier, 1 later).
+  /// A semantics action moved the key at the time by one frame (-1 earlier, 1 later).
   final void Function(TimeUs t, int frames)? onNudge;
 
   @override
@@ -426,8 +433,12 @@ class _KeyframeStripState extends State<KeyframeStrip> {
                         label: KeyframeStrings.diamondLabel(widget.label, widget.timeLabel(t)),
                         value: KeyframeStrings.diamondValue(widget.valueLabel(t)),
                         onTap: widget.onSelect == null ? null : () => widget.onSelect!(t),
-                        onIncrease: widget.enabled && widget.onNudge != null ? () => widget.onNudge!(t, 1) : null,
-                        onDecrease: widget.enabled && widget.onNudge != null ? () => widget.onNudge!(t, -1) : null,
+                        customSemanticsActions: widget.enabled && widget.onNudge != null
+                            ? <CustomSemanticsAction, VoidCallback>{
+                                KeyframeStrip.nudgeEarlierAction: () => widget.onNudge!(t, -1),
+                                KeyframeStrip.nudgeLaterAction: () => widget.onNudge!(t, 1),
+                              }
+                            : null,
                         child: const SizedBox.expand(),
                       ),
                     ),
@@ -1050,8 +1061,8 @@ class _SelectedKeyframe extends StatelessWidget {
         ? Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              numberRow(isSize ? 'Width' : 'X', value.x, (x) => onValue(Vec2(x, value.y))),
-              numberRow(isSize ? 'Height' : 'Y', value.y, (y) => onValue(Vec2(value.x, y))),
+              numberRow(isSize ? KeyframeStrings.valueWidth : KeyframeStrings.valueX, value.x, (x) => onValue(Vec2(x, value.y))),
+              numberRow(isSize ? KeyframeStrings.valueHeight : KeyframeStrings.valueY, value.y, (y) => onValue(Vec2(value.x, y))),
             ],
           )
         : numberRow(KeyframeStrings.value, (value is num ? value.toDouble() : 0), (v) => onValue(v));

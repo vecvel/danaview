@@ -68,6 +68,18 @@ abstract final class KeyframeStrings {
   /// Label of the value row.
   static const String value = 'Value';
 
+  /// First value row of a position or mask centre key.
+  static const String valueX = 'X';
+
+  /// Second value row of a position or mask centre key.
+  static const String valueY = 'Y';
+
+  /// First value row of a mask size key.
+  static const String valueWidth = 'Width';
+
+  /// Second value row of a mask size key.
+  static const String valueHeight = 'Height';
+
   /// Label of the interpolation row.
   static const String interpolation = 'Interpolation';
 

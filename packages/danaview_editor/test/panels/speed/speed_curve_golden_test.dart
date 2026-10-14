@@ -7,8 +7,6 @@
 // Regenerate (after reviewing the change) with:
 //   flutter test --update-goldens test/panels/speed/speed_curve_golden_test.dart
 
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
