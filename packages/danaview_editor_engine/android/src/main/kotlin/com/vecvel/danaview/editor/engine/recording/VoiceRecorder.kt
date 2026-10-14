@@ -535,7 +535,8 @@ class VoiceRecorder(private val ctx: EngineContext) {
             return ((db - LEVEL_FLOOR_DB) / -LEVEL_FLOOR_DB).coerceIn(0.0, 1.0)
         }
 
-        /** Clears the remembered permission answers (tests). */
+        /** Clears the remembered permission answers (tests; synchronous so the next read sees it). */
+        @SuppressLint("ApplySharedPref")
         internal fun resetPermissionMemory(context: Context) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
         }
