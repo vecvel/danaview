@@ -1,0 +1,127 @@
+{
+  "comment": "CORE-37 heavy-range vectors (ARCH D-45(A)). Frames on a 30 fps grid. Budgets per tier: android = RenderBudget.forTier(tier, maxVisualSequences: 2|3|4|6); ios = RenderBudget.forTier(tier) (no slot limit). Expected: heavy ranges [k0, k1) with reasons.",
+  "budgets": {
+    "android.minimal": {"maxLiveDecoders": 2, "maxLiveSlots": 2, "effectCostLimit": 2},
+    "android.low": {"maxLiveDecoders": 3, "maxLiveSlots": 3, "effectCostLimit": 4},
+    "android.mid": {"maxLiveDecoders": 4, "maxLiveSlots": 4, "effectCostLimit": 6},
+    "android.high": {"maxLiveDecoders": 6, "maxLiveSlots": 6, "effectCostLimit": 8},
+    "ios.minimal": {"maxLiveDecoders": 2, "maxLiveSlots": null, "effectCostLimit": 2},
+    "ios.low": {"maxLiveDecoders": 3, "maxLiveSlots": null, "effectCostLimit": 4},
+    "ios.mid": {"maxLiveDecoders": 4, "maxLiveSlots": null, "effectCostLimit": 6},
+    "ios.high": {"maxLiveDecoders": 6, "maxLiveSlots": null, "effectCostLimit": 8}
+  },
+  "cases": [
+    {
+      "name": "three overlapping video layers",
+      "layers": [
+        {"kind": "media", "k": [0, 60], "z": 0},
+        {"kind": "media", "k": [0, 60], "z": 1},
+        {"kind": "media", "k": [0, 60], "z": 2}
+      ],
+      "expect": {
+        "android.minimal": [{"k": [0, 60], "reasons": ["decoders"]}], "android.low": [], "android.mid": [], "android.high": [],
+        "ios.minimal": [{"k": [0, 60], "reasons": ["decoders"]}], "ios.low": [], "ios.mid": [], "ios.high": []
+      }
+    },
+    {
+      "name": "five overlapping video layers",
+      "layers": [
+        {"kind": "media", "k": [0, 30], "z": 0},
+        {"kind": "media", "k": [0, 30], "z": 1},
+        {"kind": "media", "k": [0, 30], "z": 2},
+        {"kind": "media", "k": [0, 30], "z": 3},
+        {"kind": "media", "k": [0, 30], "z": 4}
+      ],
+      "expect": {
+        "android.minimal": [{"k": [0, 30], "reasons": ["decoders"]}], "android.low": [{"k": [0, 30], "reasons": ["decoders"]}],
+        "android.mid": [{"k": [0, 30], "reasons": ["decoders"]}], "android.high": [],
+        "ios.minimal": [{"k": [0, 30], "reasons": ["decoders"]}], "ios.low": [{"k": [0, 30], "reasons": ["decoders"]}],
+        "ios.mid": [{"k": [0, 30], "reasons": ["decoders"]}], "ios.high": []
+      }
+    },
+    {
+      "name": "two live decoders but three packed slots (split clip continued in another slot)",
+      "layers": [
+        {"kind": "media", "k": [0, 60], "z": 0, "seq": 0, "asset": "a"},
+        {"kind": "media", "k": [0, 30], "z": 1, "seq": 1, "asset": "b", "src": 0},
+        {"kind": "media", "k": [30, 60], "z": 1, "seq": 2, "asset": "b", "src": 30}
+      ],
+      "expect": {
+        "android.minimal": [{"k": [0, 60], "reasons": ["decoders"]}], "android.low": [], "android.mid": [], "android.high": [],
+        "ios.minimal": [], "ios.low": [], "ios.mid": [], "ios.high": []
+      }
+    },
+    {
+      "name": "chroma key is always heavy",
+      "layers": [
+        {"kind": "media", "k": [0, 30], "z": 0},
+        {"kind": "solid", "k": [30, 40], "z": 1}
+      ],
+      "chromaOn": [0],
+      "expect": {
+        "android.minimal": [{"k": [0, 30], "reasons": ["chromaKey"]}], "android.low": [{"k": [0, 30], "reasons": ["chromaKey"]}],
+        "android.mid": [{"k": [0, 30], "reasons": ["chromaKey"]}], "android.high": [{"k": [0, 30], "reasons": ["chromaKey"]}],
+        "ios.minimal": [{"k": [0, 30], "reasons": ["chromaKey"]}], "ios.low": [{"k": [0, 30], "reasons": ["chromaKey"]}],
+        "ios.mid": [{"k": [0, 30], "reasons": ["chromaKey"]}], "ios.high": [{"k": [0, 30], "reasons": ["chromaKey"]}]
+      }
+    },
+    {
+      "name": "blur + LUT + mask on one layer (cost 3)",
+      "layers": [
+        {"kind": "media", "k": [0, 30], "z": 0, "fx": ["blur", "lut", "mask"]}
+      ],
+      "expect": {
+        "android.minimal": [{"k": [0, 30], "reasons": ["effects"]}], "android.low": [], "android.mid": [], "android.high": [],
+        "ios.minimal": [{"k": [0, 30], "reasons": ["effects"]}], "ios.low": [], "ios.mid": [], "ios.high": []
+      }
+    },
+    {
+      "name": "two images with four effects each, overlapping (cost 4 / 8 / 4)",
+      "layers": [
+        {"kind": "image", "k": [0, 20], "z": 0, "fx": ["blur", "sharpen", "lut", "mask"]},
+        {"kind": "image", "k": [10, 30], "z": 1, "fx": ["blur", "sharpen", "lut", "mask"]}
+      ],
+      "expect": {
+        "android.minimal": [{"k": [0, 10], "reasons": ["effects"]}, {"k": [10, 20], "reasons": ["effects"]}, {"k": [20, 30], "reasons": ["effects"]}],
+        "android.low": [{"k": [10, 20], "reasons": ["effects"]}],
+        "android.mid": [{"k": [10, 20], "reasons": ["effects"]}],
+        "android.high": [],
+        "ios.minimal": [{"k": [0, 10], "reasons": ["effects"]}, {"k": [10, 20], "reasons": ["effects"]}, {"k": [20, 30], "reasons": ["effects"]}],
+        "ios.low": [{"k": [10, 20], "reasons": ["effects"]}],
+        "ios.mid": [{"k": [10, 20], "reasons": ["effects"]}],
+        "ios.high": []
+      }
+    },
+    {
+      "name": "a held (pending still) layer is not a live decoder",
+      "layers": [
+        {"kind": "media", "k": [0, 30], "z": 0},
+        {"kind": "media", "k": [0, 30], "z": 1},
+        {"kind": "media", "k": [0, 30], "z": 2, "hold": true}
+      ],
+      "expect": {
+        "android.minimal": [], "android.low": [], "android.mid": [], "android.high": [],
+        "ios.minimal": [], "ios.low": [], "ios.mid": [], "ios.high": []
+      }
+    },
+    {
+      "name": "decoders and chroma together on minimal",
+      "layers": [
+        {"kind": "media", "k": [0, 30], "z": 0},
+        {"kind": "media", "k": [0, 30], "z": 1},
+        {"kind": "media", "k": [10, 20], "z": 2}
+      ],
+      "chromaOn": [2],
+      "expect": {
+        "android.minimal": [{"k": [10, 20], "reasons": ["decoders", "chromaKey"]}],
+        "android.low": [{"k": [10, 20], "reasons": ["chromaKey"]}],
+        "android.mid": [{"k": [10, 20], "reasons": ["chromaKey"]}],
+        "android.high": [{"k": [10, 20], "reasons": ["chromaKey"]}],
+        "ios.minimal": [{"k": [10, 20], "reasons": ["decoders", "chromaKey"]}],
+        "ios.low": [{"k": [10, 20], "reasons": ["chromaKey"]}],
+        "ios.mid": [{"k": [10, 20], "reasons": ["chromaKey"]}],
+        "ios.high": [{"k": [10, 20], "reasons": ["chromaKey"]}]
+      }
+    }
+  ]
+}

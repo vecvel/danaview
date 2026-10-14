@@ -48,7 +48,7 @@ String? _ownerHeader(String source) => RegExp(r'^(?://|#|<!--) OWNER: ([A-Z]+-\d
 
 void main() {
   final root = findRepoRoot();
-  final plan = File('${root.path}/docs/editor/BUILD_PLAN.md').readAsStringSync();
+  final plan = File('${root.path}/docs/v1.1/editor/BUILD_PLAN.md').readAsStringSync();
   final owned = _ownedEditorPaths(plan);
   String read(String rel) => File('${root.path}/$rel').readAsStringSync();
 

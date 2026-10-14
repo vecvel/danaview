@@ -81,9 +81,10 @@ void main() {
           .map((f) => f.uri.pathSegments.last)
           .where((n) => n.endsWith('.dart'))
           .toSet();
-      // `testing.dart` is the CORE-25 in-memory fake barrel (ARCH §4.6 `FakeProjectRepository`).
+      // `testing.dart` is the CORE-25 in-memory fake barrel (ARCH §4.6 `FakeProjectRepository`);
+      // `render_cache.dart` is the CORE-37 render-preview cache barrel (ARCH §4.3, D-45).
       expect(barrels, containsAll(['model.dart', 'ops.dart', 'eval.dart', 'formats.dart', 'plan.dart', 'codec.dart', 'store.dart']));
-      expect(barrels.difference({'model.dart', 'ops.dart', 'eval.dart', 'formats.dart', 'plan.dart', 'codec.dart', 'store.dart', 'testing.dart'}), isEmpty);
+      expect(barrels.difference({'model.dart', 'ops.dart', 'eval.dart', 'formats.dart', 'plan.dart', 'codec.dart', 'store.dart', 'testing.dart', 'render_cache.dart'}), isEmpty);
     });
 
     test('every file under lib/src is reachable from a barrel (export or part)', () {
@@ -98,7 +99,7 @@ void main() {
         }
       }
 
-      for (final b in ['model', 'ops', 'eval', 'formats', 'plan', 'codec', 'store']) {
+      for (final b in ['model', 'ops', 'eval', 'formats', 'plan', 'codec', 'store', 'render_cache']) {
         walk('lib/$b.dart');
       }
       final all = _dartFiles('lib/src').map(_rel).toSet();

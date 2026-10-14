@@ -621,8 +621,8 @@ void main() {
       SemanticsNode node(WidgetTester tester, int i, int n) => tester.getSemantics(find.bySemanticsLabel('Point $i of $n'));
 
       void perform(WidgetTester tester, SemanticsNode n, SemanticsAction action, [Object? arguments]) {
-        // ignore: invalid_use_of_protected_member
         SemanticsBinding.instance
+            // ignore: invalid_use_of_protected_member
             .performSemanticsAction(SemanticsActionEvent(type: action, nodeId: n.id, viewId: tester.view.viewId, arguments: arguments));
       }
 
@@ -935,7 +935,7 @@ void main() {
     });
 
     testSpeedSurfaces('curve with a selected point', (tester, surface) async {
-      final rig = await SpeedRig.pump(tester, surface: surface);
+      await SpeedRig.pump(tester, surface: surface);
       await switchToCurve(tester);
       await tap(tester, preset('flashIn'));
       await tap(tester, key('speed.addPoint'));

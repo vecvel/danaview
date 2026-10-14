@@ -1,7 +1,8 @@
 # Danaview 1.2.0: AI Studio and advanced subtitles
 
 > **Release:** Danaview 1.2.0 (app version `1.2.0+N`; 1.1.x stays for editor bug fixes). **Date:** 2026-10-11. **Status:** proposal, written while the v1 editor (Danaview 1.1.0) is being built on `editor-wip`.
-> **Baseline:** `docs/editor/ARCHITECTURE.md` (decisions D-01 to D-44, "ARCH") and `docs/editor/BUILD_PLAN.md` (158 tickets M0–M6, "BP"), plus the area designs in `docs/editor/design/` (`domain.md`, `native.md`, `ux.md`, `ai.md`) and the code on `editor-wip`. ARCH stays the source of truth for v1 behaviour. This plan proposes decisions **D-45 to D-70**. AIS-01 records them in ARCH (an [INTEGRATION] change) once the owner has confirmed the ones marked **[OWNER]**.
+> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` (decisions D-01 to D-44, "ARCH") and `docs/v1.1/editor/BUILD_PLAN.md` (158 tickets M0–M6, "BP"), plus the area designs in `docs/v1.1/editor/design/` (`domain.md`, `native.md`, `ux.md`, `ai.md`) and the code on `editor-wip`. ARCH stays the source of truth for v1 behaviour. This plan proposes decisions **D-45 to D-70**. AIS-01 records them in ARCH (an [INTEGRATION] change) once the owner has confirmed the ones marked **[OWNER]**.
+> **Release placement (2026-10-15):** 1.2.0 also ships the Unified Media Home (`docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md`) and the Unified Photo & Video Editor (`docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md`); the desktop editor and the native camera moved to 1.3.0. AIS-04's schema 2 comes first; the photo/video editor's schema 3 (VED-15) builds on it. **Decision-number clash:** v1.1 ARCHITECTURE now has its own D-45 (render-preview cache, added 2026-10-11), so this plan's D-45…D-70 must be renumbered when AIS-01 records them in ARCH.
 > **Scope:** 1.2.0 work starts after the v1 release ticket INT-05 lands. Every v1 ticket listed under "Depends on" is therefore already merged when its 1.2.0 dependant starts.
 > **Notation:** "ARCH §11.2" points into ARCHITECTURE.md and "BP §6" into BUILD_PLAN.md. **[OWNER]** marks a decision the owner must confirm. **[VERIFY]** marks a claim to check during implementation; the ticket that closes each one is listed in §6.3. "Extends CORE-15" means the ticket edits a file that v1 ticket CORE-15 created (§5.1 rule 2).
 
@@ -1039,7 +1040,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
   - `test/architecture/dependency_rules_test.dart` (extends INT-01)
   - `packages/danaview_editor/test/architecture/ai_call_sites_test.dart`
   - `.github/workflows/editor-ci.yml` (extends INT-01), `scripts/ci/editor/ai.sh`
-  - `docs/editor/ARCHITECTURE.md` ([INTEGRATION]: D-45…D-70 with the owner's answers, §4 additions)
+  - `docs/v1.1/editor/ARCHITECTURE.md` ([INTEGRATION]: D-45…D-70 with the owner's answers, §4 additions)
 - **Spec:**
   - **Placeholders (D-33)** for every new file in §3.2 and for the new binding and string files, each with `// OWNER: AIS-xx`.
   - **Manifests.**
@@ -1852,7 +1853,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
   - `integration_test/editor/ai_studio/`, `integration_test/editor/rich_subtitles/`
   - `scripts/ci/editor/ai_e2e.sh`
   - `packages/danaview_editor/test/overflow/ai_studio/`
-  - `docs/editor/v1.2/qa/e2e_report.md`
+  - `docs/v1.2/ai-studio/qa/e2e_report.md`
 - **Spec:**
   - Run on the iOS Simulator (iPhone 17 Pro, iPad Pro with keyboard) and the Android Emulator (API 35 Pixel, API 29 minimal), with a loopback fake provider started by the test (`DANAVIEW_AI_FAKE_HOST`) serving hand-written fixtures.
   - Scenarios:
@@ -1878,7 +1879,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Owns:**
   - `integration_test/editor/rich_parity/`
   - `packages/danaview_editor/test/parity/rich_text/`
-  - `docs/editor/v1.2/qa/parity_and_performance.md`
+  - `docs/v1.2/ai-studio/qa/parity_and_performance.md`
 - **Spec:**
   - On the simulator, the emulator and the device lab (iPhone SE 2 and the 4 GB Android): compare the preview overlay capture with export frames at cue midpoints and karaoke word boundaries for Latin, Arabic, Hebrew, Devanagari, Thai, CJK (system), mixed bidi and emoji (the QA-03 parity method, text regions only).
   - Budgets:
@@ -1896,7 +1897,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Depends on:** AIS-37
 - **Owns:**
   - `packages/danaview_ai_providers/tool/live_check.dart`
-  - `docs/editor/v1.2/qa/live_providers.md`
+  - `docs/v1.2/ai-studio/qa/live_providers.md`
 - **Spec:**
   - A manual tool, never run in CI. It reads keys from environment variables for the owner's accounts and runs each contract on a fixed public-domain sample text (and a CC0 speech clip from ENG-05's fixtures).
   - It records request and response **shapes** (keys present, field types, error bodies, usage fields) but never content or keys.
@@ -1910,11 +1911,11 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
 - **Milestone:** S5 · **Area:** Integration
 - **Depends on:** AIS-38, AIS-39, AIS-40, AIS-36, AIS-37 (+ AIS-27 if scheduled)
 - **Owns:**
-  - `docs/editor/release-checklist.md` (extends INT-05: 1.2.0 section)
+  - `docs/v1.1/editor/release-checklist.md` (extends INT-05: 1.2.0 section)
   - Release dart-defines in the release lanes and workflows (extends INT-05)
   - Root `pubspec.yaml` version `1.2.0+N` ([INTEGRATION])
   - `ios/fastlane/metadata*/`, Android Play listing metadata
-  - `docs/editor/ARCHITECTURE.md` ([INTEGRATION]: 1.2.0 status, [VERIFY] closures)
+  - `docs/v1.1/editor/ARCHITECTURE.md` ([INTEGRATION]: 1.2.0 status, [VERIFY] closures)
 - **Spec:**
   - Release builds pass `--dart-define=DANAVIEW_AI_STUDIO=true` alongside v1's flags.
   - Store descriptions and release notes ("AI Studio is optional and off by default. It uses your own key with Gemini, OpenAI, Claude, OpenRouter or Grok. Nothing is sent until you choose to.").
@@ -1963,8 +1964,8 @@ These v1 files are edited by 1.2.0 tickets. Each row is edited by exactly one 1.
 | `danaview_features/lib/src/more/legal_texts.dart` | UX-42 | AIS-36 |
 | `lib/main.dart`, `lib/router/app_router.dart`, root `pubspec.yaml` | INT-02/INT-04/INT-05 | AIS-37 → AIS-41 (version only) |
 | `test/architecture/dependency_rules_test.dart`, `.github/workflows/editor-ci.yml` | INT-01 | AIS-01 |
-| `docs/editor/ARCHITECTURE.md` | INT-01/ENG-06/INT-05 | AIS-01 → AIS-41 |
-| `docs/editor/release-checklist.md`, release lanes | INT-05 | AIS-41 |
+| `docs/v1.1/editor/ARCHITECTURE.md` | INT-01/ENG-06/INT-05 | AIS-01 → AIS-41 |
+| `docs/v1.1/editor/release-checklist.md`, release lanes | INT-05 | AIS-41 |
 
 ### 5.7 Feature coverage (owner's list → tickets)
 

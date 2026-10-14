@@ -1,6 +1,10 @@
 // OWNER: UX-30
 //
-// Placeholder (D-33) created by UX-01. UX-30 turns this package into the assets-only content-font
-// package (ARCH §17.8, D-30). Declares no public names yet.
+// The assets-only content-font package (ARCH §17.8, D-30): the curated OFL-1.1 families for user
+// text (overlays, subtitles), their stable ids and their licences. UI chrome stays Figtree from
+// danaview_ui_kit.
 
 library;
+
+export 'src/bundled_fonts.g.dart';
+export 'src/content_fonts.dart';

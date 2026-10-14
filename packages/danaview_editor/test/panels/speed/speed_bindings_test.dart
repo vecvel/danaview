@@ -4,7 +4,6 @@
 // video or audio clip on an unlocked track while the project accepts edits, says why otherwise, and
 // opens the speed panel on the selected clip; the context tool tile runs it.
 
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/app/strings/speed_strings.dart';
 import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart';

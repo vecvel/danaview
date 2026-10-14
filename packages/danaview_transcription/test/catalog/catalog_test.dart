@@ -81,7 +81,7 @@ void main() {
     });
 
     test('ARCHITECTURE.md §16.2 table still matches the catalog (guards doc/code drift)', () {
-      final doc = File('../../docs/editor/ARCHITECTURE.md');
+      final doc = File('../../docs/v1.1/editor/ARCHITECTURE.md');
       if (!doc.existsSync()) return;
       final text = doc.readAsStringSync();
       for (final m in [...SpeechModelCatalog.models, SpeechModelCatalog.vad]) {

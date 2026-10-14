@@ -21,10 +21,10 @@
 **Danaview** is an all-in-one visual media ecosystem bringing playback, creation, capture, and editing into a unified, privacy-first application across mobile and desktop.
 
 - 🎥 **The Player** (available now, v1.0): plays almost any video file or network stream on Android, iOS, macOS, Windows and Linux, with a 10-band equalizer, volume boost up to 300%, subtitles, playlists, a queue, diagnostics and built-in network and media tools.
-- ✂️ **The Unified Photo & Video Editor** (in development, v1.1.0 mobile · v1.2.0 desktop · v1.3.0 photo & beauty updates): a single, high-performance editor serving both photo editing and multi-track video editing dynamically based on user intent. Includes still photo post-processing (16-bit float pipeline, pro tone adjustments, 8-channel HSL color mixer, RGB curves, selective masks, perspective keystone, batch export), multi-track video timeline editing (frame-accurate cuts, transitions, keyframes, hardware export, and **on-device AI subtitles**), and the **complete 8-category Beauty & Retouching Suite** (face slimming, feature reshaping, blemish healing, virtual makeup, body slimming) with temporal One-Euro landmark tracking for moving video.
+- ✂️ **The Unified Photo & Video Editor** (in development, v1.1.0 mobile video · v1.2.0 photo editing & beauty · v1.3.0 desktop): a single, high-performance editor serving both photo editing and multi-track video editing dynamically based on user intent. Includes still photo post-processing (16-bit float pipeline, pro tone adjustments, 8-channel HSL color mixer, RGB curves, selective masks, perspective keystone, batch export), multi-track video timeline editing (frame-accurate cuts, transitions, keyframes, hardware export, and **on-device AI subtitles**), and the **complete 8-category Beauty & Retouching Suite** (face slimming, feature reshaping, blemish healing, virtual makeup, body slimming) with temporal One-Euro landmark tracking for moving video.
 - 🤖 **AI Studio** (v1.2.0): optional bring-your-own-key intelligence for transcripts, translation, emotion detection, and advanced word-by-word karaoke styling.
 - 📷 **The In-House Native Camera** (v1.3.0): high-performance capture built directly on native OS APIs (`AVFoundation`, `Camera2/CameraX`), featuring the **8-category real-time beauty & face reshaping suite**, cinematic portrait bokeh, pro manual controls (ISO, shutter, focus peaking), live overlays & masks, dual front+back simultaneous capture, and background device audio recording with external mic opt-out.
-- 🗂️ **Unified Media Home** (v1.3.0): a unified visual media hub for browsing both photos and videos, system albums, and device folders—while **strictly preserving 100% of existing player, playlist, queue, and streaming features**.
+- 🗂️ **Unified Media Home** (v1.2.0): a unified visual media hub for browsing both photos and videos, system albums, and device folders—while **strictly preserving 100% of existing player, playlist, queue, and streaming features**.
 
 **Legend:** ✅ available now · 🚧 in development · 🗓️ planned 
 
@@ -247,7 +247,7 @@ Built natively for **iPhone, iPad and Android** (iOS 15+, Android 10+):
 
 ---
 
-## 🤖 AI Studio & Advanced Subtitles 🚧 (v1.2.0)
+## 🤖 AI Studio & Advanced Subtitles 🗓️ (v1.2.0)
 
 Private, bring-your-own-key intelligence and rich karaoke captioning:
 - **Advanced Subtitles (100% on-device):**
@@ -264,43 +264,7 @@ Private, bring-your-own-key intelligence and rich karaoke captioning:
 
 ---
 
-## 🖥️ Desktop Video Editor 🚧 (v1.2.0)
-
-Expanding the non-destructive multi-track editor to **macOS, Windows, and Linux**:
-- **Native Render Engines:**
-  - **macOS:** Metal + AVFoundation (sharing ~90% of the tested Darwin code with iOS).
-  - **Windows:** Media Foundation + Direct3D 11 with hardware MFT encoders (NVENC, Intel QuickSync, AMD AMF).
-  - **Linux:** GStreamer 1.x + VA-API / Vulkan with graceful software fallback.
-- **Desktop Ergonomics:**
-  - Responsive 3-pane workstation with resizable media bin, inspector, canvas, and timeline.
-  - Dedicated desktop cursor tools: Selection (`V`), Razor cut (`C`), Slip (`Y`), and Ripple edit (`B`).
-  - Professional transport shortcuts: J-K-L multi-speed shuttling and space toggle.
-  - Multi-monitor support with detached floating preview canvas.
-  - Native file drag-and-drop from Finder, Windows Explorer, and Linux file managers.
-
----
-
-## 📷 In-House Native Camera & Beauty Suite 🚧 (v1.3.0)
-
-A high-performance capture engine built directly on native OS APIs (`AVFoundation`, `Camera2/CameraX`, `DirectShow`, `V4L2`):
-- **Photo & Video Capture:** zero-shutter-lag photos, 4K 60fps video, 10-bit HDR, and RAW capture (Apple ProRAW / DNG).
-- **Comprehensive 8-Category Beauty Suite (60 fps GPU realtime):**
-  1. **Face Shape & Slimming:** face narrowing, V-line jaw tapering, jawline sharpening, chin slimming/length, forehead adjustment, cheekbone enhancement, symmetry correction, overall face reshape.
-  2. **Eyes & Eyebrows:** eye enlargement, canthus angle tilt, interpupillary spacing, eye brightening, dark-circle & eye-bag removal, eyebrow thickness/arch, procedural eyelashes.
-  3. **Nose & Lips:** nose bridge slimming, bridge elevation, tip reshaping, lip plumping, cupid's bow sculpting, speech smile adjustment.
-  4. **Skin Retouching:** multi-scale bilateral smoothing, neural acne & blemish removal, dark-spot removal, skin tone shifting, anti-shine oiliness reduction, wrinkle softening, natural glow, teeth whitening.
-  5. **Virtual Makeup:** foundation/concealer, lipstick (matte/gloss/velvet/ombré), blush & 3D contour, eyeliner & eyeshadow, colored contact lenses, hair color tinting, freckles & beauty marks.
-  6. **Body Slimming & Proportions:** skeletal silhouette reshaping, waist slimming with background anchor protection, arm/leg slimming, hip/shoulder tuning, leg elongation, posture correction.
-  7. **Camera Filters & Effects:** real-time beauty filters, background portrait blur & optical bokeh ($f/1.4$ to $f/16$), AR face masks, split-screen Before/After comparison.
-  8. **Advanced Features:** 468-point 3D landmark tracking, automatic one-tap beautification, manual pro sliders, custom beauty presets.
-- **Cinematic Capture:** 24 fps cinematic cadence, 2.39:1 anamorphic matte, real-time 3D LUT grading.
-- **Pro Manual Controls:** manual ISO, shutter speed (1/8000s to 1s), focus peaking, live zebra stripes, RGB histogram.
-- **Dual Multicam Capture (Front + Back):** simultaneous concurrent recording with customizable PIP placement, aspect ratio (1:1, 4:3, 16:9), and PIP shape (circle, pill, heart, teardrop, rounded rect) or 50/50 split.
-- **Background Device Audio Recording:** record internal device audio while playing music or games, with opt-out toggle to mute external mic or record multi-track synchronized audio.
-
----
-
-## ✂️🎨 Unified Photo & Video Editor 🚧 (v1.3.0 Updates)
+## ✂️🎨 Unified Photo & Video Editor 🗓️ (v1.2.0 Updates)
 
 The Danaview Editor seamlessly serves both photo editing and multi-track video editing dynamically based on user intent:
 
@@ -325,13 +289,49 @@ The Danaview Editor seamlessly serves both photo editing and multi-track video e
 
 ---
 
-## 🗂️ Unified Media Home Screen 🚧 (v1.3.0)
+## 🗂️ Unified Media Home Screen 🗓️ (v1.2.0)
 
 A unified visual media hub for all photos and videos on your device:
 - **100% Preservation of Player Features:** Now Playing card, Continue Watching tray (resume progress, episode badges), Playlists (create, rename, delete, shuffle, play all), Folders (device storage, external directories, breadcrumbs), Playback Queue, and streaming URL opening (HTTP, RTSP, RTMP, SRT, UDP) remain fully functional.
 - **Unified Navigation Tabs:** `Home / Overview`, `Videos`, `Photos`, `All Media`, `Playlists`, `Folders`, and `Projects`.
 - **Fast Media Browsing:** high-speed Masonry photo grid and adaptive video cards backed by 64 MB LRU memory + disk cache for 50,000+ items.
 - **Multi-Selection "Make Video Montage":** select mixed photos and videos to automatically assemble a timeline story in the Video Editor.
+
+---
+
+## 🖥️ Desktop Photo & Video Editor 🗓️ (v1.3.0)
+
+Every phone editing feature (video, photo mode, beauty, AI captions, AI Studio) on **macOS, Windows, and Linux**:
+- **Native Engines:**
+  - **macOS:** the tested iOS engine (Swift, Metal, AVFoundation, Core Image) shared with the Mac.
+  - **Windows & Linux:** one shared engine written in Rust: `wgpu` GPU rendering (Direct3D 12 / Vulkan) with hardware decode and encode through Media Foundation (NVENC, Quick Sync, AMF) and GStreamer (VA-API, NVDEC).
+  - **Crash-safe by design:** memory-safe Rust, a crash fence on every native call, and unusual formats (MKV, WebM, AVI, ProRes) opened by an isolated FFmpeg helper process that converts them on import.
+- **Desktop Extras:** 4K preview without proxies, GPU-accelerated AI captions, batch export queue, ProRes export (macOS), and colour scopes (waveform, RGB parade, vectorscope, histogram).
+- **Desktop Ergonomics:**
+  - Responsive 3-pane workstation with resizable media bin, inspector, canvas, and timeline.
+  - Dedicated desktop cursor tools: Selection (`V`), Razor cut (`C`), Slip (`Y`), and Ripple edit (`B`).
+  - Professional transport shortcuts: J-K-L multi-speed shuttling, in/out marks and frame stepping.
+  - Native menus and file drag-and-drop from Finder, Windows Explorer, and Linux file managers.
+
+---
+
+## 📷 In-House Native Camera & Beauty Suite 🗓️ (v1.3.0)
+
+A high-performance capture engine built directly on native OS APIs (`AVFoundation`, `Camera2/CameraX`, `DirectShow`, `V4L2`):
+- **Photo & Video Capture:** zero-shutter-lag photos, 4K 60fps video, 10-bit HDR, and RAW capture (Apple ProRAW / DNG).
+- **Comprehensive 8-Category Beauty Suite (60 fps GPU realtime):**
+  1. **Face Shape & Slimming:** face narrowing, V-line jaw tapering, jawline sharpening, chin slimming/length, forehead adjustment, cheekbone enhancement, symmetry correction, overall face reshape.
+  2. **Eyes & Eyebrows:** eye enlargement, canthus angle tilt, interpupillary spacing, eye brightening, dark-circle & eye-bag removal, eyebrow thickness/arch, procedural eyelashes.
+  3. **Nose & Lips:** nose bridge slimming, bridge elevation, tip reshaping, lip plumping, cupid's bow sculpting, speech smile adjustment.
+  4. **Skin Retouching:** multi-scale bilateral smoothing, neural acne & blemish removal, dark-spot removal, skin tone shifting, anti-shine oiliness reduction, wrinkle softening, natural glow, teeth whitening.
+  5. **Virtual Makeup:** foundation/concealer, lipstick (matte/gloss/velvet/ombré), blush & 3D contour, eyeliner & eyeshadow, colored contact lenses, hair color tinting, freckles & beauty marks.
+  6. **Body Slimming & Proportions:** skeletal silhouette reshaping, waist slimming with background anchor protection, arm/leg slimming, hip/shoulder tuning, leg elongation, posture correction.
+  7. **Camera Filters & Effects:** real-time beauty filters, background portrait blur & optical bokeh ($f/1.4$ to $f/16$), AR face masks, split-screen Before/After comparison.
+  8. **Advanced Features:** 468-point 3D landmark tracking, automatic one-tap beautification, manual pro sliders, custom beauty presets.
+- **Cinematic Capture:** 24 fps cinematic cadence, 2.39:1 anamorphic matte, real-time 3D LUT grading.
+- **Pro Manual Controls:** manual ISO, shutter speed (1/8000s to 1s), focus peaking, live zebra stripes, RGB histogram.
+- **Dual Multicam Capture (Front + Back):** simultaneous concurrent recording with customizable PIP placement, aspect ratio (1:1, 4:3, 16:9), and PIP shape (circle, pill, heart, teardrop, rounded rect) or 50/50 split.
+- **Background Device Audio Recording:** record internal device audio while playing music or games, with opt-out toggle to mute external mic or record multi-track synchronized audio.
 
 ---
 
@@ -382,11 +382,11 @@ A unified visual media hub for all photos and videos on your device:
 
 | Platform | Media Player | Unified Photo & Video Editor | Native Camera | AI Studio |
 |---|---|---|---|---|
-| **iOS / iPadOS** | ✅ | 🚧 (v1.1 video · v1.3 photo & beauty) | 🚧 (v1.3) | 🚧 (v1.2) |
-| **Android** | ✅ | 🚧 (v1.1 video · v1.3 photo & beauty) | 🚧 (v1.3) | 🚧 (v1.2) |
-| **macOS** | ✅ | 🚧 (v1.2 desktop · v1.3 photo & beauty) | 🚧 (v1.3 Webcams) | 🚧 (v1.2) |
-| **Windows** | ✅ | 🚧 (v1.2 desktop · v1.3 photo & beauty) | 🚧 (v1.3 Webcams) | 🚧 (v1.2) |
-| **Linux** | ✅ | 🚧 (v1.2 desktop · v1.3 photo & beauty) | 🚧 (v1.3 Webcams) | 🚧 (v1.2) |
+| **iOS / iPadOS** | ✅ | 🚧 (v1.1 video · v1.2 photo & beauty) | 🚧 (v1.3) | 🚧 (v1.2) |
+| **Android** | ✅ | 🚧 (v1.1 video · v1.2 photo & beauty) | 🚧 (v1.3) | 🚧 (v1.2) |
+| **macOS** | ✅ | 🗓️ (v1.3, with photo & beauty) | 🗓️ (v1.3 webcams) | 🗓️ (v1.3, with the desktop editor) |
+| **Windows** | ✅ | 🗓️ (v1.3, with photo & beauty) | 🗓️ (v1.3 webcams) | 🗓️ (v1.3, with the desktop editor) |
+| **Linux** | ✅ | 🗓️ (v1.3, with photo & beauty) | 🗓️ (v1.3 webcams) | 🗓️ (v1.3, with the desktop editor) |
 
 *Note: Features not supported on a specific hardware device (e.g. concurrent multicam, LiDAR depth, manual shutter on basic webcams) degrade gracefully and are cleanly hidden from the UI.*
 

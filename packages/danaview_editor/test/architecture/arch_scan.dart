@@ -165,7 +165,7 @@ List<String> directiveUris(String source) {
 Directory findRepoRoot() {
   var dir = Directory.current.absolute;
   while (true) {
-    if (File('${dir.path}/docs/editor/BUILD_PLAN.md').existsSync() && Directory('${dir.path}/packages').existsSync()) return dir;
+    if (File('${dir.path}/docs/v1.1/editor/BUILD_PLAN.md').existsSync() && Directory('${dir.path}/packages').existsSync()) return dir;
     final parent = dir.parent;
     if (parent.path == dir.path) throw StateError('repository root not found above ${Directory.current.path}');
     dir = parent;

@@ -1,4 +1,4 @@
-# Installs Claude's project notes from docs/editor/handoff/claude-memory into this
+# Installs Claude's project notes from docs/v1.1/editor/handoff/claude-memory into this
 # machine's Claude Code project folder, so a Claude session on this computer picks up
 # the editor build where the Mac left off.
 #
@@ -54,4 +54,4 @@ if ($existing) {
 Copy-Item -Path (Join-Path $source '*.md') -Destination $memory -Force
 $count = (Get-ChildItem -Path $memory -Filter '*.md').Count
 Write-Host "Installed $count note files into $memory"
-Write-Host "Next: open the Claude app, Code tab, choose $RepoRoot, and say: continue the Android lane (read docs/editor/handoff/README.md)."
+Write-Host "Next: open the Claude app, Code tab, choose $RepoRoot, and say: continue the Android lane (read docs/v1.1/editor/handoff/README.md)."

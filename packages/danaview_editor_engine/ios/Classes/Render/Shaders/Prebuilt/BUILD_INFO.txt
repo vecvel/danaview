@@ -1,0 +1,7 @@
+source: DanaviewKernels.metal
+source_sha256: 493bfa8be8593bdd622670722821631f43a2d8fb290312f30828dfb21260bda8
+compiler: Apple metal version 32023.883 (metalfe-32023.883)
+flags: metal -c -fcikernel -target air64-apple-ios15.0[-simulator] / metallib -cikernel
+min_ios: 15.0
+dv_kernels.iphoneos.metallib: 1158735cb7701e5b93fcb6fbb56d46617a80a1b25a9c6d59cbd3bce5d7cb004b
+dv_kernels.iphonesimulator.metallib: e59bdecc9785da509875ee410cf6e1189c208c65c351966ec4569a0846eb4bcb

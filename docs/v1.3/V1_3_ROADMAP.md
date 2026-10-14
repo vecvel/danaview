@@ -1,77 +1,75 @@
-# Danaview 1.3.0 Release Roadmap: The Visual Creation & Capture Suite
+# Danaview 1.3.0 Release Roadmap: Desktop Editor and Native Camera
 
-> **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12. **Status:** Master Roadmap & Architectural Overview.
-> **Baseline Releases:**
-> - Danaview 1.0: Cross-platform media player (libmpv, equalizers, subtitles, hardware decode).
-> - Danaview 1.1: Multi-track video editor on iOS and Android (`docs/v1.1/editor/ARCHITECTURE.md`, `BUILD_PLAN.md`).
-> - Danaview 1.2: AI Studio & Advanced Subtitles (`docs/v1.2/ai-studio/AI_STUDIO_PLAN.md`) + Desktop Video Editors for macOS, Windows, and Linux (`docs/v1.2/editor-desktop/DESKTOP_EDITOR_PLAN.md`).
-> **Core Theme:** **Complete Media Symmetry**. Unifying Photos and Videos into a single cohesive ecosystem: a unified home library, an in-house native capture camera with real-time beauty & dual capture, and a unified photo and video editor serving both still post-processing and timeline video editing based on user intent.
+> **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12, contents changed by the owner on 2026-10-15. **Status:** Master roadmap and overview.
+> **Baseline releases:**
+> - Danaview 1.0: cross-platform media player (libmpv, equalizer, subtitles, hardware decode).
+> - Danaview 1.1: multi-track video editor on iOS and Android (`docs/v1.1/editor/ARCHITECTURE.md`, `BUILD_PLAN.md`).
+> - Danaview 1.2: Unified Media Home, AI Studio & advanced subtitles, and the Unified Photo & Video Editor with the beauty suite, on iOS and Android (`docs/v1.2/V1_2_ROADMAP.md`).
+> **Change on 2026-10-15:** the Home screen and the Unified Photo & Video Editor moved to 1.2.0; the desktop editor moved here from 1.2.0. 1.3.0 is now the desktop editor plus the in-house camera.
+> **Core theme:** **Everywhere and at capture.** The 1.2.0 photo and video editor reaches macOS, Windows and Linux, and Danaview gets its own camera with real-time beauty built on the 1.2.0 beauty engine.
 
 ---
 
-## 1. The Three Pillars of Danaview 1.3.0
+## 1. The two pillars of Danaview 1.3.0
 
 ```
                       +---------------------------------------------------------------+
                       |                        DANAVIEW 1.3.0                         |
-                      |                 The Visual Creation Suite                     |
+                      |              Desktop Editor and Native Camera                 |
                       +---------------------------------------------------------------+
                                                       |
-                         +----------------------------+----------------------------+
-                         |                            |                            |
-                         v                            v                            v
-              +--------------------+       +--------------------+       +--------------------+
-              |      PILLAR 1      |       |      PILLAR 2      |       |      PILLAR 3      |
-              | Unified Home Media |       |   Native Camera    |       | Unified Editor     |
-              |  Photos & Videos   |       |  Capture & Beauty  |       | Photo & Video Edit |
-              +--------------------+       +--------------------+       +--------------------+
-              | • All Media view   |       | • Photo & Video    |       | • Still Photo Mode |
-              | • Folder browser   |       | • Face slimming    |       | • Timeline Video   |
-              | • Album explorer   |       | • Face reshaping   |       | • 16-bit float tone|
-              | • Fast thumbnails  |       | • Pro manual mode  |       | • HSL & RGB curves |
-              | • Montage maker    |       | • Dual front+back  |       | • 8-Category Beauty|
-              | • Direct editor    |       | • Device BG audio  |       | • One-Euro filter  |
-              | • Player preserved |       | • Dynamic overlays |       | • Batch & 4K export|
-              +--------------------+       +--------------------+       +--------------------+
+                                   +------------------+------------------+
+                                   |                                     |
+                                   v                                     v
+                        +----------------------+              +----------------------+
+                        |       PILLAR 1       |              |       PILLAR 2       |
+                        |    Desktop Editor    |              |    Native Camera     |
+                        | macOS · Windows ·    |              |  Capture & Beauty    |
+                        |        Linux         |              |                      |
+                        +----------------------+              +----------------------+
+                        | • Swift (macOS) +    |              | • Photo & video      |
+                        |   Rust (Win/Linux)   |              | • Live beauty (60fps)|
+                        | • Photo mode, beauty |              | • Pro manual mode    |
+                        | • 3-pane workspace   |              | • Cinematic & bokeh  |
+                        | • Razor/slip/ripple  |              | • Dual front+back    |
+                        | • J-K-L, multi-screen|              | • Live overlays      |
+                        | • HW export, parity  |              | • Audio routing      |
+                        +----------------------+              +----------------------+
 ```
 
-### Pillar 1: Unified Media Home Screen
-- **Document:** [`docs/v1.3/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md`](file:///Users/besaoct/Desktop/danaview/docs/v1.3/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md)
-- **Summary:** Expands the Danaview Home Screen into a unified media browser. Users can explore all photos and videos on their device, browse physical folders or system albums, view high-res previews, and launch playback or open the editor with a single tap. Multi-selection allows instant creation of video montages from chosen photos and clips. Crucially, 100% of player, playlist, queue, continue watching, and folder features remain intact and active.
+### Pillar 1: Desktop Photo & Video Editor (macOS, Windows, Linux)
+- **Document:** [`docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md`](editor-desktop/DESKTOP_EDITOR_PLAN.md) (DSK-01 to DSK-40, decisions D-71 to D-85; rewritten 2026-10-15).
+- **Summary:** Two native engines behind the same editor API: macOS reuses the iOS Swift/Metal/AVFoundation engine; Windows and Linux share one Rust engine (`wgpu` rendering on Direct3D 12 / Vulkan, Media Foundation and GStreamer for hardware decode and encode). Unusual formats open through an isolated FFmpeg helper process that converts them on import, so a bad file cannot crash the app. Desktop extras: 4K preview without proxies, GPU speech recognition, batch export, ProRes export on macOS, colour scopes. Because 1.2.0 already added photo mode and the beauty suite, the desktop engines run those too, and the parity suite checks them against mobile. The desktop UX adds a 3-pane workspace, cursor tools, J-K-L shuttle, multi-monitor preview, native drag and drop and menus. DSK-20 also turns on the Home screen's editor actions on desktop.
 
-### Pillar 2: In-House Native Camera Engine (Photo & Video Capture)
-- **Document:** [`docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md`](file:///Users/besaoct/Desktop/danaview/docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md)
-- **Summary:** A custom camera built directly on native OS frameworks (`AVFoundation`, `Camera2/CameraX`, `DirectShow/MediaCapture`, `V4L2`). Highlights include the **8-category Beauty & Retouching Suite** (real-time face slimming, V-line jaw, chin/forehead contouring, eye enlargement & brightening, nose & lip reshaping, skin smoothing, acne/dark-spot removal, virtual makeup, body & leg slimming), cinematic 24 fps recording with synthetic bokeh, pro manual exposure/focus controls, dynamic live text/mask overlays, concurrent dual front+back camera recording with customizable PIP shapes and ratios, and internal background device audio recording with mic opt-out.
-
-### Pillar 3: Unified Photo & Video Editor (Still Photo Mode & Multi-Track Timeline)
-- **Document:** [`docs/v1.3/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md`](file:///Users/besaoct/Desktop/danaview/docs/v1.3/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md)
-- **Summary:** Upgrades the Danaview Editor to dynamically handle both photo editing and video editing based on user intent. When opening photos, it provides a 16-bit half-float still-image workspace with pro exposure/light controls, 8-channel HSL color mixer, spline RGB curves, selective gradient/brush masks, perspective keystone correction, batch export, and instant "Add to Timeline" conversion. For video clips and projects, it provides multi-track timeline editing, frame-accurate trimming, transitions, keyframing, and the **complete 8-category Beauty & Retouching Suite** stabilized across moving frames with temporal One-Euro landmark filtering.
+### Pillar 2: In-House Native Camera (photo and video capture)
+- **Document:** [`docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md`](camera-photo-video/NATIVE_CAMERA_PLAN.md) (CAM-01 to CAM-20, decisions D-99 to D-115).
+- **Summary:** A first-party camera on AVFoundation and Camera2/CameraX (plus desktop webcams): photo and video modes, real-time beauty using the 1.2.0 landmark tracker and shaders (VED-16, VED-20…23) on the live stream, cinematic 24 fps with depth bokeh, pro manual controls, live text and mask overlays, dual front+back capture with custom picture-in-picture, and audio routing. Captures open directly in the editor and appear in the Home library.
 
 ---
 
-## 2. Core Architectural Principles in v1.3.0
+## 2. Order and dependencies inside 1.3.0
 
-1. **Hardware-Aware Progressive Enhancement & Graceful Degradation**:
-   - If a device or operating system does not support a capability (e.g., dual concurrent multicam, LiDAR depth, manual shutter speed on basic webcams, or internal audio capture on older Android versions), **the feature is completely hidden from the UI**.
-   - No disabled buttons, no greyed-out sliders, no confusing error modals. The UI dynamically adapts to the exact capabilities of the running hardware.
-2. **Absolute Non-Destructive Invariance**:
-   - Original photos and video files are treated as read-only and immutable. Edits exist as lightweight command recipes (`.dnphoto` for photos, `.dnproj` for video timelines).
-3. **Privacy & Offline Guarantee**:
-   - Every feature in v1.3.0 runs 100% on-device. Face tracking, mesh deformation, image processing, and audio routing require zero network permissions and communicate with zero external servers.
-4. **Owner Standing UI Adherence**:
-   - Every new screen and control uses custom `danaview_ui_kit` components, Figtree typography, dark UI surfaces, computed contrast ratios ($\ge 4.5:1$), and touch targets $\ge 44\text{ px}$.
-5. **100% Preservation of Media Player, Playlist & Queue Features**:
-   - Absolutely zero existing player functionality is removed or compromised. The Now Playing card, Continue Watching tray (resume progress, episode badges, clear history), Playlists (create, rename, delete, shuffle, play all), Folders (device storage, external directories, breadcrumbs), Playback Queue, and streaming URL opening (HTTP, RTSP, RTMP, SRT, UDP) remain 100% active, prominent, and untouched.
+1. **Starts after 1.2.0 ships.** Both pillars depend on 1.2.0 work: the desktop engines must render VED's photo and beauty passes, and the camera reuses VED's tracker and shaders.
+2. **The two pillars are independent** and can run in parallel: desktop work splits by platform (macOS on the Mac, Windows on the Windows laptop, Linux needs a Linux machine or VM); camera work needs real phones, because the iOS Simulator has no camera and the Android emulator only has a virtual one.
+3. **Feasibility notes to settle while planning:** iOS does not let a third-party camera app record other apps' audio (camera D-107 internal audio is Android 10+ only, with the user's capture consent); FFmpeg on desktop is settled (owner, 2026-10-15): only in a separate helper process, LGPL and decode-only, never GPL encoders.
 
 ---
 
-## 3. Directory Navigation & Plan Index
+## 3. Core principles in 1.3.0
 
-| Component | Target Location | Specification Document |
+1. **Graceful degradation:** if a device or OS lacks a capability (dual camera, depth, manual shutter, internal audio, hardware encoder), the control is hidden, not disabled.
+2. **Non-destructive:** originals stay read-only; edits stay `.dnphoto` / `.dnproj` recipes.
+3. **Privacy and offline:** capture, face tracking and rendering run fully on device with no network use.
+4. **Owner UI rules:** custom `danaview_ui_kit` components, Figtree, dark UI, computed contrast (≥ 4.5:1), touch targets ≥ 44 px.
+5. **Player preserved:** no player, playlist, queue or streaming feature is removed or changed.
+
+---
+
+## 4. Plan index
+
+| Component | Location | Document |
 |---|---|---|
-| **Desktop Video Editor (v1.2)** | `docs/v1.2/editor-desktop/` | [DESKTOP_EDITOR_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.2/editor-desktop/DESKTOP_EDITOR_PLAN.md) |
-| **AI Studio (v1.2)** | `docs/v1.2/ai-studio/` | [AI_STUDIO_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.2/ai-studio/AI_STUDIO_PLAN.md) |
-| **Unified Home Media (v1.3)** | `docs/v1.3/home-photo-video-view/` | [HOME_PHOTO_VIDEO_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.3/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) |
-| **In-House Native Camera (v1.3)**| `docs/v1.3/camera-photo-video/` | [NATIVE_CAMERA_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md) |
-| **Unified Photo & Video Editor (v1.3)** | `docs/v1.3/video-editor-update/` | [VIDEO_EDITOR_UPDATE_PLAN.md](file:///Users/besaoct/Desktop/danaview/docs/v1.3/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
-| **v1.3 Master Roadmap** | `docs/v1.3/` | [V1_3_ROADMAP.md](file:///Users/besaoct/Desktop/danaview/docs/v1.3/V1_3_ROADMAP.md) |
+| **Desktop Photo & Video Editor (1.3)** | `docs/v1.3/editor-desktop/` | [DESKTOP_EDITOR_PLAN.md](editor-desktop/DESKTOP_EDITOR_PLAN.md) |
+| **In-House Native Camera (1.3)** | `docs/v1.3/camera-photo-video/` | [NATIVE_CAMERA_PLAN.md](camera-photo-video/NATIVE_CAMERA_PLAN.md) |
+| **1.3 roadmap** | `docs/v1.3/` | this file |
+| **1.2 roadmap (Home, AI Studio, Unified Editor)** | `docs/v1.2/` | [V1_2_ROADMAP.md](../v1.2/V1_2_ROADMAP.md) |

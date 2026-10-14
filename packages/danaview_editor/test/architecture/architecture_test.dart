@@ -43,7 +43,7 @@ void main() {
     });
 
     test('the forbidden list is the ARCH §1.3 list', () {
-      final arch = read('docs/editor/ARCHITECTURE.md');
+      final arch = read('docs/v1.1/editor/ARCHITECTURE.md');
       final ruleLine = arch.split('\n').firstWhere((l) => l.startsWith('1. Custom components only.'));
       final named = RegExp(r'`([A-Za-z]+)`').allMatches(ruleLine.split('Architecture tests').first).map((m) => m[1]!).toSet();
       expect(forbiddenMaterialNames.toSet(), named);
