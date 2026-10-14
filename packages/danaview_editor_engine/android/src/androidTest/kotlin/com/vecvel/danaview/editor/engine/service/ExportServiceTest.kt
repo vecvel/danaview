@@ -22,6 +22,7 @@
 package com.vecvel.danaview.editor.engine.service
 
 import android.app.Notification
+import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -161,9 +162,19 @@ class ExportServiceTest {
         assertTrue(ServiceTest.waitFor(5_000) { ServiceTest.foregroundNotification() != null })
         finishAndWait(relay)
         assertTrue("open the shade", device.openNotification())
-        val cancel = findCancelInShade()
-        assertNotNull("Cancel action of our notification in the shade: " + SystemUi.dump(), cancel)
-        cancel!!.click()
+        // Progress updates re-inflate the row, so the found button can go stale: re-find and retry.
+        var clicked = false
+        for (i in 0 until 5) {
+            val cancel = findCancelInShade() ?: continue
+            try {
+                cancel.click()
+                clicked = true
+                break
+            } catch (e: androidx.test.uiautomator.StaleObjectException) {
+                Thread.sleep(200)
+            }
+        }
+        assertTrue("Cancel action of our notification clicked in the shade: " + SystemUi.dump(), clicked)
         val outcome = h.await(id, timeoutSec = 60)
         device.pressBack()
         assertNull("no result", outcome.result)
@@ -321,6 +332,14 @@ class ExportServiceTest {
     private fun swipeAppFromRecents() {
         val pkg = ServiceTest.app.packageName
         for (attempt in 0 until 3) {
+            // Our task on top (a shade or an earlier Recents attempt may be showing).
+            device.pressHome()
+            ServiceTest.app.startActivity(
+                Intent(Intent.ACTION_MAIN).setClassName(pkg, FragmentRequests.EMPTY_ACTIVITY)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            )
+            device.wait(Until.hasObject(By.pkg(pkg)), 5_000)
+            Thread.sleep(1_000)
             assertTrue("recents", device.pressRecentApps())
             Thread.sleep(3_000)
             device.takeScreenshot(File(ServiceTest.app.filesDir, "and12_recents_$attempt.png"))
