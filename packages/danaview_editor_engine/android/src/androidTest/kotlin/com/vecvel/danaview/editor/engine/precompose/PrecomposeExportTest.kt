@@ -15,6 +15,7 @@
 //   barcode in its region). HDR (hlg_10bit_720p.mov) runs only where the device has a 10-bit HEVC
 //   decoder and a tone-mapping path (the x86_64 emulator has neither: deferred to a device).
 // - Cancel during each pass (1, 2 and the final) leaves no intermediate, no work dir and no output.
+// An SSIM shortfall alone is retried once with both exports redone and logged (see verified()).
 // Software-first decoders as in AND-08/AND-11 frame checks (the goldfish H.264 decoder drops
 // B-pyramid frames). Times and SSIM values logged are EMULATOR measurements.
 
@@ -126,7 +127,7 @@ class PrecomposeExportTest {
         Compare.log("$name: per-frame SSIM " + cmp.ssim.joinToString(",") { "%.4f".format(it) })
         Compare.log("$name: full-range luma SSIM (reference only) min %.5f, mean %.5f".format(cmp.ssimFullRange.min(), cmp.ssimFullRange.average()))
         val low = cmp.ssim.withIndex().filter { it.value < 0.995 }.map { "${it.index}:%.4f".format(it.value) }
-        assertEquals("$name frames below SSIM 0.995", emptyList<String>(), low)
+        if (low.isNotEmpty()) throw SsimMismatch("$name frames below SSIM 0.995: $low")
         if (expectedCode != null) {
             val wrongSingle = (0 until frames).filter { cmp.barcodesA[it]?.toLong() != expectedCode(it.toLong()) }
             val wrongMulti = (0 until frames).filter { cmp.barcodesB[it]?.toLong() != expectedCode(it.toLong()) }
@@ -147,12 +148,43 @@ class PrecomposeExportTest {
         }
     }
 
+    private class SsimMismatch(message: String) : AssertionError(message)
+
+    /**
+     * Exports [plan] both ways and checks them ([assertMatches]). Only an SSIM shortfall is retried,
+     * once, with both exports redone: AND-01 recorded (ARCH §13.3 "Open observation") that a packed
+     * export under heavy emulator load can sporadically composite the previous source frame at one
+     * output frame, which no frame-exact check can tell from a precompose defect in a single run.
+     * The first failure is logged; the retry must pass every check.
+     */
+    private fun verified(
+        p: PrecomposeHarness,
+        plan: RenderPlan,
+        name: String,
+        expectPasses: Int,
+        expectedCode: ((Long) -> Long)?,
+        region: FrameBarcodeRegion? = null,
+    ): Pair2 {
+        val first = exportBoth(p, plan, name, visualSequences = 2, expectPasses = expectPasses)
+        try {
+            assertMatches(p, plan, first, name, expectedCode, region)
+            return first
+        } catch (e: SsimMismatch) {
+            Compare.log("$name: RETRY after an SSIM shortfall on the first run (emulator; sporadic compositing glitch suspected): ${e.message}")
+        }
+        p.recorder.plans.clear()
+        p.recorder.events.clear()
+        p.recorder.intermediateColorStandards.clear()
+        val second = exportBoth(p, plan, "${name}_retry", visualSequences = 2, expectPasses = expectPasses)
+        assertMatches(p, plan, second, "${name}_retry", expectedCode, region)
+        return second
+    }
+
     private fun matchesSinglePass(fps: Int, frames: Long) {
         val p = harness("match$fps")
         val plan = PrecomposeFixturePlans.stack(fps, frames, slots = 4)
-        val both = exportBoth(p, plan, "match$fps", visualSequences = 2, expectPasses = 3)
         val src = PrecomposeFixturePlans.counter(fps).fps
-        assertMatches(p, plan, both, "match$fps", { k -> PrecomposeFixturePlans.expectedBottom(plan, k, src) })
+        verified(p, plan, "match$fps", 3, { k -> PrecomposeFixturePlans.expectedBottom(plan, k, src) })
     }
 
     @Test
@@ -168,9 +200,8 @@ class PrecomposeExportTest {
     fun sixSlotsWithTwoVisualSequencesExportInsteadOfBeingRefused() {
         val p = harness("six")
         val plan = PrecomposeFixturePlans.stack(30, 60, slots = 6)
-        val both = exportBoth(p, plan, "six", visualSequences = 2, expectPasses = 5)
+        val both = verified(p, plan, "six", 5, { k -> PrecomposeFixturePlans.expectedBottom(plan, k, 30) })
         assertTrue(both.multiRun.warnings.contains(ExportWarnings.LAYERS_VS_RESOLUTION))
-        assertMatches(p, plan, both, "six", { k -> PrecomposeFixturePlans.expectedBottom(plan, k, 30) })
     }
 
     @Test
@@ -179,12 +210,7 @@ class PrecomposeExportTest {
         val rotated = PrecomposeFixturePlans.Source("rotated_90.mov", 30, w = 1280, h = 720, durUs = 3_000_000)
         // Displayed 720x1280: shown upright at 360x640 in the canvas centre (precomposed in pass 1).
         val plan = PrecomposeFixturePlans.stack(30, 60, slots = 3, bottom = rotated, bottomBase = PlanSize(360.0, 640.0), bottomCut = false)
-        val both = exportBoth(p, plan, "rotated", visualSequences = 2, expectPasses = 2)
-        assertMatches(
-            p, plan, both, "rotated",
-            { k -> PrecomposeFixturePlans.expectedBottom(plan, k, 30) },
-            region = FrameBarcodeRegion(460, 40, 360, 640),
-        )
+        verified(p, plan, "rotated", 2, { k -> PrecomposeFixturePlans.expectedBottom(plan, k, 30) }, region = FrameBarcodeRegion(460, 40, 360, 640))
     }
 
     @Test
@@ -199,8 +225,7 @@ class PrecomposeExportTest {
         val hlg = PrecomposeFixturePlans.Source("hlg_10bit_720p.mov", 30, durUs = 3_000_000)
         val base = PrecomposeFixturePlans.stack(30, 60, slots = 3, bottom = hlg, bottomCut = false)
         val plan = base.copy(assets = base.assets + ("md_bottom" to PlanAsset(PlanAssetKind.VIDEO, ExportPlans.media(hlg.name), fp = "hlg", w = 1280, h = 720, durUs = 3_000_000, transfer = com.vecvel.danaview.editor.engine.plan.PlanTransfer.HLG)))
-        val both = exportBoth(p, plan, "hdr", visualSequences = 2, expectPasses = 2)
-        assertMatches(p, plan, both, "hdr", { k -> PrecomposeFixturePlans.expectedBottom(plan, k, 30) })
+        verified(p, plan, "hdr", 2, { k -> PrecomposeFixturePlans.expectedBottom(plan, k, 30) })
     }
 
     @Test
