@@ -192,7 +192,7 @@ final class LayerRenderer {
         var kx: Double { renderW / canvasW }
         var ky: Double { renderH / canvasH }
 
-        /// Raster side for a base-local length [px] canvas px drawn at render scale [k].
+        /// Raster side (px) for a layer side of [px] render px, at least 1 and capped at `maxRasterSide`.
         static func rasterSide(_ px: Double) -> Int {
             guard px.isFinite else { return LayerRenderer.maxRasterSide }
             return max(1, min(LayerRenderer.maxRasterSide, Int(px.rounded())))
@@ -226,12 +226,15 @@ final class LayerRenderer {
             guard let id = layer.asset, let asset = plan.assets[id], let sprite = assets.sprite(id: id, asset: asset) else {
                 return .missing
             }
-            raster = Self.resample(spriteImage(sprite, asset: asset, shown: layer.reveal), width: rw, height: rh)
+            // Reveal shows `floor(reveal(t))` glyphs: none drawn before the first one.
+            if asset.reveal == true, sprite.hasReveal, let shown = layer.reveal, shown <= 0 { return .invisible }
+            let image = spriteImage(sprite, asset: asset, shown: layer.reveal)
+            raster = Self.resample(image, from: image.extent, width: rw, height: rh)
         case .media, .image:
             guard let source = picture(layer, plan: plan, rasterW: rw, rasterH: rh, media: media) else { return .missing }
             let crop = Kernels.cropRect(layer.crop, in: source.extent)
             guard crop.width > 0, crop.height > 0 else { return .invisible }
-            raster = Self.resample(source.cropped(to: crop), width: rw, height: rh)
+            raster = Self.resample(source, from: crop, width: rw, height: rh)
             raster = effects(raster, layer: layer, plan: plan, base: base, geo: geo)
         }
         if matte {
@@ -259,7 +262,7 @@ final class LayerRenderer {
             mask: nil, cmasks: [], reveal: nil)
         let rw = Geometry.rasterSide(base.w * geo.kx)
         let rh = Geometry.rasterSide(base.h * geo.ky)
-        var raster = Self.resample(source, width: rw, height: rh)
+        var raster = Self.resample(source, from: source.extent, width: rw, height: rh)
         raster = effects(raster, layer: fitted, plan: plan, base: base, geo: geo)
         return place(raster, layer: fitted, base: base, opacity: 1, cmasks: [], geo: geo)
     }
@@ -338,7 +341,9 @@ final class LayerRenderer {
     private func place(_ raster: CIImage, layer: EvaluatedLayer, base: PlanSize, opacity: Double, cmasks: [CanvasMask],
                        geo: Geometry) -> LayerResult {
         let t = Self.placementTransform(layer.placement, base: base, rasterExtent: raster.extent, geo: geo)
-        var out = raster.transformed(by: t)
+        // Materialize the raster: otherwise Core Image folds the placement into the resampling taps and
+        // samples the source once, sharper than the two-stage raster → place of ARCH §11.6 / API-03.
+        var out = raster.insertingIntermediate(cache: false).transformed(by: t)
         guard Self.mayDraw(extent: out.extent, cmasks: cmasks, geo: geo) else { return .invisible }
         if opacity < 1 { out = Kernels.scaleAlpha(out, max(0, opacity)) }
         for m in cmasks {
@@ -404,38 +409,41 @@ final class LayerRenderer {
     /// Per-axis cap of the footprint supersampling (as the reference renderer).
     static let maxSupersample = 8
 
-    /// [image] (extent at any origin) resampled to `(0, 0, width, height)` like the reference renderer:
-    /// minifying by f per axis, each output texel averages n×n bilinear taps spread over its footprint
-    /// (n = ⌈f⌉ ≤ 8 per axis; one tap when magnifying). Each tap is the clamped source scaled to the
-    /// target and offset by the tap's sub-texel position; the taps are summed with weight 1/(nx·ny).
-    /// Edges are clamped, so no transparent fringe enters the raster.
-    static func resample(_ image: CIImage, width: Int, height: Int) -> CIImage {
-        let e = image.extent
-        let rect = CGRect(x: 0, y: 0, width: width, height: height)
-        let src = image.transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY)).clampedToExtent()
-        let fx = e.width / Double(width)
-        let fy = e.height / Double(height)
-        if fx == 1 && fy == 1 && e.minX.rounded() == e.minX && e.minY.rounded() == e.minY { return image.transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY)) }
+    /// The [rect] of [image] (any origin; e.g. a crop) resampled to `(0, 0, width, height)` like the
+    /// reference renderer: minifying by f per axis, each output texel averages n×n bilinear taps spread
+    /// over its footprint (n = ⌈f⌉ ≤ 8 per axis; one tap when magnifying). Taps read the whole image
+    /// with clamped edges (also outside [rect], as the reference does), are offset by their sub-texel
+    /// position and summed with weight 1/(nx·ny).
+    static func resample(_ image: CIImage, from rect: CGRect, width: Int, height: Int) -> CIImage {
+        let out = CGRect(x: 0, y: 0, width: width, height: height)
+        let fx = rect.width / Double(width)
+        let fy = rect.height / Double(height)
+        let src = image.clampedToExtent()
+        let base = CGAffineTransform(translationX: -rect.minX, y: -rect.minY).concatenating(CGAffineTransform(scaleX: 1 / fx, y: 1 / fy))
         func taps(_ f: Double) -> Int {
             guard f > 1 + 1e-9 else { return 1 }
             return min(maxSupersample, Int((f - 1e-9).rounded(.up)))
         }
         let nx = taps(fx)
         let ny = taps(fy)
-        let scale = CGAffineTransform(scaleX: 1 / fx, y: 1 / fy)
-        if nx == 1 && ny == 1 { return src.transformed(by: scale).cropped(to: rect) }
-        // Output texel x (centre x + 0.5) samples source (x + (i + 0.5)/nx)·fx for tap i.
+        if nx == 1 && ny == 1 {
+            if fx == 1 && fy == 1 && rect.minX.rounded() == rect.minX && rect.minY.rounded() == rect.minY {
+                return image.cropped(to: rect).transformed(by: base)
+            }
+            return src.transformed(by: base).cropped(to: out)
+        }
+        // Output texel x (centre x + 0.5) samples rect.minX + (x + (i + 0.5)/nx)·fx for tap i.
         let weight = 1 / Double(nx * ny)
         var sum: CIImage?
         for j in 0..<ny {
             for i in 0..<nx {
                 let dx = 0.5 - (Double(i) + 0.5) / Double(nx)
                 let dy = 0.5 - (Double(j) + 0.5) / Double(ny)
-                let tap = Kernels.scaleAlpha(src.transformed(by: scale.concatenating(CGAffineTransform(translationX: dx, y: dy))), weight)
+                let tap = Kernels.scaleAlpha(src.transformed(by: base.concatenating(CGAffineTransform(translationX: dx, y: dy))), weight)
                 sum = sum.map { tap.applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: $0]) } ?? tap
             }
         }
-        return sum!.cropped(to: rect)
+        return sum!.cropped(to: out)
     }
 
     /// An opaque colour (plan ARGB, alpha ignored) covering [rect].

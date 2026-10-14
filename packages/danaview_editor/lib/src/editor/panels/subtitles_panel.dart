@@ -35,7 +35,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Icons;
-import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/services.dart' show TextInputAction, TextInputType;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -153,7 +152,8 @@ abstract final class SubtitlesPanelModel {
     final base = rate.timeOfFrame(_shiftBaseFrame);
     final t = Timecode.parse(s, rate, base: base);
     if (t == null) return null;
-    return t - base;
+    final df = rate.frameIndexOf(t) - _shiftBaseFrame;
+    return df < 0 ? -rate.timeOfFrame(-df) : rate.timeOfFrame(df);
   }
 
   /// "+2.50 s" for [delta].
@@ -296,8 +296,15 @@ class _SubtitlesPanelState extends ConsumerState<SubtitlesPanel> {
   /// The index of the cue under the playhead in [_cues].
   final ValueNotifier<int?> _current = ValueNotifier<int?>(null);
 
-  /// The built rows by index (for revealing one).
-  final Map<int, BuildContext> _rows = {};
+  /// Exact row extents for the current width and text scale.
+  _RowMetrics? _metrics;
+
+  /// The header and the focused cue's editor (their extents place the rows).
+  final GlobalKey _headerKey = GlobalKey(debugLabel: 'SubtitlesPanel.header');
+  final GlobalKey _editorKey = GlobalKey(debugLabel: 'SubtitlesPanel.editor');
+
+  /// The index of the focused cue in [_cues], or -1.
+  int _focusedIndex = -1;
 
   ValueListenable<TimeUs>? _playhead;
   ValueListenable<bool>? _playing;
@@ -337,47 +344,31 @@ class _SubtitlesPanelState extends ConsumerState<SubtitlesPanel> {
     if (index != null && (_playing?.value ?? false)) _reveal(index);
   }
 
-  /// Scrolls the row [index] into view (estimating the offset when it is not built).
-  void _reveal(int index, {double alignment = 0.3}) {
-    if (!_scroll.hasClients) return;
-    final ctx = _rows[index];
-    if (ctx != null && ctx.mounted) {
-      final box = ctx.findRenderObject();
-      if (box is RenderBox && box.hasSize && _isVisible(box)) return;
-      Scrollable.ensureVisible(ctx, alignment: alignment);
-      return;
+  /// The scroll offset of the top of row [index], or null before the first layout.
+  double? _rowOffset(int index) {
+    final metrics = _metrics;
+    final header = _headerKey.currentContext?.findRenderObject();
+    if (metrics == null || header is! RenderBox || !header.hasSize) return null;
+    var offset = header.size.height + 2 * DanaviewSpacing.sm;
+    offset += metrics.offsetOf(_cues, index);
+    if (_focusedIndex >= 0 && index > _focusedIndex) {
+      final editor = _editorKey.currentContext?.findRenderObject();
+      if (editor is RenderBox && editor.hasSize) offset += editor.size.height;
     }
-    if (_rows.isEmpty) return;
-    final built = _rows.keys.toList()..sort();
-    var extent = 0.0;
-    var counted = 0;
-    double? firstOffset;
-    for (final i in built) {
-      final box = _rows[i]?.findRenderObject();
-      if (box is! RenderBox || !box.hasSize) continue;
-      extent += box.size.height;
-      counted++;
-      if (firstOffset == null) {
-        final viewport = RenderAbstractViewport.maybeOf(box);
-        firstOffset = viewport?.getOffsetToReveal(box, 0).offset;
-      }
-    }
-    if (counted == 0 || firstOffset == null) return;
-    final average = extent / counted;
-    final target = firstOffset + (index - built.first) * average - _scroll.position.viewportDimension * alignment;
-    _scroll.jumpTo(target.clamp(_scroll.position.minScrollExtent, _scroll.position.maxScrollExtent));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final c = _rows[index];
-      if (mounted && c != null && c.mounted) Scrollable.ensureVisible(c, alignment: alignment);
-    });
+    return offset;
   }
 
-  bool _isVisible(RenderBox box) {
-    final viewport = RenderAbstractViewport.maybeOf(box);
-    if (viewport == null || !_scroll.hasClients) return false;
-    final top = viewport.getOffsetToReveal(box, 0).offset;
+  /// Scrolls row [index] into view (to [alignment] of the viewport) unless it is fully visible.
+  void _reveal(int index, {double alignment = 0.3}) {
+    if (!_scroll.hasClients || index < 0 || index >= _cues.length) return;
+    final top = _rowOffset(index);
+    final metrics = _metrics;
+    if (top == null || metrics == null) return;
     final p = _scroll.position;
-    return top >= p.pixels && top + box.size.height <= p.pixels + p.viewportDimension;
+    final bottom = top + metrics.extentOf(_cues[index].text);
+    if (top >= p.pixels && bottom <= p.pixels + p.viewportDimension) return;
+    final target = (top - p.viewportDimension * alignment).clamp(p.minScrollExtent, p.maxScrollExtent);
+    _scroll.jumpTo(target);
   }
 
   // ---- Route ----------------------------------------------------------------------------------
@@ -507,6 +498,8 @@ class _SubtitlesPanelState extends ConsumerState<SubtitlesPanel> {
     final id = EditorScope.idOf(context);
     final project = ref.watch(editorControllerProvider(id).select((s) => s.project));
     final canEdit = ref.watch(editorControllerProvider(id).select((s) => s.isReady)) && _editor.canEdit;
+    // The track menu offers "Shift selected captions…" for a selected range.
+    ref.watch(editorControllerProvider(id).select((s) => s.selection));
     if (project == null) return const SizedBox.shrink();
     final route = widget.route;
     final track = SubtitlesPanelModel.trackFor(project, route);
@@ -533,17 +526,25 @@ class _SubtitlesPanelState extends ConsumerState<SubtitlesPanel> {
     final ready = canEdit && !track.locked;
     final rate = project.settings.frameRate;
     final focused = route.cue;
+    final focusedIndex = _focusedIndex = focused == null ? -1 : SubtitlesPanelModel.indexOf(cues, focused);
     if (focused != null && focused != _revealed) {
       _revealed = focused;
-      final index = SubtitlesPanelModel.indexOf(cues, focused);
-      if (index >= 0) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _reveal(index, alignment: 0.1);
-        });
+      if (focusedIndex >= 0) {
+        // Twice: the first frame lays out the header and the editor whose extents place the row.
+        void reveal(int left) => WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              _reveal(focusedIndex, alignment: 0.1);
+              if (left > 0) {
+                reveal(left - 1);
+                WidgetsBinding.instance.scheduleFrame();
+              }
+            });
+        reveal(1);
       }
     } else if (focused == null) {
       _revealed = null;
     }
+    final metrics = _metricsFor(context);
 
     final header = _header(project, track, cues.length, ready, canEdit);
     final section = route.section;
@@ -553,7 +554,7 @@ class _SubtitlesPanelState extends ConsumerState<SubtitlesPanel> {
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(DanaviewSpacing.lg, DanaviewSpacing.sm, DanaviewSpacing.lg, DanaviewSpacing.sm),
-          sliver: SliverToBoxAdapter(child: header),
+          sliver: SliverToBoxAdapter(child: KeyedSubtree(key: _headerKey, child: header)),
         ),
         if (section == SubtitlesPanelSection.cues)
           if (cues.isEmpty)
@@ -561,29 +562,30 @@ class _SubtitlesPanelState extends ConsumerState<SubtitlesPanel> {
               padding: EdgeInsets.symmetric(horizontal: DanaviewSpacing.lg),
               sliver: SliverToBoxAdapter(child: PanelNotice(SubtitleStrings.noCues, color: DanaviewColors.textSecondary)),
             )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(DanaviewSpacing.sm, 0, DanaviewSpacing.sm, DanaviewSpacing.lg),
-              sliver: SliverList.builder(
-                itemCount: cues.length,
-                itemBuilder: (context, i) {
-                  final cue = cues[i];
-                  return _CueRow(
-                    key: SubtitlesPanelKeys.row(cue.id),
-                    index: i,
-                    cue: cue,
-                    next: i + 1 < cues.length ? cues[i + 1] : null,
-                    rate: rate,
-                    current: _current,
-                    expanded: cue.id == focused,
-                    ready: ready,
-                    rows: _rows,
-                    onTap: () => _focusCue(track, cue),
-                    onDeleting: () => _unfocus(track),
-                  );
-                },
+          else ...[
+            _rowList(track, cues, rate, ready, metrics, from: 0, to: focusedIndex >= 0 ? focusedIndex + 1 : cues.length),
+            if (focusedIndex >= 0) ...[
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm),
+                sliver: SliverToBoxAdapter(
+                  child: Container(
+                    key: _editorKey,
+                    decoration: const BoxDecoration(color: DanaviewColors.surfaceElevated, borderRadius: DanaviewRadius.smAll),
+                    child: _CueEditor(
+                      key: SubtitlesPanelKeys.editor,
+                      cue: cues[focusedIndex],
+                      next: focusedIndex + 1 < cues.length ? cues[focusedIndex + 1] : null,
+                      rate: rate,
+                      ready: ready,
+                      onDeleting: () => _unfocus(track),
+                    ),
+                  ),
+                ),
               ),
-            )
+              _rowList(track, cues, rate, ready, metrics, from: focusedIndex + 1, to: cues.length),
+            ],
+            const SliverToBoxAdapter(child: SizedBox(height: DanaviewSpacing.lg)),
+          ]
         else
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(DanaviewSpacing.lg, 0, DanaviewSpacing.lg, DanaviewSpacing.lg),
@@ -594,6 +596,45 @@ class _SubtitlesPanelState extends ConsumerState<SubtitlesPanel> {
             ),
           ),
       ],
+    );
+  }
+
+  _RowMetrics _metricsFor(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final base = DefaultTextStyle.of(context).style;
+    final m = _metrics;
+    if (m != null && m.scaler == scaler && m.base == base) return m;
+    return _metrics = _RowMetrics(scaler: scaler, base: base);
+  }
+
+  /// Rows [from]..[to) of [cues] with exact extents (lazily built; 3,000 rows scroll cheaply and
+  /// any row's offset is known without building the rows above it).
+  Widget _rowList(Track track, List<SubtitleCue> cues, FrameRate rate, bool ready, _RowMetrics metrics, {required int from, required int to}) {
+    if (to <= from) return const SliverToBoxAdapter(child: SizedBox.shrink());
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm),
+      sliver: SliverVariedExtentList.builder(
+        itemCount: to - from,
+        itemExtentBuilder: (i, dims) {
+          final index = from + i;
+          if (index >= to) return null;
+          metrics.width = dims.crossAxisExtent;
+          return metrics.extentOf(cues[index].text);
+        },
+        itemBuilder: (context, i) {
+          final index = from + i;
+          final cue = cues[index];
+          return _CueRow(
+            key: SubtitlesPanelKeys.row(cue.id),
+            index: index,
+            cue: cue,
+            rate: rate,
+            current: _current,
+            expanded: index == _focusedIndex,
+            onTap: () => _focusCue(track, cue),
+          );
+        },
+      ),
     );
   }
 
@@ -838,132 +879,156 @@ TextStyle get _timingStyle => DanaviewTextStyles.caption.copyWith(
 
 TextStyle get _cueTextStyle => DanaviewTextStyles.body.copyWith(fontFamily: DanaviewFonts.family, color: DanaviewColors.textPrimary);
 
-/// One cue of the list; the focused one expands into the editor.
-class _CueRow extends StatefulWidget {
+/// Row geometry (ARCH §17: a fixed layout so extents are known before the rows are built).
+abstract final class _RowLayout {
+  /// Vertical margin around a row.
+  static const double margin = 1;
+
+  /// Vertical padding inside a row.
+  static const double padV = DanaviewSpacing.xs + 2;
+
+  /// Horizontal padding inside a row.
+  static const double padH = DanaviewSpacing.sm;
+
+  /// The current-cue bar and its gap.
+  static const double bar = 3;
+
+  /// Gap after the bar.
+  static const double barGap = DanaviewSpacing.sm;
+
+  /// Gap between the timing line and the text.
+  static const double gap = DanaviewSpacing.xxs;
+
+  /// Lines of text shown per row.
+  static const int lines = 3;
+
+  /// Rounding slack (sub-pixel line metrics).
+  static const double slack = 2;
+}
+
+/// Measures row extents exactly (TextPainter with the rows' styles), cached per text.
+class _RowMetrics {
+  _RowMetrics({required this.scaler, required this.base});
+
+  final TextScaler scaler;
+  final TextStyle base;
+  final Map<String, double> _cache = {};
+  double _width = 0;
+  double? _timing;
+
+  /// The cross-axis extent of the list (text wraps at it minus the row chrome).
+  set width(double w) {
+    if (w == _width) return;
+    _width = w;
+    _cache.clear();
+  }
+
+  double get _textWidth => math.max(1, _width - 2 * _RowLayout.padH - _RowLayout.bar - _RowLayout.barGap);
+
+  double _height(String text, TextStyle style, int maxLines) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: base.merge(style)),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: maxLines,
+      ellipsis: '…',
+    )..layout(maxWidth: _textWidth);
+    final h = tp.height;
+    tp.dispose();
+    return h;
+  }
+
+  /// The extent of a row showing [text].
+  double extentOf(String text) => _cache[text] ??= 2 * _RowLayout.margin +
+      2 * _RowLayout.padV +
+      (_timing ??= _height('00:00:00 – 00:00:00', _timingStyle, 1)) +
+      _RowLayout.gap +
+      _height(text, _cueTextStyle, _RowLayout.lines) +
+      _RowLayout.slack;
+
+  /// The offset of row [index] from the top of the first row.
+  double offsetOf(List<SubtitleCue> cues, int index) {
+    var y = 0.0;
+    for (var i = 0; i < index && i < cues.length; i++) {
+      y += extentOf(cues[i].text);
+    }
+    return y;
+  }
+}
+
+/// One cue of the list (the focused one is followed by its editor).
+class _CueRow extends StatelessWidget {
   const _CueRow({
     super.key,
     required this.index,
     required this.cue,
-    required this.next,
     required this.rate,
     required this.current,
     required this.expanded,
-    required this.ready,
-    required this.rows,
     required this.onTap,
-    required this.onDeleting,
   });
 
   final int index;
   final SubtitleCue cue;
-  final SubtitleCue? next;
   final FrameRate rate;
   final ValueListenable<int?> current;
   final bool expanded;
-  final bool ready;
-  final Map<int, BuildContext> rows;
   final VoidCallback onTap;
-  final VoidCallback onDeleting;
-
-  @override
-  State<_CueRow> createState() => _CueRowState();
-}
-
-class _CueRowState extends State<_CueRow> {
-  @override
-  void initState() {
-    super.initState();
-    widget.rows[widget.index] = context;
-  }
-
-  @override
-  void didUpdateWidget(_CueRow old) {
-    super.didUpdateWidget(old);
-    if (old.index != widget.index) {
-      if (identical(old.rows[old.index], context)) old.rows.remove(old.index);
-      widget.rows[widget.index] = context;
-    }
-  }
-
-  @override
-  void dispose() {
-    if (identical(widget.rows[widget.index], context)) widget.rows.remove(widget.index);
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
-    final cue = widget.cue;
-    final timing = SubtitlesPanelModel.timing(cue, widget.rate);
+    final timing = SubtitlesPanelModel.timing(cue, rate);
+    final label = SubtitleStrings.rowLabel(SubtitlesPanelModel.timecode(cue.start, rate), SubtitlesPanelModel.timecode(cue.end, rate), cue.text);
     return ValueListenableBuilder<int?>(
-      valueListenable: widget.current,
+      valueListenable: current,
       builder: (context, current, _) {
-        final isCurrent = current == widget.index;
-        final background = widget.expanded
+        final isCurrent = current == index;
+        final background = expanded
             ? DanaviewColors.surfaceElevated
             : isCurrent
                 ? DanaviewColors.primarySoft
                 : null;
-        final summary = DanaviewPressable(
-          onTap: widget.onTap,
-          borderRadius: DanaviewRadius.smAll,
-          selected: widget.expanded,
-          semanticLabel: SubtitleStrings.rowLabel(
-            SubtitlesPanelModel.timecode(cue.start, widget.rate),
-            SubtitlesPanelModel.timecode(cue.end, widget.rate),
-            cue.text,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: DanaviewSpacing.xs + 2),
-            child: ExcludeSemantics(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 3,
-                    height: 16,
-                    margin: const EdgeInsets.only(top: 2, right: DanaviewSpacing.sm),
-                    decoration: BoxDecoration(
-                      color: isCurrent ? DanaviewColors.primaryLight : DanaviewColors.hairline,
-                      borderRadius: DanaviewRadius.xsAll,
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(timing, maxLines: 1, overflow: TextOverflow.ellipsis, style: _timingStyle),
-                        const SizedBox(height: DanaviewSpacing.xxs),
-                        Text(cue.text, maxLines: 3, overflow: TextOverflow.ellipsis, style: _cueTextStyle),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
         return Semantics(
           value: isCurrent ? SubtitleStrings.current : null,
           child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 1),
+            margin: const EdgeInsets.symmetric(vertical: _RowLayout.margin),
             decoration: BoxDecoration(color: background, borderRadius: DanaviewRadius.smAll),
-            child: widget.expanded
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: DanaviewPressable(
+              onTap: onTap,
+              borderRadius: DanaviewRadius.smAll,
+              selected: expanded,
+              semanticLabel: label,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: _RowLayout.padH, vertical: _RowLayout.padV),
+                child: ExcludeSemantics(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      summary,
-                      _CueEditor(
-                        key: SubtitlesPanelKeys.editor,
-                        cue: cue,
-                        next: widget.next,
-                        rate: widget.rate,
-                        ready: widget.ready,
-                        onDeleting: widget.onDeleting,
+                      Container(
+                        width: _RowLayout.bar,
+                        height: 16,
+                        margin: const EdgeInsets.only(top: 2, right: _RowLayout.barGap),
+                        decoration: BoxDecoration(
+                          color: isCurrent ? DanaviewColors.primaryLight : DanaviewColors.hairline,
+                          borderRadius: DanaviewRadius.xsAll,
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(timing, maxLines: 1, overflow: TextOverflow.ellipsis, style: _timingStyle),
+                            const SizedBox(height: _RowLayout.gap),
+                            Text(cue.text, maxLines: _RowLayout.lines, overflow: TextOverflow.ellipsis, style: _cueTextStyle),
+                          ],
+                        ),
                       ),
                     ],
-                  )
-                : summary,
+                  ),
+                ),
+              ),
+            ),
           ),
         );
       },
@@ -990,6 +1055,7 @@ class _CueEditorState extends ConsumerState<_CueEditor> {
   final FocusNode _focus = FocusNode(debugLabel: 'SubtitlesPanel.text');
   EditorController? _editorRef;
   String? _error;
+  bool _disposing = false;
 
   /// The cursor the user placed (kept when the field loses focus to the Split button).
   TextSelection _cursor = const TextSelection.collapsed(offset: -1);
@@ -1020,6 +1086,7 @@ class _CueEditorState extends ConsumerState<_CueEditor> {
 
   @override
   void dispose() {
+    _disposing = true;
     _commit(widget.cue);
     _focus.removeListener(_onFocus);
     _text.removeListener(_onText);
@@ -1050,7 +1117,7 @@ class _CueEditorState extends ConsumerState<_CueEditor> {
     final text = _text.text;
     if (editor == null || !widget.ready || text == cue.text) return true;
     if (text.trim().isEmpty) {
-      if (mounted) setState(() => _error = SubtitleStrings.emptyText);
+      if (mounted && !_disposing) setState(() => _error = SubtitleStrings.emptyText);
       return false;
     }
     editor.apply(SetCueText(cue.id, text), coalesceKey: SetCueText.coalesceKey(cue.id));

@@ -17,7 +17,7 @@ import 'arch_scan.dart';
 void main() {
   group('EditorActionId', () {
     test('is exactly the ARCH §17.6 list, in order and by group', () {
-      final arch = File('${findRepoRoot().path}/docs/editor/ARCHITECTURE.md').readAsStringSync();
+      final arch = File('${findRepoRoot().path}/docs/v1.1/editor/ARCHITECTURE.md').readAsStringSync();
       final line = arch.split('\n').firstWhere((l) => l.startsWith('`EditorActionId` (complete list, UX-01)'));
       final groups = {
         for (final m in RegExp(r'(playback|editing|timeline|markers|tools) `([^`]+)`').allMatches(line))

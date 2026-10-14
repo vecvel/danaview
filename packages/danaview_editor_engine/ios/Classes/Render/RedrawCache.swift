@@ -53,7 +53,8 @@ final class RedrawCache {
     private var pool: CVPixelBufferPool?
     private var poolSize: CGSize = .zero
     private var generation: UInt64 = 0
-    private let queue = DispatchQueue(label: "danaview.redraw", qos: .userInteractive)
+    /// Serial queue of `requestRedraw` (internal so tests can hold it busy).
+    let queue = DispatchQueue(label: "danaview.redraw", qos: .userInteractive)
 
     init() {}
 

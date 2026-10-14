@@ -32,7 +32,7 @@ Other scripts in this directory and their owners:
 
 ## Triggers
 
-- **Pull requests and pushes to `main`** that touch `packages/danaview_editor*/**`, `packages/danaview_transcription/**`, `packages/danaview_whisper/**`, `test/architecture/**`, `scripts/ci/editor/**` or the workflow itself. `packages/danaview_features/**` and `docs/editor/BUILD_PLAN.md` also trigger it, because the architecture test guards `danaview_features` (ARCH §4.2 rule 1, ARCH §1.3 Material scan) and reads the BUILD_PLAN owns lists.
+- **Pull requests and pushes to `main`** that touch `packages/danaview_editor*/**`, `packages/danaview_transcription/**`, `packages/danaview_whisper/**`, `test/architecture/**`, `scripts/ci/editor/**` or the workflow itself. `packages/danaview_features/**` and `docs/v1.1/editor/BUILD_PLAN.md` also trigger it, because the architecture test guards `danaview_features` (ARCH §4.2 rule 1, ARCH §1.3 Material scan) and reads the BUILD_PLAN owns lists.
 - **Nightly** (cron `30 2 * * *`): only the `nightly` job runs.
 - **Manual** (`workflow_dispatch`): input `runner` (`self-hosted` or `macos-15`) picks the macOS runner, and input `nightly` adds the nightly job.
 

@@ -56,8 +56,8 @@ void main() {
     });
 
     test('the scanned list equals every danaview_features Dart file owned in BUILD_PLAN §6', () {
-      final plan = repo.readFile('docs/editor/BUILD_PLAN.md');
-      expect(plan, isNotNull, reason: 'docs/editor/BUILD_PLAN.md is missing');
+      final plan = repo.readFile('docs/v1.1/editor/BUILD_PLAN.md');
+      expect(plan, isNotNull, reason: 'docs/v1.1/editor/BUILD_PLAN.md is missing');
       final owned = featureFilesOwnedInPlan(plan!);
       expect(owned.keys.toSet(), editorTouchedFeatureFiles.toSet());
       expect(owned.values.toSet(), <String>{'UX-02', 'UX-03', 'UX-04', 'UX-41', 'UX-42'});
