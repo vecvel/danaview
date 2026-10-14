@@ -4,18 +4,20 @@
 // tablet. Not part of a normal connected run: it is skipped unless `-e danaviewManualDrop true` is
 // passed. It shows a FlutterView in androidx.test's EmptyActivity with the drop target enabled
 // through the plugin's ActivityHost, then waits up to `danaviewManualDropSeconds` (default 120)
-// for a person (or `adb shell input draganddrop`) to drag a file from the Files app (split screen)
-// onto it (with `-e danaviewManualDropAdjacent true` the activity opens next to the app in front,
-// i.e. in split screen beside Files on a tablet). It logs only counts, extensions and the logical
-// position under DanaviewDropManual,
-// and asserts that the dropped items were copied into work/drops/ and the drag permissions were
-// requested and released by the platform (a cross-app content:// URI is readable only while they
-// are held).
+// for a person (or `adb shell input draganddrop`) to drag a file from the Files app onto it, with
+// both apps in split screen (Overview > Split). Entering split screen resizes and recreates the
+// activity; like the plugin (onReattachedToActivityForConfigChanges), the test then rebuilds the
+// FlutterView and re-attaches the host, and DropTarget moves its listener to the new view on resume.
+// It logs only counts, extensions and the logical position under DanaviewDropManual, and asserts
+// that the dropped items were copied into work/drops/ (a cross-app content:// URI is readable only
+// while the drag permissions are held).
 
 package com.vecvel.danaview.editor.engine.drop
 
 import android.app.Activity
+import android.app.Application
 import android.content.Intent
+import android.os.Bundle
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -49,14 +51,8 @@ class CrossAppDropManualTest {
         val ctx = EngineContext(app, EngineThreads.android())
         ctx.installRoots(Paths.fromDart(File(app.cacheDir, "danaview/editor").absolutePath, File(app.filesDir, "danaview/editor").absolutePath))
         val intent = Intent(Intent.ACTION_MAIN)
-            .setClassName(app.packageName, "androidx.test.core.app.InstrumentationActivityInvoker\$EmptyActivity")
+            .setClassName(app.packageName, EMPTY_ACTIVITY)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        // `-e danaviewManualDropAdjacent true`: open next to the app in front (split screen on a
-        // large screen), so Files and the drop target are visible together without manual setup.
-        if (args.getString("danaviewManualDropAdjacent") == "true") {
-            intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-        }
-        val activity = instrumentation.startActivitySync(intent)
         val target = DropTarget(ctx)
         val latch = CountDownLatch(1)
         var dropped: DropMsg? = null
@@ -64,12 +60,36 @@ class CrossAppDropManualTest {
             dropped = it
             if (it != null) latch.countDown()
         }
-        instrumentation.runOnMainSync {
+        var current: Activity? = null
+        fun install(activity: Activity) {
+            if (current === activity) return
+            current = activity
             activity.findViewById<ViewGroup>(android.R.id.content).addView(
                 FlutterView(activity),
                 FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
             )
             ctx.activityHost.attach(Binding(activity))
+        }
+        val recreation = object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                if (activity.javaClass.name == EMPTY_ACTIVITY && current != null) install(activity)
+            }
+
+            override fun onActivityDestroyed(activity: Activity) {
+                if (activity === current && activity.isChangingConfigurations) ctx.activityHost.detach(cancelPending = false)
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+        }
+        val application = app as Application
+        application.registerActivityLifecycleCallbacks(recreation)
+        val first = instrumentation.startActivitySync(intent)
+        instrumentation.runOnMainSync {
+            install(first)
             target.setEnabled(true) {}
         }
         Log.i(TAG, "drop target ready for $seconds s")
@@ -81,10 +101,11 @@ class CrossAppDropManualTest {
             val root = ctx.requirePaths().workDrops.canonicalPath
             msg.items.forEach { assertTrue(File(it.uri).canonicalPath.startsWith("$root/") && File(it.uri).length() > 0) }
         } finally {
+            application.unregisterActivityLifecycleCallbacks(recreation)
             instrumentation.runOnMainSync {
                 target.setEnabled(false) {}
                 ctx.activityHost.detach()
-                activity.finish()
+                current?.finish()
             }
             ctx.threads.shutdown()
         }
@@ -109,5 +130,6 @@ class CrossAppDropManualTest {
 
     companion object {
         private const val TAG = "DanaviewDropManual"
+        private const val EMPTY_ACTIVITY = "androidx.test.core.app.InstrumentationActivityInvoker\$EmptyActivity"
     }
 }
