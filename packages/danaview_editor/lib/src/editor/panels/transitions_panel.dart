@@ -119,12 +119,12 @@ abstract final class TransitionPanelModel {
     return previous != null && allowed.contains(previous) ? previous : allowed.first;
   }
 
-  /// The loop range of the preview: `cut ± (duration/2 + 0.75 s)` on the frame grid, inside
+  /// The loop range of the preview: `cut ± (duration/2 + 0.75 s)` widened to whole frames, inside
   /// `[0, projectDuration)`. [frames] 0 previews the bare cut.
   static TimeRange loopRange({required TimeUs cut, required int frames, required FrameRate rate, required TimeUs projectDuration}) {
     final half = timeOf(frames, rate) ~/ 2 + loopPadding;
-    var start = rate.quantize(cut - half);
-    var end = rate.quantize(cut + half);
+    var start = rate.timeOfFrame(rate.frameIndexOf(cut - half));
+    var end = rate.timeOfFrame(rate.frameIndexOf(cut + half - 1) + 1);
     if (start < 0) start = 0;
     if (end > projectDuration) end = projectDuration;
     if (end < start) end = start;
@@ -242,9 +242,9 @@ class _TransitionsPanelState extends ConsumerState<TransitionsPanel> {
   TransportController? _transport;
   _SavedTransport? _saved;
   bool _previewing = false;
-  /// Transport operations of every transitions panel run in order (a panel that closes restores
-  /// the transport before the next one saves it).
-  static Future<void> _ops = Future<void>.value();
+  /// The transport operations of every transitions panel, per transport, run in order (a panel
+  /// that closes restores the transport before the next one saves it).
+  static final Expando<Future<void>> _queues = Expando<Future<void>>('TransitionsPanel.queue');
   InspectorEditSession? _session;
   double? _liveSeconds;
 
@@ -267,7 +267,10 @@ class _TransitionsPanelState extends ConsumerState<TransitionsPanel> {
 
   /// Runs [op] after the previous transport operation.
   void _enqueue(Future<void> Function() op) {
-    _ops = _ops.then((_) => op()).catchError((Object _) {});
+    final transport = _transport;
+    if (transport == null) return;
+    final previous = _queues[transport] ?? Future<void>.value();
+    _queues[transport] = previous.then((_) => op()).catchError((Object _) {});
   }
 
   TransportController _transportOf() {
@@ -377,11 +380,14 @@ class _TransitionsPanelState extends ConsumerState<TransitionsPanel> {
     ));
   }
 
-  EditCommand _durationCommand(Transition current, double seconds, FrameRate rate) => SetTransition(
-        _ref,
-        TransitionSpec(current.kind, TransitionPanelModel.framesOf((seconds * microsPerSecond).round(), rate), direction: current.direction),
-        clamp: true,
-      );
+  /// `SetTransition` to [seconds] (whole frames, at most 2 s; the command clamps to the limit).
+  EditCommand _durationCommand(Transition current, double seconds, FrameRate rate) {
+    final frames = math.min(
+      TransitionPanelModel.framesOf((seconds * microsPerSecond).round(), rate),
+      TransitionPanelModel.framesOf(TransitionPanelModel.maxDuration, rate),
+    );
+    return SetTransition(_ref, TransitionSpec(current.kind, frames, direction: current.direction), clamp: true);
+  }
 
   void _applyAll(TransitionPanelView view) {
     final current = view.current;

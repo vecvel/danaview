@@ -219,6 +219,8 @@ class TransformRig {
     final rig = TransformRig._(harness, id, tester, ticker);
     await harness.pumpApp(tester, EditorScope(projectId: id, child: (build ?? transformFrame)(id)), surface: surface);
     await rig.real(() => rig.editor.open());
+    // Let the app's first page transition finish (it would cover the frame for taps).
+    await tester.pump(const Duration(seconds: 1));
     return rig;
   }
 

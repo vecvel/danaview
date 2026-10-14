@@ -72,7 +72,7 @@ void main() {
         expect(find.descendant(of: row(label), matching: find.byType(PropertyKeyframeToggle)), findsOneWidget, reason: label);
       }
       expect(find.byType(FlipRow), findsOneWidget);
-      expect(find.widgetWithText(InspectorChoiceRow<Object?>, 'Fit'), findsOneWidget);
+      expect(find.widgetWithText(InspectorChoiceRow<Object?>, 'Fit').first, findsOneWidget);
       expect(find.byKey(const ValueKey<String>('transform.crop')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('transform.reset')), findsOneWidget);
       expect(find.descendant(of: find.byType(InspectorHeader), matching: find.text('Transform')), findsOneWidget);
@@ -132,12 +132,13 @@ void main() {
 
     testWidgets('fit segments set the fit mode', (tester) async {
       final rig = await pumpTransform(tester);
-      final fill = find.descendant(of: find.widgetWithText(InspectorChoiceRow<Object?>, 'Fit'), matching: find.text('Fill'));
+      final fill = find.descendant(of: find.widgetWithText(InspectorChoiceRow<Object?>, 'Fit').first, matching: find.text('Fill'));
       await tester.ensureVisible(fill);
+      await tester.pump();
       await tester.tap(fill);
       await tester.pump();
       expect(rig.visual(Ids.a).fit, FitMode.fill);
-      final stretch = find.descendant(of: find.widgetWithText(InspectorChoiceRow<Object?>, 'Fit'), matching: find.text('Stretch'));
+      final stretch = find.descendant(of: find.widgetWithText(InspectorChoiceRow<Object?>, 'Fit').first, matching: find.text('Stretch'));
       await tester.tap(stretch);
       await tester.pump();
       expect(rig.visual(Ids.a).fit, FitMode.stretch);
