@@ -367,9 +367,13 @@ void main() {
       expect(rig.entries, 0);
     });
 
-    testText('a missing item shows a notice', (tester) async {
-      await TextRig.pump(tester, open: const ItemId('it_gone'));
-      expect(key('text.missing'), findsOneWidget);
+    testText('deleting the item while the panel is open is safe (the host closes it)', (tester) async {
+      final rig = await TextRig.pump(tester);
+      rig.editor.apply(DeleteItems({Ids.t1}));
+      await tester.pump();
+      await rig.settle();
+      expectNoOverflow(tester);
+      expect(find.byType(TextPanel), findsNothing);
     });
   });
 
@@ -403,6 +407,7 @@ void main() {
         await TextRig.pump(tester, surface: surface);
         final spec = frameSpec(tester);
         expect(spec.keyboardVisible, isTrue);
+        if (surface.size.height < 600) expect(spec.previewHidden, isTrue, reason: 'degrade step 5 on short phones');
         if (spec.previewHidden) {
           expect(key('text.liveChip'), findsOneWidget);
           expectInside(tester, key('text.liveChip'));

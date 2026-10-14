@@ -236,9 +236,9 @@ final class LayerRenderer {
         }
         if matte {
             raster = kernels.matte(raster)
-            return .drawn(place(raster, layer: layer, base: base, opacity: 1, cmasks: [], geo: geo))
+            return place(raster, layer: layer, base: base, opacity: 1, cmasks: [], geo: geo)
         }
-        return .drawn(place(raster, layer: layer, base: base, opacity: layer.opacity, cmasks: layer.cmasks, geo: geo))
+        return place(raster, layer: layer, base: base, opacity: layer.opacity, cmasks: layer.cmasks, geo: geo)
     }
 
     /// cropSource: the item's whole source, fitted to the canvas, looks applied, no transform or masks.
@@ -261,7 +261,7 @@ final class LayerRenderer {
         let rh = Geometry.rasterSide(base.h * geo.ky)
         var raster = Self.resample(source, width: rw, height: rh)
         raster = effects(raster, layer: fitted, plan: plan, base: base, geo: geo)
-        return .drawn(place(raster, layer: fitted, base: base, opacity: 1, cmasks: [], geo: geo))
+        return place(raster, layer: fitted, base: base, opacity: 1, cmasks: [], geo: geo)
     }
 
     /// The source picture of a media or image layer (display-oriented, extent at the origin).
@@ -333,16 +333,61 @@ final class LayerRenderer {
         return img
     }
 
-    /// Places a raster (covering `base` in base-local orientation) on the render canvas.
+    /// Places a raster (covering `base` in base-local orientation) on the render canvas; `.invisible`
+    /// when nothing of it can reach the render rect (off canvas or hidden by its canvas masks).
     private func place(_ raster: CIImage, layer: EvaluatedLayer, base: PlanSize, opacity: Double, cmasks: [CanvasMask],
-                       geo: Geometry) -> CIImage {
+                       geo: Geometry) -> LayerResult {
         let t = Self.placementTransform(layer.placement, base: base, rasterExtent: raster.extent, geo: geo)
         var out = raster.transformed(by: t)
+        guard Self.mayDraw(extent: out.extent, cmasks: cmasks, geo: geo) else { return .invisible }
         if opacity < 1 { out = Kernels.scaleAlpha(out, max(0, opacity)) }
         for m in cmasks {
             out = kernels.canvasMask(out, m, canvasHeight: geo.renderH, renderScale: geo.kx)
         }
-        return out
+        return .drawn(out)
+    }
+
+    /// Whether a placed layer with [extent] (render px, y up) can draw a pixel inside the render rect
+    /// after its canvas masks: a mask keeps nothing beyond its rect grown by the feather, an inverted
+    /// mask nothing inside its rect shrunk by the feather.
+    static func mayDraw(extent: CGRect, cmasks: [CanvasMask], geo: Geometry) -> Bool {
+        var visible = extent.intersection(CGRect(x: 0, y: 0, width: geo.renderW, height: geo.renderH))
+        guard !visible.isNull, !visible.isEmpty else { return false }
+        for m in cmasks {
+            let (c, s) = Kernels.cosSinDeg(m.r)
+            let f = max(0, m.feather)
+            if !m.inv {
+                let hw = m.w / 2 + f
+                let hh = m.h / 2 + f
+                guard hw > 0, hh > 0 else { return false }
+                var xs: [Double] = []
+                var ys: [Double] = []
+                for (u, v) in [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)] {
+                    xs.append((m.cx + u * c - v * s) * geo.kx)
+                    ys.append(geo.renderH - (m.cy + u * s + v * c) * geo.ky)
+                }
+                let box = CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
+                visible = visible.intersection(box)
+                guard !visible.isNull, !visible.isEmpty else { return false }
+            } else {
+                let hw = m.w / 2 - f
+                let hh = m.h / 2 - f
+                guard hw > 0, hh > 0 else { continue }
+                let corners = [
+                    (visible.minX, visible.minY), (visible.maxX, visible.minY), (visible.maxX, visible.maxY),
+                    (visible.minX, visible.maxY),
+                ]
+                let inside = corners.allSatisfy { p in
+                    let x = Double(p.0) / geo.kx - m.cx
+                    let y = (geo.renderH - Double(p.1)) / geo.ky - m.cy
+                    let qx = x * c + y * s
+                    let qy = -x * s + y * c
+                    return abs(qx) <= hw && abs(qy) <= hh
+                }
+                if inside { return false }
+            }
+        }
+        return true
     }
 
     // MARK: Helpers
@@ -356,28 +401,41 @@ final class LayerRenderer {
         return toLocal.concatenating(m).concatenating(toRender)
     }
 
-    /// [image] (extent at any origin) resampled to `(0, 0, width, height)`: Lanczos for large
-    /// minification, then bilinear with clamped edges (no transparent fringe inside the raster).
+    /// Per-axis cap of the footprint supersampling (as the reference renderer).
+    static let maxSupersample = 8
+
+    /// [image] (extent at any origin) resampled to `(0, 0, width, height)` like the reference renderer:
+    /// minifying by f per axis, each output texel averages n×n bilinear taps spread over its footprint
+    /// (n = ⌈f⌉ ≤ 8 per axis; one tap when magnifying). Each tap is the clamped source scaled to the
+    /// target and offset by the tap's sub-texel position; the taps are summed with weight 1/(nx·ny).
+    /// Edges are clamped, so no transparent fringe enters the raster.
     static func resample(_ image: CIImage, width: Int, height: Int) -> CIImage {
         let e = image.extent
-        var src = image.transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY))
-        var sx = Double(width) / e.width
-        var sy = Double(height) / e.height
-        if sx == 1 && sy == 1 && e.minX.rounded() == e.minX && e.minY.rounded() == e.minY { return src }
-        if sx < 0.5 && sy < 0.5 {
-            // Bring the source to about twice the target first (antialiased), then bilinear.
-            let scale = min(1, sy * 2)
-            let aspect = (sx * 2) / scale
-            src = src.applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: scale, kCIInputAspectRatioKey: aspect])
-            let e2 = src.extent
-            src = src.cropped(to: e2.integral.intersection(e2))
-            src = src.transformed(by: CGAffineTransform(translationX: -src.extent.minX, y: -src.extent.minY))
-            sx = Double(width) / src.extent.width
-            sy = Double(height) / src.extent.height
+        let rect = CGRect(x: 0, y: 0, width: width, height: height)
+        let src = image.transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY)).clampedToExtent()
+        let fx = e.width / Double(width)
+        let fy = e.height / Double(height)
+        if fx == 1 && fy == 1 && e.minX.rounded() == e.minX && e.minY.rounded() == e.minY { return image.transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY)) }
+        func taps(_ f: Double) -> Int {
+            guard f > 1 + 1e-9 else { return 1 }
+            return min(maxSupersample, Int((f - 1e-9).rounded(.up)))
         }
-        return src.clampedToExtent()
-            .transformed(by: CGAffineTransform(scaleX: sx, y: sy))
-            .cropped(to: CGRect(x: 0, y: 0, width: width, height: height))
+        let nx = taps(fx)
+        let ny = taps(fy)
+        let scale = CGAffineTransform(scaleX: 1 / fx, y: 1 / fy)
+        if nx == 1 && ny == 1 { return src.transformed(by: scale).cropped(to: rect) }
+        // Output texel x (centre x + 0.5) samples source (x + (i + 0.5)/nx)·fx for tap i.
+        let weight = 1 / Double(nx * ny)
+        var sum: CIImage?
+        for j in 0..<ny {
+            for i in 0..<nx {
+                let dx = 0.5 - (Double(i) + 0.5) / Double(nx)
+                let dy = 0.5 - (Double(j) + 0.5) / Double(ny)
+                let tap = Kernels.scaleAlpha(src.transformed(by: scale.concatenating(CGAffineTransform(translationX: dx, y: dy))), weight)
+                sum = sum.map { tap.applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: $0]) } ?? tap
+            }
+        }
+        return sum!.cropped(to: rect)
     }
 
     /// An opaque colour (plan ARGB, alpha ignored) covering [rect].

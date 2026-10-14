@@ -23,7 +23,7 @@
 //   direction, durations 0.1–2 s -> `SetTextAnimation` (the command fits in + out into the
 //   item). "Preview" loops the item's range and plays; leaving the panel (or "Stop preview")
 //   restores the play state, the loop range and the playhead.
-// * Slider and colour gestures go through InspectorEditSession: one history entry per drag.
+// * Slider-row and colour gestures go through InspectorEditSession: one history entry per drag.
 // * A locked lane shows a notice and disables every control; a missing item shows a notice.
 
 import 'dart:math' as math;
