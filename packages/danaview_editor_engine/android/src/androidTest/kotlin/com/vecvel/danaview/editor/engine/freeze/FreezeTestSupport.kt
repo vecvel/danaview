@@ -216,7 +216,8 @@ object YuvReference {
         extractor.seekTo(ptsUs, MediaExtractorCompat.SEEK_TO_PREVIOUS_SYNC)
         val mime = format.getString(MediaFormat.KEY_MIME)!!
         val name = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.first { info ->
-            !info.isEncoder && info.isSoftwareOnly && info.supportedTypes.any { it.equals(mime, true) }
+            !info.isEncoder && (info.isSoftwareOnly || info.name.startsWith("OMX.google.") || info.name.startsWith("c2.android.")) &&
+                info.supportedTypes.any { it.equals(mime, true) }
         }.name
         val codec = MediaCodec.createByCodecName(name)
         codec.configure(format, null, null, 0)

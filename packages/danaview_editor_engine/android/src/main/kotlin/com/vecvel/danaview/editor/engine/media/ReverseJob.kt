@@ -22,9 +22,11 @@
 //    b. the intermediate is read back with MediaExtractorCompat and fed to ONE MediaCodec decoder in
 //       reverse frame order (one sample per frame: every sample is a sync sample; an intermediate
 //       whose encoder ignored the all-intra request is decoded from the previous sync per frame),
-//       with the mirrored output time as its timestamp, rendering straight into the input Surface of
-//       ONE H.264 encoder (I-frame interval 1 s, ~0.1 bit/pixel/frame) whose samples go to a Media3
-//       Mp4Muxer. The intermediate is deleted before the next one is written, so the work directory
+//       with the mirrored output time as its timestamp; each decoded frame is copied as a flexible
+//       YUV 4:2:0 image into ONE H.264 encoder (I-frame interval 1 s, ~0.1 bit/pixel/frame) whose
+//       samples go to a Media3 Mp4Muxer. No Surface between the codecs: a decoder's Surface
+//       buffers are not always a format the encoder's input Surface takes (API 29 emulator), and a
+//       copy holds one frame. The intermediate is deleted before the next one is written, so the work directory
 //       never holds more than one chunk (plus that chunk's audio WAV, written after the
 //       intermediate is gone);
 //    c. audio of the same output span: PcmDecoder (AND-04, sample-accurate) decodes the mirrored
@@ -43,8 +45,9 @@
 // `LimitExceeded('reverseRange')`), and free space must be at least 2 x estimated output + one chunk
 // intermediate + 64 MB (`diskFull`).
 //
-// Memory: decoded frames live in codec and Surface buffers (a few frames); the job itself holds one
-// compressed sample, one 64k-frame audio block and the per-chunk PCM write buffer. Cancel or
+// Memory: decoded frames live in the codecs' buffers (a few frames); the job copies one decoded
+// frame at a time into the encoder and holds one compressed sample, one 64k-frame audio block and
+// the per-chunk PCM write buffer. Cancel or
 // pre-emption cancels the running Transformer, stops between samples, and deletes the work
 // directory and `<output>.part` (a pre-empted job restarts from scratch: Android jobs have no
 // checkpoints, ARCH §15). Run by JobRegistry (AND-05) on a registry worker thread; blocking.
@@ -63,7 +66,6 @@ import android.os.Looper
 import android.os.Process
 import android.os.StatFs
 import android.util.Log
-import android.view.Surface
 import androidx.annotation.OptIn
 import androidx.annotation.VisibleForTesting
 import androidx.media3.common.C
@@ -848,10 +850,17 @@ object ReverseWav {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Stage b and the output: decoder -> encoder Surface -> Mp4Muxer, AAC encoder.
+// Stage b and the output: decoder -> YUV image copy -> encoder -> Mp4Muxer, AAC encoder.
 // ---------------------------------------------------------------------------------------------
 
-/** The rendition writer: one video encoder, one AAC encoder, one Mp4Muxer, a decoder per format. */
+/**
+ * The rendition writer: one H.264 encoder, one AAC encoder, one Mp4Muxer, and a decoder reused
+ * across chunks. Decoded frames are copied as flexible YUV 4:2:0 images (MediaCodec
+ * `getOutputImage` -> `getInputImage`), never through a Surface: a decoder's Surface buffers are
+ * not always a format the encoder's input Surface accepts (API 29 emulator: the goldfish decoder's
+ * YUV420Planar buffers make OMX.google.h264.encoder fail), while flexible YUV images work for any
+ * codec pair and hold one decoded frame at a time.
+ */
 private class ReverseWriter(
     part: File,
     private val bitRate: Int,
@@ -865,19 +874,25 @@ private class ReverseWriter(
         .setLastSampleDurationBehavior(Mp4Muxer.LAST_SAMPLE_DURATION_BEHAVIOR_SET_FROM_END_OF_STREAM_BUFFER_OR_DUPLICATE_PREVIOUS)
         .build()
     private var encoder: MediaCodec? = null
-    private var inputSurface: Surface? = null
+    private var encoderWidth = 0
+    private var encoderHeight = 0
     private var decoder: MediaCodec? = null
     private var decoderMime: String? = null
     private var decoderSize: Pair<Int, Int>? = null
+    private var softwareDecoder = false
+    private var decoderHasInput = false
+    private var copiedByDecoder = 0L
     private var videoTrack = -1
     private var audioTrack = -1
     private var videoFormat: Format? = null
     private var rotation = 0
-    private var rendered = 0L
+    private var copied = 0L
     private var encodedVideo = 0L
     private var lastVideoPts = Long.MIN_VALUE
     private val info = MediaCodec.BufferInfo()
+    private val encoderInfo = MediaCodec.BufferInfo()
     private var closedMuxer = false
+    private var loggedLayout = false
 
     // Audio.
     private var aac: MediaCodec? = null
@@ -885,6 +900,13 @@ private class ReverseWriter(
     private var aacUnits = 0L
     private var aacInputFrames = 0L
     private var aacEos = false
+
+    // Which decoded frame goes to the encoder (null: every frame, at its own time).
+    private var targetInputPts: Long? = null
+    private var targetOutputPts = 0L
+
+    /** The decoder delivered no flexible YUV image (some vendor decoders): retry with a software decoder. */
+    private class NoYuvImage : RuntimeException()
 
     init {
         if (audio != null) startAac(audio)
@@ -895,8 +917,8 @@ private class ReverseWriter(
     // ---- video ----
 
     /**
-     * Feeds the frames of [chunk] from [intermediate] in reverse order and renders them into the
-     * encoder. Returns the number of chunk frames the intermediate did not deliver.
+     * Feeds the frames of [chunk] from [intermediate] in reverse order and encodes them. Returns the
+     * number of chunk frames the intermediate did not deliver.
      */
     fun writeVideoChunk(context: Context, intermediate: File, timeline: ReverseTimeline, chunk: ReverseTimeline.Chunk): Int {
         val extractor = MediaSources.extractor(context, intermediate.absolutePath)
@@ -906,7 +928,6 @@ private class ReverseWriter(
             } ?: throw EngineException(EngineErrorCode.decodeFailed, "the reverse intermediate has no video")
             val format = extractor.getTrackFormat(track)
             extractor.selectTrack(track)
-            // The intermediate's samples (decode order = presentation order: no B-frames).
             val samples = ArrayList<Pair<Long, Boolean>>()
             while (true) {
                 val t = extractor.sampleTime
@@ -917,25 +938,48 @@ private class ReverseWriter(
             if (samples.isEmpty()) throw EngineException(EngineErrorCode.decodeFailed, "the reverse intermediate is empty")
             val sorted = samples.map { it.first }.sorted()
             val allIntra = samples.all { it.second }
+            if (!loggedLayout) {
+                loggedLayout = true
+                Log.i(EngineContext.TAG, "reverse intermediate: ${samples.size} samples, ${samples.count { it.second }} sync" + if (allIntra) " (all-intra)" else " (decoding from sync per frame)")
+            }
             val mapping = IntermediateMapping.of(sorted.toLongArray(), timeline.frames.subList(chunk.first, chunk.last + 1).map { it.ptsUs }.toLongArray(), chunk.clipStartUs)
             ensureEncoder(format)
-            ensureDecoder(format)
-            var lost = 0
-            for (i in chunk.last downTo chunk.first) {
-                check()
-                val q = mapping.intermediatePts[i - chunk.first]
-                if (q == null) {
-                    lost++
-                    continue
+            while (true) {
+                ensureDecoder(format)
+                try {
+                    return feedChunk(extractor, timeline, chunk, mapping, allIntra)
+                } catch (e: NoYuvImage) {
+                    if (softwareDecoder) throw EngineException(EngineErrorCode.decodeFailed, "no decoder delivers YUV images")
+                    Log.w(EngineContext.TAG, "reverse: the decoder has no YUV image output; using a software decoder")
+                    releaseDecoder()
+                    softwareDecoder = true
                 }
-                val outPts = timeline.frames[i].outPtsUs
-                if (allIntra) feedIntra(extractor, q, outPts) else feedFromSync(extractor, q, outPts)
             }
-            endDecoderRun()
-            return lost
         } finally {
             extractor.release()
         }
+    }
+
+    private fun feedChunk(
+        extractor: MediaExtractorCompat,
+        timeline: ReverseTimeline,
+        chunk: ReverseTimeline.Chunk,
+        mapping: IntermediateMapping,
+        allIntra: Boolean,
+    ): Int {
+        var lost = 0
+        for (i in chunk.last downTo chunk.first) {
+            check()
+            val q = mapping.intermediatePts[i - chunk.first]
+            if (q == null) {
+                lost++
+                continue
+            }
+            val outPts = timeline.frames[i].outPtsUs
+            if (allIntra) feedIntra(extractor, q, outPts) else feedFromSync(extractor, q, outPts)
+        }
+        endDecoderRun()
+        return lost
     }
 
     private fun ensureEncoder(intermediate: MediaFormat) {
@@ -944,7 +988,7 @@ private class ReverseWriter(
         val h = intermediate.getInteger(MediaFormat.KEY_HEIGHT)
         rotation = if (intermediate.containsKey(MediaFormat.KEY_ROTATION)) intermediate.getInteger(MediaFormat.KEY_ROTATION) else 0
         val format = MediaFormat.createVideoFormat(MimeTypes.VIDEO_H264, w, h).apply {
-            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
             setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
             setInteger(MediaFormat.KEY_FRAME_RATE, max(1, Math.round(fps).toInt()))
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
@@ -958,13 +1002,14 @@ private class ReverseWriter(
         }
         try {
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            inputSurface = codec.createInputSurface()
             codec.start()
         } catch (e: RuntimeException) {
             codec.release()
             throw EngineException(EngineErrorCode.encoderUnavailable, "H.264 encoder did not start", cause = e)
         }
         encoder = codec
+        encoderWidth = w
+        encoderHeight = h
     }
 
     private fun anyEncoder(mime: String): Boolean =
@@ -980,17 +1025,22 @@ private class ReverseWriter(
             return
         }
         existing?.let { releaseDecoder() }
-        // The rotation stays metadata (Mp4OrientationData): a decoder configured with it would
-        // rotate into the encoder's unrotated Surface.
         format.setInteger(MediaFormat.KEY_ROTATION, 0)
-        val name = MediaCodecList(MediaCodecList.REGULAR_CODECS).findDecoderForFormat(format)
+        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
+        val name = if (softwareDecoder) {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.firstOrNull { info ->
+                !info.isEncoder && Codecs.isSoftware(info) && info.supportedTypes.any { it.equals(mime, true) }
+            }?.name
+        } else {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).findDecoderForFormat(format)
+        }
         val codec = try {
             if (name != null) MediaCodec.createByCodecName(name) else MediaCodec.createDecoderByType(mime)
         } catch (e: IOException) {
             throw EngineException(EngineErrorCode.decoderInitFailed, "decoder unavailable", cause = e)
         }
         try {
-            codec.configure(format, inputSurface, null, 0)
+            codec.configure(format, null, null, 0)
             codec.start()
         } catch (e: RuntimeException) {
             codec.release()
@@ -999,6 +1049,8 @@ private class ReverseWriter(
         decoder = codec
         decoderMime = mime
         decoderSize = size
+        decoderHasInput = false
+        copiedByDecoder = 0
     }
 
     private fun queueCodecConfig(codec: MediaCodec, format: MediaFormat) {
@@ -1018,56 +1070,47 @@ private class ReverseWriter(
             feedFromSync(extractor, q, outPts)
             return
         }
-        queueSample(extractor, outPts, 0)
+        queueSample(extractor, outPts)
         drainDecoder(false)
         drainEncoder(false)
-        pace()
     }
 
     /**
-     * General case: decode from the sync sample before [q] (flushing first), render only the frame
-     * of [q]. The decoder ends with an end-of-stream so every decoder delivers it, then is flushed.
+     * General case: decode from the sync sample before [q] (after ending the decoder's current run),
+     * keep only the frame of [q]. The run ends with an end-of-stream so every decoder delivers it.
      */
     private fun feedFromSync(extractor: MediaExtractorCompat, q: Long, outPts: Long) {
-        val codec = decoder!!
         endDecoderRun()
         extractor.seekTo(q, MediaExtractorCompat.SEEK_TO_PREVIOUS_SYNC)
-        // Inputs carry their own time + a marker offset; the target's output is rendered at outPts.
         targetInputPts = q
         targetOutputPts = outPts
-        // Decode order up to and including the target sample (frames reordered before it come first).
-        while (true) {
-            check()
-            val t = extractor.sampleTime
-            if (t < 0) break
-            queueSample(extractor, t, 0)
-            extractor.advance()
-            drainDecoder(false)
-            drainEncoder(false)
-            if (t == q) break
+        try {
+            // Decode order up to and including the target sample (frames reordered before it come first).
+            while (true) {
+                check()
+                val t = extractor.sampleTime
+                if (t < 0) break
+                queueSample(extractor, t)
+                extractor.advance()
+                drainDecoder(false)
+                drainEncoder(false)
+                if (t == q) break
+            }
+            endDecoderRun()
+        } finally {
+            targetInputPts = null
         }
-        val index = dequeueInput(codec)
-        codec.queueInputBuffer(index, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-        drainDecoder(true)
-        targetInputPts = null
-        codec.flush()
-        decoderAtEos = false
-        drainEncoder(false)
-        pace()
     }
 
-    private var targetInputPts: Long? = null
-    private var targetOutputPts = 0L
-    private var decoderAtEos = false
-
-    private fun queueSample(extractor: MediaExtractorCompat, ptsUs: Long, flags: Int) {
+    private fun queueSample(extractor: MediaExtractorCompat, ptsUs: Long) {
         val codec = decoder!!
         val index = dequeueInput(codec)
         val buffer = codec.getInputBuffer(index)!!
         buffer.clear()
         val size = extractor.readSampleData(buffer, 0)
         if (size < 0) throw EngineException(EngineErrorCode.decodeFailed, "intermediate sample unreadable")
-        codec.queueInputBuffer(index, 0, size, ptsUs, flags)
+        codec.queueInputBuffer(index, 0, size, ptsUs, 0)
+        decoderHasInput = true
     }
 
     private fun dequeueInput(codec: MediaCodec): Int {
@@ -1083,7 +1126,7 @@ private class ReverseWriter(
         }
     }
 
-    /** Renders decoded frames; with [untilEos] waits for the decoder's end of stream. */
+    /** Copies decoded frames to the encoder; with [untilEos] waits for the decoder's end of stream. */
     private fun drainDecoder(untilEos: Boolean) {
         val codec = decoder ?: return
         val deadline = System.nanoTime() + CODEC_TIMEOUT_NS
@@ -1092,24 +1135,30 @@ private class ReverseWriter(
             when {
                 index >= 0 -> {
                     val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                    val target = targetInputPts
-                    if (info.size > 0 || !eos) {
-                        if (target == null) {
-                            codec.releaseOutputBuffer(index, info.presentationTimeUs * 1000)
-                            rendered++
-                        } else if (info.presentationTimeUs == target) {
-                            codec.releaseOutputBuffer(index, targetOutputPts * 1000)
-                            rendered++
-                        } else {
-                            codec.releaseOutputBuffer(index, false)
+                    if (info.size > 0) {
+                        val target = targetInputPts
+                        val outPts = when {
+                            target == null -> info.presentationTimeUs
+                            info.presentationTimeUs == target -> targetOutputPts
+                            else -> null
                         }
-                    } else {
-                        codec.releaseOutputBuffer(index, false)
+                        if (outPts != null) {
+                            val image = codec.getOutputImage(index)
+                            if (image == null) {
+                                codec.releaseOutputBuffer(index, false)
+                                if (copiedByDecoder == 0L) throw NoYuvImage()
+                                throw EngineException(EngineErrorCode.decodeFailed, "decoded frame unavailable")
+                            }
+                            try {
+                                encodeFrame(image, outPts)
+                            } finally {
+                                image.close()
+                            }
+                            copiedByDecoder++
+                        }
                     }
-                    if (eos) {
-                        decoderAtEos = true
-                        return
-                    }
+                    codec.releaseOutputBuffer(index, false)
+                    if (eos) return
                 }
                 index == MediaCodec.INFO_TRY_AGAIN_LATER -> {
                     if (!untilEos) return
@@ -1122,36 +1171,26 @@ private class ReverseWriter(
         }
     }
 
+    /** Copies [image] into the encoder's next input at [ptsUs]. */
+    private fun encodeFrame(image: android.media.Image, ptsUs: Long) {
+        val codec = encoder!!
+        val index = dequeueInput(codec)
+        val target = codec.getInputImage(index) ?: throw EngineException(EngineErrorCode.encoderUnavailable, "the H.264 encoder takes no YUV images")
+        YuvCopy.copy(image, target, encoderWidth, encoderHeight)
+        codec.queueInputBuffer(index, 0, encoderWidth * encoderHeight * 3 / 2, ptsUs, 0)
+        copied++
+    }
+
     /** Ends the decoder's current run: end of stream, drain, flush (ready for the next chunk or frame). */
     private fun endDecoderRun() {
         val codec = decoder ?: return
-        if (!decoderAtEos) {
-            val index = dequeueInput(codec)
-            codec.queueInputBuffer(index, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-            drainDecoder(true)
-        }
+        if (!decoderHasInput) return
+        val index = dequeueInput(codec)
+        codec.queueInputBuffer(index, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+        drainDecoder(true)
         codec.flush()
-        decoderAtEos = false
+        decoderHasInput = false
     }
-
-    /**
-     * Keeps the decoder only a few frames ahead of the encoder (the Surface has few buffers). The
-     * allowance grows when the encoder holds more frames than that before its first output.
-     */
-    private fun pace() {
-        val deadline = System.nanoTime() + PACE_WAIT_NS
-        while (rendered - encodedVideo > framesAhead) {
-            if (!drainEncoder(false)) {
-                if (System.nanoTime() > deadline) {
-                    framesAhead = min(MAX_FRAMES_AHEAD, framesAhead + 1)
-                    return
-                }
-                Thread.sleep(2)
-            }
-        }
-    }
-
-    private var framesAhead = 4
 
     /** Writes encoded video; returns whether anything was written. With [untilEos] waits for the end of stream. */
     private fun drainEncoder(untilEos: Boolean): Boolean {
@@ -1159,23 +1198,23 @@ private class ReverseWriter(
         var wrote = false
         val deadline = System.nanoTime() + CODEC_TIMEOUT_NS
         while (true) {
-            val index = codec.dequeueOutputBuffer(info, if (untilEos) DEQUEUE_US else 0)
+            val index = codec.dequeueOutputBuffer(encoderInfo, if (untilEos) DEQUEUE_US else 0)
             when {
                 index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     videoFormat = MediaFormatUtil.createFormatFromMediaFormat(codec.outputFormat)
                     addTracks()
                 }
                 index >= 0 -> {
-                    val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                    if (info.size > 0 && info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
+                    val eos = encoderInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                    if (encoderInfo.size > 0 && encoderInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
                         if (videoTrack < 0) throw EngineException(EngineErrorCode.encodingFailed, "encoder output before its format")
                         val buffer = codec.getOutputBuffer(index)!!
-                        buffer.position(info.offset)
-                        buffer.limit(info.offset + info.size)
-                        if (info.presentationTimeUs > lastVideoPts) {
-                            val flags = if (info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0) C.BUFFER_FLAG_KEY_FRAME else 0
-                            write(videoTrack, buffer, BufferInfo(info.presentationTimeUs, info.size, flags))
-                            lastVideoPts = info.presentationTimeUs
+                        buffer.position(encoderInfo.offset)
+                        buffer.limit(encoderInfo.offset + encoderInfo.size)
+                        if (encoderInfo.presentationTimeUs > lastVideoPts) {
+                            val flags = if (encoderInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0) C.BUFFER_FLAG_KEY_FRAME else 0
+                            write(videoTrack, buffer, BufferInfo(encoderInfo.presentationTimeUs, encoderInfo.size, flags))
+                            lastVideoPts = encoderInfo.presentationTimeUs
                         }
                         encodedVideo++
                         wrote = true
@@ -1329,10 +1368,11 @@ private class ReverseWriter(
     /** Ends both streams and closes the muxer; the video track ends at [durationUs]. */
     fun finish(durationUs: Long) {
         val video = encoder ?: throw EngineException(EngineErrorCode.encodingFailed, "no video was encoded")
-        // Every chunk ended its decoder run (all frames rendered) before this.
-        video.signalEndOfInputStream()
+        // Every chunk ended its decoder run (all frames copied) before this.
+        val last = dequeueInput(video)
+        video.queueInputBuffer(last, 0, 0, max(0L, lastVideoPts + 1), MediaCodec.BUFFER_FLAG_END_OF_STREAM)
         drainEncoder(true)
-        if (encodedVideo < rendered) Log.w(EngineContext.TAG, "reverse: the encoder delivered $encodedVideo of $rendered frames")
+        if (encodedVideo < copied) Log.w(EngineContext.TAG, "reverse: the encoder delivered $encodedVideo of $copied frames")
         aac?.let { codec ->
             val index = dequeueInput(codec)
             codec.queueInputBuffer(index, 0, 0, Math.floorDiv(aacInputFrames * 1_000_000L, audio!!.outRate.toLong()), MediaCodec.BUFFER_FLAG_END_OF_STREAM)
@@ -1353,8 +1393,8 @@ private class ReverseWriter(
         }
     }
 
-    /** Frames rendered into the encoder / encoded (tests and logs). */
-    val counts: Pair<Long, Long> get() = Pair(rendered, encodedVideo)
+    /** Frames copied into the encoder / encoded (logs). */
+    val counts: Pair<Long, Long> get() = Pair(copied, encodedVideo)
 
     private fun releaseDecoder() {
         decoder?.let {
@@ -1380,8 +1420,6 @@ private class ReverseWriter(
         }
         encoder = null
         aac = null
-        inputSurface?.release()
-        inputSurface = null
         if (!closedMuxer) {
             closedMuxer = true
             try {
@@ -1400,8 +1438,6 @@ private class ReverseWriter(
     companion object {
         private const val DEQUEUE_US = 10_000L
         private const val CODEC_TIMEOUT_NS = 10_000_000_000L
-        private const val PACE_WAIT_NS = 200_000_000L
-        private const val MAX_FRAMES_AHEAD = 16
     }
 }
 
@@ -1445,4 +1481,50 @@ class IntermediateMapping(
             return IntermediateMapping(result)
         }
     }
+}
+
+/** Copies the visible part of a flexible YUV 4:2:0 image into another (any pixel and row strides). */
+object YuvCopy {
+    /** Copies [src] (its crop rectangle) into [dst] ([width] x [height]); the smaller size wins. */
+    fun copy(src: android.media.Image, dst: android.media.Image, width: Int, height: Int) {
+        val crop = src.cropRect
+        val w = min(width, crop.width())
+        val h = min(height, crop.height())
+        plane(src.planes[0], dst.planes[0], crop.left, crop.top, w, h)
+        val cw = (w + 1) / 2
+        val ch = (h + 1) / 2
+        plane(src.planes[1], dst.planes[1], crop.left / 2, crop.top / 2, cw, ch)
+        plane(src.planes[2], dst.planes[2], crop.left / 2, crop.top / 2, cw, ch)
+    }
+
+    private fun plane(src: android.media.Image.Plane, dst: android.media.Image.Plane, x0: Int, y0: Int, w: Int, h: Int) {
+        val s = src.buffer
+        val d = dst.buffer
+        val sp = src.pixelStride
+        val dp = dst.pixelStride
+        val sr = src.rowStride
+        val dr = dst.rowStride
+        if (sp == 1 && dp == 1) {
+            val row = ByteArray(w)
+            for (y in 0 until h) {
+                s.position((y0 + y) * sr + x0)
+                s.get(row, 0, w)
+                d.position(y * dr)
+                d.put(row, 0, w)
+            }
+        } else {
+            for (y in 0 until h) {
+                val si = (y0 + y) * sr + x0 * sp
+                val di = y * dr
+                for (x in 0 until w) d.put(di + x * dp, s.get(si + x * sp))
+            }
+        }
+    }
+}
+
+/** Codec list helpers. */
+object Codecs {
+    /** Whether [info] is a software codec (API 29 flag, else the platform name prefixes). */
+    fun isSoftware(info: android.media.MediaCodecInfo): Boolean =
+        if (android.os.Build.VERSION.SDK_INT >= 29) info.isSoftwareOnly else info.name.startsWith("OMX.google.") || info.name.startsWith("c2.android.")
 }
