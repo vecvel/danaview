@@ -12,7 +12,8 @@
 // FrameExtractor (media3-inspector-frame) with SeekParameters.EXACT at floor(rulePts / 1000) ms:
 // Media3 shows the first frame with pts >= the position (AND-01 V-N18, ARCH §5), and the previous
 // frame is always more than 1 ms earlier, so that position lands on the rule frame. The frame comes
-// back upright (rotation applied) and SDR (HDR tone-mapped by Media3; `setExtractHdrFrames(false)`).
+// back upright (rotation applied) and SDR (HDR is tone-mapped: FrameExtractor's default; its
+// `setExtractHdrFrames` switch is API 34+ and left alone).
 //
 // Verification: the extracted frame's presentation time must be the rule frame's (±1 ms). A
 // decoder that loses frames (the x86_64 emulator's goldfish H.264 decoder drops a B-frame of the
@@ -171,11 +172,10 @@ object ExactFrames {
         MediaCodecUtil.getDecoderInfos(mime, secure, tunneling).sortedBy { if (it.softwareOnly) 0 else 1 }
     }
 
-    /** A FrameExtractor of [uri] with EXACT seeks, SDR output and [effects]. */
+    /** A FrameExtractor of [uri] with EXACT seeks, SDR output (the default) and [effects]. */
     fun extractor(context: Context, uri: String, effects: List<Effect>, codecSelector: MediaCodecSelector? = null): FrameExtractor {
         val builder = FrameExtractor.Builder(context, MediaSources.mediaItem(uri))
             .setSeekParameters(SeekParameters.EXACT)
-            .setExtractHdrFrames(false)
             .setEffects(effects)
         codecSelector?.let { builder.setMediaCodecSelector(it) }
         return builder.build()

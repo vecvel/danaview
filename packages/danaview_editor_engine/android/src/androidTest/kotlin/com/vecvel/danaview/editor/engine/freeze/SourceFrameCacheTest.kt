@@ -107,19 +107,27 @@ class SourceFrameCacheTest {
         assertEquals("the reference is frame 160", 160, YuvReference.barcode(reference))
         // Flat regions: backdrop, lower calm area, digits area, barcode cells 0 (white) and 1 (black).
         val points = listOf(0.25 to 0.5, 0.75 to 0.8, 0.5 to 0.3, 0.0179 to 0.05, 0.0536 to 0.05)
-        var worst = 0.0
+        // The sample is the key shader's input: the frame as Media3's GL pipeline converts it. The
+        // reference is computed with both matrices; the platform's GL sampler decides which applies
+        // (ARCH §13 expects BT.709; the x86_64 emulator's sampler converts with BT.601, measured).
+        var worst709 = 0.0
+        var worst601 = 0.0
         for ((x, y) in points) {
-            val want = reference.average(x, y)
+            val want709 = reference.average(x, y)
+            val want601 = reference.average(x, y, bt601 = true)
             val got = cache.sampleColor(file.absolutePath, "fp-counter", 5_350_000, x, y)
-            val diffs = doubleArrayOf(got.red - want[0], got.green - want[1], got.blue - want[2])
-            Log.i(TAG, "sampleColor at ($x, $y) [emulator]: got (%.4f, %.4f, %.4f) want (%.4f, %.4f, %.4f)".format(got.red, got.green, got.blue, want[0], want[1], want[2]))
-            for (d in diffs) {
-                worst = maxOf(worst, kotlin.math.abs(d))
-                assertEquals("component at ($x, $y)", 0.0, d, 2.0 / 255)
+            val c = doubleArrayOf(got.red, got.green, got.blue)
+            for (i in 0 until 3) {
+                worst709 = maxOf(worst709, kotlin.math.abs(c[i] - want709[i]))
+                worst601 = maxOf(worst601, kotlin.math.abs(c[i] - want601[i]))
             }
+            Log.i(TAG, "sampleColor at ($x, $y) [emulator]: got (%.4f, %.4f, %.4f) BT.709 ref (%.4f, %.4f, %.4f) BT.601 ref (%.4f, %.4f, %.4f)".format(
+                got.red, got.green, got.blue, want709[0], want709[1], want709[2], want601[0], want601[1], want601[2]))
             assertEquals(1.0, got.alpha, 1e-9)
         }
-        Log.i(TAG, "sampleColor worst |d| = %.2f/255".format(worst * 255))
+        Log.i(TAG, "sampleColor worst |d| vs BT.709 %.2f/255, vs BT.601 %.2f/255 [emulator]".format(worst709 * 255, worst601 * 255))
+        val worst = minOf(worst709, worst601)
+        assertTrue("every point within ±2/255 of the reference of the platform's matrix (worst %.2f/255)".format(worst * 255), worst <= 2.0 / 255)
         assertEquals("one decode serves every sample of the frame", 1, cache.decodeCount)
         cache.removeAll()
     }

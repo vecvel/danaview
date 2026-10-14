@@ -13,6 +13,7 @@
 package com.vecvel.danaview.editor.engine.platform
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -68,6 +69,7 @@ class Permissions(private val ctx: EngineContext) {
     }
 
     /** Whether POST_NOTIFICATIONS is granted (API 33+; a seam for tests). */
+    @SuppressLint("InlinedApi") // only called on API 33+
     internal var notificationsGranted: () -> Boolean = {
         ctx.appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }

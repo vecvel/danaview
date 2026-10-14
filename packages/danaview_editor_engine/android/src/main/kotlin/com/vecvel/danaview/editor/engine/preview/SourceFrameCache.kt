@@ -41,6 +41,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.annotation.VisibleForTesting
+import androidx.core.graphics.scale
 import androidx.media3.common.Effect
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
@@ -54,8 +55,6 @@ import com.vecvel.danaview.editor.engine.core.EngineErrorCode
 import com.vecvel.danaview.editor.engine.core.EngineErrors
 import com.vecvel.danaview.editor.engine.core.EngineException
 import com.vecvel.danaview.editor.engine.core.JobControl
-import com.vecvel.danaview.editor.engine.core.fail
-import com.vecvel.danaview.editor.engine.core.succeed
 import com.vecvel.danaview.editor.engine.effects.BoundLayer
 import com.vecvel.danaview.editor.engine.effects.EffectAssets
 import com.vecvel.danaview.editor.engine.effects.LayerBinding
@@ -338,7 +337,7 @@ class SourceFrameCache(
     private fun unprocessedStill(uri: String, fingerprint: String?, sourceTimeUs: Long, heightPx: Int, control: JobControl?): Bitmap {
         val full = frame(uri, fingerprint, sourceTimeUs, null, control)
         val width = Sizing.widthForHeight(full.width, full.height, heightPx)
-        return Bitmap.createScaledBitmap(full, width, heightPx, true).let { if (it === full) full.copy(Bitmap.Config.ARGB_8888, false) else it }
+        return full.scale(width, heightPx).let { if (it === full) full.copy(Bitmap.Config.ARGB_8888, false) else it }
     }
 
     private fun renderLooks(uri: String, media: String, sourceTimeUs: Long, heightPx: Int, looks: List<LookStill>, control: JobControl?): List<Bitmap> {

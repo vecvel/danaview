@@ -163,14 +163,21 @@ fun meanAbsDiff(a: Bitmap, b: Bitmap): Double {
 /** The sampleColor reference (file header). */
 object YuvReference {
     class Frame(val width: Int, val height: Int, val y: ByteArray, val u: ByteArray, val v: ByteArray) {
-        /** BT.709 video-range R'G'B' (0..1, clamped) of pixel ([x], [y]). */
-        fun rgb(px: Int, py: Int): DoubleArray {
+        /** Video-range R'G'B' (0..1, clamped) of pixel ([x], [y]) with the BT.709 (or, [bt601], BT.601) matrix. */
+        fun rgb(px: Int, py: Int, bt601: Boolean = false): DoubleArray {
             val yy = (y[py * width + px].toInt() and 0xFF) - 16.0
             val cb = (u[(py / 2) * (width / 2) + px / 2].toInt() and 0xFF) - 128.0
             val cr = (v[(py / 2) * (width / 2) + px / 2].toInt() and 0xFF) - 128.0
             val yn = yy / 219.0
             val cbn = cb / 224.0
             val crn = cr / 224.0
+            if (bt601) {
+                return doubleArrayOf(
+                    (yn + 1.402 * crn).coerceIn(0.0, 1.0),
+                    (yn - 0.344136 * cbn - 0.714136 * crn).coerceIn(0.0, 1.0),
+                    (yn + 1.772 * cbn).coerceIn(0.0, 1.0),
+                )
+            }
             return doubleArrayOf(
                 (yn + 1.5748 * crn).coerceIn(0.0, 1.0),
                 (yn - 0.1873 * cbn - 0.4681 * crn).coerceIn(0.0, 1.0),
@@ -179,14 +186,14 @@ object YuvReference {
         }
 
         /** 3x3 average of [rgb] around normalized ([nx], [ny]) (same window rule as the cache). */
-        fun average(nx: Double, ny: Double): DoubleArray {
+        fun average(nx: Double, ny: Double, bt601: Boolean = false): DoubleArray {
             val cx = min(width - 1, max(0, Math.floor(nx * width).toInt()))
             val cy = min(height - 1, max(0, Math.floor(ny * height).toInt()))
             val x0 = min(max(0, cx - 1), width - 3)
             val y0 = min(max(0, cy - 1), height - 3)
             val sum = DoubleArray(3)
             for (dy in 0 until 3) for (dx in 0 until 3) {
-                val c = rgb(x0 + dx, y0 + dy)
+                val c = rgb(x0 + dx, y0 + dy, bt601)
                 for (i in 0 until 3) sum[i] += c[i]
             }
             return DoubleArray(3) { sum[it] / 9 }
