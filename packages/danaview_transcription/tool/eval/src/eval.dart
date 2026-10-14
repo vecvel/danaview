@@ -222,7 +222,7 @@ Future<EvalOutcome> runEval(EvalConfig config, {void Function(String line)? log}
   final meta = <String, Object?>{
     'date': DateTime.now().toUtc().toIso8601String().substring(0, 10),
     'engine': engine.isEmpty ? '?' : engine,
-    'host': '${Platform.operatingSystem} ${_arch()}',
+    'host': _host(),
     'clips': manifest.clips.length,
     'mode': config.smoke ? 'smoke (fixture model)' : 'models: ${tierModels.keys.join(', ')}${vadPath == null ? '' : ' + VAD'}',
     'decode': decode.toJson(),
@@ -321,8 +321,8 @@ Future<(String?, String)> _resolveWav(EvalClip clip, EvalManifest manifest, Eval
   }
 }
 
-String _arch() {
+String _host() {
   final v = Platform.version;
   final i = v.lastIndexOf('on "');
-  return i < 0 ? '' : v.substring(i + 4).replaceAll('"', '');
+  return i < 0 ? Platform.operatingSystem : v.substring(i + 4).replaceAll('"', '');
 }

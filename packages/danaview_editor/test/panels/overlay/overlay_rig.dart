@@ -12,10 +12,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/editor/contracts/inspector_routes.dart';
-import 'package:danaview_editor/src/editor/layout/editor_layout.dart' show EditorSurface;
 import 'package:danaview_editor/src/editor/preview/canvas_geometry.dart';
 import 'package:danaview_editor/src/editor/preview/crop_overlay.dart';
-import 'package:danaview_editor/src/app/editor_providers.dart';
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_engine_api/testing.dart';
 
