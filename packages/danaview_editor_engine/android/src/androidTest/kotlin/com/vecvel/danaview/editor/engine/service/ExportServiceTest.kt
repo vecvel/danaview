@@ -157,7 +157,7 @@ class ExportServiceTest {
         val relay = activity()
         val h = harness("cancel")
         val out = h.output("cancel")
-        val id = h.start(ServiceTest.counterPlan(300), settings(), out)
+        val id = h.start(ServiceTest.counterPlan(240, 1920, 1080), settings(w = 1920, h = 1080), out)
         ServiceTest.awaitForeground()
         assertTrue(ServiceTest.waitFor(5_000) { ServiceTest.foregroundNotification() != null })
         finishAndWait(relay)
@@ -192,7 +192,7 @@ class ExportServiceTest {
         val detach = DetachOnDestroy(h).apply { install() }
         try {
             val out = h.output("swipe")
-            val id = h.start(ServiceTest.counterPlan(180), settings(), out, DetachedHandoffMsg.SAVE_TO_GALLERY)
+            val id = h.start(ServiceTest.counterPlan(240, 1920, 1080), settings(w = 1920, h = 1080), out, DetachedHandoffMsg.SAVE_TO_GALLERY)
             ServiceTest.awaitForeground()
             swipeAppFromRecents()
             assertTrue("the activity is destroyed by the swipe:\n" + SystemUi.dump(), detach.awaitDestroyed(15_000))
@@ -273,7 +273,7 @@ class ExportServiceTest {
         activity()
         val h = harness("timeout")
         val out = h.output("timeout")
-        val id = h.start(ServiceTest.counterPlan(300), settings(), out)
+        val id = h.start(ServiceTest.counterPlan(240, 1920, 1080), settings(w = 1920, h = 1080), out)
         val svc = ServiceTest.awaitForeground()
         val lease = ServiceTest.onMain {
             var leaseId: String? = null
@@ -331,24 +331,26 @@ class ExportServiceTest {
     /** Opens Recents and swipes this app's task card away (checked with dumpsys recents). */
     private fun swipeAppFromRecents() {
         val pkg = ServiceTest.app.packageName
-        for (attempt in 0 until 3) {
-            // Our task on top (a shade or an earlier Recents attempt may be showing).
-            device.pressHome()
-            ServiceTest.app.startActivity(
-                Intent(Intent.ACTION_MAIN).setClassName(pkg, FragmentRequests.EMPTY_ACTIVITY)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
-            )
-            device.wait(Until.hasObject(By.pkg(pkg)), 5_000)
-            Thread.sleep(1_000)
+        for (attempt in 0 until 5) {
+            if (attempt > 0) {
+                // A retry: bring our task back on top first (Recents may still be showing).
+                device.pressHome()
+                Thread.sleep(1_000)
+                ServiceTest.app.startActivity(
+                    Intent(Intent.ACTION_MAIN).setClassName(pkg, FragmentRequests.EMPTY_ACTIVITY)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                )
+                Thread.sleep(2_000)
+            }
             assertTrue("recents", device.pressRecentApps())
             Thread.sleep(3_000)
             device.takeScreenshot(File(ServiceTest.app.filesDir, "and12_recents_$attempt.png"))
             val w = device.displayWidth
             val hgt = device.displayHeight
-            // The current task's card is centred; a 250 ms swipe up dismisses it (Launcher3 quickstep).
+            // The current task's card is centred; a 400 ms swipe up dismisses it (Launcher3 quickstep).
             // `input swipe` (as a person's finger through the shell): UiDevice.swipe's injected
             // gesture did not dismiss the card on the API 35 launcher.
-            ServiceTest.shell("input swipe ${w / 2} ${hgt / 2} ${w / 2} ${hgt / 15} 250")
+            ServiceTest.shell("input swipe ${w / 2} ${hgt * 3 / 5} ${w / 2} ${hgt / 20} 400")
             Thread.sleep(2_000)
             val recents = ServiceTest.shell("dumpsys activity recents")
             if (recents.lines().none { it.contains("Recent #") && it.contains(":$pkg}") }) {
