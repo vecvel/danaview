@@ -392,6 +392,24 @@ class ExportConformanceTest {
         assertEquals(emptyList<Any>(), h.activeJobs())
     }
 
+    // ---- encoder fallback ----
+
+    @Test
+    fun anEncoderFallbackRaisesTheProgressWarning() {
+        val h = harness("fallback")
+        val big = h.coordinator.selector.ranked("video/avc").none { it.supportsSize(2560, 1440) }
+        org.junit.Assume.assumeTrue("needs a device whose H.264 encoders refuse 2560x1440 (the x86_64 emulator: max 2048x2048)", big)
+        val plan = counterPlan(w = 2560, h = 1440, frames = 15)
+        val pre = h.preflight(plan, settings(w = 2560, h = 1440))
+        assertFalse("preflight says the size is not encodable as asked", pre.ok)
+        Log.i(EXPORT_TEST_TAG, "fallback: preflight maxHeightForPlan ${pre.maxHeightForPlan}")
+        val o = h.export(plan, settings(w = 2560, h = 1440), "fallback")
+        val out = File(o.requireResult().path)
+        val video = ExportedFile.video(out)
+        Log.i(EXPORT_TEST_TAG, "fallback: asked 2560x1440, encoded ${video.format.getInteger(MediaFormat.KEY_WIDTH)}x${video.format.getInteger(MediaFormat.KEY_HEIGHT)} (emulator)")
+        assertTrue("fallbackApplied warning (${o.warnings})", o.warnings.contains(ExportWarnings.FALLBACK_APPLIED))
+    }
+
     // ---- cancel, errors, records ----
 
     @Test
