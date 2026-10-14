@@ -167,7 +167,9 @@ class ExportServiceTest {
         for (i in 0 until 5) {
             val cancel = findCancelInShade() ?: continue
             try {
-                cancel.click()
+                // Tap its position at once: the row re-inflates with each (<= 1 Hz) progress update.
+                val at = cancel.visibleCenter
+                device.click(at.x, at.y)
                 clicked = true
                 break
             } catch (e: androidx.test.uiautomator.StaleObjectException) {
