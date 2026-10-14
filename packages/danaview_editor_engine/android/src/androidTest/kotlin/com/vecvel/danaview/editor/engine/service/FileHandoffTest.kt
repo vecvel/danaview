@@ -123,8 +123,8 @@ class FileHandoffTest {
         val byText = SystemUi.byText("(?i)^save$")
         SystemUi.waitAny(15_000, save, byText) ?: error("no DocumentsUI save screen:\n" + SystemUi.dump())
         // Make sure the current root is writable (Downloads); open the roots drawer only when needed.
-        val inDownloads = SystemUi.waitAny(2_000, SystemUi.byRes(".*:id/breadcrumb_text"))?.text?.matches(Regex("(?i)downloads?")) == true ||
-            SystemUi.waitAny(1_000, SystemUi.byText("(?i)^files in downloads$")) != null
+        // The toolbar / breadcrumb names the current root ("Downloads" on API 29 and 35 by default).
+        val inDownloads = SystemUi.waitAny(2_000, SystemUi.byText("(?i)^downloads$")) != null
         if (!inDownloads) {
             SystemUi.waitAny(3_000, SystemUi.byDesc("(?i)show roots"))?.click()
             SystemUi.waitAny(5_000, SystemUi.byText("(?i)^downloads?$"))?.click()

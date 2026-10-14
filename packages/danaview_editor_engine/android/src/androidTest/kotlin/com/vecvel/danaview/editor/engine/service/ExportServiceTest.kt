@@ -108,7 +108,8 @@ class ExportServiceTest {
         val dump = ServiceTest.dumpServices()
         Log.i(SERVICE_TEST_TAG, "API ${Build.VERSION.SDK_INT} dumpsys services:\n" + dump.lines().filter { it.contains("ExportService") || it.contains("isForeground") || it.contains("oregroundServiceType") || it.contains("types=") }.joinToString("\n"))
         assertTrue("dumpsys shows the service in the foreground", dump.contains("isForeground=true"))
-        assertTrue("dumpsys shows the type 0x%x".format(expected), dump.contains("%08x".format(expected), ignoreCase = true))
+        // dumpsys prints the FGS types from API 30 on ("types=0000xxxx"); API 29 relies on getForegroundServiceType.
+        if (Build.VERSION.SDK_INT >= 30) assertTrue("dumpsys shows the type 0x%x".format(expected), dump.contains("types=%08x".format(expected), ignoreCase = true))
 
         assertTrue("ongoing notification posted", ServiceTest.waitFor(5_000) { ServiceTest.foregroundNotification() != null })
         val n = ServiceTest.foregroundNotification()!!.notification
@@ -314,11 +315,14 @@ class ExportServiceTest {
             if (title != null) break
             device.findObject(By.res(Pattern.compile(".*:id/notification_stack_scroller")))?.scroll(androidx.test.uiautomator.Direction.DOWN, 0.6f)
         }
-        var row = title ?: return null
-        while (row.resourceName?.endsWith("expandableNotificationRow") != true) row = row.parent ?: return null
-        row.findObject(cancelText)?.let { return it }
-        row.findObject(By.res(Pattern.compile(".*:id/expand_button")))?.click() ?: row.click()
+        if (title == null) return null
+        // Only our notification has a Cancel action; rows are expandableNotificationRow on API 34+.
+        device.findObject(cancelText)?.let { return it }
+        var row: androidx.test.uiautomator.UiObject2? = title
+        while (row != null && row.resourceName?.endsWith("expandableNotificationRow") != true) row = row.parent
+        (row ?: title.parent)?.findObject(By.res(Pattern.compile(".*:id/expand_button")))?.click() ?: title.click()
         Thread.sleep(1_000)
+        device.findObject(cancelText)?.let { return it }
         for (i in 0 until 10) {
             device.findObject(By.text("Export test"))?.let { t ->
                 var r: androidx.test.uiautomator.UiObject2? = t
