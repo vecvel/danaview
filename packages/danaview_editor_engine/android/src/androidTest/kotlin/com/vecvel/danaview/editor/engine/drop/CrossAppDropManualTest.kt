@@ -5,7 +5,9 @@
 // passed. It shows a FlutterView in androidx.test's EmptyActivity with the drop target enabled
 // through the plugin's ActivityHost, then waits up to `danaviewManualDropSeconds` (default 120)
 // for a person (or `adb shell input draganddrop`) to drag a file from the Files app (split screen)
-// onto it. It logs only counts, MIME families and the logical position under DanaviewDropManual,
+// onto it (with `-e danaviewManualDropAdjacent true` the activity opens next to the app in front,
+// i.e. in split screen beside Files on a tablet). It logs only counts, extensions and the logical
+// position under DanaviewDropManual,
 // and asserts that the dropped items were copied into work/drops/ and the drag permissions were
 // requested and released by the platform (a cross-app content:// URI is readable only while they
 // are held).
@@ -49,6 +51,11 @@ class CrossAppDropManualTest {
         val intent = Intent(Intent.ACTION_MAIN)
             .setClassName(app.packageName, "androidx.test.core.app.InstrumentationActivityInvoker\$EmptyActivity")
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // `-e danaviewManualDropAdjacent true`: open next to the app in front (split screen on a
+        // large screen), so Files and the drop target are visible together without manual setup.
+        if (args.getString("danaviewManualDropAdjacent") == "true") {
+            intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+        }
         val activity = instrumentation.startActivitySync(intent)
         val target = DropTarget(ctx)
         val latch = CountDownLatch(1)
