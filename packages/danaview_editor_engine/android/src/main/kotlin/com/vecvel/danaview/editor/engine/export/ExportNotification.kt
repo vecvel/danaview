@@ -189,7 +189,9 @@ class NotificationThrottle(
     private val nowMs: () -> Long,
     private val schedule: (Runnable, Long) -> Cancellable,
 ) {
-    private var lastRunMs: Long = Long.MIN_VALUE
+    /** When the last action ran ([nowMs] clock; Long.MIN_VALUE before the first). */
+    var lastRunMs: Long = Long.MIN_VALUE
+        private set
     private var pending: (() -> Unit)? = null
     private var timer: Cancellable? = null
 
@@ -211,8 +213,9 @@ class NotificationThrottle(
     }
 
     /** Counts a post made outside the throttle (the startForeground notification) as the last run. */
-    fun noteExternalRun() {
+    fun noteExternalRun(): Long {
         lastRunMs = nowMs()
+        return lastRunMs
     }
 
     /** Runs the pending action now (if any). */

@@ -69,9 +69,9 @@ class ExportService : Service() {
     @VisibleForTesting
     fun notificationPostTimes(): List<Long> = synchronized(postTimes) { postTimes.toList() }
 
-    private fun notePost() = synchronized(postTimes) {
+    private fun notePost(atMs: Long) = synchronized(postTimes) {
         if (postTimes.size >= 512) postTimes.removeAt(0)
-        postTimes += SystemClock.uptimeMillis()
+        postTimes += atMs
     }
 
     /** The type passed to the last successful startForeground (0 before API 29). */
@@ -140,8 +140,8 @@ class ExportService : Service() {
         throttle.submit {
             val now = ServiceState.content()
             if (now != null && isForeground) {
+                notePost(throttle.lastRunMs)
                 notifications.update(now)
-                notePost()
             }
         }
     }
@@ -153,6 +153,7 @@ class ExportService : Service() {
             // Framework call, not ServiceCompat: androidx.core 1.13.1 masks the type with the types it
             // knows (up to API 34), which drops mediaProcessing and makes API 35 refuse the start
             // (InvalidForegroundServiceTypeException, measured on the API 35 emulator).
+            notePost(throttle.noteExternalRun())
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(ExportNotification.FOREGROUND_ID, notification, type)
             } else {
@@ -160,8 +161,6 @@ class ExportService : Service() {
             }
             isForeground = true
             requestedForegroundType = type
-            throttle.noteExternalRun()
-            notePost()
             Log.i(TAG, "export service: foreground (type $type, API ${Build.VERSION.SDK_INT})")
         } catch (e: RuntimeException) {
             // ForegroundServiceStartNotAllowedException (API 31+) or a SecurityException: the work

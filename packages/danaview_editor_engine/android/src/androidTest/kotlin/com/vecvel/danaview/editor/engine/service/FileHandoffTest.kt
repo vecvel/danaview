@@ -122,11 +122,13 @@ class FileHandoffTest {
         val save = { SystemUi.device.findObject(androidx.test.uiautomator.By.res(Pattern.compile(".*documentsui:id/container_save.*")))?.findObject(androidx.test.uiautomator.By.clickable(true).text(Pattern.compile("(?i)^save$"))) }
         val byText = SystemUi.byText("(?i)^save$")
         SystemUi.waitAny(15_000, save, byText) ?: error("no DocumentsUI save screen:\n" + SystemUi.dump())
-        // Make sure the current root is writable: pick Downloads from the roots drawer.
-        SystemUi.waitAny(3_000, SystemUi.byDesc("(?i)show roots"))?.let { roots ->
-            roots.click()
+        // Make sure the current root is writable (Downloads); open the roots drawer only when needed.
+        val inDownloads = SystemUi.waitAny(2_000, SystemUi.byRes(".*:id/breadcrumb_text"))?.text?.matches(Regex("(?i)downloads?")) == true ||
+            SystemUi.waitAny(1_000, SystemUi.byText("(?i)^files in downloads$")) != null
+        if (!inDownloads) {
+            SystemUi.waitAny(3_000, SystemUi.byDesc("(?i)show roots"))?.click()
             SystemUi.waitAny(5_000, SystemUi.byText("(?i)^downloads?$"))?.click()
-            Thread.sleep(1_000)
+            Thread.sleep(1_500)
         }
         return SystemUi.waitAny(10_000, save, byText) ?: error("no Save button:\n" + SystemUi.dump())
     }

@@ -14,7 +14,8 @@
 //   the target the user chooses (and the system chooser itself, for its preview) can read the file;
 //   no grantUriPermission is made to any package. The chooser's IntentSender callback
 //   (EXTRA_CHOSEN_COMPONENT, a non-exported dynamic receiver) tells whether a target was chosen:
-//   done when one was, cancelled when the chooser closed without one.
+//   done as soon as one is chosen (the chooser's own result may only come back when the target
+//   finishes), cancelled when the chooser closed without one.
 // - Without an attached activity both fail with `internal` ("no activity attached"), like the
 //   pickers (AND-14).
 // Nothing logs paths, URIs or names.
@@ -133,11 +134,13 @@ class FileHandoff(private val ctx: EngineContext) {
         val action = ACTION_CHOSEN_PREFIX + UUID.randomUUID().toString().replace("-", "")
         var chosen: ComponentName? = null
         var finished = false
+        var finish: () -> Unit = {}
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 chosen = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_CHOSEN_COMPONENT, ComponentName::class.java)
                     ?: ComponentName("", "")
                 lastChosenPackage = chosen?.packageName
+                finish()
             }
         }
         ContextCompat.registerReceiver(app, receiver, IntentFilter(action), ContextCompat.RECEIVER_NOT_EXPORTED)
@@ -145,8 +148,8 @@ class FileHandoff(private val ctx: EngineContext) {
         val callback = PendingIntent.getBroadcast(app, SHARE_CALLBACK_REQUEST, Intent(action).setPackage(app.packageName), PendingIntent.FLAG_UPDATE_CURRENT or mutable)
         val chooser = Intent.createChooser(send, null, callback.intentSender)
 
-        fun finish() {
-            if (finished) return
+        finish = finish@{
+            if (finished) return@finish
             finished = true
             try {
                 app.unregisterReceiver(receiver)

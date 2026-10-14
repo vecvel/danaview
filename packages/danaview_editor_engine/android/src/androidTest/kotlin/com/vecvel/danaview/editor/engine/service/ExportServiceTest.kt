@@ -48,6 +48,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.util.regex.Pattern
 
 @RunWith(AndroidJUnit4::class)
@@ -128,7 +129,7 @@ class ExportServiceTest {
         val gaps = posts.zipWithNext { a, b -> b - a }
         Log.i(SERVICE_TEST_TAG, "notification posts: ${posts.size} over ${outcome.wallMs} ms (emulator), min gap ${gaps.minOrNull()} ms")
         assertTrue("several progress updates (${posts.size})", posts.size >= 2)
-        assertTrue("<= 1 Hz: gaps $gaps", gaps.all { it >= 990 })
+        assertTrue("<= 1 Hz: gaps $gaps", gaps.all { it >= 1_000 })
         assertTrue("service stopped after the export", ServiceTest.awaitStopped())
         assertNull("notification removed", ServiceTest.foregroundNotification())
         relay.finish()
@@ -160,15 +161,8 @@ class ExportServiceTest {
         assertTrue(ServiceTest.waitFor(5_000) { ServiceTest.foregroundNotification() != null })
         finishAndWait(relay)
         assertTrue("open the shade", device.openNotification())
-        var cancel = device.wait(Until.findObject(By.text(Pattern.compile("(?i)^cancel$"))), 5_000)
-        if (cancel == null) {
-            // Collapsed: expand our notification first.
-            device.findObject(By.text("Export test"))?.let { title ->
-                title.parent?.findObject(By.res(Pattern.compile(".*:id/expand_button.*")))?.click() ?: title.swipe(androidx.test.uiautomator.Direction.DOWN, 0.5f)
-            }
-            cancel = device.wait(Until.findObject(By.text(Pattern.compile("(?i)^cancel$"))), 5_000)
-        }
-        assertNotNull("Cancel action in the shade:\n" + SystemUi.dump(), cancel)
+        val cancel = findCancelInShade()
+        assertNotNull("Cancel action of our notification in the shade: " + SystemUi.dump(), cancel)
         cancel!!.click()
         val outcome = h.await(id, timeoutSec = 60)
         device.pressBack()
@@ -298,15 +292,51 @@ class ExportServiceTest {
         return value!!
     }
 
-    /** Opens Recents and swipes this app's task card away. */
+    /** Our notification's Cancel button in the open shade (scrolls, expands the row if collapsed). */
+    private fun findCancelInShade(): androidx.test.uiautomator.UiObject2? {
+        val cancelText = By.text(Pattern.compile("(?i)^cancel$"))
+        var title: androidx.test.uiautomator.UiObject2? = null
+        for (i in 0 until 6) {
+            title = device.wait(Until.findObject(By.text("Export test")), 2_000)
+            if (title != null) break
+            device.findObject(By.res(Pattern.compile(".*:id/notification_stack_scroller")))?.scroll(androidx.test.uiautomator.Direction.DOWN, 0.6f)
+        }
+        var row = title ?: return null
+        while (row.resourceName?.endsWith("expandableNotificationRow") != true) row = row.parent ?: return null
+        row.findObject(cancelText)?.let { return it }
+        row.findObject(By.res(Pattern.compile(".*:id/expand_button")))?.click() ?: row.click()
+        Thread.sleep(1_000)
+        for (i in 0 until 10) {
+            device.findObject(By.text("Export test"))?.let { t ->
+                var r: androidx.test.uiautomator.UiObject2? = t
+                while (r != null && r.resourceName?.endsWith("expandableNotificationRow") != true) r = r.parent
+                r?.findObject(cancelText)?.let { return it }
+            }
+            Thread.sleep(300)
+        }
+        return null
+    }
+
+    /** Opens Recents and swipes this app's task card away (checked with dumpsys recents). */
     private fun swipeAppFromRecents() {
-        assertTrue("recents", device.pressRecentApps())
-        Thread.sleep(2_000)
-        val w = device.displayWidth
-        val hgt = device.displayHeight
-        // The current task's card is centred; a fling up dismisses it (Launcher3 quickstep, API 29+).
-        device.swipe(w / 2, hgt / 2, w / 2, hgt / 12, 12)
-        Thread.sleep(1_500)
-        Log.i(SERVICE_TEST_TAG, "swiped the task away in Recents")
+        val pkg = ServiceTest.app.packageName
+        for (attempt in 0 until 3) {
+            assertTrue("recents", device.pressRecentApps())
+            Thread.sleep(3_000)
+            device.takeScreenshot(File(ServiceTest.app.filesDir, "and12_recents_$attempt.png"))
+            val w = device.displayWidth
+            val hgt = device.displayHeight
+            // The current task's card is centred; a 250 ms swipe up dismisses it (Launcher3 quickstep).
+            // `input swipe` (as a person's finger through the shell): UiDevice.swipe's injected
+            // gesture did not dismiss the card on the API 35 launcher.
+            ServiceTest.shell("input swipe ${w / 2} ${hgt / 2} ${w / 2} ${hgt / 15} 250")
+            Thread.sleep(2_000)
+            val recents = ServiceTest.shell("dumpsys activity recents")
+            if (recents.lines().none { it.contains("Recent #") && it.contains(":$pkg}") }) {
+                Log.i(SERVICE_TEST_TAG, "swiped the task away in Recents (attempt ${attempt + 1})")
+                return
+            }
+        }
+        error("the task is still in Recents")
     }
 }
