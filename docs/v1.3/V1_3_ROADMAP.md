@@ -27,8 +27,8 @@
                         | macOS · Windows ·    |              |  Capture & Beauty    |
                         |        Linux         |              |                      |
                         +----------------------+              +----------------------+
-                        | • Metal / D3D11 /    |              | • Photo & video      |
-                        |   GStreamer engines  |              | • Live beauty (60fps)|
+                        | • Swift (macOS) +    |              | • Photo & video      |
+                        |   Rust (Win/Linux)   |              | • Live beauty (60fps)|
                         | • Photo mode, beauty |              | • Pro manual mode    |
                         | • 3-pane workspace   |              | • Cinematic & bokeh  |
                         | • Razor/slip/ripple  |              | • Dual front+back    |
@@ -38,8 +38,8 @@
 ```
 
 ### Pillar 1: Desktop Photo & Video Editor (macOS, Windows, Linux)
-- **Document:** [`docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md`](editor-desktop/DESKTOP_EDITOR_PLAN.md) (DSK-01 to DSK-20, decisions D-71 to D-85).
-- **Summary:** Native desktop engines behind the same editor API: macOS reuses the iOS Metal/AVFoundation code; Windows uses Media Foundation and Direct3D 11 with hardware encoders; Linux uses GStreamer with VA-API and a software fallback. Because 1.2.0 already added photo mode and the beauty suite, the desktop engines run those too, and the parity suite checks them against mobile. The desktop UX adds a 3-pane workspace, cursor tools, J-K-L shuttle, multi-monitor preview, native drag and drop and menus. DSK-20 also turns on the Home screen's editor actions on desktop.
+- **Document:** [`docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md`](editor-desktop/DESKTOP_EDITOR_PLAN.md) (DSK-01 to DSK-40, decisions D-71 to D-85; rewritten 2026-10-15).
+- **Summary:** Two native engines behind the same editor API: macOS reuses the iOS Swift/Metal/AVFoundation engine; Windows and Linux share one Rust engine (`wgpu` rendering on Direct3D 12 / Vulkan, Media Foundation and GStreamer for hardware decode and encode). Unusual formats open through an isolated FFmpeg helper process that converts them on import, so a bad file cannot crash the app. Desktop extras: 4K preview without proxies, GPU speech recognition, batch export, ProRes export on macOS, colour scopes. Because 1.2.0 already added photo mode and the beauty suite, the desktop engines run those too, and the parity suite checks them against mobile. The desktop UX adds a 3-pane workspace, cursor tools, J-K-L shuttle, multi-monitor preview, native drag and drop and menus. DSK-20 also turns on the Home screen's editor actions on desktop.
 
 ### Pillar 2: In-House Native Camera (photo and video capture)
 - **Document:** [`docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md`](camera-photo-video/NATIVE_CAMERA_PLAN.md) (CAM-01 to CAM-20, decisions D-99 to D-115).
@@ -51,7 +51,7 @@
 
 1. **Starts after 1.2.0 ships.** Both pillars depend on 1.2.0 work: the desktop engines must render VED's photo and beauty passes, and the camera reuses VED's tracker and shaders.
 2. **The two pillars are independent** and can run in parallel: desktop work splits by platform (macOS on the Mac, Windows on the Windows laptop, Linux needs a Linux machine or VM); camera work needs real phones, because the iOS Simulator has no camera and the Android emulator only has a virtual one.
-3. **Feasibility notes to settle while planning:** iOS does not let a third-party camera app record other apps' audio (camera D-107 internal audio is Android 10+ only, with the user's capture consent); the desktop plan's FFmpeg/x264 fallbacks conflict with v1.1's no-FFmpeg rule for the editor and need an owner decision.
+3. **Feasibility notes to settle while planning:** iOS does not let a third-party camera app record other apps' audio (camera D-107 internal audio is Android 10+ only, with the user's capture consent); FFmpeg on desktop is settled (owner, 2026-10-15): only in a separate helper process, LGPL and decode-only, never GPL encoders.
 
 ---
 

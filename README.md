@@ -301,17 +301,17 @@ A unified visual media hub for all photos and videos on your device:
 
 ## 🖥️ Desktop Photo & Video Editor 🗓️ (v1.3.0)
 
-Expanding the non-destructive multi-track editor to **macOS, Windows, and Linux**:
-- **Native Render Engines:**
-  - **macOS:** Metal + AVFoundation (sharing ~90% of the tested Darwin code with iOS).
-  - **Windows:** Media Foundation + Direct3D 11 with hardware MFT encoders (NVENC, Intel QuickSync, AMD AMF).
-  - **Linux:** GStreamer 1.x + VA-API / Vulkan with graceful software fallback.
+Every phone editing feature (video, photo mode, beauty, AI captions, AI Studio) on **macOS, Windows, and Linux**:
+- **Native Engines:**
+  - **macOS:** the tested iOS engine (Swift, Metal, AVFoundation, Core Image) shared with the Mac.
+  - **Windows & Linux:** one shared engine written in Rust: `wgpu` GPU rendering (Direct3D 12 / Vulkan) with hardware decode and encode through Media Foundation (NVENC, Quick Sync, AMF) and GStreamer (VA-API, NVDEC).
+  - **Crash-safe by design:** memory-safe Rust, a crash fence on every native call, and unusual formats (MKV, WebM, AVI, ProRes) opened by an isolated FFmpeg helper process that converts them on import.
+- **Desktop Extras:** 4K preview without proxies, GPU-accelerated AI captions, batch export queue, ProRes export (macOS), and colour scopes (waveform, RGB parade, vectorscope, histogram).
 - **Desktop Ergonomics:**
   - Responsive 3-pane workstation with resizable media bin, inspector, canvas, and timeline.
   - Dedicated desktop cursor tools: Selection (`V`), Razor cut (`C`), Slip (`Y`), and Ripple edit (`B`).
-  - Professional transport shortcuts: J-K-L multi-speed shuttling and space toggle.
-  - Multi-monitor support with detached floating preview canvas.
-  - Native file drag-and-drop from Finder, Windows Explorer, and Linux file managers.
+  - Professional transport shortcuts: J-K-L multi-speed shuttling, in/out marks and frame stepping.
+  - Native menus and file drag-and-drop from Finder, Windows Explorer, and Linux file managers.
 
 ---
 
