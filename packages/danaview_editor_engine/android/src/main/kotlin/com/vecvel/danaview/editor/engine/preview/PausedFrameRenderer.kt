@@ -37,7 +37,6 @@ package com.vecvel.danaview.editor.engine.preview
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.net.Uri
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
@@ -50,6 +49,7 @@ import android.opengl.GLUtils
 import android.util.Log
 import android.view.Surface
 import androidx.annotation.OptIn
+import androidx.core.net.toUri
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSourceBitmapLoader
@@ -65,6 +65,8 @@ import com.vecvel.danaview.editor.engine.effects.GlResources
 import com.vecvel.danaview.editor.engine.effects.GlTarget
 import com.vecvel.danaview.editor.engine.effects.LayerFrameOptions
 import com.vecvel.danaview.editor.engine.effects.LayerFrames
+import com.vecvel.danaview.editor.engine.effects.LutTable
+import com.vecvel.danaview.editor.engine.effects.LutTexture
 import com.vecvel.danaview.editor.engine.effects.RenderGeometry
 import com.vecvel.danaview.editor.engine.effects.ShaderPrograms
 import com.vecvel.danaview.editor.engine.effects.ShaderSources
@@ -83,6 +85,7 @@ import com.vecvel.danaview.editor.engine.plan.PlanCrop
 import com.vecvel.danaview.editor.engine.plan.PlanDetail
 import com.vecvel.danaview.editor.engine.plan.PlanLayer
 import com.vecvel.danaview.editor.engine.plan.PlanLayerKind
+import com.vecvel.danaview.editor.engine.plan.PlanLut
 import com.vecvel.danaview.editor.engine.plan.PlanMask
 import com.vecvel.danaview.editor.engine.plan.PlanMaskShape
 import com.vecvel.danaview.editor.engine.plan.PlanSize
@@ -174,7 +177,7 @@ class EngineFrameSource(private val ctx: EngineContext) : PausedFrameSource {
             .setMaximumOutputDimension(request.maxLongSide ?: LayerFrames.MAX_RASTER_SIDE)
             .build()
         val decoded = try {
-            loader.loadBitmap(Uri.parse(request.uri)).get(IMAGE_TIMEOUT_S, TimeUnit.SECONDS)
+            loader.loadBitmap(request.uri.toUri()).get(IMAGE_TIMEOUT_S, TimeUnit.SECONDS)
         } catch (e: Exception) {
             throw EngineException(EngineErrorCode.decodeFailed, "image could not be decoded", cause = e)
         }
@@ -369,8 +372,9 @@ class PausedFrameRenderer(
     private var pendingSinceNs = 0L
     private var renderScheduled = false
 
-    // Worker-confined: the bitmaps of the frame being shown.
+    // Worker-confined: the bitmaps of the frame being shown, and fetches that failed.
     private var held = HashMap<PausedFrameRequest, Bitmap>()
+    private val failed = HashSet<PausedFrameRequest>()
 
     // GL-lane-confined state.
     private var egl: PausedEgl? = null
@@ -445,7 +449,7 @@ class PausedFrameRenderer(
         }
     }
 
-    /** GL lane: one tiny frame through look (chroma, grade), blur, detail (sharpen, vignette, mask), place and solid. */
+    /** GL lane: one tiny frame through look (chroma, grade, LUT), blur, detail (sharpen, vignette, mask), place and solid. */
     private fun warmDraw(comp: LayerCompositorGl) {
         val n = WARM_SIZE
         val texture = GlResources.createTexture(n, n)
@@ -473,6 +477,22 @@ class PausedFrameRenderer(
                 ),
                 target,
             )
+            // The LUT path (tiled LUT sampler) once, with a 2³ identity table.
+            val identity = DoubleArray(2 * 2 * 2 * 3)
+            for (b in 0..1) for (g in 0..1) for (r in 0..1) {
+                val i = ((b * 2 + g) * 2 + r) * 3
+                identity[i] = r.toDouble()
+                identity[i + 1] = g.toDouble()
+                identity[i + 2] = b.toDouble()
+            }
+            val lut = LutTexture.upload(LutTable.fromFloats(2, identity), comp.programs.caps.isEs3)
+            try {
+                target.bind()
+                val look = LayerFrames.look(picture.copy(lut = PlanLut("warm", 0.5)), n, n, n, n)
+                comp.programs.drawLook(SourceTexture(texture, n, n, transform = SourceTexture.TOP_DOWN), look, lut)
+            } finally {
+                lut.release()
+            }
             GLES20.glFinish()
         } finally {
             target.release()
@@ -544,7 +564,7 @@ class PausedFrameRenderer(
                     val (p, _) = PausedFrames.applyMode(mode, params)
                     PausedFrames.request(snap.plan, layer, p, t, useProxies, geometry)?.let { wanted[it] = Unit }
                 }
-                val (fetched, missing) = resolve(wanted.keys, gen)
+                val (fetched, missing) = resolve(wanted.keys, gen, retryFailed = true)
                 val uploads = wanted.keys.mapNotNull { r -> held[r]?.let { r to it } }
                 Triple(PrefetchResult(k, wanted.size, fetched, missing, 0.0), uploads, snap.plan to active.map { it.first })
             }.mapError()
@@ -659,10 +679,13 @@ class PausedFrameRenderer(
 
     /**
      * Worker: makes [wanted] the held set, fetching what is not held yet. Returns (fetched,
-     * missing); a failed fetch leaves its layer out of the frame (cancellation propagates).
+     * missing); a failed fetch leaves its layer out of the frame and is not retried until the next
+     * prefetch or trim (an offline or undecodable source must not stall every transient);
+     * cancellation propagates.
      */
-    private fun resolve(wanted: Collection<PausedFrameRequest>, gen: Long): Pair<Int, Int> {
+    private fun resolve(wanted: Collection<PausedFrameRequest>, gen: Long, retryFailed: Boolean = false): Pair<Int, Int> {
         val control = GenerationControl(gen)
+        if (retryFailed) failed.clear()
         val next = HashMap<PausedFrameRequest, Bitmap>()
         var fetched = 0
         var missing = 0
@@ -673,15 +696,21 @@ class PausedFrameRenderer(
                 next[request] = have
                 continue
             }
+            if (request in failed) {
+                missing++
+                continue
+            }
             control.throwIfCancelled()
             try {
                 next[request] = frames.frame(request, control)
                 fetched++
                 fetches.incrementAndGet()
-            } catch (e: EngineException) {
-                if (e.code == EngineErrorCode.cancelled || control.isCancelled) throw EngineException(EngineErrorCode.cancelled, "cancelled")
+            } catch (e: Exception) {
+                val error = EngineErrors.from(e)
+                if (error.code == EngineErrorCode.cancelled || control.isCancelled) throw EngineException(EngineErrorCode.cancelled, "cancelled")
                 missing++
-                Log.w(EngineContext.TAG, "paused frame: source frame unavailable (${e.code})")
+                failed += request
+                Log.w(EngineContext.TAG, "paused frame: source frame unavailable (${error.code})")
             }
         }
         held = next
@@ -810,7 +839,10 @@ class PausedFrameRenderer(
      */
     fun trim(level: CacheTrimLevelMsg) {
         if (level == CacheTrimLevelMsg.MEMORY_PRESSURE || level == CacheTrimLevelMsg.BACKGROUND || level == CacheTrimLevelMsg.CLEAR_ALL) {
-            worker.execute { held = HashMap() }
+            worker.execute {
+                held = HashMap()
+                failed.clear()
+            }
             glLane.execute {
                 if (egl == null || disposed) return@execute
                 egl?.makeCurrent(if (window != EGL14.EGL_NO_SURFACE) window else null)

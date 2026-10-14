@@ -10,6 +10,8 @@
 //   moves a layer in time fetches nothing; both timed;
 // - editing modes: matte and cropSource change only their item's pixels; normal restores the frame;
 // - cancel (play/seek) fails a pending render with `cancelled` and the next render works;
+// - an offline source leaves its layer out (the rest is drawn), is not re-fetched by every render,
+//   and is retried by the next prefetch; after dispose every call answers `cancelled`;
 // - the frame is presented onto the attached Surface (ImageReader RGBA_8888) pixel-for-pixel equal
 //   to the composed canvas, with pts = P(k);
 // - surface hand-off with a player (the showSourceFrame mechanism): ExoPlayer renders into the
@@ -43,6 +45,7 @@ import com.vecvel.danaview.editor.engine.plan.PlanChroma
 import com.vecvel.danaview.editor.engine.plan.PlanEffects
 import com.vecvel.danaview.editor.engine.plan.PlanTransform
 import com.vecvel.danaview.editor.engine.plan.PlanTransient
+import com.vecvel.danaview.editor.engine.plan.PlanValidator
 import com.vecvel.danaview.editor.engine.plan.TransientLayer
 import com.vecvel.danaview.editor.engine.preview.PausedEditingMode
 import com.vecvel.danaview.editor.engine.preview.PausedFrameRenderer
@@ -339,6 +342,28 @@ class PausedEditTest {
                 reader.close()
                 readerThread.quitSafely()
             }
+        }
+    }
+
+    @Test
+    fun offlineSourceIsLeftOutAndNotRetriedUntilThePrefetch() {
+        val base = PausedScenes.layered()
+        val offline = base.assets.getValue("counter").copy(uri = "file:///data/local/tmp/and17_missing.mp4", fp = "fp-missing")
+        val plan = base.copy(layers = base.layers.map { if (it.id == "pip#v") it.copy(asset = "gone") else it }, assets = base.assets + ("gone" to offline))
+        assertEquals(emptyList<Any>(), PlanValidator.validate(plan))
+        PausedHarness("and17_offline", plan).use { h ->
+            val pre = h.prefetch(k)
+            assertEquals(1, pre.missing)
+            val r1 = h.render()
+            assertEquals("main and band drawn, offline PiP left out", 2, r1.drawn)
+            assertEquals(1, r1.missing)
+            assertEquals(0, r1.fetched)
+            val fetchesBefore = h.renderer.fetchCount
+            val r2 = h.render()
+            assertEquals(1, r2.missing)
+            assertEquals("no retry per render", fetchesBefore, h.renderer.fetchCount)
+            assertEquals((10 + k).toInt(), FrameBarcode.decode(h.capture().rgba, PausedPlans.W, PausedPlans.H))
+            assertEquals("the prefetch retries", 1, h.prefetch(k).missing)
         }
     }
 
