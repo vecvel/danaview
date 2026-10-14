@@ -206,7 +206,7 @@ class ExportServiceTest {
             val out = h.output("swipe")
             val id = h.start(ServiceTest.counterPlan(480, 1920, 1080, fps = 60), settings(w = 1920, h = 1080, fps = 60), out, DetachedHandoffMsg.SAVE_TO_GALLERY)
             ServiceTest.awaitForeground()
-            swipeAppFromRecents()
+            swipeAppFromRecents(relay)
             assertTrue("the activity is destroyed by the swipe:\n" + SystemUi.dump(), detach.awaitDestroyed(15_000))
             assertTrue("the activity is gone", relay.activity.isDestroyed)
             device.pressHome()
@@ -343,10 +343,17 @@ class ExportServiceTest {
         return null
     }
 
-    /** Opens Recents and swipes this app's task card away (checked with dumpsys recents). */
-    private fun swipeAppFromRecents() {
+    /**
+     * Opens Recents and swipes this app's task card away; done when [relay]'s activity is destroyed
+     * by the task removal. Earlier tests' finished tasks stay listed in Recents, so they are removed
+     * first and the current task is the only one of this app.
+     */
+    private fun swipeAppFromRecents(relay: FragmentRequests) {
         val pkg = ServiceTest.app.packageName
-        for (attempt in 0 until 5) {
+        val current = relay.activity.taskId
+        val am = ServiceTest.app.getSystemService(android.app.ActivityManager::class.java)
+        for (t in am.appTasks) if (t.taskInfo.taskId != current) t.finishAndRemoveTask()
+        for (attempt in 0 until 4) {
             if (attempt > 0) {
                 // A retry: bring our task back on top first (Recents may still be showing).
                 device.pressHome()
@@ -358,20 +365,18 @@ class ExportServiceTest {
                 Thread.sleep(2_000)
             }
             assertTrue("recents", device.pressRecentApps())
-            Thread.sleep(4_000)
-            device.takeScreenshot(File(ServiceTest.app.filesDir, "and12_recents_$attempt.png"))
+            Thread.sleep(3_000)
             val w = device.displayWidth
             val hgt = device.displayHeight
             // The current task's card is centred; a 400 ms swipe up dismisses it (Launcher3 quickstep).
             // `input swipe` (as a person's finger through the shell): UiDevice.swipe's injected
             // gesture did not dismiss the card on the API 35 launcher.
             ServiceTest.shell("input swipe ${w / 2} ${hgt * 3 / 5} ${w / 2} ${hgt / 20} 400")
-            Thread.sleep(2_000)
-            val recents = ServiceTest.shell("dumpsys activity recents")
-            if (recents.lines().none { it.contains("Recent #") && it.contains(":$pkg}") }) {
+            if (ServiceTest.waitFor(3_000) { relay.activity.isDestroyed }) {
                 Log.i(SERVICE_TEST_TAG, "swiped the task away in Recents (attempt ${attempt + 1})")
                 return
             }
+            device.takeScreenshot(File(ServiceTest.app.filesDir, "and12_recents_$attempt.png"))
         }
         error("the task is still in Recents")
     }
