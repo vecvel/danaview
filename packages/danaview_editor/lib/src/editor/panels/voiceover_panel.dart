@@ -400,7 +400,7 @@ class VoiceoverController extends ChangeNotifier {
         _recording = null;
         _set(VoiceoverPhase.finishing);
         await _stopPlayback();
-        await _endListening();
+        _endListening();
         if (recording != null) await _discard(recording);
         _set(VoiceoverPhase.idle);
         _tell(const VoiceoverNotice(VoiceoverStrings.discarded));
@@ -427,12 +427,14 @@ class VoiceoverController extends ChangeNotifier {
     }
   }
 
-  Future<void> _endListening() async {
+  /// Stops listening to the session's streams (the cancels are not awaited: the session closes
+  /// its streams itself when it stops).
+  void _endListening() {
     final levels = _levels, interruptions = _interruptions;
     _levels = null;
     _interruptions = null;
-    await levels?.cancel();
-    await interruptions?.cancel();
+    if (levels != null) unawaited(levels.cancel());
+    if (interruptions != null) unawaited(interruptions.cancel());
     if (!_disposed) level.value = 0;
   }
 
@@ -442,7 +444,7 @@ class VoiceoverController extends ChangeNotifier {
     _recording = null;
     _set(VoiceoverPhase.finishing);
     await _stopPlayback();
-    await _endListening();
+    _endListening();
     RecordedAsset asset;
     try {
       asset = await recording.stop();
@@ -491,6 +493,7 @@ class VoiceoverController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _countdownTimer?.cancel();
     onNotice = null;
     if (_phase == VoiceoverPhase.recording) {
@@ -499,7 +502,6 @@ class VoiceoverController extends ChangeNotifier {
     } else {
       _release();
     }
-    _disposed = true;
     super.dispose();
   }
 
@@ -507,7 +509,7 @@ class VoiceoverController extends ChangeNotifier {
     final recording = _recording;
     _recording = null;
     if (recording != null) unawaited(_discard(recording));
-    unawaited(_endListening());
+    _endListening();
   }
 }
 

@@ -160,13 +160,35 @@ final class PreviewHarness: @unchecked Sendable {
                 if let e = value as? EngineEventMsg { events.mutate { $0.append(e) } }
             })
         }
-        textureId = await withCheckedContinuation { c in session.registerTexture { c.resume(returning: $0) } }
+        textureId = (try? await call(timeout: 10) { (s: PreviewSession, r: @escaping EngineReply<Int64>) in
+            s.registerTexture { r(.success($0)) }
+        }) ?? -2
     }
 
     /// Runs a session call with a reply on the control queue.
-    func call<T>(_ body: @escaping (PreviewSession, @escaping EngineReply<T>) -> Void) async throws -> T {
+    struct Timeout: Error, CustomStringConvertible {
+        let what: String
+        var description: String { "timed out: \(what)" }
+    }
+
+    /// Runs a session call with a reply on the control queue; fails after [timeout] s instead of
+    /// hanging when the reply never comes.
+    func call<T>(_ what: String = #function, line: Int = #line, timeout: TimeInterval = 20,
+                 _ body: @escaping (PreviewSession, @escaping EngineReply<T>) -> Void) async throws -> T {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<T, Error>) in
-            queue.async { body(self.session) { c.resume(with: $0) } }
+            let once = Locked(false)
+            let finish: (Result<T, Error>) -> Void = { r in
+                var first = false
+                once.mutate { done in
+                    first = !done
+                    done = true
+                }
+                if first { c.resume(with: r) }
+            }
+            queue.async { body(self.session) { finish($0) } }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                finish(.failure(Timeout(what: "\(what) line \(line)")))
+            }
         }
     }
 
@@ -192,7 +214,7 @@ final class PreviewHarness: @unchecked Sendable {
     func pause() async throws -> Int64 { try await call { s, r in s.pause(reply: r) } }
 
     func dispose() async {
-        await withCheckedContinuation { c in queue.async { self.session.dispose { c.resume() } } }
+        _ = try? await call(timeout: 10) { (s: PreviewSession, r: @escaping EngineReply<Void>) in s.dispose { r(.success(())) } }
     }
 
     var previewEvents: [PreviewEventMsg] { events.value.compactMap { $0.kind == .preview ? $0.previewEvent : nil } }

@@ -1,0 +1,28 @@
+WEBVTT - title here
+Kind: captions
+
+NOTE this is a comment
+spanning lines
+
+STYLE
+::cue { color: red }
+
+REGION
+id:r1
+width:40%
+
+intro
+00:01.000 --> 00:02.000 align:start position:10%
+<v Bob>Hi &amp; <c.loud>there</c> &lt;you&gt;</v>
+
+01:00:00.000 --> 01:00:01.500
+<i>Italic</i> <00:01:00.250>timed <b>bold
+
+bad cue without timing
+second line
+
+00:05.000 --> 00:04.000
+backwards
+
+00:09.000 --> 00:10.000
+

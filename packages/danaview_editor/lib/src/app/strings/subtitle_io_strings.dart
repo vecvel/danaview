@@ -12,7 +12,7 @@ abstract final class SubtitleIoStrings {
   /// Title of the import result sheet.
   static const String importTitle = 'Import captions';
 
-  /// "Imported 312 captions from movie.srt" (the sheet's headline before importing).
+  /// "Found 312 captions in movie.srt" (the sheet's headline before importing).
   static String found(int n, String fileName) => n == 1 ? 'Found 1 caption in $fileName' : 'Found $n captions in $fileName';
 
   /// Toast after an import ("Imported 312 captions from movie.srt").
