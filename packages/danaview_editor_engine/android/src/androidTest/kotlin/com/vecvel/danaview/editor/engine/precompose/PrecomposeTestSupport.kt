@@ -5,7 +5,8 @@
 // with the decoder budget forced through the coordinator's environment seam, a pass recorder on
 // the precompose's observer hook, plans over ENG-05's committed fixtures that stack several packed
 // slots with effects, an image lane and audio, and frame/audio comparison of two exports: per-frame
-// luma SSIM (8×8 windows, stride 4, the usual C1/C2 constants), frame barcodes (whole frame or a
+// SSIM of the video Y plane (studio-range BT.601 luma of the decoded frames; 8×8 windows, stride 4,
+// the usual C1/C2 constants), frame barcodes (whole frame or a
 // region) and 20 ms window RMS of the decoded audio (QA-11's ±0.5 dB tolerance).
 // Diagnostic instrumentation arguments (am instrument -e …): and19Factor <n>, and19AllIntra
 // true|false and and19Color EXPORT|BT601 override PrecomposePlanner.Options for a run.
@@ -238,13 +239,20 @@ object PrecomposeFixturePlans {
 
 /** Frame and audio comparison of exported files (file header). */
 object Compare {
-    /** BT.601 luma of every pixel of [b] (0..255). */
-    fun luma(b: Bitmap): FloatArray {
+    /**
+     * The video Y plane of [b]: BT.601 luma of the decoded RGB, in studio range (16 + 219·Y/255),
+     * the plane video SSIM is defined on (ffmpeg's ssim filter, libvmaf). [fullRange] keeps 0..255,
+     * where SSIM's luminance term is hypersensitive near black (a 1-level lift of a flat black area
+     * scores 0.87): logged for reference only.
+     */
+    fun luma(b: Bitmap, fullRange: Boolean = false): FloatArray {
         val px = IntArray(b.width * b.height)
         b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
+        val scale = if (fullRange) 1f else 219f / 255f
+        val offset = if (fullRange) 0f else 16f
         return FloatArray(px.size) { i ->
             val c = px[i]
-            0.299f * (c shr 16 and 0xFF) + 0.587f * (c shr 8 and 0xFF) + 0.114f * (c and 0xFF)
+            offset + scale * (0.299f * (c shr 16 and 0xFF) + 0.587f * (c shr 8 and 0xFF) + 0.114f * (c and 0xFF))
         }
     }
 
@@ -290,8 +298,8 @@ object Compare {
         return sum / n
     }
 
-    /** Per-frame SSIM of [a] against [b] and the barcodes of both (whole frame or [region]). */
-    class Frames(val ssim: DoubleArray, val barcodesA: List<Int?>, val barcodesB: List<Int?>)
+    /** Per-frame Y-plane SSIM of [a] against [b] (and full-range, for reference) and the barcodes of both. */
+    class Frames(val ssim: DoubleArray, val ssimFullRange: DoubleArray, val barcodesA: List<Int?>, val barcodesB: List<Int?>)
 
     fun frames(a: File, b: File, count: Int, region: FrameBarcodeRegion? = null): Frames {
         val ra = MediaMetadataRetriever()
@@ -300,6 +308,7 @@ object Compare {
             ra.setDataSource(a.absolutePath)
             rb.setDataSource(b.absolutePath)
             val ssim = DoubleArray(count)
+            val full = DoubleArray(count)
             val ca = ArrayList<Int?>()
             val cb = ArrayList<Int?>()
             var i = 0
@@ -311,6 +320,7 @@ object Compare {
                     val x = fa[j]
                     val y = fb[j]
                     ssim[i + j] = ssim(luma(x), luma(y), x.width, x.height)
+                    full[i + j] = ssim(luma(x, fullRange = true), luma(y, fullRange = true), x.width, x.height)
                     ca += FrameBarcode.decode(x, region)
                     cb += FrameBarcode.decode(y, region)
                     x.recycle()
@@ -318,7 +328,7 @@ object Compare {
                 }
                 i += n
             }
-            return Frames(ssim, ca, cb)
+            return Frames(ssim, full, ca, cb)
         } finally {
             ra.release()
             rb.release()

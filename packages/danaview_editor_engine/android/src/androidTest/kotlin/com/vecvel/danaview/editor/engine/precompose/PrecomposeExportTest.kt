@@ -5,7 +5,7 @@
 // production PrecomposeExport by reflection; only the decoder budget is forced (environment seam).
 // - The same plan exported once in one pass (budget 16 slots) and once precomposed
 //   (maxVisualSequences forced to 2: 4 slots → 3 passes, two intermediates) at 24, 30 and 60 fps:
-//   identical frame count on the export grid, per-frame luma SSIM ≥ 0.995, the bottom slot's
+//   identical frame count on the export grid, per-frame Y-plane SSIM ≥ 0.995, the bottom slot's
 //   grid-cut barcode exact on 100% of the frames of both exports (it went through both
 //   intermediates), and audio (a tone with a gain ramp plus the clap track) within QA-11's
 //   ±0.5 dB per 20 ms window.
@@ -62,7 +62,8 @@ class PrecomposeExportTest {
     private class Pair2(val single: File, val multi: File, val singleRun: ExportHarness.Outcome, val multiRun: ExportHarness.Outcome)
 
     private fun exportBoth(p: PrecomposeHarness, plan: RenderPlan, name: String, visualSequences: Int, expectPasses: Int): Pair2 {
-        val s = settings(fps = plan.canvas.fps)
+        // ARCH §14.1 auto bitrate for a 720p export: 5 Mb/s up to 30 fps, 7.5 Mb/s above.
+        val s = settings(fps = plan.canvas.fps, videoBitrate = if (plan.canvas.fps > 30) 7_500_000 else 5_000_000)
         p.singlePassBudget()
         val single = p.h.export(plan, s, "${name}_single")
         assertTrue("single pass did not precompose", p.recorder.plans.isEmpty())
@@ -123,6 +124,7 @@ class PrecomposeExportTest {
         val mean = cmp.ssim.average()
         Compare.log("$name: SSIM precomposed vs single pass over $frames frames: min %.5f (frame %d), mean %.5f (emulator)".format(worst.value, worst.index, mean))
         Compare.log("$name: per-frame SSIM " + cmp.ssim.joinToString(",") { "%.4f".format(it) })
+        Compare.log("$name: full-range luma SSIM (reference only) min %.5f, mean %.5f".format(cmp.ssimFullRange.min(), cmp.ssimFullRange.average()))
         val low = cmp.ssim.withIndex().filter { it.value < 0.995 }.map { "${it.index}:%.4f".format(it.value) }
         assertEquals("$name frames below SSIM 0.995", emptyList<String>(), low)
         if (expectedCode != null) {
