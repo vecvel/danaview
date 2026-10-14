@@ -1,8 +1,9 @@
-# Danaview 1.3.0: Unified Media Home Screen (Photos & Videos)
+# Danaview 1.2.0: Unified Media Home Screen (Photos & Videos)
 
-> **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12. **Status:** Proposal & Architectural Draft (Updated).
-> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md`, `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md`, `docs/v1.2/editor-desktop/DESKTOP_EDITOR_PLAN.md`, and current production `DanaviewHomeScreen` (`packages/danaview_features/lib/src/library/danaview_home_screen.dart`).
+> **Release:** Danaview 1.2.0 (app version `1.2.0+N`), moved from 1.3.0 by the owner on 2026-10-15. **Date:** 2026-10-12. **Status:** Proposal & Architectural Draft (Updated).
+> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md`, `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md`, `docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md` (shipping in the same release), and current production `DanaviewHomeScreen` (`packages/danaview_features/lib/src/library/danaview_home_screen.dart`).
 > **Core Mandate:** **100% Preservation of Existing Player, Playlists, Queue, and Library Features**. Absolutely zero existing player functionality is removed, hidden, or compromised. The Home Screen expands additively to embrace photos and camera captures alongside the existing video playback ecosystem.
+> **Release placement (2026-10-15):** 1.2.0 ships this Home screen together with AI Studio and the Unified Photo & Video Editor; the desktop editor and the in-house camera follow in 1.3.0. Consequences: "Edit in Editor" (HOM-11) and "Make Video Montage" (HOM-12) appear only where the editor runs (iOS and Android in 1.2.0, ARCH D-17); on macOS, Windows and Linux the Home screen still gains photo browsing (HOM-03) but hides editor actions until the 1.3.0 desktop editor; camera captures appear in the library once the 1.3.0 camera exists.
 > **Decisions:** Proposes decisions **D-86 to D-98**. Decisions marked **[OWNER]** require confirmation from the product owner.
 
 ---
@@ -30,9 +31,9 @@
 ## 1. Executive Summary, Goals, and Absolute Preservation Guarantees
 
 ### 1.1 Executive Summary
-Prior to v1.3.0, Danaview's Home Screen served as a beloved video player hub: "Now Playing" cards, quick actions ("Open file", "Open folder", "Open link"), "Continue watching" with resume progress bars, playlists management, and folder browsing.
+Prior to v1.2.0, Danaview's Home Screen served as a beloved video player hub: "Now Playing" cards, quick actions ("Open file", "Open folder", "Open link"), "Continue watching" with resume progress bars, playlists management, and folder browsing.
 
-In v1.3.0, with the arrival of the **In-House Native Camera** and the **Unified Photo & Video Editor**, Danaview evolves into a **Unified Visual Media Hub**. Crucially, **all existing player, playlist, queue, folder, and streaming features remain 100% active, prominent, and unchanged**. The user loses nothing; instead, photo viewing, album browsing, and creation tools are seamlessly integrated as additive capabilities.
+In v1.2.0, with the arrival of the **Unified Photo & Video Editor** (and ahead of the **In-House Native Camera** in v1.3.0), Danaview evolves into a **Unified Visual Media Hub**. Crucially, **all existing player, playlist, queue, folder, and streaming features remain 100% active, prominent, and unchanged**. The user loses nothing; instead, photo viewing, album browsing, and creation tools are seamlessly integrated as additive capabilities.
 
 ### 1.2 Absolute Preservation Guarantees
 
@@ -47,7 +48,7 @@ In v1.3.0, with the arrival of the **In-House Native Camera** and the **Unified 
 | **P-7** | **Network & Stream Playback** | http, https, rtsp, rtmp, srt, udp, rtp, mms, and local file streams open with zero regression. |
 | **P-8** | **Desktop Drag & Drop & Links** | `desktop_drop` onto home/player and system `danaview://` URL schemes operate without change. |
 
-### 1.3 Goals for v1.3.0 Additions
+### 1.3 Goals for v1.2.0 Additions
 
 | # | Goal | Where Guaranteed |
 |---|---|---|
@@ -60,7 +61,7 @@ In v1.3.0, with the arrival of the **In-House Native Camera** and the **Unified 
 
 ## 2. Preservation Register: Existing Player, Playlist, Queue & Folder Features
 
-To ensure no code or UX regressions occur, the v1.3.0 Home Screen architecture maps 1-to-1 with existing domain controllers and services:
+To ensure no code or UX regressions occur, the v1.2.0 Home Screen architecture maps 1-to-1 with existing domain controllers and services:
 
 ```
 +---------------------------------------------------------------------------------------------------+
@@ -279,7 +280,7 @@ Selecting a mixture of photos and videos activates the bottom action bar:
 | **HOM-09** | Build the "Recent Photos & Stills" additive carousel for the default Overview tab. | HOM-04, HOM-05 |
 | **HOM-10** | Implement Masonry and adaptive photo grid view for the dedicated `Photos` tab. | HOM-04 |
 | **HOM-11** | Build Fullscreen Photo Viewer with pinch-to-zoom, EXIF metadata sheet, and "Edit in Editor" action button. | HOM-10 |
-| **HOM-12** | Implement multi-select bar with "Make Video Montage" bridge and "Play in Player" slideshow. | HOM-05, v1.1 Editor |
+| **HOM-12** | Implement multi-select bar with "Make Video Montage" bridge and "Play in Player" slideshow. | HOM-05, v1.1 Editor (mobile only in 1.2.0; desktop after DSK-20 in 1.3.0) |
 | **HOM-13** | Add media badges (Duration pill, 4K/60fps, RAW, HDR, Live Photo indicators). | HOM-10 |
 | **HOM-14** | Stress test: verify smooth 60/120 fps scrolling with 50,000+ mixed photos and videos. | HOM-04 |
 | **HOM-15** | Regression test suite: verify zero regressions across existing player and playlist unit/widget tests. | HOM-06, HOM-07, HOM-08 |

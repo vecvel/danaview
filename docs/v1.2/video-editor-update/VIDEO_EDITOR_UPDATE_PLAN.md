@@ -1,8 +1,9 @@
-# Danaview 1.3.0: Unified Photo & Video Editor (Still Photo Post-Processing, Multi-Track Video Timeline, 8-Category Beauty Suite & Tracking)
+# Danaview 1.2.0: Unified Photo & Video Editor (Still Photo Post-Processing, Multi-Track Video Timeline, 8-Category Beauty Suite & Tracking)
 
-> **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12. **Status:** Proposal & Architectural Draft.
-> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` (decisions D-01 to D-44), `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` (decisions D-45 to D-70), `docs/v1.2/editor-desktop/DESKTOP_EDITOR_PLAN.md` (decisions D-71 to D-85), `docs/v1.3/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md` (decisions D-86 to D-98), and `docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md` (decisions D-99 to D-115).
+> **Release:** Danaview 1.2.0 (app version `1.2.0+N`), moved from 1.3.0 by the owner on 2026-10-15. **Date:** 2026-10-12. **Status:** Proposal & Architectural Draft.
+> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` (decisions D-01 to D-44), `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` (decisions D-45 to D-70), `docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md` (decisions D-86 to D-98, same release). Later plans that build on this one: `docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md` (D-71 to D-85) and `docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md` (D-99 to D-115).
 > **Scope:** Upgrades the Danaview Editor into a single, unified visual post-processing engine. Rather than maintaining a separate photo app or disjoint editor binaries, our main editor dynamically serves both **Still Photo Editing** and **Multi-Track Video Timeline Editing** based on user intent and media type. Incorporates a 16-bit float still pipeline, pro tone controls, 8-channel HSL mixer, RGB curves, selective masking, perspective keystone, batch export, multi-track video timeline editing, and the complete 8-category Beauty, Face Reshaping, Virtual Makeup, Body Slimming, and AI Retouching Suite with temporal One-Euro landmark tracking for moving video.
+> **Release placement (2026-10-15):** this plan now ships in 1.2.0, **before** the native camera and the desktop editor (both 1.3.0). Consequences, applied below: (1) this plan owns the face landmark tracker and the beauty shaders (VED-16, VED-20…VED-23 no longer depend on CAM-04…CAM-06); the 1.3.0 camera reuses them for real-time capture. (2) Platforms are iOS and Android only; the macOS, Windows and Linux columns of §7 arrive with the 1.3.0 desktop editor. (3) The 4K export check (VED-30) runs on the v1.1 mobile exporters (IOS-12, AND-11) instead of DSK-06. (4) AI Studio (same release) moves `.dnproj` to schema 2 (AIS-04); VED-15's schema 3 lands after it, or both bumps are merged into one release migration.
 > **Decisions:** Proposes decisions **D-116 to D-145**. Decisions marked **[OWNER]** require confirmation from the product owner.
 
 ---
@@ -48,9 +49,9 @@
 ## 1. Executive Summary & Intent-Based Architecture
 
 ### 1.1 Executive Summary
-In Danaview 1.1.0 and 1.2.0, the Danaview Editor established multi-track timeline editing, color grading, 3D LUTs (`.vlut`), typography, and AI subtitles across mobile and desktop. 
+In Danaview 1.1.0, the Danaview Editor established multi-track timeline editing, color grading, 3D LUTs (`.vlut`), typography, and on-device AI subtitles on iOS and Android; AI Studio and rich subtitles ship alongside this plan in 1.2.0. 
 
-Danaview 1.3.0 establishes complete visual media symmetry by expanding the main editor into a **Unified Photo & Video Editor**. Rather than forcing creators to juggle two separate applications or isolated codebases, our single editor intelligently adapts its workspace based on user intent:
+Danaview 1.2.0 establishes complete visual media symmetry by expanding the main editor into a **Unified Photo & Video Editor**. Rather than forcing creators to juggle two separate applications or isolated codebases, our single editor intelligently adapts its workspace based on user intent:
 1. **Still Photo Mode**: When a user selects a photo (or multiple photos) from the Home screen, camera roll, or file picker, the editor opens directly in an optimized still-image canvas featuring tiled GPU rendering, 16-bit half-float processing, pro exposure/light controls, 8-channel HSL color mixer, spline RGB curves, selective masking, perspective keystone correction, batch export, and full-resolution portrait beauty retouching.
 2. **Video Timeline Mode**: When a user selects a video clip, a project, or chooses to assemble a story, the editor presents the full multi-track timeline with frame-accurate trimming, transitions, audio mixing, and temporal One-Euro landmark tracking for moving video retouching.
 3. **Seamless Transition**: With a single tap ("Add to Timeline / Make Video"), any edited still photo can instantly become an animated clip on a video track, complete with Ken Burns pan-and-zoom motion presets.
@@ -463,6 +464,8 @@ In both Still Photo Mode and Video Timeline Mode, activating **Compare Split** r
 
 ## 7. Platform Capability Matrix & Graceful Degradation
 
+> 1.2.0 ships the iOS and Android columns. The macOS, Windows and Linux columns are the target for the 1.3.0 desktop editor (`docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md`).
+
 | Feature | iOS / iPadOS | Android | macOS | Windows | Linux |
 |---|---|---|---|---|---|
 | **Tone & Color Engine** | Metal (Instant) | OpenGL ES / Vulkan | Metal (Instant) | Direct3D 11 HLSL | OpenGL / Vulkan |
@@ -500,15 +503,15 @@ In both Still Photo Mode and Video Timeline Mode, activating **Compare Split** r
 
 | Ticket | Scope & Summary | Depends On |
 |---|---|---|
-| **VED-15** | Update `.dnproj` schema to version 3 with `BeautyEffectSpec` within visual clip effect lists. | CORE-03, VED-02 |
-| **VED-16** | Develop temporal One-Euro landmark stabilization filter to eliminate inter-frame mesh jitter on moving video. | CAM-04 |
+| **VED-15** | Update `.dnproj` schema to version 3 with `BeautyEffectSpec` within visual clip effect lists. | CORE-03, VED-02, AIS-04 |
+| **VED-16** | Build the on-device face landmark tracker (Apple Vision on iOS, MediaPipe Face Mesh on Android; 468 points) and the temporal One-Euro stabilization filter that removes inter-frame mesh jitter on moving video. Shared later with the 1.3.0 camera (CAM-04). | VED-03 |
 | **VED-17** | Build background video landmark pre-tracker isolate and `.dnface` caching service. | VED-16 |
 | **VED-18** | Implement multi-subject face detection and independent Face ID parameter management. | VED-16 |
 | **VED-19** | Wire timeline keyframe animation system for all numeric beauty parameters. | VED-15, CORE-19 |
-| **VED-20** | Implement real-time facial slimming, V-line jaw, and chin deformation shaders for still and video clips. | VED-03, CAM-05 |
-| **VED-21** | Implement eye enlargement, canthus angle tilt, and eye brightening shaders. | VED-03, CAM-05 |
-| **VED-22** | Implement nose slimming, bridge elevation, and lip plumping shaders. | VED-03, CAM-05 |
-| **VED-23** | Implement skin smoothing, blemish healing brush, and teeth whitening shaders. | VED-03, CAM-06 |
+| **VED-20** | Implement real-time facial slimming, V-line jaw, and chin deformation shaders for still and video clips. | VED-03, VED-16 |
+| **VED-21** | Implement eye enlargement, canthus angle tilt, and eye brightening shaders. | VED-03, VED-16 |
+| **VED-22** | Implement nose slimming, bridge elevation, and lip plumping shaders. | VED-03, VED-16 |
+| **VED-23** | Implement skin smoothing, blemish healing brush, and teeth whitening shaders. | VED-03, VED-16 |
 | **VED-24** | Build virtual makeup shader passes (foundation, lipstick, blush, contour, eyeliner). | VED-03 |
 | **VED-25** | Implement body reshaping, waist slimming, and leg length adjustment shaders. | VED-03 |
 | **VED-26** | Design and build "Beauty & Retouching" inspector panel in `danaview_editor` UI kit. | ARCH §1.3, VED-15 |
@@ -520,6 +523,6 @@ In both Still Photo Mode and Video Timeline Mode, activating **Compare Split** r
 | Ticket | Scope & Summary | Depends On |
 |---|---|---|
 | **VED-29** | High-resolution still photo export engine (JPEG, PNG, WebP, HEIC with quality sliders). | VED-04 |
-| **VED-30** | Hardware video export verification: validate real-time 4K 60fps rendering with full beauty passes. | VED-15, DSK-06 |
+| **VED-30** | Hardware video export verification on iOS and Android: validate 4K 60fps export with full beauty passes (desktop export is verified by the 1.3.0 desktop plan). | VED-15, IOS-12, AND-11 |
 | **VED-31** | Memory stress test on 48 MP and 100 MP camera images across low-RAM devices. | VED-05, VED-29 |
 | **VED-32** | Golden image parity test suite comparing photo mode vs video timeline beauty rendering. | VED-29, VED-30 |

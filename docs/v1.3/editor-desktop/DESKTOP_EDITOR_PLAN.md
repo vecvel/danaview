@@ -1,8 +1,9 @@
-# Danaview 1.2.0: Desktop Video Editor (macOS, Windows & Linux)
+# Danaview 1.3.0: Desktop Video Editor (macOS, Windows & Linux)
 
-> **Release:** Danaview 1.2.0 (app version `1.2.0+N`). **Date:** 2026-10-12. **Status:** Proposal & Architectural Draft.
-> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` (decisions D-01 to D-44, "ARCH"), `docs/v1.1/editor/BUILD_PLAN.md` (M0–M6), and `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` (decisions D-45 to D-70, "AIS").
-> **Context:** ARCH §25 explicitly laid out the foundation for desktop editing ("Desktop later (designed now, not built)"). This document formalizes the architecture, native engines, UX enhancements, and rollout plan for **macOS, Windows, and Linux**, shipping alongside the AI Studio initiative in Danaview 1.2.0.
+> **Release:** Danaview 1.3.0 (app version `1.3.0+N`), moved from 1.2.0 by the owner on 2026-10-15. **Date:** 2026-10-12. **Status:** Proposal & Architectural Draft.
+> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` (decisions D-01 to D-44, "ARCH"), `docs/v1.1/editor/BUILD_PLAN.md` (M0–M6), and the 1.2.0 plans it builds on: `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` (decisions D-45 to D-70, "AIS"), `docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md` (D-116 to D-145, "VED") and `docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md` (D-86 to D-98, "HOM").
+> **Context:** ARCH §25 explicitly laid out the foundation for desktop editing ("Desktop later (designed now, not built)"). This document formalizes the architecture, native engines, UX enhancements, and rollout plan for **macOS, Windows, and Linux**, shipping in Danaview 1.3.0 alongside the native camera.
+> **Release placement (2026-10-15):** by 1.3.0 the mobile editor already has AI Studio and rich subtitles (AIS) and the photo mode and beauty suite (VED) from 1.2.0. The desktop engines must therefore also run VED's still-photo pipeline (16-bit float, HSL, curves, masks) and beauty shaders, and DSK-18's parity suite covers them; the desktop columns of VED §7 are this plan's target. AI Studio on desktop (the AI Studio tab below) is new in 1.3.0: AIS shipped it for iOS and Android only.
 > **Decisions:** Proposes decisions **D-71 to D-85**. Decisions marked **[OWNER]** require confirmation from the product owner.
 
 ---
@@ -35,7 +36,7 @@
 
 In Danaview 1.1.0, the video editor was introduced for iPhone, iPad, and Android, while the desktop platforms (macOS, Windows, Linux) had their editor entry points hidden (`ARCH §3.3, §25, D-17`). However, the player already thrives across all five platforms, powered by Flutter and `libmpv`.
 
-Danaview 1.2.0 brings the **non-destructive video editor to Desktop**:
+Danaview 1.3.0 brings the **non-destructive photo and video editor to Desktop**:
 
 1. **macOS**: Full native acceleration utilizing AVFoundation, Core Image, and Metal, sharing ~90% of the tested iOS Darwin codebase.
 2. **Windows**: High-performance Media Foundation and Direct3D 11 rendering pipeline with hardware-accelerated NVENC, Intel QuickSync, and AMD AMF video encoding.
@@ -53,10 +54,10 @@ Danaview 1.2.0 brings the **non-destructive video editor to Desktop**:
 | **G-D5** | **Offline & Privacy Invariance**: Full editor and subtitle workflows operate 100% locally and offline on desktop. AI Studio remains strictly opt-in with explicit disclosure.               | AIS G-S1, G-S2, D-45                           |
 | **G-D6** | **Owner Standing UI Compliance**: Desktop UI uses custom `danaview_ui_kit` components, Figtree typography, dark UI surfaces, computed contrast, and zero raw Material widgets.              | ARCH §1.3; DSK-13                              |
 
-### 1.3 Non-Goals for 1.2.0 Desktop
+### 1.3 Non-Goals for 1.3.0 Desktop
 
 - **Non-integer project frame rates**: Desktop adheres to v1's integer timeline grid (24, 25, 30, 48, 50, 60 fps; D-03).
-- **Third-party plugin ecosystems**: No OpenFX, VST3, or AU plugin hosting in 1.2.0.
+- **Third-party plugin ecosystems**: No OpenFX, VST3, or AU plugin hosting in 1.3.0.
 - **Complex multi-camera synchronization**: Switching live multicam angles remains a future release roadmap item.
 - **Direct cloud project sync**: Projects remain local `.dnproj` files; external cloud sharing relies on local file sync (iCloud, OneDrive, Dropbox).
 
@@ -282,9 +283,9 @@ graph TD
 | **DSK-15** | Native drag-and-drop integration from desktop file managers via `desktop_drop`.         | DSK-11         |
 | **DSK-16** | Native App Menu Bar (macOS) and system title bar menus (Windows/Linux).                 | DSK-11         |
 | **DSK-17** | Secondary display / detached canvas preview window support.                             | DSK-11         |
-| **DSK-18** | Render parity suite validation: desktop engines vs mobile reference frames.             | DSK-06, DSK-07 |
+| **DSK-18** | Render parity suite validation: desktop engines vs mobile reference frames, including VED photo mode and beauty passes. | DSK-06, DSK-07 |
 | **DSK-19** | Desktop missing media relinker with recursive folder discovery.                         | DSK-15         |
-| **DSK-20** | Flip `EditorAvailability.platform` for desktop platforms and release gate.              | DSK-18         |
+| **DSK-20** | Flip `EditorAvailability.platform` for desktop platforms and release gate; turn on the Home screen's editor actions on desktop (HOM-11, HOM-12). | DSK-18         |
 
 ---
 

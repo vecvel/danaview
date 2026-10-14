@@ -1,8 +1,9 @@
 # Danaview 1.3.0: In-House Native Camera (Photo & Video Capture Engine)
 
 > **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12. **Status:** Proposal & Architectural Draft.
-> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` (D-01 to D-44), `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` (D-45 to D-70), `docs/v1.2/editor-desktop/DESKTOP_EDITOR_PLAN.md` (D-71 to D-85), and `docs/v1.3/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md` (D-86 to D-98).
+> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` (D-01 to D-44), `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` (D-45 to D-70), `docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md` (D-86 to D-98).
 > **Scope:** A high-performance, in-house native camera for capturing photos and videos. Built directly on native OS camera APIs without bloated third-party wrappers. Features real-time beauty & face reshaping, cinematic capture, manual pro configurations, live overlay texts/masks/fonts, dual front+back multicam capture, and flexible device background audio vs external microphone recording.
+> **Release placement (2026-10-15):** ships in 1.3.0 with the desktop editor (`docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md`, D-71 to D-85). The Unified Photo & Video Editor (`docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md`, D-116 to D-145) ships earlier, in 1.2.0, and owns the face landmark tracker (VED-16) and the beauty shaders (VED-20…VED-23). The camera **reuses** them for real-time capture instead of building them: CAM-04…CAM-06 adapt them to the live capture pipeline at 60 fps. Camera captures open in the 1.2.0 editor (CAM-14) and appear in the 1.2.0 Home library.
 > **Decisions:** Proposes decisions **D-99 to D-115**. Decisions marked **[OWNER]** require confirmation from the product owner.
 
 ---
@@ -302,9 +303,9 @@ Creators often want to record videos while playing background music (Spotify, Ap
 | **CAM-01** | Create `danaview_camera` native plugin with iOS `AVFoundation` implementation.                          | v1.1 Native         |
 | **CAM-02** | Implement Android `Camera2` / `CameraX` capture session with OpenGL ES 3.2 preview.                     | CAM-01              |
 | **CAM-03** | Develop desktop webcam capture driver for macOS, Windows, and Linux.                                    | CAM-01              |
-| **CAM-04** | Build real-time face landmark tracking engine (Vision on iOS, MediaPipe on Android).                    | CAM-01, CAM-02      |
-| **CAM-05** | Implement GPU face mesh deformation shaders (face slimming, chin, nose, eyes).                          | CAM-04              |
-| **CAM-06** | Implement bilateral skin smoothing and blemish reduction shader passes.                                 | CAM-05              |
+| **CAM-04** | Run VED-16's face landmark tracker on the live capture stream at 60 fps (Vision on iOS, MediaPipe on Android). | CAM-01, CAM-02, VED-16 |
+| **CAM-05** | Apply VED-20…VED-22's face mesh deformation shaders (slimming, chin, nose, eyes) in the live preview and recording path. | CAM-04, VED-20, VED-21, VED-22 |
+| **CAM-06** | Apply VED-23's skin smoothing and blemish reduction passes in the live preview and recording path.      | CAM-05, VED-23      |
 | **CAM-07** | Implement cinematic capture mode: 24 fps cadence, 2.39:1 matte, depth bokeh.                            | CAM-01, CAM-02      |
 | **CAM-08** | Implement manual pro controls: ISO, shutter speed, manual focus with focus peaking.                     | CAM-01, CAM-02      |
 | **CAM-09** | Develop dual camera concurrent capture session (`AVCaptureMultiCamSession` & Android concurrent).       | CAM-01, CAM-02      |
@@ -312,7 +313,7 @@ Creators often want to record videos while playing background music (Spotify, Ap
 | **CAM-11** | Build audio capture routing: Internal Device Audio, Mic opt-out, and multi-track audio writing.         | CAM-01, CAM-02      |
 | **CAM-12** | Implement hardware capability discovery probe and UI dynamic visibility gating.                         | CAM-01              |
 | **CAM-13** | Implement live dynamic text, aesthetic masks, and font overlay rendering.                               | CAM-01, FontCatalog |
-| **CAM-14** | Build direct capture handoff into Unified Editor (Still Photo mode and Video Timeline mode).           | CAM-01, HOM-01      |
+| **CAM-14** | Build direct capture handoff into Unified Editor (Still Photo mode and Video Timeline mode).           | CAM-01, HOM-01, VED-01 |
 | **CAM-15** | Implement zoom controller with smooth optical lens switching (0.5×, 1×, 2×, 3×, 5×).                    | CAM-01, CAM-02      |
 | **CAM-16** | Add exposure metering aids: live zebra stripes and RGB/luminance histogram.                             | CAM-08              |
 | **CAM-17** | Implement flash, torch, and soft front screen fill-light modes.                                         | CAM-01, CAM-02      |
