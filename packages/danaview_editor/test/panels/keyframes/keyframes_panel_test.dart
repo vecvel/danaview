@@ -10,11 +10,9 @@
 
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/semantics.dart' show CustomSemanticsAction, SemanticsAction, SemanticsActionEvent, SemanticsBinding, SemanticsNode;
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/app/strings/keyframe_strings.dart';
-import 'package:danaview_editor/src/editor/contracts/contracts.dart';
 import 'package:danaview_editor/src/editor/inspector/inspector_header.dart';
 import 'package:danaview_editor/src/editor/inspector/inspector_rows.dart';
 import 'package:danaview_editor/src/editor/inspector/keyframe_toggle.dart';
@@ -44,6 +42,12 @@ Finder valueFields(PropertyKey<Object?> p) => find.descendant(of: card(p), match
 Offset diamondAt(WidgetTester tester, PropertyKey<Object?> p, TimeUs t, TimeUs duration) {
   final r = tester.getRect(strip(p));
   return Offset(r.left + KeyframeStrip.xOf(r.width, t, duration), r.center.dy);
+}
+
+/// The menu entry [text] (not the footer button with the same words).
+Finder menuEntry(WidgetTester tester, String text) {
+  final footer = find.descendant(of: key('kf.removeAll'), matching: find.text(text)).evaluate().toSet();
+  return find.byElementPredicate((e) => e.widget is Text && (e.widget as Text).data == text && !footer.contains(e));
 }
 
 /// Scrolls [finder] into view and taps it.
@@ -144,9 +148,12 @@ void main() {
       expect(addable, contains(PropertyKeys.position));
       expect(addable, contains(PropertyKeys.maskCenter));
       expect(addable, isNot(contains(PropertyKeys.opacity)));
-      expect(addable, isNot(contains(PropertyKeys.volume)), reason: 'volume belongs to the audio part');
+      expect(addable, contains(PropertyKeys.volume), reason: 'the video has sound');
+      final image = project.index.item(KfIds.image)!;
+      expect(KeyframeCommands.addable(image, project.pool), isNot(contains(PropertyKeys.volume)), reason: 'an image has no sound');
       final text = project.index.item(KfIds.text)!;
-      expect(KeyframeCommands.addable(text, project.pool), [PropertyKeys.position, PropertyKeys.scale, PropertyKeys.rotation, PropertyKeys.opacity]);
+      expect(KeyframeCommands.addable(text, project.pool),
+          [PropertyKeys.position, PropertyKeys.scale, PropertyKeys.rotation, PropertyKeys.opacity]);
       expect(KeyframeCommands.animatable(text), isTrue);
     });
 
@@ -418,7 +425,7 @@ void main() {
       final before = rig.entries;
       await tap(tester, key('kf.menu.${PropertyKeys.opacity.id}'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(KeyframeStrings.removeAllOfProperty).last);
+      await tester.tap(menuEntry(tester, KeyframeStrings.removeAllOfProperty));
       await tester.pumpAndSettle();
       expect(rig.keys(KfIds.video, PropertyKeys.opacity), isEmpty);
       expect(rig.keys(KfIds.video, PropertyKeys.exposure), [0, 2 * s], reason: 'other properties stay');

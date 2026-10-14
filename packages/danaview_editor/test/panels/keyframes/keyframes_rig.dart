@@ -115,13 +115,20 @@ EditProject keyframesProject(ProjectId id) => EditProject(
             _clip('it_image', 'm_image', 10 * s, 2 * s),
           ]),
           Track(id: const TrackId('tr_overlay'), kind: TrackKind.overlay, locked: true, items: [
-            _clip('it_locked', 'm_video', 0, 4 * s, keys: KeyframeSet({'transform.opacity': _track({0: 1.0, 60: 0.2})})),
+            _clip('it_locked', 'm_video', 0, 4 * s,
+                keys: KeyframeSet({
+                  'transform.opacity': _track({0: 1.0, 60: 0.2})
+                })),
           ]),
           Track(id: const TrackId('tr_text'), kind: TrackKind.text, items: [
             const TextItem(id: ItemId('it_text'), start: 0, duration: 5 * s, text: 'Title'),
           ]),
           Track(id: const TrackId('tr_audio'), kind: TrackKind.audio, items: [
-            _clip('it_audio', 'm_song', 0, 8 * s, visual: false, keys: KeyframeSet({'audio.volume': _track({30: 1.0, 120: 0.5})})),
+            _clip('it_audio', 'm_song', 0, 8 * s,
+                visual: false,
+                keys: KeyframeSet({
+                  'audio.volume': _track({30: 1.0, 120: 0.5})
+                })),
           ]),
         ],
       ),

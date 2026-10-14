@@ -100,8 +100,10 @@ abstract final class KeyframeCommands {
   }
 
   /// The item-local times of the keys of [key] that lie inside [item] (sorted).
-  static List<TimeUs> timesOf(TimelineItem item, PropertyKey<Object?> key) =>
-      [for (final t in KeyframeOps.keyTimes(keyframesOf(item), key)) if (t >= 0 && t < item.duration) t];
+  static List<TimeUs> timesOf(TimelineItem item, PropertyKey<Object?> key) => [
+        for (final t in KeyframeOps.keyTimes(keyframesOf(item), key))
+          if (t >= 0 && t < item.duration) t
+      ];
 
   /// The properties of [item] that have at least one key inside the item, in registry order.
   static List<PropertyKey<Object?>> animated(TimelineItem item) => [
@@ -150,7 +152,10 @@ abstract final class KeyframeCommands {
     if (selected != null && selected.appliesToItem(item)) return [selected];
     final animatedNow = animated(item);
     if (animatedNow.isNotEmpty) return animatedNow;
-    final transform = [for (final k in defaultKeys) if (k.appliesToItem(item)) k];
+    final transform = [
+      for (final k in defaultKeys)
+        if (k.appliesToItem(item)) k
+    ];
     if (transform.isNotEmpty) return transform;
     return [
       for (final k in addable(item, pool))
@@ -163,8 +168,9 @@ abstract final class KeyframeCommands {
       toggleAt(item, atPlayheadKeys(item, pool, selected: selected), at, label: KeyframeStrings.historyAtPlayhead);
 
   /// Removes every key of [item]; each property keeps the value it has at absolute [at].
-  static EditCommand removeAll(TimelineItem item, TimeUs at) =>
-      CompositeCommand(KeyframeStrings.historyRemoveAll, [ClearKeyframes([item.id], at: at)]);
+  static EditCommand removeAll(TimelineItem item, TimeUs at) => CompositeCommand(KeyframeStrings.historyRemoveAll, [
+        ClearKeyframes([item.id], at: at)
+      ]);
 
   /// The state of the header's keyframe-all over [keys] at absolute [playhead]: at the playhead when
   /// every property has a key there, animated when any has keys, else static.
@@ -263,8 +269,7 @@ class KeyframeStrip extends StatefulWidget {
   static const CustomSemanticsAction nudgeLaterAction = CustomSemanticsAction(label: KeyframeStrings.nudgeLater);
 
   /// Where a key at item-local [t] sits in a strip [width] wide for an item of [duration].
-  static double xOf(double width, TimeUs t, TimeUs duration) =>
-      pad + (duration <= 0 ? 0 : t / duration) * math.max(1.0, width - 2 * pad);
+  static double xOf(double width, TimeUs t, TimeUs duration) => pad + (duration <= 0 ? 0 : t / duration) * math.max(1.0, width - 2 * pad);
 
   /// Name of the property (semantics).
   final String label;
@@ -425,22 +430,22 @@ class _KeyframeStripState extends State<KeyframeStrip> {
                     top: 0,
                     width: KeyframeStrip.hitSlop,
                     height: KeyframeStrip.height,
-                    child: IgnorePointer(
-                      child: Semantics(
-                        container: true,
-                        button: true,
-                        selected: t == selected,
-                        label: KeyframeStrings.diamondLabel(widget.label, widget.timeLabel(t)),
-                        value: KeyframeStrings.diamondValue(widget.valueLabel(t)),
-                        onTap: widget.onSelect == null ? null : () => widget.onSelect!(t),
-                        customSemanticsActions: widget.enabled && widget.onNudge != null
-                            ? <CustomSemanticsAction, VoidCallback>{
-                                KeyframeStrip.nudgeEarlierAction: () => widget.onNudge!(t, -1),
-                                KeyframeStrip.nudgeLaterAction: () => widget.onNudge!(t, 1),
-                              }
-                            : null,
-                        child: const SizedBox.expand(),
-                      ),
+                    // The node carries no hit target (pointers fall through to the strip's detector); it
+                    // exists for assistive technology only.
+                    child: Semantics(
+                      container: true,
+                      button: true,
+                      selected: t == selected,
+                      label: KeyframeStrings.diamondLabel(widget.label, widget.timeLabel(t)),
+                      value: KeyframeStrings.diamondValue(widget.valueLabel(t)),
+                      onTap: widget.onSelect == null ? null : () => widget.onSelect!(t),
+                      customSemanticsActions: widget.enabled && widget.onNudge != null
+                          ? <CustomSemanticsAction, VoidCallback>{
+                              KeyframeStrip.nudgeEarlierAction: () => widget.onNudge!(t, -1),
+                              KeyframeStrip.nudgeLaterAction: () => widget.onNudge!(t, 1),
+                            }
+                          : null,
+                      child: const SizedBox.expand(),
                     ),
                   ),
               ],
@@ -632,7 +637,10 @@ class _KeyframesBody extends ConsumerWidget {
                   ),
                 if (animated.isEmpty) const _EmptyNote(),
                 for (final group in KeyframeGroup.values)
-                  ..._group(group, [for (final k in animated) if (KeyframeCommands.groupOf(k) == group) k]),
+                  ..._group(group, [
+                    for (final k in animated)
+                      if (KeyframeCommands.groupOf(k) == group) k
+                  ]),
                 if (addable.isNotEmpty) _AddArea(item: item, addable: addable, enabled: editable),
                 if (animated.isNotEmpty)
                   Padding(
@@ -739,7 +747,8 @@ class _AddArea extends ConsumerWidget {
                   for (final group in KeyframeGroup.values) ...[
                     if (addable.any((k) => KeyframeCommands.groupOf(k) == group)) DanaviewMenuHeader(KeyframeCommands.groupLabel(group)),
                     for (final k in addable)
-                      if (KeyframeCommands.groupOf(k) == group) DanaviewMenuItem(label: KeyframeCommands.labelOf(k), onTap: () => _add(ref, context, k)),
+                      if (KeyframeCommands.groupOf(k) == group)
+                        DanaviewMenuItem(label: KeyframeCommands.labelOf(k), onTap: () => _add(ref, context, k)),
                   ],
                 ],
                 builder: (context, open, isOpen) => DanaviewButton.secondary(
@@ -923,7 +932,9 @@ class _PropertyBlockState extends ConsumerState<_PropertyBlock> {
         children: [
           Row(
             children: [
-              Expanded(child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: _bodyStyle.copyWith(fontWeight: FontWeight.w600))),
+              Expanded(
+                  child:
+                      Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: _bodyStyle.copyWith(fontWeight: FontWeight.w600))),
               DanaviewMenuIconTrigger(
                 key: ValueKey<String>('kf.menu.${key.id}'),
                 icon: Icons.more_horiz_rounded,
@@ -1079,32 +1090,46 @@ class _SelectedKeyframe extends StatelessWidget {
             child: Text(KeyframeStrings.selectedTitle(label, index, total), style: _bodyStyle.copyWith(fontWeight: FontWeight.w600)),
           ),
           const SizedBox(height: DanaviewSpacing.xs),
-          Row(
+          // The label and the nudge control share a line when they fit; on a narrow panel at a large
+          // text scale the control wraps under the label.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(child: Text(KeyframeStrings.time, maxLines: 1, overflow: TextOverflow.ellipsis, style: _bodyStyle)),
-              DanaviewIconButton(
-                key: const ValueKey<String>('kf.frameBack'),
-                icon: Icons.chevron_left_rounded,
-                size: 32,
-                iconSize: 20,
-                color: DanaviewColors.textSecondary,
-                tooltip: KeyframeStrings.frameBack,
-                onPressed: canBack ? () => onNudge(-1) : null,
-              ),
-              Semantics(
-                label: KeyframeStrings.time,
-                value: Timecode.format(local, rate),
-                excludeSemantics: true,
-                child: Text(Timecode.format(local, rate), key: const ValueKey<String>('kf.time'), maxLines: 1, style: _timeStyle),
-              ),
-              DanaviewIconButton(
-                key: const ValueKey<String>('kf.frameForward'),
-                icon: Icons.chevron_right_rounded,
-                size: 32,
-                iconSize: 20,
-                color: DanaviewColors.textSecondary,
-                tooltip: KeyframeStrings.frameForward,
-                onPressed: canForward ? () => onNudge(1) : null,
+              Text(KeyframeStrings.time, maxLines: 1, overflow: TextOverflow.ellipsis, style: _bodyStyle),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DanaviewIconButton(
+                    key: const ValueKey<String>('kf.frameBack'),
+                    icon: Icons.chevron_left_rounded,
+                    size: 32,
+                    iconSize: 20,
+                    color: DanaviewColors.textSecondary,
+                    tooltip: KeyframeStrings.frameBack,
+                    onPressed: canBack ? () => onNudge(-1) : null,
+                  ),
+                  Flexible(
+                    child: Semantics(
+                      label: KeyframeStrings.time,
+                      value: Timecode.format(local, rate),
+                      excludeSemantics: true,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(Timecode.format(local, rate), key: const ValueKey<String>('kf.time'), maxLines: 1, style: _timeStyle),
+                      ),
+                    ),
+                  ),
+                  DanaviewIconButton(
+                    key: const ValueKey<String>('kf.frameForward'),
+                    icon: Icons.chevron_right_rounded,
+                    size: 32,
+                    iconSize: 20,
+                    color: DanaviewColors.textSecondary,
+                    tooltip: KeyframeStrings.frameForward,
+                    onPressed: canForward ? () => onNudge(1) : null,
+                  ),
+                ],
               ),
             ],
           ),
