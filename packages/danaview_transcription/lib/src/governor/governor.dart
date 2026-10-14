@@ -1,6 +1,8 @@
 // OWNER: AI-13
 //
-// Placeholder (D-33) created by AI-08's scaffold. AI-13 replaces this sub-barrel. Will declare:
-// ResourceGovernor: threads, thermal and memory policy, export interplay, background leases.
+// Sub-barrel of `lib/src/governor/`: ResourceGovernor (threads, thermal and memory policy, export
+// interplay, app lifecycle) and its ports.
 
 library;
+
+export 'resource_governor.dart';
