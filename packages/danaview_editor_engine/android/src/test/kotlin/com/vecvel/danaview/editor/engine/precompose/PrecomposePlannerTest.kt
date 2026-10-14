@@ -12,6 +12,7 @@ import com.vecvel.danaview.editor.engine.export.DecoderBudget
 import com.vecvel.danaview.editor.engine.export.EncoderSettings
 import com.vecvel.danaview.editor.engine.export.ExportVideoCodec
 import com.vecvel.danaview.editor.engine.export.MultiPassRouting
+import com.vecvel.danaview.editor.engine.export.precompose.IntermediateColor
 import com.vecvel.danaview.editor.engine.export.precompose.MediaSpan
 import com.vecvel.danaview.editor.engine.export.precompose.PlannerLane
 import com.vecvel.danaview.editor.engine.export.precompose.PrecomposePlan
@@ -190,6 +191,7 @@ class PrecomposePlannerTest {
         assertEquals(0, i.keyframeIntervalMs)
         assertEquals(0f, i.iFrameIntervalSeconds)
         assertEquals(exportSettings.copy(videoBitrate = 20_000_000, keyframeIntervalMs = 0), i)
+        assertEquals("intermediates are BT.601 (planner header)", IntermediateColor.BT601, PrecomposePlanner.Options().color)
         val gop = PrecomposePlanner.intermediateSettings(exportSettings, PrecomposePlanner.Options(bitrateFactor = 6, allIntra = false))
         assertEquals(30_000_000, gop.videoBitrate)
         assertEquals(2000, gop.keyframeIntervalMs)

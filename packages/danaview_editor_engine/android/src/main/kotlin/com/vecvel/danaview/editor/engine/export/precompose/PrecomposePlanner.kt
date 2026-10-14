@@ -23,6 +23,15 @@
 // may clamp the bitrate to what the encoder supports; all-intra is kept either way), rendered over
 // the plan duration plus one grid frame ([paddedDurationUs]) so the final pass can clip exactly
 // `durUs` of it at rate 1 whatever duration the muxer writes.
+// Colour: intermediates are encoded and signalled as BT.601 limited-range SDR (they are already
+// tone-mapped; HDR never reaches them). Measured on the API 35 emulator (2026-10-15): with Media3's
+// default BT.709 encoder configuration, every intermediate round trip shifted colours by one
+// 709-encode / 601-decode step (the emulator's GL converts decoded H.264 with BT.601 whatever the
+// stream signals, AND-06), e.g. a background (89, 35, 45) became (79, 21, 46) after two
+// intermediates and per-frame SSIM against the single pass fell to 0.975; with BT.601
+// intermediates the round trip is consistent (SSIM ≥ 0.996) on a decoder that ignores the
+// signalled matrix the way the emulator does, and on any decoder that honours it. The export
+// itself keeps Media3's colour (BT.709). QA-04 re-checks on devices.
 // Disk: an intermediate is estimated like an export ((bitrate) · seconds / 8 · 1.02, ARCH §14.1,
 // video only); pass n ≥ 2 holds its input and its output, the final pass holds the last
 // intermediate and the output, so the peak is max(2·I, I + output) (I + output with one pass).
@@ -38,6 +47,15 @@ import com.vecvel.danaview.editor.engine.export.EncoderSettings
 import com.vecvel.danaview.editor.engine.export.MultiPassRouting
 import com.vecvel.danaview.editor.engine.plan.FrameGrid
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
+
+/** The YUV colour encoding of intermediates. */
+enum class IntermediateColor {
+    /** Whatever Media3 configures for the export's own encoder (BT.709 limited for SDR; see the file header). */
+    EXPORT,
+
+    /** BT.601 limited range, signalled in the stream (the default, file header). */
+    BT601,
+}
 
 /** A half-open plan-time span `[t0, t1)` of one media layer. */
 data class MediaSpan(val t0: Long, val t1: Long)
@@ -108,6 +126,8 @@ object PrecomposePlanner {
         val bitrateFactor: Int = 4,
         /** I-frame interval 0: every intermediate frame is a key frame (D-45: all-intra). */
         val allIntra: Boolean = true,
+        /** The YUV matrix intermediates are encoded with and signal (file header). */
+        val color: IntermediateColor = IntermediateColor.BT601,
     ) {
         init {
             require(bitrateFactor >= 1) { "bitrateFactor" }

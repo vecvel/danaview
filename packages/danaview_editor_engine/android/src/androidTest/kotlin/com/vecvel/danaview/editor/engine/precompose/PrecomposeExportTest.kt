@@ -20,6 +20,7 @@
 
 package com.vecvel.danaview.editor.engine.precompose
 
+import android.media.MediaFormat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.vecvel.danaview.editor.engine.core.EngineErrorCode
 import com.vecvel.danaview.editor.engine.export.ExportHarness
@@ -79,10 +80,21 @@ class PrecomposeExportTest {
         val sr = single.requireResult()
         val mr = multi.requireResult()
         assertFalse("$name: intermediates deleted", p.workDir(multi.jobId).exists())
+        val standards = p.recorder.intermediateColorStandards.toList()
+        assertEquals("$name intermediates", expectPasses - 1, standards.size)
+        val bt601 = setOf(MediaFormat.COLOR_STANDARD_BT601_PAL, MediaFormat.COLOR_STANDARD_BT601_NTSC)
+        assertTrue("$name intermediates signal BT.601: $standards", standards.all { it in bt601 })
+        val exported = ExportedFile.video(File(mr.path)).format
+        assertEquals("$name export keeps BT.709", MediaFormat.COLOR_STANDARD_BT709, exported.getInteger(MediaFormat.KEY_COLOR_STANDARD))
         assertEquals((1..expectPasses).flatMap { listOf("start $it/$expectPasses", "done $it/$expectPasses") }, p.recorder.events.toList())
         val fractions = multi.progress.map { it.fraction }
         assertTrue("$name progress never decreases: $fractions", fractions.zipWithNext().all { (a, b) -> b >= a })
         assertEquals(1.0, fractions.last(), 0.0)
+        // Kept for inspection off the device (adb pull <external files>/and19_*.mp4).
+        p.h.app.getExternalFilesDir(null)?.let { dir ->
+            File(sr.path).copyTo(File(dir, "and19_${name}_single.mp4"), overwrite = true)
+            File(mr.path).copyTo(File(dir, "and19_${name}_multi.mp4"), overwrite = true)
+        }
         return Pair2(File(sr.path), File(mr.path), single, multi)
     }
 
@@ -110,6 +122,7 @@ class PrecomposeExportTest {
         val worst = cmp.ssim.withIndex().minByOrNull { it.value }!!
         val mean = cmp.ssim.average()
         Compare.log("$name: SSIM precomposed vs single pass over $frames frames: min %.5f (frame %d), mean %.5f (emulator)".format(worst.value, worst.index, mean))
+        Compare.log("$name: per-frame SSIM " + cmp.ssim.joinToString(",") { "%.4f".format(it) })
         val low = cmp.ssim.withIndex().filter { it.value < 0.995 }.map { "${it.index}:%.4f".format(it.value) }
         assertEquals("$name frames below SSIM 0.995", emptyList<String>(), low)
         if (expectedCode != null) {

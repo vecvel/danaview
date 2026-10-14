@@ -7,11 +7,14 @@
 // slots with effects, an image lane and audio, and frame/audio comparison of two exports: per-frame
 // luma SSIM (8×8 windows, stride 4, the usual C1/C2 constants), frame barcodes (whole frame or a
 // region) and 20 ms window RMS of the decoded audio (QA-11's ±0.5 dB tolerance).
+// Diagnostic instrumentation arguments (am instrument -e …): and19Factor <n>, and19AllIntra
+// true|false and and19Color EXPORT|BT601 override PrecomposePlanner.Options for a run.
 // Every number logged here is an EMULATOR measurement (tag DanaviewPrecomposeTest).
 
 package com.vecvel.danaview.editor.engine.precompose
 
 import android.graphics.Bitmap
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.util.Log
 import com.vecvel.danaview.editor.engine.export.ContextExportEnvironment
@@ -57,10 +60,16 @@ class ForcedBudgetEnvironment(private val base: ExportEnvironment, @Volatile var
     override fun decoderBudget(): DecoderBudget = budget
 }
 
-/** Records the precompose passes of every job (observer hook; called on danaview-export). */
-class PassRecorder : PrecomposeObserver {
+/**
+ * Records the precompose passes of every job (observer hook; called on danaview-export), and the
+ * colour standard each completed intermediate signals (read before the next pass consumes it).
+ */
+class PassRecorder(private val workDirOf: (String) -> File) : PrecomposeObserver {
     val plans = CopyOnWriteArrayList<Pair<PrecomposePlan, DiskEstimate>>()
     val events = CopyOnWriteArrayList<String>()
+
+    /** MediaFormat KEY_COLOR_STANDARD of each intermediate (−1 when not signalled). */
+    val intermediateColorStandards = CopyOnWriteArrayList<Int>()
 
     override fun onPlanned(jobId: String, plan: PrecomposePlan, disk: DiskEstimate) {
         plans += plan to disk
@@ -72,6 +81,11 @@ class PassRecorder : PrecomposeObserver {
 
     override fun onPassCompleted(jobId: String, number: Int, total: Int) {
         events += "done $number/$total"
+        if (number < total) {
+            val f = File(workDirOf(jobId), "pre-$number.mp4")
+            val video = ExportedFile.video(f).format
+            intermediateColorStandards += if (video.containsKey(MediaFormat.KEY_COLOR_STANDARD)) video.getInteger(MediaFormat.KEY_COLOR_STANDARD) else -1
+        }
     }
 
     fun started(number: Int): Boolean = events.any { it.startsWith("start $number/") }
@@ -81,13 +95,17 @@ class PassRecorder : PrecomposeObserver {
 class PrecomposeHarness(name: String, fixedRoot: Boolean = false) {
     val h = ExportHarness("and19_$name", fixedRoot)
     val env = ForcedBudgetEnvironment(ContextExportEnvironment(h.ctx), DecoderBudget(16, 0))
-    val recorder = PassRecorder()
+    val recorder = PassRecorder { File(h.paths.work, "export-$it") }
     val precompose: PrecomposeExport
 
     init {
         h.coordinator.environment = env
         precompose = h.coordinator.multiPassExport() as PrecomposeExport
         precompose.observer = recorder
+        val args = androidx.test.platform.app.InstrumentationRegistry.getArguments()
+        args.getString("and19Factor")?.let { precompose.options = precompose.options.copy(bitrateFactor = it.toInt()) }
+        args.getString("and19AllIntra")?.let { precompose.options = precompose.options.copy(allIntra = it.toBoolean()) }
+        args.getString("and19Color")?.let { precompose.options = precompose.options.copy(color = com.vecvel.danaview.editor.engine.export.precompose.IntermediateColor.valueOf(it)) }
     }
 
     /** One pass for up to 16 slots (the emulator decodes them all in software). */

@@ -8,16 +8,23 @@
 // Transformer configuration (AND-11 TransformerExport: same encoder factory and selector, same
 // DefaultVideoFrameProcessor with the ORIGINAL working colour space, same muxer), with only the
 // encoder settings replaced for intermediates (PrecomposePlanner.intermediateSettings: all-intra,
-// 4× bitrate). Portrait sizes follow ARCH §14.1 as the single pass does: portrait encoding first,
-// one landscape-plus-rotation retry when the encoder refuses the portrait configuration, then
+// 4× bitrate) and their encoder configured with the intermediate colour (BT.601 limited by default,
+// PrecomposePlanner header) through an encoder-factory wrapper over the job's own. Portrait sizes
+// follow ARCH §14.1 as the single pass does: portrait encoding first, one landscape-plus-rotation
+// retry when the encoder refuses the portrait configuration, then
 // `encoderSizeLimit`. Runs on the job's looper (danaview-export); nothing is called after cancel.
 
 package com.vecvel.danaview.editor.engine.export.precompose
 
 import android.util.Log
+import android.media.metrics.LogSessionId
 import androidx.annotation.OptIn
+import androidx.media3.common.C
+import androidx.media3.common.ColorInfo
+import androidx.media3.common.Format
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.transformer.Codec
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import com.vecvel.danaview.editor.engine.composition.CompositionSpec
@@ -43,6 +50,8 @@ class PassRequest(
     val output: File,
     /** Intermediate settings, or the export settings for the final pass. */
     val settings: EncoderSettings,
+    /** Colour signalled (and converted to) by an intermediate's encoder (PrecomposePlanner.Options). */
+    val color: IntermediateColor = IntermediateColor.EXPORT,
 ) {
     val isFinal: Boolean get() = number == totalPasses
 }
@@ -80,7 +89,8 @@ class PrecomposePass : PassRunner {
         fun attempt(n: Int) {
             if (cancelled) return
             val built = job.build(request.spec, request.snapshotPlan)
-            val config = job.configFor(built, job.passConfig.copy(settings = request.settings, portraitEncoding = n == 0))
+            val base = job.passConfig.copy(settings = request.settings, portraitEncoding = n == 0)
+            val config = job.configFor(built, intermediateColorInfo(request)?.let { base.copy(encoderFactoryDecorator = intermediateColor(base.encoderFactoryDecorator, it)) } ?: base)
             val run = job.newTransformerExport(config, object : TransformerExport.Listener {
                 override fun onProgress(fraction: Double) {
                     if (!cancelled) listener.onProgress(fraction)
@@ -122,5 +132,39 @@ class PrecomposePass : PassRunner {
             cancelled = true
             current?.cancel()
         }
+    }
+}
+
+/** The colour an intermediate's encoder is configured with, or null to keep Media3's (final pass, EXPORT). */
+internal fun intermediateColorInfo(request: PassRequest): ColorInfo? = when {
+    request.isFinal -> null
+    request.color == IntermediateColor.BT601 -> ColorInfo.Builder()
+        .setColorSpace(C.COLOR_SPACE_BT601)
+        .setColorRange(C.COLOR_RANGE_LIMITED)
+        .setColorTransfer(C.COLOR_TRANSFER_SDR)
+        .build()
+    else -> null
+}
+
+/**
+ * Wraps [decorator]'s encoder factory so intermediate video encoders are configured with [color]
+ * (the RGB → YUV matrix the encoder applies and the colour it signals, PrecomposePlanner.Options).
+ */
+private fun intermediateColor(
+    decorator: ((Codec.EncoderFactory) -> Codec.EncoderFactory)?,
+    color: ColorInfo,
+): (Codec.EncoderFactory) -> Codec.EncoderFactory = { factory ->
+    val base = decorator?.invoke(factory) ?: factory
+    object : Codec.EncoderFactory {
+        override fun createForAudioEncoding(format: Format, logSessionId: LogSessionId?): Codec = base.createForAudioEncoding(format, logSessionId)
+
+        override fun createForVideoEncoding(format: Format, logSessionId: LogSessionId?): Codec =
+            base.createForVideoEncoding(if (ColorInfo.isTransferHdr(format.colorInfo)) format else format.buildUpon().setColorInfo(color).build(), logSessionId)
+
+        override fun isVideoFormatSupported(format: Format): Boolean = base.isVideoFormatSupported(format)
+
+        override fun audioNeedsEncoding(): Boolean = base.audioNeedsEncoding()
+
+        override fun videoNeedsEncoding(): Boolean = base.videoNeedsEncoding()
     }
 }

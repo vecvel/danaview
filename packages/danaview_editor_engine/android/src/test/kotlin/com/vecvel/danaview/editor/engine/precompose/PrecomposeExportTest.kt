@@ -35,6 +35,7 @@ import com.vecvel.danaview.editor.engine.export.HardwareEncoderSelector
 import com.vecvel.danaview.editor.engine.export.PassDouble
 import com.vecvel.danaview.editor.engine.export.Settings
 import com.vecvel.danaview.editor.engine.export.precompose.DiskEstimate
+import com.vecvel.danaview.editor.engine.export.precompose.IntermediateColor
 import com.vecvel.danaview.editor.engine.export.precompose.PrecomposeExport
 import com.vecvel.danaview.editor.engine.export.precompose.PrecomposeObserver
 import com.vecvel.danaview.editor.engine.export.precompose.PrecomposePlan
@@ -171,6 +172,7 @@ class PrecomposeExportTest {
             assertEquals(exportSettings.width, s.request.settings.width)
             assertEquals(exportSettings.height, s.request.settings.height)
             assertEquals(exportSettings.fps, s.request.settings.fps)
+            assertEquals(IntermediateColor.BT601, s.request.color)
             assertEquals(TrackTypes.VIDEO, s.request.spec.sequences.first().trackTypes)
             assertTrue(s.request.spec.audioSequences.isEmpty())
             // The previous intermediate is this pass's input and still exists.

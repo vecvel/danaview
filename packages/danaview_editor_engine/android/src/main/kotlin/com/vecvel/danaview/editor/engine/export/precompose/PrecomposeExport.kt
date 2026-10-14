@@ -162,6 +162,7 @@ class PrecomposeExport(@Suppress("unused") private val ctx: EngineContext) : Mul
                 snapshotPlan = PrecomposeSpecs.snapshotPlan(padded, lane?.first),
                 output = output,
                 settings = PrecomposePlanner.intermediateSettings(job.settings, options),
+                color = options.color,
             )
             Log.i(EngineContext.TAG, "export ${job.jobId}: precompose pass ${pass.number}/${split.totalPasses}: lanes ${pass.from}..${pass.to - 1}, slots ${pass.load.slots}, peak ${pass.load.peakDecoders}${if (pass.overBudget) " (over budget)" else ""}")
             launch(request, index) {
