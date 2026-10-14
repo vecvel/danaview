@@ -934,9 +934,14 @@ class PreviewSession internal constructor(
             }
         }
         val step2 = {
-            renderer.dispose { r ->
-                r.exceptionOrNull()?.let { Log.w(TAG, "renderer dispose: ${EngineErrors.from(it).code}") }
-                onLane { step3() }
+            // Drain: the renderer's worker is FIFO, so this request completes only after every
+            // render or prefetch already queued there has handed its GL step to danaview-gl; the
+            // dispose posted next runs after those GL steps.
+            renderer.render { _ ->
+                renderer.dispose { r ->
+                    r.exceptionOrNull()?.let { Log.w(TAG, "renderer dispose: ${EngineErrors.from(it).code}") }
+                    onLane { step3() }
+                }
             }
         }
         try {
@@ -1115,10 +1120,17 @@ class PreviewSession internal constructor(
         val redraw = {
             onLane {
                 if (!playing && committed != null && owner == Owner.RENDERER) {
-                    renderer.present { p ->
-                        onLane {
-                            if (p.getOrNull() != true || sizeChanged) requestPausedRender(null)
-                            then()
+                    if (sizeChanged) {
+                        // The kept canvas has the old size: compose the frame again at the new one.
+                        requestPausedRender(null)
+                        then()
+                    } else {
+                        // Same size (a recovered surface): present the kept frame; ES 2 composes again.
+                        renderer.present { p ->
+                            onLane {
+                                if (p.getOrNull() != true) requestPausedRender(null)
+                                then()
+                            }
                         }
                     }
                 } else {

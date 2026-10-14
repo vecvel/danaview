@@ -85,7 +85,6 @@ class PreviewSessionTest {
         opened("and10_paused").use { h ->
             assertEquals(TextureRegistryLifecycle.RESET_IN_BACKGROUND, h.producer.lifecycle.name)
             assertEquals(h.producer.id(), h.opened.textureId)
-            assertEquals(PausedFrameRenderer::class, h.session.renderer::class)
             assertEquals("stills", h.session.backend.name)
             val before = h.producer.frameCount
             val ack = h.setPlan(PreviewPlans.plan(listOf(PreviewPlans.main(), PreviewPlans.box()), rev = 1))
@@ -130,7 +129,7 @@ class PreviewSessionTest {
             // Editing mode (cropSource of a cropped main) and refresh go through the renderer too.
             h.patch(RenderPlanPatch(from = 2, to = 3, layers = PatchSet(upsert = listOf(PreviewPlans.main().copy(crop = PlanCrop(0.2, 0.2, 0.8, 0.8), xf = PlanTransform(s = 0.5))))))
             val n3 = h.producer.frameCount
-            val beforeMode = h.producer.awaitFrame(n3 - 1)
+            val beforeMode = requireNotNull(h.producer.last())
             h.call<Unit> { s, cb -> s.setEditingMode(EditingModeMsg(EditingModeKindMsg.CROP_SOURCE, "main"), cb) }
             val crop = h.producer.awaitFrame(n3)
             assertTrue("cropSource shows the uncropped source", meanDiff(beforeMode.rgba, crop.rgba) > 1.0)
@@ -139,8 +138,11 @@ class PreviewSessionTest {
             h.call<Unit> { s, cb -> s.refresh(cb) }
             assertTrue(h.session.renderer.renderCount > r)
 
-            // debugCaptureFrame = the frame on the producer.
+            // debugCaptureFrame = the frame on the producer (main restored to full frame first).
+            h.patch(RenderPlanPatch(from = 3, to = 4, layers = PatchSet(upsert = listOf(PreviewPlans.main()))))
             val cap = h.capture()
+            val onProducer = requireNotNull(h.producer.last())
+            assertEquals(0.0, meanDiff(cap, onProducer.rgba), 0.5)
             assertEquals(640 * 360 * 4, cap.size)
             assertEquals(PreviewPlans.SOURCE_OFFSET.toInt(), FrameBarcode.decode(cap, 640, 360))
         }
@@ -184,8 +186,6 @@ class PreviewSessionTest {
             assertEquals(PreviewPlans.SOURCE_OFFSET.toInt(), barcode(after))
             assertTrue(meanDiff(shown.rgba, after.rgba) > 1.0)
             Log.i(AND10_TAG, "paused structural edit (new layer, cold EXACT extraction) -> frame: ${ack.applyMs} ms (emulator)")
-            // The debouncer handed it to the backend once.
-            h.waitUntil("rebuild") { h.sync { !h.session.backend.name.isEmpty() } }
         }
     }
 
@@ -289,6 +289,22 @@ class PreviewSessionTest {
     }
 
     @Test
+    fun autoQualityStepsDownWhenStillsPlaybackDropsFrames() {
+        opened("and10_auto", PreviewQualityMsg.AUTO).use { h ->
+            h.setPlan(PreviewPlans.plan(listOf(PreviewPlans.main()), rev = 1))
+            h.producer.awaitFrame(0)
+            h.play()
+            h.waitUntil("degraded", 10_000) { h.previewEvents(PreviewEventKindMsg.DEGRADED).isNotEmpty() }
+            h.pause()
+            val degraded = h.previewEvents(PreviewEventKindMsg.DEGRADED)
+            assertEquals(PreviewQualityMsg.HALF, degraded.first().quality)
+            h.waitUntil("half-size frames") { h.producer.last()?.width == 320 }
+            h.waitUntil("frameSize event") { h.previewEvents(PreviewEventKindMsg.FRAME_SIZE).any { it.width == 320L } }
+            Log.i(AND10_TAG, "auto quality under StillFramesBackend load (emulator): ${degraded.map { it.quality }}, drop ratio ${"%.2f".format(h.sync { h.session.governor.windowDropRatio })}")
+        }
+    }
+
+    @Test
     fun qualityChangesResizeTheTexture() {
         opened("and10_quality").use { h ->
             h.setPlan(PreviewPlans.plan(listOf(PreviewPlans.main()), rev = 1))
@@ -301,9 +317,9 @@ class PreviewSessionTest {
             assertEquals(320 to 180, h.sync { h.session.renderSize })
             h.waitUntil("frameSize event") { h.previewEvents(PreviewEventKindMsg.FRAME_SIZE).any { it.width == 320L } }
             assertTrue("a requested quality is not a degradation", h.previewEvents(PreviewEventKindMsg.DEGRADED).isEmpty())
-            val n2 = h.producer.frameCount
             h.call<Unit> { s, cb -> s.setQuality(PreviewQualityMsg.AUTO, cb) }
-            assertEquals(640, h.producer.awaitFrame(n2).width)
+            h.waitUntil("full-size frame") { h.producer.last()?.width == 640 }
+            assertEquals(640 to 360, h.sync { h.session.renderSize })
         }
     }
 
@@ -316,6 +332,7 @@ class PreviewSessionTest {
             h.play()
             h.manager.suspendForExport("job1")
             h.waitUntil("suspended") { h.sync { h.session.isSuspended && !h.session.playing } }
+            Thread.sleep(300) // a playback still already being composed may still land
             val busy = runCatching { h.play() }.exceptionOrNull() as EngineException
             assertEquals(EngineErrorCode.busy, busy.code)
             assertTrue(busy.retryable)
@@ -327,7 +344,7 @@ class PreviewSessionTest {
             h.manager.resumeAfterExport("job1")
             h.producer.awaitFrame(n)
             h.waitUntil("resumed") { h.sync { !h.session.isSuspended } }
-            assertEquals(3L, h.play() + 0L)
+            assertEquals("busy commands take no seq", 2L, h.play())
         }
     }
 

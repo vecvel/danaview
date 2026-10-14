@@ -81,10 +81,12 @@ class FakeSurfaceProducer(private val id: Long, val lifecycle: TextureRegistry.S
 
     override fun release() {
         released = true
-        reader?.close()
-        oldReaders.forEach { it.close() }
-        reader = null
-        thread.quitSafely()
+        // Close on the reader thread, never under a running read.
+        val all = synchronized(this) { (listOfNotNull(reader) + oldReaders).also { reader = null; oldReaders.clear() } }
+        handler.post {
+            all.forEach { it.close() }
+            thread.quitSafely()
+        }
     }
 
     override fun setSize(width: Int, height: Int) {
@@ -128,7 +130,17 @@ class FakeSurfaceProducer(private val id: Long, val lifecycle: TextureRegistry.S
         } catch (_: IllegalStateException) {
             null
         } ?: return
-        image.use {
+        try {
+            readImage(image, gen)
+        } catch (_: IllegalStateException) {
+            // The reader was closed under us (cleanup / release).
+        } finally {
+            image.close()
+        }
+    }
+
+    private fun readImage(image: android.media.Image, gen: Int) {
+        image.let {
             val plane = it.planes[0]
             val buf = plane.buffer
             val iw = it.width
@@ -150,10 +162,8 @@ class FakeSurfaceProducer(private val id: Long, val lifecycle: TextureRegistry.S
             val t0 = System.nanoTime()
             callback?.onSurfaceCleanup()
             ms = (System.nanoTime() - t0) / 1e6
-            synchronized(this) {
-                reader?.close()
-                reader = null
-            }
+            val closing = synchronized(this) { reader.also { reader = null } }
+            handler.post { closing?.close() }
         }
         return ms
     }
