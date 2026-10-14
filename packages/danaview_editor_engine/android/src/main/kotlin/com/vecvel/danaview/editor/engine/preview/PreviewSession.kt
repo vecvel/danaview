@@ -312,6 +312,9 @@ class PreviewSession internal constructor(
     private var suspended = false
     private var renderAfterResume = false
     private var opened = false
+
+    /** Whether [open] completed (texture, renderer and backend ready). */
+    val isOpen: Boolean get() = opened
     private var disposed = false
     private var firstFrameSent = false
     private var ticker: Cancellable? = null
@@ -453,7 +456,8 @@ class PreviewSession internal constructor(
             if (suspended) renderAfterResume = true
             ack()
         } else {
-            renderer.setFrame(playhead)
+            // A seek in flight owns the renderer's frame; otherwise draw the paused playhead.
+            if (!seeks.isBusy) renderer.setFrame(playhead)
             requestPausedRender { ack() }
         }
     }
@@ -915,9 +919,6 @@ class PreviewSession internal constructor(
     }
 
     private fun release(done: Completion<Unit>) {
-        if (disposed && !opened) {
-            // Second release of a session that failed to open.
-        }
         disposed = true
         playing = false
         stopTicker()
@@ -1169,7 +1170,8 @@ class PreviewSession internal constructor(
                 val last = synchronized(lock) { --remaining == 0 }
                 if (last) done()
             }
-            renderer.cancel()
+            // No cancel: a render in flight (an exact seek's still) finishes offscreen and is
+            // presented again on the next surface; detaching runs after it on danaview-gl.
             renderer.detachSurface { one() }
             if (backend.drawsOnSurface) {
                 try {
@@ -1184,8 +1186,9 @@ class PreviewSession internal constructor(
         override fun onSurfaceAvailable(surface: Surface, width: Int, height: Int) {
             if (disposed) return
             enqueue { next ->
+                val resized = width != surfaceW || height != surfaceH
                 replaceSurface(surface, width, height) {
-                    if (width != surfaceW || height != surfaceH) {
+                    if (resized) {
                         ctx.events.preview(sessionId, PreviewEventMsg(PreviewEventKindMsg.FRAME_SIZE, width = width.toLong(), height = height.toLong()))
                     }
                     ctx.events.preview(sessionId, PreviewEventMsg(PreviewEventKindMsg.RECOVERED))

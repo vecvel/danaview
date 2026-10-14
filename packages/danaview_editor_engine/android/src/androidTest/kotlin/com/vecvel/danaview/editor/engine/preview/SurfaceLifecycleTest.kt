@@ -48,6 +48,7 @@ class SurfaceLifecycleTest {
                 h.waitUntil("settled") { h.sync { !h.session.seeks.isBusy } }
                 Thread.sleep(150)
                 val now = h.producer.last()!!
+                Log.i(AND10_TAG, "cycle $cycle: k=$k playhead=${h.sync { h.session.playhead }} shown=${FrameBarcode.decode(now.rgba, now.width, now.height)} frames=${h.producer.frameCount} gen=${now.generation} last=${h.session.lastRender}")
                 assertEquals("frame $k after recovery", (PreviewPlans.SOURCE_OFFSET + h.sync { h.session.playhead }).toInt(), FrameBarcode.decode(now.rgba, now.width, now.height))
                 if (cycle % 3 == 0) assertTrue("the edit made while lost is shown", meanDiff(shown.rgba, recovered.rgba) > 0.5 || k != 0L)
                 shown = now

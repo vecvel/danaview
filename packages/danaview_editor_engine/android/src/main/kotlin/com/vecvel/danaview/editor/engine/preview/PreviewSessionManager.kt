@@ -25,6 +25,7 @@ import com.vecvel.danaview.editor.engine.core.Cancellable
 import com.vecvel.danaview.editor.engine.core.Capabilities
 import com.vecvel.danaview.editor.engine.core.Completion
 import com.vecvel.danaview.editor.engine.core.EngineContext
+import com.vecvel.danaview.editor.engine.core.EngineErrorCode
 import com.vecvel.danaview.editor.engine.core.EngineErrors
 import com.vecvel.danaview.editor.engine.core.fail
 import com.vecvel.danaview.editor.engine.core.succeed
@@ -211,18 +212,31 @@ class StillFramesBackend : PreviewBackend {
         }
         val mine = ++seekEpoch
         host.renderer.cancel()
+        drawStill(k, mine, attempt = 0)
+        done.succeed(Unit)
+    }
+
+    /** Draws the exact still of frame [k] for seek [mine]; a render cancelled by someone else is retried. */
+    private fun drawStill(k: Long, mine: Long, attempt: Int) {
         host.renderer.setFrame(k)
         host.renderer.render { r ->
             host.previewLane.execute {
                 if (mine != seekEpoch || playing) return@execute
-                r.onSuccess { if (it.k == k) shown = k }
-                r.onFailure {
-                    if (EngineErrors.from(it).code != com.vecvel.danaview.editor.engine.core.EngineErrorCode.cancelled) host.failed(it)
+                val result = r.getOrNull()
+                if (result != null && result.k == k) {
+                    shown = k
+                    host.frameDisplayed(k)
+                    return@execute
                 }
-                if (r.isSuccess && r.getOrNull()?.k == k) host.frameDisplayed(k)
+                val error = r.exceptionOrNull()
+                val cancelled = error == null || EngineErrors.from(error).code == EngineErrorCode.cancelled
+                if (cancelled && attempt < MAX_STILL_RETRIES) {
+                    drawStill(k, mine, attempt + 1)
+                } else if (error != null && !cancelled) {
+                    host.failed(error)
+                }
             }
         }
-        done.succeed(Unit)
     }
 
     override fun setRenderSize(width: Int, height: Int) = Unit
@@ -299,7 +313,7 @@ class StillFramesBackend : PreviewBackend {
                         host.frameDisplayed(k)
                     } else {
                         r.exceptionOrNull()?.let {
-                            if (EngineErrors.from(it).code != com.vecvel.danaview.editor.engine.core.EngineErrorCode.cancelled) host.failed(it)
+                            if (EngineErrors.from(it).code != EngineErrorCode.cancelled) host.failed(it)
                         }
                     }
                     if (loop == null && k >= count - 1) {
@@ -319,5 +333,6 @@ class StillFramesBackend : PreviewBackend {
 
     private companion object {
         const val MAX_DROP_REPORTS = 240L
+        const val MAX_STILL_RETRIES = 3
     }
 }

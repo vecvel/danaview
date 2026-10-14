@@ -183,7 +183,7 @@ class FakeSurfaceProducer(private val id: Long, val lifecycle: TextureRegistry.S
     fun awaitFrame(after: Int, timeoutMs: Long = 20_000): ProducedFrame {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            if (frameCount > after) return frames.last()
+            frames.lastOrNull()?.let { if (it.index > after) return it }
             Thread.sleep(5)
         }
         error("no frame after #$after in $timeoutMs ms")
