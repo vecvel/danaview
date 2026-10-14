@@ -40,6 +40,13 @@
 // 3. The muxer closes `<output>.part`, which is renamed to the output path; the source's rotation
 //    is carried as the track orientation when the intermediate kept it as metadata.
 //
+// KNOWN LIMITATION (same open investigation as ProxyJob's): on the API 29 emulator the Transformer
+// intermediate loses the first 5-6 frames of every chunk with both OMX H.264 decoders (measured
+// 2026-10-14; frames that are lost leave the previous output frame on screen longer, the order stays
+// mirrored), and OMX.google.h264.encoder ignores the all-intra request (block mode below). On the
+// API 35 emulator with software decoders first every frame arrives; frame-exactness of the
+// production decoders on real API 29 and mid-tier devices is QA-04's check.
+//
 // Preflight (ARCH §15): ranges over 10 min are refused (`unsupportedMedia` with the message token
 // "limitExceeded reverseRange 600000000", like iOS; the Dart side maps it to
 // `LimitExceeded('reverseRange')`), and free space must be at least 2 x estimated output + one chunk
@@ -1477,7 +1484,8 @@ private class ReverseWriter(
 
     companion object {
         private const val DEQUEUE_US = 10_000L
-        private const val CODEC_TIMEOUT_NS = 10_000_000_000L
+        /** A codec that makes no progress for this long has stalled (generous: emulators under load). */
+        private const val CODEC_TIMEOUT_NS = 30_000_000_000L
 
         /** YUV memory of one block-mode pass (16 MB: 5 frames at 1080p, 11 at 720p, 1 at 4K). */
         private const val BLOCK_BYTES = 16L * 1024 * 1024
