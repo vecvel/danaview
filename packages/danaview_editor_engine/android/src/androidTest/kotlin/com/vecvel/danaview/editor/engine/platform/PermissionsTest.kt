@@ -103,11 +103,23 @@ class PermissionsTest {
         try {
             val p = Permissions(ctx).apply { requests = relay }
             val first = startOnMain<Boolean> { p.requestNotificationPermission(it) }
-            (SystemUi.waitAny(15_000, SystemUi.byText("(?i)don.t allow")) ?: error("no dialog:\n" + SystemUi.dump())).click()
-            assertFalse(first.await().getOrThrow())
+            // The permission controller's own buttons (by id) first, then by label.
+            val deny = SystemUi.waitAny(
+                15_000,
+                SystemUi.byRes(".*permissioncontroller:id/permission_deny_button"),
+                SystemUi.byText("(?i)don.t allow"),
+            ) ?: error("no dialog:\n" + SystemUi.dump())
+            deny.click()
+            assertFalse("denied in the dialog", first.await().getOrThrow())
+            assertEquals(PackageManager.PERMISSION_DENIED, ctx.appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
             val second = startOnMain<Boolean> { p.requestNotificationPermission(it) }
-            (SystemUi.waitAny(15_000, SystemUi.byText("(?i)^allow$")) ?: error("no dialog:\n" + SystemUi.dump())).click()
-            assertTrue(second.await().getOrThrow())
+            val allow = SystemUi.waitAny(
+                15_000,
+                SystemUi.byRes(".*permissioncontroller:id/permission_allow_button"),
+                SystemUi.byText("(?i)^allow$"),
+            ) ?: error("no dialog:\n" + SystemUi.dump())
+            allow.click()
+            assertTrue("allowed in the dialog", second.await().getOrThrow())
             assertEquals(PackageManager.PERMISSION_GRANTED, ctx.appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
             Log.i("DanaviewPermissionsTest", "AND-14 real notification dialog on API ${Build.VERSION.SDK_INT}: deny -> false, allow -> true")
         } finally {
