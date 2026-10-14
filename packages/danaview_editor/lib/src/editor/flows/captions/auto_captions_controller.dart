@@ -37,7 +37,6 @@ import '../../../app/editor_providers.dart';
 import '../../../app/strings/captions_strings.dart';
 import '../../contracts/inspector_routes.dart';
 import '../../state/editor_controller.dart';
-import '../../state/editor_session.dart';
 import '../../state/editor_state.dart';
 import '../../state/tasks_controller.dart';
 
@@ -565,7 +564,7 @@ class AutoCaptionsController extends StateNotifier<AutoCaptionsState> {
     for (final id in _editor.state.selection.items) {
       final loc = project.index.locate(id);
       if (loc == null || loc.item is! MediaClip) continue;
-      final kind = project.tracks.firstWhere((t) => t.id == loc.track, orElse: () => project.tracks.first).kind;
+      final kind = loc.track.kind;
       if (kind == TrackKind.video || kind == TrackKind.audio) out.add(id);
     }
     return out;
@@ -941,13 +940,9 @@ class AutoCaptionsController extends StateNotifier<AutoCaptionsState> {
       applyResult();
       return;
     }
-    final failure = state.failure;
-    if (failure is ModelDownloadFailure || failure is ModelCorruptFailure || failure is ModelMissingFailure) {
-      state = state.copyWith(stage: AutoCaptionsStage.configure, failure: null);
-      await start();
-      return;
-    }
-    state = state.copyWith(stage: AutoCaptionsStage.configure, failure: null);
+    // A missing or damaged model, or a failed download, leads to the consent view again: start()
+    // finds the model is not installed.
+    state = state.copyWith(stage: AutoCaptionsStage.configure, failure: null, applyRejection: null);
     await start();
   }
 
@@ -1000,7 +995,7 @@ AutoCaptionsController createAutoCaptionsController(Ref<Object?> ref, ProjectId 
     editor: editor,
     prefs: ref.watch(editorPrefsProvider),
     host: ref.watch(autoCaptionsHostProvider),
-    timeline: () => DomainTimelineView(editor.state.project ?? session.committedProject!, access: engine.access),
+    timeline: () => DomainTimelineView(session.committedProject!, access: engine.access),
     tasks: () {
       if (!session.isOpen) return null;
       try {

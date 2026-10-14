@@ -36,7 +36,7 @@ class CaptionsProgressPanel extends StatelessWidget {
   /// Download progress.
   const CaptionsProgressPanel.download({
     super.key,
-    required ModelDownloadProgress? this.download,
+    required this.download,
     required this.onCancel,
     this.onHide,
     this.resumed = false,
@@ -47,9 +47,9 @@ class CaptionsProgressPanel extends StatelessWidget {
   /// Job progress.
   const CaptionsProgressPanel.job({
     super.key,
-    required TranscriptionProgress? this.progress,
+    required this.progress,
     required this.onCancel,
-    required VoidCallback this.onHide,
+    required this.onHide,
     this.waitingForExport = false,
   })  : download = null,
         resumed = false,
@@ -140,7 +140,7 @@ class CaptionsProgressPanel extends StatelessWidget {
       const SizedBox(height: DanaviewSpacing.sm),
       DanaviewProgressBar(
         key: const ValueKey('captions-progress-bar'),
-        value: p == null ? null : p.fraction.clamp(0.0, 1.0),
+        value: p?.fraction.clamp(0.0, 1.0),
         semanticFormatter: CaptionsStrings.spokenProgress,
       ),
       if (partial != null && partial.isNotEmpty) ...[
