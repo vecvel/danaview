@@ -31,6 +31,7 @@
 
 package com.vecvel.danaview.editor.engine.export.precompose
 
+import android.os.StatFs
 import android.util.Log
 import androidx.annotation.Keep
 import androidx.annotation.VisibleForTesting
@@ -71,10 +72,15 @@ class PrecomposeExport(@Suppress("unused") private val ctx: EngineContext) : Mul
     @Volatile
     var options: PrecomposePlanner.Options = PrecomposePlanner.Options()
 
-    /** Free bytes on the volume holding [dir] (tests inject a full disk). */
+    /**
+     * Free bytes on the volume holding [dir]: StatFs.availableBytes of its nearest existing
+     * ancestor, as the glue's `freeBytes` answers Dart's own preflight (tests inject a full disk).
+     */
     @VisibleForTesting
     @Volatile
-    var freeBytes: (File) -> Long = { dir -> generateSequence(dir.absoluteFile) { it.parentFile }.firstOrNull { it.exists() }?.usableSpace ?: Long.MAX_VALUE }
+    var freeBytes: (File) -> Long = { dir ->
+        generateSequence(dir.absoluteFile) { it.parentFile }.firstOrNull { it.exists() }?.let { StatFs(it.path).availableBytes } ?: Long.MAX_VALUE
+    }
 
     /** Diagnostics and test hook. */
     @VisibleForTesting
@@ -191,11 +197,7 @@ class PrecomposeExport(@Suppress("unused") private val ctx: EngineContext) : Mul
             current = runner.run(job, request, object : PassRunListener {
                 override fun onProgress(fraction: Double) {
                     if (ended) return
-                    val overall = ((doneWeight + w * fraction.coerceIn(0.0, 1.0)) / total).coerceIn(0.0, 1.0)
-                    if (overall > reported) {
-                        reported = overall
-                        out.onProgress(overall)
-                    }
+                    report((doneWeight + w * fraction.coerceIn(0.0, 1.0)) / total)
                 }
 
                 override fun onFallbackApplied() {
@@ -213,6 +215,7 @@ class PrecomposeExport(@Suppress("unused") private val ctx: EngineContext) : Mul
                     if (ended) return
                     current = null
                     doneWeight += w
+                    if (!request.isFinal) report(doneWeight / total)
                     observer?.onPassCompleted(job.jobId, request.number, request.totalPasses)
                     try {
                         completed(videoEncoderName)
@@ -227,6 +230,15 @@ class PrecomposeExport(@Suppress("unused") private val ctx: EngineContext) : Mul
                     fail(error)
                 }
             })
+        }
+
+        /** Reports [overall] progress when it moved forward (one fraction over all passes). */
+        private fun report(overall: Double) {
+            val f = overall.coerceIn(0.0, 1.0)
+            if (f > reported) {
+                reported = f
+                out.onProgress(f)
+            }
         }
 
         private fun fail(error: Throwable) {

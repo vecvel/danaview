@@ -6,7 +6,8 @@
 //
 // - Start: the coordinator sends ACTION_EXPORT_STARTED (plain startService) when a job starts;
 //   BackgroundGuard sends ACTION_WORK when a lease is acquired. onStartCommand calls startForeground
-//   with type mediaProcessing on API 35+, dataSync on API 29-34 (none before 29). If the system
+//   with type mediaProcessing on API 35+, dataSync on API 29-34 (none before 29), through the
+//   framework call (androidx ServiceCompat 1.13.1 drops the API 35 type). If the system
 //   refuses the foreground start (ForegroundServiceStartNotAllowedException), the work still runs as
 //   a started service. START_NOT_STICKY: after a process death the job is gone and ActiveExportStore
 //   reports it interrupted once (AND-11).
@@ -148,7 +149,15 @@ class ExportService : Service() {
     private fun enterForeground(content: ForegroundContent) {
         val type = foregroundServiceTypeFor(Build.VERSION.SDK_INT)
         try {
-            ServiceCompat.startForeground(this, ExportNotification.FOREGROUND_ID, notifications.foreground(content), type)
+            val notification = notifications.foreground(content)
+            // Framework call, not ServiceCompat: androidx.core 1.13.1 masks the type with the types it
+            // knows (up to API 34), which drops mediaProcessing and makes API 35 refuse the start
+            // (InvalidForegroundServiceTypeException, measured on the API 35 emulator).
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(ExportNotification.FOREGROUND_ID, notification, type)
+            } else {
+                startForeground(ExportNotification.FOREGROUND_ID, notification)
+            }
             isForeground = true
             requestedForegroundType = type
             throttle.noteExternalRun()
@@ -185,7 +194,7 @@ class ExportService : Service() {
         fun current(): ExportService? = instance
 
         /** Foreground service type for API [sdk]: mediaProcessing on 35+, dataSync on 29-34, none before. */
-        @SuppressLint("InlinedApi") // constants only; ServiceCompat ignores the type before API 29
+        @SuppressLint("InlinedApi") // constants only; no type is passed before API 29
         fun foregroundServiceTypeFor(sdk: Int): Int = when {
             sdk >= 35 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
             sdk >= 29 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC

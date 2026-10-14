@@ -63,7 +63,7 @@ class ServiceLogicTest {
         t.advance(2_000)
         val times = shown.map { it.first }
         for (k in 1 until times.size) assertTrue("updates ${times[k - 1]} -> ${times[k]} closer than 1 s", times[k] - times[k - 1] >= 1_000)
-        assertEquals("first sample at once", 0 to 0, shown.first())
+        assertEquals("first sample at once", 0L to 0, shown.first())
         assertEquals("the trailing update shows the last sample", 19, shown.last().second)
         assertTrue("about 1 Hz (${shown.size} updates in 5 s)", shown.size in 5..7)
         assertEquals(shown.size, throttle.runs)

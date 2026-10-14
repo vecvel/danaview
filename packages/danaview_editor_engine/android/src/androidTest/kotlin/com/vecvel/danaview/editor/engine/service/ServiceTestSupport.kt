@@ -95,6 +95,23 @@ object ServiceTest {
         return out.toString("UTF-8")
     }
 
+    /** Installed packages (shell: package visibility hides them from the test app). */
+    fun installed(pkg: String): Boolean = shell("pm list packages $pkg").lines().any { it.trim() == "package:$pkg" }
+
+    /** The uid of [pkg] (shell `pm list packages -U`). */
+    fun uidOf(pkg: String): Int {
+        val line = shell("pm list packages -U $pkg").lines().firstOrNull { it.trim().startsWith("package:$pkg ") }
+            ?: error("$pkg not installed")
+        return Regex("""uid:(\d+)""").find(line)!!.groupValues[1].toInt()
+    }
+
+    /** Packages with an activity for ACTION_SEND of [mime] (shell query; package visibility). */
+    fun sendTargets(mime: String): List<String> =
+        shell("cmd package query-activities --brief -a android.intent.action.SEND -t $mime").lines()
+            .mapNotNull { Regex("""^\s*([A-Za-z0-9_.]+)/""").find(it)?.groupValues?.get(1) }
+            .distinct()
+            .filter { it != app.packageName }
+
     /** frame_counter_1080p30 at [w]x[h] for [frames] frames at 30 fps (no audio): a long enough export. */
     fun counterPlan(frames: Long, w: Int = 1280, h: Int = 720): RenderPlan {
         val g = FrameGrid.of(30)
