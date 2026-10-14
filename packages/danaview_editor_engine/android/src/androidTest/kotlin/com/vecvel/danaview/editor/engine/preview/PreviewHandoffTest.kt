@@ -94,13 +94,19 @@ class PreviewHandoffTest {
             h.setPlan(PreviewPlans.plan(listOf(PreviewPlans.main()), rev = 1))
             h.producer.awaitFrame(0)
             h.waitUntil("first rebuild") { b.rebuilds.get() == 1 }
-            // 10 structural patches in 1 s (each moves the box in time: z/t changes are structural).
+            // 10 structural patches in 1 s, one every 100 ms (each moves the box in time: a t change
+            // is structural); sent without waiting for their acks, like PlanSync during a drag.
+            val acks = java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
+            val start = System.nanoTime()
             for (i in 0 until 10) {
                 val box = PreviewPlans.box().copy(t0 = PreviewPlans.grid.timeOfFrame(i.toLong()))
-                val ack = h.patch(PreviewPlans.upsert(1L + i, box))
-                assertTrue(ack.structural)
-                Thread.sleep(100)
+                val bytes = com.vecvel.danaview.editor.engine.plan.PlanWriter.patchJson(PreviewPlans.upsert(1L + i, box)).toByteArray()
+                h.onPreview { h.session.applyPatch(bytes) { r -> acks[1L + i + 1] = r.getOrThrow().structural } }
+                val due = start + (i + 1) * 100_000_000L
+                while (System.nanoTime() < due) Thread.sleep(1)
             }
+            h.waitUntil("10 acks") { acks.size == 10 }
+            assertTrue(acks.values.all { it })
             h.waitUntil("debounce idle", 3_000) { b.calls.lastOrNull()?.startsWith("rebuild:11") == true }
             Thread.sleep(400)
             val rebuilds = b.rebuilds.get() - 1
