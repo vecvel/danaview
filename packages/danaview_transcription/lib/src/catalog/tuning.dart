@@ -52,6 +52,17 @@ abstract final class SpeechTuning {
   /// Overlap between VAD windows, seconds.
   static const double vadSamplesOverlapSeconds = 0.1;
 
+  // --- Normalizer hallucination gates (ai.md §8.3) -----------------------------------------------
+
+  /// A segment with `nsp` above this and `lp` below [hallucinationLogprob] is dropped.
+  static const double hallucinationNoSpeech = 0.5;
+
+  /// See [hallucinationNoSpeech].
+  static const double hallucinationLogprob = -0.8;
+
+  /// A phrase-list match is dropped when its `nsp` is above this (or it is a short unit end).
+  static const double hallucinationPhraseNoSpeech = 0.3;
+
   // --- Segmentation reading limits (ai.md §9.2; V-A10) -------------------------------------------
 
   /// Standard preset: max characters per line (space-delimited scripts; 32 for 9:16).

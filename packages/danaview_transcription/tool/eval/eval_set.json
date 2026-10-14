@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "note": "QA-06 eval set (ai.md §16.5). 'clips' are what the harness runs; 'plan' is the licensed multilingual set still to be pinned (see README.md). Remote clips need url, bytes and sha256; CC-BY-4.0 clips need an attribution line.",
+  "clips": [
+    {
+      "id": "en-repo-jfk",
+      "language": "en",
+      "kind": "speech",
+      "source": "repo",
+      "path": "../../../danaview_whisper/third_party/whisper.cpp/samples/jfk.wav",
+      "sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+      "licence": "public-domain",
+      "attribution": "John F. Kennedy, inaugural address, 20 January 1961 (US government work; whisper.cpp samples/jfk.wav)",
+      "reference": "references/en-jfk.json"
+    },
+    {
+      "id": "en-synth-silence-30s",
+      "language": "en",
+      "kind": "silence",
+      "source": "synthetic",
+      "licence": "in-house",
+      "synth": {"type": "silence", "seconds": 30}
+    },
+    {
+      "id": "en-synth-noise-30s",
+      "language": "en",
+      "kind": "noise",
+      "source": "synthetic",
+      "licence": "in-house",
+      "synth": {"type": "noise", "seconds": 30, "amplitude": 0.08, "seed": 7}
+    },
+    {
+      "id": "en-synth-music-30s",
+      "language": "en",
+      "kind": "music",
+      "source": "synthetic",
+      "licence": "in-house",
+      "synth": {"type": "music", "seconds": 30, "amplitude": 0.3, "seed": 1}
+    },
+    {
+      "id": "ja-synth-music-30s",
+      "language": "ja",
+      "kind": "music",
+      "source": "synthetic",
+      "licence": "in-house",
+      "synth": {"type": "music", "seconds": 30, "amplitude": 0.3, "seed": 2}
+    }
+  ],
+  "plan": [
+    {"language": "en", "clips": 4, "sources": ["LibriVox (public-domain) x2", "Common Voice (CC0-1.0)", "in-house screen recording"]},
+    {"language": "es", "clips": 4, "sources": ["FLEURS (CC-BY-4.0) x2", "Common Voice (CC0-1.0)", "LibriVox (public-domain)"]},
+    {"language": "de", "clips": 4, "sources": ["FLEURS (CC-BY-4.0) x2", "Common Voice (CC0-1.0)", "LibriVox (public-domain)"]},
+    {"language": "fr", "clips": 4, "sources": ["FLEURS (CC-BY-4.0) x2", "Common Voice (CC0-1.0)", "LibriVox (public-domain)"]},
+    {"language": "pt", "clips": 4, "sources": ["FLEURS (CC-BY-4.0) x2", "Common Voice (CC0-1.0) x2"]},
+    {"language": "ja", "clips": 4, "sources": ["FLEURS (CC-BY-4.0) x2", "Common Voice (CC0-1.0)", "in-house screen recording"]},
+    {"language": "zh", "clips": 4, "sources": ["FLEURS (CC-BY-4.0) x2", "Common Voice (CC0-1.0) x2"]},
+    {"language": "ko", "clips": 4, "sources": ["FLEURS (CC-BY-4.0) x2", "Common Voice (CC0-1.0)", "in-house screen recording"]},
+    {"language": "ar", "clips": 4, "sources": ["FLEURS (CC-BY-4.0) x2", "Common Voice (CC0-1.0) x2"]},
+    {"language": "hi", "clips": 4, "sources": ["FLEURS (CC-BY-4.0) x2", "Common Voice (CC0-1.0)", "in-house screen recording"]},
+    {"language": "*", "clips": 6, "sources": ["silence, room tone, instrumental music (in-house recordings, CC0 music beds) for the hallucination rate"]}
+  ]
+}
