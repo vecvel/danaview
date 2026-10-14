@@ -139,9 +139,7 @@ void main() {
       unawaited(rig.tools.pickColor(Ids.a).then((c) => picked = c));
       await tester.pump();
       await tester.pump();
-      final node = tester.getSemantics(find.byType(EyedropperOverlay));
-      expect(node.label, 'Colour picker on the preview');
-      tester.binding.pipelineOwner.semanticsOwner!.performAction(node.id, SemanticsAction.tap);
+      tester.semantics.performAction(find.semantics.byLabel('Colour picker on the preview'), SemanticsAction.tap);
       await tester.pump();
       await tester.pump();
       expect(picked, rig.preview.sampledColor);

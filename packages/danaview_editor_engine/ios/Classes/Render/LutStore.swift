@@ -58,6 +58,30 @@ final class LutTexture {
         self.byteCount = byteCount
     }
 
+    /// Scatters the `n³` RGB entries (red fastest) into RGBA texels of the tile grid (alpha = [one]).
+    private static func fillTiles<T>(
+        n: Int, width w: Int, src: UnsafeBufferPointer<T>, dst: UnsafeMutableBufferPointer<T>, one: T
+    ) {
+        guard let s = src.baseAddress, let d = dst.baseAddress else { return }
+        let cols = grid(n).columns
+        for b in 0..<n {
+            let x0 = (b % cols) * n
+            let y0 = (b / cols) * n
+            for g in 0..<n {
+                var si = (b * n + g) * n * 3
+                var o = ((y0 + g) * w + x0) * 4
+                for _ in 0..<n {
+                    d[o] = s[si]
+                    d[o + 1] = s[si + 1]
+                    d[o + 2] = s[si + 2]
+                    d[o + 3] = one
+                    si += 3
+                    o += 4
+                }
+            }
+        }
+    }
+
     /// A texture from `n³ × 3` floats, red fastest (`index = ((b·N + g)·N + r)·3`).
     static func make(n: Int, rgb: [Float]) throws -> LutTexture {
         guard (minSize...maxSize).contains(n) else { throw LutFormatError(message: "size \(n) outside 2…65") }
@@ -65,21 +89,11 @@ final class LutTexture {
         let (cols, rows) = grid(n)
         let w = cols * n
         let h = rows * n
-        var px = [Float](repeating: 0, count: w * h * 4)
-        for b in 0..<n {
-            for g in 0..<n {
-                for r in 0..<n {
-                    let src = ((b * n + g) * n + r) * 3
-                    let (x, y) = texel(n, r: r, g: g, b: b)
-                    let o = (y * w + x) * 4
-                    px[o] = rgb[src]
-                    px[o + 1] = rgb[src + 1]
-                    px[o + 2] = rgb[src + 2]
-                    px[o + 3] = 1
-                }
-            }
+        var data = Data(count: w * h * 16)
+        data.withUnsafeMutableBytes { raw in
+            let px = raw.bindMemory(to: Float.self)
+            rgb.withUnsafeBufferPointer { src in fillTiles(n: n, width: w, src: src, dst: px, one: 1) }
         }
-        let data = px.withUnsafeBufferPointer { Data(buffer: $0) }
         let image = CIImage(
             bitmapData: data, bytesPerRow: w * 16, size: CGSize(width: w, height: h), format: .RGBAf, colorSpace: nil)
         return LutTexture(n: n, image: image, byteCount: data.count)
@@ -92,22 +106,11 @@ final class LutTexture {
         let (cols, rows) = grid(n)
         let w = cols * n
         let h = rows * n
-        let one: UInt16 = 0x3C00
-        var px = [UInt16](repeating: 0, count: w * h * 4)
-        for b in 0..<n {
-            for g in 0..<n {
-                for r in 0..<n {
-                    let src = ((b * n + g) * n + r) * 3
-                    let (x, y) = texel(n, r: r, g: g, b: b)
-                    let o = (y * w + x) * 4
-                    px[o] = halfs[src]
-                    px[o + 1] = halfs[src + 1]
-                    px[o + 2] = halfs[src + 2]
-                    px[o + 3] = one
-                }
-            }
+        var data = Data(count: w * h * 8)
+        data.withUnsafeMutableBytes { raw in
+            let px = raw.bindMemory(to: UInt16.self)
+            halfs.withUnsafeBufferPointer { src in fillTiles(n: n, width: w, src: src, dst: px, one: 0x3C00) }
         }
-        let data = px.withUnsafeBufferPointer { Data(buffer: $0) }
         let image = CIImage(
             bitmapData: data, bytesPerRow: w * 8, size: CGSize(width: w, height: h), format: .RGBAh, colorSpace: nil)
         return LutTexture(n: n, image: image, byteCount: data.count)
@@ -138,10 +141,12 @@ struct VlutTable: Equatable {
         guard bytes.count == headerBytes + count * 2 else {
             throw LutFormatError(message: "expected \(headerBytes + count * 2) bytes, got \(bytes.count)")
         }
-        var halfs = [UInt16](repeating: 0, count: count)
-        for i in 0..<count {
-            let o = headerBytes + i * 2
-            halfs[i] = UInt16(bytes[o]) | UInt16(bytes[o + 1]) << 8
+        // Little-endian payload; iOS is little-endian, so this is a straight copy.
+        let halfs = [UInt16](unsafeUninitializedCapacity: count) { buf, initialized in
+            bytes.withUnsafeBytes { raw in
+                _ = memcpy(buf.baseAddress!, raw.baseAddress! + headerBytes, count * 2)
+            }
+            initialized = count
         }
         return VlutTable(n: n, halfs: halfs)
     }

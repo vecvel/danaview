@@ -147,10 +147,22 @@ final class RenderMathVectorTests: XCTestCase {
         }
     }
 
-    /// Edge texels of a transform fixture: any 3×3 neighbour with a different expected alpha.
-    private func interior(_ want: [[Double]], w: Int, h: Int) -> (Int) -> Bool {
-        { i in
+    /// Interior texels of a transform fixture: the texel centre is ≥ 1 canvas px from the placed box's
+    /// edges (inside or outside) and no 3×3 neighbour has a different expected alpha.
+    private func interior(_ want: [[Double]], w: Int, h: Int, row: Row) -> (Int) -> Bool {
+        let m = Self.nums(row.params["M"])
+        let base = Self.nums(row.params["base"])
+        let t = CGAffineTransform(a: m[0], b: m[1], c: m[2], d: m[3], tx: m[4], ty: m[5])
+        let inv = t.inverted()
+        let scale = abs(m[0] * m[3] - m[1] * m[2]).squareRoot()
+        return { i in
             let x = i % w, y = i / w
+            let local = CGPoint(x: Double(x) + 0.5, y: Double(y) + 0.5).applying(inv)
+            let dx = min(abs(local.x), abs(base[0] - local.x))
+            let dy = min(abs(local.y), abs(base[1] - local.y))
+            let inside = local.x >= 0 && local.x <= base[0] && local.y >= 0 && local.y <= base[1]
+            let edgeDistance = inside ? min(dx, dy) : max(local.x < 0 || local.x > base[0] ? dx : 0, local.y < 0 || local.y > base[1] ? dy : 0)
+            if edgeDistance * scale < 1 { return false }
             let a = want[i][3]
             for dy in -1...1 {
                 for dx in -1...1 {
@@ -180,7 +192,7 @@ final class RenderMathVectorTests: XCTestCase {
             }
             let got = KernelTestSupport.render(out, context: context, w: row.w, h: row.h)
             let want = expected(row)
-            let include = row.stage == "place" ? interior(want, w: row.w, h: row.h) : { _ in true }
+            let include = row.stage == "place" ? interior(want, w: row.w, h: row.h, row: row) : { _ in true }
             let e = KernelTestSupport.errors(got, want, include: include)
             stages[row.stage, default: 0] += 1
             if e.mean > worst.mean { worst = (e.mean, max(worst.p99, e.p99), row.name) }

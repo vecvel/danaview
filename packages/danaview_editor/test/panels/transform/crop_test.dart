@@ -219,9 +219,7 @@ void main() {
 
     testWidgets('semantics increase grows the crop', (tester) async {
       final rig = await pumpCrop(tester, project: (repo) => transformProject(repo, visuals: {Ids.a: const VisualProps(crop: CropRect(left: 0.25, top: 0.25, right: 0.75, bottom: 0.75))}));
-      final node = tester.getSemantics(find.byType(CropOverlay));
-      expect(node.label, 'Crop frame');
-      tester.binding.pipelineOwner.semanticsOwner!.performAction(node.id, SemanticsAction.increase);
+      tester.semantics.performAction(find.semantics.byLabel('Crop frame'), SemanticsAction.increase);
       await tester.pump();
       expect(rig.visual(Ids.a).crop.right - rig.visual(Ids.a).crop.left, greaterThan(0.5));
     });

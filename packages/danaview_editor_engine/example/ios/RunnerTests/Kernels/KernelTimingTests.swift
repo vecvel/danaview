@@ -2,9 +2,10 @@
 //
 // Kernel loading from the pod's DVEditorKernels bundle and per-kernel timing (logged; simulator numbers
 // only, device numbers are recorded in QA-04: no device available here). 1080p, Metal CIContext,
-// RGBA8 render target, median of 7 renders after a pre-warm.
+// IOSurface BGRA render target (the compositor's), median of 9 renders after a pre-warm.
 
 import CoreImage
+import CoreVideo
 import XCTest
 
 @testable import danaview_editor_engine
@@ -57,20 +58,30 @@ final class KernelTimingTests: XCTestCase {
             ("dv_reveal", k.reveal(src, glyphs: glyphs, shown: 2)),
             ("dv_matte", k.matte(src)),
         ]
-        var out = [UInt8](repeating: 0, count: w * h * 4)
-        var report: [String] = []
-        for (name, image) in cases {
-            context.render(image, toBitmap: &out, rowBytes: w * 4, bounds: rect, format: .RGBA8, colorSpace: nil)
-            var samples: [Double] = []
-            for _ in 0..<7 {
-                let t0 = CFAbsoluteTimeGetCurrent()
-                context.render(image, toBitmap: &out, rowBytes: w * 4, bounds: rect, format: .RGBA8, colorSpace: nil)
-                samples.append((CFAbsoluteTimeGetCurrent() - t0) * 1000)
-            }
-            samples.sort()
-            report.append("\(name): p50 \(String(format: "%.2f", samples[3])) ms, max \(String(format: "%.2f", samples[6])) ms")
+        // IOSurface-backed BGRA target, as the compositor renders into (no CPU readback in the timing).
+        var pb: CVPixelBuffer?
+        let attrs: [CFString: Any] = [kCVPixelBufferIOSurfacePropertiesKey: [:], kCVPixelBufferMetalCompatibilityKey: true]
+        XCTAssertEqual(CVPixelBufferCreate(nil, w, h, kCVPixelFormatType_32BGRA, attrs as CFDictionary, &pb), kCVReturnSuccess)
+        let destination = CIRenderDestination(pixelBuffer: try XCTUnwrap(pb))
+        destination.colorSpace = nil
+        func once(_ image: CIImage) throws -> Double {
+            let t0 = CFAbsoluteTimeGetCurrent()
+            _ = try context.startTask(toRender: image, to: destination).waitUntilCompleted()
+            return (CFAbsoluteTimeGetCurrent() - t0) * 1000
         }
-        let summary = "IOS-09 per-kernel timing (1080p, simulator GPU, includes readback):\n  " + report.joined(separator: "\n  ")
+        var report: [String] = []
+        var baseline = 0.0
+        for (name, image) in cases {
+            _ = try once(image)
+            var samples: [Double] = []
+            for _ in 0..<9 { samples.append(try once(image)) }
+            samples.sort()
+            let p50 = samples[4]
+            if name == "passthrough" { baseline = p50 }
+            report.append(
+                "\(name): p50 \(String(format: "%.2f", p50)) ms (kernel ≈ \(String(format: "%.2f", max(0, p50 - baseline))) ms over passthrough), max \(String(format: "%.2f", samples[8])) ms")
+        }
+        let summary = "IOS-09 per-kernel timing (1080p, simulator GPU, BGRA IOSurface target):\n  " + report.joined(separator: "\n  ")
         print(summary)
         let attachment = XCTAttachment(string: summary)
         attachment.name = "IOS-09 kernel timing"
