@@ -32,9 +32,9 @@
 //       other layouts are mixed down to mono, unusual rates resampled to 48 kHz per chunk), which
 //       is read back from its end in blocks of 64k frames, each block reversed in memory and fed to
 //       an AAC-LC encoder (128 kb/s), muxed into the same Mp4Muxer. The AAC encoder's priming is
-//       taken out the same way Media3's Transformer does it (c2.android.aac.encoder: 1600 frames,
-//       subtracted from the sample times, which makes Mp4Muxer write the `elst`), so clicks keep
-//       their mirrored position.
+//       taken out the way Media3's Transformer does it (subtracted from the sample times, which
+//       makes Mp4Muxer write the `elst`), with the priming measured for the platform encoder
+//       (2048 frames, not Media3's 1600), so clicks keep their mirrored position.
 // 3. The muxer closes `<output>.part`, which is renamed to the output path; the source's rotation
 //    is carried as the track orientation when the intermediate kept it as metadata.
 //
@@ -558,8 +558,14 @@ object ReverseMath {
 
     private val AAC_RATES = listOf(96_000, 88_200, 64_000, 48_000, 44_100, 32_000, 24_000, 22_050, 16_000, 12_000, 11_025, 8_000, 7_350)
 
-    /** The priming (frames) an AAC encoder adds, as Media3's Transformer assumes it (DefaultCodec). */
-    fun aacEncoderDelayFrames(codecName: String): Int = if (codecName == "c2.android.aac.encoder") 1600 else 0
+    /**
+     * The priming (frames) the platform's software AAC encoder adds. Media3's Transformer assumes 1600
+     * for c2.android.aac.encoder (DefaultCodec); measured on the API 35 emulator (AND-07 clap test,
+     * 2026-10-14) the decoded audio lags by 2048 frames (with 1600 every click was 447 frames, 9.3 ms,
+     * late), so the platform FDK encoders use 2048. Other (vendor) encoders: 0, as Media3.
+     */
+    fun aacEncoderDelayFrames(codecName: String): Int =
+        if (codecName == "c2.android.aac.encoder" || codecName == "OMX.google.aac.encoder") 2048 else 0
 
     /** Muxer time of AAC access unit [index] (1024 frames each) at [rate], minus the encoder [delayFrames]. */
     fun aacUnitPtsUs(index: Long, rate: Int, delayFrames: Int): Long =

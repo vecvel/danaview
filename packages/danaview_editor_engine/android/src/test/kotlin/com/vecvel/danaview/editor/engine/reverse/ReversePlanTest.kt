@@ -306,8 +306,9 @@ class ReversePlanTest {
         assertArrayEquals(byteArrayOf(0x14, 0x08), ReverseMath.aacLcConfig(16_000, 1))
         assertEquals(-1, ReverseMath.aacFrequencyIndex(50_000))
         for (rate in ReverseMath.ENCODER_RATES) assertTrue(ReverseMath.aacFrequencyIndex(rate) >= 0)
-        // Media3 Transformer's c2.android.aac.encoder priming (DefaultCodec): 1600 frames.
-        assertEquals(1600, ReverseMath.aacEncoderDelayFrames("c2.android.aac.encoder"))
+        // The platform FDK encoders' priming, measured (2048; Media3 assumes 1600).
+        assertEquals(2048, ReverseMath.aacEncoderDelayFrames("c2.android.aac.encoder"))
+        assertEquals(2048, ReverseMath.aacEncoderDelayFrames("OMX.google.aac.encoder"))
         assertEquals(0, ReverseMath.aacEncoderDelayFrames("c2.vendor.aac.encoder"))
         assertEquals(-33_333, ReverseMath.aacUnitPtsUs(0, 48_000, 1600))
         assertEquals(21_333 - 33_333, ReverseMath.aacUnitPtsUs(1, 48_000, 1600))
