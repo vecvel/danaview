@@ -102,7 +102,7 @@ object PausedPlans {
     fun assets(): Map<String, PlanAsset> = mapOf(
         "counter" to PlanAsset(PlanAssetKind.VIDEO, uri("frame_counter_720p24.mp4"), fp = "fp-counter24", w = 1280, h = 720),
         "alpha" to PlanAsset(PlanAssetKind.IMAGE, uri("alpha.png"), fp = "fp-alpha", w = 512, h = 512),
-        "lut" to PlanAsset(PlanAssetKind.LUT, "file:///and17/look.vlut", fp = "fp-lut"),
+        "lut" to PlanAsset(PlanAssetKind.LUT, "file:///and17/look.vlut", fp = "fp-lut", n = 33),
     )
 
     /** A media layer of the counter showing source frame [sourceFrame] at frame [k0]. */

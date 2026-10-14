@@ -74,12 +74,20 @@ import com.vecvel.danaview.editor.engine.pigeon.EditingModeKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.EditingModeMsg
 import com.vecvel.danaview.editor.engine.plan.LayerParams
 import com.vecvel.danaview.editor.engine.plan.ParamSnapshot
+import com.vecvel.danaview.editor.engine.plan.PlanAdjust
 import com.vecvel.danaview.editor.engine.plan.PlanAsset
 import com.vecvel.danaview.editor.engine.plan.PlanAssetKind
+import com.vecvel.danaview.editor.engine.plan.PlanCanvas
+import com.vecvel.danaview.editor.engine.plan.PlanChroma
 import com.vecvel.danaview.editor.engine.plan.PlanCrop
+import com.vecvel.danaview.editor.engine.plan.PlanDetail
 import com.vecvel.danaview.editor.engine.plan.PlanLayer
 import com.vecvel.danaview.editor.engine.plan.PlanLayerKind
+import com.vecvel.danaview.editor.engine.plan.PlanMask
+import com.vecvel.danaview.editor.engine.plan.PlanMaskShape
 import com.vecvel.danaview.editor.engine.plan.PlanSize
+import com.vecvel.danaview.editor.engine.plan.PlanTarget
+import com.vecvel.danaview.editor.engine.plan.PlanTransform
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -421,6 +429,58 @@ class PausedFrameRenderer(
         generation.incrementAndGet()
     }
 
+    /**
+     * Creates the EGL context, compiles every shader program and draws each pass once on a 32 × 32
+     * target (session open), so the first paused edit does not pay the setup: drivers finish
+     * compiling a program on its first draw (about 1.2 s for the first full frame on the API 35
+     * emulator without warm-up).
+     */
+    fun warmUp(done: Completion<Unit>) {
+        onGl(done) {
+            val e = ensureGl()
+            e.makeCurrent(if (window != EGL14.EGL_NO_SURFACE) window else null)
+            programs?.compileAll()
+            compositor?.let { warmDraw(it) }
+            Unit
+        }
+    }
+
+    /** GL lane: one tiny frame through look (chroma, grade), blur, detail (sharpen, vignette, mask), place and solid. */
+    private fun warmDraw(comp: LayerCompositorGl) {
+        val n = WARM_SIZE
+        val texture = GlResources.createTexture(n, n)
+        val target = GlTarget.rgba8(n, n)
+        try {
+            val plan = RenderPlan(
+                rev = 0, target = PlanTarget.PREVIEW, canvas = PlanCanvas(n, n, 30), durUs = 1_000_000L,
+                assets = emptyMap(), layers = emptyList(), audio = emptyList(),
+            )
+            val xf = PlanTransform(cx = n / 2.0, cy = n / 2.0, r = 10.0)
+            val picture = LayerParams(
+                id = "warm", kind = PlanLayerKind.MEDIA, t = 0, xf = xf, base = PlanSize(n.toDouble(), n.toDouble()), crop = PlanCrop.FULL,
+                adj = PlanAdjust(contrast = 0.1), detail = PlanDetail(sharpen = 0.2, blur = 1.0, vignette = 0.2), lut = null,
+                chroma = PlanChroma(key = 0x00FF00), mask = PlanMask(PlanMaskShape.ELLIPSE, feather = 0.1), reveal = null,
+                cmasks = emptyList(), color = null,
+            )
+            val solid = picture.copy(id = "warm-solid", kind = PlanLayerKind.SOLID, color = 0x80FFFFFF.toInt(), detail = null, chroma = null, mask = null)
+            val layer = PlanLayer(id = "warm", z = 0, t0 = 0, t1 = 1_000_000L, kind = PlanLayerKind.MEDIA)
+            comp.compose(
+                plan,
+                RenderGeometry(n, n, n, n),
+                listOf(
+                    LayerCompositorGl.Input(layer, picture, SourceTexture(texture, n, n, transform = SourceTexture.TOP_DOWN, premultiplied = true)),
+                    LayerCompositorGl.Input(layer.copy(id = "warm-solid", kind = PlanLayerKind.SOLID), solid, null),
+                ),
+                target,
+            )
+            GLES20.glFinish()
+        } finally {
+            target.release()
+            GlResources.deleteTexture(texture)
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        }
+    }
+
     // ---- surface ----
 
     /**
@@ -473,20 +533,41 @@ class PausedFrameRenderer(
         val gen = generation.get()
         worker.execute {
             val started = System.nanoTime()
-            val result = runCatching {
+            val prepared = runCatching {
                 checkAlive()
                 val snap = snapshot.get()
                 val t = snap.outputGrid.timeOfFrame(k)
                 val geometry = geometry(snap.plan)
                 val wanted = LinkedHashMap<PausedFrameRequest, Unit>()
-                for ((layer, params) in LayerCompositorGl.activeLayers(snap, t)) {
+                val active = LayerCompositorGl.activeLayers(snap, t)
+                for ((layer, params) in active) {
                     val (p, _) = PausedFrames.applyMode(mode, params)
                     PausedFrames.request(snap.plan, layer, p, t, useProxies, geometry)?.let { wanted[it] = Unit }
                 }
                 val (fetched, missing) = resolve(wanted.keys, gen)
-                PrefetchResult(k, wanted.size, fetched, missing, (System.nanoTime() - started) / 1e6)
+                val uploads = wanted.keys.mapNotNull { r -> held[r]?.let { r to it } }
+                Triple(PrefetchResult(k, wanted.size, fetched, missing, 0.0), uploads, snap.plan to active.map { it.first })
+            }.mapError()
+            val value = prepared.getOrNull()
+            if (value == null) {
+                done?.invoke(Result.failure(prepared.exceptionOrNull()!!))
+                return@execute
             }
-            done?.invoke(result.mapError())
+            // GL: upload the fetched pictures and the active layers' LUT / sprite textures now, so
+            // the first paused edit only draws.
+            glLane.execute {
+                val r = runCatching {
+                    if (generation.get() != gen) throw EngineException(EngineErrorCode.cancelled, "cancelled")
+                    checkAlive()
+                    val e = ensureGl()
+                    e.makeCurrent(if (window != EGL14.EGL_NO_SURFACE) window else null)
+                    for ((request, bitmap) in value.second) if (!textures.containsKey(request)) textures[request] = upload(bitmap)
+                    val (plan, layers) = value.third
+                    for (layer in layers) compositor?.preload(plan, layer)
+                    value.first.copy(wallMs = (System.nanoTime() - started) / 1e6)
+                }.mapError()
+                done?.invoke(r)
+            }
         }
     }
 
@@ -806,6 +887,10 @@ class PausedFrameRenderer(
     }
 
     private fun <T> Result<T>.mapError(): Result<T> = fold({ Result.success(it) }, { Result.failure(EngineErrors.from(it)) })
+
+    private companion object {
+        const val WARM_SIZE = 32
+    }
 }
 
 /**

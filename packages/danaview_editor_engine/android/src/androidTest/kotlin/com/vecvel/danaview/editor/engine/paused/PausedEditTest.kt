@@ -100,9 +100,13 @@ class PausedEditTest {
             val frames = AtomicInteger()
             reader.setOnImageAvailableListener({ r -> r.acquireLatestImage()?.use { frames.incrementAndGet() } }, Handler(readerThread.looper))
             try {
+                val warm0 = System.nanoTime()
+                await<Unit> { h.renderer.warmUp(it) }
+                val warmMs = (System.nanoTime() - warm0) / 1e6
                 await<Unit> { h.renderer.attachSurface(reader.surface, PausedPlans.W, PausedPlans.H, it) }
                 h.prefetch(k)
-                h.render()
+                val first = h.render()
+                Log.i(AND17_TAG, "warm-up (EGL + all programs) ${"%.1f".format(warmMs)} ms; first render after warm-up: GL ${"%.1f".format(first.glMs)} ms (emulator)")
                 val total = ArrayList<Double>()
                 val gl = ArrayList<Double>()
                 val wall = ArrayList<Double>()
@@ -170,7 +174,8 @@ class PausedEditTest {
     @Test
     fun editingModesChangeOnlyTheirItem() {
         val keyed = PausedScenes.layered(PausedScenes.PIP_FX.copy(chroma = PlanChroma(key = 0x808080, sim = 0.3)))
-        val plan = keyed.copy(layers = keyed.layers.map { if (it.id == "main#v") it.copy(crop = PlanCrop(0.2, 0.2, 0.8, 0.8)) else it })
+        // The main layer at half size with a centre crop, so the uncropped source shows around it.
+        val plan = keyed.copy(layers = keyed.layers.map { if (it.id == "main#v") it.copy(crop = PlanCrop(0.2, 0.2, 0.8, 0.8), xf = PlanTransform(s = 0.5)) else it })
         PausedHarness("and17_modes", plan).use { h ->
             h.prefetch(k)
             h.render()
@@ -183,7 +188,14 @@ class PausedEditTest {
             h.renderer.setEditingMode(PausedEditingMode.CropSource("main"))
             h.render()
             val crop = h.capture()
-            assertTrue("cropSource shows the uncropped main", PausedReference.meanDiff(normal.rgba, crop.rgba, normal.width, 0, 0, 640, 40) > 5)
+            // Main's cropped box: x 160..480, y 90..270; uncropped it grows to x 53..587, y 0..360.
+            val ring = PausedReference.meanDiff(normal.rgba, crop.rgba, normal.width, 70, 100, 150, 230)
+            val inner = PausedReference.meanDiff(normal.rgba, crop.rgba, normal.width, 200, 120, 300, 240)
+            Log.i(AND17_TAG, "cropSource: outside-crop ring mean diff $ring/255, inside the crop $inner/255")
+            assertTrue("cropSource shows the source outside the crop ($ring)", ring > 5)
+            // Resampled on another raster grid (and sharpened), so not bit-equal; a 1 px shift of this
+            // sharp content would differ by tens of levels.
+            assertTrue("cropSource keeps the cropped region in place ($inner)", inner < 4.0)
             h.renderer.setEditingMode(PausedEditingMode.Normal)
             h.render()
             assertArrayEquals("normal restores the frame", normal.rgba, h.capture().rgba)

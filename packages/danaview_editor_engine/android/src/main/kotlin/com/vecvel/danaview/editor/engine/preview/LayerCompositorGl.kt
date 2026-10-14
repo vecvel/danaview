@@ -127,6 +127,14 @@ class LayerCompositorGl(
         return true
     }
 
+    /** Loads the LUT and sprite textures [layer] draws with (prefetch on pause), so its first draw only samples them. */
+    fun preload(plan: RenderPlan, layer: PlanLayer) {
+        confinement.check()
+        check(!released) { "compositor released" }
+        layer.fx.lut?.let { lut -> plan.assets[lut.asset]?.let { lutTexture(it) } }
+        if (layer.kind == PlanLayerKind.SPRITE) layer.asset?.let { plan.assets[it] }?.let { spriteTexture(it) }
+    }
+
     private fun lutTexture(asset: PlanAsset): LutTexture? {
         val t = textures ?: return null
         return try {
