@@ -111,7 +111,9 @@ class TasksController {
   /// The current progress of task [id] (null when indeterminate or unknown).
   double? progressOf(String id) => _tasks[id]?.progress;
 
-  EditProject? get _project => _editor.mounted ? _editor.state.project : null;
+  EditorState? _state;
+
+  EditProject? get _project => _editor.mounted ? _state?.project : null;
 
   // -----------------------------------------------------------------------------------------------
   // Reverse and freeze
@@ -362,6 +364,7 @@ class TasksController {
   // -----------------------------------------------------------------------------------------------
 
   void _onState(EditorState state) {
+    _state = state;
     final pool = state.project?.pool;
     if (pool == null || identical(pool, _seenPool)) return;
     _seenPool = pool;

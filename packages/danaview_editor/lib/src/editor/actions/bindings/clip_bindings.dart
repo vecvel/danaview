@@ -25,7 +25,7 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewToast, Danavi
 import '../../../app/editor_providers.dart';
 import '../../../app/strings/clip_strings.dart';
 import '../../contracts/contracts.dart';
-import '../../flows/import_media_sheet.dart' show showImportMediaSheet;
+import '../../flows/import_media_sheet.dart' show ImportItemResult, showImportMediaSheet;
 import '../../flows/tasks_sheet.dart';
 import '../../state/editor_controller.dart';
 import '../../state/tasks_controller.dart';
@@ -179,10 +179,10 @@ Future<void> _replace(EditorActionContext ctx) async {
     if (edit == null) return;
     final job = ops.importJob(pool: ctx.read(mediaPoolServiceProvider), edit: edit, place: false);
     final result = await showImportMediaSheet(context, picks: picked.take(1).toList(), job: job, title: ClipStrings.replaceImportTitle);
-    final asset = [
-      for (final i in result?.job?.items ?? const [])
-        if (i.asset != null) i.asset!,
-    ].firstOrNull;
+    MediaAsset? asset;
+    for (final i in result?.job?.items ?? const <ImportItemResult>[]) {
+      asset ??= i.asset;
+    }
     if (!context.mounted) return;
     if (asset == null) return;
     final current = ops.project?.pool[asset.id] ?? asset;
