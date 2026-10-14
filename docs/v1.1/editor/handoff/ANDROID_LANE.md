@@ -23,7 +23,7 @@ The laptop builds the Android half of the editor's native engine inside the `dan
 5. **Optional.** The root app's Android build makes `media_kit_libs_android_video` download its libmpv jars from github.com (its own `build.gradle`; this is not pub or Maven). Windows will not build the root app unless you allow it. Only one AI-04 check needs that build ("no libc++_shared clash with media_kit"). Without your OK, the Mac covers it when INT-02 wires whisper into the app.
 
 **For the Mac to settle in ENG-06** (Windows does not decide these):
-- **AND-16 needs a ~60-line JNI shim** (HardwareBuffer → OES texture) built with CMake (AND-01 §6.3). No ticket owns `packages/danaview_editor_engine/android/src/main/cpp/`, and ENG-06 freezes `build.gradle.kts`. ENG-06 must add the `externalNativeBuild` block and assign the cpp directory before AND-16 starts.
+- **AND-16 needs a ~60-line JNI shim** (HardwareBuffer → OES texture) built with CMake (AND-01 §6.3). **Settled 2026-10-15:** AND-16 owns `packages/danaview_editor_engine/android/src/main/cpp/` (BUILD_PLAN AND-16 owns, ARCH §13.3 Build). ENG-06's frozen `build.gradle.kts` already declares the CMake build and turns it on when `src/main/cpp/CMakeLists.txt` exists; port the spike's shim from `spikes/android_engine/app/src/main/cpp/`. `AND16-SHIM` may go in `landed`.
 - **`minSdk` conflict.** ENG-08's spec and ARCH §3.2 keep the plugin at minSdk 24: the app is minSdk 24 and gates the editor at runtime. AND-01 §6.3 says 29. ENG-08 ships 24, and ENG-06 decides.
 - **Ignore `.cxx/`.** The root `.gitignore` covers `**/build/` but not `.cxx/`, where AGP stages CMake builds inside plugin modules. Add `**/.cxx/` before AND-16's shim build. AI-04 keeps its own staging folder under `build/`.
 - **AND-01.md still has `{{…}}` measurement placeholders** from the Mac's final reruns. The NO-GO verdict and the rules in its §6 do not depend on them.
@@ -80,7 +80,7 @@ Commands are in §9.
 | 10 | AND-09 | Android GL effects, shaders, LUT and sprite textures | M3 | ENG-06 MAC (pending); API-03, API-04, CORE-21 DONE | ENG-06 merged | and-m3-text | JVM, EMU (GL, parity goldens) |
 | 11 | AND-17 | Android paused-frame renderer, layer GL compositor and structural debounce | M3 | AND-08, AND-09, AND-06 WINDOWS | All three committed | and-m3-paused | EMU |
 | 12 | AND-10 | Android preview session: SurfaceProducer, clock, seek/scrub, transients, redraw, quality, lifecycle | M3 | AND-08, AND-09, AND-06, AND-17 WINDOWS; ENG-02 MAC (pending) | AND-17 committed **and** ENG-02 merged | and-m3-preview | EMU, IT `android_preview_test.dart` |
-| 13 | AND-16 | Android contingency preview engine (active: AND-01 NO-GO) | M3 | AND-10, AND-17 WINDOWS; activation by ENG-06 MAC (pending); owner sign-off D-43e DONE (2026-10-11) | AND-10 committed **and** ENG-06 has activated AND-16 **and** ENG-06 has settled the JNI shim's Gradle and cpp ownership (§2). The lead then adds `AND16-SHIM` to the workflow's `landed` | and-m3-fallback | EMU, IT (AND-10's playback list through this backend) |
+| 13 | AND-16 | Android contingency preview engine (active: AND-01 NO-GO) | M3 | AND-10, AND-17 WINDOWS; activated (AND-01 NO-GO); owner sign-off D-43e DONE (2026-10-11); JNI shim Gradle and cpp ownership settled 2026-10-15 (§2) | AND-10 committed; add `AND16-SHIM` to the workflow's `landed` (lead OK given 2026-10-15) | and-m3-fallback | EMU, IT (AND-10's playback list through this backend) |
 | 14 | AND-13 | Android voice recorder | M4 | ENG-03 MAC (pending) | ENG-03 merged | and-m4-services | EMU |
 | 15 | AND-14 | Android pickers, URI grants (media access), permissions | M4 | ENG-03 MAC (pending) | ENG-03 merged | and-m4-services | EMU (API 35, so API 33+ permission flows run) |
 | 16 | AND-15 | Android external drop target | M4 | ENG-03 MAC (pending) | ENG-03 merged | and-m4-services | EMU, plus a manual check on the tablet AVD |
@@ -426,7 +426,7 @@ packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danavi
 ```
 
 **§7 files:**
-- The JNI shim and its Gradle `externalNativeBuild` are outside these owns. Wait for ENG-06 (§2).
+- Also owns `android/src/main/cpp/` (the JNI shim; port from the spike). The Gradle `externalNativeBuild` is ENG-06's, already in place and frozen: it activates when `src/main/cpp/CMakeLists.txt` exists (§2).
 - Uses AND-17's `LayerCompositorGl` and AND-10's `PreviewBackend` without editing them.
 
 **Design:** follow AND-01 §2 and §7.
@@ -625,7 +625,7 @@ Nothing else can start until ENG-06. Do not start AND tickets against the unfroz
 | `packages/danaview_whisper/src/CMakeLists.txt` | AI-03 (Mac) | Read-only. AI-04 works through `src/cmake/android.cmake`. |
 | `packages/danaview_editor_engine/example/**`, `scripts/ci/editor/{android_unit,android_emulator}.sh` | ENG-09 (Mac) | Read-only. The one exception is AND-10's `example/integration_test/android_preview_test.dart`. |
 | `packages/danaview_editor_engine/test_fixtures/media/` | ENG-05 (Mac; generated with Swift and AVFoundation) | Read-only. Windows can't regenerate it. Ask the Mac for new shared fixtures, or generate ticket-local ones inside owned test directories. |
-| `android/src/main/cpp/` (AND-16's JNI shim) | unowned; ENG-06 decides | Don't create it until ENG-06 assigns it. |
+| `android/src/main/cpp/` (AND-16's JNI shim) | AND-16 (assigned 2026-10-15) | AND-16 creates `CMakeLists.txt` and the shim source here. |
 | `spikes/android_engine/`, `docs/v1.1/editor/spikes/AND-01.md` | AND-01 (Mac, final reruns) | Read-only reference. |
 | Root `pubspec.yaml`, `lib/`, `android/app/**` | INT-02, INT-04, INT-05, CORE-28 (Mac) | Never commit. A local verification edit (owner item 5) must be reverted with `git restore`. |
 | `docs/v1.1/editor/BUILD_PLAN.md`, `docs/v1.1/editor/handoff/` | Mac | Read-only. Send corrections through the owner. |

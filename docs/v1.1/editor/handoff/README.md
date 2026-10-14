@@ -66,7 +66,7 @@ Tell me after each ticket lands so the Mac can merge it. Use a workflow for the 
   | ENG-02 | Mac | AND-10 |
   | ENG-03 | Mac | AND-13, AND-14, AND-15 |
   | ENG-04 | Mac | AND-11 |
-  | JNI shim set up by ENG-06 (the D-43e sign-off is done: owner decision 2026-10-11) | Mac | AND-16 |
+  | JNI shim set up by ENG-06 (done 2026-10-15: Gradle block in place, cpp/ assigned to AND-16; `AND16-SHIM` may be added to `landed`) | Mac | AND-16 |
   | AND-16 | Windows | AND-18 |
   | AND-11 | Windows | AND-19 |
   | INT-06 ([INTEGRATION] engine interface additions for render preview: `renderPreview`, `setRenderedRanges`, `powerState`; ARCH D-45) | Mac | AND-18 (Windows; AND-18 waits for both AND-16 and INT-06) |
