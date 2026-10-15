@@ -65,8 +65,12 @@ data class EncoderSettings(
     /** Requested I-frame interval in seconds. */
     val iFrameIntervalSeconds: Float get() = keyframeIntervalMs / 1000f
 
-    /** Output frames of a [durUs] plan on the export grid: k with timeOfFrame(k) < durUs. */
-    fun frameCount(durUs: Long): Long = if (durUs <= 0) 0 else FrameGrid.ceilDiv(durUs * fps, FrameGrid.MICROS)
+    /**
+     * Output frames of a [durUs] plan on the export grid: the k ≥ 0 with timeOfFrame(k) =
+     * ceil(k·1e6/fps) < durUs, i.e. floor((durUs − 1)·fps/1e6) + 1 (a plan ending on a grid frame
+     * time, such as timeOfFrame(61) = 2 033 334 µs at 30 fps, has exactly that many frames).
+     */
+    fun frameCount(durUs: Long): Long = if (durUs <= 0) 0 else Math.floorDiv((durUs - 1) * fps, FrameGrid.MICROS) + 1
 
     /** Expected file size of a [durUs] export: (video + audio bps) · seconds / 8 · 1.02 (ARCH §14.1). */
     fun estimatedBytes(durUs: Long): Long = ((videoBitrate.toLong() + audioBitrate) * durUs / 8_000_000.0 * 1.02).toLong()

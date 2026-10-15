@@ -25,6 +25,12 @@
 //   - single pass: one TransformerExport with portrait encoding on; on a refused portrait
 //     configuration one retry landscape with rotation metadata (`portraitRetried`), then
 //     `encoderSizeLimit` (ARCH §14.1);
+//   - audio to the video's end (owner decision 2026-10-15, ARCH §14.3): every composition with an
+//     audio track mixes [AUDIO_TAIL_US] of silence past the video's end (Media3Composition
+//     `audioThroughUs`) and the muxer drops AAC units presented at or after the video's end
+//     (TransformerExport `audioEndUs`), so the AAC track ends at the last video frame within one AAC
+//     frame on every route (single pass, the precompose final pass; video-only passes have no
+//     audio track to pad);
 //   - progress: Transformer.getProgress every 250 ms → EventHub.exportProgress (phase preparing →
 //     rendering → finishing, frames on the export grid, warnings incl. fallbackApplied);
 //   - completion: jobDone with ExportResult (path, bytes, durUs, the encoder that actually ran and
@@ -96,6 +102,7 @@ import com.vecvel.danaview.editor.engine.pigeon.ExportResultMsg
 import com.vecvel.danaview.editor.engine.pigeon.ExportWarningMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobResultMsg
+import com.vecvel.danaview.editor.engine.plan.FrameGrid
 import com.vecvel.danaview.editor.engine.plan.ParamSnapshot
 import com.vecvel.danaview.editor.engine.plan.PlanDecoding
 import com.vecvel.danaview.editor.engine.plan.PlanLayerKind
@@ -626,7 +633,8 @@ class ExportCoordinator(private val ctx: EngineContext) {
         val budget = environment.decoderBudget()
         val load = MultiPassRouting.load(plan)
         val hdrMode = environment.hdrMode(plan)
-        val passConfig = TransformerExport.Config(settings = settings, selector = selector, encoderFactoryDecorator = encoderFactoryDecorator)
+        val videoEnd = videoEndUs(plan.durUs, settings)
+        val passConfig = TransformerExport.Config(settings = settings, selector = selector, encoderFactoryDecorator = encoderFactoryDecorator, audioEndUs = videoEnd)
         val images = PngCompositionImages(paths.engineAssets)
         val assets = effectAssets
         val baseLoader = assetLoaderFactory
@@ -650,7 +658,12 @@ class ExportCoordinator(private val ctx: EngineContext) {
                     images,
                     LayerEffectChainFactory(settings.width, settings.height, assets),
                     AtomicReference(ParamSnapshot.of(p)),
-                    Media3Composition.Options(hdrMode = hdrMode, outputWidth = settings.width, outputHeight = settings.height),
+                    Media3Composition.Options(
+                        hdrMode = hdrMode,
+                        outputWidth = settings.width,
+                        outputHeight = settings.height,
+                        audioThroughUs = videoEnd + AUDIO_TAIL_US,
+                    ),
                 )
             },
             assetLoaders = { built ->
@@ -817,5 +830,16 @@ class ExportCoordinator(private val ctx: EngineContext) {
 
         /** Preflight warning: the container cannot be written on Android. */
         const val CONTAINER_UNAVAILABLE = "containerUnavailable"
+
+        /**
+         * Silence mixed past the video's end so the AAC encoder emits every sample up to it (the
+         * API 35 emulator's encoder held back up to 49 ms at end of stream; 250 ms leaves room for
+         * encoders that hold back more); the excess is trimmed by the muxer.
+         */
+        const val AUDIO_TAIL_US = 250_000L
+
+        /** End of the last exported video frame: the export-grid time of frame `frameCount(durUs)`. */
+        fun videoEndUs(durUs: Long, settings: EncoderSettings): Long =
+            FrameGrid.of(settings.fps).platformTimeOfFrame(settings.frameCount(durUs))
     }
 }
