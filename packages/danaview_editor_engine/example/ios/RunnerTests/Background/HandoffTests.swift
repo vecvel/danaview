@@ -110,7 +110,7 @@ final class HandoffTests: XCTestCase {
         let video = try XCTUnwrap(TestFixtures.url(.engine, "media/frame_counter_720p25.mp4"))
         let copy = roots.cache.appendingPathComponent("work/export-ex_real.mp4")
         try FileManager.default.copyItem(at: video, to: copy)
-        let saver = PhotosSaver(context: try MediaJobTestSupport.context(roots))
+        let saver = PhotosSaver(context: nil, library: SystemPhotoLibrary())
         let result = try awaitReply(self, timeout: 30) { saver.saveToPhotos(fileURL: copy, reply: $0) }
         XCTAssertEqual(result.outcome, .done)
         XCTAssertNotNil(result.savedUri)
