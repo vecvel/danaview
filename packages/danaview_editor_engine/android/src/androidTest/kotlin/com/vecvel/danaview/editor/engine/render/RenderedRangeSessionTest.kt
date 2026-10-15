@@ -4,7 +4,8 @@
 // - RenderedRangeHandler.setRenderedRanges installs the session's swap as AND-16's hook, playback
 //   enters the ranges, an unknown session answers `internal`, a patch outside every range keeps
 //   them, a param patch touching one range drops only that range (within the poll period), the next
-//   call restores them, and a new plan with a canvas change drops every range (ARCH §12.2);
+//   call restores them, a new plan with a canvas change drops every range (ARCH §12.2), and the
+//   binding of a disposed session is dropped;
 // - the session's plan (what an export of it reads) never gains a render file (D-45: export plans
 //   never reference render files);
 // - a session on the stills backend (no range deck) accepts the call and keeps live preview;
@@ -118,6 +119,11 @@ class RenderedRangeSessionTest {
             h.setPlan(plan4)
             h.waitUntil("a canvas change drops every range", timeoutMs = 2_000) { swap.isEmpty }
             assertEquals(3, swap.stats().dropped)
+            // A disposed session's binding is forgotten: the handler keeps no session alive.
+            set(h, handler, msgs)
+            assertEquals(1, handler.bindingCount)
+            await<Unit> { cb -> h.onPreview { h.session.dispose(cb) } }
+            h.waitUntil("the binding of a disposed session is dropped", timeoutMs = 3_000) { handler.bindingCount == 0 }
         }
     }
 

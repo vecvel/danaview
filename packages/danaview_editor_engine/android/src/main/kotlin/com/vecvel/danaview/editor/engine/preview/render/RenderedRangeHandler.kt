@@ -53,6 +53,7 @@ class RenderedRangeHandler(private val ctx: EngineContext) {
 
     /** Replaces the rendered ranges of session [sessionId]. */
     fun setRenderedRanges(sessionId: String, ranges: List<RenderedRangeMsg>, done: Completion<Unit>) {
+        synchronized(bindings) { prune() }
         val session = sessions(sessionId)
             ?: return done.fail(EngineException(EngineErrorCode.internal, "unknown preview session"))
         val backend = session.backend as? ContingencyPreviewBackend
@@ -64,7 +65,6 @@ class RenderedRangeHandler(private val ctx: EngineContext) {
         try {
             val entries = RenderRanges.entries(ranges, FrameGrid.of(session.snapshot.get().plan.canvas.fps))
             val binding = synchronized(bindings) {
-                prune()
                 val id = session.sessionId
                 val existing = bindings[id]?.takeIf { it.session.get() === session }
                 existing?.binding ?: run {
@@ -98,8 +98,10 @@ class RenderedRangeHandler(private val ctx: EngineContext) {
     /** Bindings held (tests). */
     val bindingCount: Int get() = synchronized(bindings) { bindings.size }
 
-    private fun forget(id: String, binding: RenderedRangeBinding) = synchronized(bindings) {
-        if (bindings[id]?.binding === binding) bindings.remove(id)
+    private fun forget(id: String, binding: RenderedRangeBinding) {
+        synchronized(bindings) {
+            if (bindings[id]?.binding === binding) bindings.remove(id)
+        }
     }
 
     /** Drops bindings whose session was disposed or collected (caller holds the lock). */

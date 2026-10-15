@@ -2,8 +2,9 @@
 //
 // RenderedRangeSwap on the JVM (no backend): message → frame conversion (D-35 nearest frame,
 // `file://` URIs), the hook's ranges after a set, drops by patches / plan changes / transients
-// until the next set (ARCH §12.2 "Rendered ranges"), the source-frame snapshot being ignored,
-// boundary counters, and the power-state charging rule.
+// until the next set (ARCH §12.2 "Rendered ranges"), the per-frame validity check with its single
+// drop notice, the source-frame snapshot being ignored, boundary counters, and the power-state
+// charging rule.
 
 package com.vecvel.danaview.editor.engine.render
 
@@ -86,6 +87,28 @@ class RenderedRangeSwapTest {
         snapshot.set(snapshot.get().withPlan(plan.copy(rev = 4, layers = plan.layers + extra), setOf("x#s")))
         assertFalse(swap.refresh())
         assertEquals(listOf(0L, 60L), firsts())
+    }
+
+    @Test
+    fun everyPlaybackFrameChecksValidityAndADropIsReportedOnce() {
+        install()
+        val (r0, r1) = swap.current.map { it.range }
+        var drops = 0
+        swap.onDropped = { drops++ }
+        assertTrue(swap.isValid(r0))
+        assertTrue(swap.isValid(r1))
+        // A param patch of "a" (inside r0) published while a range frame is due: no poll ran, the
+        // very next per-frame check already refuses r0 and keeps r1.
+        val a2 = plan.layer("a#v")!!.copy(xf = PlanTransform(cx = 1.0, cy = 2.0))
+        snapshot.set(snapshot.get().withPlan(plan.copy(rev = 2, layers = plan.layers.map { if (it.id == "a#v") a2 else it }), setOf("a#v")))
+        assertFalse(swap.isValid(r0))
+        assertTrue(swap.isValid(r1))
+        assertFalse(swap.isValid(r0))
+        assertEquals("one drop, reported once (the binding rebuilds once)", 1, drops)
+        assertFalse(swap.refresh())
+        assertEquals(1, drops)
+        // A range that was never set is not valid either.
+        assertFalse(swap.isValid(RenderedRange(30, 60, "file:///c/danaview/editor/renders/other.mp4")))
     }
 
     @Test

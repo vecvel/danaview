@@ -66,9 +66,6 @@ import kotlin.math.roundToLong
 
 const val AND18_TAG = "AND18"
 
-/** Retries of a render whose file showed a stale input frame (CI counts them). */
-const val AND18_RETRY_TAG = "DanaviewRenderRetry"
-
 fun log18(msg: String) = Log.i(AND18_TAG, msg)
 
 /** Range plans (file header). */
@@ -370,6 +367,19 @@ class RangeHarness(
         onPreview {
             host.snapshot.set(host.snapshot.get().withPlan(next, touched))
             cb(Result.success(Unit))
+        }
+    }
+
+    /**
+     * The same param patch published on danaview-gl between two composites (the engine reads the
+     * snapshot once per composite there): returns the last output frame composited before the new
+     * snapshot became visible (-1: none), so every frame presented with a larger k was composited
+     * after it.
+     */
+    fun publishBetweenFrames(next: RenderPlan, touched: Set<String>): Long = await { cb ->
+        engine.ctx.threads.gl.execute {
+            host.snapshot.set(host.snapshot.get().withPlan(next, touched))
+            cb(Result.success(host.displayed.lastOrNull() ?: -1L))
         }
     }
 

@@ -123,14 +123,18 @@ object RenderPreviewSpecs {
         }
         range.layers.firstOrNull { it.hold }?.let { throw EngineException(EngineErrorCode.planInvalid, "a held layer cannot be rendered", itemId = it.id) }
         if (rendersDir != null) {
-            for ((id, a) in range.assets) {
-                if (isInside(a.uri, rendersDir) || a.proxyUri?.let { isInside(it, rendersDir) } == true) {
-                    throw EngineException(EngineErrorCode.planInvalid, "a render file cannot be an input", itemId = id)
-                }
-            }
+            renderFileAsset(range, rendersDir)?.let { throw EngineException(EngineErrorCode.planInvalid, "a render file cannot be an input", itemId = it) }
         }
         return range.copy(target = PlanTarget.EXPORT, durUs = paddedDurationUs(range), audio = emptyList(), req = null)
     }
+
+    /**
+     * The id of the first asset of [plan] whose file or proxy is inside [rendersDir], or null. Render
+     * files are never inputs: not of a render (above) and not of an export (AND-11's
+     * ExportCoordinator refuses such a plan, D-45 "export plans never reference render files").
+     */
+    fun renderFileAsset(plan: RenderPlan, rendersDir: File): String? =
+        plan.assets.entries.firstOrNull { (_, a) -> isInside(a.uri, rendersDir) || a.proxyUri?.let { isInside(it, rendersDir) } == true }?.key
 
     private fun isInside(uri: String, dir: File): Boolean {
         val path = when {

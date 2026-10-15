@@ -103,6 +103,7 @@ import com.vecvel.danaview.editor.engine.plan.PlanAssetKind
 import com.vecvel.danaview.editor.engine.plan.PlanTarget
 import com.vecvel.danaview.editor.engine.plan.PlanTransfer
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
+import com.vecvel.danaview.editor.engine.preview.render.RenderPreviewSpecs
 import java.io.Closeable
 import java.io.File
 import java.util.UUID
@@ -604,6 +605,12 @@ class ExportCoordinator(private val ctx: EngineContext) {
             (req.pendingReverse + req.pendingStill).firstOrNull()?.let { throw EngineException(EngineErrorCode.planInvalid, "a reverse or freeze job is pending", itemId = it) }
         }
         if (s.fps != plan.canvas.fps) throw EngineErrors.invalidArgument("settings.fps", "differs from the plan's output fps")
+        // D-45: render-preview files are preview-quality and never exported (like proxies, §9.5).
+        ctx.pathsOrNull?.let { paths ->
+            RenderPreviewSpecs.renderFileAsset(plan, RenderPreviewSpecs.rendersDir(paths))?.let {
+                throw EngineException(EngineErrorCode.planInvalid, "a render-preview file cannot be exported", itemId = it)
+            }
+        }
     }
 
     private fun prepare(planBytes: ByteArray, msg: EncodeSettingsMsg, outputPath: String, title: String, whenDetached: DetachedHandoffMsg): Running {

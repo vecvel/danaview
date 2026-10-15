@@ -9,12 +9,16 @@
 //   composition, two rendered ranges cut at its layer edges as CORE-37 cuts them), on the original
 //   counters and on light 640x360 all-intra copies of them (rendered by the job itself) with which
 //   the emulator presents the frames on both sides of the edges;
-// - a param patch inside a range falls back to the live decks: no frame of the stale render is
-//   shown after the patch is published beyond the rebuild latency (measured, ≤ 2 frames), and every
-//   later frame is the live composition of the patched plan;
+// - a param patch inside a range falls back to the live decks on the next frame: no frame
+//   composited after the patched snapshot became visible shows the stale render (the backend asks
+//   the swap about every range frame), and every such frame is the live composition of the
+//   patched plan;
 // - a 6-layer chroma-key range on the minimal/low tier budget (2 live slots) plays from its cache
-//   where live playback shows 4 layers as still frames; the emulator's drop rate is recorded and
-//   must beat live playback (the ≤ 2% budget is a device number, QA-04).
+//   where live playback shows 4 layers as still frames, every layer advancing (a backward step is a
+//   wrong frame); the emulator's drop rate is recorded and must meet the ≤ 2% budget or beat live
+//   playback (the budget is a device number, QA-04).
+// No assertion retries or tolerates a wrong frame: when Media3's multi-input compositor (AND-08's
+// export path) composites a stale input frame into a render on the emulator, these tests fail.
 // Playback on the x86_64 emulator drops many frames (AND-16's own grid-cut playback presents
 // 20-65% of frames here), so playback assertions are correctness (no wrong frame) plus
 // non-vacuity (frames of every range and of the live parts were checked).
@@ -92,16 +96,8 @@ class RenderedRangePlaybackTest {
                 }
                 return wrong to bitmaps
             }
-            var (file, ms) = h.rig.render(RangeCut.cut(plan, first, end), "match")
-            var (fileWrong, bitmaps) = fileMismatches(file)
-            if (fileWrong.isNotEmpty()) {
-                // Media3's multi-input compositor (AND-08's export path, also seen in
-                // CompositionExportTest) occasionally composites a stale frame of one input on the
-                // emulator. One retry, logged under its own tag so CI can count retries.
-                android.util.Log.w(AND18_RETRY_TAG, "render file barcodes $fileWrong; rendering once more")
-                h.rig.render(RangeCut.cut(plan, first, end), "match_retry").let { file = it.first; ms = it.second }
-                fileMismatches(file).let { fileWrong = it.first; bitmaps = it.second }
-            }
+            val (file, ms) = h.rig.render(RangeCut.cut(plan, first, end), "match")
+            val (fileWrong, bitmaps) = fileMismatches(file)
             val rf = RenderedFile(file)
             log18("render [${first}, $end) of grid-cut 30 fps (emulator): $rf in $ms ms")
             assertEquals("one video track", 1, rf.videoTracks)
@@ -288,37 +284,36 @@ class RenderedRangePlaybackTest {
             h.sink.awaitK(0)
             Thread.sleep(200)
             h.sink.clear()
-            var publishedAtNs = 0L
+            var lastBefore = -1L
             var patchK = -1L
             val ended = h.playToEnd(0, 60_000) {
                 // Publish once playback shows F from the cache for a few frames.
                 val last = h.sink.frames.lastOrNull() ?: return@playToEnd false
                 if (last.k < fStart + 3) return@playToEnd false
                 patchK = last.k
-                publishedAtNs = System.nanoTime()
-                h.publish(patched, setOf("F#v"))
+                lastBefore = h.publishBetweenFrames(patched, setOf("F#v"))
                 true
             }
             Thread.sleep(200)
             assertTrue("ended", ended)
             val shown = h.sink.frames.toList()
-            val after = shown.filter { it.atNs > publishedAtNs }
+            // Playback presents increasing k: frames after lastBefore were composited after the patch.
+            val after = shown.filter { it.k > lastBefore }
             val stale = after.filter { it.k < end && it.readings["s2"] != null }
-            val staleCount = after.takeWhile { it.k < end && it.readings["s2"] != null }.size
-            val laterWrong = after.drop(staleCount).flatMap { mismatchesVisible(patched, it.k, it.readings, pts) }
-            val beforeWrong = shown.filter { it.atNs <= publishedAtNs }.flatMap { mismatches(plan, it.k, it.readings, pts) }
+            val afterWrong = after.flatMap { mismatchesVisible(patched, it.k, it.readings, pts) }
+            val beforeWrong = shown.filter { it.k <= lastBefore }.flatMap { mismatches(plan, it.k, it.readings, pts) }
             val stats = h.stats()
-            val line = "param patch at k=$patchK inside range [$first, $end) (emulator): ${after.size} frames presented after the patch, " +
-                "stale render frames after it $staleCount (first live frame k=${after.getOrNull(staleCount)?.k}), " +
+            val line = "param patch at k=$patchK inside range [$first, $end) (emulator): last frame composited before it k=$lastBefore, " +
+                "${after.size} frames presented after it (first k=${after.firstOrNull()?.k}), stale render frames after it ${stale.size} ${stale.take(3).map { it.k }}, " +
                 "swap dropped ${binding.swap.stats().dropped}, rebuilds ${binding.rebuilds}, dropped frames ${h.host.dropped.size}, range frames ${stats.rangeFrames}"
             log18(line)
+            assertTrue("published during playback inside the range: $line", lastBefore in fStart until end)
             assertEquals("before the patch every frame is right: $line", emptyList<String>(), beforeWrong)
             assertEquals("the range was dropped", 1, binding.swap.stats().dropped)
             assertTrue("the range is gone until the next set", binding.swap.isEmpty)
             assertTrue("frames after the patch: $line", after.size >= 5)
-            assertTrue("at most the rebuild latency (2 frames) of the stale render: $line", staleCount <= 2)
-            assertEquals("no stale frame after the fallback: $line", staleCount, stale.size)
-            assertEquals("every later frame is the live patched composition: $line", emptyList<String>(), laterWrong)
+            assertEquals("no frame of the stale render after the patch (live on the next frame): $line", emptyList<Long>(), stale.map { it.k })
+            assertEquals("every later frame is the live patched composition: $line", emptyList<String>(), afterWrong)
         }
     }
 
@@ -378,13 +373,12 @@ class RenderedRangePlaybackTest {
             val dropped = h.host.dropped.size
             val rangeFrames = cached.rangeFrames - before.rangeFrames
             val dropPct = 100.0 * dropped / frames
-            // The cache shows every layer moving: each cell's barcode advances with k.
-            // (A backward step is a stale input frame in the render, the Media3 compositor flake of
-            // AND-08's export path; logged, not hidden.)
+            // The cache shows every layer moving: each cell's barcode advances with k; a backward
+            // step is a wrong (stale) frame shown from the cache and fails the test.
             val backward = (0 until 6).sumOf { i -> shown.mapNotNull { it.readings["c$i"] }.zipWithNext().count { (a, b) -> b < a } }
             val cellsMoving = (0 until 6).count { i ->
                 val values = shown.mapNotNull { it.readings["c$i"] }
-                values.size >= shown.size / 2 && values.last() > values.first()
+                values.size >= shown.size / 2 && values.zipWithNext().all { (a, b) -> b >= a } && values.last() > values.first()
             }
             val line = "6-layer chroma key, liveBudget 2 (emulator): live playback presented $liveShown/$frames, dropped $liveDropped, " +
                 "stills fetched ${live.stillsFetched}; render ${RenderedFile(file)} in $ms ms; cached playback presented ${shown.size}/$frames, " +
@@ -396,6 +390,7 @@ class RenderedRangePlaybackTest {
             assertTrue("the cache played the range: $line", rangeFrames >= shown.size - 1 && shown.size >= 10)
             // The ≤ 2% drop budget is a device number (QA-04); on the emulator the cache must beat live playback.
             assertTrue("<= 2% dropped from the cache, or fewer drops than live playback: $line", dropPct <= 2.0 || dropped < liveDropped)
+            assertEquals("no backward step (wrong frame) in the cached playback: $line", 0, backward)
             assertEquals("every layer moves in the cached playback: $line", 6, cellsMoving)
         }
     }
