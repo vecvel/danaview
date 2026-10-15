@@ -221,7 +221,8 @@ Status as of 2026-10-15 (FIX-DOCS), after FIX-AI-TUNING and INT-04 landed.
   `NormalizerOptions` defaults (hallucination thresholds, AI-10), the decode and VAD options built by
   `pipeline_job.dart` (AI-13; no longer `WhisperVadOptions` defaults), and
   `ResourceGovernor.memoryHeadroom` (= `preflightMemoryFactor`, AI-13). `orchestration_test.dart`
-  asserts the decode and VAD values; the drift guard in `tool/eval/test/tuning_test.dart` stays.
+  asserts the decode and VAD values; the drift guard in
+  `packages/danaview_transcription/tool/eval/test/tuning_test.dart` stays.
 - Done (FIX-AI-TUNING): `TranscriptionLanguage.qualityHint` changed from a stored field (false for
   every language) into a getter reading `SpeechTuning.qualityHintFor(whisperCode)` (§6.6);
   `languages_test.dart` checks that exactly the FLEURS top 30 carry no hint.

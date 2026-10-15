@@ -66,6 +66,8 @@ const Map<EditorActionId, (List<String>, List<String>)> _labels = {
   EditorActionId.zoomOut: (['⌘−'], ['Ctrl+−']),
   EditorActionId.zoomFit: (['⇧Z'], ['Shift+Z']),
   EditorActionId.addMarker: (['M'], ['M']),
+  // UX-44 render preview (FIX-UX44-HOOKS): Cmd/Ctrl+R; R alone stays Ripple.
+  EditorActionId.renderPreview: (['⌘R'], ['Ctrl+R']),
   EditorActionId.showShortcuts: (['⌘/', '?'], ['Ctrl+/', '?']),
 };
 

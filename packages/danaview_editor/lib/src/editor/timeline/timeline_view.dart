@@ -780,7 +780,7 @@ class TimelineViewState extends ConsumerState<TimelineView> with TickerProviderS
               right: 0,
               top: ruler,
               height: RenderMarkerStrip.defaultHeight,
-              child: RenderMarkerStripHost(projectId: id),
+              child: const SizedBox.shrink(),
             ),
             Positioned.fill(
                 child: IgnorePointer(child: PlayheadLayer(viewport: viewport, playhead: playhead, style: style, metrics: metrics))),

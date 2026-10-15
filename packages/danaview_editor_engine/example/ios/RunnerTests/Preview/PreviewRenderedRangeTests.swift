@@ -107,7 +107,7 @@ final class PreviewRenderedRangeTests: XCTestCase {
 
     private func seek(_ id: String, frame k: Int64, fps: Int64 = 25) async throws -> SeekAckMsg {
         let manager = self.manager!
-        let t = FrameGrid(fps).timeOfFrame(k)
+        let t = FrameGrid(fps: fps).timeOfFrame(k)
         return try await call { manager.seek(sessionId: id, timeUs: t, exact: true, reply: $0) }
     }
 
