@@ -47,8 +47,14 @@ final class VideoTimescaleTests: XCTestCase {
     private func assertExactGrid(_ pts: [CMTime], fps: Int, count: Int, _ what: String,
                                  file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertEqual(pts.count, count, "\(what): frame count", file: file, line: line)
+        // Passthrough sample times are media times: a B-frame track (the fixture) starts after a
+        // composition offset that its edit list removes, so compare relative to the first frame.
+        let first = pts.first ?? .zero
+        XCTAssertEqual(Int64(first.value) * Int64(fps) % Int64(first.timescale), 0,
+                       "\(what): first frame \(first.value)/\(first.timescale) on the grid", file: file, line: line)
         var off: [String] = []
-        for (k, t) in pts.enumerated() where CMTimeCompare(t, CMTime(value: CMTimeValue(k), timescale: CMTimeScale(fps))) != 0 {
+        for (k, t) in pts.enumerated()
+        where CMTimeCompare(CMTimeSubtract(t, first), CMTime(value: CMTimeValue(k), timescale: CMTimeScale(fps))) != 0 {
             if off.count < 5 { off.append("k=\(k) at \(t.value)/\(t.timescale)") }
         }
         XCTAssertTrue(off.isEmpty, "\(what): frames off k/\(fps): \(off)", file: file, line: line)
