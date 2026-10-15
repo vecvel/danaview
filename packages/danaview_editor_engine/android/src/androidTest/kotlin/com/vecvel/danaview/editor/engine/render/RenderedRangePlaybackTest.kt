@@ -167,21 +167,42 @@ class RenderedRangePlaybackTest {
                 val ended = h.playToEnd(0, plan.durUs / 1000 + 60_000)
                 Thread.sleep(200)
                 val shown = h.sink.frames.toList()
-                val bad = shown.flatMap { mismatches(plan, it.k, it.readings, pts) }
-                val ks = shown.map { it.k }.toSet()
-                val inRange = shown.count { f -> rs.any { (a, b) -> f.k in a until b } }
-                val edges = rs.flatMap { listOf(it.first, it.second) }
-                val bothSides = edges.count { (it - 1) in ks && it in ks }
+                val dropped = h.host.dropped.size
                 val stats = h.stats()
                 val swap = binding.swap.stats()
-                val line = "range boundaries $fps fps (emulator): presented ${ks.size}/${fps * 4} ($inRange from 2 rendered ranges ${rs}), " +
-                    "dropped ${h.host.dropped.size}, range frames ${stats.rangeFrames}, swap entered ${swap.entered} left ${swap.left}, " +
-                    "boundaries seen on both sides $bothSides/${edges.size}, composite ${Timings(stats.compositeMs)}, wrong ${bad.size} ${bad.take(6)}"
+                // Then short plays starting two frames before each range edge, so the frames on both
+                // sides of every edge are presented despite the emulator's drops.
+                val edges = rs.flatMap { listOf(it.first, it.second) }
+                val around = ArrayList<Shown>()
+                for (e in edges) {
+                    assertTrue("seek ${e - 2}", h.seekExact(e - 2) >= 0)
+                    h.sink.awaitK(e - 2)
+                    Thread.sleep(150)
+                    h.sink.clear()
+                    h.play(e - 2)
+                    val until = System.currentTimeMillis() + 1_500
+                    while (System.currentTimeMillis() < until && h.sink.frames.none { it.k >= e + 2 }) Thread.sleep(5)
+                    h.pause()
+                    Thread.sleep(100)
+                    val run = h.sink.frames.toList()
+                    assertTrue("presented frames increase around $e", run.zipWithNext().all { (a, b) -> b.k > a.k })
+                    around += run
+                }
+                val all = shown + around
+                val bad = all.flatMap { mismatches(plan, it.k, it.readings, pts) }
+                val ks = shown.map { it.k }.toSet()
+                val inRange = shown.count { f -> rs.any { (a, b) -> f.k in a until b } }
+                val aroundKs = around.map { it.k }.toSet()
+                val bothSides = edges.count { (it - 1) in aroundKs && it in aroundKs }
+                val line = "range boundaries $fps fps (emulator): full play presented ${ks.size}/${fps * 4} ($inRange from 2 rendered ranges ${rs}), " +
+                    "dropped $dropped, range frames ${stats.rangeFrames}, swap entered ${swap.entered} left ${swap.left}, composite ${Timings(stats.compositeMs)}; " +
+                    "edge plays: ${around.size} frames, edges seen on both sides $bothSides/${edges.size}; wrong ${bad.size} ${bad.take(6)}"
                 log18(line)
                 report.appendLine(line)
                 assertTrue("ended: $line", ended)
                 assertEquals("no wrong frame at $fps fps: $line", emptyList<String>(), bad)
                 assertTrue("presented frames increase", shown.zipWithNext().all { (a, b) -> b.k > a.k })
+                assertTrue("some edges were crossed frame to frame: $line", bothSides >= 1)
                 assertTrue("both ranges played from their files: $line", swap.entered >= 2 && swap.left >= 2 && stats.rangeFrames >= inRange)
                 // Non-vacuous on a slow emulator: frames from each range and live frames were checked.
                 assertTrue("frames of each range presented: $line", rs.all { (a, b) -> shown.any { it.k in a until b } })
