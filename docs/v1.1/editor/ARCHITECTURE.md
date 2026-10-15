@@ -749,7 +749,7 @@ Layer ids unique; every referenced asset exists with a compatible kind; `t0 < t1
 - **Which frame is being rendered** is decided by the platform-time rule (§5, D-35): an output frame's platform time maps to `k = frameIndexNearest(τ)` and every evaluation below uses `t = timeOfFrame(k)` of the output rate.
 - Media layer at timeline time *t* ∈ `t`: `s = s0 + (t − t0)·(s1 − s0)/(t1 − t0)` on the containing segment. **Displayed source frame = the sample with the greatest PTS ≤ s + 500 µs** (PTS on the asset's presentation timeline with edit lists applied). `hold`: `s = map[0].s0` throughout. Images ignore `map`.
 - Audio: sample-accurate `s(t)` with no ε. A clip's video layer and audio segment are compiled from one `ClipTimeMap` and share segment boundaries, which is the A/V-sync contract (≤ 1 frame and ≤ 20 ms over 10 min; QA-03 clap/flash test).
-- `pitch: true` → time-stretch keeping pitch (iOS `.spectral`, Android Sonic `shouldMaintainPitch`); `false` → varispeed/resample.
+- `pitch: true` → time-stretch keeping pitch (iOS `.timeDomain` per §13.2 / IOS-01 V-N21, Android Sonic `shouldMaintainPitch`); `false` → varispeed/resample.
 - Reversed clips reference the rendition asset with an increasing map (`r = R.end − s`); engines never see "reverse".
 - Frame-rate conform for sources whose rate differs from the plan's: iOS floor, Android nearest (D-04); consistent between preview and export per platform.
 
@@ -778,7 +778,7 @@ Per layer, in order (D-08): **sample** (video frame / image / solid / sprite) �
 | Sprite | premultiplied RGBA sampled with M; if `reveal` is animated, a pixel is drawn iff `glyph < floor(reveal(t))` |
 | Audio | `out = Σ seg(t)·gain(t)` (linear interpolation of `gain`, range 0–2 = up to +6.02 dB, applied per sample: iOS `MTAudioProcessingTap` D-37, Android `GainProcessor`), 48 kHz stereo (mono duplicated; > 2 channels downmixed with ITU coefficients), hard-clipped to [−1, 1] (no limiter in v1; the iOS export pump clamps explicitly). The Dart reference mixer (API-03 `reference/audio_mix.dart`) implements this row and is the oracle for QA-11's PCM checks |
 
-**Parity tolerance** (device output vs the Dart reference, and iOS vs Android): mean absolute error ≤ 1.5/255 per channel, 99th percentile ≤ 6/255, SSIM ≥ 0.98 on transform fixtures with edge pixels excluded.
+**Parity tolerance** (device output vs the Dart reference, and iOS vs Android): mean absolute error ≤ 1.5/255 per channel, 99th percentile ≤ 6/255, SSIM ≥ 0.98 on transform fixtures with edge pixels excluded. **Exported frames** (H.264/HEVC 4:2:0) additionally exclude content edges: pixels whose 3×3 range exceeds 48/255, dilated by 1 px, because chroma subsampling smears them; preview frames are compared without this exclusion (lead decision 2026-10-15, QA-03). QA-03's iOS reference renders live in `docs/v1.1/editor/qa/QA-03-parity/ios/` so the Android lane can compare against them.
 
 ### 11.7 Lowering table (compiler, CORE-30/31)
 
@@ -1206,7 +1206,7 @@ Media (bin, import, add at playhead, add as overlay, replace, relink, drag to ti
 
 ### 17.8 Content fonts (D-30)
 
-`packages/danaview_editor_fonts` bundles 10 OFL-1.1 families for **user content only** (regular, bold, italic where available; ≈ 3–4 MB): Figtree (default), Inter, Montserrat, Oswald, Bebas Neue, Playfair Display, Lora, Caveat, Pacifico, JetBrains Mono. `FontCatalog` maps stable ids to family names; scripts the family lacks (CJK, Arabic, Devanagari…) use Flutter's system font fallback, identical in preview and export because both are rendered by Flutter. The font picker previews each family in itself. Licences appear in the licences screen.
+`packages/danaview_editor_fonts` bundles 10 OFL-1.1 families for **user content only** (regular, bold, italic where available; ≈ 5.6 MB as built: the upstream variable-font files are used; lead decision 2026-10-15 accepts this over the earlier 3–4 MB estimate rather than subsetting, which would drop scripts users may type): Figtree (default), Inter, Montserrat, Oswald, Bebas Neue, Playfair Display, Lora, Caveat, Pacifico, JetBrains Mono. `FontCatalog` maps stable ids to family names; scripts the family lacks (CJK, Arabic, Devanagari…) use Flutter's system font fallback, identical in preview and export because both are rendered by Flutter. The font picker previews each family in itself. Licences appear in the licences screen.
 
 ### 17.9 Accessibility and no-overflow
 
