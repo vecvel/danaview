@@ -297,42 +297,9 @@ internal class VideoDeck(
         if (DEBUG) android.util.Log.d("AND16DBG", "deck$index e=$epoch seek i=$i ms=$ms cur=${player.currentMediaItemIndex}/${player.currentPosition}")
         assigned = i
         positionedMs = ms
-        approachRule = -1L
-        approachFailures = 0
         positionedAtMs = android.os.SystemClock.uptimeMillis()
         nudge = false
         stats.seeks++
-    }
-
-    /** The rule frame this deck is approaching by playing (-1: none). */
-    var approachRule = -1L
-        private set
-
-    /** Approaches that overshot since the last positioning by the engine. */
-    var approachFailures = 0
-        private set
-
-    /**
-     * Plays item [i] from window position [ms] (before [rule]) until the rule frame arrives; the
-     * engine latches it and calls [endApproach]. For decoders that skip the leading B-frames after a
-     * flush: frames decoded in playback are complete.
-     */
-    fun approach(i: Int, ms: Long, rule: Long) {
-        val failures = approachFailures
-        position(i, ms, SeekParameters.EXACT, force = true)
-        approachFailures = failures
-        approachRule = rule
-        // Slowly, so a loaded decoder never drops the target as a late frame.
-        player.setPlaybackSpeed(APPROACH_SPEED)
-        player.playWhenReady = true
-    }
-
-    /** Ends an approach: pauses on the latched frame; a failed one counts. */
-    fun endApproach(succeeded: Boolean) {
-        player.playWhenReady = false
-        player.setPlaybackSpeed(1f)
-        approachRule = -1L
-        if (!succeeded) approachFailures++
     }
 
     /** Watchdog: re-issues the current exact seek, alternating ms − 1 and ms (ExoPlayer ignores a seek to the ms it reports). */
@@ -543,7 +510,6 @@ internal class VideoDeck(
         const val MAX_TAGS = 512
         const val MAX_RECOVERIES = 5
         const val READY_WITHOUT_FRAME_MS = 600L
-        const val APPROACH_SPEED = 0.25f
         const val MIN_SPEED = 0.1f
         const val MAX_SPEED = 10f
     }

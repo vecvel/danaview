@@ -103,14 +103,13 @@ class EngineStats {
     var rangeFrames = 0
     var exactStillFallbacks = 0
     var stillFailures = 0
-    var approaches = 0
     val compositeMs = ArrayList<Double>()
 
     fun copy(): EngineStats = EngineStats().also {
         it.composed = composed; it.dropped = dropped; it.held = held; it.missed = missed; it.rebuffers = rebuffers
         it.audioFollows = audioFollows; it.audioClockReads = audioClockReads; it.nearestShown = nearestShown; it.stillsFetched = stillsFetched
         it.reseeks = reseeks; it.replans = replans; it.slotsReplanned = slotsReplanned; it.deckCount = deckCount
-        it.rangeFrames = rangeFrames; it.exactStillFallbacks = exactStillFallbacks; it.stillFailures = stillFailures; it.approaches = approaches; it.compositeMs.addAll(compositeMs)
+        it.rangeFrames = rangeFrames; it.exactStillFallbacks = exactStillFallbacks; it.stillFailures = stillFailures; it.compositeMs.addAll(compositeMs)
     }
 }
 
@@ -1034,35 +1033,14 @@ internal class MultiPlayerEngine(
                                     continue
                                 }
                                 val rule = ruleOf(item, k)
-                                when {
-                                    purpose == Purpose.PLAYBACK -> d.latchFor(rule)
-                                    purpose == Purpose.EXACT && d.approachRule == rule -> {
-                                        d.latchFor(rule)
-                                        if (d.hasLatched(rule)) {
-                                            d.endApproach(succeeded = true)
-                                        } else if (d.passed(rule)) {
-                                            d.endApproach(succeeded = false)
-                                        }
-                                    }
-                                    else -> d.latchNewest()
-                                }
+                                if (purpose == Purpose.PLAYBACK) d.latchFor(rule) else d.latchNewest()
                                 if (purpose == Purpose.NEAREST) {
                                     if (!d.hasEpochFrame) continue
                                 } else if (!d.hasLatched(rule)) {
-                                    if (purpose == Purpose.EXACT && d.approachRule != rule && d.hasEpochFrame && d.latchedPts > rule &&
-                                        d.player.playbackState == Player.STATE_READY && d.approachFailures < MAX_APPROACHES
-                                    ) {
+                                    if (purpose == Purpose.EXACT && d.hasEpochFrame && d.latchedPts > rule && d.player.playbackState == Player.STATE_READY) {
                                         // The decoder skipped the rule frame after the seek (the emulators'
-                                        // decoders drop the leading B-frames after a flush): approach it by
-                                        // playing from a little earlier and pausing on it.
-                                        val from = maxOf(item.clipStartUs, rule - APPROACH_US)
-                                        d.approach(i, item.positionMs(RuleFrameMath.rule(frameTables[item.uri] ?: longArrayOf(rule), from)), rule)
-                                        stats.approaches++
-                                        missing = true
-                                        continue
-                                    }
-                                    if (purpose == Purpose.EXACT && d.approachRule != rule && d.hasEpochFrame && d.latchedPts > rule && d.player.playbackState == Player.STATE_READY) {
-                                        // Approaching failed too: this paused frame shows the exact still of the layer.
+                                        // decoders drop the leading B-frames after a flush): this paused frame
+                                        // shows the exact still of the layer instead (never another frame).
                                         val tex = stillTexture(snap.plan, layer, params, t, geom, exact = true)
                                         if (tex == null) {
                                             missing = true
@@ -1345,12 +1323,6 @@ internal class MultiPlayerEngine(
 
         /** Drift corrections of one deck at most this often. */
         const val CORRECTION_COOLDOWN_MS = 1_000L
-
-        /** A deck that skipped its rule frame replays from this far before it (µs). */
-        const val APPROACH_US = 300_000L
-
-        /** Approaches per seek before the exact still is used. */
-        const val MAX_APPROACHES = 2
 
         /** A failed still is requested again after this long. */
         const val STILL_RETRY_MS = 1_000L
