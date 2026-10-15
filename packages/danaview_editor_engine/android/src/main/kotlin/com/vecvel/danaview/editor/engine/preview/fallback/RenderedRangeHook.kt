@@ -40,6 +40,14 @@ interface RenderedRangeHook {
      */
     fun onBoundary(k: Long, entered: RenderedRange?)
 
+    /**
+     * Whether [range] (one of [ranges]) may still play. Asked for every playback frame inside the
+     * range before it is drawn from the range deck, so a change that touched the range since the
+     * last structural rebuild falls back to the live decks on the very next frame (hold/miss: the
+     * live decks may drop a frame or two while they reposition, never show a stale one).
+     */
+    fun isValid(range: RenderedRange): Boolean = true
+
     companion object {
         /** No rendered ranges (AND-16's default until AND-18 installs its swap). */
         val NONE: RenderedRangeHook = object : RenderedRangeHook {

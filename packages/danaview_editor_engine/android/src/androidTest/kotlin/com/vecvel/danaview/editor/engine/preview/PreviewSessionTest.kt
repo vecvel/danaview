@@ -1,7 +1,8 @@
 // OWNER: AND-10
 //
-// PreviewSession end to end on the emulator with the built-in StillFramesBackend (AND-16 has not
-// landed; AND-01 NO-GO): the real PausedFrameRenderer draws onto a fake SurfaceProducer's
+// PreviewSession end to end on the emulator with the built-in StillFramesBackend, installed
+// explicitly (since AND-16 the manager's default backend is ContingencyPreviewBackend, whose
+// session-level tests are AND-16's ContingencySessionTest): the real PausedFrameRenderer draws onto a fake SurfaceProducer's
 // ImageReader, so every presented frame is checked by its barcode (ENG-05's 720p24 counter, frame
 // number = source frame). Covers: open → firstFrame; paused edits through AND-17 (param patch,
 // transient, clear, editing mode, refresh); "a rebuild keeps the last frame"; seq semantics of
@@ -78,7 +79,7 @@ class PreviewSessionTest {
     private fun barcode(frame: ProducedFrame): Int? = FrameBarcode.decode(frame.rgba, frame.width, frame.height)
 
     private fun opened(name: String, quality: PreviewQualityMsg = PreviewQualityMsg.FULL): PreviewHarness =
-        PreviewHarness(name).apply { open(quality) }
+        PreviewHarness(name, backend = { StillFramesBackend() }).apply { open(quality) }
 
     @Test
     fun openShowsTheFirstFrameAndPausedEditsGoThroughThePausedRenderer() {

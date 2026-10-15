@@ -8,7 +8,8 @@
 //   cancel (partial output deleted), interrupt, detached completion (D-39), process death
 //   (interrupted once), consume, the side effects (job registry / preview suspension / service via
 //   the environment) and the AND-12 listener API;
-// - the export mapping uses originals (never proxies).
+// - the export mapping uses originals (never proxies); a plan referencing a render-preview file is
+//   refused (D-45).
 
 package com.vecvel.danaview.editor.engine.export
 
@@ -174,6 +175,26 @@ class ExportCoordinatorTest {
         // gridFps 30 with output fps 24 is a valid export.
         assertTrue(start(Settings.msg(fps = 24)).isSuccess)
         assertEquals(0, events.count { it.kind == EngineEventKindMsg.FAILURE })
+    }
+
+    @Test
+    fun aPlanReferencingARenderPreviewFileIsRefused() {
+        // D-45: render-preview files (<cache>/danaview/editor/renders/) are never exported, as an
+        // asset or as its proxy; the AND-19 work directory and other cache files are fine.
+        val renders = File(paths.cacheRoot, "renders")
+        fun withSrc(uri: String, proxy: String? = null) = Plans.media().let { p ->
+            p.copy(assets = p.assets.mapValues { (_, a) -> a.copy(uri = uri, proxyUri = proxy) })
+        }
+        plan = withSrc("file://" + File(renders, "abc.mp4").absolutePath)
+        val asAsset = preflight().exceptionOrNull() as EngineException
+        assertEquals(EngineErrorCode.planInvalid, asAsset.code)
+        assertEquals("md_src", asAsset.itemId)
+        assertEquals(EngineErrorCode.planInvalid, (start().exceptionOrNull() as EngineException).code)
+        plan = withSrc("file:///fixtures/src.mp4", proxy = "file://" + File(renders, "abc.mp4").absolutePath)
+        assertEquals(EngineErrorCode.planInvalid, (start().exceptionOrNull() as EngineException).code)
+        plan = withSrc("file://" + File(paths.work, "export-x/pass1.mp4").absolutePath)
+        assertTrue(preflight().isSuccess)
+        assertEquals("no pass started for a refused plan", 0, single.starts + multi.starts)
     }
 
     // ---- routing ----
