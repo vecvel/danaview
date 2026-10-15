@@ -1,10 +1,638 @@
 // OWNER: IOS-12
 //
-// D-33 placeholder created by ENG-07: AVAssetReader/AVAssetWriter pumps (ARCH §14.2).
-// Only IOS-12 edits this file once it lands.
-// Not called by the glue; it only declares the class name of ARCH §4.4.
+// The iOS export pipeline (ARCH §14.2, D-22, D-35, D-37, D-38): AVAssetReader over the export
+// composition → IOS-17's SegmentedWriter → passthrough concat.
+//
+// Video. `AVAssetReader(asset: composition)` with `AVAssetReaderVideoCompositionOutput` (the
+// export variant of IOS-08/IOS-10: renderSize = output, frameDuration = 1/export fps, DVCompositor
+// stamping `danaview.frame = k`). The SegmentedWriter opens the source once per 10 s segment, so
+// every segment re-creates its reader with that segment's `timeRange` (resume starts at the next
+// segment). Frames are BGRA IOSurface buffers; with the `.rotated` layout (ARCH §14.1) each frame
+// is turned 90° counter-clockwise into a landscape buffer and the final file gets a 90° clockwise
+// `preferredTransform` (passthrough remux after the concat).
+//
+// Audio. One whole-duration AAC-LC 48 kHz stereo file (IOS-17 `writeAudio`):
+// - `plan.audio` empty (no audio, everything muted or soloed out, images/text only): silent LPCM
+//   across [0, durUs); no AVAssetReaderAudioMixOutput is ever built over zero tracks (D-38: that
+//   raises an uncatchable NSInvalidArgumentException).
+// - otherwise `AVAssetReaderAudioMixOutput` (LPCM Float32 48 kHz stereo interleaved, `.timeDomain`
+//   for keep-pitch tracks as set per track by IOS-08, IOS-18 gain taps carrying the plan
+//   envelopes up to +6.02 dB). Samples are clamped to [−1, 1] (NaN → 0) before the AAC input
+//   (§11.6 hard clip, D-37). The reader runs 0.01–0.10 s past the composition; the writer trims to
+//   the duration (`endSession`). IOS-01 saw about one read in 70 come back silent or NaN, so a
+//   read is validated (NaN, fully silent while the plan has audible audio, a tap range
+//   discontinuity, a hung read) and redone with a fresh composition, at most twice; the last
+//   attempt is accepted (sanitised) unless it hangs or fails.
+//
+// Order: video segments (phase rendering; progress = last video PTS / duration), then the audio
+// file and the concat (phase finishing). Pumps run on IOS-17's serial pump queue with
+// requestMediaDataWhenReady; this class blocks the calling queue (the export work queue).
+// Interruptions (background, AVFoundation −11847/−11819) return `.interrupted` with the checkpoint
+// kept; `cancel` throws `cancelled` (the coordinator deletes the files).
 
+import Accelerate
+import AVFoundation
+import CoreMedia
+import CoreVideo
 import Foundation
 
-/// Placeholder (IOS-12).
-final class ReaderWriterPipeline {}
+// MARK: - Export composition
+
+/// A composition built for export with the render session its compositor uses (kept alive).
+final class ExportComposition {
+    let built: BuiltComposition
+    let session: DVRenderSession?
+
+    init(built: BuiltComposition, session: DVRenderSession?) {
+        self.built = built
+        self.session = session
+    }
+
+    /// Decoder-backed composition video tracks (CORE-36 slots; the spacer is not counted).
+    var decoderTracks: Int { built.trackIDBySeq.count }
+
+    /// Audio tracks the mix output would read.
+    var audioTracks: [AVAssetTrack] { built.composition.tracks(withMediaType: .audio) }
+
+    func release() { built.releaseMedia() }
+}
+
+/// Builds the export composition of a plan (throws `decoderInitFailed` when a track cannot get a
+/// decoder, `mediaOffline` for missing media, …).
+typealias ExportCompositionFactory = (RenderPlan) throws -> ExportComposition
+
+// MARK: - Pipeline
+
+final class ReaderWriterPipeline {
+    struct Input {
+        var jobId: String
+        var plan: RenderPlan
+        var planHash: String
+        var settings: EncoderSettings
+        var layout: EncodeLayout
+        /// `work/export-<jobId>/`.
+        var directory: URL
+        var outputURL: URL
+    }
+
+    struct Result: Equatable {
+        var path: String
+        var bytes: Int64
+        var durationUs: Int64
+        var frames: Int
+        var peakDiskBytes: Int64
+        var reencodedSegments: [Int]
+    }
+
+    enum Outcome: Equatable {
+        case completed(Result)
+        /// Stopped by an interruption; the checkpoint keeps every finished segment.
+        case interrupted
+    }
+
+    let input: Input
+    let control: PipelineControl
+    let makeComposition: ExportCompositionFactory
+    var segmentDurationUs = SegmentedWriter.defaultSegmentDurationUs
+    /// Audio reads per job (the first plus at most two redos).
+    var maxAudioAttempts = 3
+    /// Seconds one audio buffer may take before the read counts as hung.
+    var audioWatchdog: TimeInterval = 30
+    /// Encoder probe used to classify video encoder failures (`encoderSizeLimit` vs
+    /// `encoderUnavailable`); decoder and media errors keep their codes (`decoderInitFailed` routes
+    /// the job to the multi-pass hook).
+    var probe: EncoderProbe = .system
+
+    // Test hooks.
+    /// Configures the segmented writer (fault injection, IOS-17 hooks).
+    var configureWriter: ((SegmentedWriter) -> Void)?
+    /// An error to throw when the video source opens the segment starting at the given µs.
+    var videoOpenFault: ((Int64) -> Error?)?
+    /// Called with every audio source before it is read (attempt 1, 2, …).
+    var audioSourceHook: ((MixAudioSource, Int) -> Void)?
+
+    /// Audio reads of the last run (tests).
+    private(set) var audioAttempts = 0
+    /// Whether the last run wrote silent audio (tests).
+    private(set) var wroteSilentAudio = false
+
+    init(input: Input, control: PipelineControl, makeComposition: @escaping ExportCompositionFactory) {
+        self.input = input
+        self.control = control
+        self.makeComposition = makeComposition
+    }
+
+    /// Whether any audio segment of [plan] has a non-zero gain (a silent read is then suspicious).
+    static func hasAudibleAudio(_ plan: RenderPlan) -> Bool {
+        plan.audio.contains { seg in seg.gain.isEmpty || seg.gain.contains { $0.v > 1e-4 } }
+    }
+
+    /// Runs the job to completion or interruption.
+    func run() throws -> Outcome {
+        let plan = input.plan
+        guard plan.durUs > 0 else { throw EngineError(.planInvalid, "empty export plan") }
+        let segmentSettings = input.settings.segmentSettings(layout: input.layout)
+        let writer = try SegmentedWriter(
+            directory: input.directory, jobKind: ExportJob.jobKind, inputHash: input.planHash, settings: segmentSettings,
+            startUs: 0, endUs: plan.durUs, segmentDurationUs: segmentDurationUs)
+        configureWriter?(writer)
+        control.attach(writer)
+        defer { control.attach(nil) }
+        if control.isCancelled { throw EngineError.cancelled }
+        if let job = control as? ExportJob { job.restoreProgress(doneUs: writer.checkpoint.resumeTimeUs) }
+
+        var composition: ExportComposition?
+        defer { composition?.release() }
+
+        // Video segments.
+        if !writer.checkpoint.isVideoComplete {
+            control.enter(.preparing)
+            let built = try makeComposition(plan)
+            composition = built
+            let rotator = input.layout == .rotated
+                ? FrameRotator(sourceWidth: input.settings.width, sourceHeight: input.settings.height) : nil
+            let source = CompositionVideoSource(composition: built, control: control, rotator: rotator)
+            source.openFault = videoOpenFault
+            control.enter(.rendering)
+            let outcome: SegmentedWriter.Outcome
+            do {
+                outcome = try writer.writeVideo(source: source)
+            } catch {
+                if control.isCancelled { throw EngineError.cancelled }
+                throw EncoderErrors.map(error, settings: input.settings, probe: probe)
+            }
+            if outcome == .interrupted {
+                if control.isCancelled { throw EngineError.cancelled }
+                return .interrupted
+            }
+        } else if let job = control as? ExportJob {
+            job.videoProgress(lastPtsUs: plan.durUs - 1)
+        }
+
+        // Audio and concat.
+        control.enter(.finishing)
+        if !writer.checkpoint.audioComplete {
+            if try writeAudio(writer, composition: &composition) == .interrupted {
+                if control.isCancelled { throw EngineError.cancelled }
+                return .interrupted
+            }
+        }
+        if control.isCancelled { throw EngineError.cancelled }
+        composition?.release()
+        composition = nil
+
+        let rotated = input.layout == .rotated
+        let joined = rotated
+            ? input.directory.appendingPathComponent("joined.\(input.settings.fileExtension)") : input.outputURL
+        let concat: SegmentConcat.Result
+        do {
+            concat = try writer.concat(to: joined)
+        } catch {
+            try? FileManager.default.removeItem(at: joined)
+            if control.isCancelled { throw EngineError.cancelled }
+            throw error
+        }
+        if rotated {
+            do {
+                try PassthroughRemux.remux(
+                    from: joined, to: input.outputURL, fileType: input.settings.fileType,
+                    transform: EncodeLayout.rotatedTransform(encodedHeight: segmentSettings.height))
+            } catch {
+                try? FileManager.default.removeItem(at: input.outputURL)
+                try? FileManager.default.removeItem(at: joined)
+                throw error
+            }
+            try? FileManager.default.removeItem(at: joined)
+        }
+        if control.isCancelled {
+            try? FileManager.default.removeItem(at: input.outputURL)
+            throw EngineError.cancelled
+        }
+        return .completed(Result(
+            path: input.outputURL.path, bytes: SegmentedWriter.fileSize(input.outputURL), durationUs: plan.durUs,
+            frames: concat.frames, peakDiskBytes: concat.peakDiskBytes, reencodedSegments: concat.reencodedSegments))
+    }
+
+    private func writeAudio(_ writer: SegmentedWriter, composition: inout ExportComposition?) throws -> SegmentedWriter.Outcome {
+        let plan = input.plan
+        if plan.audio.isEmpty {
+            wroteSilentAudio = true
+            return try writer.writeAudio(source: SilentAudioSource(control: control))
+        }
+        let audible = ReaderWriterPipeline.hasAudibleAudio(plan)
+        var attempt = 0
+        while true {
+            attempt += 1
+            audioAttempts = attempt
+            if composition == nil || attempt > 1 {
+                composition?.release()
+                composition = nil
+                composition = try makeComposition(plan)
+            }
+            guard let built = composition else { throw EngineError(.internal, "no export composition") }
+            guard built.built.audioMix != nil, !built.audioTracks.isEmpty else {
+                // Every segment was skipped (missing streams): silence, never a mix over zero tracks.
+                wroteSilentAudio = true
+                return try writer.writeAudio(source: SilentAudioSource(control: control))
+            }
+            let source = MixAudioSource(composition: built, expectAudible: audible, control: control)
+            source.validates = attempt < maxAudioAttempts
+            source.watchdog = audioWatchdog
+            audioSourceHook?(source, attempt)
+            do {
+                return try writer.writeAudio(source: source)
+            } catch {
+                if control.isCancelled { throw EngineError.cancelled }
+                guard let reason = source.rejection, attempt < maxAudioAttempts else { throw error }
+                Log.info(.export, "audio read \(attempt) rejected (\(reason)); reading again")
+            }
+        }
+    }
+}
+
+// MARK: - Video source
+
+/// Frames of the export composition per segment (AVAssetReaderVideoCompositionOutput).
+final class CompositionVideoSource: SegmentVideoSource {
+    private let composition: ExportComposition
+    private let control: PipelineControl
+    private let rotator: FrameRotator?
+    private var reader: AVAssetReader?
+    private var output: AVAssetReaderVideoCompositionOutput?
+    /// Test hook: an error to throw when opening the segment that starts at the given µs.
+    var openFault: ((Int64) -> Error?)?
+    /// Frames delivered (all segments).
+    private(set) var framesRead = 0
+
+    static let videoSettings: [String: Any] = [
+        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+        kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
+    ]
+
+    init(composition: ExportComposition, control: PipelineControl, rotator: FrameRotator?) {
+        self.composition = composition
+        self.control = control
+        self.rotator = rotator
+    }
+
+    func openSegment(startUs: Int64, endUs: Int64) throws {
+        closeSegment()
+        if let fault = openFault?(startUs) { throw fault }
+        let built = composition.built
+        let reader: AVAssetReader
+        do {
+            reader = try AVAssetReader(asset: built.composition)
+        } catch {
+            throw EngineError.from(error)
+        }
+        reader.timeRange = CMTimeRange(start: FrameGrid.cmTime(us: startUs), end: FrameGrid.cmTime(us: endUs))
+        let output = AVAssetReaderVideoCompositionOutput(
+            videoTracks: built.composition.tracks(withMediaType: .video), videoSettings: CompositionVideoSource.videoSettings)
+        output.videoComposition = built.videoComposition
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { throw EngineError(.decoderInitFailed, "video composition output refused") }
+        reader.add(output)
+        guard reader.startReading() else {
+            throw reader.error.map(EngineError.from) ?? EngineError(.decoderInitFailed, "export reader did not start")
+        }
+        self.reader = reader
+        self.output = output
+    }
+
+    func nextFrame() throws -> SegmentFrame? {
+        control.waitWhileThermalCritical()
+        guard let output = output, let reader = reader else { return nil }
+        while let sample = output.copyNextSampleBuffer() {
+            guard let image = CMSampleBufferGetImageBuffer(sample) else { continue }
+            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+            let frame = try rotator?.rotate(image) ?? image
+            framesRead += 1
+            control.videoProgress(lastPtsUs: FrameGrid.us(pts))
+            return SegmentFrame(pixelBuffer: frame, pts: pts)
+        }
+        if reader.status == .failed {
+            throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "export reader failed")
+        }
+        return nil
+    }
+
+    func closeSegment() {
+        if reader?.status == .reading { reader?.cancelReading() }
+        reader = nil
+        output = nil
+    }
+}
+
+/// Turns BGRA frames 90° counter-clockwise into landscape buffers (ARCH §14.1 `.rotated` layout).
+final class FrameRotator {
+    /// Size of the rotated (encoded) buffer.
+    let width: Int
+    let height: Int
+    private var pool: CVPixelBufferPool?
+
+    init(sourceWidth: Int, sourceHeight: Int) {
+        width = sourceHeight
+        height = sourceWidth
+    }
+
+    func rotate(_ source: CVPixelBuffer) throws -> CVPixelBuffer {
+        guard CVPixelBufferGetPixelFormatType(source) == kCVPixelFormatType_32BGRA else {
+            throw EngineError(.internal, "rotation expects BGRA frames")
+        }
+        let destination = try makeBuffer()
+        CVPixelBufferLockBaseAddress(source, .readOnly)
+        CVPixelBufferLockBaseAddress(destination, [])
+        defer {
+            CVPixelBufferUnlockBaseAddress(destination, [])
+            CVPixelBufferUnlockBaseAddress(source, .readOnly)
+        }
+        var src = vImage_Buffer(
+            data: CVPixelBufferGetBaseAddress(source), height: vImagePixelCount(CVPixelBufferGetHeight(source)),
+            width: vImagePixelCount(CVPixelBufferGetWidth(source)), rowBytes: CVPixelBufferGetBytesPerRow(source))
+        var dst = vImage_Buffer(
+            data: CVPixelBufferGetBaseAddress(destination), height: vImagePixelCount(height), width: vImagePixelCount(width),
+            rowBytes: CVPixelBufferGetBytesPerRow(destination))
+        guard Int(src.width) == height, Int(src.height) == width else {
+            throw EngineError(.internal, "rotation size mismatch")
+        }
+        var background: [UInt8] = [0, 0, 0, 255]
+        let status = vImageRotate90_ARGB8888(
+            &src, &dst, UInt8(kRotate90DegreesCounterClockwise), &background, vImage_Flags(kvImageNoFlags))
+        guard status == kvImageNoError else { throw EngineError(.internal, "frame rotation failed (\(status))") }
+        CVBufferPropagateAttachments(source, destination)
+        return destination
+    }
+
+    private func makeBuffer() throws -> CVPixelBuffer {
+        if pool == nil {
+            let attributes: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
+            ]
+            CVPixelBufferPoolCreate(nil, nil, attributes as CFDictionary, &pool)
+        }
+        var buffer: CVPixelBuffer?
+        guard let pool = pool, CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess, let out = buffer else {
+            throw EngineError(.internal, "no rotation buffer")
+        }
+        return out
+    }
+}
+
+// MARK: - Audio
+
+/// LPCM Float32 48 kHz stereo interleaved buffers (the AAC writer's input format).
+enum ExportPCM {
+    static let sampleRate = EncoderSettings.audioSampleRate
+    static let channels = EncoderSettings.audioChannels
+
+    /// Reader output settings of the mix (ARCH §14.2).
+    static var readerSettings: [String: Any] {
+        var layout = AudioChannelLayout()
+        layout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
+        return [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: channels,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsNonInterleaved: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVChannelLayoutKey: Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size),
+        ]
+    }
+
+    static let format: CMAudioFormatDescription? = {
+        var asbd = AudioStreamBasicDescription(
+            mSampleRate: Float64(sampleRate), mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: UInt32(4 * channels), mFramesPerPacket: 1, mBytesPerFrame: UInt32(4 * channels),
+            mChannelsPerFrame: UInt32(channels), mBitsPerChannel: 32, mReserved: 0)
+        var layout = AudioChannelLayout()
+        layout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
+        var description: CMAudioFormatDescription?
+        CMAudioFormatDescriptionCreate(
+            allocator: nil, asbd: &asbd, layoutSize: MemoryLayout<AudioChannelLayout>.size, layout: &layout,
+            magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &description)
+        return description
+    }()
+
+    /// A sample buffer of [frames] interleaved frames at [pts]; [fill] writes the samples (zeroed).
+    static func makeBuffer(frames: Int, pts: CMTime, fill: (UnsafeMutableBufferPointer<Float>) -> Void) throws -> CMSampleBuffer {
+        guard let format = format, frames > 0 else { throw EngineError(.internal, "no PCM format") }
+        let bytes = frames * channels * MemoryLayout<Float>.size
+        var block: CMBlockBuffer?
+        var status = CMBlockBufferCreateWithMemoryBlock(
+            allocator: nil, memoryBlock: nil, blockLength: bytes, blockAllocator: nil, customBlockSource: nil,
+            offsetToData: 0, dataLength: bytes, flags: kCMBlockBufferAssureMemoryNowFlag, blockBufferOut: &block)
+        guard status == kCMBlockBufferNoErr, let blockBuffer = block else { throw EngineError(.internal, "PCM block (\(status))") }
+        var pointer: UnsafeMutablePointer<CChar>?
+        status = CMBlockBufferGetDataPointer(
+            blockBuffer, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: nil, dataPointerOut: &pointer)
+        guard status == kCMBlockBufferNoErr, let raw = pointer else { throw EngineError(.internal, "PCM pointer (\(status))") }
+        raw.withMemoryRebound(to: Float.self, capacity: frames * channels) { floats in
+            let samples = UnsafeMutableBufferPointer(start: floats, count: frames * channels)
+            samples.initialize(repeating: 0)
+            fill(samples)
+        }
+        var sample: CMSampleBuffer?
+        status = CMAudioSampleBufferCreateReadyWithPacketDescriptions(
+            allocator: nil, dataBuffer: blockBuffer, formatDescription: format, sampleCount: frames,
+            presentationTimeStamp: pts, packetDescriptions: nil, sampleBufferOut: &sample)
+        guard status == noErr, let out = sample else { throw EngineError(.internal, "PCM sample (\(status))") }
+        return out
+    }
+}
+
+/// Digital silence across the output range (plans without audio segments, D-38).
+final class SilentAudioSource: SegmentAudioSource {
+    static let chunkFrames = 4_096
+    private let control: PipelineControl?
+    private var startUs: Int64 = 0
+    private var total: Int64 = 0
+    private var next: Int64 = 0
+
+    init(control: PipelineControl?) {
+        self.control = control
+    }
+
+    func openAudio(startUs: Int64, endUs: Int64) throws {
+        self.startUs = startUs
+        let rate = Int64(ExportPCM.sampleRate)
+        total = max(1, ((endUs - startUs) * rate + 500_000) / 1_000_000)
+        next = 0
+    }
+
+    func nextAudio() throws -> CMSampleBuffer? {
+        control?.waitWhileThermalCritical()
+        guard next < total else { return nil }
+        let frames = Int(min(Int64(SilentAudioSource.chunkFrames), total - next))
+        let pts = CMTimeAdd(
+            FrameGrid.cmTime(us: startUs), CMTime(value: next, timescale: CMTimeScale(ExportPCM.sampleRate)))
+        next += Int64(frames)
+        return try ExportPCM.makeBuffer(frames: frames, pts: pts) { _ in }
+    }
+
+    func closeAudio() {}
+}
+
+/// The audio mix of the export composition (AVAssetReaderAudioMixOutput with IOS-18 gain taps),
+/// clamped to [−1, 1] and validated (see the file comment).
+final class MixAudioSource: SegmentAudioSource {
+    private let composition: ExportComposition
+    private let expectAudible: Bool
+    private let control: PipelineControl?
+    private let readQueue = DispatchQueue(label: "com.vecvel.danaview.editor.export.audioread", qos: .userInitiated)
+    private var reader: AVAssetReader?
+    private var output: AVAssetReaderAudioMixOutput?
+
+    /// Reject bad reads (false on the last attempt: the read is accepted, sanitised).
+    var validates = true
+    /// Seconds one buffer may take.
+    var watchdog: TimeInterval = 30
+    /// Test hook: rewrites the floats of buffer n (0-based) before validation.
+    var corrupt: ((Int, UnsafeMutableBufferPointer<Float>) -> Void)?
+
+    /// Why the read was rejected (nil = accepted or not finished).
+    private(set) var rejection: String?
+    private(set) var frames = 0
+    private(set) var nanSamples = 0
+    private(set) var clippedSamples = 0
+    private(set) var peak: Float = 0
+    private var buffers = 0
+
+    /// Peak below which a whole read counts as silent.
+    static let silencePeak: Float = 1e-5
+
+    init(composition: ExportComposition, expectAudible: Bool, control: PipelineControl?) {
+        self.composition = composition
+        self.expectAudible = expectAudible
+        self.control = control
+    }
+
+    func openAudio(startUs: Int64, endUs: Int64) throws {
+        closeAudio()
+        let built = composition.built
+        let tracks = composition.audioTracks
+        guard let mix = built.audioMix, !tracks.isEmpty else {
+            // D-38: never construct a mix output over zero tracks.
+            throw EngineError(.internal, "audio mix without tracks")
+        }
+        let reader: AVAssetReader
+        do {
+            reader = try AVAssetReader(asset: built.composition)
+        } catch {
+            throw EngineError.from(error)
+        }
+        reader.timeRange = CMTimeRange(start: FrameGrid.cmTime(us: startUs), end: FrameGrid.cmTime(us: endUs))
+        let output = AVAssetReaderAudioMixOutput(audioTracks: tracks, audioSettings: ExportPCM.readerSettings)
+        output.audioMix = mix
+        output.audioTimePitchAlgorithm = .timeDomain
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { throw EngineError(.decodeFailed, "audio mix output refused") }
+        reader.add(output)
+        guard reader.startReading() else {
+            throw reader.error.map(EngineError.from) ?? EngineError(.decoderInitFailed, "audio reader did not start")
+        }
+        self.reader = reader
+        self.output = output
+    }
+
+    func nextAudio() throws -> CMSampleBuffer? {
+        control?.waitWhileThermalCritical()
+        guard let output = output, let reader = reader else { return nil }
+        let box = SampleBox()
+        let done = DispatchSemaphore(value: 0)
+        readQueue.async {
+            box.sample = output.copyNextSampleBuffer()
+            done.signal()
+        }
+        if done.wait(timeout: .now() + watchdog) == .timedOut {
+            rejection = "hung"
+            reader.cancelReading()
+            _ = done.wait(timeout: .now() + 5)
+            throw EngineError(.decodeFailed, "audio read hung", retryable: true)
+        }
+        guard let sample = box.sample else {
+            if reader.status == .failed {
+                rejection = "failed"
+                throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "audio reader failed")
+            }
+            try finishValidation()
+            return nil
+        }
+        return try sanitized(sample)
+    }
+
+    private final class SampleBox {
+        var sample: CMSampleBuffer?
+    }
+
+    private func finishValidation() throws {
+        var reason: String?
+        let jumps = composition.built.gainTaps.map(\.rangeDiscontinuities).reduce(0, +)
+        if nanSamples > 0 {
+            reason = "NaN"
+        } else if expectAudible && peak < MixAudioSource.silencePeak {
+            reason = "silent"
+        } else if jumps > 0 {
+            reason = "tap range discontinuity"
+        }
+        guard let reason = reason else { return }
+        guard validates else {
+            Log.info(.export, "audio read accepted on the last attempt despite: \(reason)")
+            return
+        }
+        rejection = reason
+        throw EngineError(.decodeFailed, "audio read rejected: \(reason)", retryable: true)
+    }
+
+    /// A copy of [sample] with NaN → 0 and every sample clamped to [−1, 1].
+    private func sanitized(_ sample: CMSampleBuffer) throws -> CMSampleBuffer {
+        guard let block = CMSampleBufferGetDataBuffer(sample) else { throw EngineError(.decodeFailed, "audio buffer without data") }
+        let length = CMBlockBufferGetDataLength(block)
+        let count = length / MemoryLayout<Float>.size
+        let frameCount = count / ExportPCM.channels
+        guard frameCount > 0 else { return try ExportPCM.makeBuffer(frames: 1, pts: CMSampleBufferGetPresentationTimeStamp(sample)) { _ in } }
+        let index = buffers
+        buffers += 1
+        var nan = 0
+        var clipped = 0
+        var localPeak: Float = 0
+        let out = try ExportPCM.makeBuffer(frames: frameCount, pts: CMSampleBufferGetPresentationTimeStamp(sample)) { dst in
+            _ = dst.withMemoryRebound(to: UInt8.self) { bytes in
+                CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: frameCount * ExportPCM.channels * 4, destination: bytes.baseAddress!)
+            }
+            corrupt?(index, dst)
+            for i in 0..<dst.count {
+                var v = dst[i]
+                if v.isNaN {
+                    nan += 1
+                    v = 0
+                } else if v > 1 {
+                    clipped += 1
+                    v = 1
+                } else if v < -1 {
+                    clipped += 1
+                    v = -1
+                }
+                dst[i] = v
+                let a = abs(v)
+                if a > localPeak { localPeak = a }
+            }
+        }
+        frames += frameCount
+        nanSamples += nan
+        clippedSamples += clipped
+        peak = max(peak, localPeak)
+        return out
+    }
+
+    func closeAudio() {
+        if reader?.status == .reading { reader?.cancelReading() }
+        reader = nil
+        output = nil
+    }
+}
