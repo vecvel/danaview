@@ -47,7 +47,18 @@ class LayerPlaceEffect(
         override fun shouldClearTextureBuffer(): Boolean = false
 
         override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
-            EffectPasses.place(programs, e.binding.resolve(presentationTimeUs), e.geometry, e.options, inputTexId, inW, inH, detail)
+            val bound = e.binding.resolve(presentationTimeUs)
+            EffectPasses.place(programs, bound, e.geometry, e.options, inputTexId, inW, inH, detail)
+            DiagTmpDump.dir?.let { dir ->
+                val w = e.geometry.renderW
+                val h = e.geometry.renderH
+                val buf = java.nio.ByteBuffer.allocateDirect(w * h * 4)
+                android.opengl.GLES20.glReadPixels(0, 0, w, h, android.opengl.GLES20.GL_RGBA, android.opengl.GLES20.GL_UNSIGNED_BYTE, buf)
+                val bytes = ByteArray(w * h * 4)
+                buf.get(bytes)
+                val id = bound?.layer?.id?.replace('#', '_') ?: "none"
+                java.io.File(dir, "${DiagTmpDump.tag}_${id}_${presentationTimeUs}_${DiagTmpDump.seq.incrementAndGet()}_${w}x$h.rgba").writeBytes(bytes)
+            }
         }
 
         override fun release() {
