@@ -1,8 +1,10 @@
-// OWNER: ENG-07 (frozen by ENG-06)
+// OWNER: ENG-07 (frozen by ENG-06; amended by INT-06)
 //
 // Glue of `JobsHostApi` (ARCH §12.3, §12.6, §15): thumbnails (IOS-03), media jobs (IOS-05
 // JobRegistry, which runs IOS-04/05/06/07 jobs) and proxy status (IOS-05). Job progress, results
-// and failures are events keyed by the returned job id.
+// and failures are events keyed by the returned job id. `renderPreview` jobs (D-45, INT-06) start
+// through the render-preview service (IOS-19, which registers them with the JobRegistry), so
+// `cancelJob` and `setJobPriority` reach them through the registry like every other job.
 
 import Foundation
 
@@ -43,6 +45,15 @@ final class JobsHostApiImpl: JobsHostApi {
     }
 
     func startJob(request: JobRequestMsg, completion: @escaping (Result<String, Error>) -> Void) {
+        if request.kind == .renderPreview {
+            GlueDispatch.hop(
+                "jobs.startJob(renderPreview)", on: queue, completion: completion,
+                validate: { try Validate.renderPreviewRequest(request, paths: context.requirePaths()) }
+            ) { [renderPreviews = services.renderPreviews] valid, reply in
+                renderPreviews.start(request, plan: valid.plan, outputURL: valid.output, reply: reply)
+            }
+            return
+        }
         GlueDispatch.hop(
             "jobs.startJob", on: queue, completion: completion,
             validate: { try Validate.jobRequest(request, paths: context.requirePaths()) }

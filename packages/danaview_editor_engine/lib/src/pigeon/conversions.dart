@@ -3,7 +3,8 @@
 // Conversions between the Pigeon messages (pigeons/engine_api.dart) and the engine API types
 // (danaview_editor_engine_api, ARCH §12). Every enum mapping is an exhaustive switch, so a Pigeon or
 // API change fails to compile here instead of mis-mapping at runtime. Used by MobileEditorEngine
-// and the mobile services (ENG-02/03/04).
+// and the mobile services (ENG-02/03/04). INT-06 added the D-45 render-preview and power-state
+// conversions.
 
 import 'dart:typed_data';
 import 'dart:ui' show Color, Offset, Size;
@@ -169,8 +170,11 @@ CacheTrimLevelMsg cacheTrimLevelToMsg(CacheTrimLevel level) => switch (level) {
       CacheTrimLevel.clearAll => CacheTrimLevelMsg.clearAll,
     };
 
-/// [EngineSignal] from its message, or null when a thermal signal carries no level.
+/// [EngineSignal] from its message, or null when a thermal signal carries no level. A
+/// `powerStateChanged` signal is not an [EngineSignal] (it reaches `BackgroundWorkGuard
+/// .powerStateChanged` through [powerStateOfSignal]) and maps to null.
 EngineSignal? signalFromMsg(SignalMsg m) => switch (m.kind) {
+      SignalKindMsg.powerStateChanged => null,
       SignalKindMsg.memoryWarning => const MemoryWarningSignal(),
       SignalKindMsg.thermal => switch (m.thermalLevel) {
           null => null,
@@ -181,9 +185,23 @@ EngineSignal? signalFromMsg(SignalMsg m) => switch (m.kind) {
         },
     };
 
+/// [PowerState] from its message.
+PowerState powerStateFromMsg(PowerStateMsg m) => PowerState(charging: m.charging, lowPowerMode: m.lowPowerMode);
+
+/// The power state a `powerStateChanged` signal carries, or null for other signals (and a
+/// `powerStateChanged` signal without a payload).
+PowerState? powerStateOfSignal(SignalMsg m) => switch ((m.kind, m.powerState)) {
+      (SignalKindMsg.powerStateChanged, final p?) => powerStateFromMsg(p),
+      _ => null,
+    };
+
 // ---------------------------------------------------------------------------------------------
 // Preview (ARCH §12.2)
 // ---------------------------------------------------------------------------------------------
+
+/// The message for a rendered range (D-45).
+RenderedRangeMsg renderedRangeToMsg(RenderedRange r) =>
+    RenderedRangeMsg(startUs: r.range.start, endUs: r.range.end, uri: r.uri, hash: r.hash);
 
 /// The message for [config].
 PreviewConfigMsg previewConfigToMsg(PreviewConfig config) => PreviewConfigMsg(

@@ -1,6 +1,10 @@
 // OWNER: ENG-06 [INTEGRATION] (defined by ENG-01). FROZEN 2026-10-11 after the IOS-01 and AND-01
 // spikes (D-42): neither spike needed a message change (IOS-01.md §3, AND-01.md §6.5); ENG-06 only
 // amended the capability docs below. Later changes need a new lead-approved [INTEGRATION] ticket.
+// Approved amendment INT-06 (2026-10-11, ARCH D-45 'Contract', §12.6): `JobKindMsg.renderPreview`
+// with `JobRequestMsg.plan`, `RenderedRangeMsg` and `PreviewHostApi.setRenderedRanges`,
+// `PowerStateMsg`, `PlatformHostApi.powerState` and the `powerStateChanged` signal. Frozen again
+// after INT-06.
 //
 // Pigeon surface of the editor engine plugin (ARCH §12.6). Regenerate from the package root with
 //
@@ -72,8 +76,9 @@ enum PreviewEventKindMsg { firstFrame, frameSize, stalled, recovered, degraded, 
 /// `ThumbPriority` (ARCH §12.3).
 enum ThumbPriorityMsg { visible, prefetch, background }
 
-/// Engine job kinds (ARCH §12.3, §12.4). `export` jobs are started by `ExportHostApi`.
-enum JobKindMsg { waveform, proxy, reverse, freeze, speechAudio, export }
+/// Engine job kinds (ARCH §12.3, §12.4). `export` jobs are started by `ExportHostApi`;
+/// `renderPreview` (D-45, INT-06) renders a range plan into the render-preview cache.
+enum JobKindMsg { waveform, proxy, reverse, freeze, speechAudio, export, renderPreview }
 
 /// `JobPriority` (ARCH §12.3).
 enum JobPriorityMsg { interactive, normal, background }
@@ -114,8 +119,9 @@ enum PickOriginMsg { photos, files, drop }
 /// `FileHandoffOutcome` (ARCH §12.4).
 enum FileHandoffOutcomeMsg { done, cancelled, denied, failed }
 
-/// Engine-wide signals (ARCH §12.1).
-enum SignalKindMsg { memoryWarning, thermal }
+/// Engine-wide signals (ARCH §12.1). `powerStateChanged` (D-45, INT-06) carries
+/// [SignalMsg.powerState].
+enum SignalKindMsg { memoryWarning, thermal, powerStateChanged }
 
 /// `ThermalLevel` (ARCH §12.1).
 enum ThermalLevelMsg { nominal, fair, serious, critical }
@@ -461,7 +467,9 @@ class ThumbnailTileMsg {
 
 /// `JobsHostApi.startJob` request. Fields by kind: waveform (media, audioStream), proxy (media),
 /// reverse (media, sourceStartUs, sourceEndUs, outputPath), freeze (media, sourceTimeUs,
-/// outputPath), speechAudio (media, sourceStartUs, sourceEndUs, outputPath, audioStream).
+/// outputPath), speechAudio (media, sourceStartUs, sourceEndUs, outputPath, audioStream),
+/// renderPreview (plan, outputPath inside `<cache>/danaview/editor/renders/`; [media] is unused
+/// and carries the output file, D-45).
 class JobRequestMsg {
   JobRequestMsg({
     required this.kind,
@@ -472,6 +480,7 @@ class JobRequestMsg {
     this.sourceEndUs,
     this.sourceTimeUs,
     this.outputPath,
+    this.plan,
   });
 
   JobKindMsg kind;
@@ -482,6 +491,33 @@ class JobRequestMsg {
   int? sourceEndUs;
   int? sourceTimeUs;
   String? outputPath;
+
+  /// renderPreview: the range plan as UTF-8 JSON (`PlanTransport.encodePlan`; a preview plan cut
+  /// to the range, times relative to its start).
+  Uint8List? plan;
+}
+
+/// `RenderedRange` (ARCH §12.2, D-45): a render-preview file covering `[startUs, endUs)` of the
+/// session's plan.
+class RenderedRangeMsg {
+  RenderedRangeMsg({required this.startUs, required this.endUs, required this.uri, required this.hash});
+
+  int startUs;
+  int endUs;
+
+  /// `file://` URI of a file in `<cache>/danaview/editor/renders/`.
+  String uri;
+
+  /// CORE-37 range hash the file was rendered for.
+  String hash;
+}
+
+/// `PowerState` (ARCH §12.4, D-45).
+class PowerStateMsg {
+  PowerStateMsg({required this.charging, required this.lowPowerMode});
+
+  bool charging;
+  bool lowPowerMode;
 }
 
 /// `GeneratedAsset` (proxy, reverse, freeze).
@@ -753,12 +789,14 @@ class PreviewEventMsg {
   FailureMsg? failure;
 }
 
-/// `EngineSignal` (ARCH §12.1).
+/// `EngineSignal` (ARCH §12.1): [thermalLevel] for `thermal`, [powerState] for
+/// `powerStateChanged`.
 class SignalMsg {
-  SignalMsg({required this.kind, this.thermalLevel});
+  SignalMsg({required this.kind, this.thermalLevel, this.powerState});
 
   SignalKindMsg kind;
   ThermalLevelMsg? thermalLevel;
+  PowerStateMsg? powerState;
 }
 
 /// `ExternalDrop` (ARCH §12.4, D-18): position in logical px relative to the Flutter view.
@@ -873,6 +911,12 @@ abstract class PreviewHostApi {
 
   @asyncCallback
   void setUseProxies(String sessionId, bool on);
+
+  /// Replaces the session's rendered ranges (D-45; sorted, non-overlapping). Fails with
+  /// `planInvalid` for an invalid list. The engine drops a range when an applied patch touches it
+  /// and every range on `setPlan`, until the next call.
+  @asyncCallback
+  void setRenderedRanges(String sessionId, List<RenderedRangeMsg> ranges);
 
   @asyncCallback
   void setEditingMode(String sessionId, EditingModeMsg mode);
@@ -1033,6 +1077,10 @@ abstract class PlatformHostApi {
 
   @asyncCallback
   void setDropTargetEnabled(bool enabled);
+
+  /// Charging and low-power state (D-45); changes arrive as `powerStateChanged` signals.
+  @asyncCallback
+  PowerStateMsg powerState();
 }
 
 /// The single multiplexed event stream (ARCH §12.6).

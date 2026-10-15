@@ -1,11 +1,13 @@
-// OWNER: ENG-07 (frozen by ENG-06)
+// OWNER: ENG-07 (frozen by ENG-06; amended by INT-06: render-preview requests, rendered ranges)
 //
 // Argument validation of the host APIs (ARCH §12.6). Dart is trusted but buggy callers must fail
 // with a typed error instead of reaching media code: contract violations are `internal`
 // ("invalid argument <name>: <reason>", never retryable), empty plan/patch payloads are
 // `planInvalid`, output paths outside the editor roots and backup exclusions outside the editor or
-// speech roots are `permissionDenied` (ARCH §20.1, D-44). Messages never contain the value of a
-// path argument.
+// speech roots are `permissionDenied` (ARCH §20.1, D-44). Render-preview outputs and rendered-range
+// files must lie inside `<cache>/danaview/editor/renders/` (`permissionDenied` otherwise); a
+// rendered-range list that is unsorted, overlapping or has an empty range is `planInvalid`
+// (D-45). Messages never contain the value of a path argument.
 
 import Flutter
 import Foundation
@@ -185,6 +187,59 @@ enum Validate {
             return (mediaURL, try requireOutput())
         case .export:
             throw EngineError.invalidArgument("request.kind", "exports start through ExportHostApi")
+        case .renderPreview:
+            throw EngineError.invalidArgument("request.kind", "render previews are validated by renderPreviewRequest")
+        }
+    }
+
+    // MARK: Render preview (D-45, INT-06)
+
+    /// Most rendered ranges per session.
+    static let maxRenderedRanges = 10_000
+
+    /// `<cache>/danaview/editor/renders` of [paths].
+    static func rendersDirectory(_ paths: Paths) -> URL {
+        paths.cacheRoot.appendingPathComponent("renders", isDirectory: true)
+    }
+
+    /// A file strictly inside the renders directory.
+    static func renderFile(_ path: String, paths: Paths, name: String) throws -> URL {
+        let dir = rendersDirectory(paths)
+        let url = try paths.requireInside(path, roots: [dir], name: name)
+        guard Paths.resolvedURL(url).path != Paths.resolvedURL(dir).path else {
+            throw EngineError.invalidArgument(name, "is the renders directory itself")
+        }
+        return url
+    }
+
+    /// A `renderPreview` job request: the range plan payload (`planInvalid` when missing or empty)
+    /// and the output URL inside the renders directory.
+    static func renderPreviewRequest(_ request: JobRequestMsg, paths: Paths) throws -> (plan: Data, output: URL) {
+        guard request.kind == .renderPreview else {
+            throw EngineError.invalidArgument("request.kind", "not a renderPreview request")
+        }
+        guard let payload = request.plan else { throw EngineError(.planInvalid, "request.plan is missing") }
+        let bytes = try plan(payload, "request.plan")
+        guard let output = request.outputPath else {
+            throw EngineError.invalidArgument("request.outputPath", "required for renderPreview")
+        }
+        return (bytes, try renderFile(output, paths: paths, name: "request.outputPath"))
+    }
+
+    /// `setRenderedRanges`: each range non-empty and inside 0...maxTimeUs, sorted and not
+    /// overlapping, with a hash and a file inside the renders directory. Returns the file URLs.
+    static func renderedRanges(_ ranges: [RenderedRangeMsg], paths: Paths) throws -> [URL] {
+        guard ranges.count <= maxRenderedRanges else { throw EngineError.invalidArgument("ranges", "more than \(maxRenderedRanges)") }
+        var previousEnd: Int64 = 0
+        return try ranges.enumerated().map { index, range in
+            try timeUs(range.startUs, "ranges[\(index)].startUs")
+            try timeUs(range.endUs, "ranges[\(index)].endUs")
+            guard range.startUs < range.endUs else { throw EngineError(.planInvalid, "ranges[\(index)] is empty") }
+            guard range.startUs >= previousEnd else { throw EngineError(.planInvalid, "ranges[\(index)] overlaps or is not sorted") }
+            previousEnd = range.endUs
+            try id(range.hash, "ranges[\(index)].hash")
+            let file = try Paths.fileURL(fromPathOrUri: range.uri, name: "ranges[\(index)].uri")
+            return try renderFile(file.path, paths: paths, name: "ranges[\(index)].uri")
         }
     }
 

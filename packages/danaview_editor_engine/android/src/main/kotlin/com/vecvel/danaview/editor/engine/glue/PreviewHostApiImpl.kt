@@ -1,12 +1,14 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06)
 //
 // `PreviewHostApi` glue (ARCH §12.2, §12.6, §13). Every call runs on danaview-preview, so a session
 // sees its commands in Dart's order; setTransient/clearTransient are fire-and-forget and coalesced
-// by the session (AND-10).
+// by the session (AND-10). `setRenderedRanges` (D-45, INT-06) needs the roots ([paths]) to check
+// that every file lies inside `<cache>/renders/`.
 
 package com.vecvel.danaview.editor.engine.glue
 
 import com.vecvel.danaview.editor.engine.core.EngineThreads
+import com.vecvel.danaview.editor.engine.core.Paths
 import com.vecvel.danaview.editor.engine.pigeon.ColorMsg
 import com.vecvel.danaview.editor.engine.pigeon.EditingModeMsg
 import com.vecvel.danaview.editor.engine.pigeon.LookSpecMsg
@@ -16,6 +18,7 @@ import com.vecvel.danaview.editor.engine.pigeon.PreviewConfigMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewHostApi
 import com.vecvel.danaview.editor.engine.pigeon.PreviewOpenedMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewQualityMsg
+import com.vecvel.danaview.editor.engine.pigeon.RenderedRangeMsg
 import com.vecvel.danaview.editor.engine.pigeon.ResolvedMediaMsg
 import com.vecvel.danaview.editor.engine.pigeon.SeekAckMsg
 
@@ -24,6 +27,7 @@ class PreviewHostApiImpl(
     private val threads: EngineThreads,
     private val port: PreviewPort,
     private val dispatch: GlueDispatcher = GlueDispatcher(threads.main),
+    private val paths: () -> Paths? = { null },
 ) : PreviewHostApi {
     private val lane get() = threads.preview
 
@@ -75,6 +79,12 @@ class PreviewHostApiImpl(
 
     override fun setUseProxies(sessionId: String, on: Boolean, callback: (Result<Unit>) -> Unit) =
         dispatch.async(lane, callback, check = { Check.id("sessionId", sessionId) }) { done -> port.setUseProxies(sessionId, on, done) }
+
+    override fun setRenderedRanges(sessionId: String, ranges: List<RenderedRangeMsg>, callback: (Result<Unit>) -> Unit) =
+        dispatch.async(lane, callback, check = {
+            Check.id("sessionId", sessionId)
+            Check.renderedRanges(ranges, paths())
+        }) { done -> port.setRenderedRanges(sessionId, ranges, done) }
 
     override fun setEditingMode(sessionId: String, mode: EditingModeMsg, callback: (Result<Unit>) -> Unit) =
         dispatch.async(lane, callback, check = {

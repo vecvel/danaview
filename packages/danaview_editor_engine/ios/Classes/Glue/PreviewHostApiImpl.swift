@@ -1,7 +1,8 @@
-// OWNER: ENG-07 (frozen by ENG-06)
+// OWNER: ENG-07 (frozen by ENG-06; amended by INT-06)
 //
 // Glue of `PreviewHostApi` (ARCH §12.2, §12.6, §13.2): validate on main, hop to
 // `previewControlQueue`, delegate to PreviewSessionManager (IOS-11), reply asynchronously.
+// `setRenderedRanges` (D-45, INT-06) goes to the rendered-range handler (IOS-19).
 // `setTransient`/`clearTransient` are fire-and-forget; the manager coalesces them to one per frame.
 
 import Flutter
@@ -128,6 +129,18 @@ final class PreviewHostApiImpl: PreviewHostApi {
             validate: { try Validate.id(sessionId, "sessionId") }
         ) { [manager = self.manager] _, reply in
             manager.setUseProxies(sessionId: sessionId, on: on, reply: reply)
+        }
+    }
+
+    func setRenderedRanges(sessionId: String, ranges: [RenderedRangeMsg], completion: @escaping (Result<Void, Error>) -> Void) {
+        GlueDispatch.hop(
+            "preview.setRenderedRanges", on: queue, completion: completion,
+            validate: { () -> [URL] in
+                try Validate.id(sessionId, "sessionId")
+                return try Validate.renderedRanges(ranges, paths: context.requirePaths())
+            }
+        ) { [handler = services.renderedRanges] urls, reply in
+            handler.setRenderedRanges(sessionId: sessionId, ranges: ranges, fileURLs: urls, reply: reply)
         }
     }
 
