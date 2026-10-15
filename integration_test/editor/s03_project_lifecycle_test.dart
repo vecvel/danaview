@@ -41,7 +41,9 @@ void main() {
 
     // Duplicate.
     await _menu(tester, renamed, 'Duplicate');
-    await E2eApp.pumpUntil(tester, () => find.text('Duplicated as "$renamed copy"').evaluate().isNotEmpty, what: 'the duplicate toast');
+    // The copy's card is the evidence. The "Duplicated as" toast can be replaced by the rename
+    // toast still on screen, so it is not waited for.
+    await E2eApp.pumpUntil(tester, () => find.text('$renamed copy').evaluate().isNotEmpty, what: 'the card of "$renamed copy"');
     final copies = (await _summaries()).where((s) => s.name == '$renamed copy').toList();
     expect(copies, hasLength(1));
     await E2eApp.screenshot(tester, 's03_renamed_and_duplicated');

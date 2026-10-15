@@ -207,7 +207,8 @@ final class Qa03Env {
   }
 
   /// Exports [plan] to `<work>/<name>.mp4` (H.264, AAC) and returns the result.
-  Future<ExportResult> export(String name, RenderPlan plan, {int? width, int? height, int? fps, int videoBitrate = 8000000}) async {
+  Future<ExportResult> export(String name, RenderPlan plan,
+      {int? width, int? height, int? fps, int videoBitrate = 8000000, Duration timeout = const Duration(minutes: 3)}) async {
     final c = plan.canvas;
     final settings = EncodeSettings(width: width ?? c.w, height: height ?? c.h, fps: fps ?? c.fps, videoBitrate: videoBitrate);
     final out = '$work/$name.mp4';
@@ -215,7 +216,14 @@ final class Qa03Env {
     final sw = Stopwatch()..start();
     final job = await engine.exporter.start(plan, settings,
         outputPath: out, title: 'QA-03 $name', whenDetached: ExportDetachedHandoff.keepForLater);
-    final r = await job.result.timeout(const Duration(minutes: 8));
+    final ExportResult r;
+    try {
+      r = await job.result.timeout(timeout);
+    } on TimeoutException {
+      await job.cancel();
+      qa03('export', {'name': name, 'timeoutAfterMs': sw.elapsedMilliseconds});
+      rethrow;
+    }
     qa03('export', {'name': name, 'ms': sw.elapsedMilliseconds, 'encoder': r.videoEncoderName, 'hw': r.hardwareEncoder, 'durUs': r.duration});
     return r;
   }
