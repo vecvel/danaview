@@ -92,6 +92,7 @@ class EngineStats {
     var missed = 0
     var rebuffers = 0
     var audioFollows = 0
+    var audioClockReads = 0
     var nearestShown = 0
     var stillsFetched = 0
     var reseeks = 0
@@ -104,7 +105,7 @@ class EngineStats {
 
     fun copy(): EngineStats = EngineStats().also {
         it.composed = composed; it.dropped = dropped; it.held = held; it.missed = missed; it.rebuffers = rebuffers
-        it.audioFollows = audioFollows; it.nearestShown = nearestShown; it.stillsFetched = stillsFetched
+        it.audioFollows = audioFollows; it.audioClockReads = audioClockReads; it.nearestShown = nearestShown; it.stillsFetched = stillsFetched
         it.reseeks = reseeks; it.replans = replans; it.slotsReplanned = slotsReplanned; it.deckCount = deckCount
         it.rangeFrames = rangeFrames; it.exactStillFallbacks = exactStillFallbacks; it.compositeMs.addAll(compositeMs)
     }
@@ -761,6 +762,7 @@ internal class MultiPlayerEngine(
             if (!d.player.playWhenReady || nowMs - d.playingSinceMs < AUDIO_WARMUP_MS) continue
             val audioT = d.planTimeNow() ?: continue
             lastFollowNs = now
+            stats.audioClockReads++
             if (clock.follow(audioT, now) != 0L) stats.audioFollows++
             return
         }
@@ -937,6 +939,7 @@ internal class MultiPlayerEngine(
         val used = HashSet<VideoDeck>()
         var missing = false
         var passed = false
+        var stillFallbackUsed = false
         val range = if (purpose == Purpose.PLAYBACK) rangeAt(t) else null
         if (range != null) {
             val rt = rangeRuntime!!
@@ -993,12 +996,12 @@ internal class MultiPlayerEngine(
                                         // The decoder skipped the rule frame after the seek (the emulators'
                                         // hardware H.264 decoders drop the leading B-frames after a flush):
                                         // this paused frame shows the exact still of the layer instead.
-                                        stats.exactStillFallbacks++
                                         val tex = stillTexture(snap.plan, layer, params, t, geom, exact = true)
                                         if (tex == null) {
                                             missing = true
                                             continue
                                         }
+                                        stillFallbackUsed = true
                                         inputs += LayerCompositorGl.Input(layer, params, tex)
                                         continue
                                     }
@@ -1050,6 +1053,7 @@ internal class MultiPlayerEngine(
         val presented = g.present(grid.platformTimeOfFrame(k))
         stats.composed++
         if (range != null) stats.rangeFrames++
+        if (stillFallbackUsed) stats.exactStillFallbacks++
         if (stats.compositeMs.size < MAX_TIMINGS) stats.compositeMs += (System.nanoTime() - started) / 1e6
         if (!presented) return Outcome.NOT_PRESENTED
         if (purpose != Purpose.NEAREST) {

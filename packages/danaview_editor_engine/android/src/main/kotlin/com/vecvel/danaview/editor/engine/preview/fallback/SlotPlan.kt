@@ -340,10 +340,11 @@ object SlotPlanner {
                     val asset = plan.assets[s.asset] ?: return@mapNotNull null
                     val start = s.map.first().s0
                     val endSrc = sourceAt(s.map, s.t1 - 1) + CLIP_TAIL_US
+                    // Audio-only sources have no video sample table: the clip end then stays uncapped.
                     val dur = try {
                         rules?.durationUs(asset.uri)
                     } catch (e: Exception) {
-                        return@mapNotNull null
+                        null
                     }
                     val end = if (dur != null && dur > start) minOf(endSrc, dur) else endSrc
                     AudioItem("${s.id}|${s.t0}|${s.t1}|${s.map}|${s.stream}|${asset.uri}", s, asset.uri, start, maxOf(end, start + 1))
