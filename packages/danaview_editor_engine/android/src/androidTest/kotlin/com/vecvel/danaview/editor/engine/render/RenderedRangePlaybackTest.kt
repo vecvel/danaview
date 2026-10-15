@@ -86,6 +86,8 @@ class RenderedRangePlaybackTest {
             h.bind(listOf(h.rig.msg(first, end, h.grid, file)))
             h.sink.keep.addAll(samples)
             assertTrue("warm-up", h.seekExact(0, 30_000) >= 0)
+            h.sink.awaitK(0)
+            Thread.sleep(200)
             h.sink.clear()
             assertTrue("played to the end", h.playToEnd(0, 60_000))
             Thread.sleep(150)
@@ -135,6 +137,8 @@ class RenderedRangePlaybackTest {
                 val msgs = rs.mapIndexed { i, (a, b) -> h.rig.msg(a, b, h.grid, h.rig.render(RangeCut.cut(plan, a, b), "b${fps}_$i").first) }
                 val binding = h.bind(msgs)
                 assertTrue("warm-up", h.seekExact(0, 30_000) >= 0)
+                h.sink.awaitK(0)
+                Thread.sleep(200)
                 h.sink.clear()
                 h.host.dropped.clear()
                 val ended = h.playToEnd(0, plan.durUs / 1000 + 60_000)
@@ -181,6 +185,8 @@ class RenderedRangePlaybackTest {
             val fStart = h.grid.frameIndexOf(f.t0)
             assertTrue("F starts inside the range", fStart in first + 10 until end - 20)
             assertTrue("warm-up", h.seekExact(0, 30_000) >= 0)
+            h.sink.awaitK(0)
+            Thread.sleep(200)
             h.sink.clear()
             var publishedAtNs = 0L
             var patchK = -1L
