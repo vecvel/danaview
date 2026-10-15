@@ -12,7 +12,8 @@
 // and compared with the Dart CPU reference renderer (API-03) at the same output size, with the
 // §11.6 tolerance: mean |Δ| ≤ 1.5/255 per channel and 99th percentile ≤ 6/255 with layer edges
 // excluded (pixels within 1.5 px of a placed layer or canvas-mask edge), SSIM ≥ 0.98 on the
-// transform fixtures. IOS-10 / AND-10 check the compositor in isolation; this suite checks what
+// transform fixtures. Exported frames also exclude content edges (withCodecEdges: 8-bit 4:2:0
+// H.264 cannot keep sharp chroma edges at any bitrate); preview captures do not. IOS-10 / AND-10 check the compositor in isolation; this suite checks what
 // the user sees (texture capture) and what the user gets (the encoded file).
 //
 // Sources: the engine needs real files. Images, sprites (.vsprite), LUTs (.vlut) and tones are the
@@ -229,6 +230,43 @@ List<bool> edgeMask(RenderPlan plan, int t, int w, int h) {
   return mask;
 }
 
+/// Codec edge pixels of an encoded frame: pixels whose 3×3 neighbourhood in [ref] spans more than
+/// [threshold]/255 in any channel, dilated by one pixel, added to [mask]. 8-bit 4:2:0 H.264 cannot
+/// keep a sharp chroma edge (a blue/orange checkerboard bleeds across two luma pixels at any
+/// bitrate), so exported frames exclude content edges as well as layer edges; preview captures
+/// exclude layer edges only (ARCH §11.6 as written).
+List<bool> withCodecEdges(List<bool> mask, Uint8List ref, int w, int h, {int threshold = 48}) {
+  final edge = List<bool>.filled(w * h, false);
+  for (var y = 1; y < h - 1; y++) {
+    for (var x = 1; x < w - 1; x++) {
+      for (var c = 0; c < 3 && !edge[y * w + x]; c++) {
+        var lo = 255, hi = 0;
+        for (var dy = -1; dy <= 1; dy++) {
+          for (var dx = -1; dx <= 1; dx++) {
+            final v = ref[((y + dy) * w + x + dx) * 4 + c];
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+          }
+        }
+        if (hi - lo > threshold) edge[y * w + x] = true;
+      }
+    }
+  }
+  final out = List<bool>.of(mask);
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      if (!edge[y * w + x]) continue;
+      for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+          final yy = y + dy, xx = x + dx;
+          if (yy >= 0 && yy < h && xx >= 0 && xx < w) out[yy * w + xx] = true;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 // =================================================================================================
 // Device sources
 // =================================================================================================
@@ -418,7 +456,8 @@ String? compareRender(Prepared p, GoldenCase c, int k, acc.Rgba got, String mode
   final (rw, rh) = renderer.outputSizeOf(plan.canvas);
   final dev = got.w == rw && got.h == rh ? got : got.downscale(rw, rh);
   final want = renderer.renderFrame(plan, t);
-  final par = parity(dev.px, want, rw, rh, edgeMask(plan, t, rw, rh));
+  final layerEdges = edgeMask(plan, t, rw, rh);
+  final par = parity(dev.px, want, rw, rh, mode == 'export' ? withCodecEdges(layerEdges, want, rw, rh) : layerEdges);
   final needSsim = transformFixtures.contains(c.name);
   final ok = par.ok(needSsim: needSsim);
   acc.qa03('parity', {'case': c.name, 'k': k, 'mode': mode, 'size': '${rw}x$rh', 'result': par.toString(), 'ok': ok});
@@ -458,7 +497,8 @@ Future<List<String>> comparePeer(String outDir, String peerDir, Map<String, (Ren
       continue;
     }
     final t = FrameRate(plan.canvas.fps, 1).timeOfFrame(k);
-    final par = parity(a.px, b.px, a.w, a.h, edgeMask(plan, t, a.w, a.h));
+    final edges = edgeMask(plan, t, a.w, a.h);
+    final par = parity(a.px, b.px, a.w, a.h, m.group(3) == 'export' ? withCodecEdges(withCodecEdges(edges, a.px, a.w, a.h), b.px, a.w, a.h) : edges);
     final ok = par.ok(needSsim: transformFixtures.contains(c.name));
     n++;
     acc.qa03('peer', {'file': file, 'result': par.toString(), 'ok': ok});

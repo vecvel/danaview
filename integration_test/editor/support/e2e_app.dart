@@ -124,9 +124,25 @@ abstract final class E2eApp {
         ok = false;
       }
       if (ok) return;
-      if (DateTime.now().isAfter(deadline)) throw TestFailure('Timed out after ${timeout.inSeconds} s waiting for $what');
+      if (DateTime.now().isAfter(deadline)) {
+        throw TestFailure('Timed out after ${timeout.inSeconds} s waiting for $what\n${describeScreen()}');
+      }
       await Future<void>.delayed(step);
     }
+  }
+
+  /// What is on screen, for a timeout message: the routes' texts (first 40) and the hit-testable
+  /// keyed widgets, so a failed wait shows the dialog or sheet that was in the way.
+  static String describeScreen() {
+    final texts = <String>[
+      for (final e in find.byType(Text).hitTestable().evaluate().take(40))
+        if ((e.widget as Text).data case final d? when d.trim().isNotEmpty) d.replaceAll('\n', ' '),
+    ];
+    final keys = <String>{
+      for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String>).hitTestable().evaluate().take(60))
+        (e.widget.key! as ValueKey<String>).value,
+    };
+    return 'screen texts: $texts\nscreen keys: $keys';
   }
 
   /// Awaits [future] while pumping frames (an engine call that needs the UI to keep running).
@@ -148,12 +164,26 @@ abstract final class E2eApp {
     return value as T;
   }
 
-  /// A 0.1 s tap on [finder] (scrolled into view first).
-  static Future<void> tap(WidgetTester tester, Finder finder, {String? what}) async {
+  /// A 0.1 s tap on [finder] (scrolled into view first, once it receives hits). With
+  /// [ifStillThere], a target that went away meanwhile is not tapped; otherwise that fails.
+  static Future<void> tap(WidgetTester tester, Finder finder, {String? what, bool ifStillThere = false}) async {
     final target = finder.first;
     await pumpUntil(tester, () => target.evaluate().isNotEmpty, what: what ?? '$finder');
     await tester.ensureVisible(target);
     await tester.pump();
+    // A route still animating in ignores pointers (the Navigator's IgnorePointer), so a tap right
+    // after a push is lost: wait until the target receives hits at its centre (bounded; a target
+    // under a deliberate overlay is still tapped after the wait).
+    try {
+      await pumpUntil(tester, () => target.hitTestable().evaluate().isNotEmpty, what: 'hit-testable ${what ?? finder}', timeout: const Duration(seconds: 5));
+    } on TestFailure {
+      // Tap anyway; the caller's next wait reports what was in the way.
+    }
+    if (finder.evaluate().isEmpty) {
+      // It went away while the route settled (a summary that closed itself, for example).
+      if (ifStillThere) return;
+      throw TestFailure('${what ?? finder} disappeared before the tap\n${describeScreen()}');
+    }
     final gesture = await tester.startGesture(tester.getCenter(target));
     await Future<void>.delayed(const Duration(milliseconds: 100));
     await tester.pump();
@@ -163,7 +193,8 @@ abstract final class E2eApp {
   }
 
   /// [tap] on the widget keyed [key].
-  static Future<void> tapKey(WidgetTester tester, String key) => tap(tester, find.byKey(ValueKey<String>(key)), what: 'key $key');
+  static Future<void> tapKey(WidgetTester tester, String key, {bool ifStillThere = false}) =>
+      tap(tester, find.byKey(ValueKey<String>(key)), what: 'key $key', ifStillThere: ifStillThere);
 
   /// Whether a widget keyed [key] is in the tree.
   static bool hasKey(String key) => find.byKey(ValueKey<String>(key)).evaluate().isNotEmpty;

@@ -105,7 +105,7 @@ final class E2eEditor {
         timeout: const Duration(minutes: 2),
       );
       // A summary with problems waits for "Open project".
-      if (!editorOpen()) await E2eApp.tapKey(tester, 'import-finish');
+      if (!editorOpen()) await E2eApp.tapKey(tester, 'import-finish', ifStillThere: true);
     }
     return attach(tester);
   }

@@ -12,6 +12,8 @@
 #   integration_test/editor/tool/e2e_host.sh -p android -d emulator-5554 stage-models ~/models
 #   integration_test/editor/tool/e2e_host.sh -p android -d emulator-5554 run all
 #
+# DV_E2E_PHASE_TIMEOUT=<seconds> (default 900) stops a phase that hangs and counts it as failed.
+#
 # Platforms: macOS (iOS Simulator, xcrun simctl) and macOS / Linux / Git Bash on Windows (Android
 # Emulator, adb). Evidence lands in build/e2e/<platform>/<device>/ (logs, screenshots, exported files).
 
@@ -265,10 +267,18 @@ run_phase() {
   while IFS= read -r line; do args+=("$line"); done < <(defines)
   (cd "$ROOT" && flutter test "$file" -d "$DEVICE" "${args[@]}" --dart-define=DV_E2E_PHASE="$phase") > "$logf" 2>&1 &
   local pid=$!
+  # Watchdog: a phase that hangs (an engine call that never answers, a test stuck before its first
+  # frame) is stopped after DV_E2E_PHASE_TIMEOUT seconds (default 900) and counts as failed.
+  local limit="${DV_E2E_PHASE_TIMEOUT:-900}"
+  ( for _ in $(seq 1 "$limit"); do kill -0 "$pid" 2>/dev/null || exit 0; sleep 1; done
+    echo "[e2e_host] TIMEOUT after ${limit}s" >> "$logf"; pkill -P "$pid" 2>/dev/null; kill "$pid" 2>/dev/null ) &
+  local watchdog=$!
   set +e
   serve "$pid"; local served=$?
   wait "$pid"; status=$?
+  kill "$watchdog" 2>/dev/null; wait "$watchdog" 2>/dev/null
   set -e
+  if grep -q '^\[e2e_host\] TIMEOUT' "$logf" 2>/dev/null; then log "TIMEOUT $file ${phase} after ${limit}s (see $logf)"; status=124; fi
   if [[ "$expect" == dies ]]; then
     [[ $served -eq 3 ]] && { log "phase $phase ended the app as expected"; return 0; }
     log "phase $phase was expected to end the app (status $status)"; return 1
