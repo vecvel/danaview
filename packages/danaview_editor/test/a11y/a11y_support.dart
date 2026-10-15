@@ -161,13 +161,7 @@ class KnownErrorDefect {
 }
 
 /// Errors that belong to other tickets.
-final List<KnownErrorDefect> knownErrorDefects = [
-  KnownErrorDefect(
-    'FIX-UX-22-2',
-    RegExp(r'property "transform\.\w+" does not apply to this item: MediaClip'),
-    'selecting an audio clip throws in ManipulationOverlay.build (the semantics label reads the transform of a clip without visual props)',
-  ),
-];
+final List<KnownErrorDefect> knownErrorDefects = [];
 
 /// Behaviour defects found by the timeline semantics tests (QA-08-a11y.md, "Defects").
 const List<String> knownTimelineDefects = ['FIX-UX-12-1', 'FIX-UX-12-2'];

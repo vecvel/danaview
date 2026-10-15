@@ -89,7 +89,7 @@ A problem that matches an entry in `knownDefects` (`test/overflow/overflow_rig.d
 
 | Id | Owner file | Problem | Found by |
 |---|---|---|---|
-| FIX-UX-22-2 | `lib/src/editor/preview/manipulation_overlay.dart` (UX-22) | Selecting an audio clip (music or voice: a `MediaClip` with no `visual`) throws `ArgumentError: property "transform.scale" does not apply to this item` while building `ManipulationOverlay`. `_transformOf` evaluates `PropertyKeys.scale`/`rotation` on every selected non-cue item, including audio clips. This also breaks the Volume and Fades panels of an audio clip whenever the preview is shown. It reproduces on every surface where the preview region is visible. | `editor_inspector_overflow_test.dart` ("selected it_ovmusic0001", "volume", "fades") |
+| FIX-UX-22-2 (**fixed 2026-10-16**, removed from the register) | `lib/src/editor/preview/manipulation_overlay.dart` (UX-22) | Selecting an audio clip (music or voice: a `MediaClip` with no `visual`) throws `ArgumentError: property "transform.scale" does not apply to this item` while building `ManipulationOverlay`. `_transformOf` evaluates `PropertyKeys.scale`/`rotation` on every selected non-cue item, including audio clips. This also breaks the Volume and Fades panels of an audio clip whenever the preview is shown. It reproduces on every surface where the preview region is visible. | `editor_inspector_overflow_test.dart` ("selected it_ovmusic0001", "volume", "fades") |
 
 ## Other findings (not known-defect entries: they fail the nightly until fixed)
 

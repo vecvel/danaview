@@ -997,6 +997,8 @@ class ManipulationOverlayState extends ConsumerState<ManipulationOverlay> {
   }
 
   static (double, double)? _transformOf(TimelineItem item, TimeUs t) {
+    // Audio clips have no visual properties; evaluating them throws.
+    if (!PropertyKeys.scale.appliesToItem(item) || !PropertyKeys.rotation.appliesToItem(item)) return null;
     final local = (t - item.start).clamp(0, item.duration);
     return (evaluate(item, PropertyKeys.scale, local), evaluate(item, PropertyKeys.rotation, local));
   }
