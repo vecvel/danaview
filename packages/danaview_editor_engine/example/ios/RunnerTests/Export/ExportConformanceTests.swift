@@ -119,9 +119,11 @@ final class ExportConformanceTests: XCTestCase {
 
     /// durUs = timeOfFrame(K) = ceil(K·10⁶/fps) is not an exact µs time whenever K·10⁶/fps is
     /// fractional (24/30/48/60 fps). The composition ends at CMTime(K, fps); readers and writers
-    /// must clamp to it (AVFoundationErrorDomain −11841 otherwise). 30 × 331 spans two segments.
+    /// must clamp to it (AVFoundationErrorDomain −11841 otherwise). The harness writes 1 s segments,
+    /// so every case also reads segments that start inside the spacer edit, which hung while that
+    /// edit had a fractional scale (60 × 179 at 2 s); 30 × 331 spans eleven segments.
     func testExportDurationsOffTheWholeMicrosecondGrid() throws {
-        let cases: [(Int, Int64)] = [(60, 179)]
+        let cases: [(Int, Int64)] = [(24, 73), (30, 91), (48, 49), (60, 179), (25, 51), (30, 331)]
         for (fps, k) in cases {
             let durUs = FrameGrid(fps).timeOfFrame(k)
             let settings = ExportPlans.settings(320, 180, fps: fps, videoBitrate: 300_000)
@@ -138,9 +140,10 @@ final class ExportConformanceTests: XCTestCase {
             XCTAssertEqual(result.durationUs, durUs, "\(fps) fps × \(k)")
             let facts = try ExportConformance.check(output, settings: settings, durUs: durUs, brand: "mp42", codec: "avc1", checkBitrate: false)
             XCTAssertEqual(facts.frames, Int(k), "\(fps) fps × \(k): frame count")
-            // The video ends on the grid end K/fps (never past it).
+            // The video ends on the grid end K/fps, up to the MP4 video timescale (600 cannot hold
+            // 1/48 s exactly: 49/48 s is stored as 612/600).
             let gridEndUs = Double(k) * 1_000_000 / Double(fps)
-            XCTAssertLessThanOrEqual(abs(Double(facts.videoDurationUs) - gridEndUs), 1, "\(fps) fps × \(k): video duration")
+            XCTAssertLessThanOrEqual(abs(Double(facts.videoDurationUs) - gridEndUs), 1_000, "\(fps) fps × \(k): video duration")
             try? FileManager.default.removeItem(at: output)
         }
     }
@@ -156,6 +159,24 @@ final class ExportConformanceTests: XCTestCase {
         XCTAssertEqual(CMTimeCompare(inner.end, CMTime(value: 1_000_000, timescale: 1_000_000)), 0, "inner ends stay µs")
         let past = ExportTime.readerRange(startUs: 10_000_000, endUs: 20_000_000, plan: plan)
         XCTAssertTrue(past.duration == .zero, "a range after the end is empty")
+        // The spacer of a fractional scale (179·30/60 = 89.5 spacer frames) is split into an
+        // integral edit and a remainder; a whole ratio (180 frames) stays one edit.
+        for (k, edits) in [(Int64(179), 2), (180, 1)] {
+            let d = FrameGrid(60).timeOfFrame(k)
+            let p = try RenderPlanDecoder.decodePlan(ExportPlans.plan(
+                w: 320, h: 180, fps: 60, durUs: d, assets: [],
+                layers: [ExportPlans.solid("it_s0000000001#v", t0: 0, t1: d, color: "#FF0000FF", w: 100, h: 100, cx: 160, cy: 90)]))
+            var options = CompositionBuildOptions(spacerDirectory: harness.paths.engineAssets)
+            options.validate = false
+            let input = UncheckedSendable((p, options))
+            let built = try MediaBlocking.await { try await CompositionBuilder.build(plan: input.value.0, options: input.value.1) }
+            defer { built.releaseMedia() }
+            XCTAssertEqual(ExportTime.splitFractionalSpacer(built), edits == 2)
+            let track = try XCTUnwrap(built.composition.track(withTrackID: try XCTUnwrap(built.spacerTrackID)))
+            XCTAssertEqual(track.segments.count, edits, "\(k) frames")
+            XCTAssertEqual(CMTimeCompare(track.timeRange.end, CMTime(value: k, timescale: 60)), 0, "\(k) frames: spacer end")
+            XCTAssertFalse(ExportTime.splitFractionalSpacer(built), "idempotent")
+        }
         // Exact ends are untouched.
         let exact = try RenderPlanDecoder.decodePlan(ExportPlans.plan(w: 320, h: 180, fps: 25, durUs: 2_040_000, assets: [], layers: []))
         XCTAssertEqual(CMTimeCompare(ExportTime.gridEnd(exact), CMTime(value: 2_040_000, timescale: 1_000_000)), 0)

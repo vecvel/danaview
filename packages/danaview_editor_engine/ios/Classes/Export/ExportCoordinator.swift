@@ -683,6 +683,8 @@ final class ExportCoordinator: ExportCoordinating {
             session.configure(&options)
             let input = UncheckedSendable((plan, options))
             let built = try MediaBlocking.await { try await CompositionBuilder.build(plan: input.value.0, options: input.value.1) }
+            // FIX-IOS-DURATION: readers starting inside a fractionally scaled spacer edit hang.
+            ExportTime.splitFractionalSpacer(built)
             return ExportComposition(built: built, session: session)
         }
     }
