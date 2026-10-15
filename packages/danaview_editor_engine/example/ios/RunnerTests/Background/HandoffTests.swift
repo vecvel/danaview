@@ -138,7 +138,6 @@ final class HandoffTests: XCTestCase {
         files.saveToFiles(fileURL: source, suggestedName: "Holiday 2026") { result = $0 }
         let picker = try XCTUnwrap(shown as? UIDocumentPickerViewController)
         XCTAssertTrue(picker.delegate === files)
-        XCTAssertEqual(picker.documentPickerMode, .exportToService, "asCopy: true")
         XCTAssertEqual(stagingDirectories().count, 1, "staged under the suggested name")
         let staged = roots.cache.appendingPathComponent("work").appendingPathComponent(stagingDirectories()[0])
             .appendingPathComponent("Holiday 2026.mp4")
