@@ -105,3 +105,37 @@ int estimateExportBytes({required int videoBitrate, required int audioBitrate, r
 /// [estimateExportBytes] of [encode] over [durationUs].
 int estimateEncodeBytes(EncodeSettings encode, TimeUs durationUs) =>
     estimateExportBytes(videoBitrate: encode.videoBitrate, audioBitrate: encode.audioBitrate, durationUs: durationUs);
+
+// Multi-pass precompose intermediates (D-45(B), ARCH §14.1 step 5, IOS-20 / AND-19). When the
+// engine's preflight reports `layersVsResolution`, the export may run a precompose whose
+// video-only intermediates (≥ 4× the export video bitrate, rendered over the plan duration plus
+// one grid frame) live next to the output in the work directory. Pass n ≥ 2 holds its input and
+// its output, the final pass holds the last intermediate and the output, so the work volume peaks
+// at `max(2·I, I + output)`; Dart does not know the pass count and counts that peak (the native
+// planners use `I + output` for a single pass, which is never more). Mirrors AND-19's
+// `PrecomposePlanner.diskEstimate` / `paddedDurationUs`.
+
+/// Bitrate multiple of a precompose intermediate over the export video bitrate (D-45(B)).
+const int precomposeBitrateFactor = 4;
+
+/// [durationUs] plus one frame of the [gridFps] grid: the end of the grid frame after the one
+/// containing [durationUs] (`timeOfFrame(frameIndexOf(dur) + 1)`), as the intermediates are rendered.
+TimeUs precomposePaddedDurationUs(TimeUs durationUs, int gridFps) {
+  final grid = FrameRate(gridFps, 1);
+  return grid.timeOfFrame(grid.frameIndexOf(durationUs) + 1);
+}
+
+/// Bytes of one video-only precompose intermediate: `4 · videoBitrate · (dur + 1 grid frame) / 8 ·
+/// 1.02` (rounded down like the native planners).
+int precomposeIntermediateBytes({required int videoBitrate, required TimeUs durationUs, required int gridFps}) =>
+    (precomposeBitrateFactor * videoBitrate * (precomposePaddedDurationUs(durationUs, gridFps) / microsPerSecond) / 8 * containerOverhead)
+        .floor();
+
+/// What a precomposed export of [encode] over [durationUs] (plan grid [gridFps]) needs on the work
+/// volume beyond the single-pass estimate: `max(2·I, I + output) − output`.
+int precomposeExtraBytesOf(EncodeSettings encode, TimeUs durationUs, int gridFps) {
+  final output = estimateEncodeBytes(encode, durationUs);
+  final i = precomposeIntermediateBytes(videoBitrate: encode.videoBitrate, durationUs: durationUs, gridFps: gridFps);
+  final peak = 2 * i > i + output ? 2 * i : i + output;
+  return peak - output;
+}

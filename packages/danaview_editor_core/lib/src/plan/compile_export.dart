@@ -303,6 +303,10 @@ final class ExportReady extends ExportCompileResult {
 
   /// What the engine encodes.
   EncodeSettings get encode => resolved.encode;
+
+  /// Extra work-volume bytes when the engine runs the multi-pass precompose (preflight reported
+  /// `layersVsResolution`, D-45(B)): [precomposeExtraBytesOf] over the plan duration and grid.
+  int get precomposeExtraBytes => precomposeExtraBytesOf(encode, plan.durUs, plan.canvas.gridFps);
 }
 
 /// The export cannot start (ARCH §11.2 Requirements, §14.1 pre-checks).
