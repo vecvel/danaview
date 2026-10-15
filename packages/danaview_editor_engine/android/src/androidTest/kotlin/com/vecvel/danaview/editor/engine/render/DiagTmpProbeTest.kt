@@ -93,6 +93,8 @@ class DiagTmpProbeTest {
                     for ((i, r) in rlist.withIndex()) {
                         val dd = File(dumpRoot, "r${rep}_$i").apply { mkdirs() }
                         if (dump) DiagTmpDump.dir = dd
+                        androidx.media3.effect.DebugTraceUtil.enableTracing = true
+                        androidx.media3.effect.DebugTraceUtil.reset()
                         val f = try {
                             h.rig.render(RangeCut.cut(lightPlan, r.first, r.second), "prange_${fps}_${rep}_$i").first
                         } finally {
@@ -103,6 +105,7 @@ class DiagTmpProbeTest {
                             rangeBad++
                             val again = checkRange(lightPlan, f, r.first, r.second, lpts)
                             log18("PROBE rep $rep range $r: wrong ${bad.size} $bad; second decode ${again.size} $again")
+                            androidx.media3.effect.DebugTraceUtil.generateTraceSummary().chunked(3000).forEach { log18("PTRACE $it") }
                             // The place outputs of every layer: pts → barcode in its quadrant.
                             for (l in lightPlan.layers) {
                                 val q = l.seq ?: continue
