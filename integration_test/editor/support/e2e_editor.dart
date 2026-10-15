@@ -8,21 +8,24 @@
 
 // ignore_for_file: implementation_imports
 
-import 'dart:async';
-
 import 'package:danaview_editor/danaview_editor.dart';
 import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart';
-import 'package:danaview_editor/src/editor/contracts/action_binding.dart' show EditorActionSource;
+import 'package:danaview_editor/src/editor/contracts/action_binding.dart' show EditorActionContext, EditorActionSource;
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
 import 'package:danaview_editor/src/editor/state/editor_controller.dart';
+import 'package:danaview_editor/src/editor/state/editor_session.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
 import 'package:danaview_editor/src/editor/state/playhead_controller.dart';
 import 'package:danaview_editor/src/editor/state/transport_controller.dart';
+import 'package:danaview_editor/src/editor/timeline/timeline_gestures.dart';
+import 'package:danaview_editor/src/editor/timeline/timeline_hit.dart';
 import 'package:danaview_editor/src/editor/timeline/timeline_viewport.dart' show TimelineViewportController;
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart';
 import 'package:danaview_editor_engine/testing.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -92,15 +95,17 @@ final class E2eEditor {
     }
     await E2eApp.enterText(tester, 'new-project-name', name);
     await E2eApp.tapKey(tester, 'new-project-create');
-    await E2eApp.pumpUntil(
-      tester,
-      () {
-        if (E2eApp.hasKey('import-finish')) unawaited(E2eApp.tapKey(tester, 'import-finish'));
-        return find.byType(EditorScreen).evaluate().isNotEmpty;
-      },
-      what: 'the editor of the new project "$name"',
-      timeout: const Duration(minutes: 2),
-    );
+    bool editorOpen() => find.byType(EditorScreen).evaluate().isNotEmpty;
+    while (!editorOpen()) {
+      await E2eApp.pumpUntil(
+        tester,
+        () => editorOpen() || E2eApp.hasKey('import-finish'),
+        what: 'the editor of the new project "$name"',
+        timeout: const Duration(minutes: 2),
+      );
+      // A summary with problems waits for "Open project".
+      if (!editorOpen()) await E2eApp.tapKey(tester, 'import-finish');
+    }
     return attach(tester);
   }
 
@@ -236,6 +241,55 @@ final class E2eEditor {
 
   /// Taps the tool tile keyed `tile.<key>` (`split`, `tool.media`, …).
   Future<void> tapTile(String key) => E2eApp.tapKey(tester, 'tile.$key');
+
+  // ---------------------------------------------------------------------------------------------
+  // Timeline drags (the canvas' drag delegate, with its snapping)
+  // ---------------------------------------------------------------------------------------------
+
+  /// Drags [item] (mouse) so that the pointer moves by [to] − its start: the timeline's own move
+  /// path (`TimelineInteractionController`: snapping, then `MoveItems` in a transaction, one history
+  /// entry on drop). [overshootPx] lands the pointer that many pixels off the exact target, so a
+  /// snap has to pull it in.
+  Future<void> dragMove(ItemId item, TimeUs to, {double overshootPx = 0}) async {
+    final it = this.item(item);
+    final lane = trackOf(item).id;
+    final grabAt = it.start + it.duration ~/ 2;
+    await _drag(
+      TimelineDragKind.move,
+      HitItem(item: item, lane: lane, time: grabAt, selected: state.selection.items.contains(item)),
+      grabAt,
+      grabAt + (to - it.start),
+      overshootPx,
+    );
+  }
+
+  /// Drags the [edge] trim handle of [item] to [to] (mouse).
+  Future<void> dragTrim(ItemId item, TrimEdge edge, TimeUs to, {double overshootPx = 0}) async {
+    final it = this.item(item);
+    final from = edge == TrimEdge.start ? it.start : it.end;
+    await _drag(TimelineDragKind.trim, HitTrimHandle(item: item, lane: trackOf(item).id, edge: edge), from, to, overshootPx);
+  }
+
+  Future<void> _drag(TimelineDragKind kind, TimelineHit hit, TimeUs from, TimeUs to, double overshootPx) async {
+    final interaction = container.read(interactionProvider(id));
+    final vp = viewport;
+    // y = -1: above the lanes, so a move keeps its lane.
+    Offset at(TimeUs t, [double dx = 0]) => Offset(vp.xOf(t) + dx, -1);
+    final start = at(from);
+    final ok = interaction.beginDrag(TimelineDragStart(kind: kind, hit: hit, position: start, time: from, deviceKind: PointerDeviceKind.mouse));
+    expect(ok, isTrue, reason: 'the timeline refused to start a ${kind.name} drag');
+    const steps = 10;
+    for (var i = 1; i <= steps; i++) {
+      final t = from + ((to - from) * i ~/ steps);
+      final dx = i == steps ? overshootPx : 0.0;
+      final p = at(t, dx);
+      interaction.updateDrag(TimelineDragUpdate(position: p, time: vp.timeAt(p.dx), offset: p - start));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    interaction.endDrag();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+  }
 
   // ---------------------------------------------------------------------------------------------
   // Time and frames

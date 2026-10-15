@@ -117,7 +117,10 @@ abstract final class E2eApp {
       bool ok;
       try {
         ok = ready();
+      } on TestFailure {
+        rethrow;
       } on Object {
+        // Not there yet (a finder or a provider not built yet).
         ok = false;
       }
       if (ok) return;
