@@ -12,6 +12,13 @@
 // GL_EXT_YUV_target and a 10-bit decoder, else MediaCodec or proxies, AND-02 / AND-01 V-N5).
 // AUDIO items of audio stream n > 0 carry an AudioStreamTag; the exporter installs
 // AudioStreamAssetLoaderFactory when `Built.selectsAudioStreams` (AudioStreamSelection.kt).
+// Audio tail (owner decision 2026-10-15, ARCH §14.3): with `Options.audioThroughUs` set and an
+// audio track in the spec, one more audio-only sequence of silence (a single gap) lasting to that
+// time is mixed in, so the AAC encoder receives samples past the video's end and every sample up
+// to it is encoded (the encoder keeps its tail at end of stream; on the API 35 emulator the AAC
+// track otherwise ended 41-49 ms before the video). The exporter trims the AAC track at the
+// video's end (TransformerExport `audioEndUs`). The spec itself is unchanged (no gating, no
+// compositor input: the sequence is audio only and comes after every video sequence).
 
 package com.vecvel.danaview.editor.engine.composition
 
@@ -48,6 +55,11 @@ object Media3Composition {
         val outputHeight: Int? = null,
         /** Composition audio effects: Sonic 48 kHz + stereo channel mixing. */
         val compositionAudio: Boolean = true,
+        /**
+         * When set and the spec has an audio track: the composition's audio lasts at least until
+         * this time (µs; silence past the spec's end, file header "Audio tail"). Export only.
+         */
+        val audioThroughUs: Long? = null,
     )
 
     /** The built composition and the gating settings it uses. */
@@ -71,7 +83,8 @@ object Media3Composition {
         options: Options = Options(),
     ): Built {
         if (spec.isEmpty) throw EngineErrors.invalidPlan("an empty plan has nothing to compose")
-        val sequences = spec.sequences.map { sequence(spec, it, images, effects, snapshot) }
+        val sequences = spec.sequences.map { sequence(spec, it, images, effects, snapshot) }.toMutableList()
+        audioTailUs(spec, options)?.let { sequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO)).addGap(it).build() }
         val settings = LayerGatingCompositorSettings(
             spec,
             options.outputWidth ?: spec.canvasW,
@@ -82,6 +95,16 @@ object Media3Composition {
             .setHdrMode(options.hdrMode)
         if (options.compositionAudio) builder.setEffects(Effects(compositionAudioProcessors(), emptyList()))
         return Built(builder.build(), settings, spec)
+    }
+
+    /**
+     * Duration of the audio tail sequence (file header "Audio tail"), or null when [options] asks
+     * for none or [spec] has no audio track (video-only passes: intermediates, render previews).
+     */
+    fun audioTailUs(spec: CompositionSpec, options: Options): Long? {
+        val through = options.audioThroughUs ?: return null
+        if (spec.sequences.none { it.trackTypes != TrackTypes.VIDEO }) return null
+        return through.takeIf { it > 0L }
     }
 
     /** SonicAudioProcessor(48 kHz) + ChannelMixingAudioProcessor(→ stereo) (ARCH §13.3). */

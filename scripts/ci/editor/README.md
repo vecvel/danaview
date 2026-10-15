@@ -71,6 +71,15 @@ scripts/ci/editor/nightly.sh --list                    # nightly.d scripts
 scripts/ci/editor/nightly.sh overflow_full             # one nightly script (the command printed on failure)
 ```
 
+```sh
+scripts/ci/editor/android_emulator.sh                                     # every instrumented test package, then the engine smoke test
+DANAVIEW_EMULATOR_BATCHES="effects proxy" scripts/ci/editor/android_emulator.sh   # only these batches
+DANAVIEW_EMULATOR_BATCHES="drop,harness" DANAVIEW_SKIP_SMOKE=1 scripts/ci/editor/android_emulator.sh
+DANAVIEW_EMULATOR_DRY_RUN=1 scripts/ci/editor/android_emulator.sh         # print the batches and commands only
+```
+
+`android_emulator.sh` needs a booted emulator or device (`ANDROID_SERIAL` picks one). It runs the engine's instrumented tests in batches, one `:danaview_editor_engine:connectedDebugAndroidTest` per test package: each direct subdirectory of `packages/danaview_editor_engine/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/` that has an `@Test`, filtered with `-Pandroid.testInstrumentationRunnerArguments.package=`. Each batch is its own instrumentation process, so a load-dependent failure or a native codec crash in one package can't abort the rest (owner decision 2026-10-15; the single-process run of the whole suite failed load-dependent tests and crashed after about 245 tests). A failed batch doesn't stop the run. The script prints a per-batch summary (batch, result, tests, failures, time), copies each batch's JUnit XML and logs to `packages/danaview_editor_engine/example/build/danaview_emulator_batches/<batch>/`, runs `integration_test/engine_smoke_test.dart` unless `DANAVIEW_SKIP_SMOKE=1`, and exits non-zero if any batch failed. `DANAVIEW_EMULATOR_BATCHES` takes space-separated batches; a comma joins packages into one batch. `DANAVIEW_GRADLE_ARGS` adds Gradle arguments (CI adds `--no-daemon`).
+
 `flutter_packages.sh` covers `danaview_editor_engine_api`, `danaview_editor_engine` (and its `example/` when present), `danaview_transcription`, `danaview_whisper`, `danaview_editor_fonts` and `danaview_editor`: `flutter pub get`, `flutter analyze --fatal-infos --fatal-warnings`, `flutter test`. Missing packages are skipped. It then runs `flutter analyze` and `flutter test` on `test/architecture/` at the repo root (`dependency_rules_test.dart`, ARCH §4.2 rules 1–7 and the ARCH §1.3 Material scan). `danaview_editor_core` is pure Dart and runs in `core.sh`.
 
 ## Toolchain pins

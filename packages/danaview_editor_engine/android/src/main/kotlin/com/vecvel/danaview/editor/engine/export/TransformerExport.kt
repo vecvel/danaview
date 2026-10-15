@@ -11,7 +11,11 @@
 //     setEnableFallback(true) (Transformer reports a changed request through onFallbackApplied →
 //     the `fallbackApplied` progress warning);
 //   InAppMp4Muxer.Factory().setAttemptStreamableOutputEnabled(true) (writes `hvc1` for HEVC,
-//     V-N13; no location metadata);
+//     V-N13; no location metadata), wrapped by [AudioEndTrimmingMuxer] when `config.audioEndUs` is
+//     set: AAC access units presented at or after the video's end are not written, so with the
+//     composition's audio tail (Media3Composition "Audio tail") the AAC track ends at the video's
+//     last frame, within one AAC frame (owner decision 2026-10-15, ARCH §14.3; timestamps and the
+//     A/V offset are unchanged, video samples always pass);
 //   DefaultVideoFrameProcessor with WORKING_COLOR_SPACE_ORIGINAL (ARCH §11.6, the same frame
 //     processor as AND-08/AND-09 were verified with);
 //   setPortraitEncodingEnabled(config.portraitEncoding): true first; the coordinator's §14.1 retry
@@ -30,10 +34,16 @@ package com.vecvel.danaview.editor.engine.export
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.annotation.OptIn
+import androidx.media3.common.Format
+import androidx.media3.common.Metadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.DefaultVideoFrameProcessor
+import androidx.media3.muxer.BufferInfo
+import androidx.media3.muxer.Muxer
 import androidx.media3.transformer.AssetLoader
 import androidx.media3.transformer.Codec
 import androidx.media3.transformer.Composition
@@ -44,11 +54,14 @@ import androidx.media3.transformer.InAppMp4Muxer
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.TransformationRequest
 import androidx.media3.transformer.Transformer
+import com.google.common.collect.ImmutableList
+import com.vecvel.danaview.editor.engine.core.EngineContext
 import com.vecvel.danaview.editor.engine.core.EngineErrorCode
 import com.vecvel.danaview.editor.engine.core.EngineErrors
 import com.vecvel.danaview.editor.engine.core.EngineException
 import java.io.File
 import java.io.IOException
+import java.nio.ByteBuffer
 
 /** One Transformer run (file header). Create, [start] and [cancel] on [looper]. */
 class TransformerExport(
@@ -70,6 +83,11 @@ class TransformerExport(
         val encoderFactoryDecorator: ((Codec.EncoderFactory) -> Codec.EncoderFactory)? = null,
         /** Progress poll interval (ARCH §14.3: 250 ms). */
         val progressIntervalMs: Long = PROGRESS_INTERVAL_MS,
+        /**
+         * The video's end (µs): audio samples presented at or after it are dropped
+         * ([AudioEndTrimmingMuxer]); null keeps every sample.
+         */
+        val audioEndUs: Long? = null,
     )
 
     /** Run callbacks, all on the looper. */
@@ -148,7 +166,7 @@ class TransformerExport(
                 .setVideoMimeType(config.settings.videoMimeType)
                 .setAudioMimeType(EncoderSettings.AUDIO_MIME_TYPE)
                 .setEncoderFactory(encoders)
-                .setMuxerFactory(InAppMp4Muxer.Factory().setAttemptStreamableOutputEnabled(true))
+                .setMuxerFactory(muxerFactory(config))
                 .setVideoFrameProcessorFactory(
                     DefaultVideoFrameProcessor.Factory.Builder()
                         .setSdrWorkingColorSpace(DefaultVideoFrameProcessor.WORKING_COLOR_SPACE_ORIGINAL)
@@ -160,6 +178,12 @@ class TransformerExport(
             return builder.build()
         }
 
+        /** InAppMp4Muxer (streamable), trimming audio at [Config.audioEndUs] when set. */
+        fun muxerFactory(config: Config): Muxer.Factory {
+            val base = InAppMp4Muxer.Factory().setAttemptStreamableOutputEnabled(true)
+            return config.audioEndUs?.let { AudioEndTrimmingMuxer.Factory(base, it) } ?: base
+        }
+
         /** DefaultEncoderFactory: hardware-first selector, requested settings, fallback on. */
         fun encoderFactory(context: Context, config: Config): DefaultEncoderFactory =
             DefaultEncoderFactory.Builder(context)
@@ -168,6 +192,67 @@ class TransformerExport(
                 .setRequestedAudioEncoderSettings(config.settings.audioEncoderSettings())
                 .setEnableFallback(true)
                 .build()
+    }
+}
+
+/**
+ * A muxer that does not write audio samples presented at or after [endUs] (the video's end), so
+ * the audio track ends within one access unit after it: the last kept unit starts before [endUs]
+ * and the first dropped one at or after it (owner decision 2026-10-15, ARCH §14.3). Video and
+ * every other track pass unchanged; timestamps are never altered. Logs (no paths) when the audio
+ * written ends more than one access unit before [endUs] (the audio tail was too short).
+ */
+class AudioEndTrimmingMuxer(private val base: Muxer, private val endUs: Long) : Muxer {
+    private val audioTracks = HashSet<Int>()
+    private val sampleRates = HashMap<Int, Int>()
+    private var lastAudioUs = Long.MIN_VALUE
+    private var dropped = 0
+
+    /** Wraps [base]'s muxers. */
+    class Factory(private val base: Muxer.Factory, private val endUs: Long) : Muxer.Factory {
+        override fun create(path: String): Muxer = AudioEndTrimmingMuxer(base.create(path), endUs)
+
+        override fun getSupportedSampleMimeTypes(trackType: Int): ImmutableList<String> = base.getSupportedSampleMimeTypes(trackType)
+
+        override fun supportsWritingNegativeTimestampsInEditList(): Boolean = base.supportsWritingNegativeTimestampsInEditList()
+    }
+
+    override fun addTrack(format: Format): Int {
+        val id = base.addTrack(format)
+        if (MimeTypes.isAudio(format.sampleMimeType)) {
+            audioTracks += id
+            if (format.sampleRate != Format.NO_VALUE) sampleRates[id] = format.sampleRate
+        }
+        return id
+    }
+
+    override fun writeSampleData(trackId: Int, data: ByteBuffer, bufferInfo: BufferInfo) {
+        if (trackId in audioTracks) {
+            if (bufferInfo.presentationTimeUs >= endUs) {
+                dropped++
+                return
+            }
+            lastAudioUs = maxOf(lastAudioUs, bufferInfo.presentationTimeUs)
+        }
+        base.writeSampleData(trackId, data, bufferInfo)
+    }
+
+    override fun addMetadataEntry(metadataEntry: Metadata.Entry) = base.addMetadataEntry(metadataEntry)
+
+    override fun close() {
+        if (audioTracks.isNotEmpty()) {
+            val rate = sampleRates.values.firstOrNull() ?: 48_000
+            val unitUs = AAC_FRAME_SAMPLES * 1_000_000L / rate
+            if (lastAudioUs == Long.MIN_VALUE || lastAudioUs + unitUs < endUs - unitUs) {
+                Log.w(EngineContext.TAG, "export audio ends early: last access unit at $lastAudioUs us for a video ending at $endUs us ($dropped dropped)")
+            }
+        }
+        base.close()
+    }
+
+    companion object {
+        /** Samples per AAC-LC access unit. */
+        const val AAC_FRAME_SAMPLES = 1024L
     }
 }
 

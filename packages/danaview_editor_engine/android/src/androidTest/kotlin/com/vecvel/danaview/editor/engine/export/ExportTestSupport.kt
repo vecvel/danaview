@@ -47,6 +47,7 @@ import com.vecvel.danaview.editor.engine.plan.PlanLayerKind
 import com.vecvel.danaview.editor.engine.plan.PlanSize
 import com.vecvel.danaview.editor.engine.plan.PlanWriter
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
+import org.junit.Assert.assertTrue
 import java.io.Closeable
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
@@ -297,6 +298,77 @@ object ExportedFile {
         } finally {
             r.release()
         }
+    }
+
+    /** One track's samples as the platform MediaExtractor reads them from the written MP4. */
+    class TrackSpan(val samples: Int, val firstUs: Long, val lastUs: Long, val lastSampleDurationUs: Long, val trackDurationUs: Long) {
+        /** Presentation end: last sample time + its duration. */
+        val endUs: Long get() = lastUs + lastSampleDurationUs
+    }
+
+    /** Video and audio spans of an export, and their end difference (audio − video, µs). */
+    class Spans(val video: TrackSpan, val audio: TrackSpan) {
+        val endDeltaUs: Long get() = audio.endUs - video.endUs
+
+        override fun toString(): String =
+            "video ${video.samples} samples [${video.firstUs}, ${video.endUs}] us, audio ${audio.samples} AAC frames [${audio.firstUs}, ${audio.endUs}] us, " +
+                "audio - video end ${endDeltaUs} us; track durations video ${video.trackDurationUs} us, audio ${audio.trackDurationUs} us"
+    }
+
+    /** Duration of one AAC-LC access unit at 48 kHz (1024 samples): 21 333 µs. */
+    const val AAC_FRAME_US = 1024L * 1_000_000L / 48_000L
+
+    /**
+     * Track ends measured from [f] with the platform MediaExtractor (edit lists applied): the last
+     * sample time plus the last sample's duration, i.e. one export frame (1/[fps]) for video and one
+     * AAC access unit (1024 samples at the track's sample rate) for audio.
+     */
+    fun spans(f: File, fps: Int): Spans {
+        fun span(video: Boolean): TrackSpan {
+            val ex = android.media.MediaExtractor()
+            try {
+                ex.setDataSource(f.absolutePath)
+                val t = (0 until ex.trackCount).single { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)!!.startsWith(if (video) "video/" else "audio/") }
+                val format = ex.getTrackFormat(t)
+                ex.selectTrack(t)
+                var n = 0
+                var first = Long.MAX_VALUE
+                var last = Long.MIN_VALUE
+                while (true) {
+                    val pts = ex.sampleTime
+                    if (pts == -1L) break // end of the track (MediaExtractor's "no sample" value)
+                    n++
+                    first = minOf(first, pts)
+                    last = maxOf(last, pts)
+                    if (!ex.advance()) break
+                }
+                val lastDur = if (video) {
+                    Math.round(1_000_000.0 / fps)
+                } else {
+                    1024L * 1_000_000L / format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                }
+                val trackDur = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else -1L
+                return TrackSpan(n, first, last, lastDur, trackDur)
+            } finally {
+                ex.release()
+            }
+        }
+        return Spans(span(video = true), span(video = false))
+    }
+
+    /**
+     * Owner decision 2026-10-15 (ARCH §14.3): the AAC track ends at the video's last frame, within
+     * one AAC frame: |audio end − video end| ≤ 1024/48000 s. Logs the spans (EMULATOR numbers).
+     */
+    fun assertAudioSpansVideo(f: File, fps: Int, name: String): Spans {
+        val s = spans(f, fps)
+        Log.i(EXPORT_TEST_TAG, "$name: $s (emulator)")
+        assertTrue("$name: no audio samples", s.audio.samples > 0)
+        assertTrue(
+            "$name: audio end ${s.audio.endUs} us vs video end ${s.video.endUs} us differ by ${s.endDeltaUs} us (> one AAC frame, 21.333 ms)",
+            kotlin.math.abs(s.endDeltaUs) * 48_000L <= 1024L * 1_000_000L,
+        )
+        return s
     }
 
     /** Decoded output audio (content time 0 = first sample) through AND-04's PcmStream. */
