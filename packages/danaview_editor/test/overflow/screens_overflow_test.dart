@@ -11,11 +11,12 @@
 // The Home header and the player surfaces live in danaview_features, which danaview_editor may not
 // import (ARCH §4.2 rule 7); overflow_full.sh runs their matrix tests at the repository root.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart' show Scaffold;
 import 'package:flutter/widgets.dart' hide AspectRatio;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/danaview_editor.dart';
-import 'package:danaview_editor/src/editor/editor_screen.dart';
 import 'package:danaview_editor/src/editor/flows/relink/recovery_dialog.dart';
 import 'package:danaview_editor/src/projects/new_project_sheet.dart';
 import 'package:danaview_editor/src/projects/project_actions.dart';
@@ -149,7 +150,7 @@ void main() {
       mainRevision: 2,
       journalSavedAt: DateTime(2026, 10, 8, 14, 32),
     );
-    showEditorRecoveryDialog(context, session, now: DateTime(2026, 10, 9, 9));
+    unawaited(showEditorRecoveryDialog(context, session, now: DateTime(2026, 10, 9, 9)));
     await _settle(tester);
     final restore = find.byKey(const ValueKey('recovery-restore'));
     final lastSaved = find.byKey(const ValueKey('recovery-open-last-saved'));

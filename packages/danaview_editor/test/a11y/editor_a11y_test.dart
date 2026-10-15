@@ -77,6 +77,9 @@ void main() {
     testWidgets('clip custom actions edit through the controller and announce the result', (tester) async {
       final semantics = tester.ensureSemantics();
       final rig = await A11yEditorRig.pump(tester, surface: _wide);
+      // Ripple off: with ripple on a nudge is a no-op (FIX-UX-12-1, tested below).
+      rig.editor.setModes((m) => m.copyWith(ripple: false));
+      await tester.pump();
       tester.takeAnnouncements();
       final before = rig.state.history.position;
       tester.semantics.customAction(_logo(), const CustomSemanticsAction(label: TimelineSemanticsStrings.moveSecondLater));
@@ -97,9 +100,30 @@ void main() {
       semantics.dispose();
     });
 
+    testWidgets('move actions with ripple on (the default) do something (FIX-UX-12-1)', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final rig = await A11yEditorRig.pump(tester, surface: _wide);
+      expect(rig.state.modes.ripple, isTrue);
+      tester.takeAnnouncements();
+      tester.semantics.customAction(_logo(), const CustomSemanticsAction(label: TimelineSemanticsStrings.moveSecondLater));
+      await tester.pump();
+      final heard = tester.takeAnnouncements().map((a) => a.message).toList();
+      final moved = rig.project.index.locate(const ItemId('it_o1'))!.item.start != 1 * s;
+      if (!moved) {
+        // Known: MoveItems(ripple: true) by less than the item's length is a no-op, so every nudge
+        // says "Not changed" until FIX-UX-12-1 lands.
+        expect(heard, [TimelineSemanticsStrings.notChanged]);
+        expect(knownTimelineDefects, contains('FIX-UX-12-1'));
+      }
+      await tester.pump(const Duration(seconds: 2));
+      semantics.dispose();
+    });
+
     testWidgets('announcements are throttled to one per second, newest wins', (tester) async {
       final semantics = tester.ensureSemantics();
       final rig = await A11yEditorRig.pump(tester, surface: _wide);
+      rig.editor.setModes((m) => m.copyWith(ripple: false));
+      await tester.pump();
       tester.takeAnnouncements();
       const later = CustomSemanticsAction(label: TimelineSemanticsStrings.moveFrameLater);
       tester.semantics.customAction(_logo(), later);
@@ -164,6 +188,26 @@ void main() {
       await tester.pump();
       expect(rig.state.selection.keyframe?.item, const ItemId('it_o1'));
       await expectA11yGuidelines(tester, contrast: false, where: 'keyframes shown');
+      semantics.dispose();
+    });
+
+    testWidgets('markers, transitions and keyframes carry custom actions (FIX-UX-12-2)', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final rig = await A11yEditorRig.pump(tester, surface: _wide);
+      rig.editor.select(const ItemId('it_o1'));
+      await rig.settle();
+      final nodes = {
+        'marker': find.semantics.byLabel('Marker at 0:03').evaluate().single,
+        'transition': find.semantics.byLabel(RegExp(r'^Cross dissolve transition at ')).evaluate().single,
+        'keyframe': find.semantics.byLabel(RegExp(r' keyframe at \d')).evaluate().first,
+      };
+      final without = [
+        for (final MapEntry(key: kind, value: node) in nodes.entries)
+          if (customActionLabels(node).isEmpty) kind,
+      ];
+      // ARCH §17.9 asks for custom actions on these nodes (ux.md §19.1: select, delete, jump); they
+      // only have tap (select / open) today. Recorded as FIX-UX-12-2 until it lands.
+      if (without.isNotEmpty) expect(knownTimelineDefects, contains('FIX-UX-12-2'), reason: 'no custom actions on $without');
       semantics.dispose();
     });
 

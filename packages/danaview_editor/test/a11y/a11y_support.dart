@@ -24,7 +24,6 @@
 
 import 'package:flutter/material.dart' show MaterialApp;
 import 'package:flutter/rendering.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -165,6 +164,9 @@ final List<KnownErrorDefect> knownErrorDefects = [
     'selecting an audio clip throws in ManipulationOverlay.build (the semantics label reads the transform of a clip without visual props)',
   ),
 ];
+
+/// Behaviour defects found by the timeline semantics tests (QA-08-a11y.md, "Defects").
+const List<String> knownTimelineDefects = ['FIX-UX-12-1', 'FIX-UX-12-2'];
 
 /// Whether FIX-UX-22-2 (selecting an audio clip throws) is still listed.
 bool get audioSelectionCrashOpen => knownErrorDefects.any((k) => k.fixTicket == 'FIX-UX-22-2');

@@ -10,13 +10,12 @@
 // (export progress and failure, caption download and progress, relink rows) have their own matrix
 // tests that overflow_full.sh runs over the full matrix.
 
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart';
 import 'package:danaview_editor/src/editor/contracts/contracts.dart';
 import 'package:danaview_editor/src/editor/flows/captions/auto_captions_sheet.dart';
 import 'package:danaview_editor/src/editor/flows/relink/relink_sheet.dart';
-import 'package:danaview_editor/src/editor/state/playhead_controller.dart';
+import 'package:danaview_editor/src/editor/layout/editor_layout.dart';
 import 'package:danaview_editor/src/editor/timeline/track_menu_sheet.dart';
 import 'package:danaview_editor/src/app/editor_providers.dart';
 import 'package:danaview_editor_core/model.dart';
@@ -83,6 +82,9 @@ void main() {
       await prepare?.call(rig);
       await rig.settle();
       final registry = rig.container.read(editorActionRegistryProvider);
+      // With the keyboard up the layout ladder hides the preview, so there is nothing to show
+      // fullscreen (ARCH §17.2 degradation ladder).
+      if (action == EditorActionId.fullscreenPreview && !rig.spec.shows(EditorRegion.preview)) continue;
       await _sheet(rig, name, () {
         final result = registry.invoke(action, WidgetActionContext.container(projectId: rig.id, context: rig.context, container: rig.container));
         if (result != EditorActionResult.ran) rig.log.add('[$name] ${action.name} did not run: $result');

@@ -4,6 +4,7 @@
 // the screen, a truncated button label and a known defect; the surface filter; and the real fonts
 // are loaded (Figtree measures narrower than the test font's 1 em squares).
 
+import 'package:flutter/material.dart' show Scaffold;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,7 +18,8 @@ void main() {
 
   Future<void> pump(WidgetTester tester, Widget child, {Size size = const Size(280, 500)}) async {
     applySurface(tester, EditorSurface(size, textScale: 1.35));
-    await tester.pumpWidget(surfaceApp(EditorSurface(size, textScale: 1.35), Center(child: child)));
+    // The editor's Scaffold supplies the theme's (Figtree) default text style.
+    await tester.pumpWidget(surfaceApp(EditorSurface(size, textScale: 1.35), Scaffold(body: Center(child: child))));
     await tester.pump();
   }
 
@@ -60,8 +62,10 @@ void main() {
     await pump(tester, SizedBox(width: 200, child: DanaviewButton(label: 'Reset transform', onPressed: () {})));
     expect(problemsOf(tester), isEmpty);
     final paragraph = tester.renderObject<RenderParagraph>(find.text('Reset transform'));
-    // 15 glyphs at 14 px in the 1 em test font would be 210 px wide; Figtree is far narrower.
-    expect(paragraph.size.width, lessThan(150));
+    expect(DefaultTextStyle.of(tester.element(find.text('Reset transform'))).style.fontFamily, DanaviewFonts.family);
+    // 15 glyphs at 14 px x 1.35 in the 1 em test font would be about 280 px wide; Figtree is far
+    // narrower.
+    expect(paragraph.size.width, lessThan(160));
   });
 
   test('known defects match their pattern only', () {
