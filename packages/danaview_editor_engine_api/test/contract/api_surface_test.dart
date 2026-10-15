@@ -6,7 +6,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:danaview_editor_core/model.dart' show TimeRange;
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
+import 'package:danaview_editor_engine_api/testing.dart';
 
 Directory _pkg() {
   var d = Directory.current;
@@ -29,7 +31,7 @@ void main() {
       // 12.2
       PreviewConfig, PreviewSession, PreviewClock, SeekAck, PlanAck, SeekKind, PreviewQuality, PreviewEditingMode, PreviewEvent,
       NormalPreviewMode, CropSourceMode, MatteMode, PreviewFirstFrame, PreviewStalled, PreviewRecovered, PreviewDegraded,
-      PreviewSurfaceLost, PreviewFailedEvent, LookSpec,
+      PreviewSurfaceLost, PreviewFailedEvent, LookSpec, RenderedRange,
       // 12.3
       ThumbnailSource, ThumbnailRequest, ThumbnailTile, ThumbnailHandle, ThumbPriority, WaveformSource, WaveformPeaks, MediaJobs,
       MediaJob, JobPriority, GeneratedAsset, ProxyStatus, SpeechAudioJobRequest, ExtractedSpeechAudio,
@@ -38,7 +40,7 @@ void main() {
       ExportCompletedWhileDetached, ExportDetachedHandoff, ExportProgress, ExportPhase, ExportResult, ExportWarning, VoiceRecorder,
       RecordingSession, MicPermission, RecordedAsset, RecordingInterruption, MediaPicker, MediaPickRequest, MediaPickSource,
       MediaPickKind, FileHandoff, FileHandoffResult, FileHandoffOutcome, MediaAccess, BackgroundWorkGuard, BackgroundLease,
-      ExternalDropTarget, ExternalDrop,
+      ExternalDropTarget, ExternalDrop, PowerState,
       // 12.5
       EditorCapabilities, DeviceTier, BackgroundExportKind, EngineErrorCode, EngineFailure, EngineError, EngineCancelled,
       UnsupportedReasons,
@@ -51,6 +53,24 @@ void main() {
     ];
     expect(types, everyElement(isNotNull));
     expect(types.toSet().length, greaterThan(80));
+  });
+
+  test('the INT-06 render-preview additions (D-45) are part of the surface', () {
+    final engine = FakeEditorEngine();
+    final MediaJobs jobs = engine.jobs;
+    final MediaJob<GeneratedAsset> Function(RenderPlan, {required String outputPath}) renderPreview = jobs.renderPreview;
+    final BackgroundWorkGuard background = engine.background;
+    final Future<PowerState> Function() powerState = background.powerState;
+    final Stream<PowerState> powerStateChanged = background.powerStateChanged;
+    Future<void> Function(List<RenderedRange>) setRenderedRanges(PreviewSession s) => s.setRenderedRanges;
+    expect([renderPreview, powerState, powerStateChanged, setRenderedRanges], everyElement(isNotNull));
+    expect(renderPreviewDirName, 'renders');
+    const range = RenderedRange(range: TimeRange(0, 1000), uri: 'file:///c/renders/a.mp4', hash: 'h');
+    expect([range.range, range.uri, range.hash], hasLength(3));
+    const power = PowerState(charging: true, lowPowerMode: false);
+    expect([power.charging, power.lowPowerMode], [true, false]);
+    expect(renderedRangesProblem(const [range]), isNull);
+    expect(RenderPreviewContractProbe, isNotNull);
   });
 
   test('capabilities carry every field of ARCH §12.5', () {

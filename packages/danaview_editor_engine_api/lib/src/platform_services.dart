@@ -1,7 +1,9 @@
 // OWNER: API-01
 //
 // Pickers, file handoff, media access, background leases and external drops (ARCH §12.4, §9,
-// §15, D-13, D-18, D-44).
+// §15, D-13, D-18, D-44). The power state (`BackgroundWorkGuard.powerState` and
+// `powerStateChanged`, the D-45 `PlatformServices.powerState` idle-and-charging signal) was added
+// by INT-06.
 
 import 'dart:ui' show Offset;
 
@@ -134,12 +136,48 @@ abstract interface class BackgroundLease {
   Future<void> release();
 }
 
-/// Keeps work alive while the app is in the background.
+/// Charging and low-power state of the device (ARCH §12.4, D-45).
 ///
-/// See ARCH §12.4.
+/// The render-preview controller (UX-44) combines it with its own editor-idle timer: the
+/// automatic background render runs on minimal/low only while [charging] and not
+/// [lowPowerMode].
+///
+/// See ARCH §12.4, D-45.
+@immutable
+final class PowerState {
+  /// Creates a power state.
+  const PowerState({required this.charging, required this.lowPowerMode});
+
+  /// Plugged in (charging or full).
+  final bool charging;
+
+  /// iOS Low Power Mode / Android battery saver.
+  final bool lowPowerMode;
+
+  @override
+  bool operator ==(Object other) => other is PowerState && other.charging == charging && other.lowPowerMode == lowPowerMode;
+
+  @override
+  int get hashCode => Object.hash(charging, lowPowerMode);
+
+  @override
+  String toString() => 'PowerState(charging: $charging, lowPowerMode: $lowPowerMode)';
+}
+
+/// Keeps work alive while the app is in the background, and reports the power state that
+/// background work (the D-45 automatic render preview) waits for.
+///
+/// See ARCH §12.4, D-45.
 abstract interface class BackgroundWorkGuard {
   /// Acquires a lease showing [title] and [progress]; null when not available.
   Future<BackgroundLease?> acquire({required String title, required Stream<double> progress});
+
+  /// The current power state (the D-45 `PlatformServices.powerState`). Throws
+  /// `EngineFailure(notSupportedOnDevice)` on the mobile engine until IOS-19 / AND-18 land.
+  Future<PowerState> powerState();
+
+  /// Every power state change (the engine's `powerStateChanged` signal), as a broadcast stream.
+  Stream<PowerState> get powerStateChanged;
 }
 
 /// Items dropped onto the app from another app (D-18). Items are already app-owned temporary

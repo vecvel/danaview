@@ -5,4 +5,11 @@
 // `package:danaview_editor_engine_api/testing.dart`; this file re-exports it for tests in this package.
 
 export 'package:danaview_editor_engine_api/testing.dart'
-    show checkEngineContract, contractKitGrid, contractKitItem, contractKitPatch, contractKitPlan;
+    show
+        checkEngineContract,
+        contractKitGrid,
+        contractKitItem,
+        contractKitPatch,
+        contractKitPlan,
+        contractKitShortPatch,
+        RenderPreviewContractProbe;

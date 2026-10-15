@@ -8,6 +8,15 @@
 //   and report `displayedFrameTime = timeOfFrame(displayedFrame)` (D-35).
 // - `seek(scrub)` may show any frame within ±1 GOP and still reports the displayed frame.
 // - Transients never touch the plan revision, history or disk.
+// - Rendered ranges (D-45 render-preview cache, added by INT-06): `setRenderedRanges` replaces
+//   the session's whole set. During playback only, the engine plays a rendered range from its
+//   file at the range's exact frame boundaries; paused, scrub and exact seeks always use the live
+//   composition. The engine drops every rendered range that an applied patch touches, until the
+//   next `setRenderedRanges`, so a stale render never plays: a removed or upserted layer whose
+//   old or new span overlaps it; a changed canvas (every range); a changed duration (the ranges
+//   ending after the shorter of the two durations); a changed or removed asset that the old plan
+//   had (every range). Audio-only changes touch nothing (audio always plays live). `setPlan`
+//   drops every range.
 
 import 'dart:typed_data';
 import 'dart:ui' show Color, Offset, Size;
@@ -262,6 +271,56 @@ final class LookSpec {
   final double intensity;
 }
 
+/// One render-preview file covering `[range)` of the current preview plan (ARCH D-45(A)).
+///
+/// [range] is in plan µs on the plan's frame grid; [uri] is the `file://` URI of a file in
+/// `<cache>/danaview/editor/renders/`; [hash] is the CORE-37 `rangeHash` the file was rendered
+/// for.
+///
+/// See ARCH §12.2, D-45.
+@immutable
+final class RenderedRange {
+  /// Creates a rendered range.
+  const RenderedRange({required this.range, required this.uri, required this.hash});
+
+  /// Plan time covered, half-open.
+  final TimeRange range;
+
+  /// `file://` URI of the rendered file.
+  final String uri;
+
+  /// Range hash the file was rendered for.
+  final String hash;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RenderedRange && other.range == range && other.uri == uri && other.hash == hash;
+
+  @override
+  int get hashCode => Object.hash(range, uri, hash);
+
+  @override
+  String toString() => 'RenderedRange(${range.start}..${range.end}, $hash)';
+}
+
+/// Checks a [PreviewSession.setRenderedRanges] argument: every range non-empty, starting at or
+/// after 0, sorted by start and not overlapping the previous one; every uri a `file://` URI.
+/// Returns the first problem, or null when the list is valid. Engines refuse an invalid list
+/// with `EngineFailure(planInvalid)`.
+///
+/// See ARCH §12.2, D-45.
+String? renderedRangesProblem(List<RenderedRange> ranges) {
+  TimeUs? previousEnd;
+  for (final r in ranges) {
+    if (r.range.start < 0 || r.range.isEmpty) return 'empty or negative range ${r.range.start}..${r.range.end}';
+    if (previousEnd != null && r.range.start < previousEnd) return 'ranges overlap or are not sorted at ${r.range.start}';
+    if (!r.uri.startsWith('file://')) return 'rendered range uri is not a file URI';
+    if (r.hash.isEmpty) return 'rendered range without a hash';
+    previousEnd = r.range.end;
+  }
+  return null;
+}
+
 /// One live preview bound to a Flutter texture.
 ///
 /// See ARCH §12.2, §12.7, §13.
@@ -299,6 +358,12 @@ abstract interface class PreviewSession {
 
   /// Uses proxies when available.
   Future<void> setUseProxies(bool on);
+
+  /// Replaces the session's rendered ranges (D-45 render-preview cache; playback only). See the
+  /// library comment for when the engine drops them; throws `EngineFailure(planInvalid)` when
+  /// [renderedRangesProblem] finds a problem, and `notSupportedOnDevice` on the mobile engine
+  /// until IOS-19 / AND-18 land.
+  Future<void> setRenderedRanges(List<RenderedRange> ranges);
 
   /// Switches the editing mode.
   Future<void> setEditingMode(PreviewEditingMode mode);
