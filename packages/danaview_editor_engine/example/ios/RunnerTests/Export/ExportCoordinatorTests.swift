@@ -120,18 +120,20 @@ final class ExportCoordinatorTests: XCTestCase {
                        .decoderInitFailed, "decoder errors keep their code")
 
         // Through the coordinator: start fails with the mapped code, nothing is left behind.
-        let h = try make(ExportHarness.Options(probe: EncoderProbe.refusing { _, w, _ in w >= 640 }))
-        let plan = ExportPlans.noAudioVideo(w: 640, h: 360, fps: 25, durUs: 1_000_000)
-        XCTAssertThrowsError(try h.start(self, plan: plan, settings: ExportPlans.settings(640, 360, fps: 25), output: h.outputURL())) {
+        let h = try make(ExportHarness.Options(probe: EncoderProbe.refusing { _, w, _ in w > 640 }))
+        let big = ExportPlans.noAudioVideo(w: 960, h: 540, fps: 25, durUs: 1_000_000)
+        XCTAssertThrowsError(try h.start(self, plan: big, settings: ExportPlans.settings(960, 540, fps: 25), output: h.outputURL())) {
             XCTAssertEqual(EngineError.from($0).code, .encoderSizeLimit)
         }
+        let plan = ExportPlans.noAudioVideo(w: 640, h: 360, fps: 25, durUs: 1_000_000)
         let dead = try make(ExportHarness.Options(probe: EncoderProbe { _, _, _ in false }))
         XCTAssertThrowsError(try dead.start(self, plan: plan, settings: ExportPlans.settings(640, 360, fps: 25), output: dead.outputURL())) {
             XCTAssertEqual(EngineError.from($0).code, .encoderUnavailable)
         }
         let preflight = try dead.preflight(self, plan: plan, settings: ExportPlans.settings(640, 360, fps: 25))
         XCTAssertFalse(preflight.ok)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: h.paths.work.path).filter { $0.hasPrefix("export-ex_") }, [])
+        let left = (try? FileManager.default.contentsOfDirectory(atPath: h.paths.work.path)) ?? []
+        XCTAssertEqual(left.filter { $0.hasPrefix("export-ex_") }, [])
     }
 
     // MARK: Portrait retry (ARCH §14.1)
@@ -462,7 +464,7 @@ final class ExportCoordinatorTests: XCTestCase {
             let h = try make(ExportHarness.Options(tier: tier))
             let suspender = CountingSuspender()
             h.coordinator.previewSuspender = suspender
-            let id = try h.export(self, plan: ExportPlans.noAudioVideo(w: 320, h: 180, fps: 25, durUs: 500_000),
+            let id = try h.export(self, plan: ExportPlans.noAudioVideo(w: 320, h: 180, fps: 25, durUs: 1_000_000),
                                   settings: ExportPlans.settings(320, 180, fps: 25), output: h.outputURL())
             XCTAssertNotNil(h.recorder.done(id))
             XCTAssertTrue(JobEventRecorder.spin(timeout: 5) { suspender.counts.1 == expected })

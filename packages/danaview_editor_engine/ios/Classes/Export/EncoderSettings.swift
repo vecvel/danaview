@@ -221,18 +221,26 @@ enum EncoderErrors {
         return EngineError(.encoderSizeLimit, "\(settings.codec.rawValue) encoder refused \(settings.width)x\(settings.height)")
     }
 
+    /// AVFoundation and VideoToolbox codes that mean "this encoder configuration is refused":
+    /// AVErrorUnsupportedOutputSettings, EncoderNotFound, EncoderTemporarilyUnavailable;
+    /// kVTParameterErr, kVTCouldNotFindVideoEncoderErr, kVTVideoEncoderNotAvailableNowErr.
+    static let refusalCodes: [String: Set<Int>] = [
+        EngineError.avFoundationDomain: [-11861, -11834, -11840],
+        NSOSStatusErrorDomain: [-12902, -12908, -12915],
+    ]
+
     /// Whether [error] (from a segment writer) means the encoder would not take the configuration.
+    /// IOS-17's writer hands AVFoundation errors on as `EngineError`s whose message is the error's
+    /// "<domain> <code>" tag (ENG-07), so the tag is matched as well as the raw NSError.
     static func isEncoderRefusal(_ error: Error) -> Bool {
-        let e = EngineError.from(error)
-        switch e.code {
-        case .encoderUnavailable, .encoderSizeLimit: return true
-        default: break
+        if let e = error as? EngineError {
+            if e.code == .encoderUnavailable || e.code == .encoderSizeLimit { return true }
+            return refusalCodes.contains { domain, codes in
+                codes.contains { e.message.hasPrefix("\(domain) \($0)") }
+            }
         }
         let ns = error as NSError
-        // AVErrorInvalidOutputSettings-like configuration failures and VideoToolbox parameter errors.
-        if ns.domain == EngineError.avFoundationDomain, [-11861, -11841, -11834, -11840].contains(ns.code) { return true }
-        if ns.domain == NSOSStatusErrorDomain, [-12902, -12908, -12915, -12903].contains(ns.code) { return true }
-        return false
+        return refusalCodes[ns.domain]?.contains(ns.code) ?? false
     }
 
     /// Maps a writer failure of the video encoder to the export error: refusals become

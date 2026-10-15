@@ -117,7 +117,7 @@ packages:
     source: path
     version: "1.1.0"
   danaview_editor_engine_api:
-    dependency: "direct dev"
+    dependency: "direct main"
     description:
       path: "packages/danaview_editor_engine_api"
       relative: true
@@ -152,7 +152,7 @@ packages:
     source: path
     version: "1.0.0"
   danaview_transcription:
-    dependency: transitive
+    dependency: "direct main"
     description:
       path: "packages/danaview_transcription"
       relative: true
@@ -166,7 +166,7 @@ packages:
     source: path
     version: "1.0.0"
   danaview_whisper:
-    dependency: transitive
+    dependency: "direct main"
     description:
       path: "packages/danaview_whisper"
       relative: true

@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:danaview_data/danaview_data.dart' show LibraryRepository;
 import 'package:danaview_editor/danaview_editor.dart';
 import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewToast, DanaviewToastKind;
 
 String folderLocation(String path) => '/folder?path=${Uri.encodeQueryComponent(path)}';
 
@@ -24,6 +28,86 @@ String editorLocation(ProjectId id, {TimeUs? initialPlayhead}) {
 
 /// Opens the Projects screen (Home edit button, Settings › Storage "Open projects").
 void openProjects(BuildContext context) => context.push(projectsLocation);
+
+/// The root navigator of the app's router, for navigation that has no widget context (the editor
+/// flows' hosts, INT-04).
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'app');
+
+BuildContext? get _rootContext => appNavigatorKey.currentContext;
+
+/// Opens Settings › Privacy Policy (the Auto captions consent view's link, ARCH §20.3).
+void openPrivacyPolicy() => _rootContext?.push(settingsLocation(SettingsDestination.privacy));
+
+/// The export flow's navigation (ux.md §11): Play in Danaview plays the file in the player, Free up
+/// space opens Settings › Storage. There is no app-settings opener, so that button stays hidden.
+const ExportHost appExportHost = ExportHost(onPlay: _playExport, onFreeUpSpace: _openStorage);
+
+Future<void> _playExport(String path) async {
+  final context = _rootContext;
+  if (context == null) return;
+  final container = ProviderScope.containerOf(context, listen: false);
+  await container.read(queueControllerProvider.notifier).playFrom([LibraryRepository.mediaRefForFile(path)]);
+  if (context.mounted) unawaited(context.push('/player'));
+}
+
+void _openStorage() => _rootContext?.push(settingsLocation(SettingsDestination.storage));
+
+/// The player's Edit action (ARCH §17.1): `EditorLauncher.openFromPlayer` with the player as the
+/// handoff, opening `/editor/:id?t=<µs>` and restoring the player when that route pops.
+Future<EditorLaunchOutcome> editFromPlayer(BuildContext context, PlayerEditRequest request) {
+  final container = ProviderScope.containerOf(context, listen: false);
+  final launcher = container.read(editorLauncherProvider);
+  final handoff = PlayerControllerHandoff(container.read(playerControllerProvider.notifier), context, position: request.position);
+  return launcher.openFromPlayer(
+    EditorLaunchRequest(
+      pathOrUri: request.media.pathOrUri,
+      title: request.media.title,
+      position: request.position,
+      wasPlaying: request.wasPlaying,
+    ),
+    context,
+    player: handoff,
+    openEditor: (id, at) => context.push<void>(editorLocation(id, initialPlayhead: at)),
+  );
+}
+
+/// [PlayerHandoff] over the app's [PlayerController] (`danaview_features` never imports the editor,
+/// so the app root adapts one to the other).
+final class PlayerControllerHandoff implements PlayerHandoff {
+  /// Creates the handoff; [position] is the Edit request's snapshot.
+  PlayerControllerHandoff(this.controller, this.context, {required this.position});
+
+  /// The player.
+  final PlayerController controller;
+
+  /// Where toasts show.
+  final BuildContext context;
+
+  /// The position the editor opens at and the player returns to.
+  final Duration position;
+
+  PlayerResumeToken? _token;
+
+  @override
+  Future<void> pause() => controller.pause();
+
+  @override
+  Future<void> suspend({required bool release}) async {
+    _token = await controller.suspendForEditor(release ? PlayerHandoffMode.release : PlayerHandoffMode.pause, position: position);
+  }
+
+  @override
+  Future<void> resume() async {
+    final token = _token;
+    _token = null;
+    if (token != null) await controller.resumeAfterEditor(token);
+  }
+
+  @override
+  void showToast(String message) {
+    if (context.mounted) DanaviewToast.show(context, message, kind: DanaviewToastKind.info);
+  }
+}
 
 /// Whether the editor is reachable: iOS/Android with `DANAVIEW_EDITOR` (D-17, D-31) and wired by
 /// `EditorBootstrap` (a failed wiring hides it like an unsupported platform).
@@ -64,6 +148,7 @@ Widget _settingsPage(BuildContext context, SettingsDestination destination) {
 
 /// Pages are nested under Home so Back always has somewhere to go, even after a deep link.
 GoRouter createAppRouter() => GoRouter(
+      navigatorKey: appNavigatorKey,
       initialLocation: '/',
       // Unknown locations (e.g. a file URL the OS handed over) land on Home instead of an error page.
       onException: (context, state, router) => router.go('/'),
@@ -129,7 +214,11 @@ GoRouter createAppRouter() => GoRouter(
             GoRoute(
               path: 'player',
               name: 'player',
-              builder: (context, state) => DanaviewPlayerScreen(onBack: () => _back(context)),
+              builder: (context, state) => DanaviewPlayerScreen(
+                onBack: () => _back(context),
+                // Hidden on desktop, with DANAVIEW_EDITOR off and when the editor failed to wire (D-17).
+                onEditVideo: editorReachable(context) ? (request) => unawaited(editFromPlayer(context, request)) : null,
+              ),
             ),
             GoRoute(
               path: 'folder',
