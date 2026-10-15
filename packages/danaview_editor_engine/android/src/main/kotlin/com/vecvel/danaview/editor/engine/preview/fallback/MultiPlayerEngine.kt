@@ -781,10 +781,24 @@ internal class MultiPlayerEngine(
         }
     }
 
+    /**
+     * The rendered range that plays at plan time [t], or null (live decks). A range the hook no
+     * longer accepts (a change touched it since the last rebuild) is null at once, so the next
+     * frame is composited live; the rebuild that removes its deck follows.
+     */
     private fun rangeAt(t: Long): RenderedRange? {
         val rt = rangeRuntime ?: return null
         val i = rt.spec.activeAt(t)
-        return if (i >= 0) rt.spec.items[i].range else null
+        val r = if (i >= 0) rt.spec.items[i].range else null
+        return r?.takeIf { rangeValid(it) }
+    }
+
+    private fun rangeValid(r: RenderedRange): Boolean = try {
+        options.rangeHook.isValid(r)
+    } catch (e: RuntimeException) {
+        // A failing hook cannot vouch for its file: play live.
+        Log.w(EngineContext.TAG, "rendered-range hook failed (${e.javaClass.simpleName})")
+        false
     }
 
     /** True when a deck that plays the layer at deck time [tp] is rebuffering (its clock stopped). */

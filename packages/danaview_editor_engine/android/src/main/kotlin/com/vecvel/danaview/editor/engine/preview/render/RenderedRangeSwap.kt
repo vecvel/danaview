@@ -13,12 +13,15 @@
 // applied to the change, plus transient overrides) and drops every touched range until the next
 // `setRenderedRanges` ([set]). A snapshot that shows a source frame (PreviewSession's import
 // preview) is not a plan change and is skipped. [ranges] refreshes first, so a structural rebuild
-// never reinstalls a touched range; RenderedRangeHandler polls [refresh] on danaview-preview and
-// rebuilds the backend when a range was dropped, so a param patch (no structural rebuild) also
-// falls back to live.
+// never reinstalls a touched range. [isValid] refreshes too and is asked by the backend for every
+// playback frame inside a range, so a param patch (no structural rebuild) falls back to the live
+// decks on the next frame composited after the snapshot changed; [onDropped] then lets
+// RenderedRangeBinding rebuild the backend without the range's deck. While paused the binding's
+// slow poll runs [refresh] (paused frames never use a range).
 //
-// Threads: [set] and [refresh] on danaview-preview, [ranges] on the backend's worker, [onBoundary]
-// on danaview-gl; state is guarded by one lock and every method is cheap. Never logs URIs.
+// Threads: [set] and [refresh] on danaview-preview, [ranges] on the backend's worker, [isValid] and
+// [onBoundary] on danaview-gl; state is guarded by one lock and every method is cheap. Never logs
+// URIs.
 
 package com.vecvel.danaview.editor.engine.preview.render
 
@@ -47,6 +50,10 @@ class RenderedRangeSwap(private val snapshot: AtomicReference<ParamSnapshot>) : 
         val current: Long? = null,
     )
 
+    /** Called (on the dropping thread, outside the lock) after [refresh] dropped a range. */
+    @Volatile
+    var onDropped: (() -> Unit)? = null
+
     private val lock = Any()
     private var entries: List<Entry> = emptyList()
     private var seen: ParamSnapshot? = null
@@ -72,6 +79,12 @@ class RenderedRangeSwap(private val snapshot: AtomicReference<ParamSnapshot>) : 
      * touches. Returns whether a range was dropped.
      */
     fun refresh(): Boolean {
+        val dropped = refreshLocked()
+        if (dropped) onDropped?.invoke()
+        return dropped
+    }
+
+    private fun refreshLocked(): Boolean {
         val snap = snapshot.get()
         synchronized(lock) {
             if (isSourceFrame(snap)) return false
@@ -101,6 +114,11 @@ class RenderedRangeSwap(private val snapshot: AtomicReference<ParamSnapshot>) : 
     override fun ranges(rev: Long): List<RenderedRange> {
         refresh()
         return synchronized(lock) { entries.map { it.range } }
+    }
+
+    override fun isValid(range: RenderedRange): Boolean {
+        refresh()
+        return synchronized(lock) { entries.any { it.range == range } }
     }
 
     override fun onBoundary(k: Long, entered: RenderedRange?) {

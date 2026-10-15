@@ -17,7 +17,9 @@
 //   back to the live decks within a frame or two (measured by RenderedRangeSwapTest). The rebuild
 //   waits while the session is closed, suspended for an export or shows a source frame.
 // - An unknown session answers `internal` (glue convention); the poll ends when the session is
-//   disposed or has no range left.
+//   disposed or has no range left. Bindings are keyed by session id and hold the session only
+//   weakly (the backend they hold refers to its session as host): a binding whose session is gone
+//   is removed when its poll notices, and on every call.
 // Never logs URIs or plan content.
 
 package com.vecvel.danaview.editor.engine.preview.render
@@ -35,11 +37,14 @@ import com.vecvel.danaview.editor.engine.plan.FrameGrid
 import com.vecvel.danaview.editor.engine.preview.PreviewSession
 import com.vecvel.danaview.editor.engine.preview.fallback.ContingencyPreviewBackend
 import com.vecvel.danaview.editor.engine.preview.fallback.RenderedRange
-import java.util.WeakHashMap
+import java.lang.ref.WeakReference
 
 /** Rendered ranges of preview sessions (file header). */
 class RenderedRangeHandler(private val ctx: EngineContext) {
-    private val bindings = WeakHashMap<PreviewSession, RenderedRangeBinding>()
+    private class Bound(val session: WeakReference<PreviewSession>, val binding: RenderedRangeBinding)
+
+    /** Bindings by session id; guarded by itself. */
+    private val bindings = HashMap<String, Bound>()
 
     /** Finds open sessions (the process's PreviewSessionManager; tests use their own manager). */
     @VisibleForTesting
@@ -59,14 +64,23 @@ class RenderedRangeHandler(private val ctx: EngineContext) {
         try {
             val entries = RenderRanges.entries(ranges, FrameGrid.of(session.snapshot.get().plan.canvas.fps))
             val binding = synchronized(bindings) {
-                bindings.getOrPut(session) {
-                    RenderedRangeBinding(
+                prune()
+                val id = session.sessionId
+                val existing = bindings[id]?.takeIf { it.session.get() === session }
+                existing?.binding ?: run {
+                    bindings.remove(id)?.binding?.stop()
+                    val ref = WeakReference(session)
+                    lateinit var created: RenderedRangeBinding
+                    created = RenderedRangeBinding(
                         backend = backend,
                         snapshot = session.snapshot,
                         handler = handler,
-                        ready = { session.isOpen && !session.isSuspended },
-                        alive = { sessions(session.sessionId) === session },
+                        ready = { ref.get()?.let { it.isOpen && !it.isSuspended } ?: false },
+                        alive = { ref.get()?.let { sessions(id) === it } ?: false },
+                        onGone = { forget(id, created) },
                     )
+                    bindings[id] = Bound(ref, created)
+                    created
                 }
             }
             binding.apply(entries)
@@ -77,7 +91,29 @@ class RenderedRangeHandler(private val ctx: EngineContext) {
     }
 
     /** The swap of [session], or null (tests). */
-    fun swapOf(session: PreviewSession): RenderedRangeSwap? = synchronized(bindings) { bindings[session]?.swap }
+    fun swapOf(session: PreviewSession): RenderedRangeSwap? = synchronized(bindings) {
+        bindings[session.sessionId]?.takeIf { it.session.get() === session }?.binding?.swap
+    }
+
+    /** Bindings held (tests). */
+    val bindingCount: Int get() = synchronized(bindings) { bindings.size }
+
+    private fun forget(id: String, binding: RenderedRangeBinding) = synchronized(bindings) {
+        if (bindings[id]?.binding === binding) bindings.remove(id)
+    }
+
+    /** Drops bindings whose session was disposed or collected (caller holds the lock). */
+    private fun prune() {
+        val it = bindings.entries.iterator()
+        while (it.hasNext()) {
+            val (id, b) = it.next()
+            val s = b.session.get()
+            if (s == null || sessions(id) !== s) {
+                b.binding.stop()
+                it.remove()
+            }
+        }
+    }
 }
 
 /** Rendered-range messages → swap entries (pure; JVM-tested). */

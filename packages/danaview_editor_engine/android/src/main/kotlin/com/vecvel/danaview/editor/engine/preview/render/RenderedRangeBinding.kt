@@ -3,13 +3,16 @@
 // RenderedRangeBinding: one session's RenderedRangeSwap bound to its AND-16 backend (ARCH D-45,
 // §12.2 "Rendered ranges"). [apply] installs the swap as the backend's rendered-range hook (once),
 // replaces the ranges and rebuilds the backend on the session's current plan, so the next playback
-// (or the one running) picks them up. While ranges exist a poll on the session's lane
-// (danaview-preview, every [POLL_MS]) runs the swap's invalidation; when a change touched a range
-// the backend is rebuilt at once (the range deck goes and the live decks take over, hold/miss: a
-// frame is dropped, never a stale one kept beyond the rebuild). A rebuild waits while [ready] says
-// no (session closed, suspended for an export, or showing a source frame). The poll stops when
-// [alive] turns false or no range is left. Used by RenderedRangeHandler (PreviewSession) and by the
-// instrumented tests (AND-16's DirectHost). Never logs URIs.
+// (or the one running) picks them up. During playback the backend asks the swap about every frame
+// inside a range (RenderedRangeHook.isValid), so a change that touched the range falls back to the
+// live decks on the next frame; the swap's [RenderedRangeSwap.onDropped] then posts a rebuild here
+// that removes the range deck. While ranges exist a slow poll on the session's lane
+// (danaview-preview, every [POLL_MS]; paused frames never use a range, so this is only
+// bookkeeping) runs the same invalidation while nothing plays and retries a rebuild that had to
+// wait: a rebuild waits while [ready] says no (session closed, suspended for an export, or showing
+// a source frame). The poll stops when no range is left; when [alive] turns false it stops for
+// good and [onGone] runs. Used by RenderedRangeHandler (PreviewSession) and by the instrumented
+// tests (AND-16's DirectHost). Never logs URIs.
 
 package com.vecvel.danaview.editor.engine.preview.render
 
@@ -32,11 +35,19 @@ class RenderedRangeBinding(
     private val ready: () -> Boolean = { true },
     /** Whether the session still exists (false ends the poll). */
     private val alive: () -> Boolean = { true },
+    /** Runs on [handler] once [alive] turned false (the owner forgets this binding). */
+    private val onGone: () -> Unit = {},
 ) {
     /** The hook installed on the backend. */
     val swap = RenderedRangeSwap(snapshot)
 
     private val token = Any()
+
+    init {
+        // A drop seen on danaview-gl (per-frame check) or by the poll: rebuild without the range.
+        swap.onDropped = { handler.postAtTime({ onRangeDropped() }, token, SystemClock.uptimeMillis()) }
+    }
+
     private var pendingRebuild = false
     private var polling = false
 
@@ -59,7 +70,20 @@ class RenderedRangeBinding(
     /** Stops polling (the session is gone). */
     fun stop() {
         polling = false
+        swap.onDropped = null
         handler.removeCallbacksAndMessages(token)
+    }
+
+    private fun onRangeDropped() {
+        if (!alive()) return gone()
+        pendingRebuild = true
+        rebuildIfReady()
+        schedulePoll()
+    }
+
+    private fun gone() {
+        stop()
+        onGone()
     }
 
     private fun rebuildIfReady() {
@@ -88,11 +112,9 @@ class RenderedRangeBinding(
 
     private fun poll() {
         if (!polling) return
-        if (!alive()) {
-            stop()
-            return
-        }
-        if (swap.refresh()) pendingRebuild = true
+        if (!alive()) return gone()
+        // A drop posts onRangeDropped (the rebuild); the poll only keeps the swap current.
+        swap.refresh()
         rebuildIfReady()
         if (swap.isEmpty && !pendingRebuild) {
             polling = false
@@ -102,7 +124,10 @@ class RenderedRangeBinding(
     }
 
     companion object {
-        /** Invalidation poll period while ranges exist (about half a 60 fps frame). */
-        const val POLL_MS = 8L
+        /**
+         * Poll period while ranges exist. Playback checks validity per frame, so the poll only keeps
+         * the swap current while paused and retries waiting rebuilds; 2 wake-ups a second at most.
+         */
+        const val POLL_MS = 500L
     }
 }

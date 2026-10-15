@@ -117,8 +117,9 @@ class PowerStateMonitor(private val ctx: EngineContext) {
     }
 
     private fun register(r: BroadcastReceiver, filter: IntentFilter) {
-        // System broadcasts only; they need an exported receiver on API 33+.
-        ContextCompat.registerReceiver(ctx.appContext, r, filter, ContextCompat.RECEIVER_EXPORTED)
+        // Protected system broadcasts only: the system delivers them to a non-exported receiver,
+        // so no other app can reach this one.
+        ContextCompat.registerReceiver(ctx.appContext, r, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 }
 
