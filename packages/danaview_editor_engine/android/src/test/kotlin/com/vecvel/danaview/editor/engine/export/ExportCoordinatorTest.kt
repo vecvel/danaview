@@ -218,6 +218,7 @@ class ExportCoordinatorTest {
     @Test
     fun withoutAHookAMultiPassPlanStillRunsOnePass() {
         coordinator.multiPass = null
+        coordinator.discoverMultiPass = false
         assertNull(coordinator.multiPassExport())
         plan = Plans.media(slots = 5)
         env.budget = DecoderBudget(maxVisualSequences = 2, maxDecoderInstances = 0)
