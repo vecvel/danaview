@@ -1,6 +1,9 @@
 // OWNER: API-01
 //
 // Voice recording (ARCH §12.4, §15, D-25): WAV PCM s16 48 kHz mono in the project bundle.
+// INT-07 added the recording state ([VoiceRecorder.isRecording], [VoiceRecorder.recordingChanged]):
+// while a recording captures, every preview session plays muted (natively, both platforms), so the
+// project sound is not recorded.
 
 import 'package:meta/meta.dart';
 import 'package:danaview_editor_core/model.dart';
@@ -84,6 +87,14 @@ abstract interface class VoiceRecorder {
   /// Opens the app's system settings page.
   Future<void> openSystemSettings();
 
-  /// Starts recording into [outputPath].
+  /// Starts recording into [outputPath]. Preview sessions play muted until the recording stops,
+  /// is cancelled or is interrupted (INT-07).
   Future<RecordingSession> start({required String outputPath});
+
+  /// Whether a recording is capturing now (INT-07).
+  Future<bool> isRecording();
+
+  /// Recording state changes (true: capture started, preview muted; false: capture ended), as a
+  /// broadcast stream (INT-07).
+  Stream<bool> get recordingChanged;
 }

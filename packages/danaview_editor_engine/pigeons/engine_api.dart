@@ -5,6 +5,12 @@
 // with `JobRequestMsg.plan`, `RenderedRangeMsg` and `PreviewHostApi.setRenderedRanges`,
 // `PowerStateMsg`, `PlatformHostApi.powerState` and the `powerStateChanged` signal. Frozen again
 // after INT-06.
+// Approved amendment INT-07 (2026-10-15, from the Android-lane report; ARCH §12.4, §12.6):
+// `PlatformHostApi.materializePick` (copy of a non-persistable pick into an engine directory),
+// `ExportNotificationTextsMsg` (localized export notification texts from Dart, carried by
+// `EngineConfigMsg.exportTexts` and `ExportHostApi.start`), `RecorderHostApi.isRecording` and the
+// `recordingChanged` event (the preview mutes its audio while a recording captures). Frozen again
+// after INT-07.
 //
 // Pigeon surface of the editor engine plugin (ARCH §12.6). Regenerate from the package root with
 //
@@ -160,6 +166,10 @@ enum EngineEventKindMsg {
 
   /// The background lease `jobId` is about to expire (iOS).
   leaseExpiring,
+
+  /// `recording` (engine-wide, INT-07): a voice recording started (true) or ended (false) capturing;
+  /// preview sessions mute their audio while it is true.
+  recordingChanged,
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -168,13 +178,74 @@ enum EngineEventKindMsg {
 
 /// Dart-supplied engine roots (ARCH §20.1). Native writes only below these.
 class EngineConfigMsg {
-  EngineConfigMsg({required this.cacheRoot, required this.supportRoot});
+  EngineConfigMsg({required this.cacheRoot, required this.supportRoot, this.exportTexts});
 
   /// `<cache>/danaview/editor`.
   String cacheRoot;
 
   /// `<support>/danaview/editor`.
   String supportRoot;
+
+  /// Localized export notification texts (INT-07); null keeps the engine's English defaults.
+  ExportNotificationTextsMsg? exportTexts;
+}
+
+/// Localized texts of the export and background-work notifications (INT-07, ARCH §12.4). Android
+/// shows them in the foreground-service and completion notifications and names its channels with
+/// them; iOS shows no export notification and ignores them. `{percent}` in [exportingProgress] and
+/// [workingProgress] and `{count}` in [more] are replaced natively.
+class ExportNotificationTextsMsg {
+  ExportNotificationTextsMsg({
+    required this.exportTitle,
+    required this.workTitle,
+    required this.exporting,
+    required this.exportingProgress,
+    required this.working,
+    required this.workingProgress,
+    required this.cancel,
+    required this.savedToGallery,
+    required this.exportFinished,
+    required this.more,
+    required this.progressChannelName,
+    required this.progressChannelDescription,
+    required this.doneChannelName,
+    required this.doneChannelDescription,
+  });
+
+  /// Title when the job has none ("Exporting video").
+  String exportTitle;
+
+  /// Title of a background-work lease without one ("Working in the background").
+  String workTitle;
+
+  /// Text without a known progress ("Exporting").
+  String exporting;
+
+  /// Text with progress ("Exporting · {percent}%").
+  String exportingProgress;
+
+  /// Lease text without progress ("Working").
+  String working;
+
+  /// Lease text with progress ("Working · {percent}%").
+  String workingProgress;
+
+  /// The Cancel action.
+  String cancel;
+
+  /// Completion title after a detached save to the gallery ("Saved to Gallery").
+  String savedToGallery;
+
+  /// Completion title otherwise ("Export finished").
+  String exportFinished;
+
+  /// Further jobs not shown ("+{count} more").
+  String more;
+
+  String progressChannelName;
+  String progressChannelDescription;
+  String doneChannelName;
+  String doneChannelDescription;
 }
 
 /// `EditorCapabilities` (ARCH §12.5, D-14, D-22, D-40).
@@ -824,6 +895,7 @@ class EngineEventMsg {
     this.interruption,
     this.signal,
     this.drop,
+    this.recording,
   });
 
   EngineEventKindMsg kind;
@@ -843,6 +915,9 @@ class EngineEventMsg {
   RecordingInterruptionMsg? interruption;
   SignalMsg? signal;
   DropMsg? drop;
+
+  /// `recordingChanged` (INT-07): whether a voice recording is capturing now.
+  bool? recording;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -975,9 +1050,17 @@ abstract class ExportHostApi {
   @asyncCallback
   ExportPreflightMsg preflight(Uint8List plan, EncodeSettingsMsg settings);
 
-  /// Returns the job id (stable across process death).
+  /// Returns the job id (stable across process death). [texts] (INT-07) replaces the notification
+  /// texts from `initialize` from this job on; null keeps them.
   @asyncCallback
-  String start(Uint8List plan, EncodeSettingsMsg settings, String outputPath, String title, DetachedHandoffMsg whenDetached);
+  String start(
+    Uint8List plan,
+    EncodeSettingsMsg settings,
+    String outputPath,
+    String title,
+    DetachedHandoffMsg whenDetached,
+    ExportNotificationTextsMsg? texts,
+  );
 
   /// Resumes an iOS segment-resumable job; `notSupportedOnDevice` elsewhere. Returns the job id.
   @asyncCallback
@@ -1016,6 +1099,10 @@ abstract class RecorderHostApi {
 
   @asyncCallback
   void cancel(String recordingId);
+
+  /// Whether a recording is capturing now (INT-07); changes arrive as `recordingChanged` events.
+  @asyncCallback
+  bool isRecording();
 }
 
 /// Pickers, file handoff, media access, background leases and drops (ARCH §12.4, §9, §15).
@@ -1081,6 +1168,16 @@ abstract class PlatformHostApi {
   /// Charging and low-power state (D-45); changes arrive as `powerStateChanged` signals.
   @asyncCallback
   PowerStateMsg powerState();
+
+  /// Copies a picked item that cannot be kept by reference (INT-07: an Android `content://` URI
+  /// without a persistable grant; on iOS a `file://` pick) into a new file inside [intoDir] (a
+  /// directory under `<cache>/danaview/editor/work/`, created when missing) and returns its
+  /// absolute path. An item that already is an app-owned temporary copy under `work/` is returned
+  /// as is. Fails with `permissionDenied` when [intoDir] is outside `work/` or the source cannot be
+  /// read, `mediaOffline` when it is gone, `diskFull`, `io`, or `notSupportedOnDevice` for a URI
+  /// scheme the platform cannot copy.
+  @asyncCallback
+  String materializePick(String uri, String intoDir);
 }
 
 /// The single multiplexed event stream (ARCH §12.6).

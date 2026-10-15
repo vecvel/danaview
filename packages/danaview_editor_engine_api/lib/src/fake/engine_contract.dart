@@ -12,6 +12,11 @@
 // the render-preview job (renders to its output, cancel deletes the output, refusals are
 // `EngineFailure`s) and rendered ranges (a patch touching a range drops it, an untouched one
 // stays, `setPlan` drops all, an invalid list is `planInvalid`).
+// INT-07 cases, each opt-in: [IntegrationContractProbe.workDirectory] checks `materializePick`
+// (a directory outside `work/` is `MediaAccessFailure(outsideEditorRoots)`; an app-owned temporary copy under `work/` comes
+// back as is); [IntegrationContractProbe.recordingOutputPath] checks the recording state (start ->
+// `isRecording` true and a `recordingChanged(true)`, cancel -> false) and, with
+// [IntegrationContractProbe.previewMuted], that open preview sessions are muted meanwhile.
 
 import 'dart:async';
 
@@ -86,6 +91,27 @@ final class RenderPreviewContractProbe {
   final FutureOr<List<RenderedRange>> Function(PreviewSession session) activeRanges;
 }
 
+/// What [checkEngineContract] needs to check the INT-07 additions (materializePick, recording
+/// state and the preview mute while recording) on an engine that implements them.
+///
+/// See ARCH §12.4, §15.
+final class IntegrationContractProbe {
+  /// Creates the probe; leave a field null to skip its check.
+  const IntegrationContractProbe({this.workDirectory, this.temporaryCopyPath, this.recordingOutputPath, this.previewMuted});
+
+  /// Absolute path of the engine's `<cache>/danaview/editor/work` directory.
+  final String? workDirectory;
+
+  /// An existing app-owned temporary copy under [workDirectory] (materializePick returns it as is).
+  final String? temporaryCopyPath;
+
+  /// Where the kit may record a short WAV (inside the editor roots; needs mic permission).
+  final String? recordingOutputPath;
+
+  /// Whether [session]'s audio is muted now (a test hook of the engine).
+  final FutureOr<bool> Function(PreviewSession session)? previewMuted;
+}
+
 /// Runs the preview, job and export contract against [engine] and returns violations (empty =
 /// pass).
 ///
@@ -98,12 +124,14 @@ final class RenderPreviewContractProbe {
 /// * [checkExportRecords]: consumes one-shot records and checks they do not come back.
 /// * [renderPreview]: when set, also checks the D-45 render-preview job, rendered ranges and the
 ///   power state (engines that still answer `notSupportedOnDevice` leave it null).
+/// * [integration]: when set, also checks the INT-07 additions it names.
 Future<List<String>> checkEngineContract(
   EditorEngine engine, {
   Duration settle = Duration.zero,
   String? exportOutputPath,
   bool checkExportRecords = true,
   RenderPreviewContractProbe? renderPreview,
+  IntegrationContractProbe? integration,
 }) async {
   final v = <String>[];
   final caps = await engine.capabilities();
@@ -126,7 +154,68 @@ Future<List<String>> checkEngineContract(
     await _checkRenderedRanges(engine, v, renderPreview, settle);
     await _checkPowerState(engine, v);
   }
+  if (integration != null) {
+    await _checkMaterialize(engine, v, integration);
+    await _checkRecordingState(engine, v, integration, settle);
+  }
   return v;
+}
+
+Future<void> _checkMaterialize(EditorEngine engine, List<String> v, IntegrationContractProbe probe) async {
+  final work = probe.workDirectory;
+  if (work == null) return;
+  final dir = work.endsWith('/') ? work.substring(0, work.length - 1) : work;
+  final outside = dir.substring(0, dir.lastIndexOf('/'));
+  const pick = PickedMedia(uri: 'content://kit/pick/1', displayName: 'kit.mp4', origin: MediaOrigin.files);
+  try {
+    await engine.access.materializePick(pick, '$outside/kit');
+    v.add('materializePick into a directory outside work/ must throw MediaAccessFailure(outsideEditorRoots)');
+  } on MediaAccessFailure catch (e) {
+    if (e.kind != MediaAccessFailureKind.outsideEditorRoots) {
+      v.add('materializePick into a directory outside work/ threw ${e.kind.name}, expected outsideEditorRoots');
+    }
+  } on Object catch (e) {
+    v.add('materializePick into a directory outside work/ threw ${e.runtimeType}, expected MediaAccessFailure');
+  }
+  final temp = probe.temporaryCopyPath;
+  if (temp != null) {
+    final copy = PickedMedia(uri: temp, displayName: temp.split('/').last, origin: MediaOrigin.drop, isTemporaryCopy: true);
+    try {
+      final path = await engine.access.materializePick(copy, '$dir/picks/kit');
+      if (path != temp) v.add('materializePick must return an app-owned temporary copy under work/ as is');
+    } on Object catch (e) {
+      v.add('materializePick of a temporary copy failed: $e');
+    }
+  }
+}
+
+Future<void> _checkRecordingState(EditorEngine engine, List<String> v, IntegrationContractProbe probe, Duration settle) async {
+  final out = probe.recordingOutputPath;
+  final recorder = engine.voiceRecorder;
+  if (out == null || recorder == null) return;
+  final changes = <bool>[];
+  final sub = recorder.recordingChanged.listen(changes.add);
+  PreviewSession? session;
+  try {
+    if (await recorder.isRecording()) v.add('isRecording() must be false before a recording starts');
+    if (probe.previewMuted != null) session = await engine.openPreview(const PreviewConfig(canvasWidth: 64, canvasHeight: 36, fps: 30));
+    final rec = await recorder.start(outputPath: out);
+    await _pump(settle);
+    if (!await recorder.isRecording()) v.add('isRecording() must be true while a recording captures');
+    if (!changes.contains(true)) v.add('recordingChanged must emit true when a recording starts');
+    final muted = probe.previewMuted;
+    if (muted != null && session != null && !await muted(session)) v.add('preview sessions must be muted while a recording captures');
+    await rec.cancel();
+    await _pump(settle);
+    if (await recorder.isRecording()) v.add('isRecording() must be false after cancel');
+    if (changes.isEmpty || changes.last) v.add('recordingChanged must emit false when a recording ends');
+    if (muted != null && session != null && await muted(session)) v.add('preview sessions must be unmuted after a recording');
+  } on Object catch (e) {
+    v.add('recording state check failed: $e');
+  } finally {
+    await sub.cancel();
+    await session?.dispose();
+  }
 }
 
 Future<void> _checkRenderJobs(EditorEngine engine, List<String> v, RenderPreviewContractProbe probe, Duration settle) async {

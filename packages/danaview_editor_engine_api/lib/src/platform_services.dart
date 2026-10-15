@@ -3,7 +3,7 @@
 // Pickers, file handoff, media access, background leases and external drops (ARCH §12.4, §9,
 // §15, D-13, D-18, D-44). The power state (`BackgroundWorkGuard.powerState` and
 // `powerStateChanged`, the D-45 `PlatformServices.powerState` idle-and-charging signal) was added
-// by INT-06.
+// by INT-06; `MediaAccess.materializePick` (the core `PickMaterializer`) by INT-07.
 
 import 'dart:ui' show Offset;
 
@@ -120,6 +120,19 @@ abstract interface class FileHandoff {
 abstract interface class MediaAccess implements MediaAccessPort {
   /// Asks for `POST_NOTIFICATIONS` (Android 13+); true elsewhere.
   Future<bool> requestNotificationPermission();
+
+  /// Copies [picked] into a new file `<intoDir>/<unique>/<display name>` ([intoDir] lies under
+  /// `<cache>/danaview/editor/work/`, e.g. `StoreRoots.picksDir`) and returns its absolute path
+  /// (INT-07). Used for picks that cannot be kept by reference (an Android `content://` URI
+  /// without a persistable grant); the media pool then moves the copy into `media/`. Matches core
+  /// `PickMaterializer`, so `engine.access.materializePick` can be passed as one. An item that is
+  /// already an app-owned temporary copy under `work/` comes back as is. Failures follow the
+  /// port: `MediaAccessFailure` (`outsideEditorRoots` for [intoDir] outside `work/`, a caller
+  /// bug; `notFound` when the item is gone; `accessLost` when it cannot be read; `io` otherwise,
+  /// including a URI scheme the platform cannot copy) and `StoreFailure(diskFull)`.
+  ///
+  /// See ARCH §9.1, §12.4.
+  Future<String> materializePick(PickedMedia picked, String intoDir);
 }
 
 /// A background-work lease (iOS `beginBackgroundTask`, Android FGS-hosted lease).

@@ -3,7 +3,8 @@
 // The Pigeon host APIs, the event router and the engine config, shared by MobileEditorEngine and
 // every mobile service (ENG-02 preview, ENG-03 jobs/recorder/platform/access, ENG-04 export).
 // Services call native through [EngineChannels.invoke], which initializes the engine once and
-// maps every error to an `EngineFailure` (ARCH §12.5, §12.6, §19).
+// maps every error to an `EngineFailure` (ARCH §12.5, §12.6, §19). `initialize` also carries the
+// localized export notification texts of the config (INT-07).
 
 import 'package:flutter/services.dart';
 import 'package:meta/meta.dart';
@@ -11,6 +12,7 @@ import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 
 import '../error_mapper.dart';
 import '../event_router.dart';
+import 'conversions.dart';
 import 'engine_api.g.dart';
 
 /// Host APIs, the event router and the engine roots of one MobileEditorEngine.
@@ -82,7 +84,11 @@ final class EngineChannels {
 
   Future<void> _initialize() async {
     try {
-      await guardEngineCall(() => engine.initialize(EngineConfigMsg(cacheRoot: config.cacheRoot, supportRoot: config.supportRoot)));
+      await guardEngineCall(() => engine.initialize(EngineConfigMsg(
+            cacheRoot: config.cacheRoot,
+            supportRoot: config.supportRoot,
+            exportTexts: exportNotificationTextsToMsg(config.exportNotificationTexts),
+          )));
       _initialized = true;
       router.start();
     } on EngineFailure catch (f) {

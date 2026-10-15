@@ -162,12 +162,12 @@ final class GlueValidationTests: XCTestCase {
         assertRefused("internal") { api.preflight(plan: bytes("{}"), settings: encodeSettings(width: 1919), completion: $0) }
         assertRefused("planInvalid") { api.preflight(plan: FlutterStandardTypedData(bytes: Data()), settings: encodeSettings(), completion: $0) }
         assertRefused("permissionDenied") {
-            api.start(plan: bytes("{}"), settings: encodeSettings(), outputPath: "/tmp/e.mp4", title: "t", whenDetached: .keepForLater, completion: $0)
+            api.start(plan: bytes("{}"), settings: encodeSettings(), outputPath: "/tmp/e.mp4", title: "t", whenDetached: .keepForLater, texts: nil, completion: $0)
         }
         assertRefused("internal") {
             api.start(
                 plan: bytes("{}"), settings: encodeSettings(), outputPath: output + "/../../../x.mp4", title: "t",
-                whenDetached: .keepForLater, completion: $0)
+                whenDetached: .keepForLater, texts: nil, completion: $0)
         }
     }
 

@@ -139,6 +139,7 @@ void main() {
           '/c/danaview/editor/work/export-1.mp4',
           'My project',
           detachedHandoffToMsg(ExportDetachedHandoff.keepForLater),
+          null,
         ));
     expect(id, 'job-1');
     final sent = host.args['ExportHostApi.start']!.single;
@@ -146,6 +147,7 @@ void main() {
     expect(encodeSettingsFromMsg(sent[1]! as EncodeSettingsMsg).fps, 25);
     expect(sent[3], 'My project');
     expect(sent[4], DetachedHandoffMsg.keepForLater);
+    expect(sent[5], isNull, reason: 'no per-job notification texts (INT-07)');
     expect(await channels.invoke(() => channels.export.resume('job-1')), 'job-1');
     await channels.invoke(() => channels.export.consumeJobRecord('det'));
     expect(host.args['ExportHostApi.consumeJobRecord']!.single, ['det']);

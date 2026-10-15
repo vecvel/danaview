@@ -72,10 +72,12 @@ final class MobileExportService implements ExportService {
     required String outputPath,
     required String title,
     ExportDetachedHandoff whenDetached = ExportDetachedHandoff.saveToGallery,
+    ExportNotificationTexts? notificationTexts,
   }) async {
     final bytes = await PlanTransport.encodePlan(plan);
+    final texts = notificationTexts == null ? null : exportNotificationTextsToMsg(notificationTexts);
     final jobId = await _channels.invoke(
-      () => _channels.export.start(bytes, encodeSettingsToMsg(settings), outputPath, title, detachedHandoffToMsg(whenDetached)),
+      () => _channels.export.start(bytes, encodeSettingsToMsg(settings), outputPath, title, detachedHandoffToMsg(whenDetached), texts),
     );
     return _attach(jobId);
   }

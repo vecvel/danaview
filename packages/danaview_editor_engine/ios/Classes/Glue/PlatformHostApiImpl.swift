@@ -1,4 +1,5 @@
-// OWNER: ENG-07 (frozen by ENG-06; amended by INT-06: `powerState`, D-45)
+// OWNER: ENG-07 (frozen by ENG-06; amended by INT-06: `powerState`, D-45; by INT-07:
+// `materializePick`, PickMaterializer.swift, on the io queue)
 //
 // Glue of `PlatformHostApi` (ARCH §9, §12.4, §15): pickers, Files/share sheets, notification
 // permission, background leases and the drop target run on main (UIKit); bookmarks, stat,
@@ -173,6 +174,19 @@ final class PlatformHostApiImpl: PlatformHostApi {
     func setDropTargetEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
         GlueDispatch.hop("platform.setDropTargetEnabled", on: .main, completion: completion) { [drops = services.drops] reply in
             drops.setEnabled(enabled, reply: reply)
+        }
+    }
+
+    func materializePick(uri: String, intoDir: String, completion: @escaping (Result<String, Error>) -> Void) {
+        GlueDispatch.hop(
+            "platform.materializePick", on: io, completion: completion,
+            validate: { () -> (URL, Paths) in
+                try Validate.text(uri, "uri", maxBytes: 8192, allowEmpty: false)
+                let paths = try context.requirePaths()
+                return (try paths.requireInside(intoDir, roots: [paths.work], name: "intoDir"), paths)
+            }
+        ) { value, reply in
+            reply(.success(try PickMaterializer.materialize(uri: uri, intoDir: value.0, paths: value.1)))
         }
     }
 

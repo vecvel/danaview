@@ -2,7 +2,8 @@
 //
 // Glue of `EngineHostApi` (ARCH §12.1, §12.6): validate on main, hop to the engine queue,
 // delegate, reply asynchronously. `initialize` and `freeBytes` are engine core and implemented
-// here; the rest delegates to the IOS-02/IOS-03 services.
+// here; the rest delegates to the IOS-02/IOS-03 services. The localized export notification texts
+// of `initialize` (INT-07) are validated and ignored: iOS shows no export notification.
 
 import Foundation
 
@@ -20,7 +21,10 @@ final class EngineHostApiImpl: EngineHostApi {
     func initialize(config: EngineConfigMsg, completion: @escaping (Result<Void, Error>) -> Void) {
         GlueDispatch.hop(
             "initialize", on: queue, completion: completion,
-            validate: { try Paths(cacheRoot: config.cacheRoot, supportRoot: config.supportRoot) }
+            validate: { () -> Paths in
+                if let texts = config.exportTexts { try Validate.notificationTexts(texts) }
+                return try Paths(cacheRoot: config.cacheRoot, supportRoot: config.supportRoot)
+            }
         ) { [context = self.context, services = self.services] _, reply in
             let changed = try context.configure(cacheRoot: config.cacheRoot, supportRoot: config.supportRoot)
             let paths = try context.requirePaths()

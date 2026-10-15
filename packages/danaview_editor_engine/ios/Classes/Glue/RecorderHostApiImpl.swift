@@ -3,7 +3,8 @@
 // Glue of `RecorderHostApi` (ARCH §12.4, §15, D-25): permission calls and openSettings run on main
 // (AVAudioSession / UIApplication), start/stop/cancel on the recorder queue; VoiceRecorder (IOS-14)
 // emits levels and interruptions keyed by the recording id. The WAV output path must lie inside the
-// editor roots (`projects/<id>/assets/recordings/`).
+// editor roots (`projects/<id>/assets/recordings/`). `isRecording` (INT-07) answers
+// `VoiceRecorder.isRecording` on main; changes are `recordingChanged` events (RecordingMute.swift).
 
 import Foundation
 
@@ -11,9 +12,18 @@ final class RecorderHostApiImpl: RecorderHostApi {
     private let context: EngineContext
     private let services: EngineServices
 
-    init(context: EngineContext, services: EngineServices) {
+    private let recording: () -> Bool
+
+    init(context: EngineContext, services: EngineServices, isRecording: @escaping () -> Bool = { VoiceRecorder.isRecording }) {
         self.context = context
         self.services = services
+        self.recording = isRecording
+    }
+
+    func isRecording(completion: @escaping (Result<Bool, Error>) -> Void) {
+        GlueDispatch.hop("recorder.isRecording", on: .main, completion: completion) { [recording] reply in
+            reply(.success(recording()))
+        }
     }
 
     func permission(completion: @escaping (Result<MicPermissionMsg, Error>) -> Void) {

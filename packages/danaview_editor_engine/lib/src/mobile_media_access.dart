@@ -29,6 +29,12 @@
 // symlink-resolved paths. A refusal never reaches native: it reports an OwnershipViolation to
 // [MobileMediaAccess.onViolation] and throws MediaAccessFailure(outsideEditorRoots), the
 // port's documented refusal that ManagedStore rethrows as a bug.
+//
+// materializePick (INT-07, the core PickMaterializer): `intoDir` must lie inside
+// `<cache>/danaview/editor/work/` (checked lexically here; otherwise OwnershipViolation +
+// MediaAccessFailure(outsideEditorRoots) without a native call). Native copies the item into a new
+// `<intoDir>/<unique>/<name>`; its failures map like the other calls (external), except `diskFull`,
+// which becomes StoreFailure(diskFull) so the import reports `diskFull`.
 
 import 'dart:convert';
 import 'dart:io' show Directory, Platform;
@@ -36,7 +42,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:danaview_editor_core/model.dart';
-import 'package:danaview_editor_core/store.dart' show OwnershipViolation;
+import 'package:danaview_editor_core/store.dart' show OwnershipViolation, StoreFailure, StoreFailureKind;
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 
 import 'pigeon/conversions.dart';
@@ -198,6 +204,28 @@ final class MobileMediaAccess implements MediaAccess {
       // "true elsewhere": no prompt exists without the native engine.
       if (e.code == EngineErrorCode.notSupportedOnDevice) return true;
       rethrow;
+    }
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Non-persistable picks (INT-07)
+  // -------------------------------------------------------------------------------------------
+
+  @override
+  Future<String> materializePick(PickedMedia picked, String intoDir) async {
+    final work = '$_cacheEditor/work';
+    final dir = normalizePosixPath(intoDir);
+    if (!intoDir.startsWith('/') || !(dir == work || isWithinPosix(work, dir))) {
+      onViolation?.call(OwnershipViolation(intoDir, 'materializePick outside work/'));
+      throw const MediaAccessFailure(MediaAccessFailureKind.outsideEditorRoots, 'materializePick refused: outside work/');
+    }
+    final source = _filePathOf(picked.uri);
+    if (picked.isTemporaryCopy && source != null && isWithinPosix(work, source)) return source;
+    try {
+      return await _channels.invoke(() => _channels.platform.materializePick(picked.uri, dir));
+    } on EngineFailure catch (f) {
+      if (f.code == EngineErrorCode.diskFull) throw const StoreFailure(StoreFailureKind.diskFull, 'materializePick');
+      throw mediaAccessFailureOf(f, external: true);
     }
   }
 

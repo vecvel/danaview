@@ -4,7 +4,7 @@
 // (danaview_editor_engine_api, ARCH §12). Every enum mapping is an exhaustive switch, so a Pigeon or
 // API change fails to compile here instead of mis-mapping at runtime. Used by MobileEditorEngine
 // and the mobile services (ENG-02/03/04). INT-06 added the D-45 render-preview and power-state
-// conversions.
+// conversions; INT-07 the export notification texts.
 
 import 'dart:typed_data';
 import 'dart:ui' show Color, Offset, Size;
@@ -499,6 +499,24 @@ MediaPickRequestMsg mediaPickRequestToMsg(MediaPickRequest request) => MediaPick
             },
       ],
       multiple: request.multiple,
+    );
+
+/// The notification texts message for [t] (INT-07).
+ExportNotificationTextsMsg exportNotificationTextsToMsg(ExportNotificationTexts t) => ExportNotificationTextsMsg(
+      exportTitle: t.exportTitle,
+      workTitle: t.workTitle,
+      exporting: t.exporting,
+      exportingProgress: t.exportingProgress,
+      working: t.working,
+      workingProgress: t.workingProgress,
+      cancel: t.cancel,
+      savedToGallery: t.savedToGallery,
+      exportFinished: t.exportFinished,
+      more: t.more,
+      progressChannelName: t.progressChannelName,
+      progressChannelDescription: t.progressChannelDescription,
+      doneChannelName: t.doneChannelName,
+      doneChannelDescription: t.doneChannelDescription,
     );
 
 /// [PickedMedia] from its message.
