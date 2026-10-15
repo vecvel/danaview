@@ -15,8 +15,9 @@
 #      headless (-no-window -no-boot-anim -no-snapshot-save, plus -no-audio unless
 #      DANAVIEW_E2E_AUDIO=1; an API 29 AVD also gets -feature GLESDynamicVersion) and waits for
 #      sys.boot_completed;
-#   2. integration_test/editor/tool/e2e_host.sh stage (fixtures), and stage-models when
-#      DANAVIEW_E2E_MODELS is set;
+#   2. on API 30+ creates the app's shared folders (Android/data/<app>/files/e2e_*) and opens the
+#      shell-owned ones to the app (see prepare_shared), then integration_test/editor/tool/
+#      e2e_host.sh stage (fixtures), and stage-models when DANAVIEW_E2E_MODELS is set;
 #   3. runs the suite in batches, one flutter invocation sequence per batch, so one crash or hang
 #      cannot sink the rest: each scenario file is a batch (`e2e_host.sh run sNN`, which runs the
 #      phases of s09 in order), and the Android extra's phase pairs are separate batches
@@ -198,6 +199,26 @@ pick_device() {
   wait_booted
 }
 
+# The app's external files folder (the handshake's shared dir). On API 30+ a folder that adb creates
+# under Android/data/<app> belongs to the shell user (mode 2770), and the app can neither enter nor
+# create it: only the app's own getExternalFilesDir() has vold create it for the app, and the suite
+# never calls that. So, before staging, the folders the suite uses (files/, e2e_fixtures,
+# e2e_models, e2e_handshake, e2e_out) are created here and every one the shell owns is opened to
+# the app (2777). adb push writes files as 0666, which the app can read. API 29 (sdcardfs) derives
+# the owner from the path and needs none of this.
+prepare_shared() {
+  local base="/sdcard/Android/data/com.vecvel.danaview" d dirs
+  [ "$API" -ge 30 ] || return 0
+  dirs="$base $base/files $base/files/e2e_fixtures $base/files/e2e_models $base/files/e2e_handshake $base/files/e2e_out"
+  "$ADB" -s "$SERIAL" shell "mkdir -p $dirs" || die "cannot create $base/files on $SERIAL"
+  for d in $dirs; do
+    if [ "$("$ADB" -s "$SERIAL" shell stat -c %u "$d" | tr -d '\r')" = 2000 ]; then
+      "$ADB" -s "$SERIAL" shell chmod 2777 "$d" || die "cannot open $d to the app"
+    fi
+  done
+  echo "shared dir: $("$ADB" -s "$SERIAL" shell ls -lan "$base/files" | tr -d '\r' | awk 'NR > 1 { printf "%s %s %s; ", $1, $3, $NF }')"
+}
+
 # ---- batches ------------------------------------------------------------------------------------
 
 API=""
@@ -364,6 +385,7 @@ fi
 OUT="$ROOT/build/e2e/android/$SERIAL"
 if [ "$DRY_RUN" = 1 ]; then
   group "batches (dry run)"
+  echo "  + (API >= 30) adb shell mkdir -p + chmod 2777 Android/data/com.vecvel.danaview/files/{,e2e_fixtures,e2e_models,e2e_handshake,e2e_out}"
   echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage"
   [ -z "$MODELS_DIR" ] || echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage-models <DANAVIEW_E2E_MODELS>"
   [ "$KEEP_APP" != 1 ] || echo "  (flutter test runs with --no-uninstall: DANAVIEW_E2E_KEEP_APP=1)"
@@ -390,6 +412,7 @@ if [ "$KEEP_APP" = 1 ]; then
 fi
 
 group "stage"
+prepare_shared
 host stage || die "e2e_host.sh stage failed"
 if [ -n "$MODELS_DIR" ]; then host stage-models "$MODELS_DIR" || die "e2e_host.sh stage-models failed"; fi
 endgroup
