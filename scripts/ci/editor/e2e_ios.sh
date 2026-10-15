@@ -183,6 +183,7 @@ run_lane() {
   boot "$u"
   mkdir -p "$ROOT/build/e2e/ios/$u/logs"
   touch "$ROOT/build/e2e/ios/$u/logs/host.log"
+  touch "$ROOT/build/e2e/ios/$u/logs/.lane-start"
   from=$(( $(wc -l < "$ROOT/build/e2e/ios/$u/logs/host.log") + 1 ))
   "$HOST" -p ios -d "$u" stage
   if [ -f "$MODELS/ggml-tiny-q5_1.bin" ] && [ -f "$MODELS/ggml-silero-v6.2.0.bin" ]; then
@@ -193,6 +194,26 @@ run_lane() {
   for t in "$@"; do
     "$HOST" -p ios -d "$u" -m "$MODELS" ${args[@]+"${args[@]}"} run "$t" || rc=1
   done
+  # Harness hiccup, not a scenario result: `flutter test` built and installed the app but never
+  # attached to it ("No tests ran.", then the watchdog), seen under memory pressure on 8 GB Macs.
+  # Such files run once more; a second hang stays a failure.
+  local logf name retried=0
+  for logf in "$ROOT/build/e2e/ios/$u/logs"/s[0-9][0-9]_*.log "$ROOT/build/e2e/ios/$u/logs"/x_*.log; do
+    [ -f "$logf" ] && [ "$logf" -nt "$ROOT/build/e2e/ios/$u/logs/.lane-start" ] || continue
+    grep -q '^No tests ran\.' "$logf" || continue
+    name="$(basename "$logf" .log)"; name="${name%-*}"; name="${name%_test}_test"
+    case "$name" in s09_*|x_android_export_background_*) continue ;; esac # multi-phase: rerun by hand
+    say "retrying $name once (the test never attached: No tests ran)"
+    retried=1
+    "$HOST" -p ios -d "$u" -m "$MODELS" ${args[@]+"${args[@]}"} run "integration_test/editor/$name.dart" || true
+  done
+  if [ "$retried" = 1 ]; then
+    # The lane's verdict comes from the last attempt of each file.
+    rc=0
+    tail -n +"$from" "$ROOT/build/e2e/ios/$u/logs/host.log" |
+      sed -nE 's/.*(PASS|FAIL|TIMEOUT) integration_test\/editor\/([a-z0-9_]+)\.dart.*/\2 \1/p' |
+      awk '{ last[$1] = $2 } END { for (f in last) if (last[f] != "PASS") exit 1 }' || rc=1
+  fi
   summarize "$u" "$label" "$lane" "$from"
   shutdown_if_ours "$u"
   return $rc
