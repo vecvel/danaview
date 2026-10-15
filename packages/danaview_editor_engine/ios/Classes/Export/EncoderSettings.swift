@@ -230,17 +230,20 @@ enum EncoderErrors {
     ]
 
     /// Whether [error] (from a segment writer) means the encoder would not take the configuration.
-    /// IOS-17's writer hands AVFoundation errors on as `EngineError`s whose message is the error's
-    /// "<domain> <code>" tag (ENG-07), so the tag is matched as well as the raw NSError.
+    /// IOS-17's writer hands AVFoundation errors on as `EngineError`s mapped by ENG-07, where
+    /// UnsupportedOutputSettings is `encoderSizeLimit` and EncoderNotFound/TemporarilyUnavailable
+    /// are `encoderUnavailable`, so the code decides (never the message text); raw errors are
+    /// matched by domain and code, including one level of underlying error.
     static func isEncoderRefusal(_ error: Error) -> Bool {
         if let e = error as? EngineError {
-            if e.code == .encoderUnavailable || e.code == .encoderSizeLimit { return true }
-            return refusalCodes.contains { domain, codes in
-                codes.contains { e.message.hasPrefix("\(domain) \($0)") }
-            }
+            return e.code == .encoderUnavailable || e.code == .encoderSizeLimit
         }
         let ns = error as NSError
-        return refusalCodes[ns.domain]?.contains(ns.code) ?? false
+        if refusalCodes[ns.domain]?.contains(ns.code) ?? false { return true }
+        if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return refusalCodes[underlying.domain]?.contains(underlying.code) ?? false
+        }
+        return false
     }
 
     /// Maps a writer failure of the video encoder to the export error: refusals become

@@ -9,7 +9,7 @@
 // every segment re-creates its reader with that segment's `timeRange` (resume starts at the next
 // segment). Frames are BGRA IOSurface buffers; with the `.rotated` layout (ARCH §14.1) each frame
 // is turned 90° counter-clockwise into a landscape buffer and the final file gets a 90° clockwise
-// `preferredTransform` (passthrough remux after the concat).
+// `preferredTransform`, set on the concat writer's video input (no extra remux copy).
 //
 // Audio. One whole-duration AAC-LC 48 kHz stereo file (IOS-17 `writeAudio`):
 // - `plan.audio` empty (no audio, everything muted or soloed out, images/text only): silent LPCM
@@ -181,28 +181,16 @@ final class ReaderWriterPipeline {
         composition?.release()
         composition = nil
 
-        let rotated = input.layout == .rotated
-        let joined = rotated
-            ? input.directory.appendingPathComponent("joined.\(input.settings.fileExtension)") : input.outputURL
+        // The rotated layout's preferredTransform is set by the concat writer itself (one copy).
+        let transform = input.layout == .rotated
+            ? EncodeLayout.rotatedTransform(encodedHeight: segmentSettings.height) : .identity
         let concat: SegmentConcat.Result
         do {
-            concat = try writer.concat(to: joined)
+            concat = try writer.concat(to: input.outputURL, transform: transform)
         } catch {
-            try? FileManager.default.removeItem(at: joined)
+            try? FileManager.default.removeItem(at: input.outputURL)
             if control.isCancelled { throw EngineError.cancelled }
             throw error
-        }
-        if rotated {
-            do {
-                try PassthroughRemux.remux(
-                    from: joined, to: input.outputURL, fileType: input.settings.fileType,
-                    transform: EncodeLayout.rotatedTransform(encodedHeight: segmentSettings.height))
-            } catch {
-                try? FileManager.default.removeItem(at: input.outputURL)
-                try? FileManager.default.removeItem(at: joined)
-                throw error
-            }
-            try? FileManager.default.removeItem(at: joined)
         }
         if control.isCancelled {
             try? FileManager.default.removeItem(at: input.outputURL)
