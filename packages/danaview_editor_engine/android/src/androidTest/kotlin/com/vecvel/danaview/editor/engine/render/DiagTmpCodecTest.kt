@@ -259,7 +259,11 @@ class DiagTmpCodecTest {
             Thread {
                 repeat(reps) { rep ->
                     for ((a, b) in listOf(48 to 70, 120 to 132, 156 to 165, 30 to 36, 100 to 106)) {
-                        val res = if (args.getString("probeGl") == "1") decodeGl(light, codecName, a, b, pts, args.getString("probePending")?.toInt() ?: 5) else decode(light, codecName, a, b, pts)
+                        val tail = args.getString("probeTail")?.toInt() ?: 0
+                        val all = if (args.getString("probeGl") == "1") decodeGl(light, codecName, a, b + tail, pts, args.getString("probePending")?.toInt() ?: 5) else decode(light, codecName, a, b + tail, pts)
+                        val res = all.filter { it.first < b }
+                        val tailWrong = all.filter { it.first >= b && it.first != it.second }
+                        if (tailWrong.isNotEmpty()) log18("PCODEC w$wi rep $rep [$a,$b)+$tail tail wrong ${tailWrong}")
                         val wrong = res.filter { (k, got) -> k != got }
                         val missing = (a until b).filter { k -> res.none { it.first == k } }
                         if (wrong.isNotEmpty() || missing.isNotEmpty()) {
