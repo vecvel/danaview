@@ -12,6 +12,7 @@ package com.vecvel.danaview.editor.engine.fallback
 import android.util.Log
 import com.vecvel.danaview.editor.engine.plan.PlanLayerKind
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
+import com.vecvel.danaview.editor.engine.preview.fallback.ContingencyPreviewBackend
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,6 +20,9 @@ import kotlin.random.Random
 
 class GridCutContingencyTest {
     private val seqs = listOf(0, 1, 2)
+
+    /** Every slot decodes live (the over-budget stills are OverBudgetStillsTest's). */
+    private fun allLive() = ContingencyPreviewBackend.Config(liveBudget = 6)
 
     /** Mismatches of [f] against the plan (empty = every quadrant shows its rule frame or the background). */
     private fun mismatches(plan: RenderPlan, f: SinkFrame, pts: LongArray): List<String> {
@@ -44,7 +48,7 @@ class GridCutContingencyTest {
         var expectedTotal = 0
         for (fps in listOf(24, 30, 60)) {
             val plan = FallbackPlans.gridCut(fps)
-            BackendHarness("and16_gridplay_$fps", plan, FallbackPlans.QUADRANTS.take(3)).use { h ->
+            BackendHarness("and16_gridplay_$fps", plan, FallbackPlans.QUADRANTS.take(3), allLive()).use { h ->
                 val pts = FallbackPlans.pts(h.engine.ctx, fps)
                 assertTrue("warm-up seek", h.seekExact(0, 30_000) >= 0)
                 h.sink.clear()
@@ -81,7 +85,7 @@ class GridCutContingencyTest {
         val report = StringBuilder()
         for (fps in listOf(24, 30, 60)) {
             val plan = FallbackPlans.gridCut(fps)
-            BackendHarness("and16_gridseek_$fps", plan, FallbackPlans.QUADRANTS.take(3)).use { h ->
+            BackendHarness("and16_gridseek_$fps", plan, FallbackPlans.QUADRANTS.take(3), allLive()).use { h ->
                 val pts = FallbackPlans.pts(h.engine.ctx, fps)
                 val d = (fps * 4).toLong()
                 assertTrue("warm-up", h.seekExact(d / 2, 30_000) >= 0)
@@ -114,7 +118,7 @@ class GridCutContingencyTest {
     @Test
     fun scrubThenExactSeeksShowOnlyRuleFrames() {
         val plan = FallbackPlans.gridCut(30)
-        BackendHarness("and16_scrub", plan, FallbackPlans.QUADRANTS.take(3)).use { h ->
+        BackendHarness("and16_scrub", plan, FallbackPlans.QUADRANTS.take(3), allLive()).use { h ->
             val pts = FallbackPlans.pts(h.engine.ctx, 30)
             assertTrue(h.seekExact(60, 30_000) >= 0)
             h.sink.clear()

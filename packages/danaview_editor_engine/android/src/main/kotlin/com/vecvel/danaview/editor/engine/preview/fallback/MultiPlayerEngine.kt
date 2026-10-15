@@ -161,6 +161,7 @@ internal class MultiPlayerEngine(
 
     private val stills = HashMap<String, StillTex>()
     private val stillPending = HashSet<PausedFrameRequest>()
+    private val stillWanted = java.util.concurrent.ConcurrentHashMap<String, PausedFrameRequest>()
     private val stillFailed = HashSet<String>()
     private val images = HashMap<PausedFrameRequest, SourceTexture>()
     private val imagePending = HashSet<PausedFrameRequest>()
@@ -496,12 +497,12 @@ internal class MultiPlayerEngine(
                 else -> Unit
             }
             val now = SystemClock.uptimeMillis()
-            if (now - lastWatch >= STUCK_RESEEK_MS) {
+            if (now - lastWatch >= WATCH_INTERVAL_MS) {
                 lastWatch = now
                 watchdog(now)
             }
             if (now - started > SEEK_GIVE_UP_MS) {
-                Log.w(EngineContext.TAG, "contingency preview: seek gave up")
+                Log.w(EngineContext.TAG, "contingency preview: seek to $k gave up ${debugState()}")
                 mode = Mode.IDLE
                 scrubbing = false
                 return
@@ -565,7 +566,7 @@ internal class MultiPlayerEngine(
                 begin(k0)
                 return
             }
-            if (now - lastWatch >= STUCK_RESEEK_MS) {
+            if (now - lastWatch >= WATCH_INTERVAL_MS) {
                 lastWatch = now
                 watchdog(now)
             }
@@ -1051,21 +1052,25 @@ internal class MultiPlayerEngine(
     // ---- stills and images ----
 
     private fun requestStill(layer: PlanLayer, request: PausedFrameRequest) {
+        val id = layer.id
+        // Only the latest wanted still of a layer is fetched (a scrub supersedes its earlier frames).
+        stillWanted[id] = request
         if (!stillPending.add(request)) return
         val key = layerKeyOf(layer)
-        val id = layer.id
         val control = WorkControl()
         execute(
-            work = { frameSource.frame(request, control) },
+            work = { if (stillWanted[id] == request) frameSource.frame(request, control) else null },
             onResult = { r ->
                 stillPending.remove(request)
                 val g = gl
                 if (released || g == null) return@execute
                 r.fold(
                     onSuccess = { bitmap ->
-                        val tex = g.upload(bitmap)
-                        stills.put(id, StillTex(key, request, tex))?.let { g.delete(it.texture) }
-                        stats.stillsFetched++
+                        if (bitmap != null) {
+                            val tex = g.upload(bitmap)
+                            stills.put(id, StillTex(key, request, tex))?.let { g.delete(it.texture) }
+                            stats.stillsFetched++
+                        }
                     },
                     onFailure = {
                         Log.w(EngineContext.TAG, "contingency preview: still unavailable (${it.javaClass.simpleName})")
@@ -1171,6 +1176,9 @@ internal class MultiPlayerEngine(
         }
     }
 
+    /** Deck states for diagnostics (no content). */
+    fun debugState(): String = allSlots().joinToString(" | ") { rt -> "slot ${rt.spec.seq}: " + rt.decks.joinToString("/") { it.debugState() } }
+
     /** The current mode name (tests). */
     val modeName: String get() = mode.name
 
@@ -1217,6 +1225,9 @@ internal class MultiPlayerEngine(
 
         /** A deck stuck in BUFFERING without its frame this long is re-seeked. */
         const val STUCK_RESEEK_MS = 3_000L
+
+        /** Stuck decks are looked for this often while a seek or pre-roll waits. */
+        const val WATCH_INTERVAL_MS = 100L
 
         /** Drift corrections of one deck at most this often. */
         const val CORRECTION_COOLDOWN_MS = 1_000L

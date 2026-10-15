@@ -190,6 +190,7 @@ internal class VideoDeck(
         player.setVideoSurface(surface)
         player.setVideoFrameMetadataListener { pts, releaseNs, _, _ ->
             tags[releaseNs] = Tag(epoch, pts)
+            if (DEBUG) android.util.Log.d("AND16DBG", "deck$index e=$epoch frame pts=$pts")
             if (tags.size > MAX_TAGS) tags.keys.sorted().take(MAX_TAGS / 2).forEach { tags.remove(it) }
         }
         player.addListener(object : Player.Listener {
@@ -265,7 +266,20 @@ internal class VideoDeck(
             prepared = true
         }
         player.setSeekParameters(params)
-        player.seekTo(i, ms)
+        if (player.currentMediaItemIndex == i && player.currentPosition == ms) {
+            // ExoPlayer ignores a seek to the position it reports (no new frame would come):
+            // go through a neighbouring ms. ms − 1 lands on the same frame (frames are > 1 ms apart,
+            // V-N18); from 0 step away first.
+            if (ms > 0) {
+                player.seekTo(i, ms - 1)
+            } else {
+                player.seekTo(i, 1)
+                player.seekTo(i, 0)
+            }
+        } else {
+            player.seekTo(i, ms)
+        }
+        if (DEBUG) android.util.Log.d("AND16DBG", "deck$index e=$epoch seek i=$i ms=$ms cur=${player.currentMediaItemIndex}/${player.currentPosition}")
         assigned = i
         positionedMs = ms
         positionedAtMs = android.os.SystemClock.uptimeMillis()
@@ -285,9 +299,25 @@ internal class VideoDeck(
         stats.reseeks++
     }
 
-    /** Whether the deck is stuck: BUFFERING for at least [ms] since its last positioning without a frame of the epoch. */
-    fun stuck(nowMs: Long, ms: Long): Boolean =
-        assigned >= 0 && player.playbackState == Player.STATE_BUFFERING && nowMs - positionedAtMs >= ms && latchedEpoch != epoch && queue.isEmpty()
+    /**
+     * Whether the deck is stuck without a frame of its epoch: BUFFERING for at least [ms] since its
+     * last positioning (AND-01's cold-start case), or paused and READY for [readyMs] (a seek ExoPlayer
+     * dropped: nothing will be rendered).
+     */
+    fun stuck(nowMs: Long, ms: Long, readyMs: Long = READY_WITHOUT_FRAME_MS): Boolean {
+        if (assigned < 0 || latchedEpoch == epoch || queue.isNotEmpty()) return false
+        val waited = nowMs - positionedAtMs
+        return when (player.playbackState) {
+            Player.STATE_BUFFERING -> waited >= ms
+            Player.STATE_READY -> !player.playWhenReady && waited >= readyMs
+            else -> false
+        }
+    }
+
+    /** Deck state for diagnostics (no content). */
+    fun debugState(): String =
+        "[on $assigned st=${player.playbackState} pwr=${player.playWhenReady} idx=${player.currentMediaItemIndex} pos=${player.currentPosition} " +
+            "q=${queue.size} l=$latchedPts le=$latchedEpoch e=$epoch err=$lastError]"
 
     private fun tagOf(releaseNs: Long): Tag? = tags[releaseNs]?.takeIf { it.epoch == epoch }
 
@@ -439,8 +469,10 @@ internal class VideoDeck(
     companion object {
         /** Images per deck (one bound + up to MAX_IMAGES − 2 queued). */
         const val MAX_IMAGES = 8
+        @JvmStatic var DEBUG = true
         const val MAX_TAGS = 512
         const val MAX_RECOVERIES = 5
+        const val READY_WITHOUT_FRAME_MS = 600L
         const val MIN_SPEED = 0.1f
         const val MAX_SPEED = 10f
     }
