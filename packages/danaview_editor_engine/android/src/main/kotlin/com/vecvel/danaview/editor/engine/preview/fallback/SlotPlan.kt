@@ -33,6 +33,7 @@ import com.vecvel.danaview.editor.engine.plan.PlanTarget
 import com.vecvel.danaview.editor.engine.plan.PlanValidator
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
 import com.vecvel.danaview.editor.engine.preview.PausedFrames
+import com.vecvel.danaview.editor.engine.preview.SeekMath
 import kotlin.math.floor
 
 /** Rule-frame facts of a source (ARCH §11.5). Implementations may block (I/O); never called on danaview-gl per frame. */
@@ -113,8 +114,8 @@ class DeckItem(
         return if (seg.t1 > seg.t0 && seg.rate > 0.0) seg.rate else 1.0
     }
 
-    /** The item (window) position in ms at which source time [sourceUs] is the first frame ≥ it (V-N18: floor). */
-    fun positionMs(sourceUs: Long): Long = Math.floorDiv((sourceUs - clipStartUs).coerceAtLeast(0L), 1000L)
+    /** The item (window) position in ms at which rule frame [rulePtsUs] is the first frame ≥ it (V-N18: floor, ARCH §13.3). */
+    fun positionMs(rulePtsUs: Long): Long = SeekMath.deckSeekMs(rulePtsUs.coerceAtLeast(clipStartUs), clipStartUs)
 }
 
 /** One packing slot: its items (time order) and whether it plays live. */
@@ -200,6 +201,8 @@ class SlotPlan(
     val stillLayers: Set<String>,
     /** Every media layer id with its slot. */
     val layerSlot: Map<String, Int>,
+    /** Media layers whose source could not be read (offline, no video track): drawn without them. */
+    val unavailable: Set<String> = emptySet(),
 ) {
     /** The output grid. */
     val grid: FrameGrid get() = FrameGrid.of(fps)
@@ -242,6 +245,7 @@ object SlotPlanner {
         val seqs = media.mapNotNull { it.seq }.distinct().sorted()
         val live = seqs.take(liveBudget.coerceAtLeast(0)).toSet()
         val stills = HashSet<String>()
+        val unavailable = HashSet<String>()
         val layerSlot = HashMap<String, Int>()
         val slots = ArrayList<SlotSpec>()
         for (seq in seqs) {
@@ -256,10 +260,15 @@ object SlotPlanner {
                 if (asset.kind != PlanAssetKind.VIDEO) continue
                 val uri = if (useProxies && plan.target == PlanTarget.PREVIEW) asset.proxyUri ?: asset.uri else asset.uri
                 val s0 = l.map.first().s0
-                val clipStart = rules.rule(uri, s0)
+                val (clipStart, duration) = try {
+                    rules.rule(uri, s0) to rules.durationUs(uri)
+                } catch (e: Exception) {
+                    // Offline or unreadable: the preview draws without it (the export reports it).
+                    unavailable += l.id
+                    continue
+                }
                 val lastT = grid.timeOfFrame((grid.frameIndexOf(l.t1 - 1)).coerceAtLeast(grid.frameIndexOf(l.t0)))
                 val sLast = PausedFrames.sourceTimeUs(l, lastT.coerceIn(l.t0, l.t1 - 1))
-                val duration = rules.durationUs(uri)
                 var clipEnd = maxOf(sLast, s0) + CLIP_TAIL_US
                 if (duration != null && duration > clipStart) clipEnd = minOf(clipEnd, duration)
                 items += DeckItem(
@@ -275,7 +284,7 @@ object SlotPlanner {
             }
             slots += SlotSpec(seq, items, seq in live)
         }
-        return SlotPlan(plan.rev, plan.canvas.fps, plan.durUs, slots, audioLanes(plan, rules), stills, layerSlot)
+        return SlotPlan(plan.rev, plan.canvas.fps, plan.durUs, slots, audioLanes(plan, rules), stills, layerSlot, unavailable)
     }
 
     /** Diff identity of a layer item: the fields that change what the deck decodes. */
@@ -331,7 +340,11 @@ object SlotPlanner {
                     val asset = plan.assets[s.asset] ?: return@mapNotNull null
                     val start = s.map.first().s0
                     val endSrc = sourceAt(s.map, s.t1 - 1) + CLIP_TAIL_US
-                    val dur = rules?.durationUs(asset.uri)
+                    val dur = try {
+                        rules?.durationUs(asset.uri)
+                    } catch (e: Exception) {
+                        return@mapNotNull null
+                    }
                     val end = if (dur != null && dur > start) minOf(endSrc, dur) else endSrc
                     AudioItem("${s.id}|${s.t0}|${s.t1}|${s.map}|${s.stream}|${asset.uri}", s, asset.uri, start, maxOf(end, start + 1))
                 }
