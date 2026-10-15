@@ -54,6 +54,7 @@ import com.vecvel.danaview.editor.engine.effects.RenderGeometry
 import com.vecvel.danaview.editor.engine.effects.SourceTexture
 import com.vecvel.danaview.editor.engine.pigeon.CacheTrimLevelMsg
 import com.vecvel.danaview.editor.engine.plan.FrameGrid
+import com.vecvel.danaview.editor.engine.plan.LayerParams
 import com.vecvel.danaview.editor.engine.plan.ParamSnapshot
 import com.vecvel.danaview.editor.engine.plan.PlanLayer
 import com.vecvel.danaview.editor.engine.plan.PlanLayerKind
@@ -98,13 +99,14 @@ class EngineStats {
     var slotsReplanned = 0
     var deckCount = 0
     var rangeFrames = 0
+    var exactStillFallbacks = 0
     val compositeMs = ArrayList<Double>()
 
     fun copy(): EngineStats = EngineStats().also {
         it.composed = composed; it.dropped = dropped; it.held = held; it.missed = missed; it.rebuffers = rebuffers
         it.audioFollows = audioFollows; it.nearestShown = nearestShown; it.stillsFetched = stillsFetched
         it.reseeks = reseeks; it.replans = replans; it.slotsReplanned = slotsReplanned; it.deckCount = deckCount
-        it.rangeFrames = rangeFrames; it.compositeMs.addAll(compositeMs)
+        it.rangeFrames = rangeFrames; it.exactStillFallbacks = exactStillFallbacks; it.compositeMs.addAll(compositeMs)
     }
 }
 
@@ -835,7 +837,7 @@ internal class MultiPlayerEngine(
                 if (d.assigned != next && (ic < 0 || d.assigned != ic) && dueIn <= PREROLL_WINDOW_US) {
                     d.setPlaying(false)
                     val item = spec.items[next]
-                    d.position(next, item.positionMs(ruleOf(item, grid.frameIndexOf(item.t0 + grid.timeOfFrame(1) - 1))))
+                    d.position(next, item.positionMs(ruleOf(item, firstFrameAt(item.t0))))
                     d.stats.prerolls++
                 }
             }
@@ -903,6 +905,12 @@ internal class MultiPlayerEngine(
         val w = if (renderW > 0) renderW else p.canvas.w
         val h = if (renderH > 0) renderH else p.canvas.h
         return RenderGeometry(p.canvas.w, p.canvas.h, w, h)
+    }
+
+    /** The first output frame whose time is at or after plan time [t]. */
+    private fun firstFrameAt(t: Long): Long {
+        val k = grid.frameIndexOf(t)
+        return if (grid.timeOfFrame(k) < t) k + 1 else k
     }
 
     private fun ruleOf(item: DeckItem, k: Long): Long {
@@ -981,24 +989,31 @@ internal class MultiPlayerEngine(
                                 if (purpose == Purpose.NEAREST) {
                                     if (!d.hasEpochFrame) continue
                                 } else if (!d.hasLatched(rule)) {
+                                    if (purpose == Purpose.EXACT && d.hasEpochFrame && d.latchedPts > rule && d.player.playbackState == Player.STATE_READY) {
+                                        // The decoder skipped the rule frame after the seek (the emulators'
+                                        // hardware H.264 decoders drop the leading B-frames after a flush):
+                                        // this paused frame shows the exact still of the layer instead.
+                                        stats.exactStillFallbacks++
+                                        val tex = stillTexture(snap.plan, layer, params, t, geom, exact = true)
+                                        if (tex == null) {
+                                            missing = true
+                                            continue
+                                        }
+                                        inputs += LayerCompositorGl.Input(layer, params, tex)
+                                        continue
+                                    }
                                     missing = true
                                     if (purpose == Purpose.PLAYBACK && d.passed(rule)) passed = true
                                     continue
                                 }
                                 inputs += LayerCompositorGl.Input(layer, params, d.texture ?: continue)
                             } else {
-                                val request = PausedFrames.request(snap.plan, layer, params, t, useProxies, geom) ?: continue
-                                val st = stills[layer.id]
-                                val ok = when (purpose) {
-                                    Purpose.EXACT -> st != null && st.request == request
-                                    else -> st != null && st.layerKey == layerKeyOf(layer)
-                                }
-                                if (!ok) {
-                                    requestStill(layer, request)
+                                val tex = stillTexture(snap.plan, layer, params, t, geom, exact = purpose == Purpose.EXACT)
+                                if (tex == null) {
                                     if (purpose != Purpose.NEAREST) missing = true
                                     continue
                                 }
-                                inputs += LayerCompositorGl.Input(layer, params, st!!.texture)
+                                inputs += LayerCompositorGl.Input(layer, params, tex)
                             }
                         }
                         PlanLayerKind.IMAGE -> {
@@ -1042,6 +1057,21 @@ internal class MultiPlayerEngine(
             host.frameDisplayed(k)
         }
         return Outcome.DRAWN
+    }
+
+    /**
+     * The still texture of [layer] for this frame, or null after requesting it: [exact] needs the
+     * still of this very frame (paused, scrub, exact seek); playback accepts the layer's latest still.
+     */
+    private fun stillTexture(p: RenderPlan, layer: PlanLayer, params: LayerParams, t: Long, geom: RenderGeometry, exact: Boolean): SourceTexture? {
+        val request = PausedFrames.request(p, layer, params, t, useProxies, geom) ?: return null
+        val st = stills[layer.id]
+        val ok = if (exact) st != null && st.request == request else st != null && st.layerKey == layerKeyOf(layer)
+        if (!ok) {
+            requestStill(layer, request)
+            return null
+        }
+        return st!!.texture
     }
 
     private fun rangeLayer(p: RenderPlan, item: DeckItem): PlanLayer = PlanLayer(

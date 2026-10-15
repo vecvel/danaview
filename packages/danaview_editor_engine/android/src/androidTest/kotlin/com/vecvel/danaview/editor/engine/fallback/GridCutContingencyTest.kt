@@ -51,6 +51,8 @@ class GridCutContingencyTest {
             BackendHarness("and16_gridplay_$fps", plan, FallbackPlans.QUADRANTS.take(3), allLive()).use { h ->
                 val pts = FallbackPlans.pts(h.engine.ctx, fps)
                 assertTrue("warm-up seek", h.seekExact(0, 30_000) >= 0)
+                h.sink.awaitK(0)
+                Thread.sleep(100)
                 h.sink.clear()
                 h.host.dropped.clear()
                 val frames = (plan.durUs / 1000)
@@ -121,6 +123,8 @@ class GridCutContingencyTest {
         BackendHarness("and16_scrub", plan, FallbackPlans.QUADRANTS.take(3), allLive()).use { h ->
             val pts = FallbackPlans.pts(h.engine.ctx, 30)
             assertTrue(h.seekExact(60, 30_000) >= 0)
+            h.sink.awaitK(60)
+            Thread.sleep(100)
             h.sink.clear()
             // A drag over off-grid positions (47 ms steps): scrubs, one in flight, latest wins.
             var posMs = 0L
@@ -131,7 +135,10 @@ class GridCutContingencyTest {
                 Thread.sleep(16)
                 posMs += 47
             }
-            for (k in listOf(38L, 64L, 7L)) assertTrue("post-scrub seek $k", h.seekExact(k) >= 0)
+            for (k in listOf(38L, 64L, 7L)) {
+                assertTrue("post-scrub seek $k", h.seekExact(k) >= 0)
+                h.sink.awaitK(k)
+            }
             val scrubMs = (System.nanoTime() - t0) / 1e6
             val frames = h.sink.frames.toList()
             val bad = frames.flatMap { mismatches(plan, it, pts) }

@@ -293,11 +293,27 @@ class DirectHost(val engine: FreezeEngine, plan: RenderPlan) : PreviewBackendHos
 }
 
 /** A ContingencyPreviewBackend on a DirectHost drawing into an [OutputSink] (file header). */
-class BackendHarness(name: String, val plan: RenderPlan, regions: List<Region>, config: ContingencyPreviewBackend.Config = ContingencyPreviewBackend.Config()) : AutoCloseable {
+class BackendHarness(
+    name: String,
+    val plan: RenderPlan,
+    regions: List<Region>,
+    config: ContingencyPreviewBackend.Config = ContingencyPreviewBackend.Config(),
+    /**
+     * Decks decode with the emulator's hardware decoders (production default). False (default for
+     * the barcode tests) lists software decoders first, as the other lanes' emulator tests do: the
+     * emulators' goldfish H.264 decoders drop the leading B-frames after a seek (DeckDecoderTest).
+     */
+    hardwareDecoders: Boolean = false,
+) : AutoCloseable {
     val engine = FreezeEngine(name)
     val host = DirectHost(engine, plan)
     val sink = OutputSink(plan.canvas.w, plan.canvas.h, plan.canvas.fps, regions)
-    val backend = ContingencyPreviewBackend(config.also { if (it.effectAssets == null) it.effectAssets = EffectFixtures.assets })
+    val backend = ContingencyPreviewBackend(
+        config.also {
+            if (it.effectAssets == null) it.effectAssets = EffectFixtures.assets
+            if (!hardwareDecoders && it.codecSelector == null) it.codecSelector = ExactFrames.softwareFirst
+        },
+    )
     val grid: FrameGrid = FrameGrid.of(plan.canvas.fps)
 
     init {

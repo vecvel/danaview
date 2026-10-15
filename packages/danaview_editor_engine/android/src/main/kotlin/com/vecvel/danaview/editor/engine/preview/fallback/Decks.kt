@@ -52,6 +52,7 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.ForwardingAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.vecvel.danaview.editor.engine.composition.AudioStreamTrackSelector
 import com.vecvel.danaview.editor.engine.effects.SourceTexture
 import com.vecvel.danaview.editor.engine.plan.Keyframes
@@ -82,6 +83,13 @@ class DeckStats {
     var reseeks = 0
     var recoveries = 0
 }
+
+/**
+ * Clipping inside the media period: a ClippingMediaSource clips in decode order and loses the
+ * B-frames before a clip end (AND-11's measurement), so a deck positioned on the last frames of a
+ * layer would never render them.
+ */
+private fun deckMediaSources(context: Context) = DefaultMediaSourceFactory(context).setEnableClippingInMediaPeriod(true)
 
 /** Small LoadControl: decks hold about 2 s of media (several players run at once). */
 private fun deckLoadControl() = DefaultLoadControl.Builder()
@@ -117,6 +125,9 @@ internal class VideoDeck(
     /** Bumped on every reposition; frames released before it are stale. */
     @Volatile var epoch = 0
         private set
+
+    /** The first source pts the current position can show (exact seeks; Long.MIN_VALUE for sync seeks). */
+    @Volatile private var epochMinPts = Long.MIN_VALUE
 
     /** Acquired images not shown yet (pts order). */
     private val queue = ArrayDeque<Image>()
@@ -178,6 +189,7 @@ internal class VideoDeck(
         player = ExoPlayer.Builder(env.context, renderers)
             .setLooper(env.looper)
             .setLoadControl(deckLoadControl())
+            .setMediaSourceFactory(deckMediaSources(env.context))
             .build()
         player.setSeekParameters(SeekParameters.EXACT)
         // Never roll into the next playlist item: the other deck owns it.
@@ -266,6 +278,8 @@ internal class VideoDeck(
             prepared = true
         }
         player.setSeekParameters(params)
+        val item = items[i]
+        epochMinPts = if (params == SeekParameters.EXACT) item.clipStartUs + (ms - 1).coerceAtLeast(0L) * 1000L else Long.MIN_VALUE
         if (player.currentMediaItemIndex == i && player.currentPosition == ms) {
             // ExoPlayer ignores a seek to the position it reports (no new frame would come):
             // go through a neighbouring ms. ms − 1 lands on the same frame (frames are > 1 ms apart,
@@ -293,6 +307,7 @@ internal class VideoDeck(
         nudge = !nudge
         val ms = if (nudge && positionedMs > 0) positionedMs - 1 else positionedMs
         bumpEpoch()
+        epochMinPts = (items.getOrNull(assigned)?.clipStartUs ?: 0L) + (positionedMs - 1).coerceAtLeast(0L) * 1000L
         player.setSeekParameters(SeekParameters.EXACT)
         player.seekTo(assigned, ms)
         positionedAtMs = android.os.SystemClock.uptimeMillis()
@@ -319,7 +334,13 @@ internal class VideoDeck(
         "[on $assigned st=${player.playbackState} pwr=${player.playWhenReady} idx=${player.currentMediaItemIndex} pos=${player.currentPosition} " +
             "q=${queue.size} l=$latchedPts le=$latchedEpoch e=$epoch err=$lastError]"
 
-    private fun tagOf(releaseNs: Long): Tag? = tags[releaseNs]?.takeIf { it.epoch == epoch }
+    /**
+     * A frame belongs to the current position when it was tagged in the current epoch AND is not
+     * before the position's first possible frame: a render of the previous position still in flight
+     * when the epoch was bumped is tagged with the new epoch, but its pts gives it away (an exact
+     * seek shows the first frame ≥ the position, V-N18; playback only moves forward).
+     */
+    private fun tagOf(releaseNs: Long): Tag? = tags[releaseNs]?.takeIf { it.epoch == epoch && it.pts >= epochMinPts }
 
     private fun ptsOf(img: Image): Long? = tagOf(img.timestamp)?.pts
 
@@ -660,6 +681,7 @@ internal class AudioDeck(
         val builder = ExoPlayer.Builder(ctx, renderers)
             .setLooper(env.looper)
             .setLoadControl(deckLoadControl())
+            .setMediaSourceFactory(deckMediaSources(ctx))
         if (stream > 0) builder.setTrackSelector(AudioStreamTrackSelector(ctx, stream))
         player = builder.build()
         player.setSeekParameters(SeekParameters.EXACT)

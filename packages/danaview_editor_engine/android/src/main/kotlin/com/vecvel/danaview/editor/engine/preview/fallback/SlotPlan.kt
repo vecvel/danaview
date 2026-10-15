@@ -219,7 +219,7 @@ class SlotPlan(
 /** Builds and diffs [SlotPlan]s (file header). */
 object SlotPlanner {
     /** Source past the last frame kept in a clip (the gating stops showing it anyway). */
-    const val CLIP_TAIL_US: Long = 100_000L
+    const val CLIP_TAIL_US: Long = 250_000L
 
     /** Live decode slots per tier (AND-01 §7 bullet 1, D-43(e)): minimal/low 2, mid 4, high 6. */
     fun tierBudget(tier: DeviceTierMsg): Int = when (tier) {
