@@ -376,4 +376,25 @@ final class PreviewRenderedRangeTests: XCTestCase {
         XCTAssertTrue(playing)
         try await pause(id)
     }
+
+    func testZZLiveBarcodes() async throws {
+        let plan = try RenderPreviewFixtures.plan()
+        var bad: [String] = []
+        let range = try render(plan, a, b, name: "zz")
+        let useRanges = ProcessInfo.processInfo.environment["NO_RANGES"] == nil
+        for _ in 0..<6 {
+            let (id, session) = try await open(plan)
+            _ = try await setPlan(id, plan)
+            if useRanges { try await setRanges(id, [range]) }
+            _ = try await seek(id, frame: 2)
+            let log = ComposeLog()
+            session.render.onComposed = { log.record($0) }
+            try await play(id)
+            _ = await PreviewHarness.wait(8) { (session.bridge.current?.k ?? 0) >= 36 }
+            try await pause(id)
+            session.render.onComposed = nil
+            bad += log.barcodeProblems
+        }
+        XCTAssertEqual(bad, [])
+    }
 }
