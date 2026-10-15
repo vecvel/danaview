@@ -706,21 +706,27 @@ int exportFrameIndexAt(List<double> ptsUs, int k, int fps) => frameAtOrBefore(pt
 
 /// Reads a whole exported file back frame by frame through a preview session on it (exact seeks
 /// are verified 200/200 above), [frames] frames at [fps]. Returns the reading per frame.
-Future<List<FrameRead>> readBackExport(Qa03Env env, String path, int durUs, int fps, int frames, {int w = qaW, int h = qaH}) async {
+Future<List<FrameRead>> readBackExport(Qa03Env env, String path, int durUs, int fps, int frames, {int w = qaW, int h = qaH}) async =>
+    [for (final f in await readFramesOf(env, path, durUs, fps, [for (var k = 0; k < frames; k++) k], w: w, h: h)) readFrame(f)];
+
+/// Decodes frames [ks] of a video file ([w] × [h], [fps]) 1:1 through a preview session on it
+/// (canvas = the file's size, full quality, the [readLeadUs] lead). The preview decode returns the
+/// encoded pixels unchanged (solid colours round-trip within 1/255); the freeze-still job does
+/// not (see parity_test.dart, 'freeze stills keep the decoded colours').
+Future<List<Rgba>> readFramesOf(Qa03Env env, String path, int durUs, int fps, List<int> ks, {int w = qaW, int h = qaH}) async {
+  final frames = frameIndexOf(durUs - 1, fps) + 1;
   final last = tof(frames - 1, fps);
   final plan = Qa03Plan.plan(fps: fps, durUs: durUs, w: w, h: h, assets: {
     'x': Qa03Plan.video(path, w: w, h: h, durUs: durUs),
   }, layers: [
     Qa03Plan.media('it_x#v', 'x', [
-      [0, last, readLeadUs, last + readLeadUs],
+      if (last > 0) [0, last, readLeadUs, last + readLeadUs],
       [last, durUs, last + readLeadUs, durUs],
     ], w: w, h: h),
   ]);
   final s = await env.preview(plan);
   try {
-    return [
-      for (var k = 0; k < frames; k++) readFrame((await seekAndCapture(s, k, fps)).$2),
-    ];
+    return [for (final k in ks) (await seekAndCapture(s, k, fps)).$2];
   } finally {
     await s.dispose();
   }
