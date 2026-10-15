@@ -131,6 +131,7 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
                 try {
                     val e = MultiPlayerEngine(host, gl, pool, assets, config)
                     e.ensureGl()
+                    if (muted) e.setMuted(true)
                     engine = e
                     done(Result.success(Unit))
                 } catch (t: Throwable) {
@@ -234,6 +235,18 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
         delegate?.let { return it.setUseProxies(on) }
         if (!engineApi()) return
         onEngine { it.setUseProxies(on) }
+    }
+
+    /** Audio muted while a voice recording captures (INT-07); applied to the engine when it is created. */
+    @Volatile
+    private var muted = false
+
+    /** INT-07: mutes the audio decks while a voice recording captures. */
+    override fun setMuted(muted: Boolean) {
+        this.muted = muted
+        delegate?.let { return it.setMuted(muted) }
+        if (!engineApi()) return
+        onEngine { it.setMuted(muted) }
     }
 
     override fun capture(done: Completion<PausedFrameRenderer.Captured>) {

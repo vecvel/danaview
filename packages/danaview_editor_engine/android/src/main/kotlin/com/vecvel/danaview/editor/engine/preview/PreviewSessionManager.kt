@@ -6,7 +6,8 @@
 // Flutter engine, `trim` forwards memory trims. Export suspension (ARCH §14.3, AND-11):
 // `suspendForExport(jobId)` / `resumeAfterExport(jobId)` (thread-safe) pause the sessions and
 // release their decoders while an export runs on a minimal, low or mid tier; high-tier devices
-// keep previewing.
+// keep previewing. INT-07: `setRecordingMuted` mutes every session's audio while a voice recording
+// captures (and sessions opened meanwhile), driven by the glue's RecordingSignals.
 //
 // Backend selection (AND-01 NO-GO, ENG-06): the session plays through AND-16's
 // `preview/fallback/ContingencyPreviewBackend` as soon as that class implements [PreviewBackend]
@@ -90,8 +91,20 @@ class PreviewSessionManager(private val ctx: EngineContext) {
         Log.i(TAG, "open ${backend.name} ${config.canvasWidth}x${config.canvasHeight}@${config.fps}")
         session.open { r ->
             if (r.isSuccess && synchronized(exportJobs) { exportJobs.isNotEmpty() } && suspends()) session.suspendForExport()
+            if (r.isSuccess && recordingMuted) ctx.threads.preview.execute { session.setRecordingMuted(recordingMuted) }
             done(r)
         }
+    }
+
+    /** Whether previews are muted because a voice recording captures (INT-07). */
+    @Volatile
+    var recordingMuted: Boolean = false
+        private set
+
+    /** Mutes (true) or unmutes every session's audio while a recording captures (INT-07). Thread-safe. */
+    fun setRecordingMuted(muted: Boolean) {
+        recordingMuted = muted
+        ctx.threads.preview.execute { for (s in sessions.values) s.setRecordingMuted(recordingMuted) }
     }
 
     /** The open session [sessionId], or null. */

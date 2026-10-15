@@ -1,4 +1,5 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-07: the localized export notification texts
+// of `initialize`, validated and handed to the port)
 //
 // `EngineHostApi` glue (ARCH §12.1, §12.6). Threads: initialize, capabilities, compatibility,
 // probe and freeBytes on danaview-io; trimCaches fans out to the cache owners' lanes.
@@ -23,7 +24,11 @@ class EngineHostApiImpl(
 ) : EngineHostApi {
     override fun initialize(config: EngineConfigMsg, callback: (Result<Unit>) -> Unit) {
         lateinit var paths: Paths
-        dispatch.async(threads.io, callback, check = { paths = Paths.fromDart(config.cacheRoot, config.supportRoot) }) { done ->
+        dispatch.async(threads.io, callback, check = {
+            paths = Paths.fromDart(config.cacheRoot, config.supportRoot)
+            config.exportTexts?.let { Check.notificationTexts(it) }
+        }) { done ->
+            config.exportTexts?.let { port.setExportTexts(it) }
             port.installRoots(paths, done)
         }
     }

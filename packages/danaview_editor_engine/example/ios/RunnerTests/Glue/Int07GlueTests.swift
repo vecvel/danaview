@@ -102,6 +102,13 @@ final class Int07GlueTests: XCTestCase {
         wait(for: [done], timeout: 5)
     }
 
+    func testTheNewHostMethodsHaveHandlers() {
+        glue.install()
+        defer { glue.uninstall() }
+        XCTAssertNotNil(fixture.messenger.handlers[pigeonChannel("PlatformHostApi", "materializePick")])
+        XCTAssertNotNil(fixture.messenger.handlers[pigeonChannel("RecorderHostApi", "isRecording")])
+    }
+
     // MARK: materializePick
 
     func testMaterializePickCopiesAFileIntoANewDirectoryUnderIntoDir() throws {

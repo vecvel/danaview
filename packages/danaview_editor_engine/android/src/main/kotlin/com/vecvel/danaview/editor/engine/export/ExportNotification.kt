@@ -14,8 +14,8 @@
 // - POST_NOTIFICATIONS is requested in context by Dart (AND-14 Permissions). Without it nothing is
 //   shown, but the service still runs in the foreground and the export still completes (the
 //   system lists the app in the foreground-services task manager).
-// Strings are English constants: the engine has no string resources (D-33 placeholder set by
-// ENG-08); localisation would need an [INTEGRATION] change to pass texts from Dart.
+// Strings come from Dart (INT-07): ExportNotificationTexts.current holds the localized texts that
+// `initialize` and `start` carried, with the English defaults (the constants below) until then.
 
 package com.vecvel.danaview.editor.engine.export
 
@@ -56,16 +56,17 @@ class ExportNotification(private val context: Context) {
     /** Creates the channels (idempotent; no-op before API 26). */
     fun ensureChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val texts = ExportNotificationTexts.current
         val system = context.getSystemService(NotificationManager::class.java) ?: return
         system.createNotificationChannel(
-            NotificationChannel(CHANNEL_PROGRESS, "Video export", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Progress of video exports and background work"
+            NotificationChannel(CHANNEL_PROGRESS, texts.progressChannelName, NotificationManager.IMPORTANCE_LOW).apply {
+                description = texts.progressChannelDescription
                 setShowBadge(false)
             },
         )
         system.createNotificationChannel(
-            NotificationChannel(CHANNEL_DONE, "Finished exports", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Exports that finished while the app was closed"
+            NotificationChannel(CHANNEL_DONE, texts.doneChannelName, NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = texts.doneChannelDescription
             },
         )
     }
@@ -73,12 +74,10 @@ class ExportNotification(private val context: Context) {
     /** The ongoing foreground notification for [content]. */
     fun foreground(content: ForegroundContent): Notification {
         ensureChannels()
-        val title = content.title.trim().ifEmpty { if (content.isExport) DEFAULT_EXPORT_TITLE else DEFAULT_WORK_TITLE }
+        val texts = ExportNotificationTexts.current
+        val title = content.title.trim().ifEmpty { if (content.isExport) texts.exportTitle else texts.workTitle }
         val percent = content.percent
-        val text = buildString {
-            append(if (content.isExport) "Exporting" else "Working")
-            if (percent != null) append(" · $percent%")
-        }
+        val text = contentText(texts, content.isExport, percent)
         val b = NotificationCompat.Builder(context, CHANNEL_PROGRESS)
             .setSmallIcon(R.drawable.danaview_export_notification)
             .setContentTitle(title)
@@ -90,10 +89,10 @@ class ExportNotification(private val context: Context) {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setProgress(100, percent ?: 0, percent == null)
-        if (content.more > 0) b.setSubText("+${content.more} more")
+        if (content.more > 0) b.setSubText(ExportNotificationTexts.withCount(texts.more, content.more))
         openAppIntent()?.let { b.setContentIntent(it) }
         content.cancelJobId?.let { jobId ->
-            b.addAction(NotificationCompat.Action.Builder(R.drawable.danaview_export_notification, CANCEL_LABEL, cancelIntent(jobId)).build())
+            b.addAction(NotificationCompat.Action.Builder(R.drawable.danaview_export_notification, texts.cancel, cancelIntent(jobId)).build())
         }
         return b.build()
     }
@@ -111,10 +110,11 @@ class ExportNotification(private val context: Context) {
      */
     fun postCompleted(jobId: String, title: String, savedToGallery: Boolean): Boolean {
         ensureChannels()
+        val texts = ExportNotificationTexts.current
         val b = NotificationCompat.Builder(context, CHANNEL_DONE)
             .setSmallIcon(R.drawable.danaview_export_notification)
-            .setContentTitle(if (savedToGallery) SAVED_TITLE else FINISHED_TITLE)
-            .setContentText(title.trim().ifEmpty { DEFAULT_EXPORT_TITLE })
+            .setContentTitle(if (savedToGallery) texts.savedToGallery else texts.exportFinished)
+            .setContentText(title.trim().ifEmpty { texts.exportTitle })
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
         openAppIntent()?.let { b.setContentIntent(it) }
@@ -170,6 +170,14 @@ class ExportNotification(private val context: Context) {
         const val DEFAULT_WORK_TITLE = "Working in the background"
 
         private const val OPEN_APP_REQUEST = 0x0D45
+
+        /** The ongoing notification's text: "Exporting" / "Working", with the percent when known (INT-07 texts). */
+        fun contentText(texts: com.vecvel.danaview.editor.engine.pigeon.ExportNotificationTextsMsg, isExport: Boolean, percent: Int?): String =
+            when {
+                percent == null -> if (isExport) texts.exporting else texts.working
+                isExport -> ExportNotificationTexts.withPercent(texts.exportingProgress, percent)
+                else -> ExportNotificationTexts.withPercent(texts.workingProgress, percent)
+            }
 
         /** Notification id of [jobId]'s completion notification. */
         fun completionId(jobId: String): Int = 0x0D46_0000 + (jobId.hashCode() and 0xFFFF)

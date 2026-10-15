@@ -223,6 +223,15 @@ internal class MultiPlayerEngine(
         useProxies = on
     }
 
+    /** Audio muted while a voice recording captures (INT-07, ARCH §15). */
+    private var muted = false
+
+    /** Mutes (true) or unmutes every audio deck, including decks created later (INT-07). */
+    fun setMuted(on: Boolean) {
+        muted = on
+        for (rt in lanes) rt.decks.forEach { it.setMuted(on) }
+    }
+
     private fun readerSize(): Pair<Int, Int> {
         val p = planSource
         val w = if (renderW > 0) renderW else p?.canvas?.w ?: 2
@@ -316,7 +325,7 @@ internal class MultiPlayerEngine(
                     spec == null -> rt?.release()
                     rt == null || rt.spec.stream != spec.stream -> {
                         rt?.release()
-                        val created = LaneRuntime(spec, List(2) { AudioDeck(this, it, spec.items, spec.stream, options.avOffsetUs) })
+                        val created = LaneRuntime(spec, List(2) { AudioDeck(this, it, spec.items, spec.stream, options.avOffsetUs).also { d -> if (muted) d.setMuted(true) } })
                         if (i < lanes.size) lanes[i] = created else lanes += created
                     }
                     else -> {

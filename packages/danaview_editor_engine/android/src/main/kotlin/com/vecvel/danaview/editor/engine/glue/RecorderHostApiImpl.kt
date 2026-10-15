@@ -2,7 +2,8 @@
 //
 // `RecorderHostApi` glue (ARCH §12.4, §12.6, §15). permission, start, stop and cancel run on
 // danaview-io; requestPermission and openSettings on main (they need the activity). Levels and
-// interruptions travel as events keyed by the recording id.
+// interruptions travel as events keyed by the recording id. `isRecording` (INT-07) on danaview-io;
+// changes travel as engine-wide `recordingChanged` events (RecordingSignals).
 
 package com.vecvel.danaview.editor.engine.glue
 
@@ -38,4 +39,7 @@ class RecorderHostApiImpl(
 
     override fun cancel(recordingId: String, callback: (Result<Unit>) -> Unit) =
         dispatch.async(threads.io, callback, check = { Check.id("recordingId", recordingId) }) { done -> port.cancel(recordingId, done) }
+
+    override fun isRecording(callback: (Result<Boolean>) -> Unit) =
+        dispatch.async(threads.io, callback) { done -> port.isRecording(done) }
 }
