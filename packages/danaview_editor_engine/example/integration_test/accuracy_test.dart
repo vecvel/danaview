@@ -695,14 +695,25 @@ final class Misses {
   String toString() => '$n${samples.isEmpty ? '' : ' (${samples.join('; ')})'}';
 }
 
+/// Read-back lead: export frame k is read at source time `timeOfFrame(k) + readLeadUs`, so a
+/// file whose timescale cannot hold its rate exactly (48 fps at 600: frame PTS up to 833 µs after
+/// `k·10⁶/48`) is still read frame by frame. Which file frame was read is checked separately
+/// against the file's real PTS ([exportFrameIndexAt]).
+const int readLeadUs = 1000;
+
+/// The index of the file frame a read at timeline frame [k] lands on (real PTS of the export).
+int exportFrameIndexAt(List<double> ptsUs, int k, int fps) => frameAtOrBefore(ptsUs, tof(k, fps) + readLeadUs + 500.0);
+
 /// Reads a whole exported file back frame by frame through a preview session on it (exact seeks
 /// are verified 200/200 above), [frames] frames at [fps]. Returns the reading per frame.
 Future<List<FrameRead>> readBackExport(Qa03Env env, String path, int durUs, int fps, int frames, {int w = qaW, int h = qaH}) async {
+  final last = tof(frames - 1, fps);
   final plan = Qa03Plan.plan(fps: fps, durUs: durUs, w: w, h: h, assets: {
     'x': Qa03Plan.video(path, w: w, h: h, durUs: durUs),
   }, layers: [
     Qa03Plan.media('it_x#v', 'x', [
-      [0, durUs, 0, durUs],
+      [0, last, readLeadUs, last + readLeadUs],
+      [last, durUs, last + readLeadUs, durUs],
     ], w: w, h: h),
   ]);
   final s = await env.preview(plan);
@@ -1071,19 +1082,34 @@ void main() {
       // ---- export: every frame read back, and native freeze stills at the cuts ----
       final r = await env.export('gridcut_$fps', g.plan(path, target: 'export', w: sw, h: sh), videoBitrate: 6000000);
       expect(r.duration, tof(g.end, fps));
-      final reads = await readBackExport(env, r.path, r.duration, fps, g.end);
+      final pts = videoPts(r.path);
+      var ptsDev = 0.0;
+      for (var i = 0; i < pts.length; i++) {
+        ptsDev = math.max(ptsDev, (pts[i] - i * 1e6 / fps).abs());
+      }
       final expMiss = Misses();
+      if (pts.length != g.end) expMiss.add('file has ${pts.length} frames, want ${g.end}');
+      final reads = await readBackExport(env, r.path, r.duration, fps, g.end);
       for (var k = 0; k < g.end; k++) {
+        final idx = exportFrameIndexAt(pts, k, fps);
+        if (idx != k) expMiss.add('read at k=$k landed on file frame $idx');
         final bad = checkFrame(reads[k], k, want);
         if (bad != null) expMiss.add(bad);
       }
       final stillMiss = Misses();
       for (final k in [g.k1 - 2, g.k1 - 1, g.k1, g.k1 + 1, g.k2 - 2, g.k2 - 1, g.k2, g.k2 + 1]) {
-        final f = await env.freeze(r.path, tof(k, fps), tag: 'gc$fps');
+        final f = await env.freeze(r.path, tof(k, fps) + readLeadUs, tag: 'gc$fps');
         final bad = checkFrame(readFrame(f), k, want);
         if (bad != null) stillMiss.add('still $bad');
       }
-      qa03('gridcut', {'fps': fps, 'mode': 'export', 'frames': g.end, 'misses': expMiss, 'stillsAtCuts': '${8 - stillMiss.n}/8 $stillMiss'});
+      qa03('gridcut', {
+        'fps': fps,
+        'mode': 'export',
+        'frames': g.end,
+        'filePtsMaxDevUs': ptsDev.toStringAsFixed(0),
+        'misses': expMiss,
+        'stillsAtCuts': '${8 - stillMiss.n}/8 $stillMiss',
+      });
       Qa03Env.discard(r.path);
       expect(expMiss.n, 0, reason: 'export: $expMiss');
       expect(stillMiss.n, 0, reason: 'export stills: $stillMiss');
@@ -1105,8 +1131,8 @@ void main() {
         qa03('offgrid', {'fps': fps, 'frames': k, 'durUs': d, 'result': 'ok ${r.duration}'});
         Qa03Env.discard(r.path);
       } on EngineFailure catch (f) {
-        qa03('offgrid', {'fps': fps, 'frames': k, 'durUs': d, 'result': '${f.code.name}: ${f.message}'});
-        failures.add('$fps fps × $k: ${f.code.name} ${f.message}');
+        qa03('offgrid', {'fps': fps, 'frames': k, 'durUs': d, 'result': '$f'});
+        failures.add('$fps fps × $k: $f');
       }
     }
     expect(failures, isEmpty, reason: 'exports of off-grid durations fail: $failures');

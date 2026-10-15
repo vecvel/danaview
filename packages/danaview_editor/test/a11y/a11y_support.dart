@@ -22,6 +22,8 @@
 // tickets in docs/v1.1/editor/qa/QA-08-a11y.md). They are reported, not failed, so this suite
 // stays green while the owning ticket fixes them; anything not on the list fails.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart' show MaterialApp;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -35,6 +37,7 @@ import 'package:danaview_editor/src/editor/layout/editor_top_bar.dart';
 import 'package:danaview_editor/src/editor/state/editor_controller.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
 import 'package:danaview_editor/src/editor/state/playhead_controller.dart';
+import 'package:danaview_editor/src/editor/state/render_preview_controller.dart';
 import 'package:danaview_editor/src/editor/timeline/timeline_semantics.dart';
 import 'package:danaview_editor/src/editor/toolbar/tool_tile.dart';
 import 'package:danaview_editor_core/model.dart';
@@ -42,6 +45,7 @@ import 'package:danaview_editor_engine_api/testing.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../inspector/inspector_rig.dart' show RigTicker;
+import '../render_preview/support.dart' show MemoryRenderStore, basePlan;
 import '../support/support.dart';
 import '../timeline/canvas/canvas_fixtures.dart';
 
@@ -362,23 +366,6 @@ EditProject a11yProject() {
   return p.copyWith(timeline: p.timeline.copyWith(tracks: tracks));
 }
 
-/// [a11yProject] with a chroma key on `it_v6` (2–8 s), so the preview plan has heavy ranges and
-/// the render marker strip (UX-44) shows amber "Needs rendering" ranges next to live ones.
-EditProject renderPreviewA11yProject() {
-  final p = a11yProject();
-  final tracks = [
-    for (final t in p.timeline.tracks)
-      t.copyWith(items: [
-        for (final i in t.items)
-          if (i is MediaClip && i.id == const ItemId('it_v6'))
-            i.copyWith(visual: (i.visual ?? const VisualProps()).copyWith(chroma: const ChromaKey(enabled: true)))
-          else
-            i,
-      ]),
-  ];
-  return p.copyWith(timeline: p.timeline.copyWith(tracks: tracks));
-}
-
 /// Every inspector route of ARCH §17.7 on an item of [a11yProject] that it applies to.
 const List<InspectorRoute> everyInspectorRoute = [
   MediaInspector(),
@@ -450,8 +437,10 @@ class A11yEditorRig {
     TextDirection textDirection = TextDirection.ltr,
     bool reduceMotion = false,
     EditProject? project,
-    List<Override> overrides = const [],
+    bool renderPreview = false,
   }) async {
+    final store = renderPreview ? MemoryRenderStore() : null;
+    if (store != null) await tester.runAsync(store.open);
     final repo = FakeProjectRepository();
     final id = repo.seed(project ?? a11yProject());
     final ticker = RigTicker();
@@ -460,7 +449,7 @@ class A11yEditorRig {
       repository: repo,
       overrides: [
         playheadProvider.overrideWith((ref, pid) => createPlayheadController(ref, pid, ticker: ticker, clock: () => Duration.zero)),
-        ...overrides,
+        if (store != null) renderPreviewStoreProvider.overrideWithValue(store),
       ],
     );
     final rig = A11yEditorRig._(tester, harness, id);
@@ -519,6 +508,26 @@ class A11yEditorRig {
   bool _isAudioClip(ItemId id) {
     final item = project.index.locate(id)?.item;
     return item is MediaClip && item.visual == null;
+  }
+
+  /// The project's render-preview controller (UX-44); available when pumped with `renderPreview`.
+  RenderPreviewController get renderPreview => container.read(renderPreviewControllerProvider(id));
+
+  /// Shows heavy ranges on the render marker strip: feeds the render-preview controller the UX-44
+  /// fixture plan (`basePlan`, 0–4 s: live [0, 1), heavy chroma [1, 2), live [2, 3), heavy chroma
+  /// [3, 4)). The rig's own plan has no heavy range (its media are offline placeholders, which
+  /// lower to solid layers without effects). Needs `renderPreview: true`.
+  Future<RenderPreviewController> showHeavyRanges() async {
+    final controller = renderPreview;
+    // Not awaited: the controller's send queue may chain onto futures of the fake-async zone.
+    unawaited(controller.planChanged(basePlan(rev: 1 << 20)));
+    for (var i = 0; i < 3; i++) {
+      await real(() async {});
+    }
+    await settle();
+    expect(controller.value.available, isTrue, reason: 'render preview needs a store (pump with renderPreview: true)');
+    expect(controller.value.heavyUnrendered, isNotEmpty, reason: 'the fixture plan has heavy ranges');
+    return controller;
   }
 
   /// Pops the top route (a sheet or dialog) and settles.
