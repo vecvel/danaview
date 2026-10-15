@@ -68,6 +68,13 @@ abstract final class SettingsStrings {
         ProxyMediaMode.off => 'Large videos may play back slowly while editing.',
       };
 
+  /// Appended to the hint of the proxy mode that is this device's tier default (Always on
+  /// minimal/low devices).
+  static const String proxyTierDefaultMark = 'Recommended for this device.';
+
+  /// Hint of Auto where the tier default is another mode (Auto is then not the recommendation).
+  static const String proxyAutoNotDefault = 'Proxies are made only for media that needs them.';
+
   /// Label of a [PreviewQualityPreference].
   static String previewQualityLabel(PreviewQualityPreference quality) => switch (quality) {
         PreviewQualityPreference.auto => 'Auto',

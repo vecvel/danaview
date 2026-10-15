@@ -116,9 +116,9 @@ void main() {
       await tester.pump();
       expect(find.text(PreviewStrings.mediaMissing), findsOneWidget);
       expect(find.text(PreviewStrings.relink), findsOneWidget);
-      // The relink flow (UX-40) is not bound yet: the button is disabled, not missing.
+      // UX-40 binds `relink` (enabled while media is offline): the button runs it.
       final button = tester.widget<DanaviewButton>(find.widgetWithText(DanaviewButton, PreviewStrings.relink));
-      expect(button.onPressed, isNull);
+      expect(button.onPressed, isNotNull);
       // No clip at 6 s: the card goes away with the playhead.
       await rig.real(() => rig.transport.seekTo(6 * s));
       expect(find.text(PreviewStrings.mediaMissing), findsNothing);

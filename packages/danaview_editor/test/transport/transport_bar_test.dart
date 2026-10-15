@@ -222,11 +222,11 @@ void main() {
       expectNoOverflow(tester);
     });
 
-    testWidgets('actions that no feature binds yet (marker, snapping, ripple) are not shown', (tester) async {
+    testWidgets('feature actions appear once bound: add marker (UX-17), snapping and ripple (UX-13)', (tester) async {
       await TransportRig.pump(tester, bar, surface: const EditorSurface(Size(1280, 800), platform: TargetPlatform.macOS));
-      expect(icon(Icons.bookmark_add_rounded), findsNothing);
-      expect(icon(Icons.vertical_align_center_rounded), findsNothing);
-      expect(icon(Icons.swap_horiz_rounded), findsNothing);
+      expect(icon(Icons.bookmark_add_rounded), findsOneWidget, reason: 'marker_bindings binds addMarker');
+      expect(icon(Icons.vertical_align_center_rounded), findsOneWidget, reason: 'edit_bindings binds toggleSnapping');
+      expect(icon(Icons.swap_horiz_rounded), findsOneWidget, reason: 'edit_bindings binds toggleRipple');
     });
 
     testWidgets('a narrow bar moves the lowest priorities into the more menu and loses nothing', (tester) async {

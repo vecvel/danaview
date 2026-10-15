@@ -30,7 +30,7 @@ void main() {
       ];
       final actual = [for (final a in EditorActionId.values) (a.group.name, a.name)];
       expect(actual, expected);
-      expect(EditorActionId.values, hasLength(75));
+      expect(EditorActionId.values, hasLength(76));
     });
 
     test('byName and inGroup', () {

@@ -133,14 +133,10 @@ class EditorSettingsScreen extends ConsumerWidget {
 /// The proxy hint: [SettingsStrings.proxyHint], marking [tierDefault] as this device's default
 /// (Auto is the recommended default on mid/high; Always on minimal/low).
 String _proxyHint(ProxyMediaMode mode, {required ProxyMediaMode tierDefault}) {
-  if (mode == ProxyMediaMode.auto && tierDefault != ProxyMediaMode.auto) return _proxyAutoNotDefault;
+  if (mode == ProxyMediaMode.auto && tierDefault != ProxyMediaMode.auto) return SettingsStrings.proxyAutoNotDefault;
   final hint = SettingsStrings.proxyHint(mode);
-  return mode == tierDefault && mode != ProxyMediaMode.auto ? '$hint $_tierDefaultMark' : hint;
+  return mode == tierDefault && mode != ProxyMediaMode.auto ? '$hint ${SettingsStrings.proxyTierDefaultMark}' : hint;
 }
-
-// Copy for the tier-default proxy hint (FIX-UX44-HOOKS; belongs in SettingsStrings, UX-04).
-const String _tierDefaultMark = 'Recommended for this device.';
-const String _proxyAutoNotDefault = 'Proxies are made only for media that needs them.';
 
 /// A setting with an icon, a title, a description and a segmented choice (chips when narrow).
 class _ChoiceSetting<T> extends StatelessWidget {

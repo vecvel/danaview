@@ -6,6 +6,7 @@
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:danaview_editor/src/editor/actions/editor_shortcuts.dart';
 import 'package:danaview_editor/src/editor/editor_lifecycle.dart';
 import 'package:danaview_editor/src/editor/timeline/timeline_view.dart';
 import 'package:danaview_editor_core/model.dart';
@@ -70,7 +71,9 @@ void main() {
   });
 
   testWidgets('Esc ends the mode', (tester) async {
-    final t = await pumpTimeline(tester);
+    // Esc is the bound `escape` action (UX-13): it runs through the editor's shortcut scope, which
+    // the editor screen always places around the timeline.
+    final t = await pumpTimeline(tester, wrap: (timeline) => EditorShortcuts(child: timeline));
     await enterMode(tester, t);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();

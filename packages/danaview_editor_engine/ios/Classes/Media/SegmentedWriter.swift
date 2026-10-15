@@ -412,13 +412,14 @@ final class SegmentedWriter {
 
     /// Joins the finished segments (and the audio file) into [output] with a passthrough copy;
     /// each segment is deleted after it was appended. The checkpoint is deleted on success.
-    func concat(to output: URL) throws -> SegmentConcat.Result {
+    /// [transform] is the output video track's `preferredTransform` (identity by default).
+    func concat(to output: URL, transform: CGAffineTransform = .identity) throws -> SegmentConcat.Result {
         guard checkpoint.isVideoComplete else {
             throw EngineError(.internal, "concat before every segment is written")
         }
         let result = try SegmentConcat.concat(
             checkpoint: checkpoint, directory: directory, segmentURL: segmentURL,
-            audioURL: checkpoint.audioComplete ? audioURL : nil, to: output,
+            audioURL: checkpoint.audioComplete ? audioURL : nil, to: output, transform: transform,
             isCancelled: { [weak self] in self?.isCancelled ?? true })
         SegmentCheckpoint.delete(in: directory)
         try? FileManager.default.removeItem(at: audioURL)

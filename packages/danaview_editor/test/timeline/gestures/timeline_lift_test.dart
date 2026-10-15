@@ -3,7 +3,8 @@
 // Long-press lift (ux.md §8.8): a long press on a clip lifts it, moving drags a ghost that equals
 // the dryRun placement of the move, release commits exactly one history entry; releasing without
 // moving opens the context menu instead. Also the interaction slot contract: a slot that takes a
-// drag kind receives it instead of the basic interaction.
+// drag kind receives it instead of the basic interaction. The rig runs without UX-13's slot
+// (`basicOnly`) unless a test passes its own.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +17,7 @@ import 'gesture_support.dart';
 
 void main() {
   testWidgets('long press lifts a clip; the ghost is the dryRun placement; drop is one history entry', (tester) async {
-    final t = await pumpTimeline(tester);
+    final t = await pumpTimeline(tester, basicOnly: true);
     final base = t.project;
     final g = await tester.startGesture(t.at(tester, 12 * s, 'tr_main'));
     await tester.pump(const Duration(milliseconds: 400));
@@ -53,7 +54,7 @@ void main() {
   });
 
   testWidgets('a lifted clip can move to another lane of a compatible kind', (tester) async {
-    final t = await pumpTimeline(tester);
+    final t = await pumpTimeline(tester, basicOnly: true);
     final base = t.project;
     final g = await tester.startGesture(t.at(tester, 2 * s, 'tr_ov'));
     await tester.pump(const Duration(milliseconds: 400));
@@ -77,7 +78,7 @@ void main() {
   });
 
   testWidgets('a long press released without moving opens the clip menu with "Select multiple"', (tester) async {
-    final t = await pumpTimeline(tester);
+    final t = await pumpTimeline(tester, basicOnly: true);
     await tester.longPressAt(t.at(tester, 6 * s, 'tr_main'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -91,7 +92,7 @@ void main() {
 
   testWidgets('a slot that takes a drag kind receives it; the basic interaction keeps the rest', (tester) async {
     final slot = _RecordingSlot({TimelineDragKind.trim});
-    final t = await pumpTimeline(tester, interaction: slot);
+    final t = await pumpTimeline(tester, basicOnly: true, interaction: slot);
     await tester.tapAt(t.at(tester, 12 * s, 'tr_main'));
     await tester.pump();
     final edge = t.at(tester, 10 * s, 'tr_main', fraction: 0.9) + const Offset(3, 0);
@@ -116,7 +117,7 @@ void main() {
 
   testWidgets('a fade handle claims the pointer at once and goes to the slot that takes fades', (tester) async {
     final slot = _RecordingSlot({TimelineDragKind.fade});
-    final t = await pumpTimeline(tester, interaction: slot);
+    final t = await pumpTimeline(tester, basicOnly: true, interaction: slot);
     await tester.tapAt(t.at(tester, 12 * s, 'tr_main'));
     await tester.pump();
     final c = t.canvas(tester);
@@ -138,7 +139,7 @@ void main() {
   });
 
   testWidgets('back cancels a drag in progress (the transaction is dropped)', (tester) async {
-    final t = await pumpTimeline(tester);
+    final t = await pumpTimeline(tester, basicOnly: true);
     final g = await tester.startGesture(t.at(tester, 12 * s, 'tr_main'));
     await tester.pump(const Duration(milliseconds: 400));
     await g.moveBy(const Offset(-60, 0));

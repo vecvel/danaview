@@ -193,6 +193,7 @@ struct EngineError: Error, Equatable, CustomStringConvertible {
         case -11839: return EngineError(.decoderInitFailed, tag, retryable: true)  // DecoderTemporarilyUnavailable
         case -11834: return EngineError(.encoderUnavailable, tag)  // EncoderNotFound
         case -11840: return EngineError(.encoderUnavailable, tag, retryable: true)  // EncoderTemporarilyUnavailable
+        case -11861: return EngineError(.encoderSizeLimit, tag)  // UnsupportedOutputSettings (encoder refused the size)
         case -11823: return EngineError(.io, tag)  // FileAlreadyExists
         case -11800: return EngineError(.decodeFailed, tag, retryable: true)  // Unknown (most often a decode failure)
         default: return EngineError(.internal, tag)

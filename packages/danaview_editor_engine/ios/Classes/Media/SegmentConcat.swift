@@ -8,7 +8,8 @@
 // (and fails with encodingFailed when it still differs). The audio file is muxed passthrough by a
 // second pump running at the same time (the writer interleaves its inputs). Each segment is
 // deleted right after it was appended, so peak disk ≈ output + one segment; the peak is measured
-// and returned.
+// and returned. `transform` becomes the video track's `preferredTransform` (IOS-12's rotated
+// portrait layout, ARCH §14.1), so no second passthrough copy is needed to set it.
 
 import AVFoundation
 import CoreMedia
@@ -27,7 +28,7 @@ enum SegmentConcat {
 
     static func concat(
         checkpoint: SegmentCheckpoint, directory: URL, segmentURL: @escaping (Int) -> URL, audioURL: URL?,
-        to output: URL, isCancelled: @escaping () -> Bool
+        to output: URL, transform: CGAffineTransform = .identity, isCancelled: @escaping () -> Bool
     ) throws -> Result {
         let segments = checkpoint.completed.filter { $0.frames > 0 }.sorted { $0.index < $1.index }
         guard let firstSegment = segments.first else { throw EngineError(.encodingFailed, "no video segments") }
@@ -44,6 +45,7 @@ enum SegmentConcat {
         writer.shouldOptimizeForNetworkUse = true
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: hint)
         videoInput.expectsMediaDataInRealTime = false
+        videoInput.transform = transform
         guard writer.canAdd(videoInput) else { throw EngineError(.encodingFailed, "concat video input refused") }
         writer.add(videoInput)
 

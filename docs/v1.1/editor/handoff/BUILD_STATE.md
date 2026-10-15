@@ -208,6 +208,25 @@ Generated 2026-10-15 20:40 IST on the Mac from the code and the build runs (stat
 | 165 | QA-10 | Persistence, crash recovery and media-access survival on device | INT-04, IOS-15, AND-14, CORE-26, CORE-28 | 🔨 in progress (round 3) | Mac |
 | 166 | INT-05 | [INTEGRATION] Release 1.1.0: flags, version, release pipelines, store metadata, docs | QA-01, QA-02, QA-03, QA-04, QA-05, QA-07, QA-08, QA-09, QA-10, CORE-35, UX-43, INT-03, INT-04, QA-11 | ⏳ not started | Mac |
 
+## Open FIX tickets filed by QA
+
+Filed 2026-10-15 by QA-08 and QA-09 (BUILD_PLAN §0 item 8). Each one owns exactly the listed files of the original ticket, under that ticket's rules. Each one is also on an allow-list in a QA suite: `knownErrorDefects`/`knownA11yDefects`/`knownTimelineDefects` in `packages/danaview_editor/test/a11y/a11y_support.dart`, or `knownDefects` in `packages/danaview_editor/test/overflow/overflow_rig.dart`. The suites stay green while an entry is listed, so the FIX ticket must also remove its entry, which makes the suite enforce the fix. One id names one defect in both suites. Details: `docs/v1.1/editor/qa/QA-08-a11y.md` §4 and `docs/v1.1/editor/qa/QA-09-overflow.md`.
+
+| FIX ticket | Original | Files | Severity | Defect | Fix |
+|---|---|---|---|---|---|
+| FIX-UX-22-2 | UX-22 | `packages/danaview_editor/lib/src/editor/preview/manipulation_overlay.dart` | **Blocker** (crash) | Selecting any audio clip (music or voice) throws `ArgumentError: property "transform.scale" does not apply to this item: MediaClip` in `ManipulationOverlay.build`, because `_transformOf` runs for every non-cue selection. The preview becomes an error box, and the clip's Volume and Fades panels break while the preview is shown. | Call `_transformOf` only when `PropertyKeys.scale.appliesToItem(item)` holds, and give audio selections no transform label or actions. Remove FIX-UX-22-2 from `knownErrorDefects` (a11y) and `knownDefects` (overflow). |
+| FIX-UX-12-1 | UX-12 | `lib/src/editor/timeline/timeline_semantics.dart` | Major | With ripple on (the default), the a11y nudge actions "Move 1 frame/second earlier/later" do nothing. | Nudge with `ripple: false`. |
+| FIX-UX-12-2 | UX-12 | `lib/src/editor/timeline/timeline_semantics.dart` | Major | Marker, transition and keyframe nodes have only a tap action, with no delete or jump custom actions. | Add the custom actions (ARCH §17.9). |
+| FIX-UX-12-3 | UX-12 | the multi-select status row in `lib/src/editor/timeline/` | Minor | At 412×915 @1.35, the "1 selected" row has no flexible child and overflows with the test font (`timeline_view_matrix_test.dart`, full matrix). | Make the label flexible and ellipsize it. |
+| FIX-UX-22-1 | UX-22 | `lib/src/editor/preview/manipulation_overlay.dart` | Minor | With nothing selected, the preview overlay is an unlabeled tap semantics node. | Label it, or exclude it from semantics. |
+| FIX-UX-14-1 | UX-14 | `lib/src/editor/transport/transport_bar.dart`, `timecode_text.dart` | Minor | The time readout button is 35–41 px tall, and its label is read twice. | Give it a height of 44 or more, and drop the inner label. |
+| FIX-UX-14-2 | UX-14 | `lib/src/editor/transport/transport_bar.dart` | Minor | Transport buttons are 44×40 when the bar is 40 px tall. | Give them a touch height of 44 or more. |
+| FIX-UX-14-3 | UX-14 | `test/transport/transport_bar_test.dart` | Minor (stale test) | The test "priority row actions that no feature binds yet … are not shown" fails on every run because a feature binding now exists. | Update the test. |
+| FIX-UX-18-1 | UX-18 | `test/preview/surface/preview_region_test.dart` | Minor (stale test) | The test "statuses offline media at the playhead: Media missing with Relink…" fails on every run, because an icon it expects to be absent is present. | Update the test or the widget, whichever matches ux.md. |
+| FIX-UX-11-1 | UX-11 | `lib/src/editor/timeline/track_headers.dart` | Minor (lead decision) | On 32 px text and subtitle lanes, the header buttons are 32 px tall. | Extend the hit areas past the lane. |
+| FIX-UX-16-1 | UX-16 | `lib/src/editor/inspector/inspector_rows.dart` | Minor | Slider value chips are 32 px tall, and the value is read twice. | Use `minHeight: 44` and exclude the inner text from semantics. |
+| FIX-KIT-1 | lead (app kit) | `packages/danaview_ui_kit/lib/src/components/danaview_chips.dart` | Minor | `DanaviewSegmentedControl` segments are 38 px tall, and their labels are read twice. | Make each segment fill the control height, and exclude the label text from semantics. |
+
 ## Notes from finished tickets
 
 What each finished builder reported: acceptance notes, what was deferred and why, and the hand-off facts later tickets need. AI-01 (whisper.cpp v1.9.4 vendored into packages/danaview_whisper/third_party, see VENDORED.md) was done outside the builder runs.
