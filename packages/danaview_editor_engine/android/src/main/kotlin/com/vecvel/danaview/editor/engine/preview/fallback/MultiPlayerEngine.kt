@@ -366,8 +366,9 @@ internal class MultiPlayerEngine(
         dbg("attach ${w}x$h mode=$mode")
         val g = ensureGl()
         g.attachWindow(surface, w, h)
-        if (mode != Mode.PLAYING && lastShown >= 0 && g.canvasSize != null) {
-            // A recovered or re-handed Surface shows the last frame again.
+        if (lastShown >= 0 && g.canvasSize != null) {
+            // A recovered, resized or re-handed Surface shows the last frame again at once (scaled
+            // to the new size); playback replaces it with its next frame.
             g.present(grid.platformTimeOfFrame(lastShown))
         }
     }
@@ -592,15 +593,18 @@ internal class MultiPlayerEngine(
             val i = rt.spec.activeAt(t0)
             if (i < 0) return true
             val d = rt.deckFor(i)
-            return d.player.playbackState == Player.STATE_READY || d.player.playbackState == Player.STATE_ENDED
+            val rule = ruleOf(rt.spec.items[i], k0)
+            return d.assigned == i && (d.holds(rule) || d.passed(rule))
         }
         for (rt in slots.values) {
             val i = rt.spec.activeAt(t0)
             if (i < 0) continue
             val d = rt.deckFor(i)
             if (d.assigned != i) return false
-            val st = d.player.playbackState
-            if (st != Player.STATE_READY && st != Player.STATE_ENDED) return false
+            // The deck holds its rule frame of k0 (decoded at the pre-rolled position), or a later
+            // one when its decoder skipped it (hold/miss then drops k0).
+            val rule = ruleOf(rt.spec.items[i], k0)
+            if (!d.holds(rule) && !d.passed(rule)) return false
         }
         for (rt in lanes) {
             val i = rt.spec.activeAt(t0)
@@ -829,7 +833,8 @@ internal class MultiPlayerEngine(
                 val k = grid.frameIndexNearest(tp)
                 val want = item.positionMs(ruleOf(item, k))
                 when {
-                    d.assigned != ip || d.player.currentMediaItemIndex != ip -> {
+                    // Pre-roll: always on the exact position (a no-op when the deck already shows it).
+                    prerolling || d.assigned != ip || d.player.currentMediaItemIndex != ip -> {
                         d.position(ip, want)
                         d.lastCorrectionMs = nowMs
                     }
@@ -875,7 +880,7 @@ internal class MultiPlayerEngine(
         if (ic >= 0) {
             val d = rt.deckFor(ic)
             playing = d
-            if (d.assigned != ic) {
+            if (prerolling || d.assigned != ic) {
                 d.position(ic, maxOf(tc, spec.items[ic].t0))
                 d.lastCorrectionMs = nowMs
             } else if (started && !prerolling && nowMs - d.lastCorrectionMs > CORRECTION_COOLDOWN_MS && nowMs - d.playingSinceMs > AUDIO_WARMUP_MS) {

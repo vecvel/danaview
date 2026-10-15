@@ -422,6 +422,13 @@ internal class VideoDeck(
         pull()
     }
 
+    /** Whether the frame with pts [rule] of the current position is latched or queued. */
+    fun holds(rule: Long): Boolean {
+        pull()
+        if (latchedEpoch == epoch && latchedPts == rule) return true
+        return queue.any { ptsOf(it) == rule }
+    }
+
     /** Whether the latched frame is [rule] of the current epoch. */
     fun hasLatched(rule: Long): Boolean = latchedEpoch == epoch && latchedPts == rule
 
@@ -490,7 +497,10 @@ internal class VideoDeck(
     companion object {
         /** Images per deck (one bound + up to MAX_IMAGES − 2 queued). */
         const val MAX_IMAGES = 8
-        @JvmStatic var DEBUG = true
+        /** Verbose deck and frame-clock logs under the tag AND16DBG (pts and positions only; off in production). */
+        @Volatile
+        @JvmStatic
+        var DEBUG = false
         const val MAX_TAGS = 512
         const val MAX_RECOVERIES = 5
         const val READY_WITHOUT_FRAME_MS = 600L

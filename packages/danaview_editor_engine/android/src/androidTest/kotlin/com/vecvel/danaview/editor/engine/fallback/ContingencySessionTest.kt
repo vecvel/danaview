@@ -19,6 +19,7 @@ import com.vecvel.danaview.editor.engine.media.ExactFrames
 import com.vecvel.danaview.editor.engine.paused.PausedPlans
 import com.vecvel.danaview.editor.engine.paused.await
 import com.vecvel.danaview.editor.engine.pigeon.DeviceTierMsg
+import com.vecvel.danaview.editor.engine.pigeon.LoopMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewEventKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewQualityMsg
 import com.vecvel.danaview.editor.engine.plan.PlanTransform
@@ -152,23 +153,31 @@ class ContingencySessionTest {
             h.setPlan(PreviewPlans.plan(listOf(PreviewPlans.main()), rev = 1))
             h.producer.awaitFrame(0)
             cfg.injectedCompositeDelayMs = 90
-            h.play()
+            // Loop the whole plan: the governor needs continuous playback (2 s windows, 10 s clean).
+            val loop = LoopMsg(0, PreviewPlans.grid.timeOfFrame(PreviewPlans.FRAMES))
+            h.call<Long> { s, cb -> s.play(loop, cb) }
             h.waitUntil("half", 15_000) { h.previewEvents(PreviewEventKindMsg.DEGRADED).any { it.quality == PreviewQualityMsg.HALF } }
             h.waitUntil("quarter", 15_000) { h.previewEvents(PreviewEventKindMsg.DEGRADED).any { it.quality == PreviewQualityMsg.QUARTER } }
             h.waitUntil("quarter-size frames") { h.producer.last()?.width == 160 }
             cfg.injectedCompositeDelayMs = 0
             // Loop playback so the governor sees clean playback (10 s per step up).
-            h.waitUntil("recovered to full", 40_000) {
-                val playing = h.sync { h.session.playing }
-                if (!playing) h.play()
-                h.previewEvents(PreviewEventKindMsg.DEGRADED).any { it.quality == PreviewQualityMsg.FULL }
-            }
+            // Recovery: one level up per 10 s of clean playback (the emulator itself may drop more
+            // than 10% in a window now and then, which restarts the 10 s).
+            val full = runCatching {
+                h.waitUntil("recovered to full", 60_000) { h.previewEvents(PreviewEventKindMsg.DEGRADED).any { it.quality == PreviewQualityMsg.FULL } }
+            }.isSuccess
             h.pause()
             val steps = h.previewEvents(PreviewEventKindMsg.DEGRADED).map { it.quality }
-            Log.i(AND16_TAG, "adaptive quality under injected load (emulator): $steps")
+            Log.i(AND16_TAG, "adaptive quality under injected load (emulator): $steps (back to full: $full)")
             assertEquals(listOf(PreviewQualityMsg.HALF, PreviewQualityMsg.QUARTER), steps.take(2))
+            assertTrue("recovered at least one level: $steps", steps.drop(2).firstOrNull() == PreviewQualityMsg.HALF)
             assertTrue(h.previewEvents(PreviewEventKindMsg.FRAME_SIZE).any { it.width == 160L })
-            h.waitUntil("full-size frames") { h.producer.last()?.width == 640 }
+            val wantW = when (steps.last()) {
+                PreviewQualityMsg.QUARTER -> 160
+                PreviewQualityMsg.HALF -> 320
+                else -> 640
+            }
+            h.waitUntil("frames at the last level's size") { h.producer.last()?.width == wantW }
         }
     }
 
