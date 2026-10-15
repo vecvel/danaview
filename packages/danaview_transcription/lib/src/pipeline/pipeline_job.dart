@@ -597,6 +597,7 @@ final class PipelineJob implements TranscriptionJob {
         noSpeechThreshold: SpeechTuning.noSpeechThreshold,
         entropyThreshold: SpeechTuning.entropyThreshold,
         logprobThreshold: SpeechTuning.logprobThreshold,
+        temperatureInc: SpeechTuning.temperatureIncrement,
         suppressNonSpeech: !request.includeSoundDescriptions,
       ),
       chunkTarget: const Duration(milliseconds: SpeechTuning.chunkTargetMs),
@@ -865,7 +866,16 @@ final class PipelineJob implements TranscriptionJob {
     if (m != null) await _quietly(m.release);
   }
 
-  WhisperVadOptions? get _vad => _vadPath == null ? null : WhisperVadOptions(modelPath: _vadPath!);
+  WhisperVadOptions? get _vad => _vadPath == null
+      ? null
+      : WhisperVadOptions(
+          modelPath: _vadPath!,
+          threshold: SpeechTuning.vadThreshold,
+          minSpeech: const Duration(milliseconds: SpeechTuning.vadMinSpeechMs),
+          minSilence: const Duration(milliseconds: SpeechTuning.vadMinSilenceMs),
+          speechPad: const Duration(milliseconds: SpeechTuning.vadSpeechPadMs),
+          samplesOverlapSeconds: SpeechTuning.vadSamplesOverlapSeconds,
+        );
 
   TranscriptionFailure _mapWhisper(WhisperException e) => switch (e.kind) {
         WhisperErrorKind.cancelled => const TranscriptionCancelled(),

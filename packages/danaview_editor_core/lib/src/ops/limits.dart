@@ -1,20 +1,27 @@
 // OWNER: CORE-09
+// (shared with CORE-38, which made the two layer caps informational: BUILD_PLAN §7)
 //
 // Project and device limits checked generically after every command (ARCH §7.1, D-14):
 //
-// * items ≤ `EditPolicy.maxItems` (5,000);
-// * project duration ≤ 24 h;
-// * peak concurrent decoder-backed video layers ≤ `EditPolicy.maxConcurrentVideoLayers`;
-// * packed visual sequences ≤ `EditPolicy.maxVisualSequences`.
+// * items ≤ `EditPolicy.maxItems` (5,000): hard limit;
+// * project duration ≤ 24 h: hard limit;
+// * peak concurrent decoder-backed video layers vs `EditPolicy.maxConcurrentVideoLayers` and
+//   packed visual sequences vs `EditPolicy.maxVisualSequences`: **live preview only** (CORE-38,
+//   D-14, D-45(B), owner decision 2026-10-11, D-43(e) point 7). A command is never refused for
+//   either layer cap; [LimitCounts.previewCap] reports the informational [PreviewCapStatus] that
+//   the preview layer (proxies, paused-exact still frames, the render-preview cache) and the
+//   export layer (multi-pass precompose) use. It is never a rejection, an exception or a banner.
+//   `LimitExceeded.visualSequences` / `.concurrentVideoLayers` stay declared (rejections.dart) so
+//   existing message mappings compile, but core no longer produces them.
 //
 // The two layer counts come from CORE-36's `eval/visual_packing.dart` (one implementation shared
 // with the compiler and both engines), derived from the model without compiling and incrementally:
 // a per-session [PackingInputCache] re-derives only the lanes a command replaced, and commands
 // that leave every visual lane, the pool and the settings untouched skip packing entirely.
 //
-// **Never lock users out (D-14).** A project that already exceeds a cap (opened from another
-// device) stays editable: a command is refused only when it makes a count that is over its cap
-// larger than it was before the command. Reducing edits are always allowed.
+// **Never lock users out (D-14).** A project that already exceeds a hard limit (opened from
+// another device) stays editable: a command is refused only when it makes a count that is over its
+// limit larger than it was before the command. Reducing edits are always allowed.
 
 import 'package:meta/meta.dart';
 
@@ -48,17 +55,22 @@ final class LimitCounts {
   /// Packed visual sequences.
   final int visualSequences;
 
-  /// The limits that [policy] says these counts exceed, as `LimitExceeded` rejections (empty
-  /// when within every limit). The editor shows a banner and export preflight refuses while this
-  /// is non-empty (D-14).
+  /// The hard limits (items, duration) that [policy] says these counts exceed, as
+  /// `LimitExceeded` rejections (empty when within them). The layer caps are never listed here:
+  /// they limit live preview only and are reported by [previewCap] (CORE-38, D-45(B)).
   List<LimitExceeded> exceeded(EditPolicy policy) => [
         if (items > policy.maxItems) LimitExceeded(LimitExceeded.items, policy.maxItems),
         if (duration > maxProjectDurationUs) const LimitExceeded(LimitExceeded.duration, maxProjectDurationUs),
-        if (peakConcurrentVideoLayers > policy.maxConcurrentVideoLayers)
-          LimitExceeded(LimitExceeded.concurrentVideoLayers, policy.maxConcurrentVideoLayers),
-        if (visualSequences > policy.maxVisualSequences)
-          LimitExceeded(LimitExceeded.visualSequences, policy.maxVisualSequences),
       ];
+
+  /// The informational live-preview state of these counts under [policy] (CORE-38): data for the
+  /// preview and export layers, never a rejection.
+  PreviewCapStatus previewCap(EditPolicy policy) => PreviewCapStatus(
+        visualSequences: visualSequences,
+        maxVisualSequences: policy.maxVisualSequences,
+        peakConcurrentVideoLayers: peakConcurrentVideoLayers,
+        maxConcurrentVideoLayers: policy.maxConcurrentVideoLayers,
+      );
 
   @override
   bool operator ==(Object other) =>
@@ -76,7 +88,59 @@ final class LimitCounts {
       'LimitCounts(items: $items, duration: $duration, peak: $peakConcurrentVideoLayers, sequences: $visualSequences)';
 }
 
-/// Checks the D-14, item and duration limits after a command (ARCH §7.1). Keep one instance per
+/// Whether a project is above the live-preview layer caps (ARCH D-14, D-45(B); CORE-38).
+///
+/// Above either cap, live preview uses proxies, paused-exact still frames during playback and the
+/// render-preview cache (CORE-37's `heavyRanges`), and export runs the multi-pass precompose
+/// (IOS-20, AND-19). Editing is never blocked and export never refuses because of it.
+@immutable
+final class PreviewCapStatus {
+  /// Creates a status from the counts and the caps.
+  const PreviewCapStatus({
+    required this.visualSequences,
+    required this.maxVisualSequences,
+    required this.peakConcurrentVideoLayers,
+    required this.maxConcurrentVideoLayers,
+  });
+
+  /// Packed visual sequences of the project.
+  final int visualSequences;
+
+  /// The live-preview cap on [visualSequences] (`EditPolicy.maxVisualSequences`).
+  final int maxVisualSequences;
+
+  /// Most decoder-backed video layers active at one instant.
+  final int peakConcurrentVideoLayers;
+
+  /// The live-preview cap on [peakConcurrentVideoLayers] (`EditPolicy.maxConcurrentVideoLayers`).
+  final int maxConcurrentVideoLayers;
+
+  /// Whether [visualSequences] is over its cap.
+  bool get aboveSequenceCap => visualSequences > maxVisualSequences;
+
+  /// Whether [peakConcurrentVideoLayers] is over its cap.
+  bool get aboveConcurrentLayerCap => peakConcurrentVideoLayers > maxConcurrentVideoLayers;
+
+  /// Whether either layer count is over its cap.
+  bool get aboveLivePreviewCap => aboveSequenceCap || aboveConcurrentLayerCap;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PreviewCapStatus &&
+      other.visualSequences == visualSequences &&
+      other.maxVisualSequences == maxVisualSequences &&
+      other.peakConcurrentVideoLayers == peakConcurrentVideoLayers &&
+      other.maxConcurrentVideoLayers == maxConcurrentVideoLayers;
+
+  @override
+  int get hashCode => Object.hash(visualSequences, maxVisualSequences, peakConcurrentVideoLayers, maxConcurrentVideoLayers);
+
+  @override
+  String toString() => 'PreviewCapStatus(aboveLivePreviewCap: $aboveLivePreviewCap, sequences: $visualSequences/$maxVisualSequences, '
+      'peak: $peakConcurrentVideoLayers/$maxConcurrentVideoLayers)';
+}
+
+/// Checks the D-14 item and duration limits after a command (ARCH §7.1). Keep one instance per
 /// editing session (it lives in `EditContext.limits`) so packing stays incremental.
 final class LayerLimits {
   /// Creates a checker. [holdFrame] says whether the engine holds frames for pending stills (then
@@ -107,6 +171,25 @@ final class LayerLimits {
     return result;
   }
 
+  // The project and policy of the last [check] (the command's result, or its base when the visual
+  // layers are unchanged and the counts therefore equal), resolved lazily by [lastPreviewCap].
+  EditProject? _lastChecked;
+  EditPolicy? _lastPolicy;
+  PreviewCapStatus? _lastStatus;
+
+  /// The live-preview state of the result of the last command [check]ed (by `applyCommand` or
+  /// `dryRun`, which share this path; for a command refused by a hard limit, of its unchanged
+  /// base), or null before any check (CORE-38). Commands that leave
+  /// the visual lanes alone reuse the base's packing, so reading this never re-packs for them.
+  PreviewCapStatus? get lastPreviewCap {
+    final p = _lastChecked;
+    if (p == null) return null;
+    return _lastStatus ??= countsOf(p).previewCap(_lastPolicy!);
+  }
+
+  /// The live-preview state of [project] under [policy] (CORE-38).
+  PreviewCapStatus previewCapOf(EditProject project, EditPolicy policy) => countsOf(project).previewCap(policy);
+
   /// Every count of [project].
   LimitCounts countsOf(EditProject project) {
     final packed = pack(project);
@@ -119,8 +202,16 @@ final class LayerLimits {
   }
 
   /// The rejection for [after] (the result of a command applied to [before]) under [policy], or
-  /// null when it is within the limits or does not make any exceeded count worse.
+  /// null when it is within the hard limits or does not make any exceeded count worse.
+  ///
+  /// Only the item and duration limits reject. The layer caps never do (CORE-38): the check packs
+  /// [after] when its visual layers changed (incrementally, keeping the session cache warm) and
+  /// records the informational state for [lastPreviewCap].
   EditRejection? check(EditProject before, EditProject after, EditPolicy policy) {
+    _lastPolicy = policy;
+    _lastStatus = null;
+    // A refused command leaves [before] in place: its state is the one to report.
+    _lastChecked = before;
     final items = itemCount(after);
     if (items > policy.maxItems && items > itemCount(before)) {
       return LimitExceeded(LimitExceeded.items, policy.maxItems);
@@ -129,17 +220,9 @@ final class LayerLimits {
     if (duration > maxProjectDurationUs && duration > before.duration) {
       return const LimitExceeded(LimitExceeded.duration, maxProjectDurationUs);
     }
-    if (visualLayersUnchanged(before, after)) return null;
-    final a = pack(after);
-    final peakOver = a.peakConcurrentDecoders > policy.maxConcurrentVideoLayers;
-    final seqOver = a.slotCount > policy.maxVisualSequences;
-    if (!peakOver && !seqOver) return null;
-    final b = pack(before);
-    if (peakOver && a.peakConcurrentDecoders > b.peakConcurrentDecoders) {
-      return LimitExceeded(LimitExceeded.concurrentVideoLayers, policy.maxConcurrentVideoLayers);
-    }
-    if (seqOver && a.slotCount > b.slotCount) {
-      return LimitExceeded(LimitExceeded.visualSequences, policy.maxVisualSequences);
+    if (!visualLayersUnchanged(before, after)) {
+      _lastChecked = after;
+      pack(after);
     }
     return null;
   }

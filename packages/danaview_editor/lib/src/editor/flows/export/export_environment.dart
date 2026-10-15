@@ -21,7 +21,8 @@ import 'package:danaview_editor_core/eval.dart' show TextMetricsProvider;
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/plan.dart';
 import 'package:danaview_editor_core/store.dart';
-import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' show EditorCapabilities, SpritePrepass, TextLayoutEngine, TextSpriteRasterizer;
+import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart'
+    show EditorCapabilities, FontResolver, SpritePrepass, TextLayoutEngine, TextSpriteRasterizer;
 import 'package:danaview_platform/danaview_platform.dart' show PlatformBridge;
 
 import '../../../app/editor_bootstrap.dart' show editorRuntimeProvider;
@@ -29,6 +30,7 @@ import '../../../app/editor_providers.dart' show EditorNotConfiguredError;
 import '../../state/default_plan_compiler.dart' show DefaultSessionPlanCompiler;
 import '../../state/editor_session.dart';
 import '../../state/plan_compiler_port.dart' show ResolvingSessionPlanCompiler;
+import '../../text/font_catalog.dart' show FontCatalog, fontCatalogProvider;
 
 /// Core export capabilities of a device (ARCH §12.5 -> core `ExportCapabilities`).
 ExportCapabilities exportCapabilitiesOf(EditorCapabilities c) {
@@ -175,10 +177,13 @@ final class ExportEnvironment {
     this.newToken = _defaultToken,
   });
 
-  /// The environment over the app's storage roots and the local file system.
+  /// The environment over the app's storage roots and the local file system. Export sprites lay
+  /// text out with [fontResolver] (default: UX-30's `FontCatalog.instance`), the resolver of the
+  /// preview overlay, so the exported text uses the chosen content font (FIX-FONTS).
   factory ExportEnvironment.local(
     StoreRoots roots, {
     StoreFs fs = const LocalStoreFs(),
+    FontResolver? fontResolver,
     ExportAssetResolver resolveAssets = defaultExportAssetResolver,
     ExportCompile compile = defaultExportCompile,
     ExportWakelock wakelock = _defaultWakelock,
@@ -189,7 +194,11 @@ final class ExportEnvironment {
         documentsWriter: DocumentsExportWriter(roots, fs: fs),
         deleter: OwnedFileDeleter(roots, fs: fs),
         spriteRunner: (caps) => PrepassSpriteRunner(
-          SpritePrepass(rasterizer: TextSpriteRasterizer(engine: TextLayoutEngine()), maxTextureSize: caps.maxTextureSize, fs: fs),
+          SpritePrepass(
+            rasterizer: TextSpriteRasterizer(engine: TextLayoutEngine(fontResolver: fontResolver ?? FontCatalog.instance.resolve)),
+            maxTextureSize: caps.maxTextureSize,
+            fs: fs,
+          ),
         ),
         resolveAssets: resolveAssets,
         compile: compile,
@@ -249,7 +258,7 @@ final class ExportEnvironment {
 final exportEnvironmentProvider = Provider<ExportEnvironment>((ref) {
   final runtime = ref.watch(editorRuntimeProvider);
   if (runtime == null) throw EditorNotConfiguredError('exportEnvironmentProvider');
-  return ExportEnvironment.local(runtime.roots);
+  return ExportEnvironment.local(runtime.roots, fontResolver: ref.watch(fontCatalogProvider).resolve);
 }, name: 'exportEnvironmentProvider');
 
 /// Navigation the router supplies for the export flow (INT-04). Every callback is optional.

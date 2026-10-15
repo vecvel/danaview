@@ -67,8 +67,13 @@ void main() {
     expect(languageForWhisperCode('ru')!.nativeName, 'Русский');
   });
 
-  test('qualityHint is false until QA-06 fills it', () {
-    expect(whisperLanguages.where((l) => l.qualityHint), isEmpty);
+  test('qualityHint follows SpeechTuning.qualityHintFor (FLEURS top 30 carry no hint)', () {
+    for (final l in whisperLanguages) {
+      expect(l.qualityHint, SpeechTuning.qualityHintFor(l.whisperCode), reason: l.whisperCode);
+    }
+    expect(whisperLanguages.where((l) => !l.qualityHint), hasLength(SpeechTuning.fleursTop30.length));
+    expect(languageForWhisperCode('en')!.qualityHint, isFalse);
+    expect(languageForWhisperCode('sw')!.qualityHint, isTrue);
   });
 
   test('device locale mapping', () {

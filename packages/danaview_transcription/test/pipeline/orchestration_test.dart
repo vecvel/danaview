@@ -85,6 +85,14 @@ void main() {
       expect(req.vad?.modelPath, '/models/vad.bin');
       expect(req.decode.suppressNonSpeech, isFalse);
       expect(req.decode.tokenTimestamps, isTrue);
+      // Decode and VAD values come from SpeechTuning (FIX-AI-TUNING).
+      expect(req.decode.temperatureInc, SpeechTuning.temperatureIncrement);
+      expect(req.decode.noSpeechThreshold, SpeechTuning.noSpeechThreshold);
+      expect(req.vad!.threshold, SpeechTuning.vadThreshold);
+      expect(req.vad!.minSpeech, const Duration(milliseconds: SpeechTuning.vadMinSpeechMs));
+      expect(req.vad!.minSilence, const Duration(milliseconds: SpeechTuning.vadMinSilenceMs));
+      expect(req.vad!.speechPad, const Duration(milliseconds: SpeechTuning.vadSpeechPadMs));
+      expect(req.vad!.samplesOverlapSeconds, SpeechTuning.vadSamplesOverlapSeconds);
       expect(req.chunkTarget, const Duration(seconds: 180));
       expect(req.chunkSearch, const Duration(seconds: 15));
       expect(req.rangeStart, Duration.zero);

@@ -2,10 +2,12 @@
 //
 // The 99 whisper languages (ids 0-98 of whisper's g_lang; `yue` excluded because only large-v3
 // knows it), ai.md §9.4. BCP-47 is identity except `jw` -> `jv`. `qualityHint` (languages where
-// Fast and Balanced are weak, so the sheet recommends Accurate) is filled by QA-06 from the
-// published per-language WER; it is false for every entry until then.
+// Fast and Balanced are weak, so the sheet recommends Accurate) is read from
+// SpeechTuning.qualityHintFor (QA-06, published per-language WER; FIX-AI-TUNING).
 
 import 'package:meta/meta.dart';
+
+import '../catalog/tuning.dart';
 
 /// Segmentation script profile (ai.md §9.2).
 enum ScriptProfile {
@@ -27,7 +29,7 @@ enum ScriptProfile {
 final class TranscriptionLanguage {
   /// Creates an entry.
   const TranscriptionLanguage(this.whisperCode, this.bcp47, this.englishName, this.nativeName, this.script,
-      {this.rtl = false, this.qualityHint = false});
+      {this.rtl = false});
 
   /// whisper language code.
   final String whisperCode;
@@ -47,8 +49,8 @@ final class TranscriptionLanguage {
   /// Right-to-left script.
   final bool rtl;
 
-  /// Fast/Balanced are weak for this language: recommend Accurate.
-  final bool qualityHint;
+  /// Fast/Balanced are weak for this language: recommend Accurate ([SpeechTuning.qualityHintFor]).
+  bool get qualityHint => SpeechTuning.qualityHintFor(whisperCode);
 }
 
 /// The language list in whisper id order.

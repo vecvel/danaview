@@ -8,9 +8,9 @@
 //   gesture runs); playback repaints the painter alone, once per frame change of the
 //   frame-quantized `PlayheadController` (no widget rebuilds, nothing in EditorState changes).
 // * [previewTextEngineProvider] is the app's one `TextLayoutEngine` for the preview overlay and the
-//   manipulation handles' text metrics (UX-22). Its default resolves every content-font id to
-//   Figtree; INT-02 overrides it with UX-30's `FontCatalog` resolver, e.g.
-//   `previewTextEngineProvider.overrideWith((ref) => TextLayoutEngine(fontResolver: catalog.resolve))`.
+//   manipulation handles' text metrics (UX-22). It resolves content-font ids through UX-30's
+//   `FontCatalog` (`fontCatalogProvider`, unknown/unbundled -> Figtree), the same resolver the export
+//   sprites use (UX-39's `ExportEnvironment`), so a chosen font shows identically in both (FIX-FONTS).
 // * The layer is user content: it is wrapped in `EditorContentTextRegion` (the owner UI rules allow
 //   content fonts there) and ignores pointers (the manipulation overlay above it handles them).
 
@@ -22,16 +22,18 @@ import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' show
 import '../../app/editor_providers.dart';
 import '../contracts/content_text.dart';
 import '../editor_scope.dart';
+import '../text/font_catalog.dart' show fontCatalogProvider;
 import 'canvas_geometry.dart';
 import 'text_overlay_painter.dart';
 
 export 'text_overlay_painter.dart' show TextOverlayEntry, TextOverlayPainter, TextOverlayScene, activeItemOf;
 
-/// The preview's text layout engine (API-04): text overlay layouts and handle metrics.
+/// The preview's text layout engine (API-04): text overlay layouts and handle metrics, with content
+/// fonts resolved by the [fontCatalogProvider] catalog (FIX-FONTS).
 ///
 /// See D-05, ARCH §13.1.
 final previewTextEngineProvider = Provider<TextLayoutEngine>((ref) {
-  final engine = TextLayoutEngine();
+  final engine = TextLayoutEngine(fontResolver: ref.watch(fontCatalogProvider).resolve);
   ref.onDispose(engine.trim);
   return engine;
 }, name: 'previewTextEngineProvider');

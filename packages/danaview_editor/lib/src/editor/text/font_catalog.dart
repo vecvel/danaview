@@ -12,9 +12,14 @@
 // * The picker lists [FontCatalog.available] (bundled families only). Search matches the display
 //   name, the id and the category, ignoring case, spaces, hyphens and underscores.
 //
-// Wiring: the app overrides `previewTextEngineProvider` (UX-19) and the export environment's
-// engine with `TextLayoutEngine(fontResolver: FontCatalog.instance.resolve)` (INT-02).
-// [fontCatalogProvider] supplies the catalog to the text panel (tests override it).
+// Wiring (FIX-FONTS): `previewTextEngineProvider` (UX-19) and `exportEnvironmentProvider`'s sprite
+// engine (UX-39) build `TextLayoutEngine(fontResolver: <fontCatalogProvider>.resolve)`, so the
+// preview overlay, the handles and export sprites resolve ids through this one catalog.
+// [fontCatalogProvider] also supplies the catalog to the text panel (tests override it).
+// Bold: Flutter applies the `wght` axis of a variable font for `FontWeight.w700` (checked on
+// Flutter 3.44: identical ink to `FontVariation('wght', 700)`), so no explicit variation is needed.
+// The licences screen was removed by the owner; nothing consumes LicenseRegistry, so the app does
+// not call `registerContentFontLicenses()` (the OFL texts stay bundled as assets).
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' show FontResolver;
