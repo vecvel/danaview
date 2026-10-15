@@ -66,6 +66,9 @@ import kotlin.math.roundToLong
 
 const val AND18_TAG = "AND18"
 
+/** Retries of a render whose file showed a stale input frame (CI counts them). */
+const val AND18_RETRY_TAG = "DanaviewRenderRetry"
+
 fun log18(msg: String) = Log.i(AND18_TAG, msg)
 
 /** Range plans (file header). */

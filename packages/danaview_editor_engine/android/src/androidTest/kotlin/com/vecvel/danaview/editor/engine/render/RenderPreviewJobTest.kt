@@ -115,12 +115,13 @@ class RenderPreviewJobTest {
         val out = r.output("cancelled")
         val part = RenderPreviewSpecs.partFile(out)
         val id = r.start(longRange(), out)
-        waitFor("the render runs") { progressed(r, id) }
-        val partBytes = if (part.exists()) part.length() else -1
+        // InAppMp4Muxer creates its file late (about half way): cancel once it exists.
+        waitFor("the render writes its part file") { part.exists() }
+        val partBytes = part.length()
         r.engine.ctx.jobs.cancel(id)
         val end = r.engine.awaitTerminal(id, 60_000)
         Thread.sleep(1_500)
-        log18("cancel (emulator): part file had $partBytes bytes (-1: not created yet); after cancel part=${part.exists()} output=${out.exists()}")
+        log18("cancel (emulator): part file existed ($partBytes bytes); after cancel part=${part.exists()} output=${out.exists()}")
         assertEquals(EngineEventKindMsg.FAILURE, end.kind)
         assertEquals("cancelled", end.failure!!.code)
         assertFalse("no part file after cancel", part.exists())
