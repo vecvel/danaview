@@ -422,6 +422,8 @@ class JobRegistry(
         JobKindMsg.FREEZE -> OutputBody(JobKindMsg.FREEZE, request) { control -> JobResultMsg(JobKindMsg.FREEZE, asset = ctx.freezeFrames.run(request, control)) }
         JobKindMsg.REVERSE -> OutputBody(JobKindMsg.REVERSE, request) { control -> JobResultMsg(JobKindMsg.REVERSE, asset = ctx.reverse.run(request, control)) }
         JobKindMsg.EXPORT -> throw EngineErrors.invalidArgument("kind", "exports start through ExportHostApi")
+        // INT-06 (D-45): render previews start through preview/render/RenderPreviewJobService (AND-18).
+        JobKindMsg.RENDER_PREVIEW -> throw EngineErrors.invalidArgument("kind", "render previews start through the render-preview service")
     }
 
     /** Waveform peaks (AND-04 WaveformService, cached in waves/). Restarts after a pre-emption. */

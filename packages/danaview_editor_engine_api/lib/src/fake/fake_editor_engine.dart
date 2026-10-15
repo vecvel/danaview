@@ -774,8 +774,8 @@ final class FakeMediaJobs implements MediaJobs {
 
   /// Renders instantly (next microtask) to a stub file at [outputPath] (recorded in [files]);
   /// cancel before that deletes it and fails with `EngineCancelled`. Refuses an export-target or
-  /// invalid plan with `planInvalid` and an output outside a `renders/` directory with `internal`,
-  /// like the native glue. Default priority `background`.
+  /// invalid plan with `planInvalid` and an output outside a `renders/` directory with
+  /// `permissionDenied`, like the native glue. Default priority `background`.
   @override
   MediaJob<GeneratedAsset> renderPreview(RenderPlan rangePlan, {required String outputPath}) {
     renderRequests.add((rangePlan, outputPath));
@@ -805,7 +805,7 @@ final class FakeMediaJobs implements MediaJobs {
     }
     final segments = outputPath.split('/');
     if (!outputPath.startsWith('/') || segments.length < 3 || segments[segments.length - 2] != renderPreviewDirName) {
-      return EngineFailure.of(EngineErrorCode.internal, debugDetail: 'outputPath is not inside $renderPreviewDirName/');
+      return EngineFailure.of(EngineErrorCode.permissionDenied, debugDetail: 'outputPath is not inside $renderPreviewDirName/');
     }
     return null;
   }

@@ -275,7 +275,8 @@ abstract interface class MediaJobs {
   /// to the range start; [outputPath] lies inside `<cache>/danaview/editor/renders/`
   /// ([renderPreviewDirName]). The output is a video-only, preview-size H.264 file on the plan's
   /// frame grid. The job reports progress at ≤ 4 Hz; [MediaJob.cancel] deletes the partial file;
-  /// failures are `EngineFailure`s (`planInvalid` for a plan the engine refuses). Until IOS-19 and
+  /// failures are `EngineFailure`s (`planInvalid` for a plan the engine refuses, `permissionDenied` for
+  /// an output outside the renders directory). Until IOS-19 and
   /// AND-18 land, the mobile engine fails with `notSupportedOnDevice`. Default priority
   /// [JobPriority.background].
   MediaJob<GeneratedAsset> renderPreview(RenderPlan rangePlan, {required String outputPath});

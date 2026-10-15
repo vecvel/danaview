@@ -92,7 +92,7 @@ void main() {
       );
       await expectLater(
         e.jobs.renderPreview(contractKitPlan(), outputPath: '/fake/cache/danaview/editor/work/x.mp4').result,
-        throwsA(_failure(EngineErrorCode.internal)),
+        throwsA(_failure(EngineErrorCode.permissionDenied)),
       );
       e.failNext['jobs.renderPreview'] = EngineFailure.of(EngineErrorCode.diskFull);
       await expectLater(
