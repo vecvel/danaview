@@ -177,6 +177,9 @@ final class _EngineWithJobs implements EditorEngine {
 final class _ThrowingGuard implements BackgroundWorkGuard {
   @override
   Future<BackgroundLease?> acquire({required String title, required Stream<double> progress}) async => throw StateError('no service');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(invocation.memberName.toString());
 }
 
 final class _EngineWithGuard implements EditorEngine {

@@ -466,6 +466,9 @@ final class _GatedSession implements PreviewSession {
   void clearTransient(ItemId item) => inner.clearTransient(item);
   @override
   int get textureId => inner.textureId;
+
+  @override
+  Future<void> setRenderedRanges(List<RenderedRange> ranges) => inner.setRenderedRanges(ranges);
   @override
   ValueListenable<Size?> get frameSize => inner.frameSize;
   @override
