@@ -269,6 +269,53 @@ final class PitchSyncTests: XCTestCase {
         XCTAssertLessThanOrEqual(worst, 20_000)
     }
 
+    /// A pure tone's coherent level over [a, b) frames of [x] (48 kHz).
+    static func toneDb(_ x: [Float], _ a: Int, _ b: Int, freqHz: Double = 1_000) -> Double {
+        let n = b - a
+        var re = 0.0, im = 0.0, ws = 0.0
+        let w0 = 2 * Double.pi * freqHz / 48_000
+        for i in 0..<n {
+            let w = 0.5 - 0.5 * cos(2 * Double.pi * Double(i) / Double(n - 1))
+            let v = Double(x[a + i]) * w
+            re += v * cos(w0 * Double(i))
+            im -= v * sin(w0 * Double(i))
+            ws += w
+        }
+        return 20 * log10(2 * sqrt(re * re + im * im) / ws)
+    }
+
+    /// The QA-11 / IOS-18 ramp-seam click test through CompositionBuilder (compensated offsets, the
+    /// default layout): 7 × 300 ms at 1, 1.25, 1.6, 2, 1.6, 1.25, 1× over tone_1khz, keep pitch. The
+    /// largest tone-predictor residual within ±40 ms of a seam exceeds the in-segment floor by
+    /// ≤ 0.01 (−40 dBFS), and every segment keeps the tone at −12 ± 0.5 dBFS.
+    func testRampSeamsStayCleanWithCompensation() async throws {
+        let tone = try XCTUnwrap(TestFixtures.url(.engine, "media/tone_1khz.wav"), "ENG-05 tone_1khz.wav missing")
+        let speeds = [1.0, 1.25, 1.6, 2.0, 1.6, 1.25, 1.0]
+        var map: [MapSegment] = []
+        var s0: Int64 = 500_000
+        for (k, r) in speeds.enumerated() {
+            let s1 = s0 + Int64((r * 300_000).rounded())
+            map.append(MapSegment(Int64(k) * 300_000, Int64(k + 1) * 300_000, s0, s1))
+            s0 = s1
+        }
+        let seg = AudioSeg(id: "a", asset: "t", t0: 0, t1: 2_100_000, map: map, gain: [AnimKey(0, 1)], pitch: true)
+        let p = plan(seg, asset: PlanAsset(kind: .audio, uri: tone.absoluteString, durUs: 10_000_000), durUs: 2_100_000)
+        let x = try await exportRead(p, url: tone)
+        let e = AudioTapSupport.toneResidual(x, freqHz: 1_000)
+        var floor: Float = 0
+        var levels: [Double] = []
+        for k in 0..<speeds.count {
+            floor = max(floor, AudioTapSupport.maxAbs(e, k * 14_400 + 2_400, (k + 1) * 14_400 - 2_400))
+            levels.append(Self.toneDb(x, k * 14_400 + 1_000, (k + 1) * 14_400 - 1_000))
+        }
+        let seams = (1..<speeds.count).map { AudioTapSupport.maxAbs(e, $0 * 14_400 - 1_920, $0 * 14_400 + 1_920) }
+        let excess = Double(seams.max()! - floor)
+        print(String(format: "PITCHSYNC|ramp seams|floor=%.5f|worstSeam=%.5f|excessDbfs=%.1f|levels=%@", floor, seams.max()!,
+                     20 * log10(max(excess, 1e-9)), levels.map { String(format: "%.2f", $0) }.joined(separator: ",")))
+        XCTAssertLessThanOrEqual(excess, 0.01, "seam transient above −40 dBFS")
+        for (k, l) in levels.enumerated() { XCTAssertEqual(l, -12.04, accuracy: 0.5, "segment \(k) tone level") }
+    }
+
     // MARK: - Preview
 
     /// AVPlayer runs the same `.timeDomain` time-pitch: the tap output (composition time) of a built

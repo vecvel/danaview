@@ -20,11 +20,17 @@
 //   simulator: −36 ms at 0.5×, −14 ms at 0.75×, −4 ms at 1×, +6 ms at 1.5×, +9 ms at 2×, i.e.
 //   shift(r) ≈ A + B / r with A = +25.8 ms and B = −30.7 ms (output delay and source look-ahead of
 //   the grain search). Every piece of such a track therefore reads its source shifted by
-//   δ(r) = r · shift(r) = A·r + B (whole µs; rate and grid placement unchanged). Where the shifted
-//   range (with its ramp-seam extensions) would leave [0, asset duration], the piece is trimmed at
-//   that edge by the missing source time / r (negative `preUs`/`postUs`; at most a few tens of ms
-//   of what is silence-before-the-source anyway) rather than read with a changed rate. Pieces of
-//   `.varispeed` tracks and of keep-pitch tracks without a scaled edit are not shifted.
+//   δ(r) = r · shift(r) = A·r + B (whole µs; rate and grid placement unchanged). Pieces of one
+//   segment at different rates get different offsets, so a seam skips or repeats |Δδ| (a few ms)
+//   of source, like the time-pitch's own grains; the seam transient is unchanged (QA-11 click
+//   test), but the phase of a pure tone is not continuous across seams. (A blend that kept the
+//   source continuous across seams, drifting each piece between shared seam offsets, made the
+//   seam transients 30× larger on the iOS 26.5 simulator and was dropped.)
+//   Where the shifted range (with its ramp-seam extensions) would leave [0, asset duration], the
+//   piece is trimmed at that edge by the missing source time / r (negative `preUs`/`postUs`; at
+//   most a few tens of ms of what is silence-before-the-source anyway) rather than read with a
+//   changed rate. Pieces of `.varispeed` tracks and of keep-pitch tracks without a scaled edit are
+//   not shifted.
 //
 // This file is the pure part (which segment and piece goes where, the envelopes); the
 // AVFoundation insertion is in CompositionBuilder.
@@ -112,7 +118,6 @@ struct AudioMixLayout: Equatable {
     static let pitchLatencyOutputUs = 25_800.0
     /// Source look-ahead term B of the `.timeDomain` time-pitch (composition µs at 1×, ∝ 1/rate).
     static let pitchLatencySourceUs = -30_700.0
-
     /// Composition-time shift (µs) of audio inside a keep-pitch track at [rate] (uncompensated).
     static func pitchShiftUs(rate: Double) -> Double {
         pitchLatencyOutputUs + pitchLatencySourceUs / rate
@@ -129,9 +134,11 @@ struct AudioMixLayout: Equatable {
         p.segment.s1 - p.segment.s0 != p.segment.t1 - p.segment.t0
     }
 
-    /// Shifts the sources of every piece on a keep-pitch track that has a scaled piece.
+    /// Shifts the sources of every piece on a keep-pitch track that has a scaled piece by
+    /// `pitchCompensationUs` of its rate (pieces of other tracks stay as they are: a track without
+    /// a scaled piece is passed through untouched and must stay so).
     private static func compensatePitchLatency(_ pieces: inout [Piece], tracks: [Track], plan: RenderPlan) {
-        let active = Set(pieces.indices.filter { tracks[pieces[$0].track].pitch && isScaled(pieces[$0]) }.map { pieces[$0].track })
+        let active = Set(pieces.filter { tracks[$0.track].pitch && isScaled($0) }.map(\.track))
         guard !active.isEmpty else { return }
         let assetBySeg = Dictionary(plan.audio.map { ($0.id, $0.asset) }, uniquingKeysWith: { _, b in b })
         for i in pieces.indices where active.contains(pieces[i].track) {
