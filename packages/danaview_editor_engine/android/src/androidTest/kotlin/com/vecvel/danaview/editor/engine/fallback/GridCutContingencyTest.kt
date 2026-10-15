@@ -126,13 +126,14 @@ class GridCutContingencyTest {
             h.sink.awaitK(60)
             Thread.sleep(100)
             h.sink.clear()
-            // A drag over off-grid positions (47 ms steps): scrubs, one in flight, latest wins.
+            // A drag over off-grid positions (47 ms steps, one every 120 ms; a cold 1080p deck seek
+            // takes 0.3–1.8 s on the emulator): scrubs, one in flight, latest wins.
             var posMs = 0L
             val g = h.grid
             val t0 = System.nanoTime()
             while (posMs < plan.durUs / 1000 - 100) {
                 h.seekAsync(g.frameIndexNearest(posMs * 1000), exact = false)
-                Thread.sleep(16)
+                Thread.sleep(120)
                 posMs += 47
             }
             for (k in listOf(38L, 64L, 7L)) {
@@ -144,7 +145,7 @@ class GridCutContingencyTest {
             val bad = frames.flatMap { mismatches(plan, it, pts) }
             val offGrid = frames.count { kotlin.math.abs(it.ptsUs - g.platformTimeOfFrame(it.k)) > 1 }
             Log.i(AND16_TAG, "scrub (emulator): ${frames.size} frames presented in %.0f ms, %d wrong, %d off-grid pts".format(scrubMs, bad.size, offGrid))
-            assertTrue("frames while scrubbing", frames.size > 3)
+            assertTrue("frames while scrubbing (${frames.size - 3} scrub frames)", frames.size > 3 + 2)
             assertEquals(0, offGrid)
             assertEquals(emptyList<String>(), bad)
             assertEquals(7L, frames.last().k)
