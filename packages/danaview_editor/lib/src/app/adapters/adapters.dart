@@ -1,8 +1,9 @@
 // OWNER: INT-04
 //
-// Placeholder (D-33) created by UX-01. INT-04 replaces this file:
-// sub-barrel of the D-28 engine adapters for auto captions.
-// Until then it declares only the public names other files compile against.
+// Sub-barrel of the app wiring v2 (D-28 engine adapters for Auto captions, the governor's export
+// port and the app root's editor overrides), exported by `danaview_editor.dart`.
 
+export 'editor_app_wiring.dart';
 export 'engine_background_lease_provider.dart';
+export 'engine_export_activity.dart';
 export 'engine_speech_audio_extractor.dart';
