@@ -42,7 +42,8 @@ final class PlanPair {
   final RenderPlan after;
 }
 
-RenderPlan _replan(RenderPlan p, List<PlanLayer> layers, {Map<String, PlanAsset>? assets, PlanCanvas? canvas, TimeUs? durUs, List<AudioSeg>? audio}) {
+RenderPlan _replan(RenderPlan p, List<PlanLayer> layers,
+    {Map<String, PlanAsset>? assets, PlanCanvas? canvas, TimeUs? durUs, List<AudioSeg>? audio}) {
   final base = plan(layers, assets: assets ?? p.assets, rev: p.rev + 1, canvas: canvas ?? p.canvas);
   return RenderPlan(
     rev: base.rev,
@@ -80,16 +81,31 @@ List<PlanPair> handCases() {
     layers: p0.layers,
     audio: [_audio('m#a', 0, 120, 'm')],
   );
-  List<PlanLayer> others(String id) => [for (final l in base.layers) if (l.id != id) l];
+  List<PlanLayer> others(String id) => [
+        for (final l in base.layers)
+          if (l.id != id) l
+      ];
   return [
     PlanPair('param edit inside one range', base, _replan(base, [...others('b#v'), copyLayer(b, xf: const PlanTransform(s: 0.5))])),
-    PlanPair('keyframe edit', base, _replan(base, [...others('c#v'), copyLayer(c, anim: {'xf.op': const [AnimKey(0, 1), AnimKey(500000, 0)]})])),
+    PlanPair(
+        'keyframe edit',
+        base,
+        _replan(base, [
+          ...others('c#v'),
+          copyLayer(c, anim: {
+            'xf.op': const [AnimKey(0, 1), AnimKey(500000, 0)]
+          })
+        ])),
     PlanPair('remove the spanning layer', base, _replan(base, others('a#v'))),
     PlanPair('add a layer over the gap', base, _replan(base, [...base.layers, solid('t#v', 65, 80, z: 5)])),
-    PlanPair('ripple: everything moves one second later', base, _replan(base, [
-      for (final l in base.layers)
-        copyLayer(l, t0: l.t0 + f(30), t1: l.t1 + f(30), map: [for (final m in l.map) MapSegment(m.t0 + f(30), m.t1 + f(30), m.s0, m.s1)]),
-    ])),
+    PlanPair(
+        'ripple: everything moves one second later',
+        base,
+        _replan(base, [
+          for (final l in base.layers)
+            copyLayer(l,
+                t0: l.t0 + f(30), t1: l.t1 + f(30), map: [for (final m in l.map) MapSegment(m.t0 + f(30), m.t1 + f(30), m.s0, m.s1)]),
+        ])),
     PlanPair('proxy arrives (asset uri change, same fp)', base,
         _replan(base, base.layers, assets: {...assets, 'b': video('fp_b', proxy: 'file:///cache/proxy_b.mp4')})),
     PlanPair('asset added only', base, _replan(base, base.layers, assets: {...assets, 'z': video('fp_z')})),
@@ -97,13 +113,21 @@ List<PlanPair> handCases() {
     PlanPair('duration shrinks (empty tail removed)', _replan(base, base.layers, durUs: f(150)), base.copyWith(rev: base.rev + 2)),
     PlanPair('duration grows (empty tail)', base, _replan(base, base.layers, durUs: f(150))),
     PlanPair('seq slot change only', base, _replan(base, [...others('b#v'), copyLayer(b, seq: 7)])),
-    PlanPair('split B into two seamless halves', base, _replan(base, [
-      ...others('b#v'),
-      copyLayer(b, id: 'b1#v', t1: f(45), map: [MapSegment(f(30), f(45), 0, f(15))]),
-      copyLayer(b, id: 'b2#v', t0: f(45), map: [MapSegment(f(45), f(60), f(15), f(30))]),
-    ])),
-    PlanPair('trim the tail of the spanning layer', base,
-        _replan(base, [...others('a#v'), copyLayer(a, t1: f(110), map: [MapSegment(0, f(110), 0, f(110))])])),
+    PlanPair(
+        'split B into two seamless halves',
+        base,
+        _replan(base, [
+          ...others('b#v'),
+          copyLayer(b, id: 'b1#v', t1: f(45), map: [MapSegment(f(30), f(45), 0, f(15))]),
+          copyLayer(b, id: 'b2#v', t0: f(45), map: [MapSegment(f(45), f(60), f(15), f(30))]),
+        ])),
+    PlanPair(
+        'trim the tail of the spanning layer',
+        base,
+        _replan(base, [
+          ...others('a#v'),
+          copyLayer(a, t1: f(110), map: [MapSegment(0, f(110), 0, f(110))])
+        ])),
     PlanPair('audio only', base, _replan(base, base.layers, audio: [_audio('m#a', 0, 120, 'm', gain: 0.5)])),
     PlanPair('identical plan, new revision', base, base.copyWith(rev: base.rev + 1)),
   ];
@@ -112,7 +136,10 @@ List<PlanPair> handCases() {
 /// A random plan-level edit that may or may not change pixels.
 RenderPlan randomAnyEdit(RenderPlan p, Random rnd) {
   final l = p.layers[rnd.nextInt(p.layers.length)];
-  List<PlanLayer> others() => [for (final x in p.layers) if (x.id != l.id) x];
+  List<PlanLayer> others() => [
+        for (final x in p.layers)
+          if (x.id != l.id) x
+      ];
   switch (rnd.nextInt(9)) {
     case 0:
       return _replan(p, [...others(), copyLayer(l, xf: PlanTransform(s: l.xf.s + 0.25))]);
@@ -259,7 +286,10 @@ void checkPair(PlanPair pair, {Set<String>? stats}) {
       if (!touched && same) stats.add('kept');
     }
   }
-  expect(rangesKept(pair.before, pair.after, before), [for (final r in before) if (!rangeTouched(pair.before, pair.after, r)) r]);
+  expect(rangesKept(pair.before, pair.after, before), [
+    for (final r in before)
+      if (!rangeTouched(pair.before, pair.after, r)) r
+  ]);
 }
 
 void main() {
@@ -276,13 +306,62 @@ void main() {
     });
 
     test('a layer change touches the ranges its old or new span overlaps, and no other', () {
-      expect([for (final r in [r0, r1, r2, r3]) touched('param edit inside one range', r)], [false, true, false, false]);
-      expect([for (final r in [r0, r1, r2, r3]) touched('keyframe edit', r)], [false, false, false, true]);
-      expect([for (final r in [r0, r1, r2, r3]) touched('remove the spanning layer', r)], [true, true, true, true]);
-      expect([for (final r in [r0, r1, r2, r3]) touched('add a layer over the gap', r)], [false, false, true, false]);
-      expect([for (final r in [r0, r1, r2, r3]) touched('ripple: everything moves one second later', r)], [true, true, true, true]);
-      expect([for (final r in [r0, r1, r2, r3]) touched('seq slot change only', r)], [false, true, false, false]);
-      expect([for (final r in [r0, r1, r2, r3]) touched('split B into two seamless halves', r)], [false, true, false, false]);
+      expect([
+        for (final r in [r0, r1, r2, r3]) touched('param edit inside one range', r)
+      ], [
+        false,
+        true,
+        false,
+        false
+      ]);
+      expect([
+        for (final r in [r0, r1, r2, r3]) touched('keyframe edit', r)
+      ], [
+        false,
+        false,
+        false,
+        true
+      ]);
+      expect([
+        for (final r in [r0, r1, r2, r3]) touched('remove the spanning layer', r)
+      ], [
+        true,
+        true,
+        true,
+        true
+      ]);
+      expect([
+        for (final r in [r0, r1, r2, r3]) touched('add a layer over the gap', r)
+      ], [
+        false,
+        false,
+        true,
+        false
+      ]);
+      expect([
+        for (final r in [r0, r1, r2, r3]) touched('ripple: everything moves one second later', r)
+      ], [
+        true,
+        true,
+        true,
+        true
+      ]);
+      expect([
+        for (final r in [r0, r1, r2, r3]) touched('seq slot change only', r)
+      ], [
+        false,
+        true,
+        false,
+        false
+      ]);
+      expect([
+        for (final r in [r0, r1, r2, r3]) touched('split B into two seamless halves', r)
+      ], [
+        false,
+        true,
+        false,
+        false
+      ]);
     });
 
     test('canvas and changed assets touch every range; an added asset or audio touches none', () {
@@ -297,8 +376,16 @@ void main() {
 
     test('a duration change touches the ranges ending after the shorter duration', () {
       final shrunk = cases['duration shrinks (empty tail removed)']!;
-      expect([for (final r in splitRanges(shrunk.before)) rangeTouched(shrunk.before, shrunk.after, r)], [false, false, false, false, true]);
-      expect([for (final r in [r0, r1, r2, r3]) touched('duration grows (empty tail)', r)], [false, false, false, false]);
+      expect(
+          [for (final r in splitRanges(shrunk.before)) rangeTouched(shrunk.before, shrunk.after, r)], [false, false, false, false, true]);
+      expect([
+        for (final r in [r0, r1, r2, r3]) touched('duration grows (empty tail)', r)
+      ], [
+        false,
+        false,
+        false,
+        false
+      ]);
       final grown = cases['duration grows (empty tail)']!;
       expect(rangeTouched(grown.before, grown.after, PlanRange(f(90), f(121))), isTrue);
     });
