@@ -264,6 +264,9 @@ class ExportConformanceTest {
         val frames = g24.let { FrameGrid.ceilDiv(plan.durUs * 24, 1_000_000L) }.toInt()
         assertEquals(60, frames)
         assertOnGrid(out, 24, frames, "grid30at24")
+        // The only route whose grid rate differs from the export rate: videoEndUs comes from
+        // frameCount rounding the 30-grid duration onto the 24 fps grid (owner decision 2026-10-15).
+        ExportedFile.assertAudioSpansVideo(out, 24, "grid30at24")
         fun ruleFrame(s: Long): Long {
             var i = Math.floorDiv((s + 500) * 24, 1_000_000L)
             while (Math.floorDiv(2 * (i + 1) * 1_000_000L + 24, 48L) <= s + 500) i++
