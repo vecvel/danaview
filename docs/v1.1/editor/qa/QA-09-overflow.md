@@ -85,27 +85,27 @@ Logs go to `packages/danaview_editor/build/overflow_full/`. `OVERFLOW_JOBS` sets
 
 ## Known defects
 
-A problem that matches an entry in `knownDefects` (`test/overflow/overflow_rig.dart`) prints as `KNOWN DEFECT <id>` and does not fail the run. `--strict` (or `OVERFLOW_STRICT=1`) makes these entries fail too, the same convention as `core_fuzz.sh`'s `CORE_FUZZ_STRICT`. Remove an entry when its fix lands.
+A problem that matches an entry in `knownDefects` (`test/overflow/overflow_rig.dart`) prints as `KNOWN DEFECT <id>` and does not fail the run. `--strict` (or `OVERFLOW_STRICT=1`) makes these entries fail too, the same convention as `core_fuzz.sh`'s `CORE_FUZZ_STRICT`. Remove an entry when its fix lands. Ids are shared with QA-08's register (`docs/v1.1/editor/qa/QA-08-a11y.md` §4, `test/a11y/a11y_support.dart`): one id names one defect in both suites. FIX-UX-22-1 there is the unlabeled preview-overlay node and FIX-UX-22-2 is this crash.
 
 | Id | Owner file | Problem | Found by |
 |---|---|---|---|
-| FIX-UX-22-1 | `lib/src/editor/preview/manipulation_overlay.dart` (UX-22) | Selecting an audio clip (music or voice: a `MediaClip` with no `visual`) throws `ArgumentError: property "transform.scale" does not apply to this item` while building `ManipulationOverlay`. `_transformOf` evaluates `PropertyKeys.scale`/`rotation` on every selected non-cue item, including audio clips. This also breaks the Volume and Fades panels of an audio clip whenever the preview is shown. It reproduces on every surface where the preview region is visible. | `editor_inspector_overflow_test.dart` ("selected it_ovmusic0001", "volume", "fades") |
+| FIX-UX-22-2 | `lib/src/editor/preview/manipulation_overlay.dart` (UX-22) | Selecting an audio clip (music or voice: a `MediaClip` with no `visual`) throws `ArgumentError: property "transform.scale" does not apply to this item` while building `ManipulationOverlay`. `_transformOf` evaluates `PropertyKeys.scale`/`rotation` on every selected non-cue item, including audio clips. This also breaks the Volume and Fades panels of an audio clip whenever the preview is shown. It reproduces on every surface where the preview region is visible. | `editor_inspector_overflow_test.dart` ("selected it_ovmusic0001", "volume", "fades") |
 
 ## Other findings (not known-defect entries: they fail the nightly until fixed)
 
-These came from the first full-matrix run of the per-ticket matrix tests (`overflow_full.sh`, 2026-10-15). They are reported to the owners.
+These came from the first full-matrix run of the per-ticket matrix tests (`overflow_full.sh`, 2026-10-15). They are filed as FIX tickets in `docs/v1.1/editor/handoff/BUILD_STATE.md` ("Open FIX tickets filed by QA").
 
-| Owner | Test | Finding |
+| FIX ticket | Test | Finding |
 |---|---|---|
-| UX-12 | `test/timeline/gestures/timeline_view_matrix_test.dart` at 412×915 @1.35 (with and without the keyboard) | After multi-select plus a selection ("1 selected"), a `RenderFlex` overflows by 75 px on the right with the test font. With the real Figtree font the same state fits on all 84 surfaces (QA-09 covers it in "editor idle and with each item kind selected"), so this is a test-font artifact. The row still has no flexible or ellipsizing child, so wider text (fallback scripts) would overflow. Fails only on the full matrix. |
-| UX-14 | `test/transport/transport_bar_test.dart` "priority row actions that no feature binds yet (marker, snapping, ripple) are not shown" | Fails on every run, not only on the full matrix. The test expects an action to be unbound, but a feature binding now provides it (`Expected: null, Actual: Closure`). The test is out of date. |
-| UX-18 | `test/preview/surface/preview_region_test.dart` "statuses offline media at the playhead: Media missing with Relink…" | Fails on every run. An icon the test expects to be absent is present. |
+| FIX-UX-12-3 (UX-12) | `test/timeline/gestures/timeline_view_matrix_test.dart` at 412×915 @1.35 (with and without the keyboard) | After multi-select plus a selection ("1 selected"), a `RenderFlex` overflows by 75 px on the right with the test font. With the real Figtree font the same state fits on all 84 surfaces (QA-09 covers it in "editor idle and with each item kind selected"), so this is a test-font artifact. The row still has no flexible or ellipsizing child, so wider text (fallback scripts) would overflow. Fails only on the full matrix. |
+| FIX-UX-14-3 (UX-14) | `test/transport/transport_bar_test.dart` "priority row actions that no feature binds yet (marker, snapping, ripple) are not shown" | Fails on every run, not only on the full matrix. The test expects an action to be unbound, but a feature binding now provides it (`Expected: null, Actual: Closure`). The test is out of date. |
+| FIX-UX-18-1 (UX-18) | `test/preview/surface/preview_region_test.dart` "statuses offline media at the playhead: Media missing with Relink…" | Fails on every run. An icon the test expects to be absent is present. |
 
 ## Results
 
 | Run | Command | Result |
 |---|---|---|
 | PR subset (6 surfaces) | `cd packages/danaview_editor && flutter test test/overflow` | 82 tests passed (2026-10-15) |
-| Full matrix, QA-09 suite (84 surfaces) | `scripts/ci/editor/nightly.d/overflow_full.sh --suite` | 1018 tests passed. 288 `KNOWN DEFECT FIX-UX-22-1` lines; this run fails with `--strict` until UX-22 is fixed (2026-10-15) |
+| Full matrix, QA-09 suite (84 surfaces) | `scripts/ci/editor/nightly.d/overflow_full.sh --suite` | 1018 tests passed. 288 `KNOWN DEFECT FIX-UX-22-2` lines; this run fails with `--strict` until UX-22 is fixed (2026-10-15) |
 | Full matrix, per-ticket matrix tests | `scripts/ci/editor/nightly.d/overflow_full.sh` (part 2) | Fails: the UX-12, UX-14 and UX-18 findings above (2026-10-15) |
 | Home header and player (repo root) | `scripts/ci/editor/nightly.d/overflow_full.sh --root` | 32 tests passed (2026-10-15) |

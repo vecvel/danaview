@@ -248,6 +248,9 @@ bool isTimelineContentLabel(String label) => _timelineContent.hasMatch(label);
 
 final RegExp _timelineContent = RegExp(
   r'^(Video clip|Image|Freeze frame|Audio clip|Text|Caption)(, .*)?, length .*, starts at .*'
+  // Render marker strip ranges (UX-44): painted at their time span in a 10 px strip; the "Render
+  // preview" action (tool tile, shortcut, range of the selection or loop) is their equivalent.
+  r'|^(Rendered|Needs rendering|Plays live), [\d:]+ to [\d:]+(, .*)?$'
   r'|^Marker( .*)? at \d'
   r'|^.* transition at \d'
   r'|^Add transition at \d'
@@ -359,6 +362,23 @@ EditProject a11yProject() {
   return p.copyWith(timeline: p.timeline.copyWith(tracks: tracks));
 }
 
+/// [a11yProject] with a chroma key on `it_v6` (2–8 s), so the preview plan has heavy ranges and
+/// the render marker strip (UX-44) shows amber "Needs rendering" ranges next to live ones.
+EditProject renderPreviewA11yProject() {
+  final p = a11yProject();
+  final tracks = [
+    for (final t in p.timeline.tracks)
+      t.copyWith(items: [
+        for (final i in t.items)
+          if (i is MediaClip && i.id == const ItemId('it_v6'))
+            i.copyWith(visual: (i.visual ?? const VisualProps()).copyWith(chroma: const ChromaKey(enabled: true)))
+          else
+            i,
+      ]),
+  ];
+  return p.copyWith(timeline: p.timeline.copyWith(tracks: tracks));
+}
+
 /// Every inspector route of ARCH §17.7 on an item of [a11yProject] that it applies to.
 const List<InspectorRoute> everyInspectorRoute = [
   MediaInspector(),
@@ -430,6 +450,7 @@ class A11yEditorRig {
     TextDirection textDirection = TextDirection.ltr,
     bool reduceMotion = false,
     EditProject? project,
+    List<Override> overrides = const [],
   }) async {
     final repo = FakeProjectRepository();
     final id = repo.seed(project ?? a11yProject());
@@ -439,6 +460,7 @@ class A11yEditorRig {
       repository: repo,
       overrides: [
         playheadProvider.overrideWith((ref, pid) => createPlayheadController(ref, pid, ticker: ticker, clock: () => Duration.zero)),
+        ...overrides,
       ],
     );
     final rig = A11yEditorRig._(tester, harness, id);

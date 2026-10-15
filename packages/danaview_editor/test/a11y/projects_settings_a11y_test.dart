@@ -2,12 +2,14 @@
 //
 // Accessibility of the screens around the editor (ARCH §17.1, §17.10): Projects (empty, a list
 // with every badge and the recovery banner, the project actions menu, the New project sheet) and
-// Editor settings, on the narrowest, a phone and a tablet surface. Tap targets ≥ 44×44 with labels,
-// text contrast ≥ 4.5:1, nothing overflows. (The licences screen, UX-42, was removed by the owner.)
+// Editor settings (scrolled through to its last row, including the Render preview section), on
+// the narrowest, a phone and a tablet surface. Tap targets ≥ 44×44 with labels, text contrast
+// ≥ 4.5:1, nothing overflows. (The licences screen, UX-42, was removed by the owner.)
 
 import 'package:flutter/widgets.dart' hide AspectRatio;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/danaview_editor.dart';
+import 'package:danaview_editor/src/editor/state/render_preview_controller.dart' show renderPreviewStoreProvider;
 import 'package:danaview_editor/src/projects/project_card.dart';
 import 'package:danaview_editor/src/projects/projects_controller.dart';
 import 'package:danaview_editor_core/model.dart';
@@ -15,6 +17,7 @@ import 'package:danaview_editor_core/store.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../projects/projects_test_support.dart';
+import '../render_preview/support.dart' show MemoryRenderStore;
 import '../support/support.dart';
 import 'a11y_support.dart';
 
@@ -107,13 +110,31 @@ void main() {
         semantics.dispose();
       });
 
-      testWidgets('Editor settings', (tester) async {
+      testWidgets('Editor settings, every row (scrolled through, with the Render preview section)', (tester) async {
         final semantics = tester.ensureSemantics();
-        final h = EditorTestHarness();
+        final store = MemoryRenderStore();
+        await tester.runAsync(store.open);
+        final h = EditorTestHarness(overrides: [renderPreviewStoreProvider.overrideWithValue(store)]);
         await h.pumpApp(tester, EditorSettingsScreen(onBack: () {}), surface: surface);
         await _settle(tester);
         expectNoOverflow(tester);
         await expectA11yGuidelines(tester, where: 'Editor settings');
+        // Nodes partly off screen are skipped by the guideline check, so scroll every row into
+        // view and check at each step (as screens_overflow_test's _scrollThrough does).
+        final scrollable = find.byType(Scrollable).first;
+        var seenRenderPreview = find.byKey(const ValueKey('render-preview-setting')).evaluate().isNotEmpty;
+        for (var step = 1; step <= 40; step++) {
+          final position = tester.state<ScrollableState>(scrollable).position;
+          if (position.pixels >= position.maxScrollExtent) break;
+          await tester.drag(scrollable, Offset(0, -surface.size.height / 3), warnIfMissed: false);
+          await _settle(tester);
+          expectNoOverflow(tester);
+          await expectA11yGuidelines(tester, where: 'Editor settings, scroll step $step');
+          seenRenderPreview |= find.byKey(const ValueKey('render-preview-setting')).evaluate().isNotEmpty;
+        }
+        final position = tester.state<ScrollableState>(scrollable).position;
+        expect(position.pixels, greaterThanOrEqualTo(position.maxScrollExtent - 0.5), reason: 'scrolled to the end');
+        expect(seenRenderPreview, isTrue, reason: 'the Render preview settings section (UX-44) was checked');
         semantics.dispose();
       });
     });

@@ -84,7 +84,7 @@ const bool overflowStrict = bool.fromEnvironment('DANAVIEW_OVERFLOW_STRICT');
 /// does not fail the run unless [overflowStrict]. Remove an entry when its fix lands.
 const List<({String id, String pattern, String what})> knownDefects = [
   (
-    id: 'FIX-UX-22-1',
+    id: 'FIX-UX-22-2',
     pattern: 'property "transform.scale" does not apply to this item: MediaClip',
     what: 'ManipulationOverlay evaluates transform.scale on a selected audio clip (no visual) and throws while building',
   ),

@@ -77,6 +77,26 @@ int frameIndexOf(int t, int fps) {
 /// the greatest PTS `i·10⁶/fps` ≤ s + 500 µs (ARCH §11.5).
 int displayedSourceFrame(double sUs, int fps) => ((sUs + 500) * fps / 1e6).floor();
 
+/// The frame with the greatest PTS ≤ [targetUs] in sorted [ptsUs] (clamped to the first frame).
+int frameAtOrBefore(List<double> ptsUs, double targetUs) {
+  var lo = 0, hi = ptsUs.length - 1;
+  if (targetUs < ptsUs.first) return 0;
+  while (lo < hi) {
+    final mid = (lo + hi + 1) >> 1;
+    if (ptsUs[mid] <= targetUs) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return lo;
+}
+
+/// Video presentation timestamps (µs) of a file, cached per path.
+final Map<String, List<double>> _ptsCache = {};
+List<double> videoPts(String path) =>
+    _ptsCache[path] ??= readTrackTimes(File(path).readAsBytesSync()).firstWhere((t) => t.handler == 'vide').ptsUs;
+
 /// Where the ENG-05 media lives on this device (QA03_MEDIA), null when unavailable.
 abstract final class Qa03Media {
   static const String _define = String.fromEnvironment('QA03_MEDIA');
@@ -567,11 +587,28 @@ abstract final class Qa03Plan {
 
 /// The source frame a timeline frame shows, from piecewise-linear maps (ARCH §11.5).
 final class SourceMap {
-  /// Creates the map: one entry per layer `(segments, sourceFps)`; layers must not overlap.
-  SourceMap(this.layers);
+  /// Creates the map: one entry per layer `(segments, sourceFps)`; layers must not overlap. With
+  /// [ptsUs] (the source's real presentation timestamps, [videoPts]) the displayed frame follows
+  /// the file exactly; otherwise frame i is assumed at `i·10⁶/fps`.
+  SourceMap(this.layers, {this.ptsUs});
 
   /// Layers as (segments, source fps).
   final List<(List<Seg>, int)> layers;
+
+  /// Real source PTS (all layers show the same file), or null for nominal timing.
+  final List<double>? ptsUs;
+
+  /// Timeline frames whose expectation from the real PTS differs from nominal `i·10⁶/fps`
+  /// timing (a fixture whose timescale cannot hold its rate), over frames `[0, frames)` at [fps].
+  List<int> nominalDeviations(int frames, int fps) {
+    final p = ptsUs;
+    if (p == null) return const [];
+    final nominal = SourceMap(layers);
+    return [
+      for (var k = 0; k < frames; k++)
+        if (barcodeAt(tof(k, fps)) != nominal.barcodeAt(tof(k, fps))) k,
+    ];
+  }
 
   /// Expected barcode at timeline time [t] (null in a gap).
   int? barcodeAt(int t) {
@@ -579,7 +616,8 @@ final class SourceMap {
       for (final s in segs) {
         if (t >= s[0] && t < s[1]) {
           final src = s[2] + (t - s[0]) * (s[3] - s[2]) / (s[1] - s[0]);
-          return displayedSourceFrame(src, fps);
+          final p = ptsUs;
+          return p == null ? displayedSourceFrame(src, fps) : frameAtOrBefore(p, src + 500);
         }
       }
     }
@@ -681,13 +719,17 @@ Future<List<FrameRead>> readBackExport(Qa03Env env, String path, int durUs, int 
 // Grid-cut case (D-35)
 // =================================================================================================
 
-/// The grid-cut timeline at [fps]: A, B, C on `frame_counter_720p<fps>` with cuts at
-/// k1 ≡ 1 and k2 ≡ 2 (mod 3), each with ≥ 1.5 s on both sides (3 s window), sources disjoint.
+/// The grid-cut timeline at [fps]: A, B, C on `frame_counter_720p<fps>` (1080p30 at 30 fps) with
+/// cuts at k1 ≡ 1 and k2 ≡ 2 (mod 3), each with ≥ 1.5 s on both sides (3 s window), sources
+/// disjoint, the timeline a whole number of seconds.
 final class GridCut {
-  GridCut(this.fps)
+  GridCut(this.fps, {this.ptsUs})
       : k1 = _firstAtLeast((1.5 * fps).round(), 1),
         k2 = _firstAtLeast((1.5 * fps).round(), 1) + 3 * fps + 1 {
-    end = k2 + (1.5 * fps).ceil();
+    // At least 1.5 s after k2, rounded up to a whole second so durUs is an exact µs value (an
+    // export whose durUs is not exact fails on iOS, see the 'export duration off the whole-µs grid'
+    // test; the grid-cut case must not depend on that defect).
+    end = ((k2 + (1.5 * fps).ceil() + fps - 1) ~/ fps) * fps;
   }
 
   static int _firstAtLeast(int k, int residue) {
@@ -699,6 +741,13 @@ final class GridCut {
 
   /// Rate (project and source).
   final int fps;
+
+  /// Real PTS of the source file (null: nominal timing).
+  final List<double>? ptsUs;
+
+  /// The ENG-05 fixture of this rate and its display size.
+  static (String, int, int) fixtureFor(int fps) =>
+      fps == 30 ? ('frame_counter_1080p30.mp4', 1920, 1080) : ('frame_counter_720p$fps.mp4', 1280, 720);
 
   /// Cut frames.
   final int k1, k2;
@@ -719,14 +768,14 @@ final class GridCut {
   List<Seg> get c => [_seg(k2, end, c0)];
 
   /// Expected barcodes.
-  SourceMap get expected => SourceMap([(a, fps), (b, fps), (c, fps)]);
+  SourceMap get expected => SourceMap([(a, fps), (b, fps), (c, fps)], ptsUs: ptsUs);
 
   /// The plan ([target] preview or export).
-  RenderPlan plan(String mediaPath, {String target = 'preview'}) => Qa03Plan.plan(
+  RenderPlan plan(String mediaPath, {String target = 'preview', int w = 1280, int h = 720}) => Qa03Plan.plan(
         target: target,
         fps: fps,
         durUs: tof(end, fps),
-        assets: {'fc': Qa03Plan.video(mediaPath, w: 1280, h: 720, durUs: 8000000)},
+        assets: {'fc': Qa03Plan.video(mediaPath, w: w, h: h, durUs: 8000000)},
         layers: [
           Qa03Plan.media('it_a#v', 'fc', a),
           Qa03Plan.media('it_b#v', 'fc', b),
@@ -934,12 +983,15 @@ void main() {
     testWidgets('grid-cut case at $fps fps: exact-seek preview, playback capture and export', (tester) async {
       final env = await Qa03Env.open(base);
       if (env == null) return;
-      final g = GridCut(fps);
-      final path = Qa03Media.path('frame_counter_720p$fps.mp4');
+      final (name, sw, sh) = GridCut.fixtureFor(fps);
+      final path = Qa03Media.path(name);
+      final g = GridCut(fps, ptsUs: videoPts(path));
       final want = g.expected;
+      final deviations = want.nominalDeviations(g.end, fps);
+      qa03('gridcut', {'fps': fps, 'source': name, 'nominalPtsDeviations': '${deviations.length}/${g.end}'});
 
       // ---- exact-seek preview, every frame ----
-      final s = await env.preview(g.plan(path));
+      final s = await env.preview(g.plan(path, w: sw, h: sh));
       final seekMiss = Misses();
       try {
         for (var k = 0; k < g.end; k++) {
@@ -955,17 +1007,26 @@ void main() {
         final covered = <int>{};
         final playMiss = Misses();
         var captures = 0;
+        var blackAtEnd = 0;
         for (var pass = 0; pass < 4 && covered.length < g.end * 0.9; pass++) {
           await s.seek(0).timeout(const Duration(seconds: 10));
           await s.play().timeout(const Duration(seconds: 10));
           final sw = Stopwatch()..start();
-          final limit = tof(g.end, fps) ~/ 1000 + 1500;
-          while (sw.elapsedMilliseconds < limit) {
+          final durMs = tof(g.end, fps) ~/ 1000;
+          while (sw.elapsedMilliseconds < durMs + 1500) {
             final f = await capture(s);
             captures++;
             final r = readFrame(f);
+            if (!r.barcode.isReadable && r.barcode.status == FrameBarcodeStatus.noSignal && sw.elapsedMilliseconds >= durMs - 50) {
+              // Playback reached the end of the timeline (the player shows black past durUs).
+              blackAtEnd++;
+              break;
+            }
             if (!r.barcode.isReadable) {
-              playMiss.add('unreadable ${r.barcode.status.name}');
+              playMiss.add('unreadable ${r.barcode.status.name} at ${sw.elapsedMilliseconds} ms');
+              if (playMiss.n <= 3) {
+                File('${Qa03Dirs.out(env.work)}/playback_unreadable_${fps}_${playMiss.n}.png').writeAsBytesSync(encodePng(f.px, f.w, f.h));
+              }
               continue;
             }
             final near = inverse[r.barcode.index];
@@ -997,6 +1058,7 @@ void main() {
           'captures': captures,
           'covered': '${covered.length}/${g.end}',
           'cutFramesSeen': '$cutsSeen/4',
+          'passesEndingBlack': blackAtEnd,
           'misses': playMiss,
         });
         expect(seekMiss.n, 0, reason: 'exact seek: $seekMiss');
@@ -1007,7 +1069,7 @@ void main() {
       }
 
       // ---- export: every frame read back, and native freeze stills at the cuts ----
-      final r = await env.export('gridcut_$fps', g.plan(path, target: 'export'), videoBitrate: 6000000);
+      final r = await env.export('gridcut_$fps', g.plan(path, target: 'export', w: sw, h: sh), videoBitrate: 6000000);
       expect(r.duration, tof(g.end, fps));
       final reads = await readBackExport(env, r.path, r.duration, fps, g.end);
       final expMiss = Misses();
@@ -1027,6 +1089,28 @@ void main() {
       expect(stillMiss.n, 0, reason: 'export stills: $stillMiss');
     }, skip: skip != null);
   }
+
+  testWidgets('export duration off the whole-µs grid (D-35): 24/30/48/60 fps, durUs = timeOfFrame(K)', (tester) async {
+    // Every project whose frame count K is not a multiple of fps/gcd has a durUs = ceil(K·10⁶/fps)
+    // that is not an exact µs time (two thirds of all lengths at 30 fps). Such exports must work.
+    final env = await Qa03Env.open(base);
+    if (env == null) return;
+    final failures = <String>[];
+    for (final (fps, k) in [(24, 73), (30, 91), (48, 49), (60, 179), (25, 51)]) {
+      final d = tof(k, fps);
+      try {
+        final r = await env.export('offgrid_${fps}_$k', Qa03Plan.plan(target: 'export', fps: fps, durUs: d, layers: [
+          Qa03Plan.solid('it_s#v', 10, '#FF0000FF', 0, d, 100, 100, 320, 180),
+        ]));
+        qa03('offgrid', {'fps': fps, 'frames': k, 'durUs': d, 'result': 'ok ${r.duration}'});
+        Qa03Env.discard(r.path);
+      } on EngineFailure catch (f) {
+        qa03('offgrid', {'fps': fps, 'frames': k, 'durUs': d, 'result': '${f.code.name}: ${f.message}'});
+        failures.add('$fps fps × $k: ${f.code.name} ${f.message}');
+      }
+    }
+    expect(failures, isEmpty, reason: 'exports of off-grid durations fail: $failures');
+  });
 
   testWidgets('reverse rendition: barcode strictly decreasing, frame by frame', (tester) async {
     final env = await Qa03Env.open(base);
@@ -1082,12 +1166,16 @@ void main() {
     var n = 0;
     for (final (name, fps, frames) in cases) {
       final path = Qa03Media.path(name);
+      final pts = videoPts(path);
       for (final k in frames) {
         for (final off in [0, (tof(k + 1, fps) - tof(k, fps)) ~/ 2]) {
           final f = await env.freeze(path, tof(k, fps) + off, tag: name.hashCode.toUnsigned(16).toString());
           n++;
           final b = FrameBarcode.read(f.px, width: f.w, height: f.h);
-          if (b.index != k) miss.add('$name k=$k +$off µs: ${b.index ?? b.status.name}');
+          // Zero tolerance: the frame with the greatest real PTS ≤ the requested time.
+          final want = frameAtOrBefore(pts, (tof(k, fps) + off).toDouble());
+          if (want != k) qa03('freeze', {'source': name, 'k': k, 'offUs': off, 'note': 'fixture PTS of frame $k is ${pts[k].toStringAsFixed(0)} µs, after ${tof(k, fps)}'});
+          if (b.index != want) miss.add('$name k=$k +$off µs: ${b.index ?? b.status.name} (want $want)');
         }
       }
     }
