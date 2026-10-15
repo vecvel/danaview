@@ -16,7 +16,7 @@
 #      DANAVIEW_E2E_AUDIO=1; an API 29 AVD also gets -feature GLESDynamicVersion) and waits for
 #      sys.boot_completed;
 #   2. integration_test/editor/tool/e2e_host.sh stage (fixtures), and stage-models when
-#      DANAVIEW_E2E_MODELS_DIR is set;
+#      DANAVIEW_E2E_MODELS is set;
 #   3. runs the suite in batches, one flutter invocation sequence per batch, so one crash or hang
 #      cannot sink the rest: each scenario file is a batch (`e2e_host.sh run sNN`, which runs the
 #      phases of s09 in order), and the Android extra's phase pairs are separate batches
@@ -29,7 +29,7 @@
 #
 # Batches by device: API >= 29 runs s01..s18 and the x_android_export_background phase pairs;
 # API < 29 (below the editor gate) runs only x_android_api28. s08 needs the speech models
-# (DANAVIEW_E2E_MODELS_DIR); without them it is reported PENDING and does not fail the run.
+# (DANAVIEW_E2E_MODELS); without them it is reported PENDING and does not fail the run.
 #
 # Evidence: build/e2e/android/<serial>/ (e2e_host.sh's logs/, screens/, files/), plus per batch
 # logs/batch-<batch>.log (the host driver's output) and logs/batch-<batch>.logcat.txt, and
@@ -42,7 +42,8 @@
 #   DANAVIEW_E2E_DRY_RUN=1  print the device plan, batches and commands; no device, no build
 #   DANAVIEW_E2E_AUDIO=1    boot the emulator with audio and turn the host microphone on
 #                           (`adb emu avd hostmicon`), for s13's recording
-#   DANAVIEW_E2E_MODELS_DIR=<dir>  ggml-tiny-q5_1.bin + ggml-silero-v6.2.0.bin for s08
+#   DANAVIEW_E2E_MODELS=<dir>  ggml-tiny-q5_1.bin + ggml-silero-v6.2.0.bin for s08 (staged with
+#                           `e2e_host.sh stage-models`; DANAVIEW_E2E_MODELS_DIR is an alias)
 #   DANAVIEW_E2E_BATCH_TIMEOUT=<s>  per batch (default 2400)
 #   DANAVIEW_E2E_PHASE_TIMEOUT=<s>  per flutter run (default 1200; e2e_host.sh's DV_E2E_PHASE_TIMEOUT)
 #   DANAVIEW_E2E_KEEP_APP=0  let `flutter test` uninstall the app after each run (default 1: the
@@ -58,7 +59,7 @@ HOST="$ROOT/$SUITE/tool/e2e_host.sh"
 TARGET="${1:-Pixel_9_Pro_XL_API_35}"
 DRY_RUN="${DANAVIEW_E2E_DRY_RUN:-}"
 AUDIO="${DANAVIEW_E2E_AUDIO:-}"
-MODELS_DIR="${DANAVIEW_E2E_MODELS_DIR:-}"
+MODELS_DIR="${DANAVIEW_E2E_MODELS:-${DANAVIEW_E2E_MODELS_DIR:-}}"
 BATCH_TIMEOUT="${DANAVIEW_E2E_BATCH_TIMEOUT:-2400}"
 PHASE_TIMEOUT="${DANAVIEW_E2E_PHASE_TIMEOUT:-1200}"
 KEEP_APP="${DANAVIEW_E2E_KEEP_APP:-1}"
@@ -246,7 +247,14 @@ extra_phase() {
     --dart-define=DV_E2E_PHASE="$phase") > "$logf" 2>&1 &
   fpid=$!
   start=$SECONDS
+  fgs_seen=""
   while kill -0 "$fpid" 2>/dev/null; do
+    # Records the export service's foreground type once it runs (mediaProcessing on API 35,
+    # dataSync on API 34, none on API 29).
+    if [ -z "$fgs_seen" ] && [ $(((SECONDS - start) % 5)) -eq 0 ]; then
+      fgs_seen="$(fgs_probe)"
+      if [ -n "$fgs_seen" ]; then echo "[e2e_android] DV_E2E_FGS phase=$phase API=$API $fgs_seen" | tee -a "$logf"; fi
+    fi
     # `serve` returns (status 3) a minute after an action that ended the app.
     if [ -z "$died" ] && ! kill -0 "$spid" 2>/dev/null; then
       wait "$spid" || sstatus=$?
@@ -281,6 +289,13 @@ extra_phase() {
   fi
   echo "[e2e_android] FAIL phase $phase (status $fstatus)"
   return 1
+}
+
+# The export service's foreground state, from dumpsys (empty while it is not in the foreground).
+fgs_probe() {
+  "$ADB" -s "$SERIAL" shell dumpsys activity services com.vecvel.danaview 2>/dev/null | tr -d '\r' |
+    grep -E 'isForeground=true|foregroundServiceType=|ServiceRecord' | tr -s ' ' | tr '\n' ' ' |
+    grep 'isForeground=true' || true
 }
 
 run_batch() { # <batch>
@@ -350,10 +365,10 @@ OUT="$ROOT/build/e2e/android/$SERIAL"
 if [ "$DRY_RUN" = 1 ]; then
   group "batches (dry run)"
   echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage"
-  [ -z "$MODELS_DIR" ] || echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage-models <DANAVIEW_E2E_MODELS_DIR>"
+  [ -z "$MODELS_DIR" ] || echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage-models <DANAVIEW_E2E_MODELS>"
   [ "$KEEP_APP" != 1 ] || echo "  (flutter test runs with --no-uninstall: DANAVIEW_E2E_KEEP_APP=1)"
   for b in ${BATCHES[@]+"${BATCHES[@]}"}; do echo "batch $b (timeout ${BATCH_TIMEOUT}s)"; print_cmd "$b"; done
-  for b in ${PENDING[@]+"${PENDING[@]}"}; do echo "batch $b PENDING: speech models not staged (DANAVIEW_E2E_MODELS_DIR)"; done
+  for b in ${PENDING[@]+"${PENDING[@]}"}; do echo "batch $b PENDING: speech models not staged (DANAVIEW_E2E_MODELS)"; done
   endgroup
   echo "e2e-android: dry run done"
   exit 0
@@ -395,9 +410,9 @@ for b in ${BATCHES[@]+"${BATCHES[@]}"}; do
   kill_stray_flutter >> "$blog" 2>&1
   "$ADB" -s "$SERIAL" logcat -d > "$OUT/logs/batch-$label.logcat.txt" 2>/dev/null || true
   elapsed=$((SECONDS - started))
-  # Measured values of this batch (DV_E2E_REPORT lines of its flutter logs).
+  # Measured values of this batch (DV_E2E_REPORT / DV_E2E_EXPORT lines of its flutter logs).
   for f in "$OUT/logs/${b%%:*}"_*.log; do
-    [ -f "$f" ] && [ "$(find "$f" -newer "$OUT/logs/batch-$label.log.start" 2>/dev/null)" ] && grep -h 'DV_E2E_REPORT' "$f" | sed 's/^/  /' || true
+    [ -f "$f" ] && [ "$(find "$f" -newer "$OUT/logs/batch-$label.log.start" 2>/dev/null)" ] && grep -h 'DV_E2E_REPORT\|DV_E2E_EXPORT' "$f" | sed 's/^/  /' || true
   done
   rm -f "$OUT/logs/batch-$label.log.start"
   tail -n 5 "$blog"
@@ -409,7 +424,7 @@ for b in ${BATCHES[@]+"${BATCHES[@]}"}; do
   endgroup
 done
 for b in ${PENDING[@]+"${PENDING[@]}"}; do
-  SUMMARY+=("$(printf '%-36s %-8s %6s   %s' "$b" PENDING - "speech models not staged (DANAVIEW_E2E_MODELS_DIR)")")
+  SUMMARY+=("$(printf '%-36s %-8s %6s   %s' "$b" PENDING - "speech models not staged (DANAVIEW_E2E_MODELS)")")
 done
 
 bash "$HOST" -p android -d "$SERIAL" collect >/dev/null 2>&1 || true
@@ -417,7 +432,7 @@ bash "$HOST" -p android -d "$SERIAL" collect >/dev/null 2>&1 || true
 group "summary ($SERIAL, API $API)"
 {
   printf '%-36s %-8s %7s  %s\n' batch result time log
-  for line in "${SUMMARY[@]}"; do echo "$line"; done
+  for line in ${SUMMARY[@]+"${SUMMARY[@]}"}; do echo "$line"; done
   echo "${#BATCHES[@]} batches run, $FAILED failed or timed out, ${#PENDING[@]} pending"
 } | tee "$OUT/summary.txt"
 echo "evidence: ${OUT#"$ROOT"/}/ (logs/, screens/, files/, summary.txt)"
