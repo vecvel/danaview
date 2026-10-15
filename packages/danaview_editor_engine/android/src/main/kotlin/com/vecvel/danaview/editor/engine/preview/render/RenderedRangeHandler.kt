@@ -11,7 +11,7 @@
 //   rendered-range hook (installed once) and is rebuilt on the session's current plan, so the next
 //   playback (or the one running) plays the ranges. Other backends (the stills fallback below
 //   API 29 or without the native shim) keep live preview: the call succeeds and does nothing.
-// - While a session has ranges, a poll on danaview-preview ([POLL_MS]) runs the swap's
+// - While a session has ranges, RenderedRangeBinding polls on danaview-preview and runs the swap's
 //   invalidation (RangeTouch rule); when a patch, a transient or a new plan touched a range, the
 //   range is dropped until the next call and the backend is rebuilt at once, so playback falls
 //   back to the live decks within a frame or two (measured by RenderedRangeSwapTest). The rebuild
@@ -22,6 +22,7 @@
 
 package com.vecvel.danaview.editor.engine.preview.render
 
+import androidx.annotation.VisibleForTesting
 import com.vecvel.danaview.editor.engine.core.Completion
 import com.vecvel.danaview.editor.engine.core.EngineContext
 import com.vecvel.danaview.editor.engine.core.EngineErrorCode
@@ -40,9 +41,14 @@ import java.util.WeakHashMap
 class RenderedRangeHandler(private val ctx: EngineContext) {
     private val bindings = WeakHashMap<PreviewSession, RenderedRangeBinding>()
 
+    /** Finds open sessions (the process's PreviewSessionManager; tests use their own manager). */
+    @VisibleForTesting
+    @Volatile
+    var sessions: (String) -> PreviewSession? = { ctx.previews.get(it) }
+
     /** Replaces the rendered ranges of session [sessionId]. */
     fun setRenderedRanges(sessionId: String, ranges: List<RenderedRangeMsg>, done: Completion<Unit>) {
-        val session = ctx.previews.get(sessionId)
+        val session = sessions(sessionId)
             ?: return done.fail(EngineException(EngineErrorCode.internal, "unknown preview session"))
         val backend = session.backend as? ContingencyPreviewBackend
         if (backend == null || backend.usesStillsFallback) {
@@ -59,7 +65,7 @@ class RenderedRangeHandler(private val ctx: EngineContext) {
                         snapshot = session.snapshot,
                         handler = handler,
                         ready = { session.isOpen && !session.isSuspended },
-                        alive = { ctx.previews.get(session.sessionId) === session },
+                        alive = { sessions(session.sessionId) === session },
                     )
                 }
             }

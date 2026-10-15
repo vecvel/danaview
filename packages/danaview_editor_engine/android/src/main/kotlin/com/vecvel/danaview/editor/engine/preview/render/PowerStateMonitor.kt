@@ -20,9 +20,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
-import android.os.Build
 import android.os.PowerManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.vecvel.danaview.editor.engine.core.Completion
 import com.vecvel.danaview.editor.engine.core.EngineContext
 import com.vecvel.danaview.editor.engine.core.EngineErrors
@@ -117,13 +117,8 @@ class PowerStateMonitor(private val ctx: EngineContext) {
     }
 
     private fun register(r: BroadcastReceiver, filter: IntentFilter) {
-        val app = ctx.appContext
-        // System broadcasts only; RECEIVER_EXPORTED is required to receive them on API 33+.
-        if (Build.VERSION.SDK_INT >= 33) {
-            app.registerReceiver(r, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            app.registerReceiver(r, filter)
-        }
+        // System broadcasts only; they need an exported receiver on API 33+.
+        ContextCompat.registerReceiver(ctx.appContext, r, filter, ContextCompat.RECEIVER_EXPORTED)
     }
 }
 
