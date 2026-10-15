@@ -98,6 +98,12 @@ internal class FallbackGl(appContext: Context, assets: EffectAssets) {
         return block()
     }
 
+    /** Makes the context current (on the window when attached) for the GL calls that follow on this thread. */
+    fun bind() {
+        check(!released) { "GL released" }
+        makeCurrent(if (hasWindow) window else pbuffer)
+    }
+
     /** Draws on [surface] from now on. */
     fun attachWindow(surface: Surface, w: Int, h: Int) {
         detachWindow()
