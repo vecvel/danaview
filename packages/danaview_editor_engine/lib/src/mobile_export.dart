@@ -1,6 +1,7 @@
 // OWNER: ENG-04
 //
-// Export over `ExportHostApi` (ARCH §12.4, §14, D-22, D-39).
+// Export over `ExportHostApi` (ARCH §12.4, §14, D-22, D-39). INT-07: `start` forwards the optional
+// per-job notification texts (null keeps the engine-wide texts from `initialize`).
 //
 // Rules:
 // - Plans cross the channel as UTF-8 JSON bytes (`PlanTransport.encodePlan`, API-02; large plans

@@ -98,7 +98,7 @@ class Int07GlueTest {
     @Test
     fun materializePickRefusesDirectoriesOutsideWork() {
         call<String> { platform.materializePick("content://m/1", "${TestRoots.CACHE}/media", it) }.assertError("permissionDenied")
-        call<String> { platform.materializePick("content://m/1", "$work/../media", it) }.assertError("permissionDenied")
+        call<String> { platform.materializePick("content://m/1", "$work/../media", it) }.assertError("internal") // `..` is refused outright
         call<String> { platform.materializePick("content://m/1", "work/picks", it) }.assertError("internal")
         call<String> { platform.materializePick("", "$work/picks", it) }.assertError("internal")
         assertTrue(calls.log.none { it.name == "materializePick" })
