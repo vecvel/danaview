@@ -55,8 +55,9 @@ class RenderedRangePlaybackTest {
     fun aRenderedRangeMatchesTheLiveCompositionAtPreviewSize() {
         val fps = 30
         val plan = FallbackPlans.gridCut(fps)
-        val first = 30L
-        val end = 90L
+        // CORE-37 cuts ranges at layer edges: [31, 92) runs from B's start to C's start.
+        val first = 31L
+        val end = 92L
         val n = (end - first).toInt()
         RangeHarness("and18_match", plan, q3).use { h ->
             val pts = FallbackPlans.pts(h.engine.ctx, fps)
@@ -81,7 +82,7 @@ class RenderedRangePlaybackTest {
             }
             assertEquals("render file barcodes", emptyList<String>(), fileWrong)
             // Playback from the cache vs the live paused-exact frames at the same output frames.
-            val samples = listOf(0L, 1L, 9L, 20L, 33L, 47L, 58L, 59L).map { first + it }
+            val samples = listOf(0L, 1L, 9L, 20L, 33L, 47L, 59L, 60L).map { first + it }
             h.bind(listOf(h.rig.msg(first, end, h.grid, file)))
             h.sink.keep.addAll(samples)
             assertTrue("warm-up", h.seekExact(0, 30_000) >= 0)
@@ -110,14 +111,17 @@ class RenderedRangePlaybackTest {
         }
     }
 
-    /** Two ranges of the grid-cut plan at [fps] whose edges sit next to its cuts. */
+    /** The layer edges of [plan] inside it (CORE-37 splits ranges there), sorted. */
+    private fun edges(plan: RenderPlan): List<Long> {
+        val g = FrameGrid.of(plan.canvas.fps)
+        val d = g.frameIndexOf(plan.durUs)
+        return plan.layers.flatMap { listOf(g.frameIndexOf(it.t0), g.frameIndexOf(it.t1)) }.filter { it in 1 until d }.toSortedSet().toList()
+    }
+
+    /** Two ranges of the grid-cut plan between its layer edges (each edge at k ≡ 1 or 2 mod 3). */
     private fun ranges(plan: RenderPlan): List<Pair<Long, Long>> {
-        val d = FrameGrid.of(plan.canvas.fps).frameIndexOf(plan.durUs)
-        val a0 = FallbackPlans.cutAt(d, 0.20, 0)
-        val a1 = FallbackPlans.cutAt(d, 0.45, 1)
-        val b0 = FallbackPlans.cutAt(d, 0.60, 2)
-        val b1 = FallbackPlans.cutAt(d, 0.85, 0)
-        return listOf(a0 to a1, b0 to b1)
+        val e = edges(plan)
+        return listOf(e[0] to e[2], e[3] to e[5])
     }
 
     @Test
@@ -162,8 +166,9 @@ class RenderedRangePlaybackTest {
     fun aParamPatchInsideARangeFallsBackToLiveOnTheNextFrame() {
         val fps = 30
         val plan = FallbackPlans.gridCut(fps)
-        val first = 15L
-        val end = 105L
+        // From D's start to the end of the plan (layer edges, as CORE-37 cuts them).
+        val first = edges(plan)[1]
+        val end = FrameGrid.of(fps).frameIndexOf(plan.durUs)
         RangeHarness("and18_patch", plan, q3).use { h ->
             val pts = FallbackPlans.pts(h.engine.ctx, fps)
             val file = h.rig.render(RangeCut.cut(plan, first, end), "patch").first
