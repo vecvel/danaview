@@ -84,8 +84,8 @@ final class PhotosSaver: PhotosSaving {
         let status = library.addOnlyStatus()
         switch status {
         case .notDetermined:
-            library.requestAddOnly { [weak self] answered in
-                guard let self = self else { return reply(.failure(EngineError.cancelled)) }
+            // The saver stays alive until the prompt answers (one reply per call).
+            library.requestAddOnly { answered in
                 guard PhotosSaver.allows(answered) else { return reply(.failure(PhotosSaver.denied)) }
                 self.add(fileURL, reply: reply)
             }

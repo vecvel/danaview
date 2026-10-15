@@ -95,7 +95,7 @@ final class ActiveExportStore: ExportJobLifecycle {
         let entry = Entry(
             jobId: jobId, state: .running, settings: try? EncoderSettings(msg: settings),
             whenDetached: ActiveExportStore.name(whenDetached), result: nil, createdAt: now(), expiresAt: nil)
-        mutate { entries in
+        withEntries { entries in
             entries.removeAll { $0.jobId == jobId }
             entries.append(entry)
         }
@@ -113,7 +113,7 @@ final class ActiveExportStore: ExportJobLifecycle {
     func exportCompleted(jobId: String, result: ExportResultMsg, listenerAttached: Bool, whenDetached: DetachedHandoffMsg) -> Bool {
         background.end(jobId: jobId, success: true)
         guard !listenerAttached, let paths = paths() else {
-            mutate { $0.removeAll { $0.jobId == jobId } }
+            withEntries { $0.removeAll { $0.jobId == jobId } }
             return false
         }
         let output = URL(fileURLWithPath: result.path)
@@ -122,7 +122,7 @@ final class ActiveExportStore: ExportJobLifecycle {
         let stored = ExportJob.StoredResult(
             path: result.path, bytes: result.bytes, durationUs: result.durationUs, videoEncoderName: result.videoEncoderName,
             hardwareEncoder: result.hardwareEncoder)
-        mutate { entries in
+        withEntries { entries in
             var entry = entries.first { $0.jobId == jobId }
                 ?? Entry(jobId: jobId, state: .running, settings: nil, whenDetached: ActiveExportStore.name(whenDetached),
                          result: nil, createdAt: self.now(), expiresAt: nil)
@@ -137,7 +137,7 @@ final class ActiveExportStore: ExportJobLifecycle {
         if whenDetached == .saveToGallery {
             gallery.saveDetached(fileURL: output) { [weak self] saved, identifier in
                 guard saved, let self = self else { return }
-                self.mutate { entries in
+                self.withEntries { entries in
                     guard let i = entries.firstIndex(where: { $0.jobId == jobId && $0.state == .completedDetached }) else { return }
                     entries[i].savedToGallery = true
                     entries[i].savedUri = identifier
@@ -150,14 +150,14 @@ final class ActiveExportStore: ExportJobLifecycle {
 
     func exportEnded(jobId: String) {
         background.end(jobId: jobId, success: false)
-        mutate { $0.removeAll { $0.jobId == jobId } }
+        withEntries { $0.removeAll { $0.jobId == jobId } }
     }
 
     func records() -> [ExportJobRecordMsg] {
         guard let paths = paths() else { return [] }
         let current = now()
         var expired: [Entry] = []
-        let entries = mutate { entries -> [Entry] in
+        let entries = withEntries { entries -> [Entry] in
             expired = entries.filter { $0.state == .completedDetached && ($0.expiresAt ?? .distantFuture) <= current }
             entries.removeAll { e in expired.contains { $0.jobId == e.jobId } }
             return entries
@@ -185,7 +185,7 @@ final class ActiveExportStore: ExportJobLifecycle {
 
     func consume(jobId: String) {
         var removed: Entry?
-        mutate { entries in
+        withEntries { entries in
             removed = entries.first { $0.jobId == jobId }
             entries.removeAll { $0.jobId == jobId }
         }
@@ -198,10 +198,10 @@ final class ActiveExportStore: ExportJobLifecycle {
     // MARK: Persistence
 
     /// The persisted entries (tests).
-    var entries: [Entry] { mutate { $0 } }
+    var entries: [Entry] { withEntries { $0 } }
 
     @discardableResult
-    private func mutate<T>(_ body: (inout [Entry]) -> T) -> T {
+    private func withEntries<T>(_ body: (inout [Entry]) -> T) -> T {
         lock.lock()
         defer { lock.unlock() }
         guard let paths = paths() else {
