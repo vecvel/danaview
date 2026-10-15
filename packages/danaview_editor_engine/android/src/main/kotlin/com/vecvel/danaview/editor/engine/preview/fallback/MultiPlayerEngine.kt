@@ -190,6 +190,8 @@ internal class MultiPlayerEngine(
     private var scrubbing = false
     private var pendingScrub: Long? = null
     private var resumeAfterSeek = false
+    private var seekTarget: Long? = null
+    private var prerollTarget: Long? = null
     private var ticks = 0
 
     // ---- DeckEnv ----
@@ -345,6 +347,15 @@ internal class MultiPlayerEngine(
         planProxies = proxies
         planDirty = false
         frameTables = tables
+        // A re-plan while a seek or pre-roll waits: put the changed decks on that frame now
+        // (playback repositions them on its next vsync).
+        if (changed.isNotEmpty() || rItems.isNotEmpty()) {
+            when (mode) {
+                Mode.SEEKING -> seekTarget?.let { positionFor(it, SeekParameters.EXACT) }
+                Mode.PREROLL -> prerollTarget?.let { k -> grid.timeOfFrame(k).let { t -> schedule(t, t, prerolling = true) } }
+                else -> Unit
+            }
+        }
     }
 
     /** Runs [then] once the deck plan matches the session's snapshot (an unchanged structure only swaps the plan object). */
@@ -388,6 +399,7 @@ internal class MultiPlayerEngine(
         stopAll()
         loop = loopRange
         mode = Mode.PREROLL
+        prerollTarget = null
         ensurePlan { e ->
             if (my != token) return@ensurePlan
             if (e != null) return@ensurePlan fail(e)
@@ -418,6 +430,7 @@ internal class MultiPlayerEngine(
         val my = ++token
         stopAll()
         mode = Mode.SEEKING
+        seekTarget = null
         scrubbing = !exact
         resumeAfterSeek = resume
         pendingScrub = null
@@ -495,6 +508,7 @@ internal class MultiPlayerEngine(
     }
 
     private fun startExact(k: Long, my: Int) {
+        seekTarget = k
         positionFor(k, SeekParameters.EXACT)
         val started = SystemClock.uptimeMillis()
         var lastWatch = started
@@ -563,6 +577,7 @@ internal class MultiPlayerEngine(
         resizeDecks()
         val k0 = from.coerceIn(0, count - 1)
         playFrom = k0
+        prerollTarget = k0
         val t0 = grid.timeOfFrame(k0)
         currentRange = null
         // Pre-roll: the decks that show k0 at their exact rule frames, audio at t0, stills of k0.

@@ -26,9 +26,11 @@
 
 package com.vecvel.danaview.editor.engine.preview.fallback
 
+import android.annotation.SuppressLint
 import android.os.Build
 import android.util.Log
 import android.view.Surface
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.OptIn
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
@@ -55,7 +57,14 @@ import java.util.concurrent.atomic.AtomicInteger
 /** The MultiPlayerBackend of AND-01 §7 (file header). */
 typealias MultiPlayerBackend = ContingencyPreviewBackend
 
-/** AND-16's preview backend (file header). Keep the public no-argument constructor. */
+/**
+ * AND-16's preview backend (file header). Keep the public no-argument constructor.
+ *
+ * The class is constructed on every API level (PreviewSessionManager.defaultBackend), but the
+ * API 29 engine is only created in [open] behind the editor gate (SDK_INT >= 29 and the native shim
+ * loaded); below it every call goes to the stills delegate, and each engine call is guarded by
+ * [engineApi].
+ */
 class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
     /** The production backend. */
     constructor() : this(Config())
@@ -112,7 +121,7 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
         val gl = host.ctx.threads.gl
         val pool = Executors.newFixedThreadPool(WORKERS, Workers)
         worker = pool
-        val assets = config.effectAssets ?: host.ctx.previews.effectAssets ?: EffectAssets.of(host.ctx.appContext.contentResolver)
+        val assets = config.effectAssets ?: managerAssets(host) ?: EffectAssets.of(host.ctx.appContext.contentResolver)
         try {
             gl.execute {
                 try {
@@ -132,12 +141,24 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
         }
     }
 
+    /**
+     * The LUT/sprite opener the session manager was configured with (tests set it; production
+     * leaves it null and the app's ContentResolver opens the files), so playback draws LUTs and
+     * sprites exactly like AND-17's paused renderer of the same session.
+     */
+    @SuppressLint("VisibleForTests")
+    private fun managerAssets(host: PreviewBackendHost): EffectAssets? = host.ctx.previews.effectAssets
+
     private fun fallBack(host: PreviewBackendHost, done: Completion<Unit>, why: String) {
         Log.w(EngineContext.TAG, "contingency preview unavailable ($why); playing paused-exact stills")
         val d = StillFramesBackend()
         delegate = d
         d.open(host, done)
     }
+
+    /** Whether the API 29 engine may run here (the editor gate; lint's NewApi check reads it). */
+    @ChecksSdkIntAtLeast(api = HwbImport.MIN_API)
+    private fun engineApi(): Boolean = Build.VERSION.SDK_INT >= HwbImport.MIN_API
 
     /** Runs [block] on danaview-gl with the engine; failures complete [done]. */
     private fun <T> onEngine(done: Completion<T>, block: (MultiPlayerEngine) -> T) {
@@ -163,6 +184,7 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
 
     override fun rebuild(plan: RenderPlan, done: Completion<Unit>) {
         delegate?.let { return it.rebuild(plan, done) }
+        if (!engineApi()) return done(Result.failure(EngineErrors.notSupported("contingency preview")))
         onEngine<Unit>({ r -> r.exceptionOrNull()?.let { done(Result.failure(it)) } }) { e ->
             e.rebuild(plan) { err -> done(if (err == null) Result.success(Unit) else Result.failure(EngineErrors.from(err))) }
         }
@@ -170,51 +192,61 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
 
     override fun attachSurface(surface: Surface, width: Int, height: Int, done: Completion<Unit>) {
         delegate?.let { return it.attachSurface(surface, width, height, done) }
+        if (!engineApi()) return done(Result.failure(EngineErrors.notSupported("contingency preview")))
         onEngine(done) { it.attachSurface(surface, width, height) }
     }
 
     override fun detachSurface(done: Completion<Unit>) {
         delegate?.let { return it.detachSurface(done) }
+        if (!engineApi()) return done(Result.failure(EngineErrors.notSupported("contingency preview")))
         onEngine(done) { it.detachSurface() }
     }
 
     override fun play(fromFrame: Long, loop: FrameRange?, done: Completion<Unit>) {
         delegate?.let { return it.play(fromFrame, loop, done) }
+        if (!engineApi()) return done(Result.failure(EngineErrors.notSupported("contingency preview")))
         onEngine(done) { it.play(fromFrame, loop) }
     }
 
     override fun pause(done: Completion<Long>) {
         delegate?.let { return it.pause(done) }
+        if (!engineApi()) return done(Result.failure(EngineErrors.notSupported("contingency preview")))
         onEngine(done) { it.pause() }
     }
 
     override fun seek(k: Long, exact: Boolean, done: Completion<Unit>) {
         delegate?.let { return it.seek(k, exact, done) }
+        if (!engineApi()) return done(Result.failure(EngineErrors.notSupported("contingency preview")))
         onEngine(done) { it.seek(k, exact) }
     }
 
     override fun setRenderSize(width: Int, height: Int) {
         delegate?.let { return it.setRenderSize(width, height) }
+        if (!engineApi()) return
         onEngine { it.setRenderSize(width, height) }
     }
 
     override fun setUseProxies(on: Boolean) {
         delegate?.let { return it.setUseProxies(on) }
+        if (!engineApi()) return
         onEngine { it.setUseProxies(on) }
     }
 
     override fun capture(done: Completion<PausedFrameRenderer.Captured>) {
         delegate?.let { return it.capture(done) }
+        if (!engineApi()) return done(Result.failure(EngineErrors.notSupported("contingency preview")))
         onEngine(done) { it.capture() }
     }
 
     override fun trim(level: CacheTrimLevelMsg) {
         delegate?.let { return it.trim(level) }
+        if (!engineApi()) return
         onEngine { it.trim(level) }
     }
 
     override fun suspendForExport(done: Completion<Unit>) {
         delegate?.let { return it.suspendForExport(done) }
+        if (!engineApi()) return done(Result.failure(EngineErrors.notSupported("contingency preview")))
         onEngine(done) { it.suspendDecks() }
     }
 
@@ -226,6 +258,7 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
 
     override fun release(done: Completion<Unit>) {
         delegate?.let { return it.release(done) }
+        if (!engineApi()) return done(Result.success(Unit))
         if (!this::host.isInitialized) return done(Result.success(Unit))
         onEngine<Unit>({ r ->
             worker?.shutdownNow()
@@ -242,13 +275,13 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
 
     /** Runs [block] with the engine's counters on danaview-gl (tests and QA logs). */
     fun stats(done: Completion<EngineStats>) {
-        if (delegate != null) return done(Result.success(EngineStats()))
+        if (delegate != null || !engineApi()) return done(Result.success(EngineStats()))
         onEngine(done) { it.stats.copy() }
     }
 
     /** The engine's state on danaview-gl (tests): mode name and whether it plays. */
     fun state(done: Completion<String>) {
-        if (delegate != null) return done(Result.success("stills"))
+        if (delegate != null || !engineApi()) return done(Result.success("stills"))
         onEngine(done) { it.modeName }
     }
 
