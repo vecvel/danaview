@@ -328,9 +328,11 @@ final class CompositionVideoSource: SegmentVideoSource {
             let pts = CMSampleBufferGetPresentationTimeStamp(sample)
             let frame = try rotator?.rotate(image) ?? image
             framesRead += 1
+            NSLog("TMPDIAG frame \(pts.value)/\(pts.timescale) n=\(framesRead)")
             control.videoProgress(lastPtsUs: FrameGrid.us(pts))
             return SegmentFrame(pixelBuffer: frame, pts: pts)
         }
+        NSLog("TMPDIAG end status=\(reader.status.rawValue)")
         if reader.status == .failed {
             throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "export reader failed")
         }

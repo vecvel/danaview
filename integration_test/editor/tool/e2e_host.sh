@@ -198,8 +198,11 @@ serve_one() {
 
 # Serves requests while the flutter process <pid> runs. Exit 0 normally, 3 when an action ended the app.
 serve() {
-  local pid="$1" status=0
+  local pid="$1" status=0 tick=0
   while kill -0 "$pid" 2>/dev/null; do
+    # `flutter test` uninstalls the app when it ends (and the sandbox with it), so exported files
+    # are copied out while the test still runs (every ~6 s), not only by `collect` at the end.
+    tick=$((tick + 1)); if (( tick % 20 == 0 )); then collect_quietly; fi
     for req in $(list_requests); do
       rm -f "$OUT/.died"
       serve_one "$req" >> "$OUT/logs/host-actions.log" 2>&1 || log "action failed for $req"
@@ -239,6 +242,14 @@ stage_models() {
     adb -s "$DEVICE" shell mkdir -p "$ANDROID_SHARED/e2e_models"
     for m in "${MODEL_FILES[@]}"; do adb -s "$DEVICE" push "$dir/$m" "$ANDROID_SHARED/e2e_models/" >/dev/null; done
     log "pushed models to $ANDROID_SHARED/e2e_models"
+  fi
+}
+
+collect_quietly() {
+  if [[ "$PLATFORM" == ios ]]; then
+    local d; d="$(ios_shared)"; [[ -n "$d" && -d "$d/e2e_out" ]] && cp -R "$d/e2e_out/." "$OUT/files/" 2>/dev/null || true
+  else
+    adb -s "$DEVICE" pull "$ANDROID_SHARED/e2e_out/." "$OUT/files/" >/dev/null 2>&1 || true
   fi
 }
 

@@ -45,6 +45,13 @@ void main() {
     final handedOver = c.read(playerControllerProvider).position;
     await E2eApp.tap(tester, edit, what: 'player Edit');
     final ed = await E2eEditor.attach(tester);
+    // The editor seeks to its initial playhead after the preview is ready: give it a moment.
+    try {
+      await E2eApp.pumpUntil(tester, () => ed.playhead.value == ed.project.view.playhead && !ed.playhead.isSeeking,
+          what: 'the playhead to reach the project position', timeout: const Duration(seconds: 10));
+    } on TestFailure {
+      // Reported by the expectation below with the numbers.
+    }
     expect(
       ed.playheadFrame,
       160,
