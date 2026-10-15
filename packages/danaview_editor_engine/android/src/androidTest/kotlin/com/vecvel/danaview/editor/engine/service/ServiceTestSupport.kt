@@ -7,7 +7,13 @@
 // engine harness per test (AND-11's ExportHarness: own roots, production coordinator) registered
 // with ExportService, the "Flutter engine goes away with the activity" rule (the sink detaches when
 // the activity is destroyed, as the plugin's FlutterActivity engine does), plan builders over ENG-05's
-// frame_counter_1080p30.mp4 fixture, and MediaStore / notification / service readers.
+// frame_counter_1080p30.mp4 fixture, MediaStore / notification / service readers, and [EncoderGate]:
+// a video-encoder wrapper installed through the coordinator's test-only encoderFactoryDecorator that
+// holds an export at a known point (after N encoded frames) until the test opens it, so a step that
+// must happen mid-export (Cancel, onTimeout, the activity going away, a detach) cannot race the
+// export's completion under load. While held it lets one encoded frame through per second (the
+// muxer's no-sample watchdog is 10 s or more) so the export stays alive but cannot finish within a
+// test step; the production path is unchanged (the decorator is null outside tests).
 
 package com.vecvel.danaview.editor.engine.service
 
@@ -19,9 +25,14 @@ import android.content.ContentUris
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.media.MediaCodec
+import android.media.metrics.LogSessionId
 import android.provider.MediaStore
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import androidx.media3.common.Format
+import androidx.media3.decoder.DecoderInputBuffer
+import androidx.media3.transformer.Codec
 import androidx.test.platform.app.InstrumentationRegistry
 import com.vecvel.danaview.editor.engine.export.ExportHarness
 import com.vecvel.danaview.editor.engine.export.ExportNotification
@@ -35,7 +46,9 @@ import com.vecvel.danaview.editor.engine.plan.PlanCanvas
 import com.vecvel.danaview.editor.engine.plan.PlanSize
 import com.vecvel.danaview.editor.engine.plan.PlanTarget
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
+import android.view.Surface
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -203,4 +216,120 @@ class DetachOnDestroy(private val h: ExportHarness) : Application.ActivityLifecy
     override fun onActivityStopped(activity: Activity) {}
 
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+}
+
+/**
+ * Holds an export's video encoder output after [holdAfter] encoded frames until [open] (file header).
+ * [install] it on a harness before `start`; every video encoder of the job (the portrait retry
+ * included) shares the gate. While held, one frame passes per [trickleMs] so the muxer watchdog
+ * does not fire; a 240-frame job held at frame 30 needs more than 200 s to finish.
+ */
+class EncoderGate(private val holdAfter: Int = 30, private val trickleMs: Long = 1_000) {
+    private val held = CountDownLatch(1)
+
+    @Volatile private var opened = false
+
+    @Volatile var passed = 0
+        private set
+
+    /** Frames that passed while the gate held the encoder (the trickle). */
+    @Volatile var passedWhileHeld = 0
+        private set
+
+    fun install(h: ExportHarness) {
+        h.coordinator.encoderFactoryDecorator = { base -> Factory(base) }
+    }
+
+    /** True once the encoder is held (holdAfter frames passed and a further frame was refused). */
+    fun awaitHeld(timeoutMs: Long = 120_000): Boolean = held.await(timeoutMs, TimeUnit.MILLISECONDS)
+
+    val isHeld: Boolean get() = held.count == 0L && !opened
+
+    /** Lets the export run to its end at full speed. */
+    fun open() {
+        opened = true
+    }
+
+    private inner class Factory(private val base: Codec.EncoderFactory) : Codec.EncoderFactory {
+        override fun createForAudioEncoding(format: Format, logSessionId: LogSessionId?): Codec = base.createForAudioEncoding(format, logSessionId)
+
+        override fun createForVideoEncoding(format: Format, logSessionId: LogSessionId?): Codec = Gated(base.createForVideoEncoding(format, logSessionId))
+
+        override fun isVideoFormatSupported(format: Format): Boolean = base.isVideoFormatSupported(format)
+
+        override fun audioNeedsEncoding(): Boolean = base.audioNeedsEncoding()
+
+        override fun videoNeedsEncoding(): Boolean = base.videoNeedsEncoding()
+    }
+
+    /** Called on Transformer's internal thread only. */
+    private inner class Gated(private val c: Codec) : Codec {
+        /** The current output buffer was let through and is not released yet. */
+        private var passing = false
+
+        /** [passing] is a trickle slot of the held gate. */
+        private var trickle = false
+        private var lastPassMs = 0L
+
+        private fun mayPass(): Boolean {
+            if (passing) return true
+            if (opened || passed < holdAfter) {
+                passing = true
+                return true
+            }
+            held.countDown()
+            val now = System.currentTimeMillis()
+            if (now - lastPassMs >= trickleMs) {
+                passing = true
+                trickle = true
+                return true
+            }
+            return false
+        }
+
+        private fun released() {
+            if (!passing) return
+            passing = false
+            passed++
+            if (trickle) passedWhileHeld++
+            trickle = false
+            lastPassMs = System.currentTimeMillis()
+        }
+
+        override fun getOutputBuffer(): ByteBuffer? = if (mayPass()) c.getOutputBuffer() else null
+
+        override fun getOutputBufferInfo(): MediaCodec.BufferInfo? = if (passing) c.getOutputBufferInfo() else null
+
+        override fun releaseOutputBuffer(render: Boolean) {
+            c.releaseOutputBuffer(render)
+            released()
+        }
+
+        override fun releaseOutputBuffer(renderPresentationTimeUs: Long) {
+            c.releaseOutputBuffer(renderPresentationTimeUs)
+            released()
+        }
+
+        override fun getConfigurationFormat(): Format = c.configurationFormat
+
+        override fun getName(): String = c.name
+
+        override fun getInputSurface(): Surface = c.inputSurface
+
+        override fun getMaxPendingFrameCount(): Int = c.maxPendingFrameCount
+
+        override fun maybeDequeueInputBuffer(inputBuffer: DecoderInputBuffer): Boolean = c.maybeDequeueInputBuffer(inputBuffer)
+
+        override fun queueInputBuffer(inputBuffer: DecoderInputBuffer) = c.queueInputBuffer(inputBuffer)
+
+        override fun signalEndOfInputStream() = c.signalEndOfInputStream()
+
+        override fun getInputFormat(): Format = c.inputFormat
+
+        override fun getOutputFormat(): Format? = c.outputFormat
+
+        override fun isEnded(): Boolean = c.isEnded
+
+        override fun release() = c.release()
+    }
 }
