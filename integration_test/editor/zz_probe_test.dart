@@ -1,4 +1,5 @@
 // OWNER: QA-00 (temporary probe, deleted after use)
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -25,5 +26,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1000));
       debugPrint('PROBE after create $i: ${E2eApp.describeScreen()}');
     }
+  });
+  testWidgets('focus probe', (tester) async {
+    await E2eApp.launch(tester);
+    final ed = await E2eEditor.createProject(tester, name: 'probe focus', media: [E2eMedia.fixture(Fx.frameCounter)]);
+    debugPrint('PROBE focus primary=${FocusManager.instance.primaryFocus} highlight=${FocusManager.instance.highlightMode}');
+    await ed.key(LogicalKeyboardKey.space);
+    await tester.pump(const Duration(seconds: 1));
+    debugPrint('PROBE playing=${ed.playhead.playing.value} primary=${FocusManager.instance.primaryFocus}');
   });
 }
