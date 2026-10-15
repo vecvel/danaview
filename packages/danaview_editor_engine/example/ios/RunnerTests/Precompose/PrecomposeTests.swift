@@ -29,7 +29,7 @@ final class PrecomposeTests: XCTestCase {
         plain = []
     }
 
-    private func make(decoderLimit: Int, segmentDurationUs: Int64 = 500_000, probe: EncoderProbe = .system,
+    private func make(decoderLimit: Int, segmentDurationUs: Int64 = PrecomposeFixtures.segmentDurationUs, probe: EncoderProbe = .system,
                       roots: TempRoots? = nil) throws -> PrecomposeHarness {
         let p = try PrecomposeHarness(decoderLimit: decoderLimit, segmentDurationUs: segmentDurationUs, probe: probe, roots: roots)
         harnesses.append(p)
@@ -42,7 +42,7 @@ final class PrecomposeTests: XCTestCase {
 
     /// A single-pass reference export of [plan].
     private func reference(_ plan: Data, settings: EncodeSettingsMsg, probe: EncoderProbe = .system) throws -> URL {
-        let h = try ExportHarness(ExportHarness.Options(probe: probe, segmentDurationUs: 500_000))
+        let h = try ExportHarness(ExportHarness.Options(probe: probe, segmentDurationUs: PrecomposeFixtures.segmentDurationUs))
         plain.append(h)
         let output = h.outputURL()
         let id = try h.export(self, plan: plan, settings: settings, output: output)
@@ -258,8 +258,16 @@ final class PrecomposeTests: XCTestCase {
         let id = try p.h.export(self, plan: plan, settings: settings, output: output, timeout: 300)
         XCTAssertNil(p.h.recorder.failure(id))
         XCTAssertEqual(p.exporter.runs.map(\.index), [1])
-        let facts = try ExportConformance.check(output, settings: settings, durUs: durUs, brand: "mp42", codec: "avc1", checkBitrate: false)
+        // Encoded landscape with a 90° clockwise display transform (ARCH §14.1), otherwise conformant.
+        let facts = try ExportConformance.inspect(output)
+        XCTAssertEqual([facts.width, facts.height], [640, 360])
         XCTAssertEqual(facts.transform, EncodeLayout.rotatedTransform(encodedHeight: 360))
+        XCTAssertEqual(facts.codec, "avc1")
+        XCTAssertEqual(Double(facts.nominalFps), 25, accuracy: 0.5)
+        XCTAssertEqual(facts.frames, 25)
+        XCTAssertEqual(facts.audioFormat, kAudioFormatMPEG4AAC)
+        XCTAssertEqual(facts.sampleRate, 48_000)
+        XCTAssertEqual(facts.channels, 2)
         let ssim = try PrecomposeCheck.ssimPerFrame(single, output)
         XCTAssertEqual(ssim.count, 25)
         for (k, v) in ssim.enumerated() { XCTAssertGreaterThanOrEqual(v, 0.995, "SSIM of rotated frame \(k)") }
@@ -329,6 +337,10 @@ final class PrecomposeTests: XCTestCase {
         let plan = PrecomposeFixtures.plan(durUs: durUs, pips: 2)
         let settings = PrecomposeFixtures.settings()
         let first = try make(decoderLimit: 2, roots: roots)
+        // Pass 1 runs slowly so the "kill" lands inside it.
+        first.exporter.configurePass = { _, pass in
+            pass.configureWriter = { writer in writer.faultInjector = { _, _ in Thread.sleep(forTimeInterval: 0.03); return nil } }
+        }
         let output = first.h.outputURL()
         let id = try first.h.start(self, plan: plan, settings: settings, output: output)
         let directory = first.jobDirectory(id)
@@ -350,7 +362,7 @@ final class PrecomposeTests: XCTestCase {
         second.h.recorder.waitForEnd(id, test: self, timeout: 300)
         XCTAssertNil(second.h.recorder.failure(id))
         let runs = second.exporter.runs
-        XCTAssertEqual(runs.map(\.index), [1, 2])
+        XCTAssertEqual(runs.map(\.index), [1], "three tracks at limit 2: one intermediate pass")
         XCTAssertGreaterThanOrEqual(runs.first?.startSegment ?? 0, 1, "pass 1 resumed from its checkpoint")
         try ExportConformance.check(output, settings: settings, durUs: durUs, brand: "mp42", codec: "avc1", checkBitrate: false)
         XCTAssertEqual(try PrecomposeCheck.barcodeProblems(output, pips: 2), [])
@@ -363,6 +375,10 @@ final class PrecomposeTests: XCTestCase {
         let plan = PrecomposeFixtures.plan(durUs: durUs, pips: 2)
         let settings = PrecomposeFixtures.settings()
         let first = try make(decoderLimit: 2, roots: roots)
+        // The final pass runs slowly so the "kill" lands inside it.
+        first.h.coordinator.configurePipeline = { pipeline in
+            pipeline.configureWriter = { writer in writer.faultInjector = { _, _ in Thread.sleep(forTimeInterval: 0.03); return nil } }
+        }
         let output = first.h.outputURL()
         let id = try first.h.start(self, plan: plan, settings: settings, output: output)
         let directory = first.jobDirectory(id)
@@ -391,6 +407,11 @@ final class PrecomposeTests: XCTestCase {
     func testCancelCleansEveryIntermediate() throws {
         let durUs: Int64 = 2_000_000
         let p = try make(decoderLimit: 2)
+        // Pass 2 runs slowly so the cancel lands inside it.
+        p.exporter.configurePass = { index, pass in
+            guard index == 2 else { return }
+            pass.configureWriter = { writer in writer.faultInjector = { _, _ in Thread.sleep(forTimeInterval: 0.03); return nil } }
+        }
         let output = p.h.outputURL()
         let id = try p.h.start(self, plan: PrecomposeFixtures.plan(durUs: durUs), settings: PrecomposeFixtures.settings(), output: output)
         let directory = p.jobDirectory(id)

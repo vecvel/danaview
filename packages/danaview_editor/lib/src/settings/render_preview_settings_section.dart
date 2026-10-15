@@ -45,7 +45,6 @@ class _RenderPreviewSettingsSectionState extends ConsumerState<RenderPreviewSett
     _measured = store;
     int bytes;
     try {
-      await store.open();
       bytes = await store.bytes();
     } on Object {
       bytes = 0;
@@ -65,7 +64,6 @@ class _RenderPreviewSettingsSectionState extends ConsumerState<RenderPreviewSett
     if (!ok || !mounted) return;
     setState(() => _clearing = true);
     try {
-      await store.open();
       await store.clear();
     } on Object catch (e) {
       debugPrint('[RenderPreview] clear failed: ${e.runtimeType}');

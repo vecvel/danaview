@@ -13,6 +13,8 @@ import XCTest
 
 enum PrecomposeFixtures {
     static let fps = 25
+    /// Short segments on the 25 fps grid (10 frames) so interruptions land inside a pass.
+    static let segmentDurationUs: Int64 = 400_000
     /// PiP size and centres (canvas px) of slots 1…4 on a 640×360 canvas.
     static let pipW = 192.0
     static let pipH = 108.0
@@ -53,7 +55,7 @@ final class PrecomposeHarness {
     let h: ExportHarness
     let exporter: PrecomposeExporter
 
-    init(decoderLimit: Int, segmentDurationUs: Int64 = 500_000, probe: EncoderProbe = .system, roots: TempRoots? = nil) throws {
+    init(decoderLimit: Int, segmentDurationUs: Int64 = PrecomposeFixtures.segmentDurationUs, probe: EncoderProbe = .system, roots: TempRoots? = nil) throws {
         h = try ExportHarness(
             ExportHarness.Options(probe: probe, decoderLimit: decoderLimit, segmentDurationUs: segmentDurationUs), roots: roots)
         exporter = PrecomposeExporter(context: h.context)
