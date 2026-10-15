@@ -100,6 +100,9 @@ class AudioEndTrimTest {
     fun videoEndIsTheExportGridTimeOfTheFrameCount() {
         assertEquals(2_000_000L, ExportCoordinator.videoEndUs(2_000_000, Settings.of(fps = 30)))
         assertEquals(2_033_333L, ExportCoordinator.videoEndUs(2_033_333, Settings.of(fps = 30)))
+        // A plan ending at timeOfFrame(61) = ceil(61e6/30) = 2 033 334 us has 61 frames, not 62.
+        assertEquals(61L, Settings.of(fps = 30).frameCount(2_033_334))
+        assertEquals(2_033_333L, ExportCoordinator.videoEndUs(2_033_334, Settings.of(fps = 30)))
         // 2.5 s of a 30 fps grid exported at 24 fps: 60 frames, ending at 2.5 s.
         assertEquals(2_500_000L, ExportCoordinator.videoEndUs(2_500_000, Settings.of(fps = 24)))
         // A plan end inside an output frame extends to that frame's end.

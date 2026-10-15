@@ -8,7 +8,8 @@
 //   frame count and PTS on the export grid, rotation 0, AAC-LC 48 kHz stereo, the encoder that ran
 //   recorded, and the preflight's softwareEncoder warning consistent with the result's hardware flag.
 // - V-N24: a no-audio plan, an all-muted plan and an images/text-only plan (image, solid, sprite)
-//   each get a silent AAC 48 kHz stereo track covering the video.
+//   each get a silent AAC 48 kHz stereo track covering the video; on every export here the AAC
+//   track ends at the video's end within one AAC frame (owner decision 2026-10-15, ARCH §14.3).
 // - gridFps 30 exported at 24 fps: every output frame on the 24 fps grid shows its plan rule frame
 //   (barcodes, software-first decoders).
 // - A/V offset (clap_flash_av.mp4): flash frames against click onsets ≤ 1 frame and ≤ 20 ms.
@@ -94,7 +95,7 @@ class ExportConformanceTest {
         )
     }
 
-    private fun assertSilentAac48kStereo(h: ExportHarness, out: File, videoUs: Long, name: String) {
+    private fun assertSilentAac48kStereo(h: ExportHarness, out: File, videoUs: Long, name: String, fps: Int) {
         val track = ExportedFile.audio(out)
         assertEquals("$name audio mime", "audio/mp4a-latm", track.mime)
         assertEquals("$name sample rate", 48_000, track.format.getInteger(MediaFormat.KEY_SAMPLE_RATE))
@@ -104,10 +105,13 @@ class ExportConformanceTest {
         assertEquals(2, pcm.channels)
         Log.i(EXPORT_TEST_TAG, "$name: AAC ${pcm.sampleRate} Hz x${pcm.channels}, ${pcm.durationUs} us of audio for $videoUs us of video, peak ${pcm.peak()}, rms ${pcm.rmsDb()} dBFS")
         assertTrue("$name: silent (peak ${pcm.peak()})", pcm.peak() < 0.001f)
-        // Measured on the API 35 emulator (2026-10-14): the AAC track ends 41-49 ms before the video
-        // (ffprobe 1.950708 s for 2.000 s; 4.958708 s for 5.000 s): Transformer's audio tail, reported to
-        // the Mac for QA-11. The A/V offset inside the export is checked by avOffsetWithinOneFrameAnd20ms.
+        // Before 2026-10-15 the AAC track ended 41-49 ms before the video on the API 35 emulator
+        // (ffprobe 1.950708 s for 2.000 s; 4.958708 s for 5.000 s). Owner decision 2026-10-15 (ARCH
+        // §14.3): it is padded to the video's end, so both ends match within one AAC frame (measured
+        // from the MP4 by ExportedFile.assertAudioSpansVideo). The A/V offset inside the export is
+        // checked by avOffsetWithinOneFrameAnd20ms.
         assertTrue("$name: audio covers the video (${pcm.durationUs} us vs $videoUs us)", pcm.durationUs >= videoUs - 100_000)
+        ExportedFile.assertAudioSpansVideo(out, fps, name)
     }
 
     private fun assertOnGrid(out: File, fps: Int, frames: Int, name: String) {
@@ -150,7 +154,7 @@ class ExportConformanceTest {
         if (notEntry != null) assertFalse("no $notEntry sample entry", ExportedFile.hasFourcc(out, notEntry))
         assertTrue("MP4 brand", ExportedFile.hasFourcc(out, "ftyp"))
         assertOnGrid(out, 30, 60, codec.name)
-        assertSilentAac48kStereo(h, out, plan.durUs, codec.name)
+        assertSilentAac48kStereo(h, out, plan.durUs, codec.name, 30)
         val kbps = r.bytes * 8 / (plan.durUs / 1000)
         Log.i(EXPORT_TEST_TAG, "$codec conformance ${w}x$h0: ${r.videoEncoderName} hardware=${r.hardwareEncoder}, ${r.bytes} bytes (~$kbps kb/s total for ${s.videoBitrate / 1000} kb/s requested), audio track ${ExportedFile.audio(out).format.getLong(MediaFormat.KEY_DURATION)} us, video track ${video.format.getLong(MediaFormat.KEY_DURATION)} us, ${o.wallMs} ms wall (emulator)")
         h.app.getExternalFilesDir(null)?.let { dir -> out.copyTo(File(dir, "and11_conf_${codec.name}.mp4"), overwrite = true) }
@@ -229,7 +233,7 @@ class ExportConformanceTest {
             val o = h.export(plan, settings(), "vn24_$name")
             val out = File(o.requireResult().path)
             assertOnGrid(out, 30, frames.toInt(), name)
-            assertSilentAac48kStereo(h, out, dur, name)
+            assertSilentAac48kStereo(h, out, dur, name, 30)
         }
     }
 
@@ -310,6 +314,7 @@ class ExportConformanceTest {
             audio!! - video
         }
         Log.i(EXPORT_TEST_TAG, "A/V offsets (audio onset - flash frame pts, us, emulator): $offsets")
+        ExportedFile.assertAudioSpansVideo(out, 30, "avsync")
         for (d in offsets) {
             assertTrue("offset $d us > 20 ms", abs(d) <= 20_000)
             assertTrue("offset $d us > 1 frame", abs(d) <= g.timeOfFrame(1))
@@ -374,7 +379,7 @@ class ExportConformanceTest {
         assertEquals("coded landscape", 1280 to 720, w to ht)
         assertTrue("rotation metadata $rotation", rotation == 90 || rotation == 270)
         assertOnGrid(out, 24, 48, "portrait_retry")
-        assertSilentAac48kStereo(h, out, portraitPlan().durUs, "portrait_retry")
+        assertSilentAac48kStereo(h, out, portraitPlan().durUs, "portrait_retry", 24)
     }
 
     @Test

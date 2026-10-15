@@ -8,7 +8,8 @@
 //   identical frame count on the export grid, per-frame Y-plane SSIM ≥ 0.995, the bottom slot's
 //   grid-cut barcode exact on 100% of the frames of both exports (it went through both
 //   intermediates), and audio (a tone with a gain ramp plus the clap track) within QA-11's
-//   ±0.5 dB per 20 ms window.
+//   ±0.5 dB per 20 ms window; in both exports the AAC track ends at the video's end within one AAC
+//   frame (owner decision 2026-10-15, ARCH §14.3; ExportedFile.assertAudioSpansVideo).
 // - maxVisualSequences forced to 2: a 6-slot project is not refused (preflight ok with the
 //   layersVsResolution warning) and exports in 5 passes, matching its single pass.
 // - Rotated source (rotated_90.mov) in a precomposed slot matches single pass (SSIM, upright
@@ -137,6 +138,9 @@ class PrecomposeExportTest {
         val frames = FrameGrid.ceilDiv(plan.durUs * fps, 1_000_000L).toInt()
         assertOnGrid(both.single, fps, frames, "$name single")
         assertOnGrid(both.multi, fps, frames, "$name multi")
+        // Both routes: the AAC track ends at the video's end within one AAC frame (ARCH §14.3, 2026-10-15).
+        ExportedFile.assertAudioSpansVideo(both.single, fps, "$name single")
+        ExportedFile.assertAudioSpansVideo(both.multi, fps, "$name multi")
         val cmp = Compare.frames(both.single, both.multi, frames, region)
         val worst = cmp.ssim.withIndex().minByOrNull { it.value }!!
         val mean = cmp.ssim.average()

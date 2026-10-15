@@ -74,7 +74,7 @@ class ExportAvDurationTest {
         val o = h.export(plan, settings(fps = plan.canvas.fps, videoBitrate = if (plan.canvas.fps > 30) 7_500_000 else 5_000_000), name)
         val out = File(o.requireResult().path)
         val fps = plan.canvas.fps
-        val frames = FrameGrid.ceilDiv(plan.durUs * fps, 1_000_000L).toInt()
+        val frames = EncoderSettings.from(settings(fps = fps)).frameCount(plan.durUs).toInt()
         val s = ExportedFile.assertAudioSpansVideo(out, fps, name)
         assertEquals("$name frame count", frames, s.video.samples)
         val pcm = ExportedFile.decodeAudio(h.ctx, out)
