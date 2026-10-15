@@ -43,7 +43,7 @@ final class PrecomposePass {
 
     static let jobKind = "export-precompose"
     /// Bitrate multiple of the export (D-45: ≥ 4×).
-    static let bitrateFactor = 12
+    static let bitrateFactor = 4
     static let minBitsPerPixel = 0.2
     static let maxBitrate = 240_000_000
 
