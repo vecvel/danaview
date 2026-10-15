@@ -225,7 +225,7 @@ class RenderPreviewJob internal constructor(
                     if (output.exists() && !output.delete()) throw EngineException(EngineErrorCode.io, "cannot replace the render file")
                     if (!part.renameTo(output)) throw EngineException(EngineErrorCode.io, "cannot finish the render file")
                     service.observer?.onCompleted(control.jobId, outcome.frames)
-                    Log.i(EngineContext.TAG, "render preview ${control.jobId}: done, ${outcome.frames} frames, encoder ${outcome.encoder}")
+                    Log.i(EngineContext.TAG, "render preview ${control.jobId}: done, ${outcome.frames} frames for a $frames-frame range, encoder ${outcome.encoder}")
                     control.reportProgress(1.0)
                     return JobResultMsg(kind, asset = GeneratedAssetMsg(output.absolutePath, output.length(), durationUs))
                 }
