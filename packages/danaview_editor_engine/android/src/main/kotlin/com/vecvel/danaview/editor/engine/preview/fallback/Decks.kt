@@ -366,20 +366,6 @@ internal class VideoDeck(
     }
 
     private fun bind(img: Image): Boolean {
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            try {
-                val f = img.fence
-                val st = if (f.isValid) f.signalTime else -99L
-                DIAG_BINDS++
-                if (f.isValid) DIAG_VALID++
-                if (st == android.hardware.SyncFence.SIGNAL_TIME_PENDING) DIAG_PENDING++
-                if (DIAG_BINDS % 200 == 0L || st == android.hardware.SyncFence.SIGNAL_TIME_PENDING) {
-                    android.util.Log.i("DVDIAG", "bind pts=${ptsOf(img)} fenceValid=${f.isValid} signal=$st binds=$DIAG_BINDS valid=$DIAG_VALID pending=$DIAG_PENDING")
-                }
-            } catch (e: Exception) {
-                android.util.Log.i("DVDIAG", "fence err $e")
-            }
-        }
         val hb = img.hardwareBuffer ?: run {
             img.close()
             return false
@@ -515,10 +501,6 @@ internal class VideoDeck(
     }
 
     companion object {
-        @JvmStatic var DIAG_BINDS = 0L
-        @JvmStatic var DIAG_VALID = 0L
-        @JvmStatic var DIAG_PENDING = 0L
-
         /** Images per deck (one bound + up to MAX_IMAGES − 2 queued). */
         const val MAX_IMAGES = 8
         /** Verbose deck and frame-clock logs under the tag AND16DBG (pts and positions only; off in production). */
