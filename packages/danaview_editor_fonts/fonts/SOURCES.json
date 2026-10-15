@@ -1,0 +1,227 @@
+{
+  "licence": "OFL-1.1 (each family directory holds its OFL.txt)",
+  "totalBytes": 5807810,
+  "files": [
+    {
+      "path": "figtree/Figtree-Bold.ttf",
+      "family": "Figtree",
+      "source": "danaview_ui_kit (same files as the UI font; google/fonts ofl/figtree)",
+      "fontVersion": "Version 2.001; ttfautohint (v1.8.4.7-5d5b)",
+      "bytes": 57672,
+      "sha256": "71a35e2bd92a05427e2dc9897bab41f8a865800e148238007735b5934508198a"
+    },
+    {
+      "path": "figtree/Figtree-Regular.ttf",
+      "family": "Figtree",
+      "source": "danaview_ui_kit (same files as the UI font; google/fonts ofl/figtree)",
+      "fontVersion": "Version 2.001; ttfautohint (v1.8.4.7-5d5b)",
+      "bytes": 57504,
+      "sha256": "448d74e778cc9774db27bd86cf451bba982b2e4dc348f610390eb6e3439cf6ca"
+    },
+    {
+      "path": "figtree/OFL.txt",
+      "family": "Figtree",
+      "source": "danaview_ui_kit (same files as the UI font; google/fonts ofl/figtree)",
+      "bytes": 4388,
+      "sha256": "140d37233e7f3ce7313798befa9600893bcceaf41a55fa0fa5ad52f7f657a268"
+    },
+    {
+      "path": "inter/Inter-Italic-VF.ttf",
+      "family": "Inter",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 4.001;git-66647c0bb",
+      "bytes": 906596,
+      "sha256": "acd98e64795781b2058f07b18475e0ecee2a0fe2b42a49e2f9e37d0d6bf66ce6"
+    },
+    {
+      "path": "inter/Inter-VF.ttf",
+      "family": "Inter",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 4.001;git-66647c0bb",
+      "bytes": 876576,
+      "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031"
+    },
+    {
+      "path": "inter/OFL.txt",
+      "family": "Inter",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/inter/OFL.txt",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "bytes": 4377,
+      "sha256": "5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57"
+    },
+    {
+      "path": "montserrat/Montserrat-Italic-VF.ttf",
+      "family": "Montserrat",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/montserrat/Montserrat-Italic%5Bwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 9.000",
+      "bytes": 762376,
+      "sha256": "51607f316bc020e59f03cbf51543eecffbea501c0b31d73e5b82927c5cca442c"
+    },
+    {
+      "path": "montserrat/Montserrat-VF.ttf",
+      "family": "Montserrat",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/montserrat/Montserrat%5Bwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 9.000",
+      "bytes": 744936,
+      "sha256": "0f7b311b2f3279e4eef9b2f968bcdbab6e28f4daeb1f049f4f278a902bcd82f7"
+    },
+    {
+      "path": "montserrat/OFL.txt",
+      "family": "Montserrat",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/montserrat/OFL.txt",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "bytes": 4400,
+      "sha256": "8b7141c03fa4f8d44e6345d5d4931709290f0f67875e452e95ac1fd3a027802e"
+    },
+    {
+      "path": "oswald/OFL.txt",
+      "family": "Oswald",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/oswald/OFL.txt",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "bytes": 4483,
+      "sha256": "0fd731a904b729a4e02eaf5e8ebd06783edd9abe400e8882760160230675b652"
+    },
+    {
+      "path": "oswald/Oswald-VF.ttf",
+      "family": "Oswald",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/oswald/Oswald%5Bwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 4.103;gftools[0.9.33.dev8+g029e19f]",
+      "bytes": 172088,
+      "sha256": "5b38c246e255a12f5712d640d56bcced0472466fc68983d2d0410ec0457c2817"
+    },
+    {
+      "path": "bebasneue/BebasNeue-Regular.ttf",
+      "family": "Bebas Neue",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/bebasneue/BebasNeue-Regular.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 2.000",
+      "bytes": 61400,
+      "sha256": "08e4623805102d819f58601e46e345648846075e363b2ceb23313c2d1c83ec73"
+    },
+    {
+      "path": "bebasneue/OFL.txt",
+      "family": "Bebas Neue",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/bebasneue/OFL.txt",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "bytes": 4337,
+      "sha256": "72082f6cb4d04be2ecf7cc7d9e1e7d73787f0af8a5a278a47cade70c16b78341"
+    },
+    {
+      "path": "playfairdisplay/OFL.txt",
+      "family": "Playfair Display",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/playfairdisplay/OFL.txt",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "bytes": 4449,
+      "sha256": "566be814f8e96e93dfa16101331557eb6b5467e9e03f627c0910fe93ca12300e"
+    },
+    {
+      "path": "playfairdisplay/PlayfairDisplay-Italic-VF.ttf",
+      "family": "Playfair Display",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 1.203",
+      "bytes": 278688,
+      "sha256": "a5e26dc5e2e77fb2803a0bf02fd4f81ee136ec8dea863ccdb0c59a263b21378b"
+    },
+    {
+      "path": "playfairdisplay/PlayfairDisplay-VF.ttf",
+      "family": "Playfair Display",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 1.203",
+      "bytes": 300724,
+      "sha256": "c40f2293766a503bc70cce9e512ef844a4ccb7cbcde792fe2ea31d191917d8d6"
+    },
+    {
+      "path": "lora/Lora-Italic-VF.ttf",
+      "family": "Lora",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/lora/Lora-Italic%5Bwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 3.008",
+      "bytes": 221232,
+      "sha256": "22d8d8854b53807aa664ca34f2031a9ed57a1d0dea296b8b96cdd3aad937a2b3"
+    },
+    {
+      "path": "lora/Lora-VF.ttf",
+      "family": "Lora",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/lora/Lora%5Bwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 3.008",
+      "bytes": 212196,
+      "sha256": "822a6621ccbe8d97d20ac88c1c41f5615c9c2c202eaa75f272cd452aac6475a7"
+    },
+    {
+      "path": "lora/OFL.txt",
+      "family": "Lora",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/lora/OFL.txt",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "bytes": 4423,
+      "sha256": "1d9a970809ac804b582a6ce7f0ebc4e7fefcbfd7ff6299cad35ee656a21be716"
+    },
+    {
+      "path": "caveat/Caveat-VF.ttf",
+      "family": "Caveat",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/caveat/Caveat%5Bwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 2.000",
+      "bytes": 403648,
+      "sha256": "0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988"
+    },
+    {
+      "path": "caveat/OFL.txt",
+      "family": "Caveat",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/caveat/OFL.txt",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "bytes": 4385,
+      "sha256": "1f9d81d094273d82f3898a1ee8b598a717d050ecbf5ff7bede105b704880157b"
+    },
+    {
+      "path": "pacifico/OFL.txt",
+      "family": "Pacifico",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/pacifico/OFL.txt",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "bytes": 4389,
+      "sha256": "a47e5daeda73568969395c656823102678f2eefb0d7d7ecb47aac4cc17e42204"
+    },
+    {
+      "path": "pacifico/Pacifico-Regular.ttf",
+      "family": "Pacifico",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/pacifico/Pacifico-Regular.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 3.001",
+      "bytes": 329380,
+      "sha256": "5b6c0d5334a7bf77dea52b975c5a0c408878c0f7115ed5b6fb151f634b7bf701"
+    },
+    {
+      "path": "jetbrainsmono/JetBrainsMono-Italic-VF.ttf",
+      "family": "JetBrains Mono",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/jetbrainsmono/JetBrainsMono-Italic%5Bwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 2.211",
+      "bytes": 191556,
+      "sha256": "85ae2a5cd3f56baf1ce1c21a851322c58e3d8fbe8e8ad4a4d090a820dd7fe558"
+    },
+    {
+      "path": "jetbrainsmono/JetBrainsMono-VF.ttf",
+      "family": "JetBrains Mono",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "fontVersion": "Version 2.211",
+      "bytes": 187208,
+      "sha256": "48715a42ec242c21e9f02692891e147d022299a52e48d5e413e1a942193ffeda"
+    },
+    {
+      "path": "jetbrainsmono/OFL.txt",
+      "family": "JetBrains Mono",
+      "source": "https://raw.githubusercontent.com/google/fonts/67bc647ce1910e92f461bcc82aae30f21d21a9cc/ofl/jetbrainsmono/OFL.txt",
+      "commit": "67bc647ce1910e92f461bcc82aae30f21d21a9cc",
+      "bytes": 4399,
+      "sha256": "b2fe5e8987594e9ffd1d2ca52a2f5d73eb8335243893c5d6254b5ad69269591d"
+    }
+  ]
+}

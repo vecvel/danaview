@@ -23,6 +23,7 @@ dependencies:
     sdk: flutter
 
 dev_dependencies:
+  crypto: ^3.0.5 # tool/fetch_fonts.dart (sha256 of the bundled files)
   flutter_test:
     sdk: flutter
 
@@ -30,6 +31,15 @@ flutter:
   # BEGIN GENERATED FONTS (tool/fetch_fonts.dart)
   assets:
     - fonts/figtree/OFL.txt
+    - fonts/inter/OFL.txt
+    - fonts/montserrat/OFL.txt
+    - fonts/oswald/OFL.txt
+    - fonts/bebasneue/OFL.txt
+    - fonts/playfairdisplay/OFL.txt
+    - fonts/lora/OFL.txt
+    - fonts/caveat/OFL.txt
+    - fonts/pacifico/OFL.txt
+    - fonts/jetbrainsmono/OFL.txt
   fonts:
     - family: Figtree
       fonts:
@@ -37,4 +47,84 @@ flutter:
           weight: 400
         - asset: fonts/figtree/Figtree-Bold.ttf
           weight: 700
+    - family: Inter
+      fonts:
+        - asset: fonts/inter/Inter-VF.ttf
+          weight: 400
+        - asset: fonts/inter/Inter-VF.ttf
+          weight: 700
+        - asset: fonts/inter/Inter-Italic-VF.ttf
+          weight: 400
+          style: italic
+        - asset: fonts/inter/Inter-Italic-VF.ttf
+          weight: 700
+          style: italic
+    - family: Montserrat
+      fonts:
+        - asset: fonts/montserrat/Montserrat-VF.ttf
+          weight: 400
+        - asset: fonts/montserrat/Montserrat-VF.ttf
+          weight: 700
+        - asset: fonts/montserrat/Montserrat-Italic-VF.ttf
+          weight: 400
+          style: italic
+        - asset: fonts/montserrat/Montserrat-Italic-VF.ttf
+          weight: 700
+          style: italic
+    - family: Oswald
+      fonts:
+        - asset: fonts/oswald/Oswald-VF.ttf
+          weight: 400
+        - asset: fonts/oswald/Oswald-VF.ttf
+          weight: 700
+    - family: Bebas Neue
+      fonts:
+        - asset: fonts/bebasneue/BebasNeue-Regular.ttf
+          weight: 400
+    - family: Playfair Display
+      fonts:
+        - asset: fonts/playfairdisplay/PlayfairDisplay-VF.ttf
+          weight: 400
+        - asset: fonts/playfairdisplay/PlayfairDisplay-VF.ttf
+          weight: 700
+        - asset: fonts/playfairdisplay/PlayfairDisplay-Italic-VF.ttf
+          weight: 400
+          style: italic
+        - asset: fonts/playfairdisplay/PlayfairDisplay-Italic-VF.ttf
+          weight: 700
+          style: italic
+    - family: Lora
+      fonts:
+        - asset: fonts/lora/Lora-VF.ttf
+          weight: 400
+        - asset: fonts/lora/Lora-VF.ttf
+          weight: 700
+        - asset: fonts/lora/Lora-Italic-VF.ttf
+          weight: 400
+          style: italic
+        - asset: fonts/lora/Lora-Italic-VF.ttf
+          weight: 700
+          style: italic
+    - family: Caveat
+      fonts:
+        - asset: fonts/caveat/Caveat-VF.ttf
+          weight: 400
+        - asset: fonts/caveat/Caveat-VF.ttf
+          weight: 700
+    - family: Pacifico
+      fonts:
+        - asset: fonts/pacifico/Pacifico-Regular.ttf
+          weight: 400
+    - family: JetBrains Mono
+      fonts:
+        - asset: fonts/jetbrainsmono/JetBrainsMono-VF.ttf
+          weight: 400
+        - asset: fonts/jetbrainsmono/JetBrainsMono-VF.ttf
+          weight: 700
+        - asset: fonts/jetbrainsmono/JetBrainsMono-Italic-VF.ttf
+          weight: 400
+          style: italic
+        - asset: fonts/jetbrainsmono/JetBrainsMono-Italic-VF.ttf
+          weight: 700
+          style: italic
   # END GENERATED FONTS

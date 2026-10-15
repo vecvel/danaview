@@ -10,6 +10,14 @@
 // (`maxConcurrentVideoLayers`) come from IOS-02's tier table (Capabilities.TierLimits) for this
 // device. A session id that is unknown (never opened or disposed) fails with `cancelled`;
 // dispose is idempotent.
+//
+// Rendered ranges (D-45, IOS-19): `open` makes the session id first and installs the session's
+// RenderedRangeSwap (`RenderedRangeRegistry.of(context).swap(for: id)`, the one
+// RenderedRangeHandler feeds) as `Dependencies.renderedRanges`, with `planProvider` reading the
+// session's plan (control queue); `dispose` removes it from the registry.
+// Export suspension (IOS-12): the manager observes `.danaviewExportSuspendsPreview` /
+// `.danaviewExportResumesPreview` (object: its EngineContext) and suspends / resumes every session
+// on the control queue; a session opened during an export starts suspended.
 
 import Foundation
 
@@ -18,9 +26,37 @@ final class PreviewSessionManager: PreviewSessionManaging {
     private var sessions: [String: PreviewSession] = [:]
     /// Builds a session's dependencies (tests inject fixtures, probes and registries).
     var makeDependencies: ((EngineContext, Paths) -> PreviewSession.Dependencies)?
+    private var observers: [NSObjectProtocol] = []
+    /// Exports currently suspending the preview (control queue).
+    private(set) var exportSuspensions = 0
 
     init(context: EngineContext) {
         self.context = context
+        let center = NotificationCenter.default
+        let queue = context.queues.previewControl
+        observers.append(center.addObserver(forName: .danaviewExportSuspendsPreview, object: context, queue: nil) { [weak self] _ in
+            queue.async { self?.exportSuspendsPreview() }
+        })
+        observers.append(center.addObserver(forName: .danaviewExportResumesPreview, object: context, queue: nil) { [weak self] _ in
+            queue.async { self?.exportResumesPreview() }
+        })
+    }
+
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    /// An export started (control queue): every session releases its player.
+    func exportSuspendsPreview() {
+        exportSuspensions += 1
+        sessions.values.forEach { $0.suspendForExport() }
+    }
+
+    /// That export ended (control queue): every session rebuilds its current frame.
+    func exportResumesPreview() {
+        guard exportSuspensions > 0 else { return }
+        exportSuspensions -= 1
+        sessions.values.forEach { $0.resumeAfterExport() }
     }
 
     /// The live sessions (tests).
@@ -52,15 +88,21 @@ final class PreviewSessionManager: PreviewSessionManaging {
     func open(_ config: PreviewConfigMsg, reply: @escaping EngineReply<PreviewOpenedMsg>) {
         let paths: Paths
         do { paths = try context.requirePaths() } catch { return reply(.failure(error)) }
-        let deps = makeDependencies?(context, paths) ?? PreviewSessionManager.defaultDependencies(context: context, paths: paths)
         let id = "pv_" + UUID().uuidString.lowercased()
+        var deps = makeDependencies?(context, paths) ?? PreviewSessionManager.defaultDependencies(context: context, paths: paths)
+        let ranges = RenderedRangeRegistry.of(context)
+        let swap = ranges.swap(for: id)
+        deps.renderedRanges = swap
         let session: PreviewSession
         do {
             session = try PreviewSession(id: id, config: config, queue: context.queues.previewControl, dependencies: deps)
         } catch {
+            ranges.remove(sessionId: id)
             return reply(.failure(EngineError(.gpuUnavailable, "preview renderer unavailable: \(EngineError.from(error).message)")))
         }
+        swap.planProvider = { [weak session] in session?.plan }
         sessions[id] = session
+        for _ in 0..<exportSuspensions { session.suspendForExport() }
         let queue = context.queues.previewControl
         session.registerTexture { textureId in
             queue.async { reply(.success(PreviewOpenedMsg(sessionId: id, textureId: textureId))) }
@@ -140,6 +182,7 @@ final class PreviewSessionManager: PreviewSessionManaging {
     /// Idempotent: unknown or disposed sessions succeed.
     func dispose(sessionId: String, reply: @escaping EngineReply<Void>) {
         guard let s = sessions.removeValue(forKey: sessionId) else { return reply(.success(())) }
+        RenderedRangeRegistry.of(context).remove(sessionId: sessionId)
         s.dispose { reply(.success(())) }
     }
 }

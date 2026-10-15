@@ -36,6 +36,7 @@ import '../../app/editor_providers.dart';
 import '../contracts/contracts.dart';
 import '../state/editor_state.dart';
 import '../wiring/action_bindings.dart';
+import 'bindings/render_preview_bindings.dart' show renderPreviewMeta;
 import 'shortcuts_sheet.dart';
 
 // -------------------------------------------------------------------------------------------------
@@ -314,6 +315,7 @@ EditorActionMeta editorActionMeta(EditorActionId id) {
     EditorActionId.replace => const EditorActionMeta('Replace media', Icons.swap_calls_rounded),
     EditorActionId.clipInfo => const EditorActionMeta('Clip info', Icons.info_outline_rounded),
     EditorActionId.export => const EditorActionMeta('Export', Icons.ios_share_rounded),
+    EditorActionId.renderPreview => renderPreviewMeta,
     EditorActionId.showShortcuts => EditorActionMeta('Keyboard shortcuts', Icons.keyboard_rounded, combos: [
         key(LogicalKeyboardKey.slash, command: true),
         const EditorKeyCombo.character('?'),

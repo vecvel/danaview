@@ -22,6 +22,7 @@ import '../actions/bindings/overlay_bindings.dart';
 import '../actions/bindings/playback_bindings.dart';
 import '../actions/bindings/project_bindings.dart';
 import '../actions/bindings/relink_bindings.dart';
+import '../actions/bindings/render_preview_bindings.dart';
 import '../actions/bindings/speed_bindings.dart';
 import '../actions/bindings/subtitle_io_bindings.dart';
 import '../actions/bindings/text_bindings.dart';
@@ -76,6 +77,7 @@ final List<EditorBindingSource> editorBindingSources = List.unmodifiable(<Editor
   EditorBindingSource('auto_captions_bindings', 'UX-37', () => autoCaptionsBindings),
   EditorBindingSource('export_bindings', 'UX-39', () => exportBindings),
   EditorBindingSource('relink_bindings', 'UX-40', () => relinkBindings),
+  EditorBindingSource('render_preview_bindings', 'UX-44', () => renderPreviewBindings),
 ]);
 
 /// Thrown when two binding files bind the same [EditorActionId].

@@ -30,8 +30,20 @@
 //   (`maxConcurrentVideoLayers`), playback runs a composition whose excess slots are `hold`
 //   stills of their exact frame at the play position (PlaybackStills); paused, scrub and exact
 //   seek always run the full composition, so they are exact for every layer.
-// Rendered ranges (D-45): `RenderedRangeHook` (no-op here, IOS-19 implements it) is asked for the
-//   plan's rendered ranges and called whenever playback enters or leaves one.
+// Rendered ranges (D-45): `RenderedRangeHook` (IOS-19's RenderedRangeSwap, installed by the
+//   manager) is told about every plan change (`planDidChange`: setPlan, applyPatch), asked for the
+//   plan's rendered ranges and called whenever playback enters or leaves one. While playing, the
+//   item is built from the hook's `playbackPlan(for:)` (the rendered files swapped in; PlaybackStills
+//   then applies to that plan, never to the render layers) and the snapshot comes from that plan
+//   plus transients; pause, end of playback, scrub and exact seeks while paused run the full
+//   composition. When the playable ranges change during playback (a patch dropped one, or a new
+//   set arrived; checked with every patch and clock sample), the item is rebuilt at the play
+//   position and playback continues.
+// Export suspension (IOS-12, ARCH §14.3 parity): `suspendForExport` pauses (a real pause), releases
+//   the player item and its decoders while the last frame stays on the texture and the snapshot is
+//   kept; plans, patches, transients and seeks are recorded meanwhile (nothing is composed, play is
+//   refused with a clock sample). `resumeAfterExport` rebuilds the current plan at the current frame
+//   (paused). Nested suspensions count.
 // Lifecycle: resign active → pause + stop the display link; background → release Core Image
 //   intermediates; active → refresh (re-compose the current frame; the old frame stays on the
 //   texture meanwhile, never black); memory warning → trim render caches to 25% and drop source
@@ -48,13 +60,36 @@ import UIKit
 
 // MARK: - Rendered ranges (D-45)
 
-/// The render-preview cache hook. IOS-19 implements it; the default does nothing.
+/// The render-preview cache hook. IOS-19 implements it (RenderedRangeSwap); the default does nothing.
 protocol RenderedRangeHook: AnyObject {
     /// Output frame ranges `[lowerBound, upperBound)` of plan revision [planRev] that have a
     /// render-preview file (empty: none).
     func renderedRanges(planRev: Int64) -> [Range<Int64>]
     /// Playback entered ([entered] true) or left [range] at output frame [k] (control queue).
     func playbackCrossed(range: Range<Int64>, entered: Bool, atFrame k: Int64)
+    /// [plan] for playback with the rendered files swapped in; nil when the live composition plays.
+    func playbackPlan(for plan: RenderPlan) -> RenderPlan?
+    /// The session applied [patch] to [old] (or, with [patch] nil, replaced the plan) giving [new].
+    func planDidChange(from old: RenderPlan?, to new: RenderPlan, patch: RenderPlanPatch?)
+}
+
+extension RenderedRangeHook {
+    func playbackPlan(for plan: RenderPlan) -> RenderPlan? { nil }
+    func planDidChange(from old: RenderPlan?, to new: RenderPlan, patch: RenderPlanPatch?) {}
+}
+
+enum RenderedPlayback {
+    /// The render layers of a playback plan (ids, spans, files): plans with equal signatures build
+    /// the same composition structure (empty: the live composition).
+    static func signature(_ plan: RenderPlan?) -> [String] {
+        guard let plan else { return [] }
+        return plan.layers.filter { isRenderLayer($0) }.map { l in
+            let asset = l.asset.flatMap { plan.assets[$0] }
+            return "\(l.id)|\(l.t0)|\(l.t1)|\(asset?.uri ?? "")|\(asset?.fp ?? "")"
+        }
+    }
+
+    static func isRenderLayer(_ layer: PlanLayer) -> Bool { layer.id.hasPrefix(RenderedRangeRules.layerPrefix) }
 }
 
 /// No rendered ranges (until IOS-19).
@@ -91,7 +126,8 @@ enum PlaybackStills {
     static func plan(_ plan: RenderPlan, budget: Int, anchorFrame k: Int64) -> (plan: RenderPlan, stillSlots: [Int])? {
         let limit = max(1, budget)
         guard peakLiveLayers(plan.layers) > limit else { return nil }
-        let seqs = Set(plan.layers.compactMap { $0.kind == .media ? $0.seq : nil }).sorted()
+        // Render layers (D-45) are one decoder playing in place of the layers they cover: never stills.
+        let seqs = Set(plan.layers.compactMap { $0.kind == .media && !RenderedPlayback.isRenderLayer($0) ? $0.seq : nil }).sorted()
         guard seqs.count > 1 else { return nil }
         let t = plan.canvas.outputGrid.timeOfFrame(k)
         var layers = plan.layers
@@ -224,6 +260,15 @@ final class PreviewSession {
     private(set) var renderSize: CGSize
     private var useProxies: Bool
     private(set) var playingStills = false
+    /// The rendered playback plan the item was built from (nil: the plan's live composition).
+    private(set) var renderedPlan: RenderPlan?
+    /// Whether the item plays rendered ranges from their files.
+    var playingRenderedRanges: Bool { renderedPlan != nil }
+    /// Rebuilds started because the playable rendered ranges changed during playback (tests).
+    private(set) var rangeRebuildCount = 0
+    private var suspendDepth = 0
+    /// Suspended for an export: no player item, nothing composed (see the header).
+    var suspended: Bool { suspendDepth > 0 }
     private var rebuildGeneration: UInt64 = 0
     private(set) var rebuilding = false
     private var afterRebuild: [() -> Void] = []
@@ -333,7 +378,9 @@ final class PreviewSession {
         } catch {
             return reply(.failure(PreviewSession.planError(error)))
         }
+        let old = plan
         plan = next
+        deps.renderedRanges.planDidChange(from: old, to: next, patch: nil)
         transients.removeAll()
         rebuild(frame: currentFrame) { [weak self] result in
             guard let self else { return }
@@ -359,8 +406,14 @@ final class PreviewSession {
         let touched = PlanPatching.touchedLayerIds(patch)
         transients.removeAll { t in t.layers.contains { touched.contains($0.id) } }
         plan = next
+        deps.renderedRanges.planDidChange(from: current, to: next, patch: patch)
         var structural = PlanPatching.classify(patch, from: current) == .structural
         if !structural, !rebuilding, let built, !built.updateGains(next) {
+            structural = true
+        }
+        if !structural, !rebuilding, !suspended, renderedRangesChanged() {
+            // The patch dropped a range the playing item plays from its file.
+            rangeRebuildCount += 1
             structural = true
         }
         if structural {
@@ -404,7 +457,19 @@ final class PreviewSession {
 
     private func makeSnapshot() -> ParamSnapshot {
         guard let plan else { return snapshots.current }
-        return transients.reduce(ParamSnapshot(plan: plan)) { $0.applying($1) }
+        var base = plan
+        if let rendered = renderedPlan {
+            // The item plays the rendered plan: its snapshot has the render layers and cut maps.
+            // Param changes since the build are taken from a fresh playback plan of the same shape.
+            if let fresh = deps.renderedRanges.playbackPlan(for: plan),
+               RenderedPlayback.signature(fresh) == RenderedPlayback.signature(rendered) {
+                renderedPlan = fresh
+                base = fresh
+            } else {
+                base = rendered
+            }
+        }
+        return transients.reduce(ParamSnapshot(plan: base)) { $0.applying($1) }
     }
 
     static func validate(_ plan: RenderPlan) throws {
@@ -425,20 +490,44 @@ final class PreviewSession {
 
     // MARK: Rebuild
 
-    /// The plan the player item is built from: the plan, or its stills variant while playing over
-    /// the live decode budget.
-    private func compositionPlan(playing: Bool, anchor k: Int64) -> (plan: RenderPlan, stills: Bool)? {
+    /// The plan the player item is built from: the plan or, while playing, its rendered playback
+    /// plan (D-45), then its stills variant when over the live decode budget.
+    private func compositionPlan(playing: Bool, anchor k: Int64) -> (plan: RenderPlan, stills: Bool, rendered: RenderPlan?)? {
         guard let plan else { return nil }
-        if playing, let s = PlaybackStills.plan(plan, budget: deps.liveDecodeBudget, anchorFrame: k) {
-            return (s.plan, true)
+        let rendered = playing ? deps.renderedRanges.playbackPlan(for: plan) : nil
+        let base = rendered ?? plan
+        if playing, let s = PlaybackStills.plan(base, budget: deps.liveDecodeBudget, anchorFrame: k) {
+            return (s.plan, true, rendered)
         }
-        return (plan, false)
+        return (base, false, rendered)
+    }
+
+    /// Whether the playable rendered ranges differ from those the item plays (playing only).
+    private func renderedRangesChanged() -> Bool {
+        guard let plan, playing || wantsPlaying else { return false }
+        return RenderedPlayback.signature(deps.renderedRanges.playbackPlan(for: plan))
+            != RenderedPlayback.signature(renderedPlan)
+    }
+
+    /// Rebuilds at the play position when the playable rendered ranges changed during playback.
+    private func checkRenderedRanges() {
+        guard !disposed, !suspended, !rebuilding, playing, renderedRangesChanged() else { return }
+        rangeRebuildCount += 1
+        rebuild(frame: currentFrame, resume: true) { _ in }
     }
 
     /// Builds a new item for the current plan, swaps it in at output frame [frame] and restores
     /// the play state ([resume] defaults to the current one).
     private func rebuild(frame: Int64, resume: Bool? = nil, completion: @escaping (Result<Void, Error>) -> Void) {
         let resumePlaying = resume ?? (playing || wantsPlaying)
+        guard plan != nil else {
+            return completion(.failure(EngineError(.planOutOfSync, "no plan")))
+        }
+        if suspended {
+            // Recorded: resumeAfterExport rebuilds the latest plan.
+            if !rebuilding { snapshots.swap(makeSnapshot()) }
+            return completion(.success(()))
+        }
         guard let target = compositionPlan(playing: resumePlaying, anchor: frame) else {
             return completion(.failure(EngineError(.planOutOfSync, "no plan")))
         }
@@ -456,6 +545,8 @@ final class PreviewSession {
             item = nil
             built?.releaseMedia()
             built = nil
+            playingStills = false
+            renderedPlan = nil
             seeks.player = player
             snapshots.swap(makeSnapshot())
             currentFrame = 0
@@ -485,12 +576,12 @@ final class PreviewSession {
                 self.finishRebuild(gen, .failure(EngineError.from(error)), completion)
             case .success(let b):
                 self.lastRebuildPhases["build"] = (self.deps.now() - self.rebuildStart) * 1000
-                self.install(b, stills: target.stills, frame: frame, gen: gen, completion: completion)
+                self.install(b, stills: target.stills, rendered: target.rendered, frame: frame, gen: gen, completion: completion)
             }
         }
     }
 
-    private func install(_ b: BuiltComposition, stills: Bool, frame: Int64, gen: UInt64,
+    private func install(_ b: BuiltComposition, stills: Bool, rendered: RenderPlan?, frame: Int64, gen: UInt64,
                          completion: @escaping (Result<Void, Error>) -> Void) {
         let newItem = AVPlayerItem(asset: b.composition)
         newItem.videoComposition = b.videoComposition
@@ -501,6 +592,7 @@ final class PreviewSession {
         let wasPlaying = playing
         if wasPlaying { stopPlayback(keepWanted: true) }
         player.pause()
+        renderedPlan = rendered
         snapshots.swap(makeSnapshot())
         render.redraw.cancelPending()
         let old = built
@@ -559,10 +651,10 @@ final class PreviewSession {
             snapshots.swap(makeSnapshot())
             if wantsPlaying && !playing { startPlayback() }
         }
-        // Paused on a stills composition: back to the full one (exact for every layer).
+        // Paused on a stills or rendered composition: back to the full one (exact for every layer).
         var succeeded = false
         if case .success = result { succeeded = true }
-        let leaveStills = succeeded && !wantsPlaying && playingStills && built != nil
+        let leaveStills = succeeded && !wantsPlaying && (playingStills || renderedPlan != nil) && built != nil && !suspended
         if leaveStills {
             rebuild(frame: currentFrame, resume: false) { result in completion(result) }
             return
@@ -572,6 +664,7 @@ final class PreviewSession {
         afterRebuild.removeAll()
         pending.forEach { $0() }
         emitClock()
+        if succeeded { checkRenderedRanges() }
     }
 
     /// Runs [work] now, or after the rebuild in flight.
@@ -600,6 +693,11 @@ final class PreviewSession {
     /// Re-composes the cached frame with the current snapshot and mode, at most once per output
     /// frame; requests made meanwhile coalesce into one more redraw.
     private func scheduleRedraw(_ completion: ((Result<Double, Error>) -> Void)?) {
+        if suspended {
+            // Nothing is composed during an export; the resume rebuild shows the latest state.
+            completion?(.success(0))
+            return
+        }
         if let completion { redrawWaiters.append(completion) }
         if redrawInFlight {
             redrawDirty = true
@@ -661,7 +759,7 @@ final class PreviewSession {
         self.loop = loop
         clearSourceFrame()
         seeks.dropPendingScrub()
-        guard plan != nil else {
+        guard plan != nil, !suspended else {
             reply(.success(mySeq))
             return emitClock()
         }
@@ -678,9 +776,11 @@ final class PreviewSession {
             } else if start >= self.frameCount - 1 {
                 start = 0
             }
+            let rendered = self.deps.renderedRanges.playbackPlan(for: self.plan!)
             let needsStills = PlaybackStills.plan(
-                self.plan!, budget: self.deps.liveDecodeBudget, anchorFrame: start) != nil
-            if needsStills != self.playingStills {
+                rendered ?? self.plan!, budget: self.deps.liveDecodeBudget, anchorFrame: start) != nil
+            let rangesDiffer = RenderedPlayback.signature(rendered) != RenderedPlayback.signature(self.renderedPlan)
+            if needsStills != self.playingStills || rangesDiffer {
                 self.rebuild(frame: start, resume: true) { _ in }
             } else if start != self.currentFrame {
                 self.seeks.exact(start) { [weak self] o in
@@ -710,8 +810,9 @@ final class PreviewSession {
         emitClock()
         guard wasPlaying else { return }
         // Settle on an exact frame: the compositor may have composed ahead, and paused edits
-        // redraw the compositor's last request. Stills playback goes back to the full composition.
-        if playingStills {
+        // redraw the compositor's last request. Stills and rendered-range playback go back to the
+        // full composition.
+        if playingStills || renderedPlan != nil {
             rebuild(frame: currentFrame, resume: false) { _ in }
         } else {
             let k = currentFrame
@@ -854,6 +955,7 @@ final class PreviewSession {
         t.setEventHandler { [weak self] in
             guard let self, self.playing else { return }
             self.emitClock()
+            self.checkRenderedRanges()
         }
         clockTimer = t
         t.resume()
@@ -936,6 +1038,10 @@ final class PreviewSession {
         stopPlayback()
         if let k = bridge.lastComposed?.k { currentFrame = clampFrame(k) }
         emitClock()
+        if playingStills || renderedPlan != nil {
+            // Ended on a stills or rendered composition: paused edits and seeks need the full one.
+            rebuild(frame: currentFrame, resume: false) { _ in }
+        }
     }
 
     // MARK: Quality and proxies
@@ -1197,6 +1303,50 @@ final class PreviewSession {
 
     func handleThermal(_ state: ProcessInfo.ThermalState) {
         if let step = governor.setThermal(state, at: deps.now()) { governorStepped(to: step) }
+    }
+
+    // MARK: Export suspension (IOS-12)
+
+    /// An export starts on this device tier: pause, release the item and its decoders; the last
+    /// frame stays on the texture and the snapshot is kept.
+    func suspendForExport() {
+        guard !disposed else { return }
+        suspendDepth += 1
+        guard suspendDepth == 1 else { return }
+        if playing || wantsPlaying { pause { _ in } }
+        wantsPlaying = false
+        whenSettled { [weak self] in self?.releasePlayerForExport() }
+    }
+
+    private func releasePlayerForExport() {
+        guard suspended, !disposed else { return }
+        stopPlayback()
+        wantsPlaying = false
+        seeks.cancelAll()
+        statusObservation = nil
+        render.redraw.cancelPending()
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        item = nil
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        endObserver = nil
+        bridge.output = nil
+        built?.releaseMedia()
+        built = nil
+        playingStills = false
+        renderedPlan = nil
+        snapshots.swap(makeSnapshot())
+        displayLink.stop()
+        render.releaseIntermediates()
+        emitClock()
+    }
+
+    /// The export ended: rebuild the latest plan at the current frame (paused).
+    func resumeAfterExport() {
+        guard !disposed, suspendDepth > 0 else { return }
+        suspendDepth -= 1
+        guard suspendDepth == 0, plan != nil else { return }
+        rebuild(frame: currentFrame, resume: false) { _ in }
     }
 
     // MARK: Dispose

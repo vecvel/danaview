@@ -244,6 +244,9 @@ enum EditorActionId {
   /// Export flow.
   export(EditorActionGroup.tools),
 
+  /// ⌘R: render a preview of the selection, loop range or timeline (D-45, UX-44).
+  renderPreview(EditorActionGroup.tools),
+
   /// ⌘/ or ?: shortcuts sheet.
   showShortcuts(EditorActionGroup.tools),
 

@@ -16,6 +16,9 @@
 // * `DefaultPlanCompiler` for `planCompilerPortProvider`, the editor prefs, the capabilities, and the
 //   Settings › Storage contributors (`EditorStorageContributor.all`) when the router supplies the
 //   Projects navigation.
+// * The render-preview cache (D-45): `IndexRenderPreviewStore` over CORE-37's `RenderCacheIndex`
+//   in `<cache>/danaview/editor/renders/`, LRU-bounded by the device tier
+//   (`RenderCacheIndex.limitForTier`), for `renderPreviewStoreProvider`.
 //
 // On desktop, web, with `DANAVIEW_EDITOR` off or without an engine, [EditorBootstrap.create] returns
 // [EditorBootstrap.unavailable]: no contributors, no root providers, the router hides every entry
@@ -28,6 +31,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:danaview_data/danaview_data.dart' show AppStorage, LibraryStorage;
 import 'package:danaview_editor_core/model.dart' show ProjectId;
+import 'package:danaview_editor_core/render_cache.dart' show RenderCacheIndex;
 import 'package:danaview_editor_core/store.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 import 'package:danaview_features/storage.dart' show StorageContributor, storageContributorsProvider;
@@ -35,10 +39,12 @@ import 'package:danaview_features/storage.dart' show StorageContributor, storage
 import '../editor/state/default_plan_compiler.dart';
 import '../editor/state/editor_session.dart' show EditorPosterCapture;
 import '../editor/state/plan_compiler_port.dart';
+import '../editor/state/render_preview_controller.dart' show IndexRenderPreviewStore, renderPreviewStoreProvider;
 import 'editor_availability.dart';
 import 'editor_prefs.dart';
 import 'editor_providers.dart';
 import 'editor_storage_contributor.dart';
+import 'editor_tier_defaults.dart';
 
 /// Whether the GC may sweep now: false while an export runs or waits to be resumed (ARCH §9.4).
 /// Unknown (never refreshed, or the engine could not answer) counts as "export in progress", so a
@@ -89,6 +95,7 @@ final class EditorRuntime {
     required this.gc,
     required this.gcScheduler,
     required this.exportGate,
+    required this.renderPreview,
   });
 
   /// The platform engine.
@@ -123,6 +130,9 @@ final class EditorRuntime {
 
   /// The GC's export gate.
   final EditorExportGate exportGate;
+
+  /// The render-preview cache (D-45), bounded by the device tier.
+  final IndexRenderPreviewStore renderPreview;
 
   AppLifecycleListener? _lifecycle;
   bool _disposed = false;
@@ -315,6 +325,16 @@ abstract final class EditorBootstrap {
       gc: gc,
       gcScheduler: gcScheduler,
       exportGate: exportGate,
+      renderPreview: IndexRenderPreviewStore(
+        RenderCacheIndex(
+          roots: roots,
+          deleter: deleter,
+          fs: fs,
+          limitBytes: RenderCacheIndex.limitForTier(
+            (capabilities == null ? EditorTierDefaults.fallback : EditorTierDefaults.of(capabilities)).renderTier,
+          ),
+        ),
+      ),
     );
     if (startGc) gcScheduler.start();
     if (listenToLifecycle) runtime._listenToLifecycle();
@@ -334,6 +354,7 @@ abstract final class EditorBootstrap {
       mediaPoolServiceProvider.overrideWithValue(runtime.pool),
       editorPrefsProvider.overrideWithValue(runtime.prefs),
       planCompilerPortProvider.overrideWithValue(runtime.compiler),
+      renderPreviewStoreProvider.overrideWithValue(runtime.renderPreview),
       if (caps != null) editorCapabilitiesProvider.overrideWith((ref) async => caps),
       storageContributorsProvider.overrideWithValue(
         onOpenProjects == null
