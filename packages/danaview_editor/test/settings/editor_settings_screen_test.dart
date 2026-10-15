@@ -99,7 +99,8 @@ void main() {
 
       // Only editor keys were written.
       expect(backend.keys.every(EditorPrefKeys.isEditorKey), isTrue);
-      // The screen reflects the new values.
+      // The screen reflects the new values (scrolling back up: the list is longer than the view).
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('editor-settings-proxy')), -120, scrollable: find.byType(Scrollable).first);
       expect(_segmentValue<ProxyMediaMode>(tester, 'editor-settings-proxy'), ProxyMediaMode.always);
       expect(tester.widget<DanaviewSwitchRow>(find.byKey(const ValueKey('editor-settings-snapping-haptics'))).value, isFalse);
     });

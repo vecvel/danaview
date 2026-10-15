@@ -46,6 +46,8 @@ const _cache = <String, int>{
   '/app/cache/danaview/editor/proxies/m1/proxy.mp4': 1000,
   '/app/cache/danaview/editor/sprites/t1.vsprite': 10,
   '/app/cache/danaview/editor/looks/warm.png': 5,
+  // Render-preview cache (D-45); empty so the totals above stay the same.
+  '/app/cache/danaview/editor/renders/index.json': 0,
 };
 
 ({FaultInjectingFs fs, MemoryStoreFs memory}) _world() {

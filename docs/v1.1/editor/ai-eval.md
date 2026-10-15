@@ -160,7 +160,9 @@ FLEURS WER for whisper large-v2 (Radford et al., 2022, appendix D): `es`, `it`, 
 `el`, `cs`, `hr`, `tl`, `da`, `ro`, `zh`, `bg`. The ranking is the large model's; tiny and base are
 weaker everywhere, so the list is a floor. Per-language numbers [VERIFY against the paper's table]
 and the nightly per-tier WER replace it. Exposed as `SpeechTuning.fleursTop30` /
-`SpeechTuning.qualityHintFor(code)`.
+`SpeechTuning.qualityHintFor(code)`. Since FIX-AI-TUNING, `TranscriptionLanguage.qualityHint` is a
+getter that reads `SpeechTuning.qualityHintFor(whisperCode)` (it was a stored field, false for every
+language), so the language picker's hint follows this list.
 
 ### 6.7 Decided constants (`SpeechTuning`)
 
@@ -212,12 +214,19 @@ the harness flagged 4 of 4 non-speech clips as hallucinations (raw 100%, after t
 
 ## 8. Follow-ups outside QA-06
 
-- The constants are decided here but some consumers still hold their own copy (the drift guard in
-  `tuning_test.dart` keeps them equal): `caption_layout.dart` (CJK/Korean CPS, AI-11),
-  `NormalizerOptions` defaults (AI-10), the VAD defaults passed by `pipeline_job.dart` (AI-13 uses
-  `WhisperVadOptions` defaults), `ResourceGovernor.memoryHeadroom` (AI-13), and
-  `TranscriptionLanguage.qualityHint` (false for every language; AI-08 should read
-  `SpeechTuning.qualityHintFor`).
-- ARCH §18.2's captions row stays an estimate until §5 is measured (ARCH is edited by its owners).
-- The root `pubspec.yaml` gets `danaview_whisper` and `danaview_transcription` with INT-04; until then
-  the benchmark test's imports resolve transitively (analyzer info `depend_on_referenced_packages`).
+Status as of 2026-10-15 (FIX-DOCS), after FIX-AI-TUNING and INT-04 landed.
+
+- Done (FIX-AI-TUNING): the consumers that held their own copy of a constant now read
+  `SpeechTuning` directly: `caption_layout.dart` (line length and CPS, incl. CJK/Korean, AI-11),
+  `NormalizerOptions` defaults (hallucination thresholds, AI-10), the decode and VAD options built by
+  `pipeline_job.dart` (AI-13; no longer `WhisperVadOptions` defaults), and
+  `ResourceGovernor.memoryHeadroom` (= `preflightMemoryFactor`, AI-13). `orchestration_test.dart`
+  asserts the decode and VAD values; the drift guard in `tool/eval/test/tuning_test.dart` stays.
+- Done (FIX-AI-TUNING): `TranscriptionLanguage.qualityHint` changed from a stored field (false for
+  every language) into a getter reading `SpeechTuning.qualityHintFor(whisperCode)` (§6.6);
+  `languages_test.dart` checks that exactly the FLEURS top 30 carry no hint.
+- Done (INT-04): the root `pubspec.yaml` depends on `danaview_whisper` and
+  `danaview_transcription` (`lib/main.dart` wires the auto captions service), so the benchmark
+  test's imports no longer rely on transitive resolution.
+- Open: ARCH §18.2's captions row stays an estimate until §5 is measured on devices (ARCH is edited
+  by its owners).

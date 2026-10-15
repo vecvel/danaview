@@ -344,6 +344,9 @@ final class PreviewSession {
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
     }
 
+    /// The rendered-range hook the session reports to (tests).
+    var renderedRangeHook: RenderedRangeHook { deps.renderedRanges }
+
     /// Registers the texture (main thread hop); [completion] gets the texture id.
     func registerTexture(completion: @escaping (Int64) -> Void) {
         bridge.register(with: deps.registry, completion: completion)
