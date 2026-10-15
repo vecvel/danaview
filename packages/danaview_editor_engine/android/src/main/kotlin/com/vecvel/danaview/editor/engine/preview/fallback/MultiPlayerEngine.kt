@@ -190,6 +190,7 @@ internal class MultiPlayerEngine(
     private var scrubbing = false
     private var pendingScrub: Long? = null
     private var resumeAfterSeek = false
+    private var ticks = 0
 
     // ---- DeckEnv ----
 
@@ -207,6 +208,7 @@ internal class MultiPlayerEngine(
     private val frameCount: Long get() = SeekMath.frameCount(grid, plan.durUs)
 
     fun setRenderSize(w: Int, h: Int) {
+        dbg("render size ${w}x$h")
         renderW = w
         renderH = h
     }
@@ -361,6 +363,7 @@ internal class MultiPlayerEngine(
     // ---- surface ----
 
     fun attachSurface(surface: Surface, w: Int, h: Int) {
+        dbg("attach ${w}x$h mode=$mode")
         val g = ensureGl()
         g.attachWindow(surface, w, h)
         if (mode != Mode.PLAYING && lastShown >= 0 && g.canvasSize != null) {
@@ -370,6 +373,7 @@ internal class MultiPlayerEngine(
     }
 
     fun detachSurface() {
+        dbg("detach mode=$mode")
         gl?.detachWindow()
     }
 
@@ -378,6 +382,7 @@ internal class MultiPlayerEngine(
     // ---- transport ----
 
     fun play(from: Long, loopRange: FrameRange?) {
+        dbg("play $from mode=$mode")
         val my = ++token
         stopAll()
         loop = loopRange
@@ -391,6 +396,7 @@ internal class MultiPlayerEngine(
 
     /** Stops playback; returns the frame on screen. */
     fun pause(): Long {
+        dbg("pause mode=$mode")
         token++
         stopAll()
         mode = Mode.IDLE
@@ -401,6 +407,7 @@ internal class MultiPlayerEngine(
     }
 
     fun seek(k: Long, exact: Boolean) {
+        dbg("seek $k exact=$exact mode=$mode")
         if (!exact && scrubbing && mode == Mode.SEEKING) {
             // One scrub in flight, the latest wins.
             pendingScrub = k
@@ -634,6 +641,7 @@ internal class MultiPlayerEngine(
     }
 
     private fun begin(k0: Long) {
+        dbg("begin k0=$k0 ready=${prerollReady(grid.timeOfFrame(k0), k0)} ${debugState()}")
         val now = System.nanoTime()
         mode = Mode.PLAYING
         clock.start(grid.timeOfFrame(k0), now)
@@ -646,10 +654,15 @@ internal class MultiPlayerEngine(
     }
 
     override fun doFrame(frameTimeNanos: Long) = guarded {
-        if (mode != Mode.PLAYING || released) return@guarded
+        if (VideoDeck.DEBUG && ticks < 12) dbg("doFrame#$ticks mode=$mode")
+        if (mode != Mode.PLAYING || released) {
+            dbg("tick ignored mode=$mode")
+            return@guarded
+        }
         val now = System.nanoTime()
         val tp = clock.deckTime(now)
         val buffering = rebuffering(tp)
+        if (VideoDeck.DEBUG && (ticks++ < 6 || ticks % 24 == 0)) dbg("tick k=${clock.frameAt(now)} lastK=$lastK buf=$buffering stall=${stallStartNs != 0L} ${debugState()}")
         if (buffering && (stallStartNs == 0L || (now - stallStartNs) / 1_000_000 < FrameClock.MAX_STALL_MS)) {
             if (stallStartNs == 0L) {
                 stallStartNs = now
@@ -689,6 +702,7 @@ internal class MultiPlayerEngine(
             return@guarded
         }
         if (k >= frameCount) {
+            dbg("end k=$k frameCount=$frameCount dur=${plan.durUs} rev=${plan.rev}")
             for (dropped in SkipRange.of(lastK, frameCount)) host.frameDropped(dropped)
             stopAll()
             mode = Mode.IDLE
@@ -698,7 +712,9 @@ internal class MultiPlayerEngine(
         schedule(tc, clock.deckTime(now), prerolling = false)
         if (k > lastK && k >= playFrom) {
             noteBoundary(k)
-            when (composite(k, Purpose.PLAYBACK)) {
+            val outcome = composite(k, Purpose.PLAYBACK)
+            if (VideoDeck.DEBUG && ticks < 12) dbg("k=$k -> $outcome")
+            when (outcome) {
                 Outcome.DRAWN, Outcome.NOT_PRESENTED -> {
                     reportDropped(HoldMiss.skipped(lastK, k))
                     lastK = k
@@ -1050,12 +1066,17 @@ internal class MultiPlayerEngine(
         val delay = options.injectedCompositeDelayMs
         if (delay > 0) SystemClock.sleep(delay)
         g.compose(snap.plan, geom, inputs)
+        val sw = System.nanoTime()
         val presented = g.present(grid.platformTimeOfFrame(k))
+        if (VideoDeck.DEBUG && stats.composed < 5) dbg("present k=$k took ${(System.nanoTime() - sw) / 1_000_000} ms window=${g.hasWindow}")
         stats.composed++
         if (range != null) stats.rangeFrames++
         if (stillFallbackUsed) stats.exactStillFallbacks++
         if (stats.compositeMs.size < MAX_TIMINGS) stats.compositeMs += (System.nanoTime() - started) / 1e6
-        if (!presented) return Outcome.NOT_PRESENTED
+        if (!presented) {
+            dbg("not presented k=$k")
+            return Outcome.NOT_PRESENTED
+        }
         if (purpose != Purpose.NEAREST) {
             lastShown = k
             host.frameDisplayed(k)
@@ -1223,6 +1244,10 @@ internal class MultiPlayerEngine(
     fun deckStats(): List<DeckStats> = allSlots().flatMap { rt -> rt.decks.map { it.stats } }
 
     // ---- plumbing ----
+
+    private fun dbg(msg: String) {
+        if (VideoDeck.DEBUG) Log.d("AND16DBG", msg)
+    }
 
     private fun post(block: () -> Unit) {
         try {

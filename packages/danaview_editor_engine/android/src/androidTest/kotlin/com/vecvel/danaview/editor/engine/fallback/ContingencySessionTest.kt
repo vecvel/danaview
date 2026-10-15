@@ -53,7 +53,10 @@ class ContingencySessionTest {
     /** Frames the producer receives for [ms]; their main barcodes (null = unreadable). */
     private fun watch(h: PreviewHarness, ms: Long, during: () -> Unit = {}): List<Int?> {
         val seen = ArrayList<Int?>()
-        var last = h.producer.frameCount
+        // Start once playback presents (a cold deck start takes 1–2 s on the emulator).
+        val first = h.producer.awaitFrame(h.producer.frameCount, 15_000)
+        seen += barcode(first)
+        var last = first.index
         val t0 = System.currentTimeMillis()
         var ran = false
         while (System.currentTimeMillis() - t0 < ms) {

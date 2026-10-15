@@ -32,6 +32,13 @@ import com.vecvel.danaview.editor.engine.effects.RenderGeometry
 import com.vecvel.danaview.editor.engine.effects.ShaderPrograms
 import com.vecvel.danaview.editor.engine.effects.ShaderSources
 import com.vecvel.danaview.editor.engine.effects.SourceTexture
+import com.vecvel.danaview.editor.engine.plan.ParamSnapshot
+import com.vecvel.danaview.editor.engine.plan.PlanCanvas
+import com.vecvel.danaview.editor.engine.plan.PlanLayer
+import com.vecvel.danaview.editor.engine.plan.PlanLayerKind
+import com.vecvel.danaview.editor.engine.plan.PlanSize
+import com.vecvel.danaview.editor.engine.plan.PlanTarget
+import com.vecvel.danaview.editor.engine.plan.PlanTransform
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
 import com.vecvel.danaview.editor.engine.preview.LayerCompositorGl
 import com.vecvel.danaview.editor.engine.preview.PausedFrameRenderer
@@ -82,6 +89,30 @@ internal class FallbackGl(appContext: Context, assets: EffectAssets) {
         makeCurrent(pbuffer)
         programs = ShaderPrograms.acquire(ShaderSources.assetReader(appContext))
         compositor = LayerCompositorGl(programs, assets)
+        // Compile every program now (≈ 0.5 s on the emulator), not on the first played frame.
+        programs.compileAll()
+        warmDraw()
+    }
+
+    /** One tiny solid frame through the place shader and the compositor blend. */
+    private fun warmDraw() {
+        val n = WARM_SIZE
+        val target = GlTarget.rgba8(n, n)
+        try {
+            val plan = RenderPlan(
+                rev = 0, target = PlanTarget.PREVIEW, canvas = PlanCanvas(n, n, 30), durUs = 1_000_000L,
+                assets = emptyMap(), layers = emptyList(), audio = emptyList(),
+            )
+            val layer = PlanLayer(
+                id = "warm", z = 0, t0 = 0, t1 = 1_000_000L, kind = PlanLayerKind.SOLID, color = 0x80FFFFFF.toInt(),
+                base = PlanSize(n.toDouble(), n.toDouble()), xf = PlanTransform(cx = n / 2.0, cy = n / 2.0, r = 10.0),
+            )
+            compositor.compose(plan, RenderGeometry(n, n, n, n), listOf(LayerCompositorGl.Input(layer, ParamSnapshot.evaluate(layer, plan, 0), null)), target)
+            GLES20.glFinish()
+        } finally {
+            target.release()
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        }
     }
 
     private fun gpu(what: String) = EngineException(EngineErrorCode.gpuUnavailable, "$what failed 0x${Integer.toHexString(EGL14.eglGetError())}")
@@ -187,6 +218,10 @@ internal class FallbackGl(appContext: Context, assets: EffectAssets) {
 
     /** Deletes a texture made by [upload]. */
     fun delete(texture: SourceTexture) = current { GlResources.deleteTexture(texture.id) }
+
+    private companion object {
+        const val WARM_SIZE = 32
+    }
 
     /** Releases every GL object and the context (the default display stays initialized: it is shared). */
     fun release() {
