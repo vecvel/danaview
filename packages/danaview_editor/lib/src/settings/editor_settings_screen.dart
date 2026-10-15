@@ -1,10 +1,12 @@
 // OWNER: UX-04
 //
 // The Editor settings screen (ARCH §17.10, ux.md §4.8): proxy media, default preview quality,
-// centre playhead on touch, snapping haptics, default new-project format, and the slot for UX-38's
-// Auto captions section (shown only with DANAVIEW_AUTO_CAPTIONS, D-31). Every value is an `editor.`
-// preference written through `EditorPrefs` the moment it changes. Reached from Settings › Video
-// editor (`/settings/editor`, INT-02); navigation comes from the router.
+// centre playhead on touch, snapping haptics, default new-project format, the slot for UX-38's
+// Auto captions section (shown only with DANAVIEW_AUTO_CAPTIONS, D-31) and the second slot for
+// UX-44's Render preview section (D-45). An unset proxy preference shows the tier default
+// (`EditorTierDefaults`: Always on minimal/low, Auto on mid/high), and the hint marks it. Every
+// value is an `editor.` preference written through `EditorPrefs` the moment it changes. Reached
+// from Settings › Video editor (`/settings/editor`, INT-02); navigation comes from the router.
 
 import 'package:flutter/material.dart' show Icons, Scaffold;
 import 'package:flutter/widgets.dart';
@@ -15,8 +17,10 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import '../app/editor_availability.dart';
 import '../app/editor_prefs.dart';
 import '../app/editor_providers.dart';
+import '../app/editor_tier_defaults.dart';
 import '../app/strings/settings_strings.dart';
 import 'captions_settings_section.dart';
+import 'render_preview_settings_section.dart';
 
 /// Editor preferences (ARCH §17.10). Navigation comes from the router (INT-02).
 class EditorSettingsScreen extends ConsumerWidget {
@@ -29,6 +33,7 @@ class EditorSettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefs = ref.watch(editorPrefsProvider);
+    final defaults = ref.watch(editorTierDefaultsProvider);
     return Scaffold(
       backgroundColor: DanaviewColors.background,
       body: DanaviewLibraryFrame(
@@ -36,88 +41,106 @@ class EditorSettingsScreen extends ConsumerWidget {
         body: LayoutBuilder(
           builder: (context, constraints) => ListenableBuilder(
             listenable: prefs,
-            builder: (context, _) => ListView(
-              key: const ValueKey('editor-settings-list'),
-              padding: danaviewLibraryInsets(constraints.maxWidth).copyWith(
-                top: DanaviewSpacing.sm,
-                bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
-              ),
-              children: [
-                const DanaviewLibrarySectionHeader(SettingsStrings.previewSection, topSpacing: DanaviewSpacing.md),
-                _ChoiceSetting<ProxyMediaMode>(
-                  key: const ValueKey('editor-settings-proxy'),
-                  icon: Icons.speed_rounded,
-                  color: DanaviewColors.cyan,
-                  title: SettingsStrings.proxyTitle,
-                  description: SettingsStrings.proxyDescription,
-                  hint: SettingsStrings.proxyHint(prefs.proxyMedia),
-                  value: prefs.proxyMedia,
-                  options: [
-                    for (final mode in ProxyMediaMode.values) DanaviewOption(value: mode, label: SettingsStrings.proxyLabel(mode)),
-                  ],
-                  onChanged: prefs.setProxyMedia,
+            builder: (context, _) {
+              final proxyMode = defaults.effectiveProxyMedia(prefs);
+              return ListView(
+                key: const ValueKey('editor-settings-list'),
+                padding: danaviewLibraryInsets(constraints.maxWidth).copyWith(
+                  top: DanaviewSpacing.sm,
+                  bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
                 ),
-                const SizedBox(height: DanaviewSpacing.md),
-                _ChoiceSetting<PreviewQualityPreference>(
-                  key: const ValueKey('editor-settings-preview-quality'),
-                  icon: Icons.high_quality_rounded,
-                  color: DanaviewColors.primaryLight,
-                  title: SettingsStrings.previewQualityTitle,
-                  description: SettingsStrings.previewQualityDescription,
-                  value: prefs.previewQuality,
-                  options: [
-                    for (final quality in PreviewQualityPreference.values)
-                      DanaviewOption(value: quality, label: SettingsStrings.previewQualityLabel(quality)),
+                children: [
+                  const DanaviewLibrarySectionHeader(SettingsStrings.previewSection, topSpacing: DanaviewSpacing.md),
+                  _ChoiceSetting<ProxyMediaMode>(
+                    key: const ValueKey('editor-settings-proxy'),
+                    icon: Icons.speed_rounded,
+                    color: DanaviewColors.cyan,
+                    title: SettingsStrings.proxyTitle,
+                    description: SettingsStrings.proxyDescription,
+                    hint: _proxyHint(proxyMode, tierDefault: defaults.proxyMedia),
+                    value: proxyMode,
+                    options: [
+                      for (final mode in ProxyMediaMode.values) DanaviewOption(value: mode, label: SettingsStrings.proxyLabel(mode)),
+                    ],
+                    onChanged: prefs.setProxyMedia,
+                  ),
+                  const SizedBox(height: DanaviewSpacing.md),
+                  _ChoiceSetting<PreviewQualityPreference>(
+                    key: const ValueKey('editor-settings-preview-quality'),
+                    icon: Icons.high_quality_rounded,
+                    color: DanaviewColors.primaryLight,
+                    title: SettingsStrings.previewQualityTitle,
+                    description: SettingsStrings.previewQualityDescription,
+                    value: prefs.previewQuality,
+                    options: [
+                      for (final quality in PreviewQualityPreference.values)
+                        DanaviewOption(value: quality, label: SettingsStrings.previewQualityLabel(quality)),
+                    ],
+                    onChanged: prefs.setPreviewQuality,
+                  ),
+                  const DanaviewLibrarySectionHeader(SettingsStrings.timelineSection),
+                  DanaviewLibraryGroup(
+                    children: [
+                      DanaviewSwitchRow(
+                        key: const ValueKey('editor-settings-center-playhead'),
+                        leading: const DanaviewTileIcon(Icons.center_focus_strong_rounded, color: DanaviewColors.purple, size: 40),
+                        title: SettingsStrings.centerPlayheadTitle,
+                        subtitle: SettingsStrings.centerPlayheadSubtitle,
+                        value: prefs.centerPlayheadOnTouch,
+                        onChanged: prefs.setCenterPlayheadOnTouch,
+                      ),
+                      DanaviewSwitchRow(
+                        key: const ValueKey('editor-settings-snapping-haptics'),
+                        leading: const DanaviewTileIcon(Icons.vibration_rounded, color: DanaviewColors.warning, size: 40),
+                        title: SettingsStrings.snappingHapticsTitle,
+                        subtitle: SettingsStrings.snappingHapticsSubtitle,
+                        value: prefs.snappingHaptics,
+                        onChanged: prefs.setSnappingHaptics,
+                      ),
+                    ],
+                  ),
+                  const DanaviewLibrarySectionHeader(SettingsStrings.newProjectsSection),
+                  _ChoiceSetting<NewProjectAspect>(
+                    key: const ValueKey('editor-settings-aspect'),
+                    icon: Icons.aspect_ratio_rounded,
+                    color: DanaviewColors.success,
+                    title: SettingsStrings.aspectTitle,
+                    description: SettingsStrings.aspectDescription,
+                    value: prefs.newProjectAspect,
+                    options: [
+                      for (final aspect in NewProjectAspect.values)
+                        DanaviewOption(value: aspect, label: SettingsStrings.aspectLabel(aspect)),
+                    ],
+                    onChanged: prefs.setNewProjectAspect,
+                  ),
+                  // Slot for UX-38 (model status, size, delete, default preset).
+                  if (EditorFlags.autoCaptionsEnabled) ...[
+                    const SizedBox(height: DanaviewSpacing.xl),
+                    const CaptionsSettingsSection(),
                   ],
-                  onChanged: prefs.setPreviewQuality,
-                ),
-                const DanaviewLibrarySectionHeader(SettingsStrings.timelineSection),
-                DanaviewLibraryGroup(
-                  children: [
-                    DanaviewSwitchRow(
-                      key: const ValueKey('editor-settings-center-playhead'),
-                      leading: const DanaviewTileIcon(Icons.center_focus_strong_rounded, color: DanaviewColors.purple, size: 40),
-                      title: SettingsStrings.centerPlayheadTitle,
-                      subtitle: SettingsStrings.centerPlayheadSubtitle,
-                      value: prefs.centerPlayheadOnTouch,
-                      onChanged: prefs.setCenterPlayheadOnTouch,
-                    ),
-                    DanaviewSwitchRow(
-                      key: const ValueKey('editor-settings-snapping-haptics'),
-                      leading: const DanaviewTileIcon(Icons.vibration_rounded, color: DanaviewColors.warning, size: 40),
-                      title: SettingsStrings.snappingHapticsTitle,
-                      subtitle: SettingsStrings.snappingHapticsSubtitle,
-                      value: prefs.snappingHaptics,
-                      onChanged: prefs.setSnappingHaptics,
-                    ),
-                  ],
-                ),
-                const DanaviewLibrarySectionHeader(SettingsStrings.newProjectsSection),
-                _ChoiceSetting<NewProjectAspect>(
-                  key: const ValueKey('editor-settings-aspect'),
-                  icon: Icons.aspect_ratio_rounded,
-                  color: DanaviewColors.success,
-                  title: SettingsStrings.aspectTitle,
-                  description: SettingsStrings.aspectDescription,
-                  value: prefs.newProjectAspect,
-                  options: [
-                    for (final aspect in NewProjectAspect.values) DanaviewOption(value: aspect, label: SettingsStrings.aspectLabel(aspect)),
-                  ],
-                  onChanged: prefs.setNewProjectAspect,
-                ),
-                // Slot for UX-38 (model status, size, delete, default preset).
-                if (EditorFlags.autoCaptionsEnabled) ...[
-                  const SizedBox(height: DanaviewSpacing.xl),
-                  const CaptionsSettingsSection(),
+                  // Second slot: UX-44 (Render preview Auto/Manual, clear rendered previews).
+                  const RenderPreviewSettingsSection(),
                 ],
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
     );
   }
 }
+
+/// The proxy hint: [SettingsStrings.proxyHint], marking [tierDefault] as this device's default
+/// (Auto is the recommended default on mid/high; Always on minimal/low).
+String _proxyHint(ProxyMediaMode mode, {required ProxyMediaMode tierDefault}) {
+  if (mode == ProxyMediaMode.auto && tierDefault != ProxyMediaMode.auto) return _proxyAutoNotDefault;
+  final hint = SettingsStrings.proxyHint(mode);
+  return mode == tierDefault && mode != ProxyMediaMode.auto ? '$hint $_tierDefaultMark' : hint;
+}
+
+// Copy for the tier-default proxy hint (FIX-UX44-HOOKS; belongs in SettingsStrings, UX-04).
+const String _tierDefaultMark = 'Recommended for this device.';
+const String _proxyAutoNotDefault = 'Proxies are made only for media that needs them.';
 
 /// A setting with an icon, a title, a description and a segmented choice (chips when narrow).
 class _ChoiceSetting<T> extends StatelessWidget {

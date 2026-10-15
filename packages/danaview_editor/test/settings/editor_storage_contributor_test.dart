@@ -84,7 +84,7 @@ void main() {
       final w = _world();
       final cleaner = EditorCacheCleaner(roots: _roots, fs: w.fs);
       expect(cleaner.paths, [
-        for (final f in ['thumbs', 'waves', 'proxies', 'sprites', 'looks']) '/app/cache/danaview/editor/$f',
+        for (final f in ['thumbs', 'waves', 'proxies', 'sprites', 'looks', 'renders']) '/app/cache/danaview/editor/$f',
       ]);
       expect(await cleaner.measure(), 1165);
     });

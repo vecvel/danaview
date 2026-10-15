@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  OWNER: INT-03
+
+  Privacy manifest of the Runner app target (ARCH §20.4). No tracking, no tracking domains, no
+  collected data types. The Runner's own code (AppDelegate.swift, SceneDelegate.swift) calls no
+  required-reason API, so the list is empty; plugins and engine pods declare theirs in their own
+  manifests (danaview_editor_engine: FileTimestamp C617.1, DiskSpace E174.1, SystemBootTime 35F9.1;
+  danaview_whisper: DiskSpace E174.1).
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

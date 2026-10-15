@@ -32,6 +32,14 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.vecvel.danaview.export.*</string>
+	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Danaview uses the microphone only while you record a voiceover in the video editor.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Danaview saves the videos you export to your photo library.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

@@ -6,17 +6,27 @@
 // font's boxes), and appear in the licence registry. The golden shows each bundled family in
 // regular, bold and italic as the preview overlay and export sprites will draw it.
 //
+// FIX-FONTS-BUNDLE (2026-10-15): all ten §17.8 families are bundled (Figtree from the UI kit, the
+// other nine fetched from google/fonts by tool/fetch_fonts.dart, provenance in
+// danaview_editor_fonts/fonts/SOURCES.json). Bold is checked by ink, not width (JetBrains Mono is
+// monospaced): a family with a bold face draws clearly heavier at w700, and for the variable
+// files w700 draws exactly as `FontVariation('wght', 700)` (Flutter maps fontWeight onto the wght
+// axis). The bundle size is guarded against ARCH §17.8.
+//
 // Regenerate (after reviewing the change, e.g. after tool/fetch_fonts.dart added families) with:
 //   flutter test --update-goldens test/panels/text/content_fonts_golden_test.dart
 
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/editor/text/font_catalog.dart';
-import 'package:danaview_editor_fonts/danaview_editor_fonts.dart' show bundledContentFontFamilies, contentFontsPackage;
+import 'package:danaview_editor_fonts/danaview_editor_fonts.dart'
+    show bundledContentFontFamilies, contentFontFamilies, contentFontsPackage, registerContentFontLicenses;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../../support/support.dart';
@@ -76,10 +86,72 @@ double widthOf(String text, String family, {FontWeight weight = FontWeight.w400}
   return w;
 }
 
+/// Total alpha ("ink") of [text] drawn in white at 40 px; a heavier face draws more ink.
+Future<int> inkOf(String text, String family, {FontWeight weight = FontWeight.w400, List<ui.FontVariation>? variations}) async {
+  final p = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: TextStyle(
+        fontFamily: family,
+        fontSize: 40,
+        fontWeight: weight,
+        fontVariations: variations,
+        color: const Color(0xFFFFFFFF),
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final recorder = ui.PictureRecorder();
+  p.paint(Canvas(recorder), Offset.zero);
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(p.width.ceil(), p.height.ceil());
+  final bytes = (await image.toByteData())!;
+  picture.dispose();
+  image.dispose();
+  p.dispose();
+  var sum = 0;
+  for (var i = 3; i < bytes.lengthInBytes; i += 4) {
+    sum += bytes.getUint8(i);
+  }
+  return sum;
+}
+
+/// The package directory of danaview_editor_fonts (tests run with the package as cwd).
+Directory get _fontsDir => Directory('${Directory.current.path}/../danaview_editor_fonts/fonts');
+
 void main() {
   setUp(() {
     final base = goldenFileComparator as LocalFileComparator;
     goldenFileComparator = _TolerantComparator(base.basedir.resolve('content_fonts_golden_test.dart'), tolerance: 0.002);
+  });
+
+  test('all ten ARCH §17.8 families are bundled', () {
+    expect(contentFontFamilies, hasLength(10));
+    expect([for (final f in bundledContentFontFamilies) f.id], [for (final f in contentFontFamilies) f.id]);
+  });
+
+  test('the bundle has its provenance record and fits the size guard (ARCH §17.8)', () {
+    final record = json.decode(File('${_fontsDir.path}/SOURCES.json').readAsStringSync()) as Map<String, Object?>;
+    final files = (record['files']! as List<Object?>).cast<Map<String, Object?>>();
+    final onDisk = [
+      for (final e in _fontsDir.listSync(recursive: true).whereType<File>())
+        if (!e.path.endsWith('SOURCES.json')) e,
+    ];
+    expect(files.map((f) => f['path']).toSet(), {for (final e in onDisk) e.path.substring(_fontsDir.path.length + 1)},
+        reason: 'every file in fonts/ is recorded');
+    for (final f in files) {
+      expect(f['sha256'], matches(RegExp(r'^[0-9a-f]{64}$')), reason: '${f['path']}');
+      expect(File('${_fontsDir.path}/${f['path']}').lengthSync(), f['bytes'], reason: '${f['path']} unchanged since recorded');
+      if (!(f['path']! as String).startsWith('figtree/')) {
+        expect(f['source'], startsWith('https://raw.githubusercontent.com/google/fonts/'), reason: '${f['path']}');
+        expect(f['commit'], matches(RegExp(r'^[0-9a-f]{40}$')), reason: '${f['path']}');
+      }
+    }
+    final total = onDisk.fold<int>(0, (a, e) => a + e.lengthSync());
+    expect(total, record['totalBytes']);
+    // ARCH §17.8 estimates ≈ 3–4 MB; google/fonts ships these families as variable fonts, which
+    // brings the bundle to ≈ 5.8 MB (reported to the owner). The guard stops further growth.
+    expect(total, lessThanOrEqualTo(6 * 1024 * 1024));
   });
 
   test('every bundled family is in the font manifest with its OFL text', () async {
@@ -114,10 +186,21 @@ void main() {
       // The test font draws every glyph as a 1 em box: 5 em for "Hello". Real glyphs are narrower.
       final regular = widthOf('Hello', f.packagedFamily);
       expect(regular, lessThan(5 * 40 * 0.8), reason: '${f.family} rendered with real glyphs');
-      if (f.hasBold) {
-        expect(widthOf('Hello', f.packagedFamily, weight: FontWeight.w700), isNot(regular), reason: '${f.family} bold is its own face');
-      }
     }
+    await tester.runAsync(() async {
+      final files = await bundledFontFiles();
+      for (final f in bundledContentFontFamilies) {
+        final regular = await inkOf('Hello Bold', f.packagedFamily);
+        final bold = await inkOf('Hello Bold', f.packagedFamily, weight: FontWeight.w700);
+        if (f.hasBold) {
+          expect(bold / regular, greaterThan(1.2), reason: '${f.family} bold renders bold');
+        }
+        if (files[f.packagedFamily]!.any((a) => a.contains('-VF.'))) {
+          final axis = await inkOf('Hello Bold', f.packagedFamily, variations: const [ui.FontVariation('wght', 700)]);
+          expect(bold, axis, reason: '${f.family}: w700 sets the variable wght axis to 700');
+        }
+      }
+    });
 
     const surface = EditorSurface(Size(480, 120));
     applySurface(tester, surface);

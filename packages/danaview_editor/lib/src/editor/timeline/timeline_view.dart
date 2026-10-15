@@ -9,7 +9,8 @@
 //    │           └─ Row
 //    │               ├─ header column: ruler corner + ProjectTrackHeaders (UX-11)
 //    │               └─ Stack: TimelineRuler (UX-09) · TimelineCanvas (UX-10) · interaction layer
-//    │                         (UX-13 slot, or TimelineBasicInteraction) · PlayheadLayer (UX-10) ·
+//    │                         (UX-13 slot, or TimelineBasicInteraction) · decoration slot under the
+//    │                         ruler (UX-44 RenderMarkerStripHost) · PlayheadLayer (UX-10) ·
 //    │                         TimelineSemanticsLayer (playhead slider, markers, transitions, keys)
 //    ├─ multi-select banner ("3 selected · Select all on track · Done")
 //    ├─ hover pill
@@ -52,6 +53,7 @@ import '../state/editor_controller.dart';
 import '../state/editor_state.dart';
 import '../state/playhead_controller.dart';
 import 'playhead_layer.dart';
+import 'render_marker_strip.dart' show RenderMarkerStrip, RenderMarkerStripHost;
 import 'render_timeline_canvas.dart';
 import 'ruler.dart';
 import 'timeline_gestures.dart';
@@ -769,6 +771,16 @@ class TimelineViewState extends ConsumerState<TimelineView> with TickerProviderS
                   TimelineLayerContext(snapshot: snapshot, viewport: viewport, metrics: metrics, style: style),
                 ),
               ),
+            ),
+            // Decoration slot under the ruler: UX-44's render marker strip (D-45). It collapses to
+            // nothing while the project has no render-preview coverage.
+            Positioned(
+              key: const ValueKey('timeline-ruler-decoration'),
+              left: 0,
+              right: 0,
+              top: ruler,
+              height: RenderMarkerStrip.defaultHeight,
+              child: RenderMarkerStripHost(projectId: id),
             ),
             Positioned.fill(
                 child: IgnorePointer(child: PlayheadLayer(viewport: viewport, playhead: playhead, style: style, metrics: metrics))),

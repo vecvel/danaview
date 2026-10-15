@@ -6,10 +6,10 @@
 //   and reversed renditions), re-measured whenever the project list changes. No clear action:
 //   projects are deleted in the Projects screen, which the row opens.
 // * "Editor cache": the regenerable folders under `<cache>/danaview/editor` (thumbs, waves, proxies,
-//   sprites, looks; ARCH §8.1). Clearing asks the engine to drop its caches, then deletes the
-//   folders' contents through `OwnedFileDeleter` (the only delete path, D-44). It never touches
-//   `work/` (in-progress picks, drops and exports) or anything under `<support>` (projects and media),
-//   and it is disabled while a project is open or a job runs. The contributor owns the whole
+//   sprites, looks, and the render-preview files in renders/, D-45; ARCH §8.1). Clearing asks the
+//   engine to drop its caches, then deletes the folders' contents through `OwnedFileDeleter` (the
+//   only delete path, D-44). It never touches `work/` (in-progress picks, drops and exports) or
+//   anything under `<support>` (projects and media), and it is disabled while a project is open or a job runs. The contributor owns the whole
 //   `<cache>/danaview/editor` folder, so the app's own "Clear cache" leaves it alone.
 //
 // The router (INT-02) builds both through [EditorStorageContributor.all] and lists them in
@@ -93,7 +93,9 @@ final class EditorCacheCleaner {
 
   /// Folders under `<cache>/danaview/editor` that "Clear editor cache" empties. `work/` (picks, drops,
   /// in-progress exports) and `engine/` are never cleared from here.
-  static const List<String> folders = ['thumbs', 'waves', 'proxies', 'sprites', 'looks'];
+  /// `renders/` holds the render-preview cache (D-45): its files and `index.json` go together, so a
+  /// reopened index finds no renders.
+  static const List<String> folders = ['thumbs', 'waves', 'proxies', 'sprites', 'looks', 'renders'];
 
   /// App roots.
   final StoreRoots roots;
@@ -230,7 +232,7 @@ final class EditorProjectsStorageContributor extends EditorStorageContributor {
   }
 }
 
-/// "Editor cache": thumbnails, waveforms, proxies, sprites and look previews. Clearing is blocked
+/// "Editor cache": thumbnails, waveforms, proxies, sprites, look previews and rendered previews. Clearing is blocked
 /// while a project is open or a job runs; projects and media are never touched.
 final class EditorCacheStorageContributor extends EditorStorageContributor {
   /// Creates the contributor.

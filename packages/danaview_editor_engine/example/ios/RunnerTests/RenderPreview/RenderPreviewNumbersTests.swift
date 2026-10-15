@@ -56,7 +56,7 @@ final class RenderPreviewNumbersTests: XCTestCase {
         while CACurrentMediaTime() < deadline {
             let t = output.itemTime(forHostTime: CACurrentMediaTime())
             if output.hasNewPixelBuffer(forItemTime: t), let pb = output.copyPixelBuffer(forItemTime: t, itemTimeForDisplay: nil),
-               let k = DVRenderSession.frameIndex(of: pb) {
+               let k = DVRenderSession.frameIndex(of: pb), k >= 0, k < Int64(expected) {
                 shown.insert(k)
             }
             if item.currentTime().seconds * 1_000_000 >= Double(plan.durUs) - 1 { break }

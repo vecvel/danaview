@@ -121,7 +121,7 @@ void main() {
         .map((f) => f.uri.pathSegments.last.replaceAll('.dart', ''))
         .toSet();
     final wired = {for (final s in editorBindingSources) s.file: s.owner};
-    expect(planned, hasLength(21));
+    expect(planned, hasLength(22));
     expect(onDisk, planned.keys.toSet());
     expect(wired, planned);
   });
