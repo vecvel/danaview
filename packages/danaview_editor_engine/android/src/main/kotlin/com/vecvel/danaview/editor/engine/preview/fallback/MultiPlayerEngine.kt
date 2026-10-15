@@ -353,6 +353,12 @@ internal class MultiPlayerEngine(
             when (mode) {
                 Mode.SEEKING -> seekTarget?.let { positionFor(it, SeekParameters.EXACT) }
                 Mode.PREROLL -> prerollTarget?.let { k -> grid.timeOfFrame(k).let { t -> schedule(t, t, prerolling = true) } }
+                // Paused (AND-17 draws the paused edits): warm the changed decks on the last frame
+                // shown, so the next play or seek does not pay a cold decoder start.
+                Mode.IDLE -> if (frameCount > 0) {
+                    val t = grid.timeOfFrame(lastShown.coerceIn(0, frameCount - 1))
+                    schedule(t, t, prerolling = true)
+                }
                 else -> Unit
             }
         }

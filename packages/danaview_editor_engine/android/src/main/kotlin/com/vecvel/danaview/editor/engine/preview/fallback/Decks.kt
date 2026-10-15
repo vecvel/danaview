@@ -271,7 +271,8 @@ internal class VideoDeck(
      */
     fun position(i: Int, ms: Long, params: SeekParameters = SeekParameters.EXACT, force: Boolean = false) {
         require(i in items.indices) { "no item $i" }
-        if (!force && params == SeekParameters.EXACT && alreadyAt(i, ms) && latchedEpoch == epoch) return
+        // Already there with its frame latched or queued (e.g. warmed while paused): keep it.
+        if (!force && params == SeekParameters.EXACT && alreadyAt(i, ms) && (latchedEpoch == epoch || hasQueuedFrame())) return
         bumpEpoch()
         if (!prepared || player.playbackState == Player.STATE_IDLE) {
             player.prepare()
@@ -420,6 +421,11 @@ internal class VideoDeck(
             bind(head)
         }
         pull()
+    }
+
+    private fun hasQueuedFrame(): Boolean {
+        pull()
+        return queue.isNotEmpty()
     }
 
     /** Whether the frame with pts [rule] of the current position is latched or queued. */
