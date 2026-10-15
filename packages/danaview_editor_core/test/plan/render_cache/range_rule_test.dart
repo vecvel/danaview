@@ -14,7 +14,10 @@
 //
 // The plan pairs (hand-made edge cases, random plan-level edits that may or may not change pixels,
 // real editing commands on compiled projects) are committed as the shared vectors
-// `vectors/range_touch.json`, with the rule's verdict per range, for the native suites to replay.
+// `test/fixtures/vectors/range_touch.json` (bundled into the iOS RunnerTests as
+// `TestFixtures.url(.core, "vectors/range_touch.json")`), with the rule's verdict per range, for
+// the native suites to replay. Native replay is not enforced yet: FIX-IOS-19-1 and FIX-AND-18-1
+// (BUILD_STATE.md) add the RunnerTest and the Android unit test that assert `touched`.
 // Regenerate with `UPDATE_RANGE_VECTORS=1 dart test test/plan/render_cache/range_rule_test.dart`.
 
 import 'dart:convert';
@@ -32,7 +35,7 @@ import '../compile_visual/support.dart' show resolverFor;
 import '../diff/diff_support.dart' show compileMemo, randomEdit;
 import 'support.dart';
 
-const String vectorsPath = 'test/plan/render_cache/vectors/range_touch.json';
+const String vectorsPath = 'test/fixtures/vectors/range_touch.json';
 
 /// One plan pair.
 final class PlanPair {

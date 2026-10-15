@@ -5,7 +5,7 @@
 // touches it (CORE-37 `rangeTouched`, replayed natively on the shared vectors), and they bind a
 // `setRenderedRanges` list to the plan they hold when the call arrives.
 //
-// * Parity: on the shared vectors (core's `test/plan/render_cache/vectors/range_touch.json`) the
+// * Parity: on the shared vectors (core's `test/fixtures/vectors/range_touch.json`) the
 //   plan-difference rule equals API-01's reference rule `patchTouchesRange` applied to the patch
 //   PlanSync actually sends (`diffPlans`), so the fake engine and the native engines drop the same
 //   ranges.
@@ -28,7 +28,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support.dart';
 
-const String _vectors = '../danaview_editor_core/test/plan/render_cache/vectors/range_touch.json';
+const String _vectors = '../danaview_editor_core/test/fixtures/vectors/range_touch.json';
 
 String _hashAt(RenderPlan plan, int k) => rangeHash(plan, splitRanges(plan).firstWhere((r) => r.start == f(k)));
 

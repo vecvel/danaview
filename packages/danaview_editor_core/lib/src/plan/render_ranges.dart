@@ -568,7 +568,7 @@ Set<String> invalidated(RenderPlan oldPlan, RenderPlan newPlan, {RenderSize? pre
 /// invisible here.
 ///
 /// How it relates to the hashes (property-tested in `test/plan/render_cache/range_rule_test.dart`
-/// on the shared vectors `vectors/range_touch.json`): a range the engine keeps shows the same
+/// on the shared vectors `test/fixtures/vectors/range_touch.json`): a range the engine keeps shows the same
 /// pixels in [after], so `rangeHash(after, range) == rangeHash(before, range)` whenever this is
 /// false. The converse does not hold: the engine also drops ranges whose pixels did not change (a
 /// ripple, a proxy or `uri` change, a re-split), which the hash keeps; the render-preview
