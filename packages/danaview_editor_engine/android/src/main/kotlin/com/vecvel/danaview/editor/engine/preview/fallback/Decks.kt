@@ -322,12 +322,15 @@ internal class VideoDeck(
         position(i, ms, SeekParameters.EXACT, force = true)
         approachFailures = failures
         approachRule = rule
+        // Slowly, so a loaded decoder never drops the target as a late frame.
+        player.setPlaybackSpeed(APPROACH_SPEED)
         player.playWhenReady = true
     }
 
     /** Ends an approach: pauses on the latched frame; a failed one counts. */
     fun endApproach(succeeded: Boolean) {
         player.playWhenReady = false
+        player.setPlaybackSpeed(1f)
         approachRule = -1L
         if (!succeeded) approachFailures++
     }
@@ -540,6 +543,7 @@ internal class VideoDeck(
         const val MAX_TAGS = 512
         const val MAX_RECOVERIES = 5
         const val READY_WITHOUT_FRAME_MS = 600L
+        const val APPROACH_SPEED = 0.25f
         const val MIN_SPEED = 0.1f
         const val MAX_SPEED = 10f
     }
