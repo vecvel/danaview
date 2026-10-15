@@ -133,11 +133,12 @@ final class PitchSyncTests: XCTestCase {
     /// worst absolute error.
     @discardableResult
     private func assertClicks(
-        _ x: [Float], seg: AudioSeg, bias: Double, tolerance: Double, label: String, clicks: [Double]? = nil
+        _ x: [Float], seg: AudioSeg, bias: Double, tolerance: Double, label: String, clicks: [Double]? = nil,
+        margin: Double = 150_000
     ) -> Double {
         var worst = 0.0
         var line = "PITCHSYNC|\(label)"
-        let times = Self.clickTimes(seg, clicks: clicks)
+        let times = Self.clickTimes(seg, margin: margin, clicks: clicks)
         XCTAssertFalse(times.isEmpty, label)
         for (t, rate) in times {
             guard let on = Self.onset(x, near: t) else {
@@ -169,7 +170,7 @@ final class PitchSyncTests: XCTestCase {
         let ramp = seg("k", [MapSegment(0, 1_000_000, 2_000_000, 3_000_000), MapSegment(1_000_000, 3_000_000, 3_000_000, 4_000_000),
                              MapSegment(3_000_000, 4_000_000, 4_000_000, 6_000_000)])
         let vari = seg("v", [MapSegment(0, 2_000_000, 1_000_000, 2_000_000)], pitch: false)
-        let unity = seg("u", [MapSegment(0, 2_000_000, 1_000_000, 3_000_000 - 1_000_000)])
+        let unity = seg("u", [MapSegment(0, 2_000_000, 1_000_000, 3_000_000)])
         let p = RenderPlan(
             rev: 1, target: .export, canvas: PlanCanvas(w: 64, h: 64, fps: 30), durUs: 4_000_000,
             assets: ["a": asset], layers: [], audio: [ramp, unity, vari].sorted(by: AudioSeg.order))
@@ -190,19 +191,30 @@ final class PitchSyncTests: XCTestCase {
         XCTAssertEqual(piece("v", 0).segment, vari.map[0], "varispeed is not shifted")
         XCTAssertEqual(piece("u", 0).segment, unity.map[0], "a keep-pitch track without a scaled piece is not shifted")
 
-        // Clamps: a 0.5× piece starting at source 0 cannot read before 0; a 2× piece ending at the
-        // asset end cannot read past it.
+        // Source edges: a 0.5× piece starting at source 0 would read 17.8 ms before it, so it starts
+        // 35.6 ms later (trimmed, rate kept); a 2× piece ending at the asset end would read 10.9 ms
+        // past it, so it ends 5.45 ms earlier. The builder's first source read is then exactly 0
+        // and its last exactly the asset end.
         let edge = seg("e", [MapSegment(0, 1_000_000, 0, 500_000), MapSegment(1_000_000, 1_500_000, 500_000, 1_500_000)])
         var q = p
         q.assets = ["a": PlanAsset(kind: .audio, uri: "file:///a.wav", durUs: 1_510_000)]
         q.audio = [edge]
-        let clamped = AudioMixLayout.make(q, rampSeams: false)
-        XCTAssertEqual(clamped.pieces[0].segment.s0, 0)
-        XCTAssertEqual(clamped.pieces[1].segment.s1, 1_510_000)
-        // With ramp-seam pairs the pre-extension (2.5 ms · rate) is kept inside the source too.
-        let pairs = AudioMixLayout.make(q, rampSeams: true)
-        XCTAssertEqual(pairs.pieces[0].segment.s0, 0)
-        XCTAssertEqual(pairs.pieces[1].segment.s1 + Int64((Double(pairs.pieces[1].postUs) * 2).rounded()), 1_510_000)
+        for rampSeams in [false, true] {
+            let trimmed = AudioMixLayout.make(q, rampSeams: rampSeams)
+            let p0 = trimmed.pieces[0]
+            let p1 = trimmed.pieces[1]
+            XCTAssertEqual(p0.segment.s0, -17_800)
+            XCTAssertEqual(p0.preUs, -35_600)
+            XCTAssertEqual(p0.segment.s0 - Int64((Double(p0.preUs) * 0.5).rounded()), 0, "first source µs")
+            XCTAssertEqual(p0.postUs, rampSeams ? TapEnvelope.seamCrossfadeUs / 2 : 0)
+            XCTAssertEqual(p1.segment.s1, 1_520_900)
+            XCTAssertEqual(p1.postUs, -5_450)
+            XCTAssertEqual(p1.segment.s1 + Int64((Double(p1.postUs) * 2).rounded()), 1_510_000, "last source µs")
+            XCTAssertEqual(p1.preUs, rampSeams ? TapEnvelope.seamCrossfadeUs / 2 : 0)
+        }
+        // A piece too short to trim keeps its plain read.
+        q.audio = [seg("s", [MapSegment(0, 40_000, 0, 20_000)])]
+        XCTAssertEqual(AudioMixLayout.make(q, rampSeams: false).pieces[0].segment, q.audio[0].map[0])
     }
 
     // MARK: - Export read
@@ -221,6 +233,15 @@ final class PitchSyncTests: XCTestCase {
                     gain: [AnimKey(0, 1)], pitch: true)
                 let x = try await exportRead(plan(seg, asset: Self.wavAsset(source), durUs: 6_000_000), url: source)
                 assertClicks(x, seg: seg, bias: bias, tolerance: 10_000, label: "export \(Int(sampleRate)) Hz 1x|\(r)x|1x")
+            }
+            // Single pieces at the source edges (trimmed instead of shifted out of the source): 0.5×
+            // from source 0, 2× up to the asset end.
+            for (r, s0) in [(0.5, Int64(0)), (2.0, Int64(2_000_000))] {
+                let seg = AudioSeg(
+                    id: "a", asset: "s", t0: 0, t1: 6_000_000, map: [MapSegment(0, 6_000_000, s0, s0 + Int64(6_000_000 * r))],
+                    gain: [AnimKey(0, 1)], pitch: true)
+                let x = try await exportRead(plan(seg, asset: Self.wavAsset(source), durUs: 6_000_000), url: source)
+                assertClicks(x, seg: seg, bias: bias, tolerance: 10_000, label: "export \(Int(sampleRate)) Hz edge \(r)x")
             }
         }
     }
@@ -242,7 +263,9 @@ final class PitchSyncTests: XCTestCase {
         // The same onset bias as at 1× (QA-03 measured +2.1 ms through the whole chain).
         let clicks = [1_000_000.0, 2_500_000, 4_000_000]
         XCTAssertEqual(Self.clickTimes(seg, margin: 0, clicks: clicks).map { ($0.tUs / 1000).rounded() }, [1_067, 4_000, 5_600])
-        let worst = assertClicks(x, seg: seg, bias: 2_100, tolerance: 10_000, label: "export clap_flash 0.5x ramp", clicks: clicks)
+        let worst = assertClicks(x, seg: seg, bias: 2_100, tolerance: 10_000, label: "export clap_flash 0.5x ramp", clicks: clicks,
+            margin: 50_000)
+        XCTAssertEqual(Self.clickTimes(seg, margin: 50_000, clicks: clicks).count, 3)
         XCTAssertLessThanOrEqual(worst, 20_000)
     }
 
@@ -264,22 +287,25 @@ final class PitchSyncTests: XCTestCase {
             var p = plan(seg, asset: Self.wavAsset(source), durUs: 4_000_000)
             p.target = .preview
             let built = try await CompositionBuilder.build(plan: p, options: try options(source))
-            // The built composition with a metered tap per track (same algorithm and envelope).
-            let meter = GainTapMeter()
-            meter.accumulating = false
-            meter.capturing = true
+            // The built composition with a metered tap per track (same algorithm and envelope; a
+            // multi-piece keep-pitch segment is laid out as a ramp-seam pair).
+            var meters: [GainTapMeter] = []
             var taps: [GainTap] = []
             var parameters: [AVMutableAudioMixInputParameters] = []
             for (i, id) in built.audioTrackIDs.enumerated() {
                 let track = try XCTUnwrap(built.composition.track(withTrackID: id))
-                let tap = GainTap(envelope: built.gainTaps[i].envelope, meter: i == 0 ? meter : nil)
+                let meter = GainTapMeter()
+                meter.accumulating = false
+                meter.capturing = true
+                meters.append(meter)
+                let tap = GainTap(envelope: built.gainTaps[i].envelope, meter: meter)
                 let q = AVMutableAudioMixInputParameters(track: track)
                 q.audioTimePitchAlgorithm = built.audioLayout.tracks[i].pitch ? .timeDomain : .varispeed
                 try tap.attach(to: q)
                 parameters.append(q)
                 taps.append(tap)
             }
-            XCTAssertEqual(taps.count, 1)
+            XCTAssertEqual(taps.count, TapEnvelope.rampSeamCrossfadesEnabled ? 2 : 1)
             let mix = AVMutableAudioMix()
             mix.inputParameters = parameters
             let item = AVPlayerItem(asset: built.composition)
@@ -295,16 +321,21 @@ final class PitchSyncTests: XCTestCase {
             while item.currentTime().seconds < 3.9, Date() < deadline { try await Task.sleep(nanoseconds: 20_000_000) }
             player.pause()
             withExtendedLifetime((built, item, player, taps)) {}
-            let sr = meter.format?.mSampleRate ?? 48_000
+            // Sum of the tracks' tap outputs placed at their composition times (the player's mix).
             var x = [Float](repeating: 0, count: 4_000_000 * 48 / 1000 + 48_000)
-            for block in meter.captured {
-                for (k, v) in block.samples.enumerated() {
-                    let us: Double = block.startUs + Double(k) * 1e6 / sr
-                    let idx = Int((us * 0.048).rounded())
-                    if idx >= 0, idx < x.count { x[idx] = v }
+            for meter in meters {
+                let sr = meter.format?.mSampleRate ?? 48_000
+                var track = [Float](repeating: 0, count: x.count)
+                for block in meter.captured {
+                    for (k, v) in block.samples.enumerated() {
+                        let us: Double = block.startUs + Double(k) * 1e6 / sr
+                        let idx = Int((us * 0.048).rounded())
+                        if idx >= 0, idx < track.count { track[idx] = v }
+                    }
                 }
+                for i in x.indices { x[i] += track[i] }
+                XCTAssertTrue(meter.failures.isEmpty, "GetSourceAudio failed: \(meter.failures)")
             }
-            XCTAssertTrue(meter.failures.isEmpty, "GetSourceAudio failed: \(meter.failures)")
             assertClicks(x, seg: seg, bias: bias, tolerance: 20_000, label: "preview 1x|\(r)x|1x")
         }
     }

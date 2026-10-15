@@ -20,8 +20,10 @@
 //   simulator: −36 ms at 0.5×, −14 ms at 0.75×, −4 ms at 1×, +6 ms at 1.5×, +9 ms at 2×, i.e.
 //   shift(r) ≈ A + B / r with A = +25.8 ms and B = −30.7 ms (output delay and source look-ahead of
 //   the grain search). Every piece of such a track therefore reads its source shifted by
-//   δ(r) = r · shift(r) = A·r + B (whole µs; target placement and duration unchanged), clamped so
-//   the shifted range (with its ramp-seam extensions) stays inside [0, asset duration]. Pieces of
+//   δ(r) = r · shift(r) = A·r + B (whole µs; rate and grid placement unchanged). Where the shifted
+//   range (with its ramp-seam extensions) would leave [0, asset duration], the piece is trimmed at
+//   that edge by the missing source time / r (negative `preUs`/`postUs`; at most a few tens of ms
+//   of what is silence-before-the-source anyway) rather than read with a changed rate. Pieces of
 //   `.varispeed` tracks and of keep-pitch tracks without a scaled edit are not shifted.
 //
 // This file is the pure part (which segment and piece goes where, the envelopes); the
@@ -46,7 +48,9 @@ struct AudioMixLayout: Equatable {
     }
 
     /// One piece of audio to insert: composition [t0, t1) ← source [s0, s1) µs. `t0Frame`/`t1Frame`
-    /// are the grid frames of the unextended piece; `preUs`/`postUs` the ramp-seam extensions.
+    /// are the grid frames of the unextended piece; `preUs`/`postUs` the ramp-seam extensions
+    /// (negative: the piece is trimmed at that edge by keep-pitch latency compensation, whose
+    /// shifted source would otherwise start before 0 or end past the asset).
     struct Piece: Equatable {
         let track: Int
         let segmentId: String
@@ -135,19 +139,26 @@ struct AudioMixLayout: Equatable {
             let m = p.segment
             let rate = m.rate
             guard rate.isFinite, rate > 0 else { continue }
-            var delta = pitchCompensationUs(rate: rate)
-            // The earliest source µs the builder reads (ramp-seam pre-extension included) stays ≥ 0 …
-            let first = m.s0 - Int64((Double(p.preUs) * rate).rounded())
-            delta = max(delta, -max(first, 0))
-            // … and the last stays inside the asset when its duration is known.
-            if let dur = assetBySeg[p.segmentId].flatMap({ plan.assets[$0]?.durUs }) {
-                let last = m.s1 + Int64((Double(p.postUs) * rate).rounded())
-                delta = min(delta, max(dur - last, 0))
-            }
+            let delta = pitchCompensationUs(rate: rate)
             guard delta != 0 else { continue }
+            let span = m.t1 - m.t0
+            var pre = p.preUs
+            var post = p.postUs
+            // The shifted source must stay inside [0, asset duration]. Where it would not, the piece
+            // is trimmed at that edge instead (a negative extension: it starts later / ends earlier
+            // in composition time by the part that has no source), keeping its rate; the trimmed
+            // part is the audio the time-pitch would have pulled from outside the source.
+            let first = m.s0 + delta - Int64((Double(pre) * rate).rounded())
+            if first < 0 { pre -= Int64((Double(-first) / rate).rounded(.up)) }
+            if let dur = assetBySeg[p.segmentId].flatMap({ plan.assets[$0]?.durUs }) {
+                let last = m.s1 + delta + Int64((Double(post) * rate).rounded())
+                if last > dur { post -= Int64((Double(last - dur) / rate).rounded(.up)) }
+            }
+            // Never trim a piece away (a piece shorter than twice the shift keeps its plain read).
+            guard span + pre + post > span / 2 else { continue }
             pieces[i] = Piece(
                 track: p.track, segmentId: p.segmentId, mapIndex: p.mapIndex,
-                segment: MapSegment(m.t0, m.t1, m.s0 + delta, m.s1 + delta), preUs: p.preUs, postUs: p.postUs)
+                segment: MapSegment(m.t0, m.t1, m.s0 + delta, m.s1 + delta), preUs: pre, postUs: post)
         }
     }
 
