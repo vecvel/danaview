@@ -2,46 +2,54 @@
 
 # 🎬 Danaview
 
-**The all-in-one media player, in-house native camera, and unified photo & on-device video editor.**
-*Powered by Flutter, libmpv, native GPU capture & render engines, and on-device AI.*
+**Play anything. Edit photos and videos. Capture with your own camera. All on your device.**
+
+*A private, all-in-one media app for iPhone, iPad, Android, macOS, Windows and Linux, built with Flutter, native GPU engines and on-device AI.*
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.44-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
-[![Engine](https://img.shields.io/badge/Engine-libmpv%20%2B%20FFmpeg-5C2D91)](https://mpv.io)
-[![AI Engine](https://img.shields.io/badge/AI-whisper.cpp%20(On--Device)-FF6F00)](https://github.com/ggml-org/whisper.cpp)
-[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-22c55e)](#-supported-platforms)
+[![Player](https://img.shields.io/badge/Player-libmpv-5C2D91)](https://mpv.io)
+[![On-device AI](https://img.shields.io/badge/AI-whisper.cpp%20on%20device-FF6F00)](https://github.com/ggml-org/whisper.cpp)
+[![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-22c55e)](#-platforms)
 [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors&logoColor=white)](#-sponsor--support)
+
+[Features](#-at-a-glance) · [Roadmap](#%EF%B8%8F-roadmap) · [Player](#-player-available-now) · [Editor](#%EF%B8%8F-video-editor-v11-in-development) · [Platforms](#-platforms) · [Privacy](#-privacy) · [Build](#-getting-started)
 
 </div>
 
 ---
 
-## 🌟 Overview
+## ✨ At a glance
 
-**Danaview** is an all-in-one visual media ecosystem bringing playback, creation, capture, and editing into a unified, privacy-first application across mobile and desktop.
+| | What it does | Status |
+|---|---|---|
+| 🎥 **Player** | Plays almost any video file or network stream, with a 10-band equalizer, 300% volume boost, subtitles, playlists, a queue, diagnostics and built-in network and media tools | ✅ **Available** (v1.0) |
+| ✂️ **Video editor** | Multi-track timeline, transitions, keyframes, chroma key, text, LUTs, speed ramps, hardware export and **on-device AI subtitles** on iPhone, iPad and Android | 🚧 **In development** (v1.1) |
+| 🗂️ **Photos & videos at Home** | Browse every photo and video on the device next to your playlists and folders, then edit or make a montage in one tap | 🗓️ Planned (v1.2) |
+| 🤖 **AI Studio & rich subtitles** | Styled and karaoke captions on device; optional bring-your-own-key AI for clean-up, emotion, emojis, speakers and translation | 🗓️ Planned (v1.2) |
+| 🎨 **Photo editing & beauty** | The same editor edits photos (16-bit pipeline, HSL, curves, masks, keystone, batch export) and brings an 8-category beauty suite to photos and moving video | 🗓️ Planned (v1.2) |
+| 🖥️ **Desktop editor** | The full photo and video editor on macOS, Windows and Linux, with pro desktop tools | 🗓️ Planned (v1.3) |
+| 📷 **Danaview Camera** | A native camera with every control under your thumb, live beauty, pro modes and dual front+back capture | 🗓️ Planned (v1.3) |
 
-- 🎥 **The Player** (available now, v1.0): plays almost any video file or network stream on Android, iOS, macOS, Windows and Linux, with a 10-band equalizer, volume boost up to 300%, subtitles, playlists, a queue, diagnostics and built-in network and media tools.
-- ✂️ **The Unified Photo & Video Editor** (in development, v1.1.0 mobile video · v1.2.0 photo editing & beauty · v1.3.0 desktop): a single, high-performance editor serving both photo editing and multi-track video editing dynamically based on user intent. Includes still photo post-processing (16-bit float pipeline, pro tone adjustments, 8-channel HSL color mixer, RGB curves, selective masks, perspective keystone, batch export), multi-track video timeline editing (frame-accurate cuts, transitions, keyframes, hardware export, and **on-device AI subtitles**), and the **complete 8-category Beauty & Retouching Suite** (face slimming, feature reshaping, blemish healing, virtual makeup, body slimming) with temporal One-Euro landmark tracking for moving video.
-- 🤖 **AI Studio** (v1.2.0): optional bring-your-own-key intelligence for transcripts, translation, emotion detection, and advanced word-by-word karaoke styling.
-- 📷 **The In-House Native Camera** (v1.3.0): high-performance capture built directly on native OS APIs (`AVFoundation`, `Camera2/CameraX`), featuring the **8-category real-time beauty & face reshaping suite**, cinematic portrait bokeh, pro manual controls (ISO, shutter, focus peaking), live overlays & masks, dual front+back simultaneous capture, and background device audio recording with external mic opt-out.
-- 🗂️ **Unified Media Home** (v1.2.0): a unified visual media hub for browsing both photos and videos, system albums, and device folders—while **strictly preserving 100% of existing player, playlist, queue, and streaming features**.
-
-**Legend:** ✅ available now · 🚧 in development · 🗓️ planned 
-
----
-
-## 💖 Sponsor & Support
-
-If you enjoy using **Danaview** or find our engineering helpful, consider sponsoring the project to support active development and upcoming features:
-
-- 💖 **GitHub Sponsors**: [github.com/sponsors/vecvel](https://github.com/sponsors/vecvel)
-- ☕ **Buy Me a Coffee**: [buymeacoffee.com/vecvel](https://buymeacoffee.com/vecvel)
-- 🌐 **GitHub Profile**: [github.com/vecvel](https://github.com/vecvel)
-- ✉️ **Support**: support@vecvel.com
+**Legend:** ✅ available · 🚧 in development · 🗓️ planned
 
 ---
 
-## 🎬 Player Features ✅
+## 🗺️ Roadmap
+
+| Release | Theme | What ships | Plans |
+|---|---|---|---|
+| **1.0** ✅ | Player | Cross-platform player on libmpv, library, playlists, queue, tools | – |
+| **1.1** 🚧 | Video editor | Multi-track video editor with on-device AI subtitles on iOS, iPadOS and Android | [Architecture](docs/v1.1/editor/ARCHITECTURE.md) · [Build plan](docs/v1.1/editor/BUILD_PLAN.md) |
+| **1.2** 🗓️ | Photos join videos | Unified Home for photos and videos, AI Studio and rich subtitles, photo editing and the beauty suite (iOS, Android) | [Roadmap](docs/v1.2/V1_2_ROADMAP.md) · [Home](docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) · [AI Studio](docs/v1.2/ai-studio/AI_STUDIO_PLAN.md) · [Photo & video editor](docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
+| **1.3** 🗓️ | Everywhere and at capture | The editor on macOS, Windows and Linux; Danaview Camera (mobile first, then desktop webcams) | [Roadmap](docs/v1.3/V1_3_ROADMAP.md) · [Desktop editor](docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md) · [Camera](docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md) |
+
+---
+
+## 🎥 Player (available now)
+
+<details open>
+<summary><b>Everything the player does</b></summary>
 
 ### Playback & controls
 - Plays local files and network streams through libmpv, with hardware decoding (Auto-safe, Auto or Software).
@@ -121,17 +129,18 @@ If you enjoy using **Danaview** or find our engineering helpful, consider sponso
 - On macOS the window reopens from the Dock, and there's a Main Window menu item.
 - Keyboard shortcuts (see below).
 
+</details>
+
 ---
 
-## ✂️ Video Editor Features 🚧 (v1.1.0)
+## ✂️ Video editor (v1.1, in development)
 
-Built natively for **iPhone, iPad and Android** (iOS 15+, Android 10+):
-- iOS engine: AVFoundation, Core Image and Metal.
-- Android engine: Media3.
-- Desktop editing will come later. On desktop, the editor entry points stay hidden for now.
+Built natively for **iPhone, iPad and Android** (iOS 15+, Android 10+). The iOS engine uses AVFoundation, Core Image and Metal; the Android engine uses Media3 and OpenGL ES. Both render the same project the same way, checked by frame-by-frame parity tests. On desktop the editor arrives in 1.3.
 
-**Opening the editor**
-- Edit button on the Home screen, next to Settings.
+<details>
+<summary><b>Full v1.1 feature list</b></summary>
+
+**Opening the editor**- Edit button on the Home screen, next to Settings.
 - **Edit** while a video is playing, starting at the current position.
 
 **Projects & timeline**
@@ -245,97 +254,67 @@ Built natively for **iPhone, iPad and Android** (iOS 15+, Android 10+):
   - Mouse and trackpad timeline control.
   - Drag and drop of media.
 
----
-
-## 🤖 AI Studio & Advanced Subtitles 🗓️ (v1.2.0)
-
-Private, bring-your-own-key intelligence and rich karaoke captioning:
-- **Advanced Subtitles (100% on-device):**
-  - Word-by-word karaoke highlight animations using whisper word timings.
-  - Per-cue style overrides and per-line custom positioning.
-  - Rich text styling spans across grapheme ranges.
-  - Multi-script typography fallbacks (Indic, Arabic, Hebrew, Thai) and user font import (`.ttf`/`.otf`).
-- **AI Studio (Optional & Off by Default):**
-  - Bring your own API key for Google Gemini, OpenAI, Anthropic Claude, OpenRouter, or xAI Grok.
-  - One-tap transcript cleanup, grammar repair, and smart punctuation.
-  - Speaker diarization labeling and voice tone/emotion detection.
-  - Subtitle translation into secondary tracks with automatic duration retiming.
-  - Strict privacy: keys stored in hardware Keystore/Keychain; zero telemetry; explicit **Send** disclosure before every network call.
+</details>
 
 ---
 
-## ✂️🎨 Unified Photo & Video Editor 🗓️ (v1.2.0 Updates)
+## 🔭 Coming next
 
-The Danaview Editor seamlessly serves both photo editing and multi-track video editing dynamically based on user intent:
+### 🗂️ Photos & videos at Home (v1.2)
+- Home gains **Videos, Photos, All Media, Playlists, Folders and Projects** tabs. The classic Home stays exactly as it is: Now Playing, Continue Watching, playlists, folders, queue and stream links all keep working.
+- System albums and device folders, a fast photo grid for libraries of 50,000+ items, a full-screen photo viewer, and badges for duration, 4K/60fps, RAW, HDR and Live Photos.
+- Select photos and videos and tap **Make Video Montage** to start a timeline.
 
-### 1. Still Photo Editing Mode
-- **Strict Non-Destructive Pipeline:** edits saved as lightweight `.dnphoto` recipes; original image files are never altered or compressed.
-- **High-Bitness Color Engine:** 16-bit half-float (`RGBA16F`) internal processing in Display P3 / Rec.709 color space.
-- **Pro Tonal Controls:** Exposure ($\pm 5.0$ EV), Contrast, Highlights, Shadows, Whites, Blacks, Clarity, Dehaze, Vignette, Grain.
-- **Color Mastery:** 8-channel HSL color mixer with Target Adjustment Tool (TAT) and interactive spline RGB curves.
-- **Portrait Retouching:** full 8-category beauty suite (face slimming, feature reshaping, blemish removal, teeth whitening) evaluated at full sensor resolution.
-- **Crop, Transform & Keystone:** free crop, standard aspect ratios, auto-horizon leveler, horizontal/vertical perspective keystone correction.
-- **Selective Masking:** linear gradient, radial spotlight, brush masks, and luminance range masks with localized adjustments.
-- **Typography & Overlays:** multi-layer text with Danaview font catalog, stickers, and vintage borders.
-- **Batch Productivity:** copy/paste adjustment recipes across multiple photos and batch export (JPEG, PNG, WebP, HEIC).
-- **One-Tap Bridge to Video:** "Add to Video Project" instantly turns any edited photo into a timeline still clip with optional Ken Burns pan-and-zoom motion.
+### 🤖 AI Studio & rich subtitles (v1.2)
+- **On device:** style any word of a caption, place lines anywhere, word-by-word karaoke from the AI subtitle timings, a transcript view, timing tools, font import (`.ttf`/`.otf`), style presets, and support for Indic, Arabic, Hebrew and Thai scripts.
+- **AI Studio, off by default:** bring your own key for Google Gemini, OpenAI, Anthropic Claude, OpenRouter or xAI Grok to clean up transcripts, detect emotion and tone, add emojis, label speakers and translate subtitle tracks.
+- **Nothing is sent without your Send.** Every request shows exactly what goes where; every AI result is a suggestion you accept or reject, and accepting can be undone. Keys stay in the iOS Keychain or Android Keystore.
 
-### 2. Video Timeline Mode & Moving Beauty Suite
-- **Timeline Beauty Integration:** complete 8-category beauty & retouching suite applied directly to moving video clips on the timeline.
-- **Temporal One-Euro Landmark Stabilization:** velocity-adaptive landmark smoothing eliminates inter-frame mesh jitter.
-- **Multi-Subject Video Tracking:** detects, isolates, and independently beautifies up to 4 distinct faces per clip.
-- **Timeline Keyframe Automation:** animate any beauty parameter over time with linear and bezier easing curves.
-- **Hardware 4K 60fps Video Export:** real-time GPU evaluation during scrubbing and hardware-accelerated master export.
+### 🎨 Photo editing & beauty suite (v1.2)
+- Open a photo and the editor switches to **photo mode**: 16-bit processing, exposure, contrast, highlights, shadows, whites, blacks, clarity, dehaze, an 8-channel HSL mixer, RGB curves, gradient and brush masks, crop and perspective keystone, text and stickers, copy/paste looks, batch export (JPEG, PNG, WebP, HEIC), and **Add to Video Project** with Ken Burns motion.
+- **8-category beauty suite** for photos and video clips: face shape, eyes and brows, nose and lips, skin, makeup, body, filters and presets, with face tracking that stays steady on moving video, up to 4 faces, and keyframes.
+- Originals are never changed: photo edits are saved as `.dnphoto` recipes, video as `.dnproj` projects.
 
----
+### 🖥️ Desktop editor (v1.3)
+- **Every phone editing feature** on macOS, Windows and Linux: video, photo mode, beauty, AI subtitles and AI Studio.
+- **Engines:** macOS shares the tested iOS engine; Windows and Linux share one engine written in Rust with GPU rendering (Direct3D 12 / Vulkan) and hardware decode and encode (Media Foundation, GStreamer).
+- **Crash-safe by design:** memory-safe Rust, a crash fence on every native call, and unusual formats (MKV, WebM, AVI, ProRes) opened by an isolated helper process that converts them on import.
+- **Desktop extras:** 4K preview without proxies, GPU-accelerated AI subtitles, batch export queue, ProRes export (macOS), colour scopes, a 3-pane workspace, Select/Razor/Slip/Ripple tools, J-K-L shuttle and native menus.
 
-## 🗂️ Unified Media Home Screen 🗓️ (v1.2.0)
-
-A unified visual media hub for all photos and videos on your device:
-- **100% Preservation of Player Features:** Now Playing card, Continue Watching tray (resume progress, episode badges), Playlists (create, rename, delete, shuffle, play all), Folders (device storage, external directories, breadcrumbs), Playback Queue, and streaming URL opening (HTTP, RTSP, RTMP, SRT, UDP) remain fully functional.
-- **Unified Navigation Tabs:** `Home / Overview`, `Videos`, `Photos`, `All Media`, `Playlists`, `Folders`, and `Projects`.
-- **Fast Media Browsing:** high-speed Masonry photo grid and adaptive video cards backed by 64 MB LRU memory + disk cache for 50,000+ items.
-- **Multi-Selection "Make Video Montage":** select mixed photos and videos to automatically assemble a timeline story in the Video Editor.
+### 📷 Danaview Camera (v1.3)
+- **Every control under your thumb:** a haptic dial for zoom, exposure, ISO, shutter, focus, white balance and beauty strength; a quick bar you arrange yourself; saved **My Modes**; a left-handed layout.
+- **Fast to reach and to shoot:** volume buttons and the iPhone Camera Control as shutter, launch from the lock screen, Control Center or Android Quick Settings, viewfinder in about half a second, zero shutter lag where the phone supports it.
+- **Native pro features:** ProRAW, Apple Log and ProRes on supporting iPhones; RAW and 10-bit HLG on supporting Android phones; the phone's own Night, HDR and portrait modes where available; manual ISO, shutter, focus with peaking, zebra stripes and a histogram.
+- **Live beauty, filters, LUTs and overlays** with the same look as the editor; **dual front+back capture** with picture-in-picture shapes; audio routing (mic, device audio where the platform allows, or both on separate tracks).
+- **Keep editable:** save the clean original plus a recipe so the editor can change the beauty, filter or overlays later.
+- iPhone and Android first, then macOS (webcams and iPhone as a webcam), then Windows and Linux webcams.
 
 ---
 
-## 🖥️ Desktop Photo & Video Editor 🗓️ (v1.3.0)
+## 💻 Platforms
 
-Every phone editing feature (video, photo mode, beauty, AI captions, AI Studio) on **macOS, Windows, and Linux**:
-- **Native Engines:**
-  - **macOS:** the tested iOS engine (Swift, Metal, AVFoundation, Core Image) shared with the Mac.
-  - **Windows & Linux:** one shared engine written in Rust: `wgpu` GPU rendering (Direct3D 12 / Vulkan) with hardware decode and encode through Media Foundation (NVENC, Quick Sync, AMF) and GStreamer (VA-API, NVDEC).
-  - **Crash-safe by design:** memory-safe Rust, a crash fence on every native call, and unusual formats (MKV, WebM, AVI, ProRes) opened by an isolated FFmpeg helper process that converts them on import.
-- **Desktop Extras:** 4K preview without proxies, GPU-accelerated AI captions, batch export queue, ProRes export (macOS), and colour scopes (waveform, RGB parade, vectorscope, histogram).
-- **Desktop Ergonomics:**
-  - Responsive 3-pane workstation with resizable media bin, inspector, canvas, and timeline.
-  - Dedicated desktop cursor tools: Selection (`V`), Razor cut (`C`), Slip (`Y`), and Ripple edit (`B`).
-  - Professional transport shortcuts: J-K-L multi-speed shuttling, in/out marks and frame stepping.
-  - Native menus and file drag-and-drop from Finder, Windows Explorer, and Linux file managers.
+| Platform | Player | Video editor | Photo editing & beauty | AI Studio | Camera |
+|---|---|---|---|---|---|
+| **iOS / iPadOS** | ✅ | 🚧 v1.1 (iOS 15+) | 🗓️ v1.2 | 🗓️ v1.2 | 🗓️ v1.3 |
+| **Android** | ✅ | 🚧 v1.1 (Android 10+) | 🗓️ v1.2 | 🗓️ v1.2 | 🗓️ v1.3 |
+| **macOS** | ✅ | 🗓️ v1.3 | 🗓️ v1.3 | 🗓️ v1.3 | 🗓️ v1.3 (webcams, iPhone as webcam) |
+| **Windows** | ✅ | 🗓️ v1.3 | 🗓️ v1.3 | 🗓️ v1.3 | 🗓️ v1.3 or 1.3.x (webcams) |
+| **Linux** | ✅ | 🗓️ v1.3 (supported with diagnostics) | 🗓️ v1.3 | 🗓️ v1.3 | 🗓️ v1.3 or 1.3.x (webcams) |
+
+Features a device can't support (for example dual cameras, depth, manual shutter on basic webcams, or a hardware encoder) are **hidden, not greyed out**.
 
 ---
 
-## 📷 In-House Native Camera & Beauty Suite 🗓️ (v1.3.0)
+## 🔒 Privacy
 
-A high-performance capture engine built directly on native OS APIs (`AVFoundation`, `Camera2/CameraX`, `DirectShow`, `V4L2`):
-- **Photo & Video Capture:** zero-shutter-lag photos, 4K 60fps video, 10-bit HDR, and RAW capture (Apple ProRAW / DNG).
-- **Comprehensive 8-Category Beauty Suite (60 fps GPU realtime):**
-  1. **Face Shape & Slimming:** face narrowing, V-line jaw tapering, jawline sharpening, chin slimming/length, forehead adjustment, cheekbone enhancement, symmetry correction, overall face reshape.
-  2. **Eyes & Eyebrows:** eye enlargement, canthus angle tilt, interpupillary spacing, eye brightening, dark-circle & eye-bag removal, eyebrow thickness/arch, procedural eyelashes.
-  3. **Nose & Lips:** nose bridge slimming, bridge elevation, tip reshaping, lip plumping, cupid's bow sculpting, speech smile adjustment.
-  4. **Skin Retouching:** multi-scale bilateral smoothing, neural acne & blemish removal, dark-spot removal, skin tone shifting, anti-shine oiliness reduction, wrinkle softening, natural glow, teeth whitening.
-  5. **Virtual Makeup:** foundation/concealer, lipstick (matte/gloss/velvet/ombré), blush & 3D contour, eyeliner & eyeshadow, colored contact lenses, hair color tinting, freckles & beauty marks.
-  6. **Body Slimming & Proportions:** skeletal silhouette reshaping, waist slimming with background anchor protection, arm/leg slimming, hip/shoulder tuning, leg elongation, posture correction.
-  7. **Camera Filters & Effects:** real-time beauty filters, background portrait blur & optical bokeh ($f/1.4$ to $f/16$), AR face masks, split-screen Before/After comparison.
-  8. **Advanced Features:** 468-point 3D landmark tracking, automatic one-tap beautification, manual pro sliders, custom beauty presets.
-- **Cinematic Capture:** 24 fps cinematic cadence, 2.39:1 anamorphic matte, real-time 3D LUT grading.
-- **Pro Manual Controls:** manual ISO, shutter speed (1/8000s to 1s), focus peaking, live zebra stripes, RGB histogram.
-- **Dual Multicam Capture (Front + Back):** simultaneous concurrent recording with customizable PIP placement, aspect ratio (1:1, 4:3, 16:9), and PIP shape (circle, pill, heart, teardrop, rounded rect) or 50/50 split.
-- **Background Device Audio Recording:** record internal device audio while playing music or games, with opt-out toggle to mute external mic or record multi-track synchronized audio.
+- **On device by default.** Playback, editing, AI subtitles, photo editing, beauty and the camera run on your device and work offline.
+- **The only downloads** are the speech model for AI subtitles, after you agree, and (planned, Linux only) a one-time encoder download on machines without a hardware encoder.
+- **AI Studio is optional and off by default.** When you turn it on, requests go only to the provider you choose, with your own key, after you press Send.
+- **Your originals are never changed,** moved or deleted by the editor. No telemetry, no accounts, no ads.
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## ⌨️ Keyboard shortcuts
 
 **Player** ✅
 
@@ -357,126 +336,107 @@ A high-performance capture engine built directly on native OS APIs (`AVFoundatio
 | <kbd>#</kbd> | Next audio track |
 | <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>,</kbd> | Player settings |
 
-**Editor & Creative Tools** 🚧
+**Editor** 🚧 (v1.1 on iPad and Android tablets with a keyboard; desktop tools arrive in v1.3)
 
 | Shortcut | Action |
 |---|---|
 | <kbd>Space</kbd> / <kbd>K</kbd> | Play / Pause |
-| <kbd>J</kbd> / <kbd>L</kbd> | Shuttle reverse / forward (1×, 2×, 4×, 8×) |
 | <kbd>←</kbd> / <kbd>→</kbd> | Previous / next frame |
-| <kbd>V</kbd> | Selection tool |
-| <kbd>C</kbd> | Razor cut tool |
-| <kbd>Y</kbd> | Slip tool |
-| <kbd>B</kbd> | Ripple edit tool |
-| <kbd>S</kbd> / <kbd>⌘</kbd>+<kbd>B</kbd> | Split clip at playhead |
+| <kbd>S</kbd> / <kbd>⌘</kbd>+<kbd>B</kbd> | Split clip at the playhead |
 | <kbd>Delete</kbd> / <kbd>Backspace</kbd> | Delete selected |
 | <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Z</kbd> | Undo |
 | <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> | Redo |
-| <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>S</kbd> | Save project |
-| <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>C</kbd> / <kbd>V</kbd> | Copy / Paste attributes |
+| <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>C</kbd> / <kbd>V</kbd> | Copy / paste |
 | <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>D</kbd> | Duplicate |
+| <kbd>J</kbd> / <kbd>L</kbd> | Shuttle reverse / forward, 1× to 8× (v1.3 desktop) |
+| <kbd>I</kbd> / <kbd>O</kbd> | Mark in / out (v1.3 desktop) |
+| <kbd>V</kbd> · <kbd>C</kbd> · <kbd>Y</kbd> · <kbd>B</kbd> | Select · Razor · Slip · Ripple tools (v1.3 desktop) |
 
 ---
 
-## 📱 Supported Platforms
+## 🏗️ Project structure
 
-| Platform | Media Player | Unified Photo & Video Editor | Native Camera | AI Studio |
-|---|---|---|---|---|
-| **iOS / iPadOS** | ✅ | 🚧 (v1.1 video · v1.2 photo & beauty) | 🚧 (v1.3) | 🚧 (v1.2) |
-| **Android** | ✅ | 🚧 (v1.1 video · v1.2 photo & beauty) | 🚧 (v1.3) | 🚧 (v1.2) |
-| **macOS** | ✅ | 🗓️ (v1.3, with photo & beauty) | 🗓️ (v1.3 webcams) | 🗓️ (v1.3, with the desktop editor) |
-| **Windows** | ✅ | 🗓️ (v1.3, with photo & beauty) | 🗓️ (v1.3 webcams) | 🗓️ (v1.3, with the desktop editor) |
-| **Linux** | ✅ | 🗓️ (v1.3, with photo & beauty) | 🗓️ (v1.3 webcams) | 🗓️ (v1.3, with the desktop editor) |
-
-*Note: Features not supported on a specific hardware device (e.g. concurrent multicam, LiDAR depth, manual shutter on basic webcams) degrade gracefully and are cleanly hidden from the UI.*
-
----
-
-## 🏗️ Monorepo Architecture
-
-Danaview is a Flutter & Dart monorepo with strict package boundaries:
+Danaview is a Flutter and Dart monorepo with strict package boundaries.
 
 ```
 danaview/
-├── lib/
-│   ├── app.dart                    # App root, theme & incoming media
-│   ├── main.dart                   # Composition root & MediaKit bootstrap
-│   └── router/app_router.dart      # GoRouter declaration
+├── lib/                              App root, composition root, router
 ├── packages/
-│   │   # Player & Library
-│   ├── danaview_domain/               # Pure Dart player & media models
-│   ├── danaview_engine/               # libmpv / media_kit playback engine
-│   ├── danaview_data/                 # Storage, natural sort, sessions, tools
-│   ├── danaview_ui_kit/               # Design system: Figtree font, custom controls
-│   ├── danaview_platform/             # Window, orientation, wakelock bridges
-│   ├── danaview_features/             # Player, library, queue, settings screens
-│   │
-│   │   # Editor & Creative Suite
-│   ├── danaview_editor/               # Editor UI, timeline, and inspector panels
-│   ├── danaview_editor_core/          # Pure Dart timeline model, RenderPlan, beauty specs
-│   ├── danaview_editor_engine_api/    # Engine contracts, reference renderer, shaders
-│   ├── danaview_editor_engine/        # Mobile native engines (Metal iOS, Media3 Android)
-│   ├── danaview_editor_engine_desktop/# Desktop native engines (macOS, Windows, Linux)
-│   ├── danaview_editor_fonts/         # Bundled typography catalog & font resolver
-│   ├── danaview_transcription/        # Speech model catalog, download manager
-│   └── danaview_whisper/              # whisper.cpp (vendored) FFI plugin
+│   ├── danaview_domain/              Pure Dart player and media models
+│   ├── danaview_engine/              libmpv / media_kit playback engine
+│   ├── danaview_data/                Storage, natural sort, sessions, tools
+│   ├── danaview_ui_kit/              Design system: Figtree, custom components
+│   ├── danaview_platform/            Window, orientation and wakelock bridges
+│   ├── danaview_features/            Player, library, queue and settings screens
+│   ├── danaview_editor/              Editor UI: projects, timeline, preview, panels, export
+│   ├── danaview_editor_core/         Pure Dart editing model, commands, history, RenderPlan, storage
+│   ├── danaview_editor_engine_api/   Engine contract, fake engine, reference renderer, render prep
+│   ├── danaview_editor_engine/       Native engines: Swift + Metal (iOS), Kotlin + Media3 (Android)
+│   ├── danaview_editor_fonts/        Bundled content fonts for text and subtitles
+│   ├── danaview_transcription/       AI subtitle pipeline, model store, captions
+│   └── danaview_whisper/             whisper.cpp (vendored) FFI plugin
 ├── docs/
-│   ├── v1.1/                          # Video Editor baseline architecture & build plan
-│   ├── v1.2/                          # AI Studio & Desktop Editor (macOS, Windows, Linux)
-│   └── v1.3/                          # Unified Home, Native Camera & Unified Editor Updates
-└── test/                              # Unit, widget, and render parity tests
+│   ├── v1.1/editor/                  Video editor architecture, build plan, designs, spikes
+│   ├── v1.2/                         Home, AI Studio, photo & video editor update
+│   └── v1.3/                         Desktop editor, Danaview Camera
+├── scripts/ci/editor/                Editor CI scripts (core, Flutter packages, iOS, Android, whisper)
+└── test/                             App-level tests
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting started
 
 ### Prerequisites
-
 - [Flutter SDK](https://docs.flutter.dev/get-started/install) 3.44 (stable)
-- Xcode 26 (for macOS / iOS builds)
-- Android Studio with the Android SDK, NDK and CMake 3.22.1 (for Android and the AI subtitle engine)
-- Visual Studio C++ Build Tools (for Windows builds)
+- Xcode 26 for iOS and macOS
+- Android Studio with the Android SDK, NDK and CMake 3.22.1 for Android and the AI subtitle engine
+- Visual Studio with C++ build tools for Windows
 
-### Installation & Run
+### Run
+```bash
+git clone https://github.com/vecvel/danaview.git
+cd danaview
+flutter pub get
+```
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/vecvel/danaview.git
-   cd danaview
-   ```
+```bash
+flutter run -d macos
+```
 
-2. **Install dependencies**:
-   ```bash
-   flutter pub get
-   ```
+The editor is in development and switched off by default. To try it on a phone or simulator:
 
-3. **Run tests**:
-   ```bash
-   # App tests
-   flutter test
+```bash
+flutter run -d ios --dart-define=DANAVIEW_EDITOR=true
+```
 
-   # Editor core tests
-   ./scripts/ci/editor/core.sh
-   ```
+```bash
+flutter run -d android --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true
+```
 
-4. **Launch the app**:
-   ```bash
-   # macOS
-   flutter run -d macos
+### Test
+```bash
+flutter test
+```
 
-   # iOS / Android with the editor enabled (in development)
-   flutter run -d ios --dart-define=DANAVIEW_EDITOR=true
-   flutter run -d android --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true
-
-   # Windows / Linux
-   flutter run -d windows
-   flutter run -d linux
-   ```
+```bash
+./scripts/ci/editor/core.sh
+```
 
 ---
 
-## 📄 License & Conduct
+## 💖 Sponsor & support
 
-- **License**: Proprietary — Copyright © 2026 vecvel. All rights reserved. See [`LICENSE`](LICENSE) for terms.
-- **Code of Conduct**: See [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+If Danaview is useful to you, sponsoring helps keep it moving:
+
+- 💖 **GitHub Sponsors:** [github.com/sponsors/vecvel](https://github.com/sponsors/vecvel)
+- ☕ **Buy Me a Coffee:** [buymeacoffee.com/vecvel](https://buymeacoffee.com/vecvel)
+- 🌐 **GitHub:** [github.com/vecvel](https://github.com/vecvel)
+- ✉️ **Support:** support@vecvel.com
+
+---
+
+## 📄 License & conduct
+
+- **License:** Proprietary. Copyright © 2026 vecvel. All rights reserved. See [`LICENSE`](LICENSE).
+- **Code of conduct:** see [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
