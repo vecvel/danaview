@@ -11,7 +11,7 @@
 // (c2.goldfish.h264.decoder) did not show it in Media3 renders; the queued buffers carry no
 // acquire fence on the emulator, so a consumer has nothing to wait on.
 //
-// What it does: P decoders in parallel (plus CPU load in this process), each decoding short clips
+// What it does: 4 decoders in parallel (plus CPU load in this process), each decoding short clips
 // of ENG-05's 24 fps counter from a sync frame to end of stream into its own SurfaceTexture, at
 // most 5 frames in flight like Media3's decoders on API 29+, the consumer slowed to 15 ms a frame
 // like a loaded compositor; every frame is drawn on its own EGL context, read back with
@@ -158,7 +158,10 @@ class SoftwareDecoderSurfaceProbeTest {
         }
     }
 
-    /** Decodes frames [from, to) of [file] to end of stream with at most [maxPending] frames queued to the consumer. */
+    /**
+     * Decodes frames [from, to) of [file] (and the few after it that the B-frame reorder needs) to end
+     * of stream, with at most [maxPending] frames queued to the consumer; returns (frame, barcode).
+     */
     private fun decode(file: File, codecName: String, from: Int, to: Int, pts: LongArray, maxPending: Int): List<Pair<Int, Int?>> {
         val ex = MediaExtractor()
         ex.setDataSource(file.absolutePath)
@@ -184,7 +187,9 @@ class SoftwareDecoderSurfaceProbeTest {
                     val i = codec.dequeueInputBuffer(1_000)
                     if (i >= 0) {
                         val t = ex.sampleTime
-                        if (t < 0 || t > pts[to - 1]) {
+                        // Past the clip by the counter's B-frame reorder depth, so every frame of
+                        // [from, to) is decoded; every decoded frame from `from` on is rendered and checked.
+                        if (t < 0 || t > pts[minOf(to + REORDER_MARGIN, pts.size - 1)]) {
                             codec.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                             inputDone = true
                         } else {
@@ -259,6 +264,7 @@ class SoftwareDecoderSurfaceProbeTest {
         const val LOAD_THREADS = 4
         const val MAX_PENDING = 5
         const val CONSUMER_DELAY_MS = 15L
+        const val REORDER_MARGIN = 3
 
         /** Source frame clips (each decoded from its sync frame to end of stream). */
         val CLIPS = listOf(48 to 70, 120 to 132, 156 to 165, 30 to 36, 100 to 106)
