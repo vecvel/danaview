@@ -31,6 +31,8 @@ flutter test integration_test/parity_test.dart   -d <device> --dart-define=QA03_
 
 **Simulator isolation.** Use a simulator that no other `flutter test` run is using at the same time. If another app is launched on the same simulator, the example app goes to the background. The iOS exporter then pauses by design (D-22), and every later export times out. The first parity attempt here failed that way while another builder ran its `integration_test/editor` suite on the shared iPhone 17.
 
+**Freshly booted simulator.** On the first launch after a cold boot, `flutter test` can fail to attach to the app's VM service: the app sits on a white screen and the run never starts. Stop the run and start it again; the second launch attaches normally (seen on the iPhone 16, 2026-10-16).
+
 ## Method
 
 ### Frame identity
@@ -94,15 +96,16 @@ flutter test integration_test/parity_test.dart   -d <device> --dart-define=QA03_
 ## Results: iOS simulator
 
 Setup:
-- iOS 26.5 (23F77), Xcode 26.6, Flutter 3.44, run 2026-10-15. Capabilities: tier high; software H.264 (`hardwareEncoder` false).
-- The final runs used the iPhone 17 Pro, with the iPhone 17 for development runs. This Mac has no iOS 26.5 "iPhone 16" runtime; its iPhone 16 devices are on iOS 18.2.
+- iOS 26.5 (23F77), Xcode 26.6, Flutter 3.44. Capabilities: tier high; software H.264 (`hardwareEncoder` false).
+- **Current run (re-run, 2026-10-16): iPhone 16 on iOS 26.5**, after the fixes for findings 1–5 landed. All three files are green: `accuracy_test.dart` 12/12, `av_sync_test.dart` 7/7, `parity_test.dart` 4/4. The tables below come from this run.
+- The first run (2026-10-15, iPhone 17 Pro and iPhone 17) found findings 1–5. They are kept under "Findings and defects" with their status.
 
 ### Exact seeks (frame_counter_1080p30, 30 fps plan, 640×360 canvas)
 
 | Phase | Result | Seek + capture p50 / p95 |
 |---|---|---|
-| Map 1× \| 2× \| 0.5× \| 1× (breakpoints at 1 s, 2 s, 4 s): all 150 frames + 50 random (half mid-frame) | **200/200**, ack `displayedFrame` = k, seq increasing | 36 / 74 ms |
-| After a structural patch (re-cut at frame 77 ≡ 2 mod 3, a 2× clip, a new overlay layer; ack structural, applyMs 291) | **200/200** | 60 / 90 ms |
+| Map 1× \| 2× \| 0.5× \| 1× (breakpoints at 1 s, 2 s, 4 s): all 150 frames + 50 random (half mid-frame) | **200/200**, ack `displayedFrame` = k, seq increasing | 36 / 71 ms |
+| After a structural patch (re-cut at frame 77 ≡ 2 mod 3, a 2× clip, a new overlay layer; ack structural, applyMs 261) | **200/200** | 58 / 85 ms |
 
 The times include the Pigeon round trip and a full RGBA capture, so they are simulator numbers, not budgets.
 
@@ -112,10 +115,11 @@ The times include the Pigeon round trip and a full RGBA capture, so they are sim
 |---|---|---|---|---|---|---|---|
 | 24 | 720p24 | 37 / 110 | 168 | 168/168 | 0 wrong; 168/168 frames seen; all 4 cut frames | 168/168; file PTS exact | 8/8 |
 | 30 | 1080p30 | 46 / 137 | 210 | 210/210 | 0 wrong; 210/210 seen; 4/4 | 210/210; file PTS exact | 8/8 |
-| 48 | 720p48 | 73 / 218 | 336 | 336/336 | 0 wrong; 318/336 seen; 4/4 | 336/336; file PTS ≤ 833 µs off nominal (finding 4) | 8/8 |
+| 48 | 720p48 | 73 / 218 | 336 | 336/336 | 0 wrong; 326/336 seen; 4/4 | 336/336; file PTS exact | 8/8 |
 | 60 | 720p60 | 91 / 272 | 420 | 420/420 | 0 wrong; 397/420 seen; 4/4 | 420/420; file PTS exact | 8/8 |
 
-- **Playback capture** polls `debugCaptureFrame` while playing, for up to four passes. It cannot guarantee that every frame is captured. The test requires 0 wrong frames and at least half the frames seen. Coverage was 95–100 %, and every frame next to a cut was seen in every case.
+- **Playback capture** polls `debugCaptureFrame` while playing, for up to four passes. It cannot guarantee that every frame is captured. The test requires 0 wrong frames and at least half the frames seen. Coverage was 95–100 %. Every frame next to a cut was seen in every case, and no pass ended on a black frame (`passesEndingBlack=0`).
+- The source files now carry their nominal PTS at every rate (`nominalPtsDeviations=0` at 24/30/48/60 fps). The 48 fps fixture therefore matches the nominal design (finding 4).
 - **Grid-cut result: 100 % at all four rates.** This holds in exact-seek preview, in playback capture (for every frame captured) and in export.
 
 ### Other accuracy checks
@@ -123,10 +127,10 @@ The times include the Pigeon round trip and a full RGBA capture, so they are sim
 | Check | Result |
 |---|---|
 | Reverse rendition of frames 60..119 (1080p30) | 60 frames, barcodes 119 → 60, **strictly decreasing by 1** at every frame |
-| Freeze stills at frame starts and mid-frame (1080p30 ×8, 720p24/48/60 ×4 each, 40 stills) | **40/40 exact** against the file's real PTS. The 48 fps fixture's frames 73 and 383 sit 833 µs after their nominal start (finding 4). |
+| Freeze stills at frame starts and mid-frame (1080p30 ×8, 720p24/48/60 ×4 each, 40 stills) | **40/40 exact** against the file's real PTS |
 | Proxy of frame_counter_1080p30 (CFR) | 240/240 frames, **max PTS Δ 0.00 µs**; exact seeks on the proxy (`useProxies`) show the same barcode (35/35) |
 | Proxy of vfr_720p (VFR, irregular durations, one held frame) | 143/143 frames, **max PTS Δ 0.00 µs** |
-| Export duration off the whole-µs grid (`durUs = timeOfFrame(K)` not an integer number of µs) | **fails** at 24, 30, 48 and 60 fps with `AVFoundationErrorDomain -11841`; works at 25 fps (finding 1) |
+| Export duration off the whole-µs grid (`durUs = timeOfFrame(K)` not an integer number of µs) | **passes**: 24 fps × 73, 30 × 91, 48 × 49, 60 × 179 and 25 × 51 frames. Each export's duration equals `durUs` (finding 1 fixed). |
 
 ### A/V sync (clap_flash_av, 30 fps, 640×360)
 
@@ -137,28 +141,30 @@ Click times are measured from the export's PCM; "A/V" means the click onset minu
 | 1× | 30 → 1.000 s | 30 (30) | +2.1 ms | +2.1 ms | pass |
 | 1× | 75 → 2.500 s | 75 (75) | +2.4 ms | +2.4 ms | pass |
 | 1× | 120 → 4.000 s | 120 (120) | +2.1 ms | +2.1 ms | pass |
-| 2× keep pitch | 30 → 0.500 s | 15 (15) | +12.9 ms | +12.9 ms | pass |
-| 2× keep pitch | 75 → 1.250 s | not shown at 2× (skipped source frame) | +9.9 ms | — | pass |
-| 2× keep pitch | 120 → 2.000 s | 60 (60) | +12.8 ms | +12.8 ms | pass |
-| 0.5× ramp (1 → 0.75 → 0.5 → 1×) | 30 @ 0.75× → 1.0667 s | 32 (32) | −15.3 ms | −15.3 ms | pass |
-| 0.5× ramp | 75 @ **0.5×** → 4.000 s | 120 (120) | **−38.8 ms** | **−38.8 ms** | **fail** (finding 2) |
-| 0.5× ramp | 120 @ 1× after the ramp → 5.600 s | 168 (168) | −3.9 ms | −3.9 ms | pass |
+| 2× keep pitch | 30 → 0.500 s | 15 (15) | +1.4 ms | +1.4 ms | pass |
+| 2× keep pitch | 75 → 1.250 s | not shown at 2× (skipped source frame) | −1.4 ms | — | pass |
+| 2× keep pitch | 120 → 2.000 s | 60 (60) | +1.3 ms | +1.3 ms | pass |
+| 0.5× ramp (1 → 0.75 → 0.5 → 1×) | 30 @ 0.75× → 1.0667 s | 32 (32) | −2.4 ms | −2.4 ms | pass |
+| 0.5× ramp | 75 @ **0.5×** → 4.000 s | 120 (120) | −3.4 ms | −3.4 ms | **pass** (finding 2; first run −38.8 ms) |
+| 0.5× ramp | 120 @ 1× after the ramp → 5.600 s | 168 (168) | −2.9 ms | −2.9 ms | pass |
 | Cross dissolve (1 s at 2.0 s, equal-power audio) | A 30 → 1.000 s | 30 (30) | +2.1 ms | +2.1 ms | pass |
 | Cross dissolve | B 75 → 2.000 s (inside the dissolve) | blended, not checked | +2.1 ms (peak 0.37 ≈ 0.707 × 0.5) | — | pass |
 | Cross dissolve | B 120 → 3.500 s | 105 (105) | +2.1 ms | +2.1 ms | pass |
 
+The worst export A/V offset over all cases is 3.4 ms (limit: 1 frame and 20 ms).
+
 In preview, every checked flash frame is shown exactly at its timeline frame, at exact seeks, in all four cases.
 
-The click energy centroid shows how the keep-pitch stretch shifts audio:
+The click energy centroid now stays close to the onset at every rate:
 
-| Rate | Centroid measured | Centroid expected |
+| Rate | Centroid now | Centroid in the first run |
 |---|---|---|
-| 1× | +10.0 ms | +10 ms |
-| 2× | +16.8 ms | +5 ms |
-| 0.75× | −5.1 ms | +13.3 ms |
-| 0.5× | −23.2 ms | +20 ms |
+| 1× | +10.0 ms | +10.0 ms |
+| 2× | +5.9 ms | +16.8 ms |
+| 0.75× | +6.7 ms | −5.1 ms |
+| 0.5× | +12.2 ms | −23.2 ms |
 
-The timing offset therefore grows as the rate falls below 1×.
+The rate-dependent offset of the first run is gone.
 
 ### Render parity
 
@@ -206,16 +212,16 @@ All rows pass. Preview: 100 frames on 31 plans. Export: 32 frames on 8 plans. Ea
 | api03_place | export | 1280×720 | 3 | 1.10 | 3 | 0.9992 |
 | api03_canvas_masks | preview | 640×360 | 3 | 0.06 | 1 | 0.9994 |
 
-**Freeze-still colours:** the freeze job does **not** keep the decoded colours.
+**Freeze-still colours:** the freeze job now keeps the decoded colours (finding 3).
 
 | Colour | Preview decode | Freeze still |
 |---|---|---|
-| #808080 | 128,128,128 | 139,139,139 |
-| #C08040 | 193,128,63 | 200,139,72 |
-| #202020 | 33,33,33 | 37,37,37 |
-| All six colours, worst Δ | 1 | 11 |
+| #808080 | 128,128,128 | 128,128,128 |
+| #C08040 | 193,128,63 | 193,128,63 |
+| #202020 | 33,33,33 | 33,33,33 |
+| All six colours, worst Δ | 1 | 1 |
 
-An independent ffmpeg decode of the same file on the Mac gives 126/190,126,61/31: the encode is correct, and the freeze path is not (finding 3).
+In the first run the freeze still lifted mid-grey 128 to 139 (worst Δ 11).
 
 ### iOS vs Android renders
 
@@ -225,11 +231,13 @@ The iOS set is committed in [`QA-03-parity/ios/`](QA-03-parity/ios/): 132 PNGs, 
 
 With `QA03_PEER=<dir>`, the same test compares each of its renders with the peer's at the golden size, with the §11.6 tolerance. Exported frames use the codec edge exclusion of both images.
 
-Self-check: two separate iOS runs compared through the peer path gave 132/132 within tolerance. The run is deterministic.
+Self-check: the 2026-10-16 re-run on the iPhone 16 compared its renders with the committed set through the peer path (`QA03_PEER=docs/v1.1/editor/qa/QA-03-parity/ios`). The parity summary is `cases=31 frames=132 failures=0`. All 132 new PNGs are byte-identical to the committed ones, so the renders are deterministic across runs and simulator models.
+
+The iOS simulator's log stream can drop `QA03|…` lines when a test prints many at once. This run's log shows 90 of the 132 `peer|file` lines and no `peer|compared` line. The verdict is unaffected, because each test asserts on its own failure list.
 
 ## Deferred
 
-- **Android emulator (API 35): deferred to the Windows lane** (branch `editor-android`). All three files run unchanged. Only the media has to be on the device. From `packages/danaview_editor_engine/example`:
+- **Android emulator (API 35): deferred, Windows lane** (branch `editor-android`). All three files run unchanged; only the media has to be on the device. Through CI: `DANAVIEW_EMULATOR_SUITES="accuracy av_sync parity" scripts/ci/editor/android_emulator.sh`. It runs the plugin's instrumented batches first, then pushes the media, goldens and iOS peer renders and runs the three files. By hand, from `packages/danaview_editor_engine/example`:
   ```
   P=/sdcard/Android/data/com.vecvel.danaview.editor.engine.example/files
   flutter test integration_test/engine_smoke_test.dart -d emulator-5554     # installs the app and creates $P
@@ -251,38 +259,38 @@ Self-check: two separate iOS runs compared through the peer path gave 132/132 wi
   - The iOS simulator numbers are IOS-01 §2.8: compensated offset 10–14 ms.
   - The Android end-to-end number, including Flutter's raster delay, belongs to the Windows lane and the device lab.
 - **Device lab: deferred, no device available.** Run the same three commands with `-d <device>` (iOS: the simulator flags work unchanged after `QA03_MEDIA` points at an on-device copy) on: iPhone 7 (iOS 15.8), iPhone 8 (iOS 16.7), iPhone SE 2, iPhone 12, iPhone 15 Pro, a 2–3 GB Android Go device, a 4 GB Android device, Pixel 7a, Pixel 9 or Galaxy S24, and an API 29 device. The grid-cut case must be 100 % on every device.
-- **CI.** `scripts/ci/editor/ios.sh` and `android_emulator.sh` (owner ENG-09) run only `engine_smoke_test.dart`. They also do not pass `QA03_MEDIA`, so in CI these suites would show as skipped. See the defects section.
+- **CI.** `scripts/ci/editor/ios.sh` (`DANAVIEW_IOS_SUITES="accuracy av_sync parity"`) and `android_emulator.sh` (`DANAVIEW_EMULATOR_SUITES="accuracy av_sync parity"`) run the three files with `QA03_MEDIA`, `QA03_GOLDENS`, `QA03_OUT` and `QA03_PEER`. On Android the script pushes the media first.
 
 ## Findings and defects
 
-1. **iOS export fails whenever `durUs` is not a whole number of µs. Owners: IOS-12 / IOS-17. Severity: blocker.**
+1. **Fixed (verified 2026-10-16).** **iOS export fails whenever `durUs` is not a whole number of µs. Owners: IOS-12 / IOS-17. Severity: blocker.**
    - Symptom: `durUs = timeOfFrame(K) = ceil(K·10⁶/fps)` fails at 24, 30, 48 and 60 fps whenever K·10⁶/fps is fractional. That is two thirds of all project lengths at 30 fps. The failure is `EngineFailure(internal: AVFoundationErrorDomain -11841)` (invalid video composition).
    - Reproduced lengths: 1 frame, 25, 31, 49, 73, 91, 146, 179, 182 and 362 frames.
    - Works: whole-second lengths, and every 25 fps length.
    - Likely cause: the pipeline gives the reader and writer a µs time range ending at `durUs` (`CMTime(value: durUs, timescale: 1_000_000)`, for example in `SegmentedWriter` and `ReaderWriterPipeline`). That end lies up to 1 µs past the composition's `CMTime(K, gridFps)` end and its last instruction.
    - Proposed fix (D-35): clamp the end to `CMTime(K, gridFps)`, or build the time range from frame indices.
    - The test that tracks it is `accuracy_test.dart` "export duration off the whole-µs grid", which currently fails. QA-11's 3 s fixtures never hit this case.
-2. **Keep-pitch audio is not time-aligned inside scaled segments. Owners: IOS-18 / IOS-12. Export A/V sync fails at 0.5×.**
+2. **Fixed (verified 2026-10-16: −3.4 ms at 0.5×).** **Keep-pitch audio is not time-aligned inside scaled segments. Owners: IOS-18 / IOS-12. Export A/V sync fails at 0.5×.**
    - Inside a 0.5× keep-pitch segment, the click arrives **38.8 ms before** its flash. That is more than 20 ms and more than one frame.
    - At 0.75× it is −15.3 ms, at 2× it is +12.9 ms, and 1× segments are exact.
    - The energy centroid moves with the rate (2×: +12 ms; 0.75×: −18 ms; 0.5×: −43 ms against a correctly stretched click). This looks like the `.timeDomain` pitch algorithm's latency, which is never compensated per segment.
    - The ramp-seam click test (QA-11) does not see this, because it measures transients rather than timing.
    - Tracked by `av_sync_test.dart` "0.5x ramp", which fails.
-3. **The freeze-still job applies colour management. Owner: IOS-06.**
+3. **Fixed (verified 2026-10-16: worst Δ 1).** **The freeze-still job applies colour management. Owner: IOS-06.**
    - Encoded mid-grey 128 comes back as 139. In general, darks and mids are lifted by about +5 to +11.
    - The preview and the exporter decode the same file to within ±1, and so does an independent ffmpeg decode.
    - A freeze frame therefore visibly brightens against the clip it freezes, and pending-still holds will jump in brightness. This violates ARCH §11.6 ("colour management off").
    - Likely cause: `AVAssetImageGenerator` or CGImage output is converted to a colour-managed space. It should use the compositor's `NSNull` colour spaces, or copy from a reader output.
    - Tracked by `parity_test.dart` "freeze stills keep the decoded colours", which fails. Freeze **frame indices** are exact (40/40).
-4. **Timescale 600 cannot hold 48 fps. Owners: ENG-05 (fixture tool) and IOS-12 (export writer).**
+4. **Fixed (verified 2026-10-16: fixture and 48 fps exports at nominal PTS).** **Timescale 600 cannot hold 48 fps. Owners: ENG-05 (fixture tool) and IOS-12 (export writer).**
    - `frame_counter_720p48.mp4` (from `make_fixtures.swift`) and every 48 fps export use timescale 600. Frame k is stored at round(12.5·k) ticks, so odd frames sit up to 833 µs off `k·10⁶/48`.
    - With the §11.5 rule (PTS ≤ s + 500 µs), 133 of the 336 grid-cut frames show the neighbouring source frame compared with the nominal design. The engine follows the rule exactly; the file is what is off.
    - Proposed fix: write 48 fps at timescale 48000, or any multiple of 48. Then regenerate the fixture.
    - The tests use the files' real PTS, so they stay correct either way.
-5. **Playback reaching the end of the timeline shows a black frame instead of holding the last frame. Owner: IOS-11. Minor.** After `durUs` the captured texture is black (`passesEndingBlack`). Users see a black flash at the end of every played-through timeline.
+5. **Fixed (verified 2026-10-16: `passesEndingBlack=0` at all four rates).** **Playback reaching the end of the timeline shows a black frame instead of holding the last frame. Owner: IOS-11. Minor.** After `durUs` the captured texture is black (`passesEndingBlack`). Users see a black flash at the end of every played-through timeline.
 6. **Parity tolerance for exported frames needs the lead's sign-off.**
    - 8-bit 4:2:0 H.264 cannot keep a sharp chroma edge at any bitrate. For example, the checkerboard of `api03_place` reaches p99 14/255 at 12 bits per pixel per second, while the encode is otherwise correct (signed mean 0.0/0.8/0.8).
    - The suite therefore excludes content edges for exported frames (see Method), in addition to layer edges.
    - Without that exclusion, `api03_place`, `api03_text_scale_8x` and `sprites_export_reveal` miss p99 in export, with mean 0.7–1.7. Preview passes without it.
    - The alternative is to compare exported frames against a 4:2:0-subsampled reference. That reduces but does not remove the gap (p99 13 in the worst region).
-7. **CI does not run QA-03 yet. Owner: ENG-09.** `scripts/ci/editor/ios.sh` and `android_emulator.sh` need to run the three files with `--dart-define=QA03_MEDIA=<packages/danaview_editor_engine/test_fixtures/media>`; on Android, push the media first. Otherwise the suites are reported as skipped.
+7. **Fixed (FIX-CI-SUITES): `ios.sh` and `android_emulator.sh` now run the three files with the media, goldens and peer defines.** **CI does not run QA-03 yet. Owner: ENG-09.** `scripts/ci/editor/ios.sh` and `android_emulator.sh` need to run the three files with `--dart-define=QA03_MEDIA=<packages/danaview_editor_engine/test_fixtures/media>`; on Android, push the media first. Otherwise the suites are reported as skipped.
