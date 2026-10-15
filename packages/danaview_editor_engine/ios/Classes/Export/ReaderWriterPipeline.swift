@@ -7,7 +7,11 @@
 // export variant of IOS-08/IOS-10: renderSize = output, frameDuration = 1/export fps, DVCompositor
 // stamping `danaview.frame = k`). The SegmentedWriter opens the source once per 10 s segment, so
 // every segment re-creates its reader with that segment's `timeRange` (resume starts at the next
-// segment). Frames are BGRA IOSurface buffers; with the `.rotated` layout (ARCH §14.1) each frame
+// segment). Every reader range and writer session end is clamped to the grid end CMTime(K, gridFps)
+// (`ExportTime`, FIX-IOS-DURATION: the µs durUs = ceil(K·10⁶/fps) lies past it at 24/30/48/60 fps
+// and a reader past the last instruction fails with −11841), and the export composition's spacer
+// is split into an integral-ratio edit plus a remainder (`ExportTime.splitFractionalSpacer`; a
+// reader starting inside a fractionally scaled spacer edit hangs). Frames are BGRA IOSurface buffers; with the `.rotated` layout (ARCH §14.1) each frame
 // is turned 90° counter-clockwise into a landscape buffer and the final file gets a 90° clockwise
 // `preferredTransform`, set on the concat writer's video input (no extra remux copy).
 //
