@@ -168,7 +168,11 @@ serve_one() {
       local secs; secs="$(json_arg "$body" seconds)"; secs="${secs:-3}"
       app_background; sleep "$secs"; app_foreground; sleep 0.5; detail="background ${secs}s" ;;
     foreground) app_foreground ;;
-    grantMic) grant_mic || { ok=false; detail="grant failed"; } ;;
+    grantMic)
+      # iOS: `simctl privacy grant` terminates a running app, so run_file grants the microphone
+      # before the phase starts and this request only confirms it.
+      if [[ "$PLATFORM" == ios ]]; then detail="granted before launch"
+      else grant_mic || { ok=false; detail="grant failed"; }; fi ;;
     screenshot) screenshot "$(json_arg "$body" name)" ;;
     tapNotificationCancel)
       if [[ "$PLATFORM" == android ]]; then
@@ -290,6 +294,9 @@ run_phase() {
 run_file() {
   local file="$1" name; name="$(basename "$file" .dart)"
   case "$name" in
+    s13_voiceover_test)
+      if [[ "$PLATFORM" == ios ]]; then grant_mic || log "microphone grant failed (is the app installed?)"; fi
+      run_phase "$file" "" pass ;;
     s09_recovery_after_kill_test) run_phase "$file" edit dies && run_phase "$file" recover pass ;;
     x_android_export_background_test)
       [[ "$PLATFORM" == android ]] || { log "skip $name on $PLATFORM"; return 0; }

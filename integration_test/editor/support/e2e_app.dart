@@ -21,6 +21,7 @@ import 'package:danaview/main.dart' show createAutoCaptions, editorAppOverrides;
 import 'package:danaview_data/danaview_data.dart';
 import 'package:danaview_editor/danaview_editor.dart';
 import 'package:danaview_editor_engine/danaview_editor_engine.dart';
+import 'package:danaview_editor_engine/src/mobile_media_access.dart' show MobileMediaAccess;
 import 'package:danaview_engine/danaview_engine.dart';
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_platform/danaview_platform.dart';
@@ -59,6 +60,10 @@ abstract final class E2eApp {
   /// The wiring (built by the first [launch]).
   static E2eWorld get world => _world ?? (throw StateError('E2eApp.launch first'));
 
+  /// Whether [_boot] fills in the Documents root the app forgets (FIX-INT-02-1). Set
+  /// `--dart-define=DV_E2E_NO_WORKAROUNDS=true` to run against the app's wiring as it is.
+  static const bool _workaroundDocumentsRoot = !bool.fromEnvironment('DV_E2E_NO_WORKAROUNDS');
+
   static Future<E2eWorld> _boot() async {
     if (!E2eConfig.editorFlag) {
       throw StateError('Build with --dart-define=DANAVIEW_EDITOR=true (and DANAVIEW_AUTO_CAPTIONS=true for scenario 8)');
@@ -78,7 +83,17 @@ abstract final class E2eApp {
     await player.initialize();
 
     final roots = await EditorBootstrap.defaultRoots();
-    final engine = E2eEditorEngine(MobileEditorEngine(config: EditorBootstrap.engineConfigOf(roots)));
+    final mobile = MobileEditorEngine(config: EditorBootstrap.engineConfigOf(roots));
+    // Workaround for FIX-INT-02-1 (blocker): nothing in the app sets
+    // `MobileMediaAccess.documentsRoot`, so every media under Documents (all Files imports,
+    // ARCH §9.1 `documentsReference`) resolves as "accessLost: documents root not available" and
+    // the preview, export and relink see it offline. The suite sets it here so the other scenarios
+    // can run; remove this block when FIX-INT-02-1 lands (run with DV_E2E_NO_WORKAROUNDS=true to confirm the fix).
+    final access = mobile.access;
+    if (_workaroundDocumentsRoot && access is MobileMediaAccess && access.documentsRoot == null) {
+      access.documentsRoot = roots.documents;
+    }
+    final engine = E2eEditorEngine(mobile);
     final runtime = await EditorBootstrap.createRuntime(engine: engine, roots: roots, prefs: await EditorPrefs.load());
     final captions = EditorAppWiring.autoCaptionsEnabled ? createAutoCaptions(engine: engine, supportDirectory: roots.support) : null;
     if (captions != null) await captions.service.initialize();
