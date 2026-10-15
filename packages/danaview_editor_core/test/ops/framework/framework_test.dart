@@ -2,7 +2,8 @@
 //
 // The command framework (ARCH §7.1, BUILD_PLAN CORE-09): purity, rejections as data, the shared
 // apply / dry-run path, no-op detection, post-step validation, exception handling, atomic
-// composites, stamping, the live pool and the generic limits (D-14).
+// composites, stamping, the live pool and the generic limits (D-14; the layer caps are
+// informational since CORE-38).
 
 import 'dart:math';
 
@@ -319,19 +320,32 @@ void main() {
       expect(move.changed, isTrue, reason: '${move.rejection}');
     });
 
-    test('a seventh lane overlapping a PiP fails the sequence cap', () {
+    // CORE-38 (D-14, D-45(B)): the layer caps limit live preview only. Commands above them
+    // succeed and the checker reports the informational `aboveLivePreviewCap` state instead.
+    test('a seventh lane overlapping a PiP passes and reports aboveLivePreviewCap', () {
       final p = sparsePip();
       final c = RawEditCommand('Add seventh lane', (x) => withLane(x, lane('tr_ov6', TrackKind.overlay, [vclip('it_p6', 20, 50, media: 'md_video2')])));
-      const expected = LimitExceeded(LimitExceeded.visualSequences, 2);
-      final out = applyCommand(p, c, ctx(policy: seqPolicy));
-      expect(out.rejection, expected);
-      expect(identical(out.project, p), isTrue);
-      expect(dryRun(p, c, ctx(policy: seqPolicy)).rejection, expected);
+      final context = ctx(policy: seqPolicy);
+      final out = applyCommand(p, c, context);
+      expect(out.changed, isTrue, reason: '${out.rejection}');
+      final status = context.limits.lastPreviewCap!;
+      expect(status.aboveLivePreviewCap, isTrue);
+      expect(status.aboveSequenceCap, isTrue);
+      expect(status.visualSequences, 3);
+      expect(status.maxVisualSequences, 2);
+      expect(context.limits.previewCapOf(out.project, seqPolicy), status);
+      final probe = ctx(policy: seqPolicy);
+      expect(dryRun(p, c, probe).rejection, isNull);
+      expect(probe.limits.lastPreviewCap, status);
       // The same through a real command: an overlapping insert lands on another lane and stacks.
       final insert = InsertMedia([const MediaId('md_short')], f(10), track: const TrackId('tr_ov0'), mode: InsertMode.newLane);
-      expect(applyCommand(p, insert, ctx(policy: seqPolicy)).rejection, expected);
-      // With room for a third sequence it is accepted.
-      expect(applyCommand(p, c, ctx(policy: const EditPolicy(maxVisualSequences: 3))).changed, isTrue);
+      final ins = applyCommand(p, insert, ctx(policy: seqPolicy));
+      expect(ins.changed, isTrue, reason: '${ins.rejection}');
+      expect(LayerLimits().previewCapOf(ins.project, seqPolicy).aboveLivePreviewCap, isTrue);
+      // With room for a third sequence the state is clear.
+      final roomy = ctx(policy: const EditPolicy(maxVisualSequences: 3));
+      expect(applyCommand(p, c, roomy).changed, isTrue);
+      expect(roomy.limits.lastPreviewCap!.aboveLivePreviewCap, isFalse);
     });
 
     EditProject twoVideos() => project([
@@ -342,34 +356,48 @@ void main() {
 
     const decPolicy = EditPolicy(maxConcurrentVideoLayers: 2);
 
-    test('peak concurrent decoder-backed layers are capped', () {
+    test('peak concurrent decoder-backed layers above the cap pass and are reported', () {
       final p = twoVideos();
       expect(LayerLimits().countsOf(p).peakConcurrentVideoLayers, 2);
       final overlapping = InsertMedia([const MediaId('md_short')], f(30), track: const TrackId('tr_ov0'), mode: InsertMode.newLane);
-      const expected = LimitExceeded(LimitExceeded.concurrentVideoLayers, 2);
-      expect(applyCommand(p, overlapping, ctx(policy: decPolicy)).rejection, expected);
-      expect(dryRun(p, overlapping, ctx(policy: decPolicy)).rejection, expected);
-      // Images are not decoder-backed: the same overlap with an image passes.
+      final context = ctx(policy: decPolicy);
+      expect(applyCommand(p, overlapping, context).changed, isTrue);
+      final status = context.limits.lastPreviewCap!;
+      expect(status.aboveLivePreviewCap, isTrue);
+      expect(status.aboveConcurrentLayerCap, isTrue);
+      expect(status.peakConcurrentVideoLayers, 3);
+      expect(status.maxConcurrentVideoLayers, 2);
+      final probe = ctx(policy: decPolicy);
+      expect(dryRun(p, overlapping, probe).rejection, isNull);
+      expect(probe.limits.lastPreviewCap, status);
+      // Images are not decoder-backed: the same overlap with an image stays under the cap.
       final image = InsertMedia([const MediaId('md_image')], f(30), track: const TrackId('tr_ov0'), mode: InsertMode.newLane);
-      expect(applyCommand(p, image, ctx(policy: decPolicy)).changed, isTrue);
-      // A video where only one other decoder is active passes.
+      final ic = ctx(policy: decPolicy);
+      expect(applyCommand(p, image, ic).changed, isTrue);
+      expect(ic.limits.lastPreviewCap!.aboveLivePreviewCap, isFalse);
+      // A video where only one other decoder is active stays under the cap.
       final later = InsertMedia([const MediaId('md_short')], f(200), track: const TrackId('tr_ov0'), mode: InsertMode.newLane);
-      expect(applyCommand(p, later, ctx(policy: decPolicy)).changed, isTrue);
+      final lc = ctx(policy: decPolicy);
+      expect(applyCommand(p, later, lc).changed, isTrue);
+      expect(lc.limits.lastPreviewCap!.aboveConcurrentLayerCap, isFalse);
     });
 
-    test('a project already over a cap stays editable; only growth is refused', () {
+    test('a project above a layer cap stays editable, growth included; exceeded lists hard limits only', () {
       final over = applyCommand(
         twoVideos(),
         InsertMedia([const MediaId('md_short')], f(30), track: const TrackId('tr_ov0'), mode: InsertMode.newLane),
         ctx(),
       ).project;
       expect(LayerLimits().countsOf(over).peakConcurrentVideoLayers, 3);
-      expect(LayerLimits().countsOf(over).exceeded(decPolicy), [const LimitExceeded(LimitExceeded.concurrentVideoLayers, 2)]);
+      expect(LayerLimits().countsOf(over).exceeded(decPolicy), isEmpty);
+      expect(LayerLimits().countsOf(over).previewCap(decPolicy).aboveLivePreviewCap, isTrue);
       expect(applyCommand(over, DeleteItems({const ItemId('it_v0')}), ctx(seed: 8, policy: decPolicy)).changed, isTrue);
       expect(applyCommand(over, MoveItems({const ItemId('it_t1')}, f(5)), ctx(policy: decPolicy)).changed, isTrue);
       expect(applyCommand(over, MoveItems({const ItemId('it_v0')}, f(5)), ctx(policy: decPolicy)).changed, isTrue);
       final more = InsertMedia([const MediaId('md_short')], f(40), track: const TrackId('tr_ov0'), mode: InsertMode.newLane);
-      expect(applyCommand(over, more, ctx(seed: 8, policy: decPolicy)).rejection, const LimitExceeded(LimitExceeded.concurrentVideoLayers, 2));
+      final context = ctx(seed: 8, policy: decPolicy);
+      expect(applyCommand(over, more, context).changed, isTrue);
+      expect(context.limits.lastPreviewCap!.peakConcurrentVideoLayers, 4);
     });
 
     test('maxItems: growth past the cap is refused, reductions pass', () {

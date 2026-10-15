@@ -17,6 +17,7 @@ import 'package:characters/characters.dart';
 import 'package:meta/meta.dart';
 import 'package:danaview_editor_core/model.dart';
 
+import '../catalog/tuning.dart';
 import '../languages/languages.dart';
 import 'hallucination_phrases.dart';
 import 'transcript_models.dart';
@@ -35,9 +36,9 @@ final class NormalizerOptions {
     this.collapseRepeatedWords = true,
     this.collapseRepeatedSegments = true,
     this.fixTiming = true,
-    this.noSpeechDropThreshold = 0.5,
-    this.logprobDropThreshold = -0.8,
-    this.phraseNoSpeechThreshold = 0.3,
+    this.noSpeechDropThreshold = SpeechTuning.hallucinationNoSpeech,
+    this.logprobDropThreshold = SpeechTuning.hallucinationLogprob,
+    this.phraseNoSpeechThreshold = SpeechTuning.hallucinationPhraseNoSpeech,
     this.shortEndSegment = const Duration(milliseconds: 1200),
     this.segmentRepeatRun = 3,
     this.wordRepeatRun = 4,

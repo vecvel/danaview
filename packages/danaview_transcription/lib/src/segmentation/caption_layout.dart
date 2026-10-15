@@ -38,16 +38,16 @@ final class CaptionLayout {
     switch (script) {
       case ScriptProfile.spaceDelimited:
         chars = short ? 20 : (portrait ? 32 : SpeechTuning.standardMaxCharsPerLine);
-        cps = short ? 20 : SpeechTuning.standardMaxCps;
+        cps = short ? SpeechTuning.shortPhrasesMaxCps : SpeechTuning.standardMaxCps;
       case ScriptProfile.cjk:
         chars = short ? 8 : 16;
-        cps = short ? 10 : 9;
+        cps = short ? SpeechTuning.cjkShortPhrasesMaxCps : SpeechTuning.cjkMaxCps;
       case ScriptProfile.korean:
         chars = short ? 10 : 18;
-        cps = short ? 14 : 12;
+        cps = short ? SpeechTuning.koreanShortPhrasesMaxCps : SpeechTuning.koreanMaxCps;
       case ScriptProfile.noSpace:
         chars = short ? 16 : 35;
-        cps = short ? 20 : SpeechTuning.standardMaxCps;
+        cps = short ? SpeechTuning.shortPhrasesMaxCps : SpeechTuning.standardMaxCps;
     }
     return CaptionLayout(
       maxLines: settings.maxLines > 0 ? settings.maxLines : lines,

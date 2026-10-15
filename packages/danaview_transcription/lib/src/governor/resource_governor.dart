@@ -22,6 +22,7 @@ import 'package:meta/meta.dart';
 import 'package:danaview_whisper/danaview_whisper.dart';
 
 import '../catalog/speech_model_catalog.dart';
+import '../catalog/tuning.dart';
 import '../contracts/failures.dart';
 import '../contracts/transcription_service.dart' show PauseReason;
 
@@ -120,7 +121,7 @@ final class ResourceGovernor {
   final Duration criticalRecovery;
 
   /// Required available memory as a multiple of a tier's peak budget.
-  static const double memoryHeadroom = 1.3;
+  static const double memoryHeadroom = SpeechTuning.preflightMemoryFactor;
 
   final DeviceResources _device;
   final ExportActivity _exports;

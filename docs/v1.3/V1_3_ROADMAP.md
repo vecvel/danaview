@@ -32,7 +32,7 @@
                         | • Photo mode, beauty |              | • Live beauty, pro   |
                         | • 3-pane workspace   |              | • Cinematic & bokeh  |
                         | • Razor/slip/ripple  |              | • Dual front+back    |
-                        | • J-K-L, multi-screen|              | • Live overlays      |
+                        | • J-K-L, scopes      |              | • Live overlays      |
                         | • HW export, parity  |              | • Audio routing      |
                         +----------------------+              +----------------------+
 ```
