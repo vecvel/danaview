@@ -9,6 +9,7 @@
 // on minimal/low/mid tiers; preflight warnings; the audio read is validated and redone.
 
 import AVFoundation
+import VideoToolbox
 import XCTest
 
 @testable import danaview_editor_engine
@@ -81,6 +82,11 @@ final class ExportCoordinatorTests: XCTestCase {
         XCTAssertEqual(compression[AVVideoAverageBitRateKey] as? Int, 8_000_000)
         XCTAssertEqual(compression[AVVideoExpectedSourceFrameRateKey] as? Int, 30)
         XCTAssertEqual(compression[AVVideoMaxKeyFrameIntervalDurationKey] as? Double, 2)
+        // DataRateLimits hard cap next to AverageBitRate: 1.5× the average per 1 s (QA-11, FIX-IOS-DURATION).
+        let limits = try XCTUnwrap(compression[kVTCompressionPropertyKey_DataRateLimits as String] as? [NSNumber])
+        XCTAssertEqual(limits.map(\.doubleValue), [1_500_000, 1])
+        XCTAssertNil(SegmentEncodeSettings(width: 640, height: 360, fps: 30, averageBitRate: 1_000_000).dataRateLimits,
+                     "proxy/reverse/precompose writers stay uncapped")
 
         let rotated = s.segmentSettings(layout: .rotated)
         XCTAssertEqual(rotated.width, 1920)

@@ -194,8 +194,9 @@ abstract final class E2eApp {
     } on TestFailure {
       // Tap anyway; the caller's next wait reports what was in the way.
     }
-    if (finder.evaluate().isEmpty) {
-      // It went away while the route settled (a summary that closed itself, for example).
+    if (finder.evaluate().isEmpty || (ifStillThere && finder.hitTestable().evaluate().isEmpty)) {
+      // It went away (or is leaving with its route) while the route settled, for example a
+      // summary that closed itself. Tapping its old position would hit the next screen.
       if (ifStillThere) return;
       throw TestFailure('${what ?? finder} disappeared before the tap\n${describeScreen()}');
     }

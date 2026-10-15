@@ -41,6 +41,13 @@ struct SegmentEncodeSettings: Codable, Equatable {
     /// Expected frame rate (`AVVideoExpectedSourceFrameRateKey`).
     var fps: Int
     var averageBitRate: Int
+    /// Hard cap of the video data rate as a multiple of `averageBitRate`, enforced over a 1 s
+    /// window (`kVTCompressionPropertyKey_DataRateLimits` next to AverageBitRate; QA-11 measured
+    /// 1.2–1.6× overshoot of AverageBitRate alone on high-detail content). nil = no cap (proxy,
+    /// reverse and precompose intermediates); exports set `defaultDataRateLimitFactor` (IOS-12).
+    /// Optional so that a checkpoint written before the cap decodes (and then mismatches, so the
+    /// job restarts with the capped settings).
+    var dataRateLimitFactor: Double? = nil
     /// Keyframe interval in frames (`AVVideoMaxKeyFrameIntervalKey`), nil for none.
     var maxKeyFrameIntervalFrames: Int?
     /// Keyframe interval in seconds (`AVVideoMaxKeyFrameIntervalDurationKey`), nil for none.
@@ -62,6 +69,17 @@ struct SegmentEncodeSettings: Codable, Equatable {
 
     var fileType: AVFileType { container == .mov ? .mov : .mp4 }
 
+    /// Peak factor of the export data-rate cap: 1.5× the average bitrate per second.
+    static let defaultDataRateLimitFactor: Double = 1.5
+
+    /// `DataRateLimits` value: [bytes, seconds] pairs (one pair: `factor × averageBitRate / 8`
+    /// bytes per 1 s), nil without a cap.
+    var dataRateLimits: [NSNumber]? {
+        guard let factor = dataRateLimitFactor, factor > 0, averageBitRate > 0 else { return nil }
+        let bytesPerSecond = (Double(averageBitRate) * factor / 8).rounded(.up)
+        return [NSNumber(value: bytesPerSecond), NSNumber(value: 1.0)]
+    }
+
     /// Writer output settings: H.264 High AutoLevel or HEVC Main AutoLevel (hvc1), BT.709.
     var videoOutputSettings: [String: Any] {
         var compression: [String: Any] = [
@@ -69,6 +87,7 @@ struct SegmentEncodeSettings: Codable, Equatable {
             AVVideoExpectedSourceFrameRateKey: fps,
             AVVideoAllowFrameReorderingKey: allowFrameReordering,
         ]
+        if let limits = dataRateLimits { compression[kVTCompressionPropertyKey_DataRateLimits as String] = limits }
         if let frames = maxKeyFrameIntervalFrames { compression[AVVideoMaxKeyFrameIntervalKey] = frames }
         if let seconds = maxKeyFrameIntervalSeconds { compression[AVVideoMaxKeyFrameIntervalDurationKey] = seconds }
         switch codec {

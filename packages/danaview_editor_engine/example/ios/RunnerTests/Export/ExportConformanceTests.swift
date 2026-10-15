@@ -4,7 +4,8 @@
 // encoder exists) outputs pass the §14.4 conformance checks; projects with no audio, with every
 // clip muted or soloed out (export plans then carry no audio segment) and with images/text only
 // produce a silent AAC 48 kHz stereo track; an export plan with gridFps 30 and fps 24 passes; A/V
-// offset ≤ 1 frame and ≤ 20 ms on clap_flash; 200 % volume measures +6.02 ± 0.1 dB.
+// offset ≤ 1 frame and ≤ 20 ms on clap_flash; 200 % volume measures +6.02 ± 0.1 dB. FIX-IOS-DURATION:
+// exports whose durUs is off the whole-µs grid (24/30/48/60 fps) succeed with K frames.
 
 import AVFoundation
 import XCTest
@@ -112,6 +113,52 @@ final class ExportConformanceTests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(code, 120, "frame \(k) after the cut")
             }
         }
+    }
+
+    // MARK: Durations off the whole-µs grid (FIX-IOS-DURATION, QA-03 finding 1)
+
+    /// durUs = timeOfFrame(K) = ceil(K·10⁶/fps) is not an exact µs time whenever K·10⁶/fps is
+    /// fractional (24/30/48/60 fps). The composition ends at CMTime(K, fps); readers and writers
+    /// must clamp to it (AVFoundationErrorDomain −11841 otherwise). 30 × 331 spans two segments.
+    func testExportDurationsOffTheWholeMicrosecondGrid() throws {
+        let cases: [(Int, Int64)] = [(24, 73), (30, 91), (48, 49), (60, 179), (25, 51), (30, 331)]
+        for (fps, k) in cases {
+            let durUs = FrameGrid(fps).timeOfFrame(k)
+            let settings = ExportPlans.settings(320, 180, fps: fps, videoBitrate: 300_000)
+            let output = harness.outputURL("mp4")
+            let plan = ExportPlans.plan(
+                w: 320, h: 180, fps: fps, durUs: durUs, assets: [],
+                layers: [ExportPlans.solid("it_s0000000001#v", t0: 0, t1: durUs, color: "#FF0000FF", w: 100, h: 100, cx: 160, cy: 90)])
+            let id = try harness.export(self, plan: plan, settings: settings, output: output)
+            if let failure = harness.recorder.failure(id) {
+                XCTFail("\(fps) fps × \(k): \(failure.code) \(failure.message)")
+                continue
+            }
+            let result = try XCTUnwrap(harness.recorder.done(id)?.exportResult, "\(fps) fps × \(k): no result")
+            XCTAssertEqual(result.durationUs, durUs, "\(fps) fps × \(k)")
+            let facts = try ExportConformance.check(output, settings: settings, durUs: durUs, brand: "mp42", codec: "avc1", checkBitrate: false)
+            XCTAssertEqual(facts.frames, Int(k), "\(fps) fps × \(k): frame count")
+            // The video ends on the grid end K/fps (never past it).
+            let gridEndUs = Double(k) * 1_000_000 / Double(fps)
+            XCTAssertLessThanOrEqual(abs(Double(facts.videoDurationUs) - gridEndUs), 1, "\(fps) fps × \(k): video duration")
+            try? FileManager.default.removeItem(at: output)
+        }
+    }
+
+    func testExportTimeClampsRangesToTheGridEnd() throws {
+        let durUs = FrameGrid(30).timeOfFrame(91)  // 3_033_334 µs, grid end 91/30 s = 3_033_333.3 µs
+        let plan = try RenderPlanDecoder.decodePlan(ExportPlans.plan(w: 320, h: 180, fps: 30, durUs: durUs, assets: [], layers: []))
+        let end = ExportTime.gridEnd(plan)
+        XCTAssertEqual(CMTimeCompare(end, CMTime(value: 91, timescale: 30)), 0)
+        let range = ExportTime.readerRange(startUs: 0, endUs: durUs, plan: plan)
+        XCTAssertEqual(CMTimeCompare(range.end, end), 0, "the µs end is clamped to the grid end")
+        let inner = ExportTime.readerRange(startUs: 0, endUs: 1_000_000, plan: plan)
+        XCTAssertEqual(CMTimeCompare(inner.end, CMTime(value: 1_000_000, timescale: 1_000_000)), 0, "inner ends stay µs")
+        let past = ExportTime.readerRange(startUs: 10_000_000, endUs: 20_000_000, plan: plan)
+        XCTAssertTrue(past.duration == .zero, "a range after the end is empty")
+        // Exact ends are untouched.
+        let exact = try RenderPlanDecoder.decodePlan(ExportPlans.plan(w: 320, h: 180, fps: 25, durUs: 2_040_000, assets: [], layers: []))
+        XCTAssertEqual(CMTimeCompare(ExportTime.gridEnd(exact), CMTime(value: 2_040_000, timescale: 1_000_000)), 0)
     }
 
     func testHevcConformanceWhereAvailable() throws {

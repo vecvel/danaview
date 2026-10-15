@@ -9,7 +9,9 @@
 // 2. `start()`: free space against the estimate (+ one segment on iOS), the first-export notice
 //    (background copy and, on Android, the notification explainer and permission), the sprite
 //    pre-pass (API-04, "Preparing"), `compileExport` (CORE-33; original media only), the engine's
-//    `preflight` (warnings the user confirms) and `ExportService.start`.
+//    `preflight` (warnings the user confirms; with `layersVsResolution` the free-space check is
+//    repeated with the multi-pass precompose intermediates added, `max(2·I, I + output) − output`,
+//    D-45(B)) and `ExportService.start`.
 // 3. Progress at <= 4 Hz with phase, ETA after three samples, backgrounded copy per
 //    `BackgroundExportKind`; cancel (the sheet confirms; the engine deletes the partial file);
 //    the screen stays awake while it runs.
@@ -83,6 +85,10 @@ enum ExportReattach {
 
 /// Preflight warning codes that ask for a confirmation before the export starts.
 const Set<String> exportBlockingWarnings = {'softwareEncoder', 'layersVsResolution', 'hevcUnavailable'};
+
+/// The preflight warning that means the plan needs more decoders than the device sustains, so the
+/// export may run the multi-pass precompose and its intermediates count in the disk check (D-45(B)).
+const String precomposeWarning = 'layersVsResolution';
 
 /// Pre-checks, settings, progress and handoff of an export (ARCH §14.1).
 class ExportController extends StateNotifier<ExportUiState> {
@@ -455,9 +461,11 @@ class ExportController extends StateNotifier<ExportUiState> {
     }
   }
 
-  Future<ExportIssue?> _storageIssue(ExportUiSetup setup) async {
+  /// Free space against the estimate (+ one 10 s segment on iOS) + [extraBytes] (the multi-pass
+  /// precompose intermediates, D-45(B)).
+  Future<ExportIssue?> _storageIssue(ExportUiSetup setup, {int extraBytes = 0}) async {
     final encode = setup.resolved.encode;
-    var needed = setup.resolved.estimatedBytes;
+    var needed = setup.resolved.estimatedBytes + extraBytes;
     if (_platform == TargetPlatform.iOS) needed += (encode.videoBitrate * 10 / 8).round(); // one 10 s segment (§14.2)
     final int free;
     try {
@@ -576,6 +584,16 @@ class ExportController extends StateNotifier<ExportUiState> {
     if (!preflight.ok) {
       _fail(const ExportFailed(ExportFailureKind.encoderSizeLimit));
       return;
+    }
+    if (preflight.warnings.any((w) => w.code == precomposeWarning)) {
+      // The engine may run the multi-pass precompose (D-45(B)): its intermediates need room on
+      // the work volume too (ARCH §14.1 step 5 "counted in the disk check").
+      final issue = await _storageIssue(setup, extraBytes: ready.precomposeExtraBytes);
+      if (!_live(epoch)) return;
+      if (issue != null) {
+        _set(setup.copyWith(issue: issue, checkingStorage: false));
+        return;
+      }
     }
     final blocking = [for (final w in preflight.warnings) if (exportBlockingWarnings.contains(w.code)) w];
     _ready = ready;

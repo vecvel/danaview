@@ -16,8 +16,20 @@
 #      example/build/danaview_emulator_batches/<batch>/. The example's danaview_test_harness.gradle
 #      packs the shared fixtures into the test APK's assets (fixtures/engine, fixtures/core,
 #      fixtures/engine_api; see TestFixtures.kt);
-#   2. integration_test/engine_smoke_test.dart of the example host on the same device (it runs
-#      even when a batch failed).
+#   2. the example host's integration_test suites on the same device (they run even when a batch
+#      failed), one `flutter test --no-uninstall` per file (FIX-CI-SUITES, from QA-03 / QA-11):
+#      engine_smoke (ENG-09), android_preview (AND-10), QA-03's accuracy, av_sync and parity, and
+#      QA-11's conformance, preset_matrix and audio_mix. Before the first QA-03 suite the ENG-05
+#      media, the API-03 golden corpus and the committed iOS parity renders are pushed to the
+#      app's external files dir (/sdcard/Android/data/<app>/files/qa03_*; the app is installed
+#      first when needed) and passed as QA03_MEDIA / QA03_GOLDENS / QA03_PEER; parity writes its
+#      renders to qa03_android there, pulled to example/build/danaview_emulator_suites/. A failed
+#      file does not stop the others; a per-file summary is printed, each log is kept in
+#      example/build/danaview_emulator_suites/<suite>.log, and the script exits non-zero if any
+#      failed;
+#   3. optional (DANAVIEW_E2E=1): QA-00's app-level E2E suite (integration_test/editor) through
+#      integration_test/editor/tool/e2e_host.sh (stage, stage-models, run) on the same device.
+#      Off by default: QA-02 certifies it by hand (scripts/ci/editor/README.md).
 #
 # Usage:
 #   scripts/ci/editor/android_emulator.sh
@@ -28,7 +40,12 @@
 #   DANAVIEW_EMULATOR_BATCHES  space-separated batches to run instead of every package, e.g.
 #                      "effects proxy"; join packages with a comma to run them as one batch
 #                      ("drop,harness")
-#   DANAVIEW_SKIP_SMOKE=1  skip step 2
+#   DANAVIEW_SKIP_SMOKE=1  skip step 2 (every integration_test suite, not only the smoke test)
+#   DANAVIEW_EMULATOR_SUITES  space-separated subset of step 2 (smoke android_preview accuracy
+#                      av_sync parity conformance preset_matrix audio_mix)
+#   DANAVIEW_E2E=1     run step 3; DANAVIEW_E2E_MODELS_DIR (or DV_E2E_MODELS_DIR) names the folder
+#                      with the tiny speech models, DANAVIEW_E2E_TARGET the e2e_host.sh run target
+#                      (default all)
 #   DANAVIEW_EMULATOR_DRY_RUN=1  print the batches and commands without a device or a build
 set -euo pipefail
 
@@ -71,6 +88,35 @@ else
   done
 fi
 [ "${#BATCHES[@]}" -gt 0 ] || die "no instrumented test packages found under ${TEST_SRC#"$ROOT"/}"
+
+# Step 2 suites: validated up front so a bad selection or missing media fails before the batches.
+APP_ID="com.vecvel.danaview.editor.engine.example"
+DEVICE_FILES="/sdcard/Android/data/$APP_ID/files"
+MEDIA="$ROOT/packages/danaview_editor_engine/test_fixtures/media"
+GOLDENS="$ROOT/packages/danaview_editor_engine_api/test_fixtures/images"
+PEER_IOS="$ROOT/docs/v1.1/editor/qa/QA-03-parity/ios"
+SUITE_OUT="$EXAMPLE/build/danaview_emulator_suites"
+E2E_HOST="$ROOT/integration_test/editor/tool/e2e_host.sh"
+ALL_SUITES="smoke android_preview accuracy av_sync parity conformance preset_matrix audio_mix"
+suite_file() { if [ "$1" = smoke ]; then echo engine_smoke_test.dart; else echo "$1_test.dart"; fi; }
+needs_media() { case "$1" in accuracy | av_sync | parity) return 0 ;; *) return 1 ;; esac; }
+declare -a SUITES=()
+if [ "${DANAVIEW_SKIP_SMOKE:-}" != 1 ]; then
+  for s in ${DANAVIEW_EMULATOR_SUITES:-$ALL_SUITES}; do
+    case " $ALL_SUITES " in *" $s "*) ;; *) die "DANAVIEW_EMULATOR_SUITES: unknown suite $s (known: $ALL_SUITES)" ;; esac
+    [ -f "$EXAMPLE/integration_test/$(suite_file "$s")" ] || die "example/integration_test/$(suite_file "$s") is missing (suite $s)"
+    if needs_media "$s"; then
+      [ -f "$MEDIA/manifest.json" ] || die "ENG-05 media not found at ${MEDIA#"$ROOT"/} (QA-03 suites would only skip)"
+    fi
+    if [ "$s" = parity ]; then
+      [ -f "$GOLDENS/goldens.json" ] || die "API-03 golden corpus not found at ${GOLDENS#"$ROOT"/}"
+    fi
+    SUITES+=("$s")
+  done
+fi
+if [ "${DANAVIEW_E2E:-}" = 1 ] && [ ! -f "$E2E_HOST" ]; then
+  die "DANAVIEW_E2E=1 but ${E2E_HOST#"$ROOT"/} is missing (QA-00)"
+fi
 
 if [ "$DRY_RUN" != 1 ]; then
   command -v flutter >/dev/null || die "flutter not found: install Flutter 3.44.2"
@@ -169,13 +215,141 @@ for line in "${SUMMARY[@]}"; do echo "$line"; done
 echo "${#BATCHES[@]} batches, $FAILED failed; JUnit XML per batch in ${RESULTS_DST#"$ROOT"/}/<batch>/"
 endgroup
 
-if [ "${DANAVIEW_SKIP_SMOKE:-}" = 1 ]; then
-  echo "integration_test/engine_smoke_test.dart skipped (DANAVIEW_SKIP_SMOKE=1)"
+# --- 2. integration_test suites (one flutter test per file; a failure does not stop the rest) ---
+# Git Bash (Windows lane) rewrites arguments that start with /: keep device paths as they are while
+# host paths are still converted for the native adb/flutter. No effect on macOS or Linux.
+export MSYS2_ARG_CONV_EXCL="/sdcard;--dart-define=QA03_"
+adb_do() { if [ "$DRY_RUN" = 1 ]; then echo "+ adb -s $SERIAL $*"; else "$ADB" -s "$SERIAL" "$@"; fi; }
+
+# Prints "<passed> <failed> <skipped>" from the last flutter test progress line of a log
+# ("mm:ss +P ~S -F: ..."), or "? ? ?".
+progress_counts() {
+  local line
+  line="$(grep -E '^[0-9]+:[0-9]+ \+[0-9]+' "$1" 2>/dev/null | tail -n 1 || true)"
+  if [ -z "$line" ]; then echo "? ? ?"; return; fi
+  echo "$line" | awk '{
+    p = 0; s = 0; f = 0
+    for (i = 2; i <= NF; i++) {
+      t = $i; sub(/:$/, "", t)
+      if (t ~ /^\+[0-9]+$/) p = substr(t, 2) + 0
+      else if (t ~ /^~[0-9]+$/) s = substr(t, 2) + 0
+      else if (t ~ /^-[0-9]+$/) f = substr(t, 2) + 0
+      else break
+    }
+    print p, f, s }'
+}
+
+# Pushes the QA-03 inputs into the app's external files dir. `flutter test --no-uninstall` keeps
+# the app (and the dir) between suites; when the app is not installed yet, the example's debug APK
+# is installed first so the dir belongs to the app.
+MEDIA_PUSHED=false
+push_qa03_media() {
+  [ "$MEDIA_PUSHED" = true ] && return 0
+  group "push QA-03 media to $DEVICE_FILES"
+  if [ "$DRY_RUN" != 1 ] && [ -z "$("$ADB" -s "$SERIAL" shell pm path "$APP_ID" 2>/dev/null | tr -d '\r')" ]; then
+    run "$EXAMPLE" flutter build apk --debug
+    adb_do install -r -t "$EXAMPLE/build/app/outputs/flutter-apk/app-debug.apk"
+  fi
+  adb_do shell rm -rf "$DEVICE_FILES/qa03_media" "$DEVICE_FILES/qa03_goldens" "$DEVICE_FILES/qa03_peer_ios" "$DEVICE_FILES/qa03_android"
+  adb_do shell mkdir -p "$DEVICE_FILES"
+  adb_do push "$MEDIA" "$DEVICE_FILES/qa03_media"
+  adb_do push "$GOLDENS" "$DEVICE_FILES/qa03_goldens"
+  if [ -d "$PEER_IOS" ]; then adb_do push "$PEER_IOS" "$DEVICE_FILES/qa03_peer_ios"; fi
+  MEDIA_PUSHED=true
+  endgroup
+}
+
+suite_defines() {
+  case "$1" in
+    accuracy | av_sync) echo "--dart-define=QA03_MEDIA=$DEVICE_FILES/qa03_media" ;;
+    parity)
+      echo "--dart-define=QA03_MEDIA=$DEVICE_FILES/qa03_media"
+      echo "--dart-define=QA03_GOLDENS=$DEVICE_FILES/qa03_goldens"
+      echo "--dart-define=QA03_OUT=$DEVICE_FILES/qa03_android"
+      if [ -d "$PEER_IOS" ]; then echo "--dart-define=QA03_PEER=$DEVICE_FILES/qa03_peer_ios"; fi
+      ;;
+  esac
+}
+
+declare -a SUITE_SUMMARY=()
+SUITES_FAILED=0
+if [ "${#SUITES[@]}" -eq 0 ]; then
+  echo "integration_test suites skipped (DANAVIEW_SKIP_SMOKE=1)"
 else
-  group "integration_test/engine_smoke_test.dart"
-  run "$EXAMPLE" flutter test integration_test/engine_smoke_test.dart -d "$SERIAL"
+  if [ "$DRY_RUN" != 1 ]; then rm -rf "$SUITE_OUT"; mkdir -p "$SUITE_OUT"; fi
+  for s in "${SUITES[@]}"; do
+    if needs_media "$s"; then push_qa03_media; fi
+    f="$(suite_file "$s")"
+    declare -a D=()
+    while IFS= read -r line; do [ -n "$line" ] && D+=("$line"); done < <(suite_defines "$s")
+    logf="$SUITE_OUT/$s.log"
+    group "integration_test/$f"
+    started=$SECONDS
+    if [ "$DRY_RUN" = 1 ]; then
+      run "$EXAMPLE" flutter test "integration_test/$f" -d "$SERIAL" --no-uninstall ${D[@]+"${D[@]}"}
+      status=DRY passed="-" failures="-" skipped="-"
+    else
+      status=PASS
+      if ! (cd "$EXAMPLE" && flutter test "integration_test/$f" -d "$SERIAL" --no-uninstall ${D[@]+"${D[@]}"}) 2>&1 | tee "$logf"; then
+        status=FAIL
+      fi
+      read -r passed failures skipped < <(progress_counts "$logf")
+      if [ "$status" = FAIL ]; then
+        SUITES_FAILED=$((SUITES_FAILED + 1))
+        fail_note "integration_test/$f failed; log in ${logf#"$ROOT"/}"
+      elif [ "$skipped" != "?" ] && [ "$skipped" -gt 0 ]; then
+        echo "note: integration_test/$f skipped $skipped test(s); see ${logf#"$ROOT"/}"
+      fi
+    fi
+    SUITE_SUMMARY+=("$(printf '%-16s %-5s %6s %6s %7s %7ss' "$s" "$status" "$passed" "$failures" "$skipped" "$((SECONDS - started))")")
+    endgroup
+  done
+  if [ "$MEDIA_PUSHED" = true ] && [ -d "$PEER_IOS" ]; then
+    case " ${SUITES[*]} " in
+      *" parity "*)
+        if [ "$DRY_RUN" = 1 ]; then echo "+ adb -s $SERIAL pull $DEVICE_FILES/qa03_android ${SUITE_OUT#"$ROOT"/}/"
+        else "$ADB" -s "$SERIAL" pull "$DEVICE_FILES/qa03_android" "$SUITE_OUT/" >/dev/null 2>&1 || true; fi
+        ;;
+    esac
+  fi
+fi
+
+# --- 3. QA-00 E2E suite (opt-in) ------------------------------------------------------------------
+if [ "${DANAVIEW_E2E:-}" = 1 ]; then
+  group "QA-00 E2E suite (integration_test/editor via e2e_host.sh)"
+  started=$SECONDS
+  status=PASS
+  models="${DANAVIEW_E2E_MODELS_DIR:-${DV_E2E_MODELS_DIR:-}}"
+  e2e_ok=true
+  run "$ROOT" bash "$E2E_HOST" -p android -d "$SERIAL" stage || e2e_ok=false
+  if [ "$e2e_ok" = true ] && [ -n "$models" ]; then
+    run "$ROOT" bash "$E2E_HOST" -p android -d "$SERIAL" stage-models "$models" || e2e_ok=false
+  fi
+  if [ "$e2e_ok" = true ]; then
+    run "$ROOT" bash "$E2E_HOST" -p android -d "$SERIAL" run "${DANAVIEW_E2E_TARGET:-all}" || e2e_ok=false
+  fi
+  if [ "$DRY_RUN" = 1 ]; then status=DRY
+  elif [ "$e2e_ok" != true ]; then
+    status=FAIL
+    SUITES_FAILED=$((SUITES_FAILED + 1))
+    fail_note "QA-00 E2E suite failed; evidence in build/e2e/android/$SERIAL/"
+  fi
+  SUITE_SUMMARY+=("$(printf '%-16s %-5s %6s %6s %7s %7ss' e2e "$status" - - - "$((SECONDS - started))")")
+  endgroup
+else
+  echo "QA-00 E2E suite (integration_test/editor) not run: set DANAVIEW_E2E=1 (QA-02 certifies it by hand)"
+fi
+
+if [ "${#SUITE_SUMMARY[@]}" -gt 0 ]; then
+  group "integration_test summary"
+  printf '%-16s %-5s %6s %6s %7s %8s\n' suite result passed failed skipped time
+  for row in "${SUITE_SUMMARY[@]}"; do echo "$row"; done
+  echo "logs in ${SUITE_OUT#"$ROOT"/}/<suite>.log"
   endgroup
 fi
 
-[ "$FAILED" -eq 0 ] || die "$FAILED of ${#BATCHES[@]} instrumented test batches failed (see the summary above)"
+[ "$SUITES_FAILED" -eq 0 ] || fail_note "$SUITES_FAILED integration_test suite(s) failed (see the summary above)"
+if [ "$FAILED" -gt 0 ] || [ "$SUITES_FAILED" -gt 0 ]; then
+  die "$FAILED of ${#BATCHES[@]} instrumented test batches and $SUITES_FAILED integration_test suite(s) failed"
+fi
 if [ "$DRY_RUN" = 1 ]; then echo "android-emulator: dry run done"; else echo "android-emulator: OK"; fi

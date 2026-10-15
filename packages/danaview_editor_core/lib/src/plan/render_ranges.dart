@@ -16,6 +16,9 @@
 // - `heavyRanges(plan, budget)`: ranges above the live decode budget, with chroma key, or above
 //   the tier's effect-cost threshold.
 // - `invalidated(old, new)`: the old hashes no longer present.
+// - `rangeTouched(before, after, range)`: the engine's plan-difference rule for rendered ranges
+//   (ARCH §12.2; IOS-19 and AND-18 implement it natively), which a range the hash keeps may still
+//   fail (FIX-RANGE-RULE): the controller resends after every applied plan.
 // - `coverage(plan, lookup, budget)`: rendered / heavyUnrendered / notNeeded per range for the
 //   timeline render marker (UX-44).
 // - `RenderPolicy`: when the automatic background render may run (tier, setting, idle, charging).
@@ -548,6 +551,56 @@ List<String> rangeHashes(RenderPlan plan, {RenderSize? previewSize}) =>
 /// invalidates its entry, and an undo that restores a range finds its old hash again.
 Set<String> invalidated(RenderPlan oldPlan, RenderPlan newPlan, {RenderSize? previewSize}) =>
     rangeHashes(oldPlan, previewSize: previewSize).toSet().difference(rangeHashes(newPlan, previewSize: previewSize).toSet());
+
+/// The engine's rule for a rendered range across the plan change [before] → [after] (ARCH §12.2
+/// 'Rendered ranges', D-45 'Contract'; FIX-RANGE-RULE). Native engines see plans, not patches, so
+/// IOS-19 (`RenderedRangeRules.changeTouches`) and AND-18 (`RangeTouch.changeTouches`) drop the
+/// rendered range `[range.start, range.end)` when the difference of the two plans touches it:
+///
+/// * the canvas changed (every range);
+/// * the duration changed and the range ends after the shorter duration;
+/// * an asset [before] had changed or is gone (every range; added assets never touch);
+/// * a layer was added whose span overlaps the range, removed whose old span overlaps it, or
+///   changed (any field, by id) with its old or its new span overlapping it.
+///
+/// Audio never touches a range. This is `patchTouchesRange` (API-01's reference rule) applied to
+/// the patch equivalent of the difference, so a patch that re-sends an identical layer is
+/// invisible here.
+///
+/// How it relates to the hashes (property-tested in `test/plan/render_cache/range_rule_test.dart`
+/// on the shared vectors `vectors/range_touch.json`): a range the engine keeps shows the same
+/// pixels in [after], so `rangeHash(after, range) == rangeHash(before, range)` whenever this is
+/// false. The converse does not hold: the engine also drops ranges whose pixels did not change (a
+/// ripple, a proxy or `uri` change, a re-split), which the hash keeps; the render-preview
+/// controller (UX-44) therefore resends every hash-valid range after each applied plan, bound to
+/// that plan.
+bool rangeTouched(RenderPlan before, RenderPlan after, PlanRange range) {
+  if (before.canvas != after.canvas) return true;
+  if (before.durUs != after.durUs && range.end > (before.durUs < after.durUs ? before.durUs : after.durUs)) return true;
+  for (final MapEntry(:key, :value) in before.assets.entries) {
+    if (after.assets[key] != value) return true;
+  }
+  final old = {for (final l in before.layers) l.id: l};
+  final seen = <String>{};
+  for (final l in after.layers) {
+    seen.add(l.id);
+    final o = old[l.id];
+    if (o == null) {
+      if (range.overlapsSpan(l.t0, l.t1)) return true;
+    } else if (o != l && (range.overlapsSpan(o.t0, o.t1) || range.overlapsSpan(l.t0, l.t1))) {
+      return true;
+    }
+  }
+  for (final l in before.layers) {
+    if (!seen.contains(l.id) && range.overlapsSpan(l.t0, l.t1)) return true;
+  }
+  return false;
+}
+
+/// The members of [ranges] (rendered ranges bound to [before]) that the engine still holds after
+/// it moved to [after] ([rangeTouched] is false), in their order.
+List<PlanRange> rangesKept(RenderPlan before, RenderPlan after, Iterable<PlanRange> ranges) =>
+    [for (final r in ranges) if (!rangeTouched(before, after, r)) r];
 
 // ---------------------------------------------------------------------------------------------
 // (6) coverage

@@ -28,7 +28,7 @@ enum SegmentConcat {
 
     static func concat(
         checkpoint: SegmentCheckpoint, directory: URL, segmentURL: @escaping (Int) -> URL, audioURL: URL?,
-        to output: URL, transform: CGAffineTransform = .identity, isCancelled: @escaping () -> Bool
+        to output: URL, transform: CGAffineTransform = .identity, end: CMTime? = nil, isCancelled: @escaping () -> Bool
     ) throws -> Result {
         let segments = checkpoint.completed.filter { $0.frames > 0 }.sorted { $0.index < $1.index }
         guard let firstSegment = segments.first else { throw EngineError(.encodingFailed, "no video segments") }
@@ -87,7 +87,8 @@ enum SegmentConcat {
             try? FileManager.default.removeItem(at: output)
             throw EngineError.from(failure)
         }
-        writer.endSession(atSourceTime: CMTime(value: checkpoint.endUs, timescale: 1_000_000))
+        // [end]: the exact output end when the µs endUs only approximates it (D-35 grid end).
+        writer.endSession(atSourceTime: end ?? CMTime(value: checkpoint.endUs, timescale: 1_000_000))
         let finished = DispatchSemaphore(value: 0)
         writer.finishWriting { finished.signal() }
         finished.wait()

@@ -1,7 +1,8 @@
 // OWNER: IOS-12
 //
 // Encoder settings of one export job (ARCH §12.4 `EncodeSettings`, §14.1 'Encoder size and
-// orientation', §14.2): H.264 High AutoLevel or HEVC Main AutoLevel (`hvc1`), AverageBitRate,
+// orientation', §14.2): H.264 High AutoLevel or HEVC Main AutoLevel (`hvc1`), AverageBitRate with a
+// DataRateLimits hard cap of 1.5× per 1 s window (QA-11 follow-up, FIX-IOS-DURATION),
 // ExpectedSourceFrameRate, MaxKeyFrameIntervalDuration, BT.709 colour properties, no B-frames
 // (`AllowFrameReordering = false`, IOS-01), and AAC-LC 48 kHz stereo audio. The writer settings
 // themselves are IOS-17's `SegmentEncodeSettings` (every segment of a job must share them, so
@@ -126,6 +127,7 @@ struct EncoderSettings: Codable, Equatable {
             height: rotated ? width : height,
             fps: fps,
             averageBitRate: videoBitrate,
+            dataRateLimitFactor: SegmentEncodeSettings.defaultDataRateLimitFactor,
             maxKeyFrameIntervalFrames: nil,
             maxKeyFrameIntervalSeconds: keyframeIntervalSeconds,
             allowFrameReordering: false,

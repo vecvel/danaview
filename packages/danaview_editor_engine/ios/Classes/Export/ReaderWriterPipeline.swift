@@ -61,6 +61,36 @@ final class ExportComposition {
 /// decoder, `mediaOffline` for missing media, …).
 typealias ExportCompositionFactory = (RenderPlan) throws -> ExportComposition
 
+// MARK: - Grid end (D-35)
+
+/// Export time ranges on the composition grid (FIX-IOS-DURATION, QA-03 finding 1).
+///
+/// The composition ends at `CMTime(K, gridFps)` (spacer, instructions; IOS-08), while the plan's
+/// `durUs = timeOfFrame(K) = ceil(K·10⁶/gridFps)` lies up to 1 µs later whenever K·10⁶/gridFps is
+/// fractional (24/30/48/60 fps). A reader whose µs time range ends past the last instruction fails
+/// with AVFoundationErrorDomain −11841 (invalid video composition), so every reader range and
+/// every writer session end is clamped to the grid end.
+enum ExportTime {
+    /// `CMTime(K, gridFps)` with K = frameIndexOf(durUs) on the plan's edit grid.
+    static func gridEnd(_ plan: RenderPlan) -> CMTime {
+        let grid = plan.canvas.editGrid
+        return grid.cmTime(frame: grid.frameIndexOf(plan.durUs))
+    }
+
+    /// The µs time [us] clamped to [end] (never later than the grid end).
+    static func clamp(us: Int64, to end: CMTime) -> CMTime {
+        CMTimeMinimum(FrameGrid.cmTime(us: us), end)
+    }
+
+    /// The reader time range of the output range [startUs, endUs) of [plan]: starts stay µs (segment
+    /// starts are whole 10 s), the end is clamped to the grid end.
+    static func readerRange(startUs: Int64, endUs: Int64, plan: RenderPlan) -> CMTimeRange {
+        let end = gridEnd(plan)
+        let start = CMTimeMinimum(FrameGrid.cmTime(us: startUs), end)
+        return CMTimeRange(start: start, end: clamp(us: endUs, to: end))
+    }
+}
+
 // MARK: - Pipeline
 
 final class ReaderWriterPipeline {
@@ -135,6 +165,9 @@ final class ReaderWriterPipeline {
         let writer = try SegmentedWriter(
             directory: input.directory, jobKind: ExportJob.jobKind, inputHash: input.planHash, settings: segmentSettings,
             startUs: 0, endUs: plan.durUs, segmentDurationUs: segmentDurationUs)
+        // D-35: the last segment, the audio file and the concat end on the composition's grid end
+        // CMTime(K, gridFps), not on durUs (up to 1 µs later at 24/30/48/60 fps).
+        writer.exactEnd = ExportTime.gridEnd(plan)
         configureWriter?(writer)
         control.attach(writer)
         defer { control.attach(nil) }
@@ -273,7 +306,7 @@ final class CompositionVideoSource: SegmentVideoSource {
         } catch {
             throw EngineError.from(error)
         }
-        reader.timeRange = CMTimeRange(start: FrameGrid.cmTime(us: startUs), end: FrameGrid.cmTime(us: endUs))
+        reader.timeRange = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: built.plan)
         let output = AVAssetReaderVideoCompositionOutput(
             videoTracks: built.composition.tracks(withMediaType: .video), videoSettings: CompositionVideoSource.videoSettings)
         output.videoComposition = built.videoComposition
@@ -514,7 +547,7 @@ final class MixAudioSource: SegmentAudioSource {
         } catch {
             throw EngineError.from(error)
         }
-        reader.timeRange = CMTimeRange(start: FrameGrid.cmTime(us: startUs), end: FrameGrid.cmTime(us: endUs))
+        reader.timeRange = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: built.plan)
         let output = AVAssetReaderAudioMixOutput(audioTracks: tracks, audioSettings: ExportPCM.readerSettings)
         output.audioMix = mix
         output.audioTimePitchAlgorithm = .timeDomain
