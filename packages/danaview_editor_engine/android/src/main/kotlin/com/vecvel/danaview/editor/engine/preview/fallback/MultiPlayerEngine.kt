@@ -46,6 +46,7 @@ import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import com.vecvel.danaview.editor.engine.core.EngineContext
 import com.vecvel.danaview.editor.engine.core.EngineErrorCode
+import com.vecvel.danaview.editor.engine.core.EngineErrors
 import com.vecvel.danaview.editor.engine.core.EngineException
 import com.vecvel.danaview.editor.engine.core.JobControl
 import com.vecvel.danaview.editor.engine.core.Lane
@@ -101,13 +102,15 @@ class EngineStats {
     var deckCount = 0
     var rangeFrames = 0
     var exactStillFallbacks = 0
+    var stillFailures = 0
+    var approaches = 0
     val compositeMs = ArrayList<Double>()
 
     fun copy(): EngineStats = EngineStats().also {
         it.composed = composed; it.dropped = dropped; it.held = held; it.missed = missed; it.rebuffers = rebuffers
         it.audioFollows = audioFollows; it.audioClockReads = audioClockReads; it.nearestShown = nearestShown; it.stillsFetched = stillsFetched
         it.reseeks = reseeks; it.replans = replans; it.slotsReplanned = slotsReplanned; it.deckCount = deckCount
-        it.rangeFrames = rangeFrames; it.exactStillFallbacks = exactStillFallbacks; it.compositeMs.addAll(compositeMs)
+        it.rangeFrames = rangeFrames; it.exactStillFallbacks = exactStillFallbacks; it.stillFailures = stillFailures; it.approaches = approaches; it.compositeMs.addAll(compositeMs)
     }
 }
 
@@ -165,7 +168,8 @@ internal class MultiPlayerEngine(
     private val stills = HashMap<String, StillTex>()
     private val stillPending = HashSet<PausedFrameRequest>()
     private val stillWanted = java.util.concurrent.ConcurrentHashMap<String, PausedFrameRequest>()
-    private val stillFailed = HashSet<String>()
+    /** Layers whose still extraction failed, with the uptime of the failure (retried after [STILL_RETRY_MS]). */
+    private val stillFailedAt = HashMap<String, Long>()
     private val images = HashMap<PausedFrameRequest, SourceTexture>()
     private val imagePending = HashSet<PausedFrameRequest>()
 
@@ -337,7 +341,7 @@ internal class MultiPlayerEngine(
         val keep = sp.stillLayers
         val drop = stills.filter { (id, st) -> id !in keep || source.layer(id)?.let { layerKeyOf(it) } != st.layerKey }.keys.toList()
         for (id in drop) stills.remove(id)?.let { g.delete(it.texture) }
-        stillFailed.clear()
+        stillFailedAt.clear()
         if (changed.isNotEmpty()) stats.replans++
         stats.slotsReplanned += changed.size
         stats.deckCount = slots.values.sumOf { it.decks.size } + (rangeRuntime?.decks?.size ?: 0)
@@ -644,7 +648,7 @@ internal class MultiPlayerEngine(
         for ((layer, params) in LayerCompositorGl.activeLayers(snap, t)) {
             when (layer.kind) {
                 PlanLayerKind.MEDIA -> {
-                    if (layer.id in plan.unavailable || layer.id in stillFailed) continue
+                    if (layer.id in plan.unavailable) continue
                     if (!isStill(layer.id)) continue
                     val st = stills[layer.id]
                     if (st == null || st.layerKey != layerKeyOf(layer)) {
@@ -1011,7 +1015,7 @@ internal class MultiPlayerEngine(
                 for ((layer, params) in LayerCompositorGl.activeLayers(snap, t)) {
                     when (layer.kind) {
                         PlanLayerKind.MEDIA -> {
-                            if (layer.id in plan.unavailable || layer.id in stillFailed) continue
+                            if (layer.id in plan.unavailable) continue
                             if (!isStill(layer.id)) {
                                 val seq = plan.layerSlot[layer.id]
                                 val rt = seq?.let { slots[it] }
@@ -1030,14 +1034,35 @@ internal class MultiPlayerEngine(
                                     continue
                                 }
                                 val rule = ruleOf(item, k)
-                                if (purpose == Purpose.PLAYBACK) d.latchFor(rule) else d.latchNewest()
+                                when {
+                                    purpose == Purpose.PLAYBACK -> d.latchFor(rule)
+                                    purpose == Purpose.EXACT && d.approachRule == rule -> {
+                                        d.latchFor(rule)
+                                        if (d.hasLatched(rule)) {
+                                            d.endApproach(succeeded = true)
+                                        } else if (d.passed(rule)) {
+                                            d.endApproach(succeeded = false)
+                                        }
+                                    }
+                                    else -> d.latchNewest()
+                                }
                                 if (purpose == Purpose.NEAREST) {
                                     if (!d.hasEpochFrame) continue
                                 } else if (!d.hasLatched(rule)) {
-                                    if (purpose == Purpose.EXACT && d.hasEpochFrame && d.latchedPts > rule && d.player.playbackState == Player.STATE_READY) {
+                                    if (purpose == Purpose.EXACT && d.approachRule != rule && d.hasEpochFrame && d.latchedPts > rule &&
+                                        d.player.playbackState == Player.STATE_READY && d.approachFailures < MAX_APPROACHES
+                                    ) {
                                         // The decoder skipped the rule frame after the seek (the emulators'
-                                        // hardware H.264 decoders drop the leading B-frames after a flush):
-                                        // this paused frame shows the exact still of the layer instead.
+                                        // decoders drop the leading B-frames after a flush): approach it by
+                                        // playing from a little earlier and pausing on it.
+                                        val from = maxOf(item.clipStartUs, rule - APPROACH_US)
+                                        d.approach(i, item.positionMs(RuleFrameMath.rule(frameTables[item.uri] ?: longArrayOf(rule), from)), rule)
+                                        stats.approaches++
+                                        missing = true
+                                        continue
+                                    }
+                                    if (purpose == Purpose.EXACT && d.approachRule != rule && d.hasEpochFrame && d.latchedPts > rule && d.player.playbackState == Player.STATE_READY) {
+                                        // Approaching failed too: this paused frame shows the exact still of the layer.
                                         val tex = stillTexture(snap.plan, layer, params, t, geom, exact = true)
                                         if (tex == null) {
                                             missing = true
@@ -1134,6 +1159,7 @@ internal class MultiPlayerEngine(
 
     private fun requestStill(layer: PlanLayer, request: PausedFrameRequest) {
         val id = layer.id
+        stillFailedAt[id]?.let { if (SystemClock.uptimeMillis() - it < STILL_RETRY_MS) return }
         // Only the latest wanted still of a layer is fetched (a scrub supersedes its earlier frames).
         stillWanted[id] = request
         if (!stillPending.add(request)) return
@@ -1154,8 +1180,11 @@ internal class MultiPlayerEngine(
                         }
                     },
                     onFailure = {
-                        Log.w(EngineContext.TAG, "contingency preview: still unavailable (${it.javaClass.simpleName})")
-                        stillFailed += id
+                        // Never drawn without the layer (that would be a wrong frame): the frame
+                        // waits (paused/seek) or is dropped (playback); the still is retried.
+                        Log.w(EngineContext.TAG, "contingency preview: still unavailable (${EngineErrors.from(it).code})")
+                        stillFailedAt[id] = SystemClock.uptimeMillis()
+                        stats.stillFailures++
                     },
                 )
             },
@@ -1316,6 +1345,15 @@ internal class MultiPlayerEngine(
 
         /** Drift corrections of one deck at most this often. */
         const val CORRECTION_COOLDOWN_MS = 1_000L
+
+        /** A deck that skipped its rule frame replays from this far before it (µs). */
+        const val APPROACH_US = 300_000L
+
+        /** Approaches per seek before the exact still is used. */
+        const val MAX_APPROACHES = 2
+
+        /** A failed still is requested again after this long. */
+        const val STILL_RETRY_MS = 1_000L
 
         /** Polling period of seeks and pre-rolls (ms). */
         const val POLL_MS = 4L
