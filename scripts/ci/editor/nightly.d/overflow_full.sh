@@ -5,7 +5,7 @@
 # matrix (14 sizes x text scale 0.85/1.0/1.35 x keyboard none/40% = 84 surfaces,
 # `--dart-define=DANAVIEW_SURFACE_MATRIX=full`):
 #   1. packages/danaview_editor/test/overflow/ (QA-09's long-content suite with real fonts), and
-#   2. every other danaview_editor test file with per-ticket matrix tests (files calling
+#   2. every other danaview_editor test file with per-ticket matrix tests (files outside test/support/ calling
 #      `testSurfaces(`, discovered at run time, so new matrix tests join automatically);
 #   3. at the repository root, the Home header and player matrix tests (danaview_features surfaces):
 #      test/editor_entry/home_edit_button_test.dart and test/editor_entry/player_edit_action_test.dart.
@@ -146,7 +146,7 @@ run_root() {
 }
 
 discover_matrix_files() {
-  (cd "$PKG" && grep -rl --include='*_test.dart' 'testSurfaces(' test | grep -v '^test/overflow/' | LC_ALL=C sort)
+  (cd "$PKG" && grep -rl --include='*_test.dart' 'testSurfaces(' test | grep -v -e '^test/overflow/' -e '^test/support/' | LC_ALL=C sort)
 }
 
 (cd "$PKG" && flutter pub get >/dev/null)

@@ -90,7 +90,17 @@ void main() {
     rig.editor.selectTransition(LongIds.cut);
     await rig.settle();
     rig.check('selected transition');
-    rig.editor.clearSelection();
+    rig.editor
+      ..setModes((m) => m.copyWith(multiSelect: true))
+      ..select(LongIds.clipA);
+    await rig.settle();
+    rig.check('multi-select, 1 selected');
+    rig.editor.selectAll();
+    await rig.settle();
+    rig.check('multi-select, all selected');
+    rig.editor
+      ..setModes((m) => m.copyWith(multiSelect: false))
+      ..clearSelection();
     await rig.settle();
     rig.check('cleared');
   });

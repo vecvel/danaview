@@ -3,7 +3,9 @@
 // Gesture arbitration by hit type (ux.md §8.8): eager handle drags (trim, keyframe, marker,
 // playhead knob, ruler scrub), pointer drags of selected clips, the mouse marquee, touch scrolling
 // over clips, axis-locked pans, pinch zoom anchored at the focal point, flings, centre-locked
-// scrubbing, wheel scrolling and zooming, long-press menus and hover cursors.
+// scrubbing, wheel scrolling and zooming, long-press menus and hover cursors. The rig runs without
+// UX-13's slot (`basicOnly`) so drags land on the basic interaction; test/timeline/interaction/
+// covers the same drags through the slot.
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
@@ -25,7 +27,7 @@ void main() {
 
   group('touch', () {
     testWidgets('a horizontal drag over an unselected clip scrolls time, it never moves the clip', (tester) async {
-      final t = await pumpTimeline(tester);
+      final t = await pumpTimeline(tester, basicOnly: true);
       await tester.dragFrom(t.at(tester, 6 * s, 'tr_main'), const Offset(-150, 0));
       await tester.pumpAndSettle();
       expect(t.viewport.scrollTimeSec, greaterThan(1.5));
@@ -34,7 +36,7 @@ void main() {
     });
 
     testWidgets('a drag over the body of a selected clip also scrolls (handles are the only eager parts)', (tester) async {
-      final t = await pumpTimeline(tester);
+      final t = await pumpTimeline(tester, basicOnly: true);
       await select(tester, t, 6 * s, 'tr_main');
       expect(t.state.selection.items, {const ItemId('it_b')});
       await tester.dragFrom(t.at(tester, 6 * s, 'tr_main'), const Offset(-150, 0));
@@ -45,7 +47,7 @@ void main() {
     });
 
     testWidgets('pans lock to the dominant axis', (tester) async {
-      final t = await pumpTimeline(tester, size: const Size(1000, 170));
+      final t = await pumpTimeline(tester, basicOnly: true, size: const Size(1000, 170));
       expect(t.viewport.maxScrollY, greaterThan(20));
       final g = await tester.startGesture(t.at(tester, 6 * s, 'tr_ov'));
       await g.moveBy(const Offset(4, -30));
@@ -69,7 +71,7 @@ void main() {
     });
 
     testWidgets('a trim handle claims the pointer at once and trims through one history entry', (tester) async {
-      final t = await pumpTimeline(tester);
+      final t = await pumpTimeline(tester, basicOnly: true);
       await select(tester, t, 12 * s, 'tr_main');
       final edge = t.at(tester, 10 * s, 'tr_main', fraction: 0.9) + const Offset(3, 0);
       expect(t.hit(tester, edge), isA<HitTrimHandle>().having((h) => h.edge, 'edge', TrimEdge.start));
@@ -89,7 +91,7 @@ void main() {
     });
 
     testWidgets('a keyframe diamond drags the key', (tester) async {
-      final t = await pumpTimeline(tester);
+      final t = await pumpTimeline(tester, basicOnly: true);
       await select(tester, t, 2 * s, 'tr_ov');
       final c = t.canvas(tester);
       final g = c.geometry;
@@ -110,7 +112,7 @@ void main() {
     });
 
     testWidgets('a marker flag drags the marker', (tester) async {
-      final t = await pumpTimeline(tester);
+      final t = await pumpTimeline(tester, basicOnly: true);
       final g = await tester.startGesture(t.ruler(tester, 6 * s));
       await g.moveBy(const Offset(30, 0));
       await g.moveBy(const Offset(30, 0));
@@ -121,7 +123,7 @@ void main() {
     });
 
     testWidgets('centre-locked: scrolling time scrubs the playhead', (tester) async {
-      final t = await pumpTimeline(tester, centreLocked: true);
+      final t = await pumpTimeline(tester, basicOnly: true, centreLocked: true);
       final playhead = t.container.read(playheadProvider(t.id));
       expect(playhead.value, 0);
       final g = await tester.startGesture(t.at(tester, 0, 'tr_music'));
@@ -138,7 +140,7 @@ void main() {
     });
 
     testWidgets('pinch zooms horizontally anchored at the focal point', (tester) async {
-      final t = await pumpTimeline(tester);
+      final t = await pumpTimeline(tester, basicOnly: true);
       final focal = t.at(tester, 5 * s, 'tr_main');
       final focalX = t.canvas(tester).globalToLocal(focal).dx;
       final a = await tester.startGesture(focal - const Offset(60, 0), pointer: 1);
@@ -156,7 +158,7 @@ void main() {
     });
 
     testWidgets('pinch in centre-locked mode keeps the playhead at the centre', (tester) async {
-      final t = await pumpTimeline(tester, centreLocked: true);
+      final t = await pumpTimeline(tester, basicOnly: true, centreLocked: true);
       final centre = t.viewport.centerTimeSec;
       final mid = t.canvas(tester).localToGlobal(Offset(t.viewport.lanesWidth * 0.7, 60));
       final a = await tester.startGesture(mid - const Offset(40, 0), pointer: 1);
@@ -174,7 +176,7 @@ void main() {
     });
 
     testWidgets('a fast swipe flings', (tester) async {
-      final t = await pumpTimeline(tester);
+      final t = await pumpTimeline(tester, basicOnly: true);
       await tester.flingFrom(t.at(tester, 8 * s, 'tr_music'), const Offset(-120, 0), 2000);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 16));
@@ -186,7 +188,7 @@ void main() {
     });
 
     testWidgets('long press on an empty lane opens the add-here menu; on a locked clip it explains', (tester) async {
-      final t = await pumpTimeline(tester);
+      final t = await pumpTimeline(tester, basicOnly: true);
       await tester.longPressAt(t.at(tester, 12 * s, 'tr_music'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -221,7 +223,7 @@ void main() {
     }
 
     testWidgets('dragging a selected clip moves it; an unselected one stays and nothing scrolls', (tester) async {
-      final t = await pumpTimeline(tester, platform: TargetPlatform.macOS);
+      final t = await pumpTimeline(tester, basicOnly: true, platform: TargetPlatform.macOS);
       final g = await mouseAt(tester, t.at(tester, 12 * s, 'tr_main'));
       await g.down(t.at(tester, 12 * s, 'tr_main'));
       await g.moveBy(const Offset(-30, 0));
@@ -247,7 +249,7 @@ void main() {
     });
 
     testWidgets('dragging on an empty lane draws a marquee that selects what it touches; Shift adds', (tester) async {
-      final t = await pumpTimeline(tester, platform: TargetPlatform.macOS);
+      final t = await pumpTimeline(tester, basicOnly: true, platform: TargetPlatform.macOS);
       final from = t.at(tester, 13 * s, 'tr_music');
       final to = t.at(tester, 9500000, 'tr_main', fraction: 0.2);
       final g = await mouseAt(tester, from);
@@ -273,7 +275,7 @@ void main() {
     });
 
     testWidgets('the playhead knob and the ruler scrub in free mode', (tester) async {
-      final t = await pumpTimeline(tester, platform: TargetPlatform.macOS);
+      final t = await pumpTimeline(tester, basicOnly: true, platform: TargetPlatform.macOS);
       final playhead = t.container.read(playheadProvider(t.id));
       final g = await mouseAt(tester, t.ruler(tester, 2 * s));
       await click(tester, g, t.ruler(tester, 2 * s));
@@ -302,7 +304,7 @@ void main() {
     });
 
     testWidgets('wheel scrolls lanes, Shift+wheel scrolls time, Ctrl/⌘+wheel zooms at the cursor', (tester) async {
-      final t = await pumpTimeline(tester, platform: TargetPlatform.macOS, size: const Size(1000, 170));
+      final t = await pumpTimeline(tester, basicOnly: true, platform: TargetPlatform.macOS, size: const Size(1000, 170));
       final pointer = TestPointer(1, PointerDeviceKind.mouse);
       final at = t.at(tester, 5 * s, 'tr_ov');
       await tester.sendEventToBinding(pointer.addPointer(location: at));
@@ -338,7 +340,7 @@ void main() {
     });
 
     testWidgets('trackpad: two-finger pan scrolls both axes, pinch zooms at the focal point', (tester) async {
-      final t = await pumpTimeline(tester, platform: TargetPlatform.macOS, size: const Size(1000, 170));
+      final t = await pumpTimeline(tester, basicOnly: true, platform: TargetPlatform.macOS, size: const Size(1000, 170));
       final at = t.at(tester, 5 * s, 'tr_ov');
       final g = await tester.createGesture(kind: PointerDeviceKind.trackpad);
       await g.panZoomStart(at);
@@ -363,7 +365,7 @@ void main() {
     });
 
     testWidgets('hover cursors: resize on trim handles, grab on selected clips; the name pill', (tester) async {
-      final t = await pumpTimeline(tester, platform: TargetPlatform.macOS);
+      final t = await pumpTimeline(tester, basicOnly: true, platform: TargetPlatform.macOS);
       final g = await mouseAt(tester, t.at(tester, 12 * s, 'tr_main'));
       await click(tester, g, t.at(tester, 12 * s, 'tr_main'));
       await g.moveTo(t.at(tester, 12 * s + 50000, 'tr_main'));

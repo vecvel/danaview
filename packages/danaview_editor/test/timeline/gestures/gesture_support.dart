@@ -104,7 +104,7 @@ class TimelineRig {
   /// The canvas.
   RenderTimelineCanvas canvas(WidgetTester tester) => tester.renderObject<RenderTimelineCanvas>(find.byType(TimelineCanvas));
 
-  /// The basic interaction (UX-13 has not replaced it in these tests).
+  /// The basic interaction (the one taking drags when the rig was pumped with `basicOnly`).
   TimelineBasicInteraction basic(WidgetTester tester) => viewState(tester).basicInteraction;
 
   /// Global position of time [t] in the middle of lane [lane] (vertical [fraction] of the lane).
@@ -138,6 +138,10 @@ class TimelineRig {
 /// Pumps a [TimelineView] over [project] (default [gestureProject]) on a [size] screen for
 /// [platform] (touch on Android/iOS, mouse on macOS). Free mode with 60 px/s and time 0 at the
 /// left edge unless [centreLocked]; ripple mode off unless [ripple].
+///
+/// [basicOnly] leaves `interactionProvider` without a slot (its factory throws, as before UX-13
+/// landed), so every drag goes to UX-12's [TimelineBasicInteraction]: the arbitration and lift
+/// tests check the arbiter against that interaction, while UX-13's own tests cover its slot.
 Future<TimelineRig> pumpTimeline(
   WidgetTester tester, {
   EditProject? project,
@@ -149,6 +153,7 @@ Future<TimelineRig> pumpTimeline(
   double pxPerSecond = 60,
   TimelineInteractionSlot? interaction,
   Widget Function(Widget timeline)? wrap,
+  bool basicOnly = false,
 }) async {
   final repo = FakeProjectRepository();
   final id = repo.seed(project ?? gestureProject());
@@ -164,6 +169,7 @@ Future<TimelineRig> pumpTimeline(
       editorEngineProvider.overrideWithValue(rig.engine),
       editorSessionProvider.overrideWith((ref, id) => rig.session),
       editorControllerProvider.overrideWith((ref, id) => rig.controller),
+      if (basicOnly) interactionProvider.overrideWith((ref, id) => throw UnsupportedError('no interaction slot in this rig')),
     ],
     child: surfaceApp(surface, EditorScope(projectId: id, child: (wrap ?? (w) => w)(TimelineView(interaction: interaction)))),
   );
