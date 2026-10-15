@@ -232,11 +232,15 @@ enum EncoderErrors {
     /// Whether [error] (from a segment writer) means the encoder would not take the configuration.
     /// IOS-17's writer hands AVFoundation errors on as `EngineError`s mapped by ENG-07, where
     /// UnsupportedOutputSettings is `encoderSizeLimit` and EncoderNotFound/TemporarilyUnavailable
-    /// are `encoderUnavailable`, so the code decides (never the message text); raw errors are
-    /// matched by domain and code, including one level of underlying error.
+    /// are `encoderUnavailable`, so the code decides for those. ENG-07 maps VideoToolbox OSStatus
+    /// errors to `internal` with the exact tag "<domain> <code>" as the message, so an `internal`
+    /// error whose message is such a tag is matched by domain and code (never free text). Raw
+    /// errors are matched by domain and code, including one level of underlying error.
     static func isEncoderRefusal(_ error: Error) -> Bool {
         if let e = error as? EngineError {
-            return e.code == .encoderUnavailable || e.code == .encoderSizeLimit
+            if e.code == .encoderUnavailable || e.code == .encoderSizeLimit { return true }
+            guard e.code == .internal, let (domain, code) = parseTag(e.message) else { return false }
+            return refusalCodes[domain]?.contains(code) ?? false
         }
         let ns = error as NSError
         if refusalCodes[ns.domain]?.contains(ns.code) ?? false { return true }
@@ -244,6 +248,13 @@ enum EncoderErrors {
             return refusalCodes[underlying.domain]?.contains(underlying.code) ?? false
         }
         return false
+    }
+
+    /// The (domain, code) of an ENG-07 tag message "<domain> <code>", or nil for any other text.
+    static func parseTag(_ message: String) -> (String, Int)? {
+        let parts = message.split(separator: " ", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty, let code = Int(parts[1]) else { return nil }
+        return (String(parts[0]), code)
     }
 
     /// Maps a writer failure of the video encoder to the export error: refusals become
