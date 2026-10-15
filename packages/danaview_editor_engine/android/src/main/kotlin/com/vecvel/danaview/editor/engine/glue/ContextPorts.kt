@@ -1,9 +1,11 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: D-45 render-preview routes)
 //
 // Production ports: delegate each host API call to the service classes of ARCH §4.4 held by the
 // process EngineContext (D-33 placeholders until AND-02..AND-17 land). Glue-local behaviour that no
 // service ticket owns lives here too: freeBytes (StatFs), cache-trim fan-out, and preview session
-// lookup.
+// lookup. The D-45 render-preview calls (INT-06) go to AND-18's `preview/render/` services
+// (placeholders failing with `notSupportedOnDevice` until AND-18 lands), one instance per process
+// context (`RenderPreviewServices.of(ctx)`).
 
 package com.vecvel.danaview.editor.engine.glue
 
@@ -35,18 +37,21 @@ import com.vecvel.danaview.editor.engine.pigeon.MediaStatMsg
 import com.vecvel.danaview.editor.engine.pigeon.MicPermissionMsg
 import com.vecvel.danaview.editor.engine.pigeon.PickedMediaMsg
 import com.vecvel.danaview.editor.engine.pigeon.PlanAckMsg
+import com.vecvel.danaview.editor.engine.pigeon.PowerStateMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewConfigMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewOpenedMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewQualityMsg
 import com.vecvel.danaview.editor.engine.pigeon.ProbeMsg
 import com.vecvel.danaview.editor.engine.pigeon.ProxyStatusMsg
 import com.vecvel.danaview.editor.engine.pigeon.RecordedAssetMsg
+import com.vecvel.danaview.editor.engine.pigeon.RenderedRangeMsg
 import com.vecvel.danaview.editor.engine.pigeon.ResolvedMediaMsg
 import com.vecvel.danaview.editor.engine.pigeon.SeekAckMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbPriorityMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbnailRequestMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbnailTileMsg
 import com.vecvel.danaview.editor.engine.preview.PreviewSession
+import com.vecvel.danaview.editor.engine.preview.render.RenderPreviewServices
 import io.flutter.view.TextureRegistry
 import java.io.File
 
@@ -158,6 +163,9 @@ class ContextPreviewPort(private val ctx: EngineContext, private val textures: T
 
     override fun releaseAll() = ctx.previews.releaseAll(textures)
 
+    override fun setRenderedRanges(sessionId: String, ranges: List<RenderedRangeMsg>, done: Completion<Unit>) =
+        RenderPreviewServices.of(ctx).renderedRanges.setRenderedRanges(sessionId, ranges, done)
+
     private fun unknownSession() = EngineException(EngineErrorCode.internal, "unknown preview session")
 }
 
@@ -175,6 +183,9 @@ class ContextJobsPort(private val ctx: EngineContext) : JobsPort {
     override fun setJobPriority(jobId: String, priority: JobPriorityMsg) = ctx.jobs.setPriority(jobId, priority)
 
     override fun proxyStatus(fingerprint: String, done: Completion<ProxyStatusMsg>) = ctx.proxies.status(fingerprint, done)
+
+    override fun startRenderPreview(request: JobRequestMsg, plan: ByteArray, outputPath: String, done: Completion<String>) =
+        RenderPreviewServices.of(ctx).jobs.start(request, plan, outputPath, done)
 }
 
 /** [ExportPort] over the export coordinator. */
@@ -244,4 +255,6 @@ class ContextPlatformPort(private val ctx: EngineContext) : PlatformPort {
     override fun releaseBackground(leaseId: String, done: Completion<Unit>) = ctx.backgroundGuard.release(leaseId, done)
 
     override fun setDropTargetEnabled(enabled: Boolean, done: Completion<Unit>) = ctx.dropTarget.setEnabled(enabled, done)
+
+    override fun powerState(done: Completion<PowerStateMsg>) = RenderPreviewServices.of(ctx).power.powerState(done)
 }

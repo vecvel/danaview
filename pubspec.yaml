@@ -32,6 +32,14 @@ dependencies:
     path: packages/danaview_editor
   danaview_editor_engine:
     path: packages/danaview_editor_engine
+  danaview_editor_engine_api:
+    path: packages/danaview_editor_engine_api
+  # Auto captions (ARCH §16): the app root builds TranscriptionServiceImpl and feeds its governor
+  # from the danaview_whisper device channel (INT-04).
+  danaview_transcription:
+    path: packages/danaview_transcription
+  danaview_whisper:
+    path: packages/danaview_whisper
 
   # Native Playback Engine Bindings
   media_kit: ^1.1.10
@@ -55,8 +63,6 @@ dev_dependencies:
   # Test fakes of the editor (FakeEditorEngine, MemoryStoreFs) for the route tests.
   danaview_editor_core:
     path: packages/danaview_editor_core
-  danaview_editor_engine_api:
-    path: packages/danaview_editor_engine_api
   flutter_lints: ^3.0.0
 
 flutter:

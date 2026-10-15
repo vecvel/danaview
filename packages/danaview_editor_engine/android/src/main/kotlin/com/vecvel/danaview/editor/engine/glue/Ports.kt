@@ -1,4 +1,4 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06 for the D-45 render-preview calls)
 //
 // What the host API glue needs from the engine, one port per host API (ARCH §12.6). The glue
 // validates arguments, chooses the thread and maps errors; the ports only do the work. Production
@@ -7,11 +7,17 @@
 //
 // Each method is called on the thread the glue chose (documented per host API impl) and completes
 // its Completion exactly once, from any thread.
+//
+// The D-45 render-preview methods (INT-06: startRenderPreview, setRenderedRanges, powerState) have
+// default bodies that fail with `notSupportedOnDevice`, so port fakes written before INT-06 keep
+// compiling; the Context ports route them to AND-18's `preview/render/` services.
 
 package com.vecvel.danaview.editor.engine.glue
 
 import com.vecvel.danaview.editor.engine.core.Completion
+import com.vecvel.danaview.editor.engine.core.EngineErrors
 import com.vecvel.danaview.editor.engine.core.Paths
+import com.vecvel.danaview.editor.engine.core.fail
 import com.vecvel.danaview.editor.engine.pigeon.CacheTrimLevelMsg
 import com.vecvel.danaview.editor.engine.pigeon.CapabilitiesMsg
 import com.vecvel.danaview.editor.engine.pigeon.ColorMsg
@@ -32,12 +38,14 @@ import com.vecvel.danaview.editor.engine.pigeon.MediaStatMsg
 import com.vecvel.danaview.editor.engine.pigeon.MicPermissionMsg
 import com.vecvel.danaview.editor.engine.pigeon.PickedMediaMsg
 import com.vecvel.danaview.editor.engine.pigeon.PlanAckMsg
+import com.vecvel.danaview.editor.engine.pigeon.PowerStateMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewConfigMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewOpenedMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewQualityMsg
 import com.vecvel.danaview.editor.engine.pigeon.ProbeMsg
 import com.vecvel.danaview.editor.engine.pigeon.ProxyStatusMsg
 import com.vecvel.danaview.editor.engine.pigeon.RecordedAssetMsg
+import com.vecvel.danaview.editor.engine.pigeon.RenderedRangeMsg
 import com.vecvel.danaview.editor.engine.pigeon.ResolvedMediaMsg
 import com.vecvel.danaview.editor.engine.pigeon.SeekAckMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbPriorityMsg
@@ -90,6 +98,14 @@ interface PreviewPort {
 
     /** The Flutter engine that owns this port detached: release its sessions. */
     fun releaseAll()
+
+    /**
+     * Replaces the rendered ranges of a session (D-45; validated by the glue: sorted, non-overlapping,
+     * files inside `<cache>/renders/`). The session drops a range when an applied patch touches it
+     * and every range on `setPlan`, until the next call (ARCH §12.2).
+     */
+    fun setRenderedRanges(sessionId: String, ranges: List<RenderedRangeMsg>, done: Completion<Unit>) =
+        done.fail(EngineErrors.notSupported("rendered ranges"))
 }
 
 /** `JobsHostApi` work (thumbnails and jobs on danaview-jobs, proxy status on danaview-io). */
@@ -100,6 +116,14 @@ interface JobsPort {
     fun cancelJob(jobId: String)
     fun setJobPriority(jobId: String, priority: JobPriorityMsg)
     fun proxyStatus(fingerprint: String, done: Completion<ProxyStatusMsg>)
+
+    /**
+     * Starts a `renderPreview` job (D-45) and completes with its job id; the job is registered with the
+     * job registry, so cancelJob, setJobPriority and the job events work as for every job. [plan] is
+     * the range plan's UTF-8 JSON, [outputPath] lies inside `<cache>/renders/` (checked by the glue).
+     */
+    fun startRenderPreview(request: JobRequestMsg, plan: ByteArray, outputPath: String, done: Completion<String>) =
+        done.fail(EngineErrors.notSupported("render preview"))
 }
 
 /** `ExportHostApi` work (danaview-export). */
@@ -144,4 +168,7 @@ interface PlatformPort {
     fun updateBackground(leaseId: String, progress: Double, done: Completion<Unit>)
     fun releaseBackground(leaseId: String, done: Completion<Unit>)
     fun setDropTargetEnabled(enabled: Boolean, done: Completion<Unit>)
+
+    /** Charging and battery-saver state (D-45, main); changes are `signal(powerStateChanged)` events. */
+    fun powerState(done: Completion<PowerStateMsg>) = done.fail(EngineErrors.notSupported("power state"))
 }

@@ -1,4 +1,4 @@
-// OWNER: ENG-07 (frozen by ENG-06)
+// OWNER: ENG-07 (frozen by ENG-06; amended by INT-06 for the D-45 render-preview services)
 //
 // The service protocols the glue delegates to (ARCH §4.4, §12.6). Each protocol is implemented by
 // one service class of ARCH §4.4, created by `EngineServices.make` with `init(context:)`; until its
@@ -177,4 +177,28 @@ protocol BackgroundLeasing: AnyObject {
 /// Platform/DropTarget.swift (IOS-16). Queue: main. Drops are `drop` events.
 protocol DropTargeting: AnyObject {
     func setEnabled(_ enabled: Bool, reply: @escaping EngineReply<Void>)
+}
+
+// MARK: Render preview (D-45; INT-06 placeholders in RenderPreview/, implemented by IOS-19)
+
+/// RenderPreview/RenderPreviewJobService.swift (IOS-19). Queue: jobs. Starts a `renderPreview`
+/// job (registered with IOS-05's JobRegistry, so `cancelJob` / `setJobPriority` and the job
+/// events work as for every job) and replies with its job id. [plan] is the range plan's UTF-8
+/// JSON; [outputURL] lies inside `<cache>/danaview/editor/renders/` (checked by the glue).
+protocol RenderPreviewStarting: AnyObject {
+    func start(_ request: JobRequestMsg, plan: Data, outputURL: URL, reply: @escaping EngineReply<String>)
+}
+
+/// RenderPreview/RenderedRangeHandler.swift (IOS-19). Queue: previewControl. Replaces the rendered
+/// ranges of a session (validated by the glue: sorted, non-overlapping, files inside the renders
+/// directory). The session drops a range when an applied patch touches it and every range on
+/// `setPlan`, until the next call (ARCH §12.2).
+protocol RenderedRangeSetting: AnyObject {
+    func setRenderedRanges(sessionId: String, ranges: [RenderedRangeMsg], fileURLs: [URL], reply: @escaping EngineReply<Void>)
+}
+
+/// RenderPreview/PowerStateMonitor.swift (IOS-19). Queue: main. Answers the current charging and
+/// Low Power Mode state; changes are `signal(powerStateChanged)` events (`EventHub.emitSignal`).
+protocol PowerStateProviding: AnyObject {
+    func powerState(reply: @escaping EngineReply<PowerStateMsg>)
 }

@@ -1,4 +1,4 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: the preview glue gets the roots)
 //
 // Installs the six Pigeon host APIs and the event stream handler of ARCH §12.6 on one Flutter
 // engine's messenger, and removes them when that engine detaches. Every Flutter engine shares the
@@ -65,7 +65,7 @@ class GlueRegistrar private constructor(
             val previewPort = ContextPreviewPort(ctx, textures)
 
             EngineHostApi.setUp(messenger, EngineHostApiImpl(threads, root, dispatch))
-            PreviewHostApi.setUp(messenger, PreviewHostApiImpl(threads, previewPort, dispatch))
+            PreviewHostApi.setUp(messenger, PreviewHostApiImpl(threads, previewPort, dispatch, paths))
             JobsHostApi.setUp(messenger, JobsHostApiImpl(threads, ContextJobsPort(ctx), paths, dispatch))
             ExportHostApi.setUp(messenger, ExportHostApiImpl(threads, ContextExportPort(ctx), paths, dispatch))
             RecorderHostApi.setUp(messenger, RecorderHostApiImpl(threads, ContextRecorderPort(ctx), paths, dispatch))

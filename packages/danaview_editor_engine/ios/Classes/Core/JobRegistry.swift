@@ -249,6 +249,9 @@ final class JobRegistry: JobScheduling {
                               audioStream: request.audioStream.map(Int.init), output: output, paths: paths)
         case .export:
             throw EngineError.invalidArgument("request.kind", "exports start through ExportHostApi")
+        case .renderPreview:
+            // INT-06 (D-45): render previews start through RenderPreviewJobService (IOS-19).
+            throw EngineError.invalidArgument("request.kind", "render previews start through the render-preview service")
         }
     }
 

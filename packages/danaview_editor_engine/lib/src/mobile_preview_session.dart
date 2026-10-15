@@ -26,6 +26,10 @@
 //   `PreviewFailedEvent`. Clock and events that arrive before anyone listens are replayed to the
 //   first listener (the latest clock sample; up to [MobilePreviewSession.maxBufferedEvents]
 //   events).
+// - Rendered ranges (D-45, INT-06): `setRenderedRanges` is checked locally first (an invalid
+//   list fails with `planInvalid` without reaching native) and then sent on the plan queue, after
+//   every plan or patch sent before it, so native never sees ranges meant for a revision it has
+//   not received yet. Until IOS-19 / AND-18 land, native answers `notSupportedOnDevice`.
 // - dispose is idempotent: it releases the event route first (late events are dropped),
 //   completes every in-flight call with `EngineCancelled` (late native replies are ignored),
 //   then asks native to release the session and its texture. Calls after dispose fail with
@@ -147,8 +151,8 @@ final class MobilePreviewSession implements PreviewSession {
         return ack;
       });
 
-  Future<PlanAck> _serialized(Future<PlanAck> Function() body) {
-    if (_disposed) return Future<PlanAck>.error(_cancelled());
+  Future<T> _serialized<T>(Future<T> Function() body) {
+    if (_disposed) return Future<T>.error(_cancelled());
     final result = _planChain.then((_) {
       if (_disposed) throw _cancelled();
       return body();
@@ -295,6 +299,14 @@ final class MobilePreviewSession implements PreviewSession {
 
   @override
   Future<void> setUseProxies(bool on) => _call(() => _channels.preview.setUseProxies(_sessionId, on));
+
+  @override
+  Future<void> setRenderedRanges(List<RenderedRange> ranges) {
+    final problem = renderedRangesProblem(ranges);
+    if (problem != null) return Future<void>.error(EngineFailure.of(EngineErrorCode.planInvalid, debugDetail: problem));
+    final msgs = [for (final r in ranges) renderedRangeToMsg(r)];
+    return _serialized<void>(() => _call(() => _channels.preview.setRenderedRanges(_sessionId, msgs)));
+  }
 
   @override
   Future<void> setEditingMode(PreviewEditingMode mode) => _call(() => _channels.preview.setEditingMode(_sessionId, editingModeToMsg(mode)));

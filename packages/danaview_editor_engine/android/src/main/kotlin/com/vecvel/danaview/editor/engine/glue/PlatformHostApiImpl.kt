@@ -1,4 +1,4 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: `powerState`, D-45, on main)
 //
 // `PlatformHostApi` glue (ARCH §9, §12.4, §12.6, §15). UI flows (pick, saveToFiles, share,
 // notification permission, background leases, drop target) run on main; saveToPhotos, URI grants,
@@ -22,6 +22,7 @@ import com.vecvel.danaview.editor.engine.pigeon.MediaRefMsg
 import com.vecvel.danaview.editor.engine.pigeon.MediaStatMsg
 import com.vecvel.danaview.editor.engine.pigeon.PickedMediaMsg
 import com.vecvel.danaview.editor.engine.pigeon.PlatformHostApi
+import com.vecvel.danaview.editor.engine.pigeon.PowerStateMsg
 import com.vecvel.danaview.editor.engine.pigeon.ResolvedBookmarkMsg
 
 /** `PlatformHostApi` handlers. [paths] gives the installed roots (file and backup checks). */
@@ -89,6 +90,9 @@ class PlatformHostApiImpl(
 
     override fun setDropTargetEnabled(enabled: Boolean, callback: (Result<Unit>) -> Unit) =
         dispatch.async(threads.main, callback) { done -> port.setDropTargetEnabled(enabled, done) }
+
+    override fun powerState(callback: (Result<PowerStateMsg>) -> Unit) =
+        dispatch.async(threads.main, callback) { done -> port.powerState(done) }
 
     private fun noBookmarks() = EngineException(EngineErrorCode.notSupportedOnDevice, "security-scoped bookmarks are iOS only")
 }

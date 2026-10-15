@@ -1,13 +1,16 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06)
 //
 // `JobsHostApi` glue (ARCH §12.3, §12.6, §15). Thumbnails and jobs run on danaview-jobs (the services
 // keep their own worker pools behind it); proxy status on danaview-io. Job progress, results and
-// failures travel as events keyed by the returned job id (EventHub).
+// failures travel as events keyed by the returned job id (EventHub). `renderPreview` jobs (D-45,
+// INT-06) start through `JobsPort.startRenderPreview` (AND-18 registers them with the job registry),
+// so cancelJob and setJobPriority reach them like every other job.
 
 package com.vecvel.danaview.editor.engine.glue
 
 import com.vecvel.danaview.editor.engine.core.EngineThreads
 import com.vecvel.danaview.editor.engine.core.Paths
+import com.vecvel.danaview.editor.engine.pigeon.JobKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobPriorityMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobRequestMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobsHostApi
@@ -38,8 +41,17 @@ class JobsHostApiImpl(
             port.cancelThumbnail(requestId)
         }
 
-    override fun startJob(request: JobRequestMsg, callback: (Result<String>) -> Unit) =
+    override fun startJob(request: JobRequestMsg, callback: (Result<String>) -> Unit) {
+        if (request.kind == JobKindMsg.RENDER_PREVIEW) {
+            var valid: Pair<ByteArray, String>? = null
+            dispatch.async(threads.jobs, callback, check = { valid = Check.renderPreview(request, paths()) }) { done ->
+                val (plan, output) = valid!!
+                port.startRenderPreview(request, plan, output, done)
+            }
+            return
+        }
         dispatch.async(threads.jobs, callback, check = { Check.job(request, paths()) }) { done -> port.startJob(request, done) }
+    }
 
     override fun cancelJob(jobId: String) =
         dispatch.fireAndForget(threads.jobs, "cancelJob", check = { Check.id("jobId", jobId) }) { port.cancelJob(jobId) }

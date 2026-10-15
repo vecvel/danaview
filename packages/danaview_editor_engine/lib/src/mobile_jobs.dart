@@ -17,6 +17,12 @@
 //   sends `cancelJob` (also when it happens before the native id is known: the cancel is sent as
 //   soon as the reply arrives) and drops later events. `setPriority` is forwarded once the native
 //   id is known; the latest value wins.
+// - `renderPreview` (D-45, INT-06) runs through the same job path: `startJob` with
+//   `JobKindMsg.renderPreview`, the range plan as `PlanTransport` JSON in `JobRequestMsg.plan` and
+//   the output path (`media` is required by the message and carries the output file), cancel via
+//   `cancelJob`, progress and done/failed via the job events. The plan is encoded before the
+//   start is sent; a plan that cannot be encoded fails the job with `planInvalid`. Default
+//   priority `background`. Until IOS-19 / AND-18 land, native answers `notSupportedOnDevice`.
 // - `proxyStatus` is synchronous: it answers from a per-fingerprint cache fed by proxy jobs
 //   started here and by a background `JobsHostApi.proxyStatus` refresh on first use
 //   ([MobileMediaJobs.refreshProxyStatus]).
@@ -218,6 +224,22 @@ final class MobileMediaJob<T> implements MediaJob<T> {
         ));
   }
 
+  /// Starts once [request] is ready (render previews encode their plan first), with the priority
+  /// current at that moment. A cancel before that never reaches native.
+  void _startAsync(Future<JobRequestMsg> request) {
+    unawaited(request.then<void>(
+      (r) {
+        if (_result.isCompleted) return;
+        r.priority = jobPriorityToMsg(_priority);
+        _start(r);
+      },
+      onError: (Object e, StackTrace st) => _finishError(
+        e is EngineFailure ? e : EngineFailure.of(EngineErrorCode.planInvalid, debugDetail: 'range plan could not be encoded'),
+        st,
+      ),
+    ));
+  }
+
   void _onStarted(String nativeId) {
     _nativeId = nativeId;
     if (_result.isCompleted) {
@@ -328,6 +350,13 @@ final class _JobStarter {
   ]) {
     final job = MobileMediaJob<T>._(channels, '$prefix$_tag-${_n++}', request.kind, priority, decode, onPhase);
     job._start(request);
+    return job;
+  }
+
+  /// [start] for a request that is built asynchronously.
+  MobileMediaJob<T> startLater<T>(JobKindMsg kind, Future<JobRequestMsg> request, JobPriority priority, T? Function(JobResultMsg) decode) {
+    final job = MobileMediaJob<T>._(channels, '$prefix$_tag-${_n++}', kind, priority, decode);
+    job._startAsync(request);
     return job;
   }
 }
@@ -460,6 +489,22 @@ final class MobileMediaJobs implements MediaJobs {
         sourceStartUs: request.range.start,
         sourceEndUs: request.range.end,
         outputPath: request.outputPath,
+      );
+
+  @override
+  MediaJob<GeneratedAsset> renderPreview(RenderPlan rangePlan, {required String outputPath}) => _starter.startLater<GeneratedAsset>(
+        JobKindMsg.renderPreview,
+        PlanTransport.encodePlan(rangePlan).then(
+          (bytes) => JobRequestMsg(
+            kind: JobKindMsg.renderPreview,
+            media: ResolvedMediaMsg(uri: Uri.file(outputPath).toString(), fingerprint: 'renderPreview', isProxy: false),
+            priority: jobPriorityToMsg(JobPriority.background),
+            outputPath: outputPath,
+            plan: bytes,
+          ),
+        ),
+        JobPriority.background,
+        _assetOf,
       );
 
   /// The cached proxy state of [media]. The first query for a fingerprint also refreshes the

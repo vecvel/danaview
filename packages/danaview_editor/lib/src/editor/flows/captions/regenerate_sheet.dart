@@ -225,21 +225,29 @@ final class RegenerateRefused extends RegenerateOutcome {
 
 /// Regenerate logic without widgets (ai.md §10.3).
 class CaptionRegenerator {
-  /// Creates the regenerator over [service] for [editor]. [timeline] reads the committed project.
-  CaptionRegenerator({required TranscriptionService service, required EditorController editor, required TimelineView Function() timeline, DateTime Function()? clock})
-      : _service = service,
+  /// Creates the regenerator over [service] for [editor]. [state] reads the editor's state (usually
+  /// `ref.read(editorControllerProvider(id))`); [timeline] reads the committed project.
+  CaptionRegenerator({
+    required TranscriptionService service,
+    required EditorController editor,
+    required EditorState Function() state,
+    required TimelineView Function() timeline,
+    DateTime Function()? clock,
+  })  : _service = service,
         _editor = editor,
+        _state = state,
         _timeline = timeline,
         _clock = clock ?? DateTime.now;
 
   final TranscriptionService _service;
   final EditorController _editor;
+  final EditorState Function() _state;
   final TimelineView Function() _timeline;
   final DateTime Function() _clock;
 
   /// The target of regenerating [track], or null when it is not a generated subtitle lane.
   RegenerateTarget? targetOf(TrackId track) {
-    final project = _editor.state.project;
+    final project = _state().project;
     if (project == null) return null;
     Track? lane;
     for (final t in project.tracks) {
@@ -355,7 +363,9 @@ Future<void> showAutoCaptionsWith(
         if (container.read(provider).stage != AutoCaptionsStage.configure) return;
         onConfigure(controller);
       });
-    });
+    }, fireImmediately: true);
+    // A fresh controller already sits at `checking` (its initial state), and opening it again does
+    // not notify that stage: the immediate call above has recorded it.
   }
   try {
     await AutoCaptionsSheet.show(context, projectId: projectId, scope: scope, regenerateFrom: regenerateFrom, replaceTrack: replaceTrack);
@@ -449,6 +459,7 @@ class _RegenerateSheetState extends ConsumerState<RegenerateSheet> {
     return CaptionRegenerator(
       service: ref.read(transcriptionServiceProvider),
       editor: ref.read(editorControllerProvider(id).notifier),
+      state: () => ref.read(editorControllerProvider(id)),
       timeline: () => DomainTimelineView(session.committedProject!, access: engine.access),
     );
   }

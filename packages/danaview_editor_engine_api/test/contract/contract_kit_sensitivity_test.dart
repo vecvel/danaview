@@ -21,6 +21,9 @@ class _Mutant implements PreviewSession {
   Future<void> Function()? onPause;
   Stream<PreviewClock> Function()? onClock;
 
+  /// When set, rendered ranges are recorded here and never dropped (a broken engine).
+  List<RenderedRange>? stickyRanges;
+
   @override
   int get textureId => inner.textureId;
   @override
@@ -43,6 +46,11 @@ class _Mutant implements PreviewSession {
   Future<void> setQuality(PreviewQuality quality) => inner.setQuality(quality);
   @override
   Future<void> setUseProxies(bool on) => inner.setUseProxies(on);
+  @override
+  Future<void> setRenderedRanges(List<RenderedRange> ranges) async {
+    await inner.setRenderedRanges(ranges);
+    if (stickyRanges != null) stickyRanges = ranges;
+  }
   @override
   Future<void> setEditingMode(PreviewEditingMode mode) => inner.setEditingMode(mode);
   @override
@@ -112,8 +120,53 @@ class _MutantEngine implements EditorEngine {
   Future<void> trimCaches(CacheTrimLevel level) => fake.trimCaches(level);
 }
 
+/// Probe of the render-preview cases: files are the fake's stub files; a [_Mutant] with
+/// [_Mutant.stickyRanges] reports those instead of the fake session's ranges.
+RenderPreviewContractProbe _probe(_MutantEngine engine) => RenderPreviewContractProbe(
+      rendersDirectory: '/fake/cache/danaview/editor/renders',
+      fileExists: engine.fake.jobs.files.contains,
+      activeRanges: (s) {
+        final m = s as _Mutant;
+        return m.stickyRanges ?? (m.inner as FakePreviewSession).renderedRanges;
+      },
+    );
+
 void main() {
   Future<List<String>> run(void Function(_Mutant) configure) => checkEngineContract(_MutantEngine(configure));
+
+  Future<List<String>> runRender(void Function(_Mutant) configure, {void Function(FakeEditorEngine)? setup}) {
+    final engine = _MutantEngine(configure);
+    setup?.call(engine.fake);
+    return checkEngineContract(engine, renderPreview: _probe(engine));
+  }
+
+  test('the unmodified wrapper passes the render-preview cases', () async {
+    expect(await runRender((_) {}), isEmpty);
+  });
+
+  test('rendered ranges that a touching patch does not drop are reported', () async {
+    final v = await runRender((m) => m.stickyRanges = const []);
+    expect(v, contains('a patch touching a rendered range must drop it'));
+  });
+
+  test('a render whose cancel keeps the output is reported', () async {
+    final engine = _MutantEngine((_) {});
+    final probe = _probe(engine);
+    final v = await checkEngineContract(
+      engine,
+      renderPreview: RenderPreviewContractProbe(
+        rendersDirectory: probe.rendersDirectory,
+        fileExists: (_) => true,
+        activeRanges: probe.activeRanges,
+      ),
+    );
+    expect(v, contains('a cancelled render preview must delete its output'));
+  });
+
+  test('a render of a valid range plan that fails is reported', () async {
+    final v = await runRender((_) {}, setup: (f) => f.failNext['jobs.renderPreview'] = const EngineCancelled());
+    expect(v, contains('renderPreview of a valid range plan failed: ${const EngineCancelled()}'));
+  });
 
   test('the unmodified wrapper passes', () async {
     expect(await run((_) {}), isEmpty);

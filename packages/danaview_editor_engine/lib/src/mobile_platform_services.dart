@@ -13,7 +13,10 @@
 //   with at most one call in flight (the latest value wins, values clamped to 0..1), forwards
 //   `leaseExpiring` events of `channels.router.job(leaseId)` to [BackgroundLease.expiring], and
 //   `release` is idempotent: it stops forwarding, closes `expiring`, drops late events and calls
-//   `releaseBackground` once.
+//   `releaseBackground` once. `powerState` asks `PlatformHostApi.powerState`;
+//   `powerStateChanged` forwards the `powerStateChanged` signals of `channels.router.signals`
+//   (D-45, INT-06). Until IOS-19 / AND-18 land, native answers `notSupportedOnDevice` and sends no
+//   such signal.
 // - MobileExternalDropTarget: drops come from `channels.router.drops` in logical px; drops that
 //   arrive after `setEnabled(false)` was called are dropped on the Dart side too.
 
@@ -92,6 +95,13 @@ final class MobileBackgroundWorkGuard implements BackgroundWorkGuard {
     if (id == null) return null;
     return MobileBackgroundLease._(_channels, id, progress);
   }
+
+  @override
+  Future<PowerState> powerState() async => powerStateFromMsg(await _channels.invoke(_channels.platform.powerState));
+
+  @override
+  late final Stream<PowerState> powerStateChanged =
+      _channels.router.signals.map(powerStateOfSignal).where((p) => p != null).cast<PowerState>();
 }
 
 /// A held background lease (ARCH §12.4, ENG-03). See the file header for the rules.

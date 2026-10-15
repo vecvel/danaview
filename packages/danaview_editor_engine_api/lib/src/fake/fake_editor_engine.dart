@@ -2,6 +2,12 @@
 //
 // Deterministic in-memory engine for widget and unit tests (BUILD_PLAN API-01). No timers run
 // unless a test drives them; every call is logged in [FakeEditorEngine.calls].
+//
+// D-45 render-preview additions (INT-06): `FakeMediaJobs.renderPreview` renders instantly (next
+// microtask) to a stub file recorded in `FakeMediaJobs.files` and honours cancel (the stub is
+// deleted); `FakePreviewSession.renderedRanges` records `setRenderedRanges` and drops the ranges a
+// patch touches ([patchTouchesRange]) or a `setPlan` replaces; `FakeBackgroundWorkGuard` reports a
+// scripted power state (`setPowerState`).
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -77,7 +83,7 @@ final class FakeEditorEngine implements EditorEngine {
         access = FakeMediaAccess(editorRoots: editorRoots) {
     thumbnails = FakeThumbnailSource(log);
     waveforms = FakeWaveformSource(log);
-    jobs = FakeMediaJobs(log);
+    jobs = FakeMediaJobs(log, validatePlans);
     exporter = FakeExportService(log);
     recorder = FakeVoiceRecorder(log);
     picker = FakeMediaPicker(log);
@@ -172,7 +178,7 @@ final class FakeEditorEngine implements EditorEngine {
   final FakeMediaAccess access;
 
   @override
-  final FakeBackgroundWorkGuard background = FakeBackgroundWorkGuard();
+  late final FakeBackgroundWorkGuard background = FakeBackgroundWorkGuard(log);
 
   @override
   final FakeExternalDropTarget drops = FakeExternalDropTarget();
@@ -257,6 +263,13 @@ final class FakePreviewSession implements PreviewSession {
   /// Frames a scrub seek may be off by (0 = exact; ARCH §12.2 allows ±1 GOP).
   int scrubOffsetFrames = 0;
 
+  /// Rendered ranges the engine would play from their files (D-45): set by [setRenderedRanges],
+  /// pruned by every patch that touches a range ([patchTouchesRange]) and cleared by [setPlan].
+  List<RenderedRange> renderedRanges = const [];
+
+  /// Ranges dropped by patches and plans since the last [setRenderedRanges], in order.
+  final List<RenderedRange> droppedRanges = [];
+
   FrameRate get _grid => FrameRate(plan?.canvas.gridFps ?? config.fps, 1);
 
   void _emitClock() {
@@ -300,6 +313,8 @@ final class FakePreviewSession implements PreviewSession {
     final first = this.plan == null;
     this.plan = plan;
     transients.clear();
+    droppedRanges.addAll(renderedRanges);
+    renderedRanges = const [];
     _frameSize.value = Size(plan.canvas.w.toDouble(), plan.canvas.h.toDouble());
     if (first) emitEvent(const PreviewFirstFrame());
     return PlanAck(rev: plan.rev, structural: true, applyMs: 0);
@@ -323,6 +338,13 @@ final class FakePreviewSession implements PreviewSession {
     final (next, structural) = applyFakePatch(current, patch);
     _check(next);
     plan = next;
+    if (renderedRanges.isNotEmpty) {
+      final kept = <RenderedRange>[];
+      for (final r in renderedRanges) {
+        (patchTouchesRange(current, patch, r.range) ? droppedRanges : kept).add(r);
+      }
+      renderedRanges = List.unmodifiable(kept);
+    }
     for (final id in [...patch.layers.remove, ...patch.layers.upsert.map((l) => l.id)]) {
       transients.remove(PlanIds.itemOf(id));
     }
@@ -381,6 +403,15 @@ final class FakePreviewSession implements PreviewSession {
   Future<void> setUseProxies(bool on) async {
     _log.hit('preview.setUseProxies');
     useProxies = on;
+  }
+
+  @override
+  Future<void> setRenderedRanges(List<RenderedRange> ranges) async {
+    _log.hit('preview.setRenderedRanges');
+    final problem = renderedRangesProblem(ranges);
+    if (problem != null) throw EngineFailure.of(EngineErrorCode.planInvalid, debugDetail: problem);
+    renderedRanges = List.unmodifiable(ranges);
+    droppedRanges.clear();
   }
 
   @override
@@ -493,6 +524,34 @@ final class FakePreviewSession implements PreviewSession {
   );
 }
 
+/// Whether applying [patch] to [before] touches the rendered [range] (ARCH §12.2, D-45): a
+/// removed or upserted layer whose old or new span overlaps it, a canvas change, a duration change
+/// when the range ends after the shorter duration, or a change to (or removal of) an asset
+/// [before] already had. Audio changes never touch a range. The reference rule IOS-19 and AND-18
+/// mirror natively.
+bool patchTouchesRange(RenderPlan before, RenderPlanPatch patch, TimeRange range) {
+  if (patch.canvas != null) return true;
+  final dur = patch.durUs;
+  if (dur != null && dur != before.durUs && range.end > (dur < before.durUs ? dur : before.durUs)) return true;
+  if (patch.assetRemovals.any(before.assets.containsKey)) return true;
+  for (final MapEntry(:key, :value) in patch.assetUpserts.entries) {
+    final old = before.assets[key];
+    if (old != null && old != value) return true;
+  }
+  bool overlaps(TimeUs t0, TimeUs t1) => t0 < range.end && range.start < t1;
+  final old = {for (final l in before.layers) l.id: l};
+  for (final id in patch.layers.remove) {
+    final l = old[id];
+    if (l != null && overlaps(l.t0, l.t1)) return true;
+  }
+  for (final l in patch.layers.upsert) {
+    if (overlaps(l.t0, l.t1)) return true;
+    final o = old[l.id];
+    if (o != null && overlaps(o.t0, o.t1)) return true;
+  }
+  return false;
+}
+
 bool _sameMap(List<MapSegment> a, List<MapSegment> b) {
   if (a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
@@ -506,13 +565,18 @@ bool _sameMap(List<MapSegment> a, List<MapSegment> b) {
 ///
 /// See ARCH §12.3.
 final class FakeMediaJob<T> implements MediaJob<T> {
-  /// Creates a pending job.
-  FakeMediaJob(this.id) {
+  /// Creates a pending job. [onComplete] runs when it completes successfully, [onCancel] when it
+  /// is cancelled before that (the render-preview stub uses them to write and delete its file).
+  FakeMediaJob(this.id, {void Function(T value)? onComplete, void Function()? onCancel})
+      : _onComplete = onComplete,
+        _onCancel = onCancel {
     _result.future.ignore();
   }
 
   /// Creates a job that completes with [value] on the next microtask.
-  FakeMediaJob.done(this.id, T value) {
+  FakeMediaJob.done(this.id, T value)
+      : _onComplete = null,
+        _onCancel = null {
     _result.future.ignore();
     scheduleMicrotask(() => complete(value));
   }
@@ -520,6 +584,8 @@ final class FakeMediaJob<T> implements MediaJob<T> {
   @override
   final String id;
 
+  final void Function(T value)? _onComplete;
+  final void Function()? _onCancel;
   final StreamController<double> _progress = StreamController<double>.broadcast();
   final Completer<T> _result = Completer<T>();
 
@@ -541,6 +607,7 @@ final class FakeMediaJob<T> implements MediaJob<T> {
   /// Completes successfully.
   void complete(T value) {
     if (_result.isCompleted) return;
+    _onComplete?.call(value);
     _progress.add(1);
     _result.complete(value);
     unawaited(_progress.close());
@@ -555,7 +622,12 @@ final class FakeMediaJob<T> implements MediaJob<T> {
 
   @override
   void cancel() {
+    if (_result.isCompleted) {
+      cancelled = true;
+      return;
+    }
     cancelled = true;
+    _onCancel?.call();
     fail(const EngineCancelled());
   }
 
@@ -648,15 +720,30 @@ final class FakeWaveformSource implements WaveformSource {
   }
 }
 
-/// Fake media jobs; every job is pending until the test completes it via [created].
+/// Fake media jobs; every job is pending until the test completes it via [created], except
+/// render previews, which render instantly to a stub file unless [holdRenders] is set.
 ///
-/// See ARCH §12.3.
+/// See ARCH §12.3, D-45.
 final class FakeMediaJobs implements MediaJobs {
-  /// Creates the fake.
-  FakeMediaJobs([FakeCallLog? log]) : _log = log ?? FakeCallLog();
+  /// Creates the fake. [validatePlans] makes [renderPreview] refuse invalid range plans with
+  /// `planInvalid`, like a native engine.
+  FakeMediaJobs([FakeCallLog? log, bool validatePlans = true])
+      : _log = log ?? FakeCallLog(),
+        _validatePlans = validatePlans;
 
   final FakeCallLog _log;
+  final bool _validatePlans;
   var _n = 0;
+
+  /// Stub files written by [renderPreview] (paths), deleted again when a render is cancelled.
+  final Set<String> files = {};
+
+  /// Range plans and output paths passed to [renderPreview], in order.
+  final List<(RenderPlan, String)> renderRequests = [];
+
+  /// When true, render previews stay pending until the test completes them (through [created])
+  /// instead of rendering on the next microtask; completing one still writes its stub file.
+  bool holdRenders = false;
 
   /// Jobs created, in order.
   final List<FakeMediaJob<Object?>> created = [];
@@ -684,6 +771,44 @@ final class FakeMediaJobs implements MediaJobs {
 
   @override
   MediaJob<ExtractedSpeechAudio> extractSpeechAudio(SpeechAudioJobRequest request) => _job<ExtractedSpeechAudio>('extractSpeechAudio');
+
+  /// Renders instantly (next microtask) to a stub file at [outputPath] (recorded in [files]);
+  /// cancel before that deletes it and fails with `EngineCancelled`. Refuses an export-target or
+  /// invalid plan with `planInvalid` and an output outside a `renders/` directory with
+  /// `permissionDenied`, like the native glue. Default priority `background`.
+  @override
+  MediaJob<GeneratedAsset> renderPreview(RenderPlan rangePlan, {required String outputPath}) {
+    renderRequests.add((rangePlan, outputPath));
+    final injected = _log.record('jobs.renderPreview');
+    final j = FakeMediaJob<GeneratedAsset>(
+      'renderPreview-${_n++}',
+      onComplete: (a) => files.add(a.path),
+      onCancel: () => files.remove(outputPath),
+    )..priority = JobPriority.background;
+    created.add(j as FakeMediaJob<Object?>);
+    final failure = injected ?? _renderProblem(rangePlan, outputPath);
+    if (failure != null) {
+      j.fail(failure);
+    } else if (!holdRenders) {
+      scheduleMicrotask(() => j.complete(GeneratedAsset(path: outputPath, sizeBytes: 1024, duration: rangePlan.durUs)));
+    }
+    return j;
+  }
+
+  EngineFailure? _renderProblem(RenderPlan plan, String outputPath) {
+    if (plan.target != PlanTarget.preview) {
+      return EngineFailure.of(EngineErrorCode.planInvalid, debugDetail: 'renderPreview needs a preview plan');
+    }
+    if (_validatePlans) {
+      final violations = PlanValidator.validate(plan);
+      if (violations.isNotEmpty) return EngineFailure.of(EngineErrorCode.planInvalid, debugDetail: violations.first.toString());
+    }
+    final segments = outputPath.split('/');
+    if (!outputPath.startsWith('/') || segments.length < 3 || segments[segments.length - 2] != renderPreviewDirName) {
+      return EngineFailure.of(EngineErrorCode.permissionDenied, debugDetail: 'outputPath is not inside $renderPreviewDirName/');
+    }
+    return null;
+  }
 
   @override
   ProxyStatus proxyStatus(EngineMedia media) => proxyStates[media.fingerprint] ?? ProxyStatus.none;
@@ -1027,11 +1152,36 @@ final class FakeMediaAccess implements MediaAccess {
   Future<bool> requestNotificationPermission() async => true;
 }
 
-/// Fake background guard (leases always granted).
+/// Fake background guard (leases always granted) with a scripted power state.
 ///
-/// See ARCH §12.4.
+/// See ARCH §12.4, D-45.
 final class FakeBackgroundWorkGuard implements BackgroundWorkGuard {
+  /// Creates the fake; `background.powerState` is logged in [log] (and can be failed through it).
+  FakeBackgroundWorkGuard([FakeCallLog? log]) : _log = log ?? FakeCallLog();
+
+  final FakeCallLog _log;
   var _n = 0;
+  PowerState _power = const PowerState(charging: false, lowPowerMode: false);
+  final StreamController<PowerState> _powerChanges = StreamController<PowerState>.broadcast();
+
+  /// The power state [powerState] reports (not charging, no low-power mode by default).
+  PowerState get power => _power;
+
+  /// Changes the scripted power state and emits it on [powerStateChanged] when it differs.
+  void setPowerState(PowerState state) {
+    if (state == _power) return;
+    _power = state;
+    _powerChanges.add(state);
+  }
+
+  @override
+  Future<PowerState> powerState() async {
+    _log.hit('background.powerState');
+    return _power;
+  }
+
+  @override
+  Stream<PowerState> get powerStateChanged => _powerChanges.stream;
 
   /// Leases currently held.
   final Set<String> held = {};

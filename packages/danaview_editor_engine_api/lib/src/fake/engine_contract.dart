@@ -8,7 +8,10 @@
 // The kit checks, in this order: capabilities caching; plan and patch revision semantics;
 // transients never touching the plan revision; clock `seq` rules; exact-seek acks on the frame
 // grid; scrub acks; job cancel semantics; export reattach (when an output path is supplied) and
-// one-shot export records.
+// one-shot export records; and, when a [RenderPreviewContractProbe] is supplied (D-45, INT-06),
+// the render-preview job (renders to its output, cancel deletes the output, refusals are
+// `EngineFailure`s) and rendered ranges (a patch touching a range drops it, an untouched one
+// stays, `setPlan` drops all, an invalid list is `planInvalid`).
 
 import 'dart:async';
 
@@ -19,6 +22,7 @@ import '../engine.dart';
 import '../export.dart';
 import '../failures.dart';
 import '../media_services.dart';
+import '../platform_services.dart';
 import '../preview.dart';
 
 /// Frame grid of every plan built by [contractKitPlan].
@@ -51,6 +55,37 @@ RenderPlanPatch contractKitPatch(int from) {
   );
 }
 
+/// A patch from [from] to [from] + 1 that adds a solid layer over frames 0..10 only, so it touches
+/// a rendered range starting at frame 0 and no range starting at frame 30 or later.
+RenderPlanPatch contractKitShortPatch(int from) => RenderPlanPatch(
+      from: from,
+      to: from + 1,
+      layers: PatchSet<PlanLayer>(
+        upsert: [
+          PlanLayer(id: 'it_kit00000003#tx0', z: 17, t0: 0, t1: contractKitGrid.timeOfFrame(10), kind: PlanLayerKind.solid, color: 0xFF22AA44),
+        ],
+      ),
+    );
+
+/// What [checkEngineContract] needs to check the D-45 render-preview contract on an engine that
+/// implements it (the fake; IOS-19 / AND-18 engines on a simulator or emulator).
+///
+/// See ARCH §12.2, §12.3, D-45.
+final class RenderPreviewContractProbe {
+  /// Creates the probe.
+  const RenderPreviewContractProbe({required this.rendersDirectory, required this.fileExists, required this.activeRanges});
+
+  /// Absolute path of the engine's `<cache>/danaview/editor/renders` directory (the kit writes
+  /// `kit-*.mp4` files there).
+  final String rendersDirectory;
+
+  /// Whether a file exists at an absolute path.
+  final FutureOr<bool> Function(String path) fileExists;
+
+  /// The rendered ranges [session] currently plays from files (a test hook of the engine).
+  final FutureOr<List<RenderedRange>> Function(PreviewSession session) activeRanges;
+}
+
 /// Runs the preview, job and export contract against [engine] and returns violations (empty =
 /// pass).
 ///
@@ -61,11 +96,14 @@ RenderPlanPatch contractKitPatch(int from) {
 ///   checks `EngineCancelled` and that the job left the running list. Real engines need a plan
 ///   with real media, so the default is off.
 /// * [checkExportRecords]: consumes one-shot records and checks they do not come back.
+/// * [renderPreview]: when set, also checks the D-45 render-preview job, rendered ranges and the
+///   power state (engines that still answer `notSupportedOnDevice` leave it null).
 Future<List<String>> checkEngineContract(
   EditorEngine engine, {
   Duration settle = Duration.zero,
   String? exportOutputPath,
   bool checkExportRecords = true,
+  RenderPreviewContractProbe? renderPreview,
 }) async {
   final v = <String>[];
   final caps = await engine.capabilities();
@@ -83,7 +121,106 @@ Future<List<String>> checkEngineContract(
   await _checkPreview(engine, v, settle);
   await _checkJobs(engine, v);
   await _checkExport(engine, v, exportOutputPath, checkExportRecords);
+  if (renderPreview != null) {
+    await _checkRenderJobs(engine, v, renderPreview, settle);
+    await _checkRenderedRanges(engine, v, renderPreview, settle);
+    await _checkPowerState(engine, v);
+  }
   return v;
+}
+
+Future<void> _checkRenderJobs(EditorEngine engine, List<String> v, RenderPreviewContractProbe probe, Duration settle) async {
+  final dir = probe.rendersDirectory.endsWith('/') ? probe.rendersDirectory.substring(0, probe.rendersDirectory.length - 1) : probe.rendersDirectory;
+
+  // A render writes its output.
+  final donePath = '$dir/kit-render.mp4';
+  final job = engine.jobs.renderPreview(contractKitPlan(), outputPath: donePath);
+  if (job.id.isEmpty) v.add('a render-preview job must have a non-empty id');
+  try {
+    final asset = await job.result;
+    if (asset.path != donePath) v.add('renderPreview result path ${asset.path} is not the requested output');
+    if (!await probe.fileExists(donePath)) v.add('a finished render preview must leave its output file');
+  } on Object catch (e) {
+    v.add('renderPreview of a valid range plan failed: $e');
+  }
+
+  // Cancel deletes the output.
+  final cancelPath = '$dir/kit-cancel.mp4';
+  final cancelled = engine.jobs.renderPreview(contractKitPlan(), outputPath: cancelPath);
+  final cancelledResult = cancelled.result;
+  cancelled.cancel();
+  cancelled.cancel(); // idempotent
+  try {
+    await cancelledResult;
+    v.add('a cancelled render preview must complete with EngineCancelled');
+  } on EngineCancelled {
+    // expected
+  } on Object catch (e) {
+    v.add('cancelled render preview threw ${e.runtimeType} instead of EngineCancelled');
+  }
+  await _pump(settle);
+  if (await probe.fileExists(cancelPath)) v.add('a cancelled render preview must delete its output');
+
+  // Refusals are typed failures.
+  final exportPlan = contractKitPlan().copyWith(target: PlanTarget.export);
+  await _expectFailure(
+    v,
+    'renderPreview of an export-target plan',
+    EngineErrorCode.planInvalid,
+    () => engine.jobs.renderPreview(exportPlan, outputPath: '$dir/kit-refused.mp4').result,
+  );
+}
+
+Future<void> _checkRenderedRanges(EditorEngine engine, List<String> v, RenderPreviewContractProbe probe, Duration settle) async {
+  const grid = contractKitGrid;
+  final session = await engine.openPreview(const PreviewConfig(canvasWidth: 64, canvasHeight: 36, fps: 30));
+  try {
+    final dir = probe.rendersDirectory.endsWith('/') ? probe.rendersDirectory.substring(0, probe.rendersDirectory.length - 1) : probe.rendersDirectory;
+    final head = RenderedRange(range: TimeRange(0, grid.timeOfFrame(30)), uri: Uri.file('$dir/kit-head.mp4').toString(), hash: 'kit-head');
+    final tail = RenderedRange(range: TimeRange(grid.timeOfFrame(60), grid.timeOfFrame(90)), uri: Uri.file('$dir/kit-tail.mp4').toString(), hash: 'kit-tail');
+    final plan = contractKitPlan();
+    await session.setPlan(plan);
+    await session.setRenderedRanges([head, tail]);
+    await _pump(settle);
+    var active = await probe.activeRanges(session);
+    if (active.length != 2 || active.first != head || active.last != tail) {
+      v.add('setRenderedRanges must make every given range active (got ${active.length})');
+    }
+
+    // A patch touching the head range drops it; the tail range stays.
+    await session.applyPatch(contractKitShortPatch(plan.rev));
+    await _pump(settle);
+    active = await probe.activeRanges(session);
+    if (active.contains(head)) v.add('a patch touching a rendered range must drop it');
+    if (!active.contains(tail)) v.add('a patch must not drop a rendered range it does not touch');
+
+    // The next call restores the set; setPlan drops every range.
+    await session.setRenderedRanges([head, tail]);
+    await _pump(settle);
+    if ((await probe.activeRanges(session)).length != 2) v.add('setRenderedRanges after a drop must restore the given ranges');
+    await session.setPlan(contractKitPlan(rev: 20));
+    await _pump(settle);
+    if ((await probe.activeRanges(session)).isNotEmpty) v.add('setPlan must drop every rendered range');
+
+    // Invalid lists are refused.
+    await _expectFailure(
+      v,
+      'setRenderedRanges with overlapping ranges',
+      EngineErrorCode.planInvalid,
+      () => session.setRenderedRanges([head, RenderedRange(range: TimeRange(grid.timeOfFrame(20), grid.timeOfFrame(40)), uri: head.uri, hash: 'kit-overlap')]),
+    );
+  } finally {
+    await session.dispose();
+  }
+}
+
+Future<void> _checkPowerState(EditorEngine engine, List<String> v) async {
+  try {
+    final PowerState state = await engine.background.powerState();
+    if (state != await engine.background.powerState()) v.add('powerState() must be stable while nothing changes');
+  } on Object catch (e) {
+    v.add('powerState() failed: $e');
+  }
 }
 
 Future<void> _pump(Duration settle) async {

@@ -1,9 +1,12 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: render-preview requests, rendered ranges)
 //
 // Argument checks of the host handlers (ARCH §12.6: handlers validate before posting work). A bad
 // argument is a Dart bug, so it fails with `internal` (ARCH §19: UnknownFailure + debug assert);
 // empty plan or patch payloads fail with `planInvalid`; output paths outside the engine roots fail
-// with `permissionDenied` (ARCH §20.1). Messages name the argument, never its value.
+// with `permissionDenied` (ARCH §20.1). Render-preview outputs and rendered-range files must lie
+// inside `<cache>/renders/` (`permissionDenied` otherwise); a rendered-range list that is unsorted,
+// overlapping or has an empty range is `planInvalid` (D-45). Messages name the argument, never its
+// value.
 
 package com.vecvel.danaview.editor.engine.glue
 
@@ -20,8 +23,10 @@ import com.vecvel.danaview.editor.engine.pigeon.LookSpecMsg
 import com.vecvel.danaview.editor.engine.pigeon.LoopMsg
 import com.vecvel.danaview.editor.engine.pigeon.MediaRefMsg
 import com.vecvel.danaview.editor.engine.pigeon.PreviewConfigMsg
+import com.vecvel.danaview.editor.engine.pigeon.RenderedRangeMsg
 import com.vecvel.danaview.editor.engine.pigeon.ResolvedMediaMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbnailRequestMsg
+import java.io.File
 
 /** Host argument validation (ARCH §12.6). */
 object Check {
@@ -173,6 +178,47 @@ object Check {
                 output("outputPath", request.outputPath, paths)
             }
             JobKindMsg.EXPORT -> fail("kind", "exports start through ExportHostApi")
+            JobKindMsg.RENDER_PREVIEW -> fail("kind", "render previews are checked by renderPreview")
+        }
+    }
+
+    /** Most rendered ranges per session (D-45). */
+    const val MAX_RENDERED_RANGES = 10_000
+
+    /** `<cache>/renders` of [paths] (D-45). */
+    fun rendersDir(paths: Paths): File = File(paths.cacheRoot, "renders")
+
+    /** A file strictly inside `<cache>/renders/`; `permissionDenied` outside it. */
+    fun renderFile(name: String, path: String, paths: Paths?): File {
+        val roots = paths ?: throw EngineErrors.notInitialized()
+        val file = Paths.normalize(path) ?: fail(name, "not an absolute path")
+        val dir = rendersDir(roots)
+        if (!Paths.isInside(file, dir)) throw EngineException(EngineErrorCode.permissionDenied, "$name is outside the renders directory")
+        if (Paths.isInside(dir, file)) fail(name, "is the renders directory itself")
+        return file
+    }
+
+    /** A `renderPreview` job request: the range plan payload and an output inside `<cache>/renders/`. */
+    fun renderPreview(request: JobRequestMsg, paths: Paths?): Pair<ByteArray, String> {
+        if (request.kind != JobKindMsg.RENDER_PREVIEW) fail("kind", "not a renderPreview request")
+        val plan = request.plan ?: throw EngineErrors.invalidPlan("plan is missing")
+        planBytes("plan", plan)
+        val output = request.outputPath ?: fail("outputPath", "missing")
+        renderFile("outputPath", output, paths)
+        return plan to output
+    }
+
+    /** `setRenderedRanges`: non-empty, sorted, non-overlapping ranges with a hash and a file in `<cache>/renders/`. */
+    fun renderedRanges(ranges: List<RenderedRangeMsg>, paths: Paths?) {
+        if (ranges.size > MAX_RENDERED_RANGES) fail("ranges", "too many")
+        var previousEnd = 0L
+        ranges.forEachIndexed { i, r ->
+            if (r.startUs < 0 || r.endUs <= r.startUs) throw EngineErrors.invalidPlan("ranges[$i] is empty or negative")
+            if (r.startUs < previousEnd) throw EngineErrors.invalidPlan("ranges[$i] overlaps or is not sorted")
+            previousEnd = r.endUs
+            id("ranges[$i].hash", r.hash)
+            if (!r.uri.startsWith("file://") && !r.uri.startsWith("/")) fail("ranges[$i].uri", "not a file URI")
+            renderFile("ranges[$i].uri", r.uri, paths)
         }
     }
 

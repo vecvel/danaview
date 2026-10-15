@@ -1,5 +1,10 @@
 // OWNER: ENG-06 [INTEGRATION] (written by ENG-01). FROZEN 2026-10-11 after the IOS-01/AND-01 spikes
 // (D-42; no change was needed). Later changes need a new lead-approved [INTEGRATION] ticket.
+// Amended by INT-06 (D-45): the render-preview job (`jobs.renderPreview`), rendered ranges
+// (`PreviewSession.setRenderedRanges`) and the power state (`background.powerState` /
+// `powerStateChanged`) reach native through the mobile services below; a `powerStateChanged`
+// signal is not an EngineSignal, so [signals] filters it out. Until IOS-19 and AND-18 replace the
+// native placeholders, all three fail with `notSupportedOnDevice`.
 //
 // The iOS + Android editor engine over the Pigeon surface (ARCH §12, §12.6). The engine root
 // calls (initialize, capabilities, compatibility, probe, freeBytes, trimCaches, signals) are

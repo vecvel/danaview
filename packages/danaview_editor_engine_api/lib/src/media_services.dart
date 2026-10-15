@@ -1,11 +1,13 @@
 // OWNER: API-01
 //
-// Thumbnails, waveforms and background media jobs (ARCH §12.3, §15).
+// Thumbnails, waveforms and background media jobs (ARCH §12.3, §15). `MediaJobs.renderPreview` is
+// the D-45 render-preview job, added by INT-06 (the lead-approved amendment of the frozen surface).
 
 import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 import 'package:danaview_editor_core/model.dart';
+import 'package:danaview_editor_core/plan.dart' show RenderPlan;
 
 import 'engine.dart';
 
@@ -226,6 +228,10 @@ final class ExtractedSpeechAudio {
   final String codec;
 }
 
+/// Name of the render-preview cache directory below the editor cache root
+/// (`<cache>/danaview/editor/renders/`, ARCH D-45(A)).
+const String renderPreviewDirName = 'renders';
+
 /// A running engine job.
 ///
 /// See ARCH §12.3, §15.
@@ -246,7 +252,7 @@ abstract interface class MediaJob<T> {
   void setPriority(JobPriority priority);
 }
 
-/// Background media jobs (proxies, reverse renditions, freeze stills, speech audio).
+/// Background media jobs (proxies, reverse renditions, freeze stills, speech audio, render previews).
 ///
 /// See ARCH §12.3, §15.
 abstract interface class MediaJobs {
@@ -262,6 +268,18 @@ abstract interface class MediaJobs {
 
   /// 16 kHz s16 mono WAV, sample-accurate (±20 ms clap test).
   MediaJob<ExtractedSpeechAudio> extractSpeechAudio(SpeechAudioJobRequest request);
+
+  /// Renders [rangePlan] into the render-preview file [outputPath] (ARCH D-45(A)).
+  ///
+  /// [rangePlan] is a preview plan (`PlanTarget.preview`) cut to one range, with times relative
+  /// to the range start; [outputPath] lies inside `<cache>/danaview/editor/renders/`
+  /// ([renderPreviewDirName]). The output is a video-only, preview-size H.264 file on the plan's
+  /// frame grid. The job reports progress at ≤ 4 Hz; [MediaJob.cancel] deletes the partial file;
+  /// failures are `EngineFailure`s (`planInvalid` for a plan the engine refuses, `permissionDenied` for
+  /// an output outside the renders directory). Until IOS-19 and
+  /// AND-18 land, the mobile engine fails with `notSupportedOnDevice`. Default priority
+  /// [JobPriority.background].
+  MediaJob<GeneratedAsset> renderPreview(RenderPlan rangePlan, {required String outputPath});
 
   /// Proxy state of [media].
   ProxyStatus proxyStatus(EngineMedia media);
