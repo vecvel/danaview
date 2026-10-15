@@ -1,13 +1,13 @@
 # Editor build state
 
-Generated 2026-10-11 07:22 IST on the Mac from the builder logs. Regenerated at each hand-off; the code on `editor-wip` is the ground truth.
+Generated 2026-10-15 20:40 IST on the Mac from the code and the build runs (status was rebuilt from the code after the folder move). The code on `editor-wip` is the ground truth.
 
-**Totals:** 102 not started, 55 done, 9 in progress (of 166). Six M4 tickets (CORE-37, UX-44, IOS-19, IOS-20 on the Mac; AND-18, AND-19 on Windows) were added on 2026-10-11 by the owner's D-43(e) decision (ARCH D-43, D-45; BUILD_PLAN §9 item 11). D-43(e) is signed off, so M1 exit and AND-16 no longer wait for it. Two more Mac tickets followed the same day (BUILD_PLAN §9 item 12): CORE-38 (edits allowed above the live-preview cap; after CORE-09, CORE-37) and INT-06 ([INTEGRATION] engine interface additions for render preview; after ENG-06, CORE-37). UX-44, IOS-19 and AND-18 now also depend on INT-06, and QA-11 on CORE-38.
+**Totals:** 151 done, 13 in progress, 2 not started (of 166). The Windows Android lane is complete (ENG-08, AI-04, AND-02…AND-19; merged into editor-wip at 78f5ecc). Six M4 tickets (CORE-37, UX-44, IOS-19, IOS-20 on the Mac; AND-18, AND-19 on Windows) were added on 2026-10-11 by the owner's D-43(e) decision (ARCH D-43, D-45; BUILD_PLAN §9 item 11). D-43(e) is signed off, so M1 exit and AND-16 no longer wait for it. Two more Mac tickets followed the same day (BUILD_PLAN §9 item 12): CORE-38 (edits allowed above the live-preview cap; after CORE-09, CORE-37) and INT-06 ([INTEGRATION] engine interface additions for render preview; after ENG-06, CORE-37). UX-44, IOS-19 and AND-18 now also depend on INT-06, and QA-11 on CORE-38.
 
 "Machine" is who builds the ticket after the split: the Mac does everything except the Android lane; the Windows laptop does the Android lane (see ANDROID_LANE.md). "In progress" means a Mac builder was working on it when this file was generated; its files may be incomplete.
 
 
-## M0 (19/21 done)
+## M0 (21/21 done)
 
 | # | Ticket | Title | Depends on | Status | Machine |
 |---|---|---|---|---|---|
@@ -23,8 +23,8 @@ Generated 2026-10-11 07:22 IST on the Mac from the builder logs. Regenerated at 
 | 10 | ENG-01 | Engine plugin: Pigeon surface definitions and generated code, MobileEditorEngine, event router, error mapper | API-01, INT-01 | ✅ done | Mac |
 | 11 | ENG-05 | Test media fixtures and frame barcode readers | ENG-01 | ✅ done | Mac |
 | 12 | ENG-09 | Example host app, native test harness and editor CI scripts | ENG-01, ENG-05 | ✅ done | Mac |
-| 13 | ENG-07 | iOS plugin glue, engine core and native service placeholders | ENG-09 | ⏳ not started | Mac |
-| 14 | ENG-08 | Android plugin glue, engine core, Gradle, manifest and native service placeholders | ENG-09 | ⏳ not started | Windows |
+| 13 | ENG-07 | iOS plugin glue, engine core and native service placeholders | ENG-09 | ✅ done | Mac |
+| 14 | ENG-08 | Android plugin glue, engine core, Gradle, manifest and native service placeholders | ENG-09 | ✅ done | Windows |
 | 15 | AI-01 | Vendor whisper.cpp v1.9.4 (pruned) with re-vendor script | — | ✅ done | Mac |
 | 16 | AI-02 | danaview_whisper FFI plugin skeleton and C ABI header | AI-01 | ✅ done | Mac |
 | 17 | AI-08 | danaview_transcription package: contracts, catalog, languages, consent types, fake | AI-02, CORE-03 | ✅ done | Mac |
@@ -33,12 +33,12 @@ Generated 2026-10-11 07:22 IST on the Mac from the builder logs. Regenerated at 
 | 20 | UX-02 | Orientation owner stack (ScreenOrientationPolicy) | — | ✅ done | Mac |
 | 21 | UX-03 | Home header edit button and features chrome entry point | — | ✅ done | Mac |
 
-## M1 (19/22 done)
+## M1 (22/22 done)
 
 | # | Ticket | Title | Depends on | Status | Machine |
 |---|---|---|---|---|---|
-| 22 | IOS-01 | iOS spike (day 1, spike host): Metal CI kernels, compositor, grid timing, exact seek, texture, audio tap, background encoder, reader/writer | — | 🔨 in progress | Mac |
-| 23 | AND-01 | Android spike (day 1, spike host): Media3 1.11.1 multi-sequence CompositionPlayer + Transformer, grid timing, paused edits, rebuild latency, packing | — | 🔨 in progress | Mac |
+| 22 | IOS-01 | iOS spike (day 1, spike host): Metal CI kernels, compositor, grid timing, exact seek, texture, audio tap, background encoder, reader/writer | — | ✅ done | Mac |
+| 23 | AND-01 | Android spike (day 1, spike host): Media3 1.11.1 multi-sequence CompositionPlayer + Transformer, grid timing, paused edits, rebuild latency, packing | — | ✅ done | Mac |
 | 24 | CORE-07 | Geometry, text layout spec and text animation evaluation | CORE-05, CORE-06 | ✅ done | Mac |
 | 25 | CORE-08 | Validator and repair | CORE-05, CORE-06 | ✅ done | Mac |
 | 26 | CORE-36 | Visual packing and per-platform layer counts | CORE-03 | ✅ done | Mac |
@@ -56,11 +56,11 @@ Generated 2026-10-11 07:22 IST on the Mac from the builder logs. Regenerated at 
 | 38 | CORE-20 | SRT and WebVTT codec | CORE-02 | ✅ done | Mac |
 | 39 | CORE-21 | .cube parser, .vlut writer/reader, float16 | CORE-01 | ✅ done | Mac |
 | 40 | API-03 | Render-math vectors, Dart CPU reference renderer, goldens | API-01, CORE-07, CORE-29 | ✅ done | Mac |
-| 41 | ENG-06 | [INTEGRATION] Spike outcomes into plugin build config and Pigeon surface | IOS-01, AND-01, ENG-07, ENG-08 | ⏳ not started | Mac |
+| 41 | ENG-06 | [INTEGRATION] Spike outcomes into plugin build config and Pigeon surface | IOS-01, AND-01, ENG-07, ENG-08 | ✅ done | Mac |
 | 42 | AI-03 | whisper native C shim and host tests | AI-02 | ✅ done | Mac |
 | 43 | AI-06 | whisper device profile, thermal/memory events, backup exclusion channel | AI-02 | ✅ done | Mac |
 
-## M2 (17/34 done)
+## M2 (34/34 done)
 
 | # | Ticket | Title | Depends on | Status | Machine |
 |---|---|---|---|---|---|
@@ -77,135 +77,135 @@ Generated 2026-10-11 07:22 IST on the Mac from the builder logs. Regenerated at 
 | 54 | CORE-33 | Export settings, presets, bitrate table, compileExport | CORE-31 | ✅ done | Mac |
 | 55 | API-02 | PlanSync and plan transport | API-01, CORE-32 | ✅ done | Mac |
 | 56 | API-04 | Render prep: text layout engine, sprite rasterizer, .vsprite codec, sprite pre-pass | API-01, CORE-07, CORE-31 | ✅ done | Mac |
-| 57 | ENG-03 | Dart glue: jobs, recorder, platform services, media access | ENG-06 | ⏳ not started | Mac |
-| 58 | IOS-02 | iOS probe, compatibility, device profile, capabilities | ENG-06, ENG-05 | ⏳ not started | Mac |
-| 59 | IOS-17 | iOS segmented writer, checkpoint, passthrough concat and job interruption | ENG-06, ENG-05 | ⏳ not started | Mac |
-| 60 | IOS-03 | iOS thumbnails and disk cache | IOS-02 | ⏳ not started | Mac |
-| 61 | IOS-04 | iOS PCM reader, waveforms, speech audio extraction | IOS-02 | ⏳ not started | Mac |
-| 62 | IOS-05 | iOS job registry, proxy job and proxy registry | IOS-02, IOS-17 | ⏳ not started | Mac |
-| 63 | IOS-06 | iOS freeze frame and source-frame cache | IOS-05 | ⏳ not started | Mac |
-| 64 | IOS-07 | iOS reverse rendition job | IOS-05 | ⏳ not started | Mac |
-| 65 | IOS-18 | iOS audio gain tap (sample-exact envelopes up to +6 dB) and ramp-seam crossfade | ENG-06, API-03 | ⏳ not started | Mac |
-| 66 | AND-02 | Android probe, compatibility, device profile, capabilities | ENG-06, ENG-05 | ⏳ not started | Windows |
-| 67 | AND-03 | Android thumbnails and disk cache | AND-02 | ⏳ not started | Windows |
-| 68 | AND-04 | Android PCM decoder, waveforms, speech audio extraction | AND-02 | ⏳ not started | Windows |
-| 69 | AND-05 | Android job registry, proxy job and registry | AND-02 | ⏳ not started | Windows |
-| 70 | AND-06 | Android freeze frame and source-frame cache | AND-05 | ⏳ not started | Windows |
-| 71 | AND-07 | Android reverse rendition job | AND-05 | ⏳ not started | Windows |
-| 72 | AI-04 | whisper Android native build | AI-03 | ⏳ not started | Windows |
-| 73 | AI-05 | whisper iOS native build (static xcframework) | AI-03, INT-01, ENG-09 | ⏳ not started | Mac |
+| 57 | ENG-03 | Dart glue: jobs, recorder, platform services, media access | ENG-06 | ✅ done | Mac |
+| 58 | IOS-02 | iOS probe, compatibility, device profile, capabilities | ENG-06, ENG-05 | ✅ done | Mac |
+| 59 | IOS-17 | iOS segmented writer, checkpoint, passthrough concat and job interruption | ENG-06, ENG-05 | ✅ done | Mac |
+| 60 | IOS-03 | iOS thumbnails and disk cache | IOS-02 | ✅ done | Mac |
+| 61 | IOS-04 | iOS PCM reader, waveforms, speech audio extraction | IOS-02 | ✅ done | Mac |
+| 62 | IOS-05 | iOS job registry, proxy job and proxy registry | IOS-02, IOS-17 | ✅ done | Mac |
+| 63 | IOS-06 | iOS freeze frame and source-frame cache | IOS-05 | ✅ done | Mac |
+| 64 | IOS-07 | iOS reverse rendition job | IOS-05 | ✅ done | Mac |
+| 65 | IOS-18 | iOS audio gain tap (sample-exact envelopes up to +6 dB) and ramp-seam crossfade | ENG-06, API-03 | ✅ done | Mac |
+| 66 | AND-02 | Android probe, compatibility, device profile, capabilities | ENG-06, ENG-05 | ✅ done | Windows |
+| 67 | AND-03 | Android thumbnails and disk cache | AND-02 | ✅ done | Windows |
+| 68 | AND-04 | Android PCM decoder, waveforms, speech audio extraction | AND-02 | ✅ done | Windows |
+| 69 | AND-05 | Android job registry, proxy job and registry | AND-02 | ✅ done | Windows |
+| 70 | AND-06 | Android freeze frame and source-frame cache | AND-05 | ✅ done | Windows |
+| 71 | AND-07 | Android reverse rendition job | AND-05 | ✅ done | Windows |
+| 72 | AI-04 | whisper Android native build | AI-03 | ✅ done | Windows |
+| 73 | AI-05 | whisper iOS native build (static xcframework) | AI-03, INT-01, ENG-09 | ✅ done | Mac |
 | 74 | AI-09 | Model store and resumable, verified downloader | AI-08, AI-06 | ✅ done | Mac |
 | 75 | AI-10 | Transcript normalizer, cache and checkpoints | AI-08 | ✅ done | Mac |
 | 76 | AI-11 | Caption segmentation engine | AI-08 | ✅ done | Mac |
 | 77 | AI-12 | Timeline planner, word mapping and merge | AI-08, CORE-06 | ✅ done | Mac |
 
-## M3 (0/32 done)
+## M3 (32/32 done)
 
 | # | Ticket | Title | Depends on | Status | Machine |
 |---|---|---|---|---|---|
-| 78 | CORE-34 | Model fuzzer (commands, history, codec, plan diff) | CORE-11, CORE-12, CORE-14, CORE-15, CORE-16, CORE-17, CORE-19, CORE-22, CORE-32 | 🔨 in progress | Mac |
-| 79 | ENG-02 | Dart glue: mobile preview session | ENG-06, API-02 | ⏳ not started | Mac |
-| 80 | IOS-08 | iOS plan decode, ParamSnapshot, composition builder, instructions, audio mix | ENG-06, CORE-29, CORE-32, API-03, IOS-18 | ⏳ not started | Mac |
-| 81 | IOS-09 | iOS render kernels, LUT/sprite/image stores | ENG-06, API-03, API-04, CORE-21 | ⏳ not started | Mac |
-| 82 | IOS-10 | iOS DVCompositor, layer renderer, redraw cache | IOS-08, IOS-09 | ⏳ not started | Mac |
-| 83 | IOS-11 | iOS preview session: texture, display link, clock, seek, patches, quality, lifecycle | IOS-10, IOS-06, ENG-02 | ⏳ not started | Mac |
-| 84 | AND-08 | Android plan reader, ParamSnapshot, composition mapper, gating, speed and gain providers | ENG-06, CORE-29, CORE-32, API-03 | ⏳ not started | Windows |
-| 85 | AND-09 | Android GL effects, shaders, LUT and sprite textures | ENG-06, API-03, API-04, CORE-21 | ⏳ not started | Windows |
-| 86 | AND-17 | Android paused-frame renderer, layer GL compositor and structural debounce | AND-08, AND-09, AND-06 | ⏳ not started | Windows |
-| 87 | AND-10 | Android preview session: SurfaceProducer, clock, seek/scrub, transients, redraw, quality, lifecycle | AND-08, AND-09, AND-06, ENG-02, AND-17 | ⏳ not started | Windows |
-| 88 | AND-16 | Android contingency preview engine (conditional: only on an AND-01 no-go) | AND-10, AND-17 | ⏳ not started | Windows |
-| 89 | AI-07 | whisper Dart runtime (WhisperRuntime, WhisperModel, WhisperJob) | AI-03, AI-06, AI-04, AI-05 | ⏳ not started | Mac |
-| 90 | UX-04 | Storage contributors, Settings row and Editor settings screen | UX-01, CORE-25 | 🔨 in progress | Mac |
-| 91 | UX-05 | Projects screen and controller | UX-01, CORE-25 | 🔨 in progress | Mac |
-| 92 | UX-06 | New project sheet and import media sheet | UX-05, CORE-27 | 🔨 in progress | Mac |
-| 93 | UX-07 | Editor screen shell, scope, lifecycle and layout planner | UX-01, UI-01 | 🔨 in progress | Mac |
-| 94 | UX-08 | EditorController, EditorState, EditTransaction, session wiring, events, messages | UX-01, CORE-19, CORE-26, API-02 | 🔨 in progress | Mac |
-| 95 | INT-02 | [INTEGRATION] App wiring v1: EditorBootstrap, default plan compiler, routes, Home and Settings entry points | UX-03, UX-04, UX-05, UX-07, UX-08, ENG-06, CORE-26, CORE-28, CORE-33, AI-04, AI-05 | ⏳ not started | Mac |
-| 96 | UX-09 | Timeline viewport controller, ruler, metrics and style | UX-01, CORE-02 | 🔨 in progress | Mac |
-| 97 | UX-10 | Timeline snapshot, RenderTimelineCanvas painting, hit testing, playhead layer | UX-08, UX-09 | ⏳ not started | Mac |
-| 98 | UX-11 | Track headers, track menu and lane flags | UX-10, CORE-17 | ⏳ not started | Mac |
-| 99 | UX-12 | Timeline view, gesture arbiter, semantics | UX-10 | ⏳ not started | Mac |
-| 100 | UX-13 | Move, trim, split, delete, ripple, snapping UI, clipboard | UX-12, CORE-11, CORE-18 | ⏳ not started | Mac |
-| 101 | UX-14 | Playhead controller, transport controller and transport bar | UX-08 | ⏳ not started | Mac |
-| 102 | UX-15 | Action registry, keyboard shortcuts, shortcuts sheet | UX-08 | ⏳ not started | Mac |
-| 103 | UX-16 | Tool strip/rail, context tool sets, inspector host and dock | UX-07, UX-15, CORE-05 | ⏳ not started | Mac |
-| 104 | UX-17 | Markers sheet and marker actions | UX-13, UX-14, CORE-17 | ⏳ not started | Mac |
-| 105 | UX-18 | Preview region, preview surface, status overlays, fullscreen preview, quality | UX-07, UX-14 | ⏳ not started | Mac |
-| 106 | UX-19 | Text and subtitle overlay layer for preview | UX-18, API-04, CORE-07 | ⏳ not started | Mac |
-| 107 | UX-20 | Thumbnail cache and strip painting | UX-10 | ⏳ not started | Mac |
-| 108 | UX-21 | Waveform cache and painting | UX-10 | ⏳ not started | Mac |
-| 109 | UX-22 | Canvas geometry, manipulation overlay (move/scale/rotate), snap guides | UX-18, CORE-13, CORE-32 | ⏳ not started | Mac |
+| 78 | CORE-34 | Model fuzzer (commands, history, codec, plan diff) | CORE-11, CORE-12, CORE-14, CORE-15, CORE-16, CORE-17, CORE-19, CORE-22, CORE-32 | ✅ done | Mac |
+| 79 | ENG-02 | Dart glue: mobile preview session | ENG-06, API-02 | ✅ done | Mac |
+| 80 | IOS-08 | iOS plan decode, ParamSnapshot, composition builder, instructions, audio mix | ENG-06, CORE-29, CORE-32, API-03, IOS-18 | ✅ done | Mac |
+| 81 | IOS-09 | iOS render kernels, LUT/sprite/image stores | ENG-06, API-03, API-04, CORE-21 | ✅ done | Mac |
+| 82 | IOS-10 | iOS DVCompositor, layer renderer, redraw cache | IOS-08, IOS-09 | ✅ done | Mac |
+| 83 | IOS-11 | iOS preview session: texture, display link, clock, seek, patches, quality, lifecycle | IOS-10, IOS-06, ENG-02 | ✅ done | Mac |
+| 84 | AND-08 | Android plan reader, ParamSnapshot, composition mapper, gating, speed and gain providers | ENG-06, CORE-29, CORE-32, API-03 | ✅ done | Windows |
+| 85 | AND-09 | Android GL effects, shaders, LUT and sprite textures | ENG-06, API-03, API-04, CORE-21 | ✅ done | Windows |
+| 86 | AND-17 | Android paused-frame renderer, layer GL compositor and structural debounce | AND-08, AND-09, AND-06 | ✅ done | Windows |
+| 87 | AND-10 | Android preview session: SurfaceProducer, clock, seek/scrub, transients, redraw, quality, lifecycle | AND-08, AND-09, AND-06, ENG-02, AND-17 | ✅ done | Windows |
+| 88 | AND-16 | Android contingency preview engine (conditional: only on an AND-01 no-go) | AND-10, AND-17 | ✅ done | Windows |
+| 89 | AI-07 | whisper Dart runtime (WhisperRuntime, WhisperModel, WhisperJob) | AI-03, AI-06, AI-04, AI-05 | ✅ done | Mac |
+| 90 | UX-04 | Storage contributors, Settings row and Editor settings screen | UX-01, CORE-25 | ✅ done | Mac |
+| 91 | UX-05 | Projects screen and controller | UX-01, CORE-25 | ✅ done | Mac |
+| 92 | UX-06 | New project sheet and import media sheet | UX-05, CORE-27 | ✅ done | Mac |
+| 93 | UX-07 | Editor screen shell, scope, lifecycle and layout planner | UX-01, UI-01 | ✅ done | Mac |
+| 94 | UX-08 | EditorController, EditorState, EditTransaction, session wiring, events, messages | UX-01, CORE-19, CORE-26, API-02 | ✅ done | Mac |
+| 95 | INT-02 | [INTEGRATION] App wiring v1: EditorBootstrap, default plan compiler, routes, Home and Settings entry points | UX-03, UX-04, UX-05, UX-07, UX-08, ENG-06, CORE-26, CORE-28, CORE-33, AI-04, AI-05 | ✅ done | Mac |
+| 96 | UX-09 | Timeline viewport controller, ruler, metrics and style | UX-01, CORE-02 | ✅ done | Mac |
+| 97 | UX-10 | Timeline snapshot, RenderTimelineCanvas painting, hit testing, playhead layer | UX-08, UX-09 | ✅ done | Mac |
+| 98 | UX-11 | Track headers, track menu and lane flags | UX-10, CORE-17 | ✅ done | Mac |
+| 99 | UX-12 | Timeline view, gesture arbiter, semantics | UX-10 | ✅ done | Mac |
+| 100 | UX-13 | Move, trim, split, delete, ripple, snapping UI, clipboard | UX-12, CORE-11, CORE-18 | ✅ done | Mac |
+| 101 | UX-14 | Playhead controller, transport controller and transport bar | UX-08 | ✅ done | Mac |
+| 102 | UX-15 | Action registry, keyboard shortcuts, shortcuts sheet | UX-08 | ✅ done | Mac |
+| 103 | UX-16 | Tool strip/rail, context tool sets, inspector host and dock | UX-07, UX-15, CORE-05 | ✅ done | Mac |
+| 104 | UX-17 | Markers sheet and marker actions | UX-13, UX-14, CORE-17 | ✅ done | Mac |
+| 105 | UX-18 | Preview region, preview surface, status overlays, fullscreen preview, quality | UX-07, UX-14 | ✅ done | Mac |
+| 106 | UX-19 | Text and subtitle overlay layer for preview | UX-18, API-04, CORE-07 | ✅ done | Mac |
+| 107 | UX-20 | Thumbnail cache and strip painting | UX-10 | ✅ done | Mac |
+| 108 | UX-21 | Waveform cache and painting | UX-10 | ✅ done | Mac |
+| 109 | UX-22 | Canvas geometry, manipulation overlay (move/scale/rotate), snap guides | UX-18, CORE-13, CORE-32 | ✅ done | Mac |
 
-## M4 (0/32 done)
-
-| # | Ticket | Title | Depends on | Status | Machine |
-|---|---|---|---|---|---|
-| 110 | ENG-04 | Dart glue: export service and job reattach | ENG-06 | ⏳ not started | Mac |
-| 111 | IOS-12 | iOS export pipeline: reader/writer, encoder settings, coordinator | IOS-10, ENG-04, IOS-11, IOS-17, IOS-18 | ⏳ not started | Mac |
-| 112 | IOS-14 | iOS voice recorder | ENG-03 | ⏳ not started | Mac |
-| 113 | IOS-15 | iOS pickers, media access (bookmarks), permissions, background guard | ENG-03 | ⏳ not started | Mac |
-| 114 | IOS-16 | iOS external drop target | ENG-03 | ⏳ not started | Mac |
-| 115 | AND-11 | Android export: coordinator, Transformer, encoder settings, hardware selector, active store | AND-09, ENG-04, AND-08, AND-10 | ⏳ not started | Windows |
-| 116 | AND-13 | Android voice recorder | ENG-03 | ⏳ not started | Windows |
-| 117 | AND-14 | Android pickers, URI grants (media access), permissions | ENG-03 | ⏳ not started | Windows |
-| 118 | AND-15 | Android external drop target | ENG-03 | ⏳ not started | Windows |
-| 119 | AI-13 | Transcription orchestrator (TranscriptionServiceImpl) and resource governor | AI-07, AI-09, AI-10, AI-11, AI-12, CORE-15 | ⏳ not started | Mac |
-| 120 | UX-23 | Transform, crop and mask panels; crop, mask and eyedropper preview modes | UX-22, UX-16 | ⏳ not started | Mac |
-| 121 | UX-24 | Adjust and Filters/LUT panels, built-in looks | UX-16, CORE-13, CORE-21, CORE-27 | ⏳ not started | Mac |
-| 122 | UX-25 | Speed panel and speed curve editor | UX-16, CORE-12 | ⏳ not started | Mac |
-| 123 | UX-26 | Keyframes panel and keyframe actions | UX-16, CORE-13 | ⏳ not started | Mac |
-| 124 | UX-27 | Transitions panel and loop preview | UX-16, UX-18, CORE-16 | ⏳ not started | Mac |
-| 125 | UX-28 | Overlay (picture-in-picture) and chroma key panels | UX-23 | ⏳ not started | Mac |
-| 126 | UX-29 | Canvas/Format panel, project sheet, history sheet | UX-16, CORE-17, CORE-19 | ⏳ not started | Mac |
-| 127 | UX-30 | Text tool, text panel, font picker, content fonts package | UX-19, CORE-14, API-04 | ⏳ not started | Mac |
-| 128 | UX-31 | Subtitles lane tools and subtitles panel | UX-16, UX-19, CORE-15 | ⏳ not started | Mac |
-| 129 | UX-32 | SRT/VTT import and export UI | UX-31, CORE-20 | ⏳ not started | Mac |
-| 130 | UX-33 | Audio panel: volume, fades, mute, pitch, extract audio, background music | UX-16, CORE-13, CORE-11 | ⏳ not started | Mac |
-| 131 | UX-34 | Voiceover recording UI | UX-33 | ⏳ not started | Mac |
-| 132 | UX-35 | Freeze, reverse, replace, clip info, background tasks | UX-16, CORE-12, CORE-11 | ⏳ not started | Mac |
-| 133 | UX-36 | Media panel (bin), add/replace, in-app and external drag and drop | UX-06, UX-13 | ⏳ not started | Mac |
-| 134 | CORE-37 | Render-preview cache model: range hashing, invalidation, cache index | CORE-32 | ⏳ not started | Mac |
-| 135 | CORE-38 | Allow edits above the live-preview sequence cap | CORE-09, CORE-37 | ⏳ not started | Mac |
-| 136 | INT-06 | [INTEGRATION] Engine interface additions for render preview | ENG-06, CORE-37 | ⏳ not started | Mac |
-| 137 | UX-44 | Render-preview UI: timeline render marker, action, settings, tier defaults | UX-18, UX-04, CORE-37, INT-06 | ⏳ not started | Mac |
-| 138 | IOS-19 | iOS render-preview renderer and playback swap-in | IOS-11, INT-06 | ⏳ not started | Mac |
-| 139 | IOS-20 | iOS multi-pass export fallback (precompose above the decoder limit) | IOS-12 | ⏳ not started | Mac |
-| 140 | AND-18 | Android render-preview renderer and playback swap-in | AND-16, AND-10, INT-06 | ⏳ not started | Windows |
-| 141 | AND-19 | Android multi-pass export precompose | AND-11 | ⏳ not started | Windows |
-
-## M5 (0/10 done)
+## M4 (30/32 done)
 
 | # | Ticket | Title | Depends on | Status | Machine |
 |---|---|---|---|---|---|
-| 142 | IOS-13 | iOS background export, active-export store, Photos and Files handoff | IOS-12 | ⏳ not started | Mac |
-| 143 | INT-03 | [INTEGRATION] iOS app declarations: Info.plist, entitlements, privacy manifest, BG task ids | INT-01, IOS-13, IOS-14, IOS-15 | ⏳ not started | Mac |
-| 144 | AND-12 | Android export foreground service, notification, background guard, MediaStore, file handoff | AND-11 | ⏳ not started | Windows |
-| 145 | UX-37 | Auto captions flow: sheet, controller, language picker, consent, progress | UX-31, AI-08, CORE-15 | ⏳ not started | Mac |
-| 146 | UX-38 | Regenerate captions, interrupted-job notice, captions settings, speech storage contributor | UX-37, UX-04 | ⏳ not started | Mac |
-| 147 | UX-39 | Export sheet, export controller, progress, handoff | UX-08, CORE-33, API-04 | ⏳ not started | Mac |
-| 148 | UX-40 | Missing media, relink, recovery and migration UX | UX-05, UX-08, CORE-26, CORE-28 | ⏳ not started | Mac |
-| 149 | UX-41 | Player 'Edit' action, EditorLauncher and player handoff | UX-02, UX-07, UX-08, CORE-25 | ⏳ not started | Mac |
-| 150 | UX-42 | Privacy policy and terms update, custom licences screen, About row | — | ⏳ not started | Mac |
-| 151 | INT-04 | [INTEGRATION] App wiring v2: auto captions service, adapters, player Edit, licences route | INT-02, AI-13, UX-38, UX-41, UX-42, ENG-03, ENG-04 | ⏳ not started | Mac |
+| 110 | ENG-04 | Dart glue: export service and job reattach | ENG-06 | ✅ done | Mac |
+| 111 | IOS-12 | iOS export pipeline: reader/writer, encoder settings, coordinator | IOS-10, ENG-04, IOS-11, IOS-17, IOS-18 | ✅ done | Mac |
+| 112 | IOS-14 | iOS voice recorder | ENG-03 | ✅ done | Mac |
+| 113 | IOS-15 | iOS pickers, media access (bookmarks), permissions, background guard | ENG-03 | ✅ done | Mac |
+| 114 | IOS-16 | iOS external drop target | ENG-03 | ✅ done | Mac |
+| 115 | AND-11 | Android export: coordinator, Transformer, encoder settings, hardware selector, active store | AND-09, ENG-04, AND-08, AND-10 | ✅ done | Windows |
+| 116 | AND-13 | Android voice recorder | ENG-03 | ✅ done | Windows |
+| 117 | AND-14 | Android pickers, URI grants (media access), permissions | ENG-03 | ✅ done | Windows |
+| 118 | AND-15 | Android external drop target | ENG-03 | ✅ done | Windows |
+| 119 | AI-13 | Transcription orchestrator (TranscriptionServiceImpl) and resource governor | AI-07, AI-09, AI-10, AI-11, AI-12, CORE-15 | ✅ done | Mac |
+| 120 | UX-23 | Transform, crop and mask panels; crop, mask and eyedropper preview modes | UX-22, UX-16 | ✅ done | Mac |
+| 121 | UX-24 | Adjust and Filters/LUT panels, built-in looks | UX-16, CORE-13, CORE-21, CORE-27 | ✅ done | Mac |
+| 122 | UX-25 | Speed panel and speed curve editor | UX-16, CORE-12 | ✅ done | Mac |
+| 123 | UX-26 | Keyframes panel and keyframe actions | UX-16, CORE-13 | ✅ done | Mac |
+| 124 | UX-27 | Transitions panel and loop preview | UX-16, UX-18, CORE-16 | ✅ done | Mac |
+| 125 | UX-28 | Overlay (picture-in-picture) and chroma key panels | UX-23 | ✅ done | Mac |
+| 126 | UX-29 | Canvas/Format panel, project sheet, history sheet | UX-16, CORE-17, CORE-19 | ✅ done | Mac |
+| 127 | UX-30 | Text tool, text panel, font picker, content fonts package | UX-19, CORE-14, API-04 | ✅ done | Mac |
+| 128 | UX-31 | Subtitles lane tools and subtitles panel | UX-16, UX-19, CORE-15 | ✅ done | Mac |
+| 129 | UX-32 | SRT/VTT import and export UI | UX-31, CORE-20 | ✅ done | Mac |
+| 130 | UX-33 | Audio panel: volume, fades, mute, pitch, extract audio, background music | UX-16, CORE-13, CORE-11 | ✅ done | Mac |
+| 131 | UX-34 | Voiceover recording UI | UX-33 | ✅ done | Mac |
+| 132 | UX-35 | Freeze, reverse, replace, clip info, background tasks | UX-16, CORE-12, CORE-11 | ✅ done | Mac |
+| 133 | UX-36 | Media panel (bin), add/replace, in-app and external drag and drop | UX-06, UX-13 | ✅ done | Mac |
+| 134 | CORE-37 | Render-preview cache model: range hashing, invalidation, cache index | CORE-32 | ✅ done | Mac |
+| 135 | CORE-38 | Allow edits above the live-preview sequence cap | CORE-09, CORE-37 | ✅ done | Mac |
+| 136 | INT-06 | [INTEGRATION] Engine interface additions for render preview | ENG-06, CORE-37 | ✅ done | Mac |
+| 137 | UX-44 | Render-preview UI: timeline render marker, action, settings, tier defaults | UX-18, UX-04, CORE-37, INT-06 | 🟡 built; hooks being wired (round 3) | Mac |
+| 138 | IOS-19 | iOS render-preview renderer and playback swap-in | IOS-11, INT-06 | 🟡 built; preview wiring in progress (round 3) | Mac |
+| 139 | IOS-20 | iOS multi-pass export fallback (precompose above the decoder limit) | IOS-12 | ✅ done | Mac |
+| 140 | AND-18 | Android render-preview renderer and playback swap-in | AND-16, AND-10, INT-06 | ✅ done | Windows |
+| 141 | AND-19 | Android multi-pass export precompose | AND-11 | ✅ done | Windows |
 
-## M6 (0/15 done)
+## M5 (10/10 done)
 
 | # | Ticket | Title | Depends on | Status | Machine |
 |---|---|---|---|---|---|
-| 152 | CORE-35 | Core benchmarks, large-project fixture, README | CORE-26, CORE-32, CORE-34, CORE-33 | ⏳ not started | Mac |
-| 153 | QA-00 | Shared on-device E2E suite (integration_test/editor) | INT-04, ENG-05, UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, IOS-13, IOS-14, IOS-15, IOS-16, AND-12, AND-13, AND-14, AND-15 | ⏳ not started | Mac |
-| 154 | QA-01 | Run and certify the E2E suite on the iOS Simulator | QA-00, INT-03 | ⏳ not started | Mac |
-| 155 | QA-02 | Run and certify the E2E suite on an Android Emulator | QA-00 | ⏳ not started | Mac |
-| 156 | QA-03 | Frame accuracy, grid-cut, A/V sync and render parity suite | IOS-11, AND-10, IOS-12, AND-11, API-03, ENG-05 | ⏳ not started | Mac |
-| 157 | QA-11 | Export conformance, preset matrix and audio measurement suite | IOS-13, AND-12, IOS-18, API-03, ENG-05, IOS-20, AND-19, CORE-38 | ⏳ not started | Mac |
-| 158 | QA-04 | Performance and memory budgets (profile mode, device lab) | INT-04, CORE-35, UX-44, AND-18, IOS-19 | ⏳ not started | Mac |
-| 159 | UX-43 | Timeline picture-tile cache (conditional on QA-04 budget miss) | QA-04 | ⏳ not started | Mac |
-| 160 | QA-05 | Robustness soak | QA-00 | ⏳ not started | Mac |
-| 161 | QA-06 | Auto captions benchmarks, accuracy evaluation and tuning | AI-13, AI-07 | ⏳ not started | Mac |
-| 162 | QA-07 | Auto captions on-device E2E and AI device matrix | QA-06, UX-38, INT-04 | ⏳ not started | Mac |
-| 163 | QA-08 | Accessibility pass (guidelines, VoiceOver, TalkBack) | UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, UX-44 | ⏳ not started | Mac |
-| 164 | QA-09 | No-overflow matrix suite (full nightly, PR subset) | UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, UX-44 | ⏳ not started | Mac |
-| 165 | QA-10 | Persistence, crash recovery and media-access survival on device | INT-04, IOS-15, AND-14, CORE-26, CORE-28 | ⏳ not started | Mac |
+| 142 | IOS-13 | iOS background export, active-export store, Photos and Files handoff | IOS-12 | ✅ done | Mac |
+| 143 | INT-03 | [INTEGRATION] iOS app declarations: Info.plist, entitlements, privacy manifest, BG task ids | INT-01, IOS-13, IOS-14, IOS-15 | ✅ done | Mac |
+| 144 | AND-12 | Android export foreground service, notification, background guard, MediaStore, file handoff | AND-11 | ✅ done | Windows |
+| 145 | UX-37 | Auto captions flow: sheet, controller, language picker, consent, progress | UX-31, AI-08, CORE-15 | ✅ done | Mac |
+| 146 | UX-38 | Regenerate captions, interrupted-job notice, captions settings, speech storage contributor | UX-37, UX-04 | ✅ done | Mac |
+| 147 | UX-39 | Export sheet, export controller, progress, handoff | UX-08, CORE-33, API-04 | ✅ done | Mac |
+| 148 | UX-40 | Missing media, relink, recovery and migration UX | UX-05, UX-08, CORE-26, CORE-28 | ✅ done | Mac |
+| 149 | UX-41 | Player 'Edit' action, EditorLauncher and player handoff | UX-02, UX-07, UX-08, CORE-25 | ✅ done | Mac |
+| 150 | UX-42 | Privacy policy and terms update, custom licences screen, About row | — | ✅ done | Mac |
+| 151 | INT-04 | [INTEGRATION] App wiring v2: auto captions service, adapters, player Edit, licences route | INT-02, AI-13, UX-38, UX-41, UX-42, ENG-03, ENG-04 | ✅ done | Mac |
+
+## M6 (2/15 done)
+
+| # | Ticket | Title | Depends on | Status | Machine |
+|---|---|---|---|---|---|
+| 152 | CORE-35 | Core benchmarks, large-project fixture, README | CORE-26, CORE-32, CORE-34, CORE-33 | ✅ done | Mac |
+| 153 | QA-00 | Shared on-device E2E suite (integration_test/editor) | INT-04, ENG-05, UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, IOS-13, IOS-14, IOS-15, IOS-16, AND-12, AND-13, AND-14, AND-15 | 🔨 in progress (round 3) | Mac |
+| 154 | QA-01 | Run and certify the E2E suite on the iOS Simulator | QA-00, INT-03 | 🔨 in progress (round 3) | Mac |
+| 155 | QA-02 | Run and certify the E2E suite on an Android Emulator | QA-00 | ⏳ not started | Windows |
+| 156 | QA-03 | Frame accuracy, grid-cut, A/V sync and render parity suite | IOS-11, AND-10, IOS-12, AND-11, API-03, ENG-05 | 🔨 in progress (round 3) | Mac |
+| 157 | QA-11 | Export conformance, preset matrix and audio measurement suite | IOS-13, AND-12, IOS-18, API-03, ENG-05, IOS-20, AND-19, CORE-38 | 🔨 in progress (round 3) | Mac |
+| 158 | QA-04 | Performance and memory budgets (profile mode, device lab) | INT-04, CORE-35, UX-44, AND-18, IOS-19 | 🔨 in progress (round 3) | Mac |
+| 159 | UX-43 | Timeline picture-tile cache (conditional on QA-04 budget miss) | QA-04 | 🔨 in progress (round 3) | Mac |
+| 160 | QA-05 | Robustness soak | QA-00 | 🔨 in progress (round 3) | Mac |
+| 161 | QA-06 | Auto captions benchmarks, accuracy evaluation and tuning | AI-13, AI-07 | ✅ done | Mac |
+| 162 | QA-07 | Auto captions on-device E2E and AI device matrix | QA-06, UX-38, INT-04 | 🔨 in progress (round 3) | Mac |
+| 163 | QA-08 | Accessibility pass (guidelines, VoiceOver, TalkBack) | UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, UX-44 | 🔨 in progress (round 3) | Mac |
+| 164 | QA-09 | No-overflow matrix suite (full nightly, PR subset) | UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, UX-44 | 🔨 in progress (round 3) | Mac |
+| 165 | QA-10 | Persistence, crash recovery and media-access survival on device | INT-04, IOS-15, AND-14, CORE-26, CORE-28 | 🔨 in progress (round 3) | Mac |
 | 166 | INT-05 | [INTEGRATION] Release 1.1.0: flags, version, release pipelines, store metadata, docs | QA-01, QA-02, QA-03, QA-04, QA-05, QA-07, QA-08, QA-09, QA-10, CORE-35, UX-43, INT-03, INT-04, QA-11 | ⏳ not started | Mac |
 
 ## Notes from finished tickets
