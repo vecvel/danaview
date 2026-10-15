@@ -106,7 +106,11 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
 
     override val drawsOnSurface: Boolean get() = delegate?.drawsOnSurface ?: true
 
-    /** Cold decks need 0.6–4.2 s for their first exact frame on the emulator (AND-01 §2), watchdog included. */
+    /**
+     * Cold decks need 0.6–4.2 s for their first exact frame on the emulator (AND-01 §2; 4.6 s measured
+     * here for a first seek including the first swap on a new window), stuck-deck watchdog included.
+     * Warm exact seeks ack on their exact frame long before (p50 0.2–0.4 s on the emulator).
+     */
     override val exactSeekTimeoutMs: Long = EXACT_SEEK_TIMEOUT_MS
 
     /** Whether this backend plays through the stills fallback. */
@@ -296,7 +300,7 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
         const val NAME = "contingency"
 
         /** Exact-seek ack timeout (see [exactSeekTimeoutMs]). */
-        const val EXACT_SEEK_TIMEOUT_MS = 4_000L
+        const val EXACT_SEEK_TIMEOUT_MS = 8_000L
 
         /** Index builds, stills and images run on this many worker threads. */
         const val WORKERS = 2
