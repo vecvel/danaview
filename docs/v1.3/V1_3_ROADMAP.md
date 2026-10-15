@@ -27,9 +27,9 @@
                         | macOS · Windows ·    |              |  Capture & Beauty    |
                         |        Linux         |              |                      |
                         +----------------------+              +----------------------+
-                        | • Swift (macOS) +    |              | • Photo & video      |
-                        |   Rust (Win/Linux)   |              | • Live beauty (60fps)|
-                        | • Photo mode, beauty |              | • Pro manual mode    |
+                        | • Swift (macOS) +    |              | • Native, zero-copy  |
+                        |   Rust (Win/Linux)   |              | • Thumb dial, My Mode|
+                        | • Photo mode, beauty |              | • Live beauty, pro   |
                         | • 3-pane workspace   |              | • Cinematic & bokeh  |
                         | • Razor/slip/ripple  |              | • Dual front+back    |
                         | • J-K-L, multi-screen|              | • Live overlays      |
@@ -42,16 +42,16 @@
 - **Summary:** Two native engines behind the same editor API: macOS reuses the iOS Swift/Metal/AVFoundation engine; Windows and Linux share one Rust engine (`wgpu` rendering on Direct3D 12 / Vulkan, Media Foundation and GStreamer for hardware decode and encode). Unusual formats open through an isolated FFmpeg helper process that converts them on import, so a bad file cannot crash the app. Desktop extras: 4K preview without proxies, GPU speech recognition, batch export, ProRes export on macOS, colour scopes. Because 1.2.0 already added photo mode and the beauty suite, the desktop engines run those too, and the parity suite checks them against mobile. The desktop UX adds a 3-pane workspace, cursor tools, J-K-L shuttle, multi-monitor preview, native drag and drop and menus. DSK-20 also turns on the Home screen's editor actions on desktop.
 
 ### Pillar 2: In-House Native Camera (photo and video capture)
-- **Document:** [`docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md`](camera-photo-video/NATIVE_CAMERA_PLAN.md) (CAM-01 to CAM-20, decisions D-99 to D-115).
-- **Summary:** A first-party camera on AVFoundation and Camera2/CameraX (plus desktop webcams): photo and video modes, real-time beauty using the 1.2.0 landmark tracker and shaders (VED-16, VED-20…23) on the live stream, cinematic 24 fps with depth bokeh, pro manual controls, live text and mask overlays, dual front+back capture with custom picture-in-picture, and audio routing. Captures open directly in the editor and appear in the Home library.
+- **Document:** [`docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md`](camera-photo-video/NATIVE_CAMERA_PLAN.md) (CAM-01 to CAM-45, decisions D-99 to D-115; rewritten 2026-10-15).
+- **Summary:** A capture module inside each existing engine (Swift on iOS/macOS, CameraX + Camera2Interop on Android, Rust on Windows/Linux), so the camera reuses the 1.2.0 face tracker, beauty shaders, LUTs, overlays and hardware encoders, and live beauty looks exactly like the editor's. Every control in one hand: a haptic thumb dial (zoom, EV, ISO, shutter, focus, white balance, beauty), a user-chosen quick bar, saved "My Modes", left-handed layout, volume-button and iPhone Camera Control shutter, lock-screen / Control Center / Quick Settings launch. Fast: viewfinder in ≤ 0.5 s warm, zero shutter lag, zero-copy frames. Native pro features first (ProRAW, Apple Log, ProRes, HLG, RAW DNG, Android Night/HDR/Bokeh extensions, iOS Cinematic Video). Core beauty live on all phones, heavy effects live on high-end phones and after capture elsewhere. "Keep editable" saves the clean original plus a recipe the editor can reopen. Rollout: iOS and Android first, macOS (webcams, Continuity Camera) next, Windows/Linux webcams last (may ship in 1.3.x).
 
 ---
 
 ## 2. Order and dependencies inside 1.3.0
 
 1. **Starts after 1.2.0 ships.** Both pillars depend on 1.2.0 work: the desktop engines must render VED's photo and beauty passes, and the camera reuses VED's tracker and shaders.
-2. **The two pillars are independent** and can run in parallel: desktop work splits by platform (macOS on the Mac, Windows on the Windows laptop, Linux needs a Linux machine or VM); camera work needs real phones, because the iOS Simulator has no camera and the Android emulator only has a virtual one.
-3. **Feasibility notes to settle while planning:** iOS does not let a third-party camera app record other apps' audio (camera D-107 internal audio is Android 10+ only, with the user's capture consent); FFmpeg on desktop is settled (owner, 2026-10-15): only in a separate helper process, LGPL and decode-only, never GPL encoders.
+2. **The two pillars are independent** and can run in parallel: desktop work splits by platform (macOS on the Mac, Windows on the Windows laptop, Linux needs a Linux machine or VM). The camera needs a real-device lab (an iPhone 16 or newer, an older iPhone, a Pixel, a Samsung and a budget Android phone), because the iOS Simulator has no camera and the Android emulator only has a virtual one. The camera's Windows/Linux webcam milestone builds on the desktop Rust engine and comes last.
+3. **Settled feasibility points:** iOS does not let camera apps record other apps' sound (iOS gets "keep music playing while recording"; true internal audio on Android 10+, Windows, macOS 13+ and Linux) and has no third-party night mode (Apple's quality prioritisation is used); FFmpeg on desktop runs only in a separate LGPL decode-only helper process (owner, 2026-10-15).
 
 ---
 
