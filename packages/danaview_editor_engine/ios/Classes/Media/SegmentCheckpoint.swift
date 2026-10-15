@@ -6,6 +6,7 @@
 // complete. Written as JSON with write-to-temp + rename after every finished segment, so it
 // survives a process kill at any point; a checkpoint whose kind, input hash or settings differ
 // from the job's is discarded (the job restarts).
+// FIX-48FPS-TIMESCALE: `videoTimescale` (the writers' media/movie timescale).
 
 import AVFoundation
 import CoreMedia
@@ -68,6 +69,28 @@ struct SegmentEncodeSettings: Codable, Equatable {
     }
 
     var fileType: AVFileType { container == .mov ? .mov : .mp4 }
+
+    /// Base media and movie timescale of every video file a segmented job writes (segments,
+    /// concat output, re-encoded segments). AVAssetWriter otherwise picks 600, which cannot hold
+    /// 48 fps (frame k at round(12.5·k) ticks, up to 833 µs off k/48; QA-03 finding 4,
+    /// FIX-48FPS-TIMESCALE). 48000 is a multiple of every project rate (24/25/30/48/50/60, LCM
+    /// 1200) and of 600, so grid times CMTime(k, fps) and 600-tick source PTS land on exact ticks.
+    static let baseVideoTimescale: Int32 = 48_000
+
+    /// Video media/movie timescale for this job: `baseVideoTimescale`, or its least common
+    /// multiple with `fps` for a rate that does not divide it (never in v1, D-03).
+    var videoTimescale: CMTimeScale {
+        SegmentEncodeSettings.videoTimescale(fps: fps)
+    }
+
+    static func videoTimescale(fps: Int) -> CMTimeScale {
+        let base = Int(baseVideoTimescale)
+        guard fps > 0, base % fps != 0 else { return baseVideoTimescale }
+        var a = base, b = fps
+        while b != 0 { (a, b) = (b, a % b) }
+        let lcm = base / a * fps
+        return lcm <= Int(Int32.max) ? CMTimeScale(lcm) : baseVideoTimescale
+    }
 
     /// Peak factor of the export data-rate cap: 1.5× the average bitrate per second.
     static let defaultDataRateLimitFactor: Double = 1.5

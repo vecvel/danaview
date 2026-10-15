@@ -43,8 +43,11 @@ enum SegmentConcat {
             throw EngineError.from(error)
         }
         writer.shouldOptimizeForNetworkUse = true
+        // Same exact timescale as the segments (FIX-48FPS-TIMESCALE: 600 cannot hold 48 fps).
+        writer.movieTimeScale = checkpoint.settings.videoTimescale
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: hint)
         videoInput.expectsMediaDataInRealTime = false
+        videoInput.mediaTimeScale = checkpoint.settings.videoTimescale
         videoInput.transform = transform
         guard writer.canAdd(videoInput) else { throw EngineError(.encodingFailed, "concat video input refused") }
         writer.add(videoInput)
@@ -382,8 +385,10 @@ enum SegmentConcat {
             track: track,
             outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange])
         reader.add(output)
+        writer.movieTimeScale = settings.videoTimescale
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings.videoOutputSettings)
         input.expectsMediaDataInRealTime = false
+        input.mediaTimeScale = settings.videoTimescale
         writer.add(input)
         guard reader.startReading(), writer.startWriting() else {
             throw (reader.error ?? writer.error).map(EngineError.from) ?? EngineError(.encodingFailed, "re-encode did not start")

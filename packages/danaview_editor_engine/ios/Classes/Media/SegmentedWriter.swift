@@ -212,8 +212,11 @@ final class SegmentedWriter {
         } catch {
             throw EngineError.from(error)
         }
+        writer.movieTimeScale = settings.videoTimescale
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings.videoOutputSettings)
         input.expectsMediaDataInRealTime = false
+        // Exact ticks for every project rate (600 cannot hold 48 fps; FIX-48FPS-TIMESCALE).
+        input.mediaTimeScale = settings.videoTimescale
         guard writer.canAdd(input) else { throw EngineError(.encoderUnavailable, "segment input refused") }
         writer.add(input)
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: nil)
