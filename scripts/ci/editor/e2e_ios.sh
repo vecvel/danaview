@@ -163,7 +163,7 @@ summarize() {
   {
     echo "QA-01 lane $lane on $label ($u), $(date '+%Y-%m-%d %H:%M')"
     tail -n +"$from" "$out/logs/host.log" |
-      sed -nE 's/.*(PASS|FAIL|TIMEOUT) integration_test\/editor\/([a-z0-9_]+)\.dart ?(.*)/\1 \2 \3/p; s/.*(skip [a-z0-9_]+ on ios).*/SKIP \1/p'
+      sed -nE 's/.*(PASS|FAIL|TIMEOUT) integration_test\/editor\/([a-z0-9_]+)\.dart ?(.*)/\1 \2 \3/p; s/.*(skip [a-z0-9_]+ on ios).*/SKIP \1/p; s/.*phase ([a-z-]+) ended the app as expected.*/PASS phase \1 (ended by the host as expected)/p; s/.*phase ([a-z-]+) was expected to end the app.*/FAIL phase \1 (did not end the app)/p'
     grep -h 'DV_E2E_REPORT' "$out"/logs/*.log 2>/dev/null | sed 's/^.*DV_E2E_REPORT/REPORT/' | sort -u || true
   } | tee -a "$out/summary.txt"
 }
