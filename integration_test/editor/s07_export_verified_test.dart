@@ -84,6 +84,15 @@ void main() {
     await ed.seekFrame(120);
     await ed.invoke(EditorActionId.split);
     await ed.waitProject((p) => p.timeline.mainTrack!.items.length == 2, what: 'the split');
+    // A dissolve over a continuous cut mixes the same source frame with itself (the handles carry
+    // on the same media), so nothing would blend. Remove 15 frames at the head of the right piece
+    // (ripple: it stays at the cut) so the two sides differ: timeline frame k shows source k before
+    // the cut and source k + 15 after it.
+    const jump = 15;
+    final right = ed.mainTrack.items[1];
+    ed.apply(TrimItem(right.id, TrimEdge.start, r.timeOfFrame(120 + jump), ripple: true));
+    await ed.waitProject((p) => (ed.item(right.id) as MediaClip).start == r.timeOfFrame(120) && ed.item(right.id).duration < right.duration,
+        what: 'the right piece trimmed at its head');
     final pieces = ed.mainTrack.items;
     const d = 15;
     ed.apply(SetTransition(TransitionRef(ed.mainTrack.id, pieces[0].id, pieces[1].id), const TransitionSpec(TransitionKind.crossDissolve, d)));
@@ -176,11 +185,13 @@ void main() {
     for (final (i, k) in ks.indexed) {
       final reading = frames[i].barcode;
       final inside = k * 2 >= 2 * 120 - d && k * 2 < 2 * 120 + d;
+      final source = k < 120 ? k : k + jump;
       if (inside) {
-        expect(reading.status == FrameBarcodeStatus.blended || reading.index == k, isTrue, reason: 'frame $k inside the dissolve: $reading');
+        expect(reading.status == FrameBarcodeStatus.blended || reading.index == k || reading.index == k + jump, isTrue,
+            reason: 'frame $k inside the dissolve: $reading');
         if (reading.status == FrameBarcodeStatus.blended) blendedInside++;
       } else {
-        expect(reading.index, k, reason: 'frame $k outside the dissolve: $reading');
+        expect(reading.index, source, reason: 'frame $k outside the dissolve: $reading');
       }
     }
     expect(blendedInside, greaterThan(0), reason: 'the dissolve blends frames');
