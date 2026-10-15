@@ -103,7 +103,8 @@ final class PhotosSaver: PhotosSaving {
             switch result {
             case .success(let identifier): completion(true, identifier)
             case .failure(let error):
-                Log.error(.platform, "detached Photos save failed: \(EngineError.from(error).code.rawValue)")
+                let ns = error as NSError
+                Log.error(.platform, "detached Photos save failed: \(ns.domain) \(ns.code)")
                 completion(false, nil)
             }
         }

@@ -15,6 +15,7 @@
 //   dropped), the temp output left for Dart's OwnedFileDeleter.
 
 import AVFoundation
+import Photos
 import XCTest
 
 @testable import danaview_editor_engine
@@ -303,6 +304,25 @@ final class BackgroundExportTests: XCTestCase {
         XCTAssertTrue(exists(output), "the temp file is left for Dart's OwnedFileDeleter")
         DiskCache.wipeWork(paths: h.paths)
         XCTAssertFalse(exists(output), "the wipe exemption ended with the record")
+    }
+
+    /// The native save into the real Photos library (needs `simctl privacy grant photos-add`).
+    func testCompletedWhileDetachedRealPhotosSaveWhenGranted() throws {
+        guard PHPhotoLibrary.authorizationStatus(for: .addOnly) == .authorized else {
+            throw XCTSkip("add-only Photos access not granted on this simulator")
+        }
+        let h = try make(ExportHarness.Options(listenerAttached: false))
+        let store = ActiveExportStore(
+            context: h.context, paths: { [context = h.context] in context.paths },
+            gallery: PhotosSaver(context: h.context), background: BackgroundExecution(kind: .paused, scheduler: nil))
+        h.onExportQueue { h.coordinator.lifecycle = store }
+        let output = h.outputURL()
+        let id = try h.export(self, plan: ExportPlans.toneVideo(w: 640, h: 360, fps: 30, durUs: 1_000_000, withAudio: true),
+                              settings: ExportPlans.settings(640, 360, fps: 30), output: output, timeout: 120)
+        XCTAssertTrue(JobEventRecorder.spin(timeout: 30) { store.records().first { $0.jobId == id }?.savedToGallery == true },
+                      "saved to Photos while detached")
+        XCTAssertNotNil(store.records().first?.savedUri)
+        XCTAssertTrue(exists(output))
     }
 
     func testCompletedWhileDetachedWithoutPhotosAccessOrKeepForLaterIsNotSaved() throws {

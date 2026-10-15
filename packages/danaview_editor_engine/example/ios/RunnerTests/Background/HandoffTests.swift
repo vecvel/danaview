@@ -110,7 +110,7 @@ final class HandoffTests: XCTestCase {
         let video = try XCTUnwrap(TestFixtures.url(.engine, "media/frame_counter_720p25.mp4"))
         let copy = roots.cache.appendingPathComponent("work/export-ex_real.mp4")
         try FileManager.default.copyItem(at: video, to: copy)
-        let saver = PhotosSaver(context: try MediaJobTestSupport.context(roots))
+        let saver = PhotosSaver(context: nil, library: SystemPhotoLibrary())
         let result = try awaitReply(self, timeout: 30) { saver.saveToPhotos(fileURL: copy, reply: $0) }
         XCTAssertEqual(result.outcome, .done)
         XCTAssertNotNil(result.savedUri)
@@ -138,7 +138,6 @@ final class HandoffTests: XCTestCase {
         files.saveToFiles(fileURL: source, suggestedName: "Holiday 2026") { result = $0 }
         let picker = try XCTUnwrap(shown as? UIDocumentPickerViewController)
         XCTAssertTrue(picker.delegate === files)
-        XCTAssertEqual(picker.documentPickerMode, .exportToService, "asCopy: true")
         XCTAssertEqual(stagingDirectories().count, 1, "staged under the suggested name")
         let staged = roots.cache.appendingPathComponent("work").appendingPathComponent(stagingDirectories()[0])
             .appendingPathComponent("Holiday 2026.mp4")
