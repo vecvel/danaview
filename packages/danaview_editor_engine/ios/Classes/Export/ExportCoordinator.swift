@@ -174,8 +174,8 @@ struct ExportEnvironment {
     var decoderLimit: Int
     /// Media URL resolution (tests map fixture URIs; nil = MediaURLResolver).
     var resolveURL: ((String, PlanAsset) throws -> URL)?
-    /// Whether a Dart listener is attached to the event stream.
-    var listenerAttached: () -> Bool
+    /// Answers (any thread) whether a Dart listener is attached to the event stream.
+    var listenerAttached: (@escaping (Bool) -> Void) -> Void
     var segmentDurationUs: Int64
     /// Thermal state source of the pumps.
     var thermalState: () -> ProcessInfo.ThermalState
@@ -195,10 +195,9 @@ struct ExportEnvironment {
             freeBytes: { try Paths.freeBytes(at: $0.path) },
             decoderLimit: 16,
             resolveURL: nil,
-            listenerAttached: { [weak context] in
-                guard let context = context else { return false }
-                if Thread.isMainThread { return context.events.isListening }
-                return DispatchQueue.main.sync { context.events.isListening }
+            listenerAttached: { [weak context] answer in
+                // EventHub state lives on main; never block the export queue on it.
+                DispatchQueue.main.async { answer(context?.events.isListening ?? false) }
             },
             segmentDurationUs: SegmentedWriter.defaultSegmentDurationUs,
             thermalState: { ProcessInfo.processInfo.thermalState })
@@ -633,6 +632,7 @@ final class ExportCoordinator: ExportCoordinating {
                 if record.state == .completedDetached {
                     // The output stays for Dart's handoff (OwnedFileDeleter); only the wipe exemption ends.
                     WorkExemptions.remove(output, paths: paths)
+                    WorkExemptions.remove(directory, paths: paths)
                 } else {
                     try? FileManager.default.removeItem(at: output)
                 }
@@ -762,7 +762,9 @@ final class ExportCoordinator: ExportCoordinating {
         interruption.unregister(jobId: job.id)
         switch outcome {
         case .success(.completed(let result)):
-            finish(running, result: result)
+            environment.listenerAttached { [weak self] attached in
+                self?.queue.async { self?.finish(running, result: result, listenerAttached: attached) }
+            }
         case .success(.interrupted):
             if job.isCancelled { return end(running, failure: EngineError.cancelled) }
             if interruption.isBackgrounded {
@@ -788,13 +790,12 @@ final class ExportCoordinator: ExportCoordinating {
         }
     }
 
-    private func finish(_ running: Running, result: ReaderWriterPipeline.Result) {
+    private func finish(_ running: Running, result: ReaderWriterPipeline.Result, listenerAttached attached: Bool) {
         let job = running.job
         let settings = job.record.settings
         let msg = ExportResultMsg(
             path: result.path, bytes: result.bytes, durationUs: result.durationUs, videoEncoderName: settings.encoderName,
             hardwareEncoder: hardware(settings.codec))
-        let attached = environment.listenerAttached()
         let handled = lifecycle?.exportCompleted(
             jobId: job.id, result: msg, listenerAttached: attached, whenDetached: job.record.detachedHandoff) ?? false
         let output = URL(fileURLWithPath: result.path)
@@ -807,6 +808,7 @@ final class ExportCoordinator: ExportCoordinating {
                     hardwareEncoder: msg.hardwareEncoder)
             }
             WorkExemptions.add(output, paths: paths)
+            WorkExemptions.add(job.directory, paths: paths)
             try? FileManager.default.removeItem(at: job.directory.appendingPathComponent(ExportJob.planFileName))
             SegmentCheckpoint.delete(in: job.directory)
         } else {
@@ -885,4 +887,7 @@ final class ExportCoordinator: ExportCoordinating {
 
     /// The job [jobId] of this process (export queue; tests).
     func job(_ jobId: String) -> ExportJob? { jobs[jobId]?.job }
+
+    /// Whether [jobId] stopped and waits for the foreground (export queue; tests).
+    func isWaitingForForeground(_ jobId: String) -> Bool { jobs[jobId]?.state == .waitingForForeground }
 }

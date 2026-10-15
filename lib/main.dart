@@ -13,7 +13,7 @@ import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart'
     show EditorEngine, EngineSignal, MemoryWarningSignal, ThermalSignal;
 import 'package:danaview_platform/danaview_platform.dart';
 import 'package:danaview_transcription/danaview_transcription.dart'
-    show DeviceResources, ModelStorePlatform, TranscriptionService, WhisperDeviceModelStorePlatform, WhisperDeviceResources;
+    show DeviceResources, ModelDownloaderConfig, ModelStorePlatform, TranscriptionService, WhisperDeviceModelStorePlatform, WhisperDeviceResources;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:danaview_whisper/danaview_whisper.dart';
 import 'app.dart';
@@ -94,13 +94,14 @@ List<Override> editorAppOverrides(EditorRuntime runtime, {TranscriptionService? 
 /// The Auto captions service of the app (ARCH §16): speech folders under
 /// `<supportDirectory>/danaview/speech`, the engine adapters (D-28), and a governor fed by the
 /// danaview_whisper device channel and the engine's memory and thermal signals. [channel],
-/// [storePlatform] and [createService] are test seams.
+/// [storePlatform], [createService] and [downloaderConfig] are test seams.
 AutoCaptionsRuntime createAutoCaptions({
   required EditorEngine engine,
   required String supportDirectory,
   WhisperDeviceChannel? channel,
   ModelStorePlatform? storePlatform,
   AutoCaptionsServiceFactory? createService,
+  ModelDownloaderConfig? downloaderConfig,
 }) {
   final device = channel ?? WhisperDeviceChannel();
   return EditorAppWiring.transcriptionService(
@@ -110,6 +111,7 @@ AutoCaptionsRuntime createAutoCaptions({
     storePlatform: storePlatform ?? WhisperDeviceModelStorePlatform(device),
     appVersion: danaviewAppVersion,
     createService: createService,
+    downloaderConfig: downloaderConfig,
   );
 }
 

@@ -112,7 +112,7 @@ final class ExportHarness {
         env.probe = options.probe
         if let encoders = options.encoders { env.encoders = { encoders } }
         env.decoderLimit = options.decoderLimit
-        env.listenerAttached = { options.listenerAttached }
+        env.listenerAttached = { $0(options.listenerAttached) }
         env.segmentDurationUs = options.segmentDurationUs
         env.thermalState = options.thermal
         env.backgroundKind = { .paused }

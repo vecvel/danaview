@@ -36,7 +36,10 @@ final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>(debu
 BuildContext? get _rootContext => appNavigatorKey.currentContext;
 
 /// Opens Settings › Privacy Policy (the Auto captions consent view's link, ARCH §20.3).
-void openPrivacyPolicy() => _rootContext?.push(settingsLocation(SettingsDestination.privacy));
+void openPrivacyPolicy() {
+  final context = _rootContext;
+  if (context != null) unawaited(context.push(settingsLocation(SettingsDestination.privacy)));
+}
 
 /// The export flow's navigation (ux.md §11): Play in Danaview plays the file in the player, Free up
 /// space opens Settings › Storage. There is no app-settings opener, so that button stays hidden.
@@ -50,7 +53,10 @@ Future<void> _playExport(String path) async {
   if (context.mounted) unawaited(context.push('/player'));
 }
 
-void _openStorage() => _rootContext?.push(settingsLocation(SettingsDestination.storage));
+void _openStorage() {
+  final context = _rootContext;
+  if (context != null) unawaited(context.push(settingsLocation(SettingsDestination.storage)));
+}
 
 /// The player's Edit action (ARCH §17.1): `EditorLauncher.openFromPlayer` with the player as the
 /// handoff, opening `/editor/:id?t=<µs>` and restoring the player when that route pops.

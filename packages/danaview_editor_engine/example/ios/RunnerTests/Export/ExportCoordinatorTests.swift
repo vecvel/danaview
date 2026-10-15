@@ -351,6 +351,7 @@ final class ExportCoordinatorTests: XCTestCase {
         XCTAssertTrue(JobEventRecorder.spin(timeout: 60) { (SegmentCheckpoint.load(from: directory)?.completed.count ?? 0) >= 2 })
         h.interruption.didEnterBackground()
         XCTAssertTrue(JobEventRecorder.spin(timeout: 30) { h.progress(id).last?.pausedInBackground == true }, "pausedInBackground reported")
+        XCTAssertTrue(JobEventRecorder.spin(timeout: 30) { h.onExportQueue { h.coordinator.isWaitingForForeground(id) } })
         let kept = SegmentCheckpoint.load(from: directory)?.completed.count ?? 0
         XCTAssertGreaterThanOrEqual(kept, 2)
         XCTAssertFalse(h.recorder.ended(id))
@@ -382,7 +383,10 @@ final class ExportCoordinatorTests: XCTestCase {
         // "Kill": the app goes to the background (segment discarded, checkpoint kept) and the
         // process never comes back.
         first.interruption.didEnterBackground()
-        XCTAssertTrue(JobEventRecorder.spin(timeout: 30) { first.progress(id).last?.pausedInBackground == true })
+        XCTAssertTrue(JobEventRecorder.spin(timeout: 30) {
+            first.onExportQueue { first.coordinator.isWaitingForForeground(id) }
+        }, "the pipeline stopped")
+        XCTAssertEqual(first.progress(id).last?.pausedInBackground, true)
 
         // A new process on the same roots.
         let second = try make(ExportHarness.Options(segmentDurationUs: 500_000), roots: roots)
@@ -434,9 +438,10 @@ final class ExportCoordinatorTests: XCTestCase {
         XCTAssertEqual(record.result?.path, output.path)
         XCTAssertEqual(record.result?.bytes, SegmentedWriter.fileSize(output))
         XCTAssertFalse(record.savedToGallery)
-        // Exempt from the launch wipe until consumed.
+        // Output and record are exempt from the launch wipe until consumed.
         DiskCache.wipeWork(paths: h.paths)
         XCTAssertTrue(exists(output))
+        XCTAssertEqual(try h.activeJobs(self).first { $0.jobId == id }?.state, .completedWhileDetached, "record survives a relaunch")
         h.coordinator.consumeJobRecord(jobId: id)
         XCTAssertFalse(try h.activeJobs(self).contains { $0.jobId == id })
         XCTAssertTrue(exists(output), "the output stays for Dart's handoff")

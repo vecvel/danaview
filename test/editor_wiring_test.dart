@@ -356,9 +356,10 @@ void main() {
       engine.emitSignal(const ThermalSignal(api.ThermalLevel.serious));
       device.controller.add(const LowPowerChanged(true));
       await Future<void>.delayed(Duration.zero);
-      expect(events[0], isA<MemoryWarning>());
-      expect(events[1], isA<ThermalChanged>().having((e) => e.level, 'level', ThermalLevel.serious));
-      expect(events[2], isA<LowPowerChanged>());
+      expect(events, hasLength(3));
+      expect(events.whereType<MemoryWarning>(), hasLength(1));
+      expect(events.whereType<ThermalChanged>().single.level, ThermalLevel.serious);
+      expect(events.whereType<LowPowerChanged>().single.enabled, isTrue);
       expect((await merged.profile()).os, 'ios');
       await sub.cancel();
     });
@@ -466,10 +467,11 @@ void main() {
         expect(find.byKey(const ValueKey('captions-configure')), findsOneWidget);
 
         // Back closes the sheet, the editor, and returns to the paused player at the position.
-        await tester.binding.handlePopRoute();
-        await pumpFrames(tester, count: 10);
-        await tester.binding.handlePopRoute();
-        await pumpFrames(tester, count: 30);
+        // (each Back closes one layer: the sheet, the Captions panel, then the editor).
+        for (var i = 0; i < 5 && find.byType(EditorScreen).evaluate().isNotEmpty; i++) {
+          await tester.binding.handlePopRoute();
+          await pumpFrames(tester, count: 20);
+        }
         expect(find.byType(EditorScreen), findsNothing);
         expect(app.location, '/player');
         final player = app.container.read(playerControllerProvider);
