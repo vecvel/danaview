@@ -70,20 +70,46 @@ abstract final class E2eExport {
     Duration timeout = const Duration(minutes: 6),
     bool closeAfter = true,
   }) async {
+    final handoffs = E2eApp.world.engine.files.records.length;
+    final settings = await start(ed, configure: configure);
+    return finish(ed, settings, handoffs: handoffs, timeout: timeout, closeAfter: closeAfter);
+  }
+
+  /// Opens the sheet, applies [configure] to the custom 720p H.264 MP4 settings, picks
+  /// [destination] and presses Start. Returns the settings it started with.
+  static Future<ExportSettings> start(
+    E2eEditor ed, {
+    ExportSettings Function(ExportSettings s)? configure,
+    ExportDestination destination = ExportDestination.files,
+  }) async {
     await open(ed);
     final c = controller(ed);
     c.selectPreset(ExportPresetId.custom);
     c.updateSettings((s) => (configure ?? (s) => s)(s.copyWith(shortSide: 720, container: ExportContainer.mp4, codec: VideoCodec.h264)));
-    c.setDestination(ExportDestination.files);
+    c.setDestination(destination);
     await ed.tester.pump();
     final settings = (state(ed) as ExportUiSetup).draft.settings;
-    final handoffs = E2eApp.world.engine.files.records.length;
     await E2eApp.tapKey(ed.tester, 'export-start');
+    return settings;
+  }
+
+  /// Waits for the started export to complete and be handed off (answers the first-export notice
+  /// and warnings on the way), and returns the delivered file.
+  static Future<E2eExported> finish(
+    E2eEditor ed,
+    ExportSettings settings, {
+    required int handoffs,
+    Duration timeout = const Duration(minutes: 6),
+    bool closeAfter = true,
+    void Function(ExportUiState state)? observe,
+  }) async {
+    final c = controller(ed);
     final sides = <SideFileFormat, String>{};
     await E2eApp.pumpUntil(
       ed.tester,
       () {
         final s = state(ed);
+        observe?.call(s);
         switch (s) {
           case ExportUiNotice():
             c.confirmNotice();

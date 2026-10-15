@@ -17,8 +17,10 @@ import 'package:danaview_editor/src/editor/state/editor_session.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
 import 'package:danaview_editor/src/editor/state/playhead_controller.dart';
 import 'package:danaview_editor/src/editor/state/transport_controller.dart';
+import 'package:danaview_editor/src/editor/timeline/render_timeline_canvas.dart' show TimelineCanvas;
 import 'package:danaview_editor/src/editor/timeline/timeline_gestures.dart';
 import 'package:danaview_editor/src/editor/timeline/timeline_hit.dart';
+import 'package:danaview_editor/src/editor/timeline/timeline_metrics.dart' show TimelineMetrics;
 import 'package:danaview_editor/src/editor/timeline/timeline_viewport.dart' show TimelineViewportController;
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart';
@@ -27,7 +29,6 @@ import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -340,10 +341,18 @@ final class E2eEditor {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  /// The timeline view's area.
-  Finder get timeline => find.byKey(const ValueKey('timeline-ruler-decoration')).evaluate().isEmpty
-      ? find.byType(EditorScreen).last
-      : find.ancestor(of: find.byKey(const ValueKey('timeline-ruler-decoration')), matching: find.byType(Stack)).first;
+  /// The timeline canvas.
+  Finder get canvas => find.byType(TimelineCanvas);
+
+  /// Global position of time [t] on lane [lane], vertically centred in the lane.
+  Offset laneAt(TrackId lane, TimeUs t) {
+    final widget = tester.widget<TimelineCanvas>(canvas);
+    final geo = TimelineCanvasGeometry(snapshot: widget.snapshot, metrics: widget.metrics ?? const TimelineMetrics(), viewport: widget.viewport);
+    final index = widget.snapshot.lanes.indexWhere((l) => l.id == lane);
+    expect(index, isNonNegative, reason: 'lane $lane is not on the canvas');
+    final local = Offset(widget.viewport.xOf(t), geo.laneTop(index) + geo.stack.heights[index] / 2);
+    return tester.getTopLeft(canvas) + local;
+  }
 
   /// A mouse wheel event at [at] with [dy] (and Shift/⌘ held when asked).
   Future<void> wheel(Offset at, double dy, {bool shift = false, bool command = false}) async {
