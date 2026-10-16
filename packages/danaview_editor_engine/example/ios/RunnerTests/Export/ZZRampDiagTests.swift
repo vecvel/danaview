@@ -52,11 +52,14 @@ final class ZZRampDiagTests: XCTestCase {
         let dur = plan.durUs
         let n = Int(ProcessInfo.processInfo.environment["RAMP_N"] ?? "") ?? 80
         var bad = 0
+        var missed = 0
+        var falsePos = 0
         for it in 0..<n {
             let comp = try make(plan)
             defer { comp.release() }
             let src = MixAudioSource(composition: comp, expectAudible: true, control: nil)
             src.validates = false
+            src.timePitchWatch = TimePitchWatch.of(plan)
             try src.openAudio(startUs: 0, endUs: dur)
             var pcm: [Float] = []
             var bufInfo: [String] = []
@@ -90,7 +93,9 @@ final class ZZRampDiagTests: XCTestCase {
             let excess = worst.0 - floor
             let isBad = excess > 0.01
             if isBad { bad += 1 }
-            print("RAMPDIAG it=\(it) frames=\(x.count) floor=\(floor) worst=\(worst.0)@\(worst.1) excess=\(excess) bad=\(isBad) jumps=\(jumps) zeroRuns=\(runs.prefix(8)) peak=\(src.peak)")
+            if isBad && src.dropouts + src.seamSteps == 0 { missed += 1 }
+            if !isBad && src.dropouts + src.seamSteps > 0 { falsePos += 1 }
+            print("RAMPDIAG it=\(it) drop=\(src.dropouts)/\(src.seamSteps) \(src.firstTimePitchFault ?? "-") frames=\(x.count) floor=\(floor) worst=\(worst.0)@\(worst.1) excess=\(excess) bad=\(isBad) jumps=\(jumps) zeroRuns=\(runs.prefix(8)) peak=\(src.peak)")
             if isBad {
                 let w = worst.1
                 var prof: [String] = []
@@ -103,6 +108,6 @@ final class ZZRampDiagTests: XCTestCase {
                 print("RAMPDIAG buffers it=\(it): \(bufInfo.joined(separator: " "))")
             }
         }
-        print("RAMPDIAG bad \(bad)/\(n)")
+        print("RAMPDIAG bad \(bad)/\(n) missed=\(missed) falsePositives=\(falsePos)")
     }
 }

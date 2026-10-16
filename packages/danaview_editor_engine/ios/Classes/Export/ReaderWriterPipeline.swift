@@ -25,8 +25,9 @@
 //   (§11.6 hard clip, D-37). The reader runs 0.01–0.10 s past the composition; the writer trims to
 //   the duration (`endSession`). IOS-01 saw about one read in 70 come back silent or NaN, so a
 //   read is validated (NaN, fully silent while the plan has audible audio, a tap range
-//   discontinuity, a hung read) and redone with a fresh composition, at most twice; the last
-//   attempt is accepted (sanitised) unless it hangs or fails.
+//   discontinuity, a hung read, and a dropout or a seam step inside a speed-ramp or time-pitch
+//   segment, see `TimePitchWatch`) and redone with a fresh composition, at most twice; the last attempt is
+//   accepted (sanitised) unless it hangs or fails.
 //
 // Order: video segments (phase rendering; progress = last video PTS / duration), then the audio
 // file and the concat (phase finishing). Pumps run on IOS-17's serial pump queue with
@@ -261,6 +262,7 @@ final class ReaderWriterPipeline {
                 return try writer.writeAudio(source: SilentAudioSource(control: control))
             }
             let source = MixAudioSource(composition: built, expectAudible: audible, control: control)
+            source.timePitchWatch = TimePitchWatch.of(plan)
             source.validates = attempt < maxAudioAttempts
             source.watchdog = audioWatchdog
             audioSourceHook?(source, attempt)
@@ -503,6 +505,88 @@ final class SilentAudioSource: SegmentAudioSource {
     func closeAudio() {}
 }
 
+/// Checks of an export audio read inside speed-ramp and time-pitch segments (FIX-IOS-MEDIA,
+/// QA-11 (d) ramp-seam click test).
+///
+/// The time-pitch unit of a speed-ramp pair or of a scaled keep-pitch track sometimes renders a
+/// stretch of exact zeros inside a piece. FIX-IOS-MEDIA measured, for QA-11's 7-point ramp on the
+/// iOS 26.5 simulator, bad reads in up to a third of the reads under load (≈ 1 in 70 in QA-11):
+/// - 95 %: a DROPOUT, the mix steps between the signal and digital silence for 6–300 ms;
+/// - 5 %: one track of a ramp-seam pair drops out inside its 5 ms crossfade while the other
+///   track still plays, a SEAM STEP (the mix level falls abruptly at the seam).
+/// A read is rejected (and redone, see the file comment) for either:
+/// - an exact-zero run (both channels) of at least `minRunFrames` with an abrupt edge (the frame
+///   next to it at or above `abruptEdge`) inside a watched span where the plan gain is audible.
+///   `.timeDomain` overlap-add cannot give content that shape except from digitally gated
+///   sources;
+/// - at an inner seam of a ramp (a change of rate between map pieces) with audible gain, a peak
+///   second difference of the mono mix within ±`seamWindowUs` that exceeds `seamStepRatio` times
+///   the peak in the reference windows 10–40 ms on either side (and `abruptEdge` in absolute
+///   terms). A steady tone's good seams measure ≤ 1.4, the dropped crossfade 7.6.
+/// A false positive (a transient of the content right on a seam) only costs a redo: the last
+/// attempt is accepted.
+struct TimePitchWatch: Equatable {
+    struct Span: Equatable {
+        /// Composition µs, already shrunk by `edgeMarginUs` at both ends.
+        let startUs: Int64
+        let endUs: Int64
+        let gain: [AnimKey]
+    }
+
+    /// Spans watched for dropouts.
+    let spans: [Span]
+    /// Inner ramp seams (composition µs, sorted) watched for steps.
+    let seamsUs: [Int64]
+
+    /// 2 ms at 48 kHz.
+    static let minRunFrames = 96
+    /// ≈ −50 dBFS.
+    static let abruptEdge: Float = 0.003
+    /// Segment edges (ramp-seam extensions, keep-pitch latency trims, fades) are not watched.
+    static let edgeMarginUs: Int64 = 10_000
+    /// Gain below which a span or a seam is treated as silent.
+    static let audibleGain = 1e-4
+    /// Half width of the window around a seam (the seam crossfade is 5 ms).
+    static let seamWindowUs: Int64 = 8_000
+    /// Reference windows: from 10 ms to 40 ms before and after the seam.
+    static let seamReferenceUs: (near: Int64, far: Int64) = (10_000, 40_000)
+    static let seamStepRatio: Float = 4
+
+    static let none = TimePitchWatch(spans: [], seamsUs: [])
+
+    /// Speed ramps (more than one map piece) and keep-pitch segments with a scaled piece.
+    static func of(_ plan: RenderPlan) -> TimePitchWatch {
+        var spans: [Span] = []
+        var seams: [Int64] = []
+        for seg in plan.audio {
+            let scaled = seg.map.contains { $0.t1 > $0.t0 && abs($0.rate - 1) > 1e-6 }
+            guard seg.map.count > 1 || (seg.pitch && scaled) else { continue }
+            let start = seg.t0 + edgeMarginUs, end = seg.t1 - edgeMarginUs
+            if end > start { spans.append(Span(startUs: start, endUs: end, gain: seg.gain)) }
+            let pieces = seg.map.sorted { $0.t0 < $1.t0 }
+            for (a, b) in zip(pieces, pieces.dropFirst()) where abs(a.rate - b.rate) > 1e-6 {
+                let seam = b.t0
+                guard seam - seamReferenceUs.far >= seg.t0, seam + seamReferenceUs.far <= seg.t1 else { continue }
+                guard Keyframes.evaluate(seg.gain, at: seam, fallback: 1) > audibleGain else { continue }
+                seams.append(seam)
+            }
+        }
+        return TimePitchWatch(spans: spans, seamsUs: Array(Set(seams)).sorted())
+    }
+
+    var isEmpty: Bool { spans.isEmpty && seamsUs.isEmpty }
+
+    /// Whether the composition interval [startUs, endUs) lies inside a watched span whose gain is
+    /// audible across it.
+    func watches(startUs: Int64, endUs: Int64) -> Bool {
+        spans.contains { span in
+            guard startUs >= span.startUs, endUs <= span.endUs else { return false }
+            let mid = startUs + (endUs - startUs) / 2
+            return [startUs, mid, endUs].allSatisfy { Keyframes.evaluate(span.gain, at: $0, fallback: 1) > TimePitchWatch.audibleGain }
+        }
+    }
+}
+
 /// The audio mix of the export composition (AVAssetReaderAudioMixOutput with IOS-18 gain taps),
 /// clamped to [−1, 1] and validated (see the file comment).
 final class MixAudioSource: SegmentAudioSource {
@@ -527,6 +611,34 @@ final class MixAudioSource: SegmentAudioSource {
     private(set) var clippedSamples = 0
     private(set) var peak: Float = 0
     private var buffers = 0
+
+    /// Dropout and seam-step checks (none = not checked).
+    var timePitchWatch = TimePitchWatch.none {
+        didSet { seamStats = timePitchWatch.seamsUs.map { SeamStats(seamUs: $0) } }
+    }
+    /// Dropouts and seam steps found (the first one described in `firstTimePitchFault`).
+    private(set) var dropouts = 0
+    private(set) var seamSteps = 0
+    private(set) var firstTimePitchFault: String?
+    /// Scan state: absolute frame of the next expected frame, the current exact-zero run and the
+    /// magnitude of the frame before it, the last two mono samples (second difference).
+    private var scanNext: Int64?
+    private var runStart: Int64?
+    private var runPreEdge: Float = 0
+    private var lastMagnitude: Float = 0
+    private var mono1: Float?
+    private var mono2: Float?
+    private var seamStats: [SeamStats] = []
+    private var seamCursor = 0
+
+    /// Peak second differences around one seam.
+    private struct SeamStats {
+        let seamUs: Int64
+        var window: Float = 0
+        var reference: Float = 0
+        /// Whether the read reached the end of the far reference window.
+        var complete = false
+    }
 
     /// Peak below which a whole read counts as silent.
     static let silencePeak: Float = 1e-5
@@ -604,6 +716,11 @@ final class MixAudioSource: SegmentAudioSource {
             reason = "silent"
         } else if jumps > 0 {
             reason = "tap range discontinuity"
+        } else {
+            evaluateSeams()
+            if dropouts + seamSteps > 0 {
+                reason = "time-pitch fault (\(dropouts) dropout(s), \(seamSteps) seam step(s); first: \(firstTimePitchFault ?? "?"))"
+            }
         }
         guard let reason = reason else { return }
         guard validates else {
@@ -652,7 +769,111 @@ final class MixAudioSource: SegmentAudioSource {
         nanSamples += nan
         clippedSamples += clipped
         peak = max(peak, localPeak)
+        if !timePitchWatch.isEmpty { scanTimePitch(out, frames: frameCount) }
         return out
+    }
+
+    /// Scans one sanitised buffer for `TimePitchWatch` faults: exact-zero runs (across buffer
+    /// boundaries; a PTS gap between buffers resets the scan) and the second-difference peaks
+    /// around the watched seams.
+    private func scanTimePitch(_ sample: CMSampleBuffer, frames frameCount: Int) {
+        guard let block = CMSampleBufferGetDataBuffer(sample) else { return }
+        let rate = Double(ExportPCM.sampleRate)
+        let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+        guard pts.isNumeric else { return }
+        let first = Int64((pts.seconds * rate).rounded())
+        if let expected = scanNext, abs(first - expected) > 1 {
+            runStart = nil
+            lastMagnitude = 0
+            mono1 = nil
+            mono2 = nil
+        }
+        scanNext = first + Int64(frameCount)
+        var pointer: UnsafeMutablePointer<Int8>?
+        var length = 0
+        guard CMBlockBufferGetDataPointer(block, atOffset: 0, lengthAtOffsetOut: &length, totalLengthOut: nil,
+                                          dataPointerOut: &pointer) == kCMBlockBufferNoErr, let base = pointer else { return }
+        let channels = ExportPCM.channels
+        let count = min(frameCount, length / (4 * channels))
+        let framesPerUs = rate / 1_000_000
+        func frame(_ us: Int64) -> Int64 { Int64((Double(us) * framesPerUs).rounded()) }
+        base.withMemoryRebound(to: Float.self, capacity: count * channels) { samples in
+            for f in 0..<count {
+                var magnitude: Float = 0
+                var sum: Float = 0
+                for c in 0..<channels {
+                    let v = samples[f * channels + c]
+                    magnitude = max(magnitude, abs(v))
+                    sum += v
+                }
+                let index = first + Int64(f)
+                // Dropouts.
+                if !timePitchWatch.spans.isEmpty {
+                    if magnitude == 0 {
+                        if runStart == nil {
+                            runStart = index
+                            runPreEdge = lastMagnitude
+                        }
+                    } else {
+                        if let start = runStart {
+                            endRun(start: start, end: index, postEdge: magnitude, rate: rate)
+                            runStart = nil
+                        }
+                        lastMagnitude = magnitude
+                    }
+                }
+                // Seam steps.
+                let mono = sum / Float(channels)
+                defer {
+                    mono2 = mono1
+                    mono1 = mono
+                }
+                guard !seamStats.isEmpty, let m1 = mono1, let m2 = mono2 else { continue }
+                let d2 = abs(mono - 2 * m1 + m2)
+                while seamCursor < seamStats.count,
+                      index >= frame(seamStats[seamCursor].seamUs + TimePitchWatch.seamReferenceUs.far) {
+                    seamStats[seamCursor].complete = true
+                    seamCursor += 1
+                }
+                var k = seamCursor
+                while k < seamStats.count {
+                    let seam = seamStats[k].seamUs
+                    let lo = frame(seam - TimePitchWatch.seamReferenceUs.far)
+                    if index < lo { break }
+                    let offset = abs(index - frame(seam))
+                    if offset <= frame(TimePitchWatch.seamWindowUs) {
+                        seamStats[k].window = max(seamStats[k].window, d2)
+                    } else if offset >= frame(TimePitchWatch.seamReferenceUs.near) {
+                        seamStats[k].reference = max(seamStats[k].reference, d2)
+                    }
+                    k += 1
+                }
+            }
+        }
+    }
+
+    private func endRun(start: Int64, end: Int64, postEdge: Float, rate: Double) {
+        guard end - start >= Int64(TimePitchWatch.minRunFrames),
+              runPreEdge >= TimePitchWatch.abruptEdge || postEdge >= TimePitchWatch.abruptEdge else { return }
+        let startUs = Int64((Double(start) * 1_000_000 / rate).rounded(.down))
+        let endUs = Int64((Double(end) * 1_000_000 / rate).rounded(.up))
+        guard timePitchWatch.watches(startUs: startUs, endUs: endUs) else { return }
+        dropouts += 1
+        if firstTimePitchFault == nil {
+            firstTimePitchFault = "dropout of \(end - start) frames at \(startUs) µs, edges \(runPreEdge)/\(postEdge)"
+        }
+    }
+
+    /// Counts the seam steps of the seams the read covered completely.
+    private func evaluateSeams() {
+        for stats in seamStats where stats.complete {
+            guard stats.window >= TimePitchWatch.abruptEdge,
+                  stats.window > TimePitchWatch.seamStepRatio * stats.reference else { continue }
+            seamSteps += 1
+            if firstTimePitchFault == nil {
+                firstTimePitchFault = "seam step at \(stats.seamUs) µs, peak \(stats.window) vs \(stats.reference)"
+            }
+        }
     }
 
     func closeAudio() {
