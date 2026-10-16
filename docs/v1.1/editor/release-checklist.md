@@ -66,7 +66,7 @@ Status values: **open** (work or evidence still missing), **ready** (evidence ex
 
 | Check | Status | Evidence / next step |
 |---|---|---|
-| Privacy policy and terms updated in the app | ready | UX-42 (`packages/danaview_features/lib/src/more/legal_texts.dart`); `test/privacy_policy_host_test.dart` (INT-04). `legalEffectiveDate` still has to move to the release date (§3.1). One gap is listed in §8 (defect 1). |
+| Privacy policy and terms updated in the app | ready | UX-42 (`packages/danaview_features/lib/src/more/legal_texts.dart`); `test/privacy_policy_host_test.dart` (INT-04). `legalEffectiveDate` still has to move to the release date (§3.1). One open conflict is listed in §8 (defect 1): ARCH §20.3 wants the "Auto captions" terms to point to a licences screen the owner has removed. The lead or owner settles it before the hosted copy is published. |
 | Published at every store privacy URL with a diff or screenshot | owner | §5.1. iOS/macOS: `https://vecvel.com/ios/danaview/privacy`. Play: the listing's privacy URL in Play Console. |
 | Owner sign-offs of D-43 recorded | ready | ARCH D-43: owner defaults 2026-10-08 for (a)–(d) and (f), owner decision 2026-10-11 for (e). The owner may still revise them before go-live. |
 | Store descriptions, release notes, screenshots | open / owner | Texts drafted in §4 (not yet in `ios/fastlane/metadata/` or `android/fastlane/metadata/`). Screenshots are an owner step after v1.3 (§6). |
@@ -494,7 +494,12 @@ These need the owner's accounts, devices or decisions. Builders don't do them. T
 
 ## 8. Defects and follow-ups found while preparing
 
-1. **UX-42** (`legal_texts.dart`): ARCH §20.3 says the new "Auto captions" terms section points to the third-party open-source licences in Settings › About › Open-source licences. The current text has only the "may contain mistakes" sentence. Needs a FIX-UX-42 ticket before the hosted copy is published.
+1. **Conflict for the lead or owner: third-party licences in the "Auto captions" terms** (`legal_texts.dart`, UX-42). ARCH §20.3 says this terms section points to "Settings › About › Open-source licences". That was written before the owner removed the licences route: `test/editor_wiring_test.dart` asserts that `/settings/licenses` lands on Home, and nothing in `danaview_features` or `lib` links to a licences page. The current text has only the "may contain mistakes" sentence, which is correct for the app as it is. Do **not** add a reference to that screen to the in-app terms or the hosted policy (§5.1); it would point to nothing. Options for the lead or owner:
+   - (a) name the third-party components and their licences directly in the "Auto captions" terms text, the hosted page, or both: whisper.cpp/ggml (MIT), OpenAI Whisper weights (MIT), Silero VAD (MIT), plus AndroidX Media3 (Apache-2.0) and the content fonts and Figtree (OFL-1.1);
+   - (b) bring back a custom licences screen and its route (the "Licences screen" row in ARCH §20.4), which reverses the owner's decision and the wiring test;
+   - (c) accept the text as it is and record that ARCH §20.3 is superseded on this point.
+
+   Once settled, ARCH §20.3 (and §20.4 if needed) is updated to match, and a FIX ticket for UX-42 is opened only if the chosen option changes `legal_texts.dart`.
 2. **Version sync**: `app_info.dart` (`danaview_features`) has to change with `pubspec.yaml` (§3.1), or the root version test fails. INT-05 does it as an integration change, or a FIX ticket owns it.
 3. **Store copy**: the current 1.0 texts in `ios/fastlane/metadata/` and `android/fastlane/metadata/` use the spec terms the owner doesn't want (§4.4). They are replaced at release, not before, so that nothing uploads early.
 4. **QA reports still missing**: QA-02, QA-04 and QA-05 have no report in `qa/` yet.
