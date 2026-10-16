@@ -62,7 +62,7 @@
 #   DANAVIEW_E2E_NOTIFICATIONS=0  do not pre-grant POST_NOTIFICATIONS (default: on API 33+ the
 #                           runner grants it as soon as the app is installed in each batch, because
 #                           the export's first-run notification prompt is a system dialog the suite
-#                           cannot answer: unanswered, the export waits in "Preparing…" forever)
+#                           cannot answer: unanswered, the export waits in "Preparing..." forever)
 #   DANAVIEW_E2E_KEEP_EMULATOR=1  leave an emulator this script booted running at the end
 #   DANAVIEW_E2E_EMULATOR_ARGS  extra emulator arguments when booting
 set -euo pipefail
@@ -124,6 +124,18 @@ kill_stray_flutter() {
   [ -n "$WINDOWS" ] || return 0
   [ -n "${SERIAL:-}" ] || return 0
   powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='dart.exe'\" | Where-Object { \$_.CommandLine -match 'flutter_tools' -and \$_.CommandLine -match 'integration_test' -and \$_.CommandLine -match '$SERIAL' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Output \"killed stray flutter tool \$(\$_.ProcessId)\" }" 2>/dev/null | tr -d '\r' || true
+}
+
+# Windows only: `e2e_host.sh serve` loops of this device left over from an earlier phase (a bash
+# kill of the serve pid does not reach its subshells). A leftover loop would handle the next phase's
+# host requests a second or third time. Only this serial's serve processes are stopped.
+kill_stray_serve() {
+  [ -n "$WINDOWS" ] || return 0
+  [ -n "${SERIAL:-}" ] || return 0
+  local p
+  for p in $(ps -ef | awk -v s="$SERIAL" '/e2e_host\.sh/ && / serve/ && $0 ~ ("-d " s " ") { print $2 }'); do
+    kill "$p" 2>/dev/null && echo "killed stray e2e_host.sh serve $p" || true
+  done
 }
 
 # Runs "$@" in the background, waits at most <seconds>; returns its status, or 124 after a timeout.
@@ -350,6 +362,7 @@ extra_phase() {
   local phase="$1" expect="$2" file="$SUITE/x_android_export_background_test.dart"
   local logf="$OUT/logs/x_android_export_background_test-$phase.log" fpid spid fstatus=0 sstatus=0 start died=""
   echo "[e2e_android] flutter test $file phase=$phase (expect $expect), log ${logf#"$ROOT"/}"
+  kill_stray_serve
   host serve >> "$OUT/logs/host-serve.log" 2>&1 &
   spid=$!
   (cd "$ROOT" && flutter test "$file" -d "$SERIAL" --dart-define=DANAVIEW_EDITOR=true \
@@ -388,6 +401,7 @@ extra_phase() {
     wait "$spid" 2>/dev/null || true
   fi
   kill_stray_flutter
+  kill_stray_serve
   if [ "$expect" = dies ]; then
     if [ "$sstatus" -eq 3 ]; then echo "[e2e_android] PASS phase $phase (ended the app as expected)"; return 0; fi
     echo "[e2e_android] FAIL phase $phase: expected the host to end the app (flutter status $fstatus)"
