@@ -20,6 +20,8 @@ Other follow-ups found by QA-01 (not blocking):
 - The player library screens (`danaview_home_screen.dart`, `danaview_folder_screen.dart`, `library_storage.dart`) have a follow-up noted in `QA-01-ios-simulator.md`.
 - An empty new project shows a preview spinner that keeps spinning with no media; check whether that is intended (UX-18).
 
+**Running (2026-10-17 ~00:55):** Mac round 8 (`editor-build-mac-r8.js`): FIX-IOS-D7 (D7 plus the back-to-back export stall), then the QA-05 re-run and the QA-01 re-check on the iOS simulator. Round 6 and round 7 reviews are finishing.
+
 **Next actions, in order:**
 1. Merge `parallel-r7` once both reviews finish.
 2. iOS round: fix D7 and FIX-IOS-12-1, re-run QA-05 and the affected QA-01 scenarios.
