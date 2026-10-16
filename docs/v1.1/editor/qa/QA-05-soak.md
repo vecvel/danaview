@@ -16,7 +16,7 @@ The acceptance criteria are:
 
 | Path | What it is |
 |---|---|
-| `integration_test/editor_soak/soak_test.dart` | The random soak. It is one `testWidgets` that drives the real app for `DV_SOAK_MINUTES` minutes (default 60) with a seeded sequence of 29 op types. It uses QA-00's `E2eApp` and `E2eEditor`, so it has the real app wiring and the production engine. |
+| `integration_test/editor_soak/soak_test.dart` | The random soak. It is one `testWidgets` that drives the real app for `DV_SOAK_MINUTES` minutes (default 60) with a seeded sequence of 30 op types. It uses QA-00's `E2eApp` and `E2eEditor`, so it has the real app wiring and the production engine. |
 | `integration_test/editor_soak/process_death_test.dart` | Process death during each job type. The phases are `die-autosave`, `die-proxy`, `die-reverse`, `die-freeze`, `die-export`, `die-captions` and `verify`. Each `die-*` phase first verifies the job the previous phase killed, then starts its own job and is killed by the host. |
 | `integration_test/editor_soak/support/soak.dart` | Shared code: configuration, the `DV_SOAK` report lines and JSON summaries, the RSS sampler and the memory verdict, the framework-error recorder, sheet dismissal, the store-level validity check, and the recovery-aware project open. |
 | `integration_test/editor_soak/tool/soak_host.py` | The host driver. It runs the phases and serves QA-00's file handshake (`kill`, `background`, `call`, `audioRoute`, `lowStorage`, `freeStorage`, `screenshot`). It samples the app process from outside every 30 s and flags a process that disappears without a requested kill. |
@@ -83,7 +83,75 @@ For every job, the project is then opened straight from the store and validated.
 
 ## 2. Results: iOS Simulator
 
-RESULTS_PLACEHOLDER
+All runs below used the **iPhone 16 simulator on iOS 26.5** (`6663101E-6BE7-47D4-B3B8-055700BF2E02`), with Xcode 26.6, Flutter 3.44 and a debug build, on 2026-10-16. On this 8 GB Mac the soak was kept to 15 minutes. The 1 h runs are in §3.
+
+**Verdict: not green.** The tooling works end to end. It found four product defects (D1–D4), and all of them are reproducible with the commands given.
+
+### 2.1 Random soak, 15 min, seed 5150
+
+`soak_host.py -p ios -d 6663101E-… -m ~/danaview-models soak --minutes 15 --seed 5150` was run three times while the diagnostics were being tightened. The last run gave:
+
+- 937 ops in 903 s across 4 projects (three of them rotated out by the size limit)
+- 38 reopen checks
+- 907 RSS samples
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| No crash | **pass** | The host saw the same app pid for the whole run, and the flutter connection survived. |
+| No unhandled exception | **pass** | 0 framework errors and 0 uncaught zone errors. |
+| Project always reopens valid | **pass** | 38 of 38 reopens were valid: no validator violations, no repairs on open, no stray recovery journal. Each rotated project also passed its store check. |
+| Memory growth ≤ 10 % | **pass** | Baseline 369.0 MB, end 314.8 MB, peak 615.4 MB (during captions and export). Growth was **−14.7 %**. The earlier two runs gave −15.7 % and −13.9 %. The host's outside RSS samples agree: the app stayed at 200–400 MB after the warm-up. |
+| Nothing hangs, every op works | **FAIL** | 13 failed ops. All of them trace back to D1, D2 and D3. |
+
+Ops that ran (ran/skipped/failed):
+
+- seek 72, scrub 51, play 59, frameStep 37
+- split 69, undo 85, redo 35, copyPaste 31, duplicate 33, delete 39
+- dragMove 37, dragTrim 43
+- text 24, marker 20, speed 29, transition 17, zoom 36, selectAll 18
+- reverse 23, freeze 19/1/0, proxy 10, export 4/0/10, captions 5/2/0
+- background 25/0/2, inactive 25, call 9 (simulated), offline 10/0/1
+- audioRoute 0/9 and lowStorage 0/9: refused on the simulator (see §3)
+- reopen 38
+
+**D1 · Export stalls forever (iOS export).** This reproduced in all three runs with seed 5150, at the first export of a "complete" kind after about 160 random ops:
+
+- Run 2: stuck at 46.1 % (291/631 frames, phase `rendering`) on a 21.0 s project.
+- Run 3: stuck at 95.4 % (888/931 frames) on a 31.0 s project.
+
+The sheet keeps showing "A few seconds left", and progress never moves again: the soak waited 120 s, and 6 min in the first run. The project at the moment of the stall is saved as `build/soak/ios/<udid>/files/soak-stall-165.json`. In that project the video lane ends at 20.0 s, while three 10 s copies of the speech clip run on the audio lane to 31.0 s. The main lane mixes 1.5×, 0.5× and reversed pieces of `frame_counter` with stills and `tone_under_video`. Replay it with `--seed 5150`. The owner is the native iOS export (IOS-13 / IOS-17 segmented writer).
+
+**D2 · After a stalled export is cancelled, every later export fails.** After D1 the soak cancels the stuck job, through the controller as the sheet's Cancel does. From then on, every export in the process ends in `ExportFailed(exportFailed.unknown)`, with "The export didn't finish. Try again". This happened 10 times out of 10 in run 3, including in brand-new projects and minutes later. Each failing project is saved as `files/soak-failed-<op>.json`. Two reverse jobs failed in the same period of run 2 (`the reverse task failed`), and two background ops in run 3 saw a black preview 1 s after the return. The exporter (and possibly the shared writer and encoder) is left in a bad state, and only a relaunch clears it. The owner is the iOS export coordinator (IOS-13).
+
+### 2.2 Process death per job type
+
+`soak_host.py … death`: the full chain ran from 12:28 to 12:41. The captions phase was re-run at 12:47 after the test was fixed (§2.3).
+
+| Job | Result | Evidence |
+|---|---|---|
+| autosave | **pass** | The kill landed while the text was edited every 40 ms. On relaunch, Projects offered the journal, Restore reopened a valid project holding `SOAK AUTOSAVE 0`, and the store check was clean. |
+| export | **pass** | Killed at 13 % (32 s, 1080p). `activeJobs()` reported exactly one `ExportInterrupted` and nothing running. The editor showed it once, and after acknowledgement the record was gone. A reopened editor's `reattach()` found nothing. The simulator's export left no complete segment, so it was not resumable. |
+| captions | **pass** | Killed at 56 % of a 60 s speech WAV (the host builds it from `speech_10s.m4a` with `afconvert`). `resumableFor` kept the record. "Auto captions were interrupted" showed once. After Discard, the reopen showed no notice and the record was gone. The project was valid. |
+| proxy | **FAIL (D3)** | On reopen the asset still says `proxy: pending`, and no task runs. Nothing changed after 90 s. When the test then reads `tasksControllerProvider`, the proxy starts and completes. |
+| reverse | **FAIL (D3)** | Killed at 2 %. The rendition stays `pending` on reopen, and the clip plays its placeholder. It is only rebuilt once `tasksControllerProvider` is read. |
+| freeze | **FAIL (D3)** | Same as reverse for the pending still. |
+
+**D3 · Pending reverse, freeze and proxy jobs are not resumed when the editor opens.** `TasksController` re-queues pending assets in `_reconcile()`, as ARCH §15 says ("jobs are re-queued automatically"). But `tasksControllerProvider` is `autoDispose`, and it is first read only by the reverse/freeze/clip-info bindings, the Clip info panel and the Tasks sheet. Nothing reads it when the editor opens, so after a crash (or a normal close mid-job) the pending asset stays pending until the user happens to touch one of those. Until then:
+
+- Export waits forever on `exportBlockersOf` ("waiting for reverse").
+- The clip shows its placeholder.
+
+The fix belongs in the editor's open path. Either the editor screen or session (UX-07 / UX-08) reads `tasksControllerProvider(id)` when the session attaches, or UX-35's `createTasksController` is started by the session. The QA-05 death phases will pass unchanged once it lands. They already wait 90 s without any user action.
+
+### 2.3 What changed in the suite while running it
+
+- **The captions wait.** It now treats new cue ids as "done". With "Replace previous captions", the cue count stays the same.
+- **No speech.** "No speech found" on an edited-down speech clip counts as an answer, not a failure.
+- **Thrown errors in waits.** Errors thrown inside a bounded wait are `TestFailure`s now. `E2eApp.pumpUntil` swallows other exceptions as "not ready yet", which turned failures into 6-minute timeouts.
+- **Export.** The export waits now detect a stall (no progress for 120 s) and dump the project.
+- **Captions death phase.** It kills only while the job is transcribing, after the job record is written. The record is written only after model load and language detection, so the first run's "no record" was a test artifact.
+- **Summary in the log.** The run summary is also printed as a `DV_SOAK summary` line. A failing `flutter test` uninstalls the app before the host can copy the JSON, so the host extracts the line into `files/soak-summary-log.json`.
+
 
 ## 3. Deferred
 
