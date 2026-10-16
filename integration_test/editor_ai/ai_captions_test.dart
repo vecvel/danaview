@@ -815,6 +815,14 @@ Future<void> q06(WidgetTester tester, E2eEditor ed) async {
 }
 
 Future<void> q07(WidgetTester tester, E2eEditor ed) async {
+  // Diagnostic: does the governor see a background/foreground cycle at all right now?
+  final governor = Captions.runtime.governor;
+  var probe = false;
+  final probeSub = governor.changes.listen((_) => probe = probe || governor.inBackground);
+  await E2eHandshake.request(tester, 'background', args: {'seconds': 3}, timeout: const Duration(seconds: 60));
+  await tester.pump(const Duration(milliseconds: 500));
+  await probeSub.cancel();
+  Qa07.report('q07', 'probe without a job: governor saw the background ${probe ? 'yes' : 'NO'}');
   final tier = Shared.sixtyTier ?? await Captions.stage(Qa07.requestedTier);
   final item = clipNamed(ed, 'qa07-60s-en.m4a');
   Captions.clearTranscripts();
@@ -982,7 +990,9 @@ void main() {
     await Captions.stage(SpeechModelTier.fast);
     final resumable = await Captions.service.resumableFor(id);
     expect(resumable, isNotNull, reason: 'the service kept the job record');
+    Qa07.report('job-resume', 'service record after the kill: ${(resumable!.doneFraction * 100).round()}% done (killed at ${saved['processed']} us)');
     final ed = await E2eEditor.openFromProjects(tester, id);
+    // ai.md §8.6 / §11.5: the editor shows the interrupted-job notice when it opens the project.
     await E2eApp.waitKey(tester, 'captions-interrupted', timeout: const Duration(seconds: 30));
     await E2eApp.screenshot(tester, 'qa07_job_resume_notice');
     final watch = JobWatch(Captions.service);
@@ -990,7 +1000,7 @@ void main() {
     await E2eApp.tapKey(tester, 'captions-interrupted-resume');
     final run = await Captions.create(ed, pressCreate: false);
     final first = run.watch.firstTranscribing ?? watch.firstTranscribing;
-    Qa07.report('job-resume', 'record ${(resumable!.doneFraction * 100).round()}% done; first transcribing sample processed ${first?.processed} us, '
+    Qa07.report('job-resume', 'record ${(resumable.doneFraction * 100).round()}% done; first transcribing sample processed ${first?.processed} us, '
         'fraction ${first?.fraction}; ${run.cues.length} cues');
     expect((first?.fraction ?? 0) > 0.05 || (first?.processed ?? 0) > 0, isTrue, reason: 'resumed from the checkpoint, not from zero');
     await ed.close();
