@@ -244,6 +244,28 @@ void main() {
       expect(rig.playhead.playing.value, isFalse);
     });
 
+    testVo('the project starts playing before the recorder starts (FIX-IOS-RECORD)', (tester) async {
+      // On iOS a preview that starts playing switches the shared audio session to playback and
+      // silently stops a capturing microphone (QA-01 s13), so playback must come first.
+      final rig = await VoiceoverRig.pump(tester, playhead: 2 * s);
+      await startRecording(rig);
+      final calls = rig.engine.calls;
+      expect(calls.indexOf('preview.play'), greaterThanOrEqualTo(0));
+      expect(calls.indexOf('recorder.start'), greaterThan(calls.indexOf('preview.play')));
+      await tap(rig, 'voiceover.discard');
+      expect(rig.playhead.playing.value, isFalse);
+    });
+
+    testVo('the recorder failing to start pauses the project it started', (tester) async {
+      final rig = await VoiceoverRig.pump(tester, playhead: 2 * s);
+      rig.engine.failNext['recorder.start'] = EngineFailure.of(EngineErrorCode.busy);
+      await tap(rig, 'voiceover.record');
+      await tap(rig, 'voiceover.skip');
+      expect(key('voiceover.idle'), findsOneWidget);
+      expect(rig.engine.calls, contains('preview.play'));
+      expect(rig.playhead.playing.value, isFalse);
+    });
+
     testVo('with "Play project" off the project stays paused', (tester) async {
       final rig = await VoiceoverRig.pump(tester);
       await tap(rig, 'voiceover.playProject');

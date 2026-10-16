@@ -2,7 +2,9 @@
 //
 // The preview mutes while a voice recording captures (INT-07, ARCH §15): the recorder (AND-13)
 // tells its listeners on main when capture starts (true) and ends (false); this bridge, installed
-// once per process when the first Flutter engine attaches,
+// once per EngineContext (FIX-IOS-RECORD: keyed by context, not by process, so a second context —
+// tests, or a future per-engine context — gets its own bridge on its own EventHub; the production
+// context is the process singleton whose EventHub feeds every attached Flutter engine's sink),
 //  - emits the engine-wide `recordingChanged` event (Dart: `VoiceRecorder.recordingChanged`), once
 //    per change, and
 //  - mutes or unmutes every preview session (`PreviewSessionManager.setRecordingMuted`, which also
@@ -14,7 +16,8 @@ import com.vecvel.danaview.editor.engine.core.EngineContext
 import com.vecvel.danaview.editor.engine.core.EventHub
 import com.vecvel.danaview.editor.engine.pigeon.EngineEventKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.EngineEventMsg
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.Collections
+import java.util.WeakHashMap
 
 /** Recording state → `recordingChanged` events and the preview mute (file header). */
 class RecordingSignals(private val hub: EventHub, private val mute: (Boolean) -> Unit) {
@@ -35,11 +38,11 @@ class RecordingSignals(private val hub: EventHub, private val mute: (Boolean) ->
     }
 
     companion object {
-        private val installed = AtomicBoolean(false)
+        private val installed: MutableSet<EngineContext> = Collections.newSetFromMap(WeakHashMap())
 
-        /** Listens to the process recorder once per process. */
+        /** Listens to [ctx]'s recorder once per context, emitting on [ctx]'s EventHub. */
         fun installOnce(ctx: EngineContext) {
-            if (!installed.compareAndSet(false, true)) return
+            synchronized(installed) { if (!installed.add(ctx)) return }
             val signals = RecordingSignals(ctx.events) { muted -> ctx.previews.setRecordingMuted(muted) }
             ctx.recorder.addRecordingListener(signals::onRecording)
         }

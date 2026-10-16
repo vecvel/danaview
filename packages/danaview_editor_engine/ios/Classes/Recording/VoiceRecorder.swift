@@ -13,15 +13,17 @@
 // - Session: `.playAndRecord` + `.defaultToSpeaker` + Bluetooth HFP, preferred 48 kHz; the previous
 //   category/mode/options are restored when the recording ends (stop, cancel or interruption).
 // - Interruptions (`AVAudioSession.interruptionNotification` began, media services reset), route
-//   changes (new device -> routeChanged, old device gone -> deviceRemoved) and engine
+//   changes (new device -> routeChanged, old device gone -> deviceRemoved, a category change that
+//   leaves a playback-only session -> routeChanged, FIX-IOS-RECORD) and engine
 //   configuration changes stop the recording, finalize and KEEP the file, and emit an
 //   `interruption` event keyed by the recording id; `stop(id)` still returns the RecordedAsset.
 // - Permission: AVAudioApplication (17+) / AVAudioSession (15–16) through Permissions (IOS-15);
 //   `start` without a granted permission fails with `permissionDenied`.
 // - Preview playback is muted while recording: `VoiceRecorder.isRecording` and the
 //   `VoiceRecorder.activityDidChange` notification (main thread, userInfo["active"]: Bool) are
-//   what the preview audio path (IOS-11 AudioSessionCoordinator) observes; Dart also plays the
-//   preview muted while recording (UX-34).
+//   what the preview mute (INT-07 RecordingMuteBridge) observes. The recorder turns active before
+//   it reconfigures the session, so a project that Dart started playing just before the recorder
+//   (UX-34, FIX-IOS-RECORD) is muted before the first captured sample.
 //
 // One recording at a time (`busy` otherwise). start/stop/cancel run on the recorder queue; buffers
 // are converted and written on the recorder's own write queue.
@@ -50,6 +52,13 @@ protocol RecorderAudioSession: AnyObject {
     func snapshot() -> Snapshot
     func configureForRecording() throws
     func restore(_ snapshot: Snapshot)
+    /// Whether the session still captures from the microphone (false once something switched it
+    /// to a playback-only category while recording).
+    func allowsRecording() -> Bool
+}
+
+extension RecorderAudioSession {
+    func allowsRecording() -> Bool { true }
 }
 
 /// AVAudioEngine's input node as a RecorderInput.
@@ -123,6 +132,10 @@ final class SharedRecorderAudioSession: RecorderAudioSession {
         } catch {
             throw EngineError.from(error)
         }
+    }
+
+    func allowsRecording() -> Bool {
+        session.category == .playAndRecord || session.category == .record
     }
 
     func restore(_ snapshot: Snapshot) {
@@ -261,6 +274,7 @@ final class VoiceRecorder: VoiceRecording {
     private let snapshotSession: () -> Any
     private let configureSession: () throws -> Void
     private let restoreSession: (Any) -> Void
+    private let sessionRecords: () -> Bool
     private let permissionStatus: () -> Permissions.RecordPermission
     private let notifications: NotificationCenter
     private let now: () -> UInt64
@@ -289,6 +303,7 @@ final class VoiceRecorder: VoiceRecording {
         self.restoreSession = { snapshot in
             if let snapshot = snapshot as? Session.Snapshot { session.restore(snapshot) }
         }
+        self.sessionRecords = { session.allowsRecording() }
         self.permissionStatus = permission
         self.notifications = notifications
         self.now = now
@@ -335,6 +350,10 @@ final class VoiceRecorder: VoiceRecording {
             }
             let startHost = now()
             let snapshot = snapshotSession()
+            // Mute the preview before the session is reconfigured (FIX-IOS-RECORD): Dart starts the
+            // project playing just before the recorder, so the project sound must stop before the
+            // first captured sample.
+            VoiceRecorder.setActive(true)
             do {
                 try configureSession()
                 let writer = try RecordingWavWriter(url: outputURL)
@@ -357,11 +376,11 @@ final class VoiceRecorder: VoiceRecording {
                     try? FileManager.default.removeItem(at: outputURL)
                     throw error
                 }
-                VoiceRecorder.setActive(true)
                 Log.info(.recorder, "recording \(recording.id) started")
                 reply(.success(recording.id))
             } catch {
                 restoreSession(snapshot)
+                VoiceRecorder.setActive(false)
                 reply(.failure(EngineError.from(error)))
             }
         }
@@ -453,7 +472,13 @@ final class VoiceRecorder: VoiceRecording {
                 switch raw.flatMap(AVAudioSession.RouteChangeReason.init) {
                 case .oldDeviceUnavailable: self.interrupt(recording, .deviceRemoved)
                 case .newDeviceAvailable: self.interrupt(recording, .routeChanged)
-                default: break  // our own category change, overrides, wake from sleep
+                case .categoryChange:
+                    // Our own change keeps .playAndRecord. Anything that switched the session to a
+                    // playback-only category (a preview starting to play, IOS-11) has silently
+                    // stopped the microphone: stop and keep what was captured instead of writing
+                    // nothing (FIX-IOS-RECORD).
+                    if !self.sessionRecords() { self.interrupt(recording, .routeChanged) }
+                default: break  // overrides, wake from sleep
                 }
             },
             notifications.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: session, queue: nil) {

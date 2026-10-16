@@ -70,10 +70,14 @@ private final class FakeRecorderSession: RecorderAudioSession {
     var restored: [String] = []
     var current = "ambient"
     var failConfigure = false
+    var recordingWhileConfiguring: Bool?
 
     func snapshot() -> String { current }
 
+    func allowsRecording() -> Bool { current == "playAndRecord" }
+
     func configureForRecording() throws {
+        recordingWhileConfiguring = VoiceRecorder.isRecording
         if failConfigure { throw EngineError(.interrupted, "session refused") }
         configured += 1
         current = "playAndRecord"
@@ -268,6 +272,39 @@ final class VoiceRecorderTests: XCTestCase {
             try WavInfo(output).assertValid()
             input = FakeRecorderInput()
         }
+    }
+
+    /// FIX-IOS-RECORD: a preview that starts playing while recording switches the shared session
+    /// to `.playback` (IOS-11), which silently stops the microphone. The recorder treats that
+    /// category change as an interruption (stop, keep the file, tell Dart) instead of writing
+    /// nothing; its own category change to `.playAndRecord` keeps recording.
+    func testACategoryChangeThatStopsCaptureStopsAndKeepsTheFile() throws {
+        let id = try start()
+        input.push(seconds: 0.3)
+        let categoryChange: [AnyHashable: Any] = [AVAudioSessionRouteChangeReasonKey: AVAudioSession.RouteChangeReason.categoryChange.rawValue]
+        center.post(name: AVAudioSession.routeChangeNotification, object: AVAudioSession.sharedInstance(), userInfo: categoryChange)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertFalse(fixture.events.contains { $0.kind == .interruption && $0.jobId == id }, "our own .playAndRecord keeps recording")
+        session.current = "playback"
+        center.post(name: AVAudioSession.routeChangeNotification, object: AVAudioSession.sharedInstance(), userInfo: categoryChange)
+        XCTAssertTrue(spin(until: { self.fixture.events.contains { $0.kind == .interruption && $0.jobId == id } }))
+        XCTAssertEqual(fixture.events.first { $0.kind == .interruption && $0.jobId == id }?.interruption, .routeChanged)
+        let asset = try stop(id)
+        XCTAssertGreaterThan(asset.durationUs, 250_000)
+        try WavInfo(output).assertValid()
+    }
+
+    /// FIX-IOS-RECORD: the preview mute starts before the session is reconfigured, so a project
+    /// already playing is silent before the first captured sample; a failed start clears it.
+    func testTheRecorderIsActiveBeforeTheSessionIsReconfigured() throws {
+        let id = try start()
+        XCTAssertEqual(session.recordingWhileConfiguring, true)
+        _ = try stop(id)
+        XCTAssertFalse(VoiceRecorder.isRecording)
+        session.failConfigure = true
+        _ = awaitFailure(self) { recorder.start(outputURL: output, reply: $0) }
+        XCTAssertEqual(session.recordingWhileConfiguring, true)
+        XCTAssertFalse(VoiceRecorder.isRecording)
     }
 
     func testEngineConfigurationChangeStopsAndKeepsTheFile() throws {
