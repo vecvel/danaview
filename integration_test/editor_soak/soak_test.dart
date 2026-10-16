@@ -729,10 +729,29 @@ final class _Soak {
   }
 
   Future<String> _background() async {
-    // A reference frame before leaving: a black frame after the return only counts when the same
-    // frame was not black before (gaps, fades and dark stills are black on purpose).
+    // A reference frame before leaving: a black frame after the return only counts when a frame
+    // that was not black before leaving is black after it (gaps, fades and dark stills are black on
+    // purpose). The reference is the playhead frame, else the first of a few probes that is not
+    // black. Seeks draw nothing from the random sequence, so a seed replays the same ops.
     final f0 = ed.playheadFrame;
-    final ref = (await ed.capture()).meanLuma;
+    final f0Luma = (await ed.capture()).meanLuma;
+    var refFrame = f0;
+    var refLuma = f0Luma;
+    if (refLuma < 2) {
+      final last = math.max(0, ed.rate.frameIndexOf(ed.project.duration) - 1);
+      for (final k in {0, last ~/ 4, last ~/ 2, (3 * last) ~/ 4}) {
+        if (k == f0) continue;
+        await ed.seekFrame(k);
+        await _hold(const Duration(milliseconds: 300));
+        final l = (await ed.capture()).meanLuma;
+        if (l >= 2) {
+          refFrame = k;
+          refLuma = l;
+          break;
+        }
+      }
+      if (refFrame != f0) await ed.seekFrame(f0);
+    }
     final playing = rng.nextBool() && ed.transport.canPlay;
     if (playing) {
       await ed.transport.play();
@@ -752,23 +771,23 @@ final class _Soak {
     final how = '$secs s${playing ? ' during playback' : ''}';
     if (luma >= 2) return how;
     final f1 = ed.playheadFrame;
-    if (f1 == f0 && ref < 2) return '$how (frame $f1 is black content, also before leaving)';
-    // Black: does a fresh exact seek bring the picture back (a stale preview), and is the frame
-    // black content (the frame the playback stopped on)?
+    if (f1 == f0 && f0Luma < 2) return '$how (frame $f1 is black content, also before leaving)';
+    // Black: does a fresh exact seek bring the picture back (a stale preview)? Else, does the
+    // reference frame still show a picture (frame f1 is black content)?
     await ed.seekFrame(f1);
     await _hold(const Duration(seconds: 1));
     final reseek = (await ed.capture()).meanLuma;
-    var back = ref;
-    if (f1 != f0) {
-      await ed.seekFrame(f0);
-      await _hold(const Duration(milliseconds: 500));
-      back = (await ed.capture()).meanLuma;
-      if (reseek < 2 && back >= 2) return '$how (frame $f1 is black content)';
+    if (reseek >= 2) {
+      throw StateError('black preview 1 s after the return until the next seek: frame $f1 (left at $f0), '
+          'luma ${luma.toStringAsFixed(1)} then ${reseek.toStringAsFixed(1)} after a re-seek, ${_stateText()}');
     }
-    final detail = 'frame $f1 (left at $f0, luma ${ref.toStringAsFixed(1)} before), after a re-seek '
-        '${reseek.toStringAsFixed(1)}${f1 != f0 ? ', frame $f0 ${back.toStringAsFixed(1)}' : ''}, ${_stateText()}';
-    if (reseek >= 2) throw StateError('black preview 1 s after the return until the next seek: $detail');
-    throw StateError('black preview 1 s after the return, and a seek does not bring it back: $detail');
+    if (refLuma < 2) return '$how (frame $f1 is black; no frame with a picture to compare)';
+    await ed.seekFrame(refFrame);
+    await _hold(const Duration(milliseconds: 500));
+    final back = (await ed.capture()).meanLuma;
+    if (back >= 2) return '$how (frame $f1 is black content; frame $refFrame shows a picture)';
+    throw StateError('black preview after the return, and a seek does not bring it back: frame $f1 (left at $f0), '
+        'reference frame $refFrame luma ${refLuma.toStringAsFixed(1)} before leaving, ${back.toStringAsFixed(1)} after, ${_stateText()}');
   }
 
   /// The editor and preview phases, for failure lines.
