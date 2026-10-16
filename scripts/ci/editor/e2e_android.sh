@@ -24,7 +24,9 @@
 #      (x_android_export_background:fgs = fgs + fgs-check, :cancel, :swipe = swipe + swipe-check,
 #      :death = death + death-check), served by `e2e_host.sh serve`. A failed batch does not stop
 #      the run. Each batch has a timeout (DANAVIEW_E2E_BATCH_TIMEOUT) after which its process tree is
-#      killed and the batch counts as TIMEOUT;
+#      killed and the batch counts as TIMEOUT. Every adb call the script makes itself is bounded. An
+#      emulator that stops answering is booted again from its AVD (at most 3 times) and restaged
+#      before the next batch; the batch it died in is marked with * in the summary;
 #   4. prints a per-batch summary (batch, result, time, log) and exits non-zero if any batch failed
 #      or timed out.
 #
@@ -120,7 +122,7 @@ run_with_timeout() {
   start=$SECONDS
   while kill -0 "$pid" 2>/dev/null; do
     if [ $((SECONDS - start)) -ge "$limit" ]; then
-      echo "[e2e_android] batch timeout after ${limit}s: killing the batch" >&2
+      echo "[e2e_android] timeout after ${limit}s: killing $1" >&2
       kill_tree "$pid"
       wait "$pid" 2>/dev/null || true
       return 124
@@ -135,6 +137,7 @@ run_with_timeout() {
 
 ADB=""
 EMULATOR=""
+EMU_AVD=""
 BOOTED_BY_US=""
 SERIAL=""
 
@@ -167,7 +170,7 @@ emulator_args() { # <avd>
 }
 
 wait_booted() {
-  "$ADB" -s "$SERIAL" wait-for-device
+  run_with_timeout 300 "$ADB" -s "$SERIAL" wait-for-device || die "$SERIAL did not come up within 300 s"
   local _
   for _ in $(seq 1 180); do
     [ "$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && return 0
@@ -192,11 +195,49 @@ pick_device() {
   local port=5554
   while device_serials | grep -qx "emulator-$port"; do port=$((port + 2)); done
   SERIAL="emulator-$port"
-  echo "booting $TARGET as $SERIAL: emulator $(emulator_args "$TARGET") -port $port"
-  # shellcheck disable=SC2046
-  nohup "$EMULATOR" $(emulator_args "$TARGET") -port "$port" > "$ROOT/build/e2e_android_emulator_$port.log" 2>&1 < /dev/null &
+  boot_avd "$TARGET"
   BOOTED_BY_US=1
+}
+
+boot_avd() { # <avd>: boots it headless on $SERIAL's port and waits for sys.boot_completed
+  local port="${SERIAL#emulator-}"
+  echo "booting $1 as $SERIAL: emulator $(emulator_args "$1") -port $port"
+  # shellcheck disable=SC2046
+  nohup "$EMULATOR" $(emulator_args "$1") -port "$port" >> "$ROOT/build/e2e_android_emulator_$port.log" 2>&1 < /dev/null &
   wait_booted
+}
+
+# Whether the device answers (bounded: a dead emulator can leave adb waiting forever).
+device_ok() {
+  [ "$(run_with_timeout 30 "$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '
+')" = 1 ]
+}
+
+# Before a batch: an emulator that died (it happens under long exports on this host) is booted
+# again from its AVD and restaged, so the remaining batches still run. Returns 1 when the device is
+# gone and cannot be brought back.
+RESTARTS=0
+ensure_device() {
+  device_ok && return 0
+  echo "[e2e_android] $SERIAL does not answer"
+  if [ -z "$EMU_AVD" ] || [ -z "$EMULATOR" ] || [ "$RESTARTS" -ge 3 ]; then return 1; fi
+  RESTARTS=$((RESTARTS + 1))
+  run_with_timeout 30 "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
+  run_with_timeout 30 "$ADB" kill-server >/dev/null 2>&1 || true
+  boot_avd "$EMU_AVD"
+  BOOTED_BY_US=1
+  setup_device
+}
+
+# Microphone, shared folders and staging (after the first boot and after a restart).
+setup_device() {
+  if [ "$AUDIO" = 1 ]; then
+    if run_with_timeout 30 "$ADB" -s "$SERIAL" emu avd hostmicon >/dev/null 2>&1; then echo "host microphone: on (adb emu avd hostmicon)"
+    else note "could not turn the host microphone on (not an emulator?)"; fi
+  fi
+  prepare_shared
+  host stage || die "e2e_host.sh stage failed"
+  if [ -n "$MODELS_DIR" ]; then host stage-models "$MODELS_DIR" || die "e2e_host.sh stage-models failed"; fi
 }
 
 # The app's external files folder (the handshake's shared dir). On API 30+ a folder that adb creates
@@ -359,10 +400,9 @@ else
   pick_device
   API="$("$ADB" -s "$SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
   echo "device $SERIAL, API $API, $("$ADB" -s "$SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')$([ -n "$BOOTED_BY_US" ] && echo ", booted by this script")"
-  if [ "$AUDIO" = 1 ]; then
-    if "$ADB" -s "$SERIAL" emu avd hostmicon >/dev/null 2>&1; then echo "host microphone: on (adb emu avd hostmicon)"
-    else note "could not turn the host microphone on (not an emulator?)"; fi
-  fi
+  case "$SERIAL" in emulator-*) EMU_AVD="$(run_with_timeout 30 "$ADB" -s "$SERIAL" emu avd name 2>/dev/null | tr -d '
+' | head -1)" ;; esac
+  [ -z "$EMU_AVD" ] || echo "emulator AVD: $EMU_AVD (booted again from it if it dies mid-run)"
 fi
 endgroup
 
@@ -412,9 +452,7 @@ if [ "$KEEP_APP" = 1 ]; then
 fi
 
 group "stage"
-prepare_shared
-host stage || die "e2e_host.sh stage failed"
-if [ -n "$MODELS_DIR" ]; then host stage-models "$MODELS_DIR" || die "e2e_host.sh stage-models failed"; fi
+setup_device
 endgroup
 
 declare -a SUMMARY=()
@@ -423,7 +461,14 @@ for b in ${BATCHES[@]+"${BATCHES[@]}"}; do
   label="$(echo "$b" | tr ':' '-')"
   blog="$OUT/logs/batch-$label.log"
   group "batch $b"
-  "$ADB" -s "$SERIAL" logcat -c 2>/dev/null || true
+  if ! ensure_device; then
+    FAILED=$((FAILED + 1))
+    echo "error: batch $b not run: $SERIAL is gone and could not be booted again" >&2
+    SUMMARY+=("$(printf '%-36s %-8s %6s   %s' "$b" NODEVICE - "$SERIAL lost")")
+    endgroup
+    continue
+  fi
+  run_with_timeout 30 "$ADB" -s "$SERIAL" logcat -c 2>/dev/null || true
   : > "$OUT/logs/batch-$label.log.start"
   started=$SECONDS
   status=PASS
@@ -431,7 +476,11 @@ for b in ${BATCHES[@]+"${BATCHES[@]}"}; do
   run_with_timeout "$BATCH_TIMEOUT" run_batch "$b" > "$blog" 2>&1 || rc=$?
   if [ "$rc" -eq 124 ]; then status=TIMEOUT; elif [ "$rc" -ne 0 ]; then status=FAIL; fi
   kill_stray_flutter >> "$blog" 2>&1
-  "$ADB" -s "$SERIAL" logcat -d > "$OUT/logs/batch-$label.logcat.txt" 2>/dev/null || true
+  run_with_timeout 120 "$ADB" -s "$SERIAL" logcat -d > "$OUT/logs/batch-$label.logcat.txt" 2>/dev/null || true
+  if ! device_ok; then
+    echo "[e2e_android] $SERIAL stopped answering during batch $b (emulator died)" >> "$blog"
+    [ "$status" = PASS ] || status="$status*"
+  fi
   elapsed=$((SECONDS - started))
   # Measured values of this batch (DV_E2E_REPORT / DV_E2E_EXPORT lines of its flutter logs).
   for f in "$OUT/logs/${b%%:*}"_*.log; do
@@ -450,19 +499,20 @@ for b in ${PENDING[@]+"${PENDING[@]}"}; do
   SUMMARY+=("$(printf '%-36s %-8s %6s   %s' "$b" PENDING - "speech models not staged (DANAVIEW_E2E_MODELS)")")
 done
 
-bash "$HOST" -p android -d "$SERIAL" collect >/dev/null 2>&1 || true
+run_with_timeout 300 bash "$HOST" -p android -d "$SERIAL" collect >/dev/null 2>&1 || true
 
 group "summary ($SERIAL, API $API)"
 {
   printf '%-36s %-8s %7s  %s\n' batch result time log
   for line in ${SUMMARY[@]+"${SUMMARY[@]}"}; do echo "$line"; done
-  echo "${#BATCHES[@]} batches run, $FAILED failed or timed out, ${#PENDING[@]} pending"
+  echo "${#BATCHES[@]} batches run, $FAILED failed or timed out, ${#PENDING[@]} pending, emulator restarts: $RESTARTS"
+  echo "(a result with * means the emulator died during that batch; NODEVICE: not run, device lost)"
 } | tee "$OUT/summary.txt"
 echo "evidence: ${OUT#"$ROOT"/}/ (logs/, screens/, files/, summary.txt)"
 endgroup
 
 if [ -n "$BOOTED_BY_US" ] && [ "${DANAVIEW_E2E_KEEP_EMULATOR:-}" != 1 ]; then
-  "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
+  run_with_timeout 30 "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
 fi
 
 [ "$FAILED" -eq 0 ] || die "$FAILED of ${#BATCHES[@]} batches failed (see the summary above)"
