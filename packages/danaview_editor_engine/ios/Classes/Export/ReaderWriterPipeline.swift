@@ -378,14 +378,11 @@ final class ReaderWriterPipeline {
     }
 
     /// Releases an audio read: every reader of [source] is closed (queued behind any outstanding
-    /// call) and its compositions are released once their readers are gone.
+    /// call) and each composition is released once its reader is gone.
     static func retire(_ source: MixAudioSource, timeout: TimeInterval) {
         source.closeAudio()
-        let compositions = source.compositions
-        if source.waitForTeardown(timeout: timeout) {
-            compositions.forEach { $0.release() }
-        } else {
-            source.retire { compositions.forEach { $0.release() } }
+        if !source.retireReaders(timeout: timeout) {
+            Log.error(.export, "audio reader still blocked at teardown; left behind")
         }
     }
 }
@@ -787,10 +784,32 @@ final class MixAudioSource: SegmentAudioSource {
     private let composition: ExportComposition
     private let expectAudible: Bool
     private let control: PipelineControl?
-    /// The reader in use (pump queue only); its AVAssetReader lives on the session's own queue.
-    private var session: MixReadSession?
+    /// The reader in use; its AVAssetReader lives on the session's own queue. `session`,
+    /// `sessions` and `hung` are lock-protected: the pump reads, the work queue closes and retires
+    /// (also when IOS-17 abandoned a pump that is still inside `nextAudio`).
+    private var _session: MixReadSession?
     /// Sessions opened by this source (the first plus resumes), for validation and teardown.
-    private var sessions: [MixReadSession] = []
+    private var _sessions: [MixReadSession] = []
+    private let lock = NSLock()
+
+    private func locked<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
+    }
+
+    private var session: MixReadSession? { locked { _session } }
+    private var sessions: [MixReadSession] { locked { _sessions } }
+
+    /// Takes the current session out (nil afterwards) and marks it as left behind when [hung].
+    private func takeSession(hung leftBehind: Bool) -> MixReadSession? {
+        locked {
+            let s = _session
+            _session = nil
+            if leftBehind, let s = s { _hung.append(s) }
+            return s
+        }
+    }
     /// Reader range end (resumes read to it).
     private var rangeEnd: CMTime = .invalid
     /// Absolute 48 kHz frame of the next frame the writer gets (continuity across a resume).
@@ -823,7 +842,7 @@ final class MixAudioSource: SegmentAudioSource {
     private(set) var resumes = 0
     /// Hung reads seen (each one left alone on its own queue).
     private(set) var hungReads = 0
-    private var hung: [MixReadSession] = []
+    private var _hung: [MixReadSession] = []
 
     /// Why the read was rejected (nil = accepted or not finished).
     private(set) var rejection: String?
@@ -887,8 +906,10 @@ final class MixAudioSource: SegmentAudioSource {
 
     private func open(_ composition: ExportComposition, range: CMTimeRange) throws {
         let s = try MixReadSession(composition: composition, range: range, onTeardown: onTeardown)
-        session = s
-        sessions.append(s)
+        locked {
+            _session = s
+            _sessions.append(s)
+        }
     }
 
     static func frame(_ time: CMTime) -> Int64 {
@@ -930,12 +951,10 @@ final class MixAudioSource: SegmentAudioSource {
                 throw error.map(EngineError.from) ?? EngineError(.decodeFailed, "audio reader failed")
             case .hung:
                 hungReads += 1
-                hung.append(current)
                 onHung?()
                 // The watchdog only signals: the blocked call keeps its reader, and the reader is
                 // torn down on its own queue once (if ever) the call returns.
-                current.close()
-                session = nil
+                takeSession(hung: true)?.close()
                 guard let reopen = reopen, resumes < maxResumes, CMTimeCompare(resumeTime, rangeEnd) < 0 else {
                     rejection = "hung"
                     throw EngineError(.decodeFailed, "audio read hung", retryable: true)
@@ -957,44 +976,34 @@ final class MixAudioSource: SegmentAudioSource {
         while true {
             if let outcome = ticket.wait(SegmentedWriter.waitSlice) { return outcome }
             if control?.shouldStop == true {
-                session?.close()
-                session = nil
+                // Left behind like a hung read: its call may still be inside AVFoundation.
+                takeSession(hung: true)?.close()
                 throw EngineError(.interrupted, "audio read stopped", retryable: true)
             }
             if Date() >= deadline { return .hung }
         }
     }
 
-    /// Waits until every reader of this source is torn down (false when one is still blocked
-    /// inside AVFoundation after [timeout] s: it is then left behind, untouched).
+    /// Closes every reader of this source (each teardown queued behind any outstanding call) and
+    /// releases each reader's composition once that reader is gone: at once for the readers that
+    /// tear down within [timeout], later (on the reader's queue) for one still blocked inside
+    /// AVFoundation, which is never waited for. Returns whether every reader was torn down.
     @discardableResult
-    func waitForTeardown(timeout: TimeInterval) -> Bool {
+    func retireReaders(timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         var all = true
-        for s in sessions {
+        let (opened, leftBehind) = locked { (_sessions, _hung) }
+        for s in opened {
             s.close()
             // A hung reader is not waited for (its call may never return).
-            if hung.contains(where: { $0 === s }) {
+            if !leftBehind.contains(where: { $0 === s }), s.waitClosed(until: deadline) {
+                s.composition.release()
+            } else {
                 all = false
-                continue
+                s.afterTeardown { s.composition.release() }
             }
-            if !s.waitClosed(until: deadline) { all = false }
         }
         return all
-    }
-
-    /// Runs [body] once every reader of this source is torn down (on the last session's queue,
-    /// after any blocked call returned): used to release the compositions only then.
-    func retire(_ body: @escaping () -> Void) {
-        let all = sessions
-        guard !all.isEmpty else { return body() }
-        let group = DispatchGroup()
-        for s in all {
-            group.enter()
-            s.close() // queued behind any outstanding call: safe even for a blocked reader
-            s.afterTeardown { group.leave() }
-        }
-        group.notify(queue: .global(qos: .utility), execute: body)
     }
 
     /// The compositions this source read (the first plus one per resume).
@@ -1188,9 +1197,7 @@ final class MixAudioSource: SegmentAudioSource {
     }
 
     func closeAudio() {
-        session?.close()
-        session = nil
-        pending = nil
+        takeSession(hung: false)?.close()
     }
 }
 
