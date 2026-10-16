@@ -15,6 +15,18 @@ platform :ios do
     )
   end
 
+  # Lanes that upload screenshots run with overwrite_screenshots: true, which deletes every
+  # screenshot in App Store Connect before uploading the local ones. With an empty folder that
+  # would leave the listing without screenshots, so refuse to run until they are regenerated.
+  def require_screenshots!(relative_dir)
+    dir = File.join(ROOT, "ios", relative_dir)
+    shots = Dir.glob(File.join(dir, "**", "*.{png,jpg,jpeg}"), File::FNM_CASEFOLD)
+    return unless shots.empty?
+
+    UI.user_error!("No screenshots in ios/#{relative_dir}: this lane uploads with overwrite_screenshots " \
+                   "and would delete the store screenshots. Regenerate them first (see ios/#{relative_dir}/README.md).")
+  end
+
   def next_build_number
     latest_testflight_build_number(api_key: api_key, initial_build_number: 0) + 1
   rescue StandardError => e
@@ -38,6 +50,7 @@ platform :ios do
 
   desc "Sync metadata, screenshots, and age rating to App Store Connect without binary"
   lane :metadata do
+    require_screenshots!("fastlane/screenshots")
     upload_to_app_store(
       api_key: api_key,
       skip_binary_upload: true,
@@ -54,6 +67,7 @@ platform :ios do
 
   desc "Upload screenshots only to App Store Connect"
   lane :screenshots do
+    require_screenshots!("fastlane/screenshots")
     upload_to_app_store(
       api_key: api_key,
       skip_binary_upload: true,
@@ -70,6 +84,7 @@ platform :ios do
 
   desc "Upload Mac screenshots to App Store Connect"
   lane :mac_screenshots do
+    require_screenshots!("fastlane/screenshots_mac")
     upload_to_app_store(
       api_key: api_key,
       platform: "osx",
