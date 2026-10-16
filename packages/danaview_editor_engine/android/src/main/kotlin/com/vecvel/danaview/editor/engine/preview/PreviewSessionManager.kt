@@ -91,7 +91,7 @@ class PreviewSessionManager(private val ctx: EngineContext) {
         Log.i(TAG, "open ${backend.name} ${config.canvasWidth}x${config.canvasHeight}@${config.fps}")
         session.open { r ->
             if (r.isSuccess && synchronized(exportJobs) { exportJobs.isNotEmpty() } && suspends()) session.suspendForExport()
-            if (r.isSuccess && recordingMuted) ctx.threads.preview.execute { session.setRecordingMuted(recordingMuted) }
+            if (r.isSuccess && recordingMuted) ctx.threads.preview.execute { eachGuarded(listOf(session), "recording mute") { it.setRecordingMuted(recordingMuted) } }
             done(r)
         }
     }
@@ -101,10 +101,14 @@ class PreviewSessionManager(private val ctx: EngineContext) {
     var recordingMuted: Boolean = false
         private set
 
-    /** Mutes (true) or unmutes every session's audio while a recording captures (INT-07). Thread-safe. */
+    /**
+     * Mutes (true) or unmutes every session's audio while a recording captures (INT-07). Thread-safe.
+     * Sessions still opening are included (their backend stores the flag); one failing session
+     * neither stops the others nor reaches danaview-preview's looper (INT-07 review D1).
+     */
     fun setRecordingMuted(muted: Boolean) {
         recordingMuted = muted
-        ctx.threads.preview.execute { for (s in sessions.values) s.setRecordingMuted(recordingMuted) }
+        ctx.threads.preview.execute { eachGuarded(sessions.values, "recording mute") { it.setRecordingMuted(recordingMuted) } }
     }
 
     /** The open session [sessionId], or null. */
@@ -145,6 +149,22 @@ class PreviewSessionManager(private val ctx: EngineContext) {
 
     companion object {
         private const val TAG = "DanaviewPreview"
+
+        /**
+         * Runs [action] for each of [targets] (sessions, on danaview-preview); a failure is logged
+         * with [what] and the exception class only (never a message, path or content) and the
+         * remaining targets still run, so one session cannot stop a fan-out or kill the lane.
+         */
+        @VisibleForTesting
+        internal fun <T> eachGuarded(targets: Iterable<T>, what: String, action: (T) -> Unit) {
+            for (t in targets) {
+                try {
+                    action(t)
+                } catch (e: Exception) {
+                    Log.w(TAG, "$what not applied to a session (${e.javaClass.simpleName})")
+                }
+            }
+        }
 
         /** AND-16's backend when it implements [PreviewBackend], else [StillFramesBackend]. */
         fun defaultBackend(): PreviewBackend = contingencyBackend() ?: StillFramesBackend()

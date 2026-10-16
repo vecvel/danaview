@@ -37,6 +37,7 @@
 
 package com.vecvel.danaview.editor.engine.core
 
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.ExperimentalApi
@@ -61,8 +62,16 @@ class Capabilities(private val ctx: EngineContext) {
     /** The capabilities (computed once per process; blocking on first use). */
     fun current(): CapabilitiesMsg {
         cached?.let { return it }
-        val result = compute(ctx.deviceProfile.snapshot())
+        val snapshot = ctx.deviceProfile.snapshot()
+        val result = compute(snapshot)
         cached = result
+        // One line per process (QA-02 evidence: the tier and GLES version the app actually saw).
+        Log.i(
+            EngineContext.TAG,
+            "capabilities: supported=${result.supported} reason=${result.unsupportedReason} tier=${result.tier.name} " +
+                "api=${snapshot.apiLevel} ram=${snapshot.totalRamBytes} lowRam=${snapshot.lowRamDevice} " +
+                "gles3=${snapshot.gl?.gles3} gl=${snapshot.gl?.version} maxTexture=${result.maxTextureSize}",
+        )
         if (result.supported) ctx.deviceProfile.startThermalSignals()
         return result
     }

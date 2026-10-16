@@ -800,6 +800,7 @@ class ExportCoordinator(private val ctx: EngineContext) {
         if (outcome == ExportOutcome.INTERRUPTED) r.store.markInterrupted(r.info.jobId) else r.store.finish(r.info.jobId)
         val mapped = ExportErrors.map(error)
         Log.i(EngineContext.TAG, "export ${r.info.jobId}: ended $outcome (${mapped.code})")
+        if (outcome == ExportOutcome.FAILED) Log.w(EngineContext.TAG, "export ${r.info.jobId}: failure ${describeFailure(error)}")
         ctx.events.jobFailed(r.info.jobId, mapped)
         environment.exportEnded(r.info.jobId, r.job.output)
         for (l in listeners) guardedListener { l.onJobEnded(r.info.jobId, outcome) }
@@ -843,3 +844,17 @@ class ExportCoordinator(private val ctx: EngineContext) {
             FrameGrid.of(settings.fps).platformTimeOfFrame(settings.frameCount(durUs))
     }
 }
+
+/**
+ * A failed export's cause chain for the log (QA-02): Media3 releases the Transformer before it
+ * reports the error, so nothing else names the first failure. Class names, Media3 error code names,
+ * the top frame of each cause, and the messages of causes that are not I/O errors (an I/O message
+ * may carry a path), cut at 160 characters.
+ */
+internal fun describeFailure(error: Throwable): String =
+    generateSequence(error) { it.cause }.take(8).joinToString(" <- ") { t ->
+        val code = (t as? ExportException)?.errorCodeName?.let { "[$it]" } ?: ""
+        val top = t.stackTrace.firstOrNull()?.let { " at ${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" } ?: ""
+        val msg = if (t is java.io.IOException) "" else t.message?.take(160)?.let { " \"$it\"" } ?: ""
+        "${t.javaClass.simpleName}$code$msg$top"
+    }

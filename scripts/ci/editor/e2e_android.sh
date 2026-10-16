@@ -24,7 +24,9 @@
 #      (x_android_export_background:fgs = fgs + fgs-check, :cancel, :swipe = swipe + swipe-check,
 #      :death = death + death-check), served by `e2e_host.sh serve`. A failed batch does not stop
 #      the run. Each batch has a timeout (DANAVIEW_E2E_BATCH_TIMEOUT) after which its process tree is
-#      killed and the batch counts as TIMEOUT;
+#      killed and the batch counts as TIMEOUT. Every adb call the script makes itself is bounded. An
+#      emulator that stops answering is booted again from its AVD (at most 3 times) and restaged
+#      before the next batch; the batch it died in is marked with * in the summary;
 #   4. prints a per-batch summary (batch, result, time, log) and exits non-zero if any batch failed
 #      or timed out.
 #
@@ -50,6 +52,17 @@
 #   DANAVIEW_E2E_KEEP_APP=0  let `flutter test` uninstall the app after each run (default 1: the
 #                           app stays installed so the staged fixtures under Android/data/<app>/files
 #                           and a phase's saved state survive into the next run)
+#   DANAVIEW_E2E_FRESH=1    uninstall the app before staging, so the run starts without the projects,
+#                           recovery records and media copies of earlier runs
+#   DANAVIEW_E2E_RESET=1    before every batch but the first, copy out e2e_out, clear the app's data
+#                           (`pm clear`: projects, recovery journal, settings, permissions, its
+#                           Android/data folder) and stage again, so no batch sees what an earlier
+#                           one left (default: on when DANAVIEW_E2E_FRESH=1; 0 turns it off). The
+#                           phases inside one batch (s09, the extra's pairs) still share state.
+#   DANAVIEW_E2E_NOTIFICATIONS=0  do not pre-grant POST_NOTIFICATIONS (default: on API 33+ the
+#                           runner grants it as soon as the app is installed in each batch, because
+#                           the export's first-run notification prompt is a system dialog the suite
+#                           cannot answer: unanswered, the export waits in "Preparing..." forever)
 #   DANAVIEW_E2E_KEEP_EMULATOR=1  leave an emulator this script booted running at the end
 #   DANAVIEW_E2E_EMULATOR_ARGS  extra emulator arguments when booting
 set -euo pipefail
@@ -64,6 +77,8 @@ MODELS_DIR="${DANAVIEW_E2E_MODELS:-${DANAVIEW_E2E_MODELS_DIR:-}}"
 BATCH_TIMEOUT="${DANAVIEW_E2E_BATCH_TIMEOUT:-2400}"
 PHASE_TIMEOUT="${DANAVIEW_E2E_PHASE_TIMEOUT:-1200}"
 KEEP_APP="${DANAVIEW_E2E_KEEP_APP:-1}"
+RESET="${DANAVIEW_E2E_RESET:-${DANAVIEW_E2E_FRESH:-}}"
+NOTIFICATIONS="${DANAVIEW_E2E_NOTIFICATIONS:-1}"
 EXTRA_PAIRS="fgs cancel swipe death"
 
 GHA="${GITHUB_ACTIONS:-}"
@@ -111,6 +126,18 @@ kill_stray_flutter() {
   powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='dart.exe'\" | Where-Object { \$_.CommandLine -match 'flutter_tools' -and \$_.CommandLine -match 'integration_test' -and \$_.CommandLine -match '$SERIAL' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Output \"killed stray flutter tool \$(\$_.ProcessId)\" }" 2>/dev/null | tr -d '\r' || true
 }
 
+# Windows only: `e2e_host.sh serve` loops of this device left over from an earlier phase (a bash
+# kill of the serve pid does not reach its subshells). A leftover loop would handle the next phase's
+# host requests a second or third time. Only this serial's serve processes are stopped.
+kill_stray_serve() {
+  [ -n "$WINDOWS" ] || return 0
+  [ -n "${SERIAL:-}" ] || return 0
+  local p
+  for p in $(ps -ef | awk -v s="$SERIAL" '/e2e_host\.sh/ && / serve/ && $0 ~ ("-d " s " ") { print $2 }'); do
+    kill "$p" 2>/dev/null && echo "killed stray e2e_host.sh serve $p" || true
+  done
+}
+
 # Runs "$@" in the background, waits at most <seconds>; returns its status, or 124 after a timeout.
 run_with_timeout() {
   local limit="$1" pid start status=0
@@ -120,7 +147,7 @@ run_with_timeout() {
   start=$SECONDS
   while kill -0 "$pid" 2>/dev/null; do
     if [ $((SECONDS - start)) -ge "$limit" ]; then
-      echo "[e2e_android] batch timeout after ${limit}s: killing the batch" >&2
+      echo "[e2e_android] timeout after ${limit}s: killing $1" >&2
       kill_tree "$pid"
       wait "$pid" 2>/dev/null || true
       return 124
@@ -135,6 +162,7 @@ run_with_timeout() {
 
 ADB=""
 EMULATOR=""
+EMU_AVD=""
 BOOTED_BY_US=""
 SERIAL=""
 
@@ -167,7 +195,7 @@ emulator_args() { # <avd>
 }
 
 wait_booted() {
-  "$ADB" -s "$SERIAL" wait-for-device
+  run_with_timeout 300 "$ADB" -s "$SERIAL" wait-for-device || die "$SERIAL did not come up within 300 s"
   local _
   for _ in $(seq 1 180); do
     [ "$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && return 0
@@ -192,11 +220,57 @@ pick_device() {
   local port=5554
   while device_serials | grep -qx "emulator-$port"; do port=$((port + 2)); done
   SERIAL="emulator-$port"
-  echo "booting $TARGET as $SERIAL: emulator $(emulator_args "$TARGET") -port $port"
-  # shellcheck disable=SC2046
-  nohup "$EMULATOR" $(emulator_args "$TARGET") -port "$port" > "$ROOT/build/e2e_android_emulator_$port.log" 2>&1 < /dev/null &
+  boot_avd "$TARGET"
   BOOTED_BY_US=1
+}
+
+boot_avd() { # <avd>: boots it headless on $SERIAL's port and waits for sys.boot_completed
+  local port="${SERIAL#emulator-}"
+  echo "booting $1 as $SERIAL: emulator $(emulator_args "$1") -port $port"
+  # shellcheck disable=SC2046
+  nohup "$EMULATOR" $(emulator_args "$1") -port "$port" >> "$ROOT/build/e2e_android_emulator_$port.log" 2>&1 < /dev/null &
   wait_booted
+}
+
+# Whether the device answers (bounded: a dead emulator can leave adb waiting forever).
+device_ok() {
+  local _
+  for _ in 1 2 3; do
+    [ "$(run_with_timeout 30 "$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && return 0
+    sleep 5
+  done
+  return 1
+}
+
+# Before a batch: an emulator that died (it happens under long exports on this host) is booted
+# again from its AVD and restaged, so the remaining batches still run. Returns 1 when the device is
+# gone and cannot be brought back.
+RESTARTS=0
+ensure_device() {
+  device_ok && return 0
+  echo "[e2e_android] $SERIAL does not answer"
+  if [ -z "$EMU_AVD" ] || [ -z "$EMULATOR" ] || [ "$RESTARTS" -ge 3 ]; then return 1; fi
+  RESTARTS=$((RESTARTS + 1))
+  run_with_timeout 30 "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
+  # Restart the adb server only when no other device is attached: another run (a second emulator in
+  # parallel) would lose its connection.
+  if [ -z "$(device_serials | grep -vx "$SERIAL" || true)" ]; then
+    run_with_timeout 30 "$ADB" kill-server >/dev/null 2>&1 || true
+  fi
+  # A restarted emulator is left running at the end exactly when the original one would have been.
+  boot_avd "$EMU_AVD"
+  setup_device
+}
+
+# Microphone, shared folders and staging (after the first boot and after a restart).
+setup_device() {
+  if [ "$AUDIO" = 1 ]; then
+    if run_with_timeout 30 "$ADB" -s "$SERIAL" emu avd hostmicon >/dev/null 2>&1; then echo "host microphone: on (adb emu avd hostmicon)"
+    else note "could not turn the host microphone on (not an emulator?)"; fi
+  fi
+  prepare_shared
+  host stage || die "e2e_host.sh stage failed"
+  if [ -n "$MODELS_DIR" ]; then host stage-models "$MODELS_DIR" || die "e2e_host.sh stage-models failed"; fi
 }
 
 # The app's external files folder (the handshake's shared dir). On API 30+ a folder that adb creates
@@ -217,6 +291,33 @@ prepare_shared() {
     fi
   done
   echo "shared dir: $("$ADB" -s "$SERIAL" shell ls -lan "$base/files" | tr -d '\r' | awk 'NR > 1 { printf "%s %s %s; ", $1, $3, $NF }')"
+}
+
+# Between batches (DANAVIEW_E2E_RESET=1): exported files are copied out first, then the app's data
+# goes (pm clear also empties Android/data/<app>, and leftovers there are removed explicitly), and the
+# shared folders, fixtures and models are staged again.
+reset_app() {
+  local base="/sdcard/Android/data/com.vecvel.danaview/files"
+  run_with_timeout 300 bash "$HOST" -p android -d "$SERIAL" collect >/dev/null 2>&1 || true
+  run_with_timeout 60 "$ADB" -s "$SERIAL" shell pm clear com.vecvel.danaview 2>&1 | tr -d '\r' || true
+  run_with_timeout 60 "$ADB" -s "$SERIAL" shell "rm -rf $base/e2e_handshake $base/e2e_out" >/dev/null 2>&1 || true
+  setup_device
+}
+
+# API 33+: grants POST_NOTIFICATIONS once the app is installed (the batch's flutter test installs it;
+# after a fresh start or a reset the grant is gone). Runs in the background during a batch; every
+# adb call is bounded. The app's in-context prompt then finds the permission granted and shows no
+# system dialog (Permissions.requestNotificationPermission).
+grant_notifications() {
+  [ "$NOTIFICATIONS" = 1 ] && [ "$API" -ge 33 ] || return 0
+  local _
+  for _ in $(seq 1 900); do
+    if run_with_timeout 20 "$ADB" -s "$SERIAL" shell pm grant com.vecvel.danaview android.permission.POST_NOTIFICATIONS >/dev/null 2>&1; then
+      echo "[e2e_android] POST_NOTIFICATIONS granted (no system prompt during exports)"
+      return 0
+    fi
+    sleep 2
+  done
 }
 
 # ---- batches ------------------------------------------------------------------------------------
@@ -261,6 +362,7 @@ extra_phase() {
   local phase="$1" expect="$2" file="$SUITE/x_android_export_background_test.dart"
   local logf="$OUT/logs/x_android_export_background_test-$phase.log" fpid spid fstatus=0 sstatus=0 start died=""
   echo "[e2e_android] flutter test $file phase=$phase (expect $expect), log ${logf#"$ROOT"/}"
+  kill_stray_serve
   host serve >> "$OUT/logs/host-serve.log" 2>&1 &
   spid=$!
   (cd "$ROOT" && flutter test "$file" -d "$SERIAL" --dart-define=DANAVIEW_EDITOR=true \
@@ -294,11 +396,23 @@ extra_phase() {
     sleep 1
   done
   if [ "$fstatus" -ne 124 ]; then wait "$fpid" 2>/dev/null || fstatus=$?; fi
+  # A `kill` ends the app at once and flutter test exits on the lost connection before `serve`
+  # (which returns a minute after the action) has reported it: wait for serve's own status then.
+  if [ -z "$died" ] && [ "$expect" = dies ] && [ "$fstatus" -ne 124 ]; then
+    local waited=0
+    while kill -0 "$spid" 2>/dev/null && [ "$waited" -lt 90 ]; do sleep 1; waited=$((waited + 1)); done
+    if ! kill -0 "$spid" 2>/dev/null; then
+      wait "$spid" || sstatus=$?
+      died=1
+      [ "$sstatus" -eq 3 ] && echo "[e2e_android] phase $phase: the host ended the app (flutter test had already exited)"
+    fi
+  fi
   if [ -z "$died" ]; then
     kill_tree "$spid"
     wait "$spid" 2>/dev/null || true
   fi
   kill_stray_flutter
+  kill_stray_serve
   if [ "$expect" = dies ]; then
     if [ "$sstatus" -eq 3 ]; then echo "[e2e_android] PASS phase $phase (ended the app as expected)"; return 0; fi
     echo "[e2e_android] FAIL phase $phase: expected the host to end the app (flutter status $fstatus)"
@@ -359,10 +473,8 @@ else
   pick_device
   API="$("$ADB" -s "$SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
   echo "device $SERIAL, API $API, $("$ADB" -s "$SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')$([ -n "$BOOTED_BY_US" ] && echo ", booted by this script")"
-  if [ "$AUDIO" = 1 ]; then
-    if "$ADB" -s "$SERIAL" emu avd hostmicon >/dev/null 2>&1; then echo "host microphone: on (adb emu avd hostmicon)"
-    else note "could not turn the host microphone on (not an emulator?)"; fi
-  fi
+  case "$SERIAL" in emulator-*) EMU_AVD="$(run_with_timeout 30 "$ADB" -s "$SERIAL" emu avd name 2>/dev/null | tr -d '\r' | head -1)" ;; esac
+  [ -z "$EMU_AVD" ] || echo "emulator AVD: $EMU_AVD (booted again from it if it dies mid-run)"
 fi
 endgroup
 
@@ -385,10 +497,13 @@ fi
 OUT="$ROOT/build/e2e/android/$SERIAL"
 if [ "$DRY_RUN" = 1 ]; then
   group "batches (dry run)"
+  [ "${DANAVIEW_E2E_FRESH:-}" != 1 ] || echo "  + adb uninstall com.vecvel.danaview (DANAVIEW_E2E_FRESH=1)"
   echo "  + (API >= 30) adb shell mkdir -p + chmod 2777 Android/data/com.vecvel.danaview/files/{,e2e_fixtures,e2e_models,e2e_handshake,e2e_out}"
   echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage"
   [ -z "$MODELS_DIR" ] || echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage-models <DANAVIEW_E2E_MODELS>"
   [ "$KEEP_APP" != 1 ] || echo "  (flutter test runs with --no-uninstall: DANAVIEW_E2E_KEEP_APP=1)"
+  [ "$NOTIFICATIONS" != 1 ] || echo "  (API 33+, during every batch: adb shell pm grant com.vecvel.danaview android.permission.POST_NOTIFICATIONS once installed)"
+  [ "$RESET" != 1 ] || echo "  (before every batch but the first: collect, adb shell pm clear com.vecvel.danaview, stage again: DANAVIEW_E2E_RESET=1)"
   for b in ${BATCHES[@]+"${BATCHES[@]}"}; do echo "batch $b (timeout ${BATCH_TIMEOUT}s)"; print_cmd "$b"; done
   for b in ${PENDING[@]+"${PENDING[@]}"}; do echo "batch $b PENDING: speech models not staged (DANAVIEW_E2E_MODELS)"; done
   endgroup
@@ -412,26 +527,50 @@ if [ "$KEEP_APP" = 1 ]; then
 fi
 
 group "stage"
-prepare_shared
-host stage || die "e2e_host.sh stage failed"
-if [ -n "$MODELS_DIR" ]; then host stage-models "$MODELS_DIR" || die "e2e_host.sh stage-models failed"; fi
+if [ "${DANAVIEW_E2E_FRESH:-}" = 1 ]; then
+  # Projects, recovery records and copies left by earlier (killed) runs change what Projects shows.
+  run_with_timeout 120 "$ADB" -s "$SERIAL" uninstall com.vecvel.danaview >/dev/null 2>&1 || true
+  echo "fresh start: app uninstalled (its data and Android/data folder are gone)"
+fi
+setup_device
 endgroup
 
 declare -a SUMMARY=()
 FAILED=0
+FIRST_BATCH=1
 for b in ${BATCHES[@]+"${BATCHES[@]}"}; do
   label="$(echo "$b" | tr ':' '-')"
   blog="$OUT/logs/batch-$label.log"
   group "batch $b"
-  "$ADB" -s "$SERIAL" logcat -c 2>/dev/null || true
+  if [ "$RESET" = 1 ] && [ -z "$FIRST_BATCH" ] && device_ok; then
+    echo "reset before $b: app data cleared, staged again"
+    reset_app > "$OUT/logs/batch-$label.reset.log" 2>&1 || echo "warning: reset before $b failed (see logs/batch-$label.reset.log)"
+  fi
+  FIRST_BATCH=""
+  if ! ensure_device; then
+    FAILED=$((FAILED + 1))
+    echo "error: batch $b not run: $SERIAL is gone and could not be booted again" >&2
+    SUMMARY+=("$(printf '%-36s %-8s %6s   %s' "$b" NODEVICE - "$SERIAL lost")")
+    endgroup
+    continue
+  fi
+  run_with_timeout 30 "$ADB" -s "$SERIAL" logcat -c 2>/dev/null || true
   : > "$OUT/logs/batch-$label.log.start"
   started=$SECONDS
   status=PASS
   rc=0
+  grant_notifications > "$OUT/logs/batch-$label.grant.log" 2>&1 &
+  grant_pid=$!
   run_with_timeout "$BATCH_TIMEOUT" run_batch "$b" > "$blog" 2>&1 || rc=$?
+  kill_tree "$grant_pid"
+  wait "$grant_pid" 2>/dev/null || true
   if [ "$rc" -eq 124 ]; then status=TIMEOUT; elif [ "$rc" -ne 0 ]; then status=FAIL; fi
   kill_stray_flutter >> "$blog" 2>&1
-  "$ADB" -s "$SERIAL" logcat -d > "$OUT/logs/batch-$label.logcat.txt" 2>/dev/null || true
+  run_with_timeout 120 "$ADB" -s "$SERIAL" logcat -d > "$OUT/logs/batch-$label.logcat.txt" 2>/dev/null || true
+  if ! device_ok; then
+    echo "[e2e_android] $SERIAL stopped answering during batch $b (emulator died)" >> "$blog"
+    [ "$status" = PASS ] || status="$status*"
+  fi
   elapsed=$((SECONDS - started))
   # Measured values of this batch (DV_E2E_REPORT / DV_E2E_EXPORT lines of its flutter logs).
   for f in "$OUT/logs/${b%%:*}"_*.log; do
@@ -450,19 +589,20 @@ for b in ${PENDING[@]+"${PENDING[@]}"}; do
   SUMMARY+=("$(printf '%-36s %-8s %6s   %s' "$b" PENDING - "speech models not staged (DANAVIEW_E2E_MODELS)")")
 done
 
-bash "$HOST" -p android -d "$SERIAL" collect >/dev/null 2>&1 || true
+run_with_timeout 300 bash "$HOST" -p android -d "$SERIAL" collect >/dev/null 2>&1 || true
 
 group "summary ($SERIAL, API $API)"
 {
   printf '%-36s %-8s %7s  %s\n' batch result time log
   for line in ${SUMMARY[@]+"${SUMMARY[@]}"}; do echo "$line"; done
-  echo "${#BATCHES[@]} batches run, $FAILED failed or timed out, ${#PENDING[@]} pending"
+  echo "${#BATCHES[@]} batches run, $FAILED failed or timed out, ${#PENDING[@]} pending, emulator restarts: $RESTARTS"
+  echo "(a result with * means the emulator died during that batch; NODEVICE: not run, device lost)"
 } | tee "$OUT/summary.txt"
 echo "evidence: ${OUT#"$ROOT"/}/ (logs/, screens/, files/, summary.txt)"
 endgroup
 
 if [ -n "$BOOTED_BY_US" ] && [ "${DANAVIEW_E2E_KEEP_EMULATOR:-}" != 1 ]; then
-  "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
+  run_with_timeout 30 "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
 fi
 
 [ "$FAILED" -eq 0 ] || die "$FAILED of ${#BATCHES[@]} batches failed (see the summary above)"
