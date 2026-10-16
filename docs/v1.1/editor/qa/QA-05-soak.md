@@ -81,7 +81,87 @@ Every in-app event prints a `DV_SOAK <kind> …` line. The kinds are `op`, `fail
 
 For every job, the project is then opened straight from the store and validated.
 
-## 3. Re-run after the D1, D2 and D3 fixes (QA-05-RERUN)
+## 2. Second re-run, after FIX-QA05-D5 (QA-05-RERUN)
+
+FIX-QA05-D5 is under test. With it, the Tasks controller waits for the first media resolve pass before it resumes pending jobs, and a preview that stopped while the app was in the background restarts on resume (the Dart side of D6). All runs used an **iPhone 16 simulator on iOS 26.5**, with Xcode 26.6, Flutter 3.44 and a debug build, on 2026-10-16 from 22:09 to 23:18. Runs stayed at 15 minutes on this 8 GB Mac.
+
+**Verdict: not green.** D5 is fixed: every process-death phase passes, including proxy, reverse and freeze. D6 did not come back: 44 of 44 background ops passed. But the seeded soak (seed 5150) found a new iOS export defect, D7, at the same op in both runs. In run a, the export failed with "audio read hung". In run b, the app crashed with a SIGSEGV in the export's audio read.
+
+### 2.1 Process death per job type
+
+The first attempt (22:09, on `6663101E-…`) is **void**. Another builder was running QA-01's `e2e_host.sh` (s12, then s13) on the same simulator at the same time. The two hosts share the app's handshake folder, so each host answered the other's requests: the soak host received a `grantMic`, and the e2e host received the soak's `kill`. The e2e host's `simctl privacy grant` for s13 also terminates a running app, and that killed `die-export` 8 s in. Its logs are kept in `build/soak/ios/6663101E-…/rerun2-death-collided/`. Within that attempt, autosave and proxy had already passed.
+
+The full chain was then re-run on the second iPhone 16 iOS 26.5 simulator (`7DF46AEE-94A0-4105-A226-AAAFB9663838`), which nobody else was using, from 22:27 to 22:37:
+
+`python3 -I integration_test/editor_soak/tool/soak_host.py -p ios -d 7DF46AEE-94A0-4105-A226-AAAFB9663838 -m ~/danaview-models death`
+
+All 7 phases came back `ok`. Evidence is in `build/soak/ios/7DF46AEE-…/rerun2-death/`.
+
+| Job | Result | Evidence |
+|---|---|---|
+| autosave | **pass** | The journal was restored, and the project reopened valid holding `SOAK AUTOSAVE 0`. |
+| proxy | **pass (D5 fixed)** | On reopen the asset was `pending` with no task yet, as expected before the first resolve. It then resumed and became `ready` with no user action. |
+| reverse | **pass (D5 fixed)** | The task was running at the kill. The rendition was `pending` on reopen, resumed, and became `ready`. No `mediaOffline` failure. |
+| freeze | **pass (D5 fixed)** | The task was running at the kill. The still was `pending` on reopen, resumed, and became `ready`. |
+| export | **pass** | Killed at 15 %. Exactly one `ExportInterrupted`, reported once, and nothing on reopen. |
+| captions | **pass** | Killed at 56 %. The record was kept, the notice showed once, and the record was gone after Discard. The record now reports 0 % kept: since FIX-QA07-D5, only checkpointed ranges count, and none had been written yet. That is the expected copy ("Resume starts over"). |
+
+Each job's project was then opened straight from the store and passed validation.
+
+### 2.2 Random soak, 15 min, seed 5150
+
+`python3 -I integration_test/editor_soak/tool/soak_host.py -p ios -d 7DF46AEE-94A0-4105-A226-AAAFB9663838 -m ~/danaview-models soak --minutes 15 --seed 5150` ran twice. Evidence is in `build/soak/ios/7DF46AEE-…/rerun2-soak-{a,b}/`: the log, `soak-summary-log.json` (run a), the failing project `soak-failed-800.json` (run a), the host's `memory-host.csv`, and the crash report (run b).
+
+| Run | Ops | Projects | Reopens | Failures | Memory (baseline → end, peak) | Growth |
+|---|---|---|---|---|---|---|
+| a | 802 | 4 | 33 of 33 valid | **1**: op #800 export, `ExportFailed(exportFailed.unknown)` (D7) | 332.7 → 284.1 MB, peak 691.8 MB | −14.6 % |
+| b | 801 before the crash | 4 | 32 of 32 valid | **app crash** right after op #801 (D7) | no summary, because the app died. The host saw 95–663 MB over 27 samples. | n/a |
+
+Run a, criterion by criterion:
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| No crash | **pass** (run a) / **FAIL** (run b) | Run a: one app pid (43566) across all 30 outside samples. Run b: `EXC_BAD_ACCESS` (SIGSEGV) at 23:18:37, see D7. |
+| No unhandled exception | **pass** | 0 framework errors and 0 uncaught zone errors. |
+| Project always reopens valid | **pass** | 33 of 33 in run a and 32 of 32 in run b. Each rotated project passed its store check. |
+| Memory growth ≤ 10 % | **pass** | −14.6 % (772 samples). The peak comes from captions and export, as before. |
+| Nothing hangs, every op works | **FAIL** | 1 failed op: the export at op #800 (D7). |
+
+Ops in run a (ran/skipped/failed):
+
+- seek 64, scrub 45, play 47, frameStep 31
+- split 60, undo 68, redo 31, copyPaste 23, duplicate 31, delete 34
+- dragMove 27, dragTrim 37
+- text 23, marker 18, speed 25, transition 17, zoom 32, selectAll 15
+- reverse 19, freeze 17/1/0, proxy 9, export 12/0/1, captions 5
+- background 22, inactive 20, call 8 (simulated), offline 9
+- audioRoute 0/8 and lowStorage 0/10: refused on the simulator (see §5)
+- reopen 33
+
+Run b went through the same sequence, with ops shifted by one (`duplicate` at #800), up to the crash.
+
+**D5 is fixed in the soak too.** Reverse, freeze and proxy ran 19, 17 and 9 times with no failure. Every export blocked by "waiting for reverse" (#468, #687/#688) was blocked correctly.
+
+**D6 did not reproduce.** All 22 background ops passed in each run (1–5 s, half of them during playback). After each return the editor reached `ready` with a live preview session, in 7.5–9 s including the time away. The one black frame (run a, "5 s during playback, frame 751") was black content: the reference frame showed a picture. The preview never stayed at `PreviewPhase.degraded`, so the harness `waitReady` (QA-00's `e2e_editor.dart`) was not changed. Only the soak's own recovery check now counts `degraded` as live (§2.3).
+
+**D7 · iOS export: the audio mix read hangs, and the watchdog's cleanup can crash the app (new).** This reproduced at the same op in both seeded runs: the first "complete" export after about 800 ops, on project #4. That project's main lane has 11 clips, 5 of them reversed at 2×. It also has 4 texts and one audio-lane clip (the project is in `rerun2-soak-a/soak-failed-800.json`).
+
+- **Run a.** The simulator log shows three cycles about 30 s apart (22:57:56, 22:58:26, 22:58:57). Each cycle is an AVFoundation `remakerFamily_renderPipelineRanDry … track source id 4`, then a reader invalidate. Then the engine logs `export ex_1f05…: failed decodeFailed: audio read hung`. That is the watchdog in `MixAudioSource.nextAudio()` (`packages/danaview_editor_engine/ios/Classes/Export/ReaderWriterPipeline.swift`, about line 750) firing on each retry. The Dart side shows it as `exportFailed.unknown` ("The export didn't finish").
+- **Run b.** At the same point the app died: `EXC_BAD_ACCESS / SIGSEGV`, `KERN_INVALID_ADDRESS (possible pointer authentication failure)`, on queue `com.vecvel.danaview.editor.export.audioread`. The stack is `pthread_mutex_unlock` ← `FigSemaphoreWaitRelative` ← `assetReader_ExtractAndRetainNextSampleBuffer` ← `-[AVAssetReaderOutput copyNextSampleBuffer]` ← closure in `MixAudioSource.nextAudio()`. The report is in `rerun2-soak-b/Runner-2026-10-16-231837.ips`.
+
+Reading of the code: after the watchdog times out, `nextAudio()` calls `reader.cancelReading()`, waits at most 5 s for the blocked `copyNextSampleBuffer`, and throws (retryable). The closure on `readQueue` holds only the `output`. An `AVAssetReaderOutput` does not keep its reader alive, so when the retry replaces or releases the reader, the still-blocked copy can wake up inside a freed reader. That is a use-after-free, which matches run b's crash. The underlying stall is the D1 family: an audio mix pipeline that "runs dry" on one track of a reversed and speed-changed composition. FIX-IOS-EXPORT-STALL turned the endless hang into a bounded failure, but not into a success. The owner is IOS-12 (`ReaderWriterPipeline.swift`, which has the `// OWNER: IOS-12` header) and the FIX-IOS-EXPORT-STALL follow-up. Two things are needed:
+
+1. Keep the reader alive until the read block has returned. Capture it in the closure, and do not release or replace it while a copy is still outstanding.
+2. Fix the run-dry stall on that composition. The failing project above, replayed with `--seed 5150`, reproduces it.
+
+### 2.3 What changed in the suite in this re-run
+
+- **Recovery.** The soak's recovery check (`_recover` in `soak_test.dart`) now counts a `degraded` preview as live. A quality step still shows frames, which is the FIX-QA05-D5 finding. QA-00's `waitReady` was left unchanged, because D6 never showed as `degraded`.
+- **One host per simulator.** Two host drivers on one simulator answer each other's handshake requests, and QA-01's `grantMic` terminates the app. Run QA-05 on a simulator that no other builder is using, as in the commands above.
+
+`flutter analyze integration_test/editor_soak`: no issues.
+
+## 3. Re-run after the D1, D2 and D3 fixes (first QA-05-RERUN)
 
 All runs used the **iPhone 16 simulator on iOS 26.5** (`6663101E-6BE7-47D4-B3B8-055700BF2E02`), with Xcode 26.6, Flutter 3.44 and a debug build, on 2026-10-16, 16:41 to 17:55. The fixes under test are FIX-IOS-EXPORT-STALL (D1, D2: `ReaderWriterPipeline` spacer anchor, bounded writer waits, per-job work queues) and FIX-JOB-RESUME (D3: `createEditorController` reads `tasksControllerProvider` when the session attaches). Runs stayed at 15 minutes on this 8 GB Mac.
 
