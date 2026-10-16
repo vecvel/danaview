@@ -56,6 +56,9 @@ Future<(EditorTestHarness, ProjectId)> _open(WidgetTester tester) async {
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  // Engine-driven frames: pumps wait for real vsync frames, so FrameTiming carries real build and
+  // raster durations (the benchmark setup of Flutter's own scrolling perf tests).
+  binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
 
   testWidgets('timeline fling and pinch on 1,000 items: UI and raster per frame', (tester) async {
     final (h, id) = await _open(tester);
