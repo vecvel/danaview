@@ -469,7 +469,10 @@ final class JobRegistry: JobScheduling {
             case .waitingForForeground:
                 entry.state = .queued
                 Log.info(.jobs, "job \(entry.body.kind) re-queued on foreground")
-                pump()
+                // The foreground re-queues every waiting job with one `foreground` call each, all
+                // already enqueued on stateQueue: pump after them, so the highest priority starts
+                // first instead of a lower one starting and then being pre-empted (FIX-IOS-MEDIA).
+                stateQueue.async { [self] in pump() }
             case .running:
                 entry.foregroundSeen = true
             case .queued:
@@ -507,8 +510,9 @@ final class JobRegistry: JobScheduling {
             ProxyRegistry.mark(fingerprint: proxy.fingerprint, nil)
         }
         Log.info(.jobs, "job \(entry.body.kind) done")
-        context.events.emitJobDone(jobId: entry.id, result)
+        // Activity ends before the event, so a listener that sees the end sees the cache idle.
         DiskCache.endActivity()
+        context.events.emitJobDone(jobId: entry.id, result)
     }
 
     private func finish(_ entry: Entry, failure: EngineError) {
@@ -516,8 +520,8 @@ final class JobRegistry: JobScheduling {
             ProxyRegistry.mark(fingerprint: proxy.fingerprint, failure.code == .cancelled ? nil : .failed)
         }
         Log.info(.jobs, "job \(entry.body.kind) ended: \(failure.code.rawValue)")
-        context.events.emitJobFailure(jobId: entry.id, failure)
         DiskCache.endActivity()
+        context.events.emitJobFailure(jobId: entry.id, failure)
     }
 }
 
