@@ -186,6 +186,10 @@ final class JobWatch {
   /// The first sample of the transcribing phase.
   TranscriptionProgress? firstTranscribing;
 
+  /// The first sample of the transcribing phase with audio processed. The phase change itself is
+  /// reported before a checkpoint is replayed, so a resumed unit shows its resume point here.
+  TranscriptionProgress? firstProcessed;
+
   void poll() {
     final job = service.activeJob;
     if (job != null) attach(job);
@@ -200,6 +204,7 @@ final class JobWatch {
     last = p;
     phases.add(p.phase);
     if (p.phase == TranscriptionPhase.transcribing && firstTranscribing == null) firstTranscribing = p;
+    if (p.phase == TranscriptionPhase.transcribing && p.processed > 0 && firstProcessed == null) firstProcessed = p;
     final paused = p.paused;
     if (paused != null && (pauses.isEmpty || pauses.last != paused)) pauses.add(paused);
   }
@@ -1034,16 +1039,16 @@ void main() {
     addTearDown(watch.dispose);
     await E2eApp.tapKey(tester, 'captions-interrupted-resume');
     final run = await Captions.create(ed, pressCreate: false);
-    final first = run.watch.firstTranscribing ?? watch.firstTranscribing;
+    final first = run.watch.firstProcessed ?? watch.firstProcessed;
     final killedAt = (saved['processed'] as num?)?.toInt() ?? 0;
     final resumedAt = first?.processed ?? 0;
-    Qa07.report('job-resume', 'record ${(resumable.doneFraction * 100).round()}% done; killed at $killedAt us; first transcribing sample processed '
-        '$resumedAt us, fraction ${first?.fraction}; ${run.cues.length} cues, last cue ends ${run.cues.isEmpty ? '-' : run.cues.last.end} us');
-    // ai.md §8.6 / ARCH §16.5: the unit in progress continues from its last checkpointed chunk end,
-    // so the first transcribing sample starts at the first chunk's end (165-195 s), not at 0, and the
+    Qa07.report('job-resume', 'record ${(resumable.doneFraction * 100).round()}% done; killed at $killedAt us; first transcribing sample with audio '
+        'processed $resumedAt us, fraction ${first?.fraction}; ${run.cues.length} cues, last cue ends ${run.cues.isEmpty ? '-' : run.cues.last.end} us');
+    // ai.md §8.6 / ARCH §16.5: the unit in progress continues from its last checkpointed chunk end
+    // (165-195 s), so the first progress with audio processed is already past it, not near 0; the
     // work lost to the kill is at most one chunk.
-    expect(resumedAt, inInclusiveRange(Qa07.firstChunkMinEnd, Qa07.firstChunkMaxEnd), reason: 'resumed from the first checkpoint, not from zero');
-    expect(resumedAt, lessThanOrEqualTo(killedAt), reason: 'nothing after the kill point was kept');
+    expect(resumedAt, greaterThanOrEqualTo(Qa07.firstChunkMinEnd), reason: 'resumed from the first checkpoint, not from zero');
+    expect(resumedAt, lessThan(killedAt), reason: 'the checkpoint ends before the kill point');
     expect(run.cues, isNotEmpty);
     expect(run.cues.first.start, lessThan(Qa07.firstChunkMinEnd), reason: 'the checkpointed chunk\'s captions are inserted too');
     expect(run.cues.last.end, greaterThan(Qa07.killAfter), reason: 'the rest of the clip was transcribed');

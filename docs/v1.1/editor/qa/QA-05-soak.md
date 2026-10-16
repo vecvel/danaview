@@ -53,7 +53,7 @@ Every in-app event prints a `DV_SOAK <kind> …` line. The kinds are `op`, `fail
 | Gestures | `dragMove` (4) and `dragTrim` (4) go through the timeline's drag delegate, with snapping and a ±3 px overshoot. `frameStep` (3) uses hardware ←/→. |
 | Playback | `seek` (8, exact), `scrub` (5, `beginScrub` then 15 × `scrubTo` then `endScrub`), `play` (6, 0.3–2 s). |
 | Jobs | `export` (2): the export is cancelled, completed, or backgrounded mid-export and then completed or resumed. `captions` (1): the tiny model on the speech clip, completed or cancelled, then undone half the time. `reverse` (2), `freeze` (2) and `proxy` (1): each is waited for, or cancelled from the Tasks controller. |
-| Interruptions | `background` (2): the host backgrounds the app for 1–5 s, during playback half the time. One second after the return, the preview must not be black. `inactive` (2): the lifecycle goes inactive → resumed, which is what a call banner, Siri or Control Center produce. `call` (1): a host GSM call on the Android emulator; on iOS it falls back to the lifecycle simulation. `audioRoute` (1). `lowStorage` (1): the host fills storage, then the soak does an edit, a manual save and an export, then frees the storage. `offline` (1): a media file used on the timeline is moved away, and the media health must show it offline. The soak keeps seeking, playing, splitting and exporting (the export must be blocked), then moves the file back, and the media must come back. |
+| Interruptions | `background` (2): the host backgrounds the app for 1–5 s, during playback half the time. One second after the return, the preview must not be black. A black frame counts only when a frame that showed a picture before leaving is black after the return: the playhead frame, or else the first of a few probe frames that is not black. On a black frame the op re-seeks the same frame (a picture then means the preview stayed stale until a seek) and then the reference frame (a picture there means the stopped-on frame is black content, such as a gap). `inactive` (2): the lifecycle goes inactive → resumed, which is what a call banner, Siri or Control Center produce. `call` (1): a host GSM call on the Android emulator; on iOS it falls back to the lifecycle simulation. `audioRoute` (1). `lowStorage` (1): the host fills storage, then the soak does an edit, a manual save and an export, then frees the storage. `offline` (1): a media file used on the timeline is moved away, and the media health must show it offline. The soak keeps seeking, playing, splitting and exporting (the export must be blocked), then moves the file back, and the media must come back. |
 | Persistence | `reopen` (every 25 ops and at the end): the editor closes, the project is opened straight from the store and validated (no validator violations, no repairs on open, not read-only), then reopened in the editor and validated again. If a clean close leaves a recovery journal, that is a problem. |
 
 **Project size limit.** Once a project passes 40 items, 10 tracks or 4 minutes, it gets a final store check. It is then deleted and replaced by a fresh one, which exercises create and delete. The media are unique sandbox copies per project, and the delivered export copies are deleted after each export, so the sandbox stays bounded over an hour.
@@ -81,13 +81,94 @@ Every in-app event prints a `DV_SOAK <kind> …` line. The kinds are `op`, `fail
 
 For every job, the project is then opened straight from the store and validated.
 
-## 2. Results: iOS Simulator
+## 2. Re-run after the D1, D2 and D3 fixes (QA-05-RERUN)
 
-All runs below used the **iPhone 16 simulator on iOS 26.5** (`6663101E-6BE7-47D4-B3B8-055700BF2E02`), with Xcode 26.6, Flutter 3.44 and a debug build, on 2026-10-16. On this 8 GB Mac the soak was kept to 15 minutes. The 1 h runs are in §3.
+All runs used the **iPhone 16 simulator on iOS 26.5** (`6663101E-6BE7-47D4-B3B8-055700BF2E02`), with Xcode 26.6, Flutter 3.44 and a debug build, on 2026-10-16, 16:41 to 17:55. The fixes under test are FIX-IOS-EXPORT-STALL (D1, D2: `ReaderWriterPipeline` spacer anchor, bounded writer waits, per-job work queues) and FIX-JOB-RESUME (D3: `createEditorController` reads `tasksControllerProvider` when the session attaches). Runs stayed at 15 minutes on this 8 GB Mac.
 
-**Verdict: not green.** The tooling works end to end. It found four product defects (D1–D4), and all of them are reproducible with the commands given.
+**Verdict: not green.** D1 and D2 are fixed: the seeded soak with seed 5150 now passes. The D3 fix is incomplete: proxy, reverse and freeze still do not recover after process death, now because of a new defect, D5. Autosave, export and captions recover.
 
 ### 2.1 Random soak, 15 min, seed 5150
+
+`soak_host.py -p ios -d 6663101E-… -m ~/danaview-models soak --minutes 15 --seed 5150` ran three times. Evidence is in `build/soak/ios/<udid>/rerun-soak-{a,b,c}/` (the log, `soak-summary-log.json`, and the host's RSS samples in `memory-host.csv`). The CSV accumulates across runs, and each run has its own app pid.
+
+| Run | Ops | Projects | Reopens | Failures | Memory (baseline → end, peak) | Growth |
+|---|---|---|---|---|---|---|
+| a | 574 | 3 | 23 of 23 valid | 5 (see D6) | 281.1 → 265.4 MB, peak 482.8 MB | −5.6 % |
+| b | 1042 | 5 | 42 of 42 valid | 1 (a test artifact, fixed) | 362.9 → 300.2 MB, peak 503.7 MB | −17.3 % |
+| c (final suite) | 843 | 4 | 34 of 34 valid | **0** | 325.5 → 275.2 MB, peak 582.3 MB | **−15.5 %** |
+
+Run c, the final suite, passed every criterion:
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| No crash | **pass** | The host saw one app pid for the whole run (30 outside samples at 104–480 MB), and the flutter connection survived. |
+| No unhandled exception | **pass** | 0 framework errors and 0 uncaught zone errors. |
+| Project always reopens valid | **pass** | 34 of 34 reopens were valid, and each rotated project passed its store check. |
+| Memory growth ≤ 10 % | **pass** | −15.5 % (813 samples). The peaks come from captions and export, as before. |
+| Nothing hangs, every op works | **pass** | 0 failed ops. |
+
+Ops in run c (ran/skipped/failed):
+
+- seek 69, scrub 47, play 51, frameStep 32
+- split 63, undo 75, redo 33, copyPaste 25, duplicate 31, delete 35
+- dragMove 31, dragTrim 38
+- text 23, marker 19, speed 25, transition 17, zoom 34, selectAll 16
+- reverse 21, freeze 17/1/0, proxy 9, export 13, captions 5/1/0
+- background 22, inactive 20, call 8 (simulated), offline 10
+- audioRoute 0/8 and lowStorage 0/10: refused on the simulator (see §4)
+- reopen 34
+
+**D1 is fixed.** Op #165, the export that used to stall at the first "complete" kind, completed in 8.9 s in run b. Every export completed, was cancelled or was correctly blocked: in run b there were 7 completions (2 of them after a background), 7 cancels, and 2 `ExportUiWaiting` blocks while a reverse was pending. Run c had the same mix with 13 exports. No export stalled.
+
+**D2 is fixed.** Exports after a cancel kept succeeding in every run: run b completed 3 exports after the cancel at op #929. There was no `exportFailed.unknown`, and no reverse failed.
+
+**D6 · The preview sometimes does not come back after a background (intermittent).** This happened in run a only, on a loaded Mac (574 ops in 15 min, against 843–1042 in the other runs):
+
+- Ops #430 and #431 (background for 2 s, during playback and idle): the editor was `ready`, but the preview did not reach `ready` with a live session within 60 s, twice in a row. Op #436 (offline) then hit the same wait. The soak's recovery then counted the editor as ready, so it did not reopen it; the preview came back by op #495.
+- Ops #45 and #498 (background during playback): the frame was black 1 s after the return.
+
+Runs b and c, with the same seed, did not reproduce it at those ops (they passed in 5–8 s). Run a used the original black-frame check, which could not tell black content from a dead preview, so #45 and #498 are inconclusive. #430 and #431 are not inconclusive: the preview phase stayed short of `ready` for over a minute. The owner is the preview's background and foreground lifecycle: the iOS preview session, and the editor's preview restart in UX-08. The suite now records the editor and preview phases in every stuck line. Its recovery also reopens the project when the preview is not live, so if this happens again it fails one op, not three.
+
+### 2.2 Process death per job type
+
+`soak_host.py … death`, 16:41 to 16:59. Evidence is in `build/soak/ios/<udid>/rerun-death/`.
+
+| Job | Result | Evidence |
+|---|---|---|
+| autosave | **pass** | Journal restored. The project reopened valid holding `SOAK AUTOSAVE 0`. |
+| export | **pass** | Killed at 10 %. Exactly one `ExportInterrupted`, shown once, gone after acknowledgement. `reattach()` found nothing. |
+| captions | **pass** | Killed at 56 %. The record was kept, "Auto captions were interrupted" showed once, and the record was gone after Discard. |
+| proxy | **FAIL (D5)** | Killed while running. On reopen the asset was `proxy: pending` with no task, 90 s after the open. Reading `tasksControllerProvider` no longer helps: the controller already exists. |
+| reverse | **FAIL (D5)** | Killed while running. On reopen the rendition went straight to `FailedStatus(mediaOffline)`. |
+| freeze | **FAIL (D5)** | Same as reverse: the still failed with `mediaOffline`. |
+
+**D5 · Jobs re-queued on open race the first media resolve (the D3 fix is incomplete).** FIX-JOB-RESUME starts the Tasks controller in a microtask right after `session.attach`. Its `_reconcile()` then resolves each source through `session.compiler.resolve(...)`. But INT-02's `DefaultSessionPlanCompiler.resolve` reads `SessionAssetResolver.current`, and before the first `refresh` (the first plan compile, which is async), that snapshot has every media offline (`MapPlanAssetResolver.empty`). So on open:
+
+- `_startDerived` marks a pending reverse rendition or freeze still `FailedStatus(mediaOffline)`. That is permanent, and the user sees a failed task for media that is online.
+- `_startProxy(resume: true)` leaves the proxy pending and returns. Nothing re-runs `_reconcile` until the pool changes, so the proxy never resumes.
+
+The FIX-JOB-RESUME unit tests (`test/flows/tasks/job_resume_on_open_test.dart`, `test/layout/editor_job_reattach_test.dart`) pass because their rig's compiler resolves synchronously. The fix belongs to the owners of `editor_controller.dart` (UX-08 / FIX-JOB-RESUME) or `tasks_controller.dart` (UX-35). Either:
+
+- start the controller (or re-run `_reconcile`) after the first plan compile, or after the resolver's first refresh; or
+- treat a null resolve on resume as "not yet" rather than offline: keep the asset pending, and reconcile again when the resolver snapshot or the availability report changes.
+
+A rig compiler that resolves only after an async first refresh would reproduce it in a unit test. The QA-05 death phases need no change; they wait 90 s without any user action.
+
+### 2.3 What changed in the suite in this re-run
+
+- **`background` op.** A black frame is compared with a reference frame taken before leaving (§1.1). In run b, the first version of this check failed op #789: playback had stopped at frame 815 in a gap, and the frame it started from was black too. With the reference check, the same op passed in run c ("frame 815 is black content; frame 0 shows a picture"). A preview that stays black after a re-seek is still a failure.
+- **Stuck lines.** Each stuck line now carries the editor phase, the preview phase and failure, and whether a preview session is open.
+- **Recovery.** After a failed op, the soak reopens the project unless the editor is ready *and* the preview is live.
+
+`flutter analyze integration_test/editor_soak`: no issues.
+
+## 3. First run, before the fixes (QA-05)
+
+All runs below used the **iPhone 16 simulator on iOS 26.5** (`6663101E-6BE7-47D4-B3B8-055700BF2E02`), with Xcode 26.6, Flutter 3.44 and a debug build, on 2026-10-16. On this 8 GB Mac the soak was kept to 15 minutes. The 1 h runs are in §4.
+
+**Verdict: not green.** The tooling works end to end. It found three product defects (D1–D3), and all of them are reproducible with the commands given.
+
+### 3.1 Random soak, 15 min, seed 5150
 
 `soak_host.py -p ios -d 6663101E-… -m ~/danaview-models soak --minutes 15 --seed 5150` was run three times while the diagnostics were being tightened. The last run gave:
 
@@ -111,7 +192,7 @@ Ops that ran (ran/skipped/failed):
 - text 24, marker 20, speed 29, transition 17, zoom 36, selectAll 18
 - reverse 23, freeze 19/1/0, proxy 10, export 4/0/10, captions 5/2/0
 - background 25/0/2, inactive 25, call 9 (simulated), offline 10/0/1
-- audioRoute 0/9 and lowStorage 0/9: refused on the simulator (see §3)
+- audioRoute 0/9 and lowStorage 0/9: refused on the simulator (see §4)
 - reopen 38
 
 **D1 · Export stalls forever (iOS export).** This reproduced in all three runs with seed 5150, at the first export of a "complete" kind after about 160 random ops:
@@ -123,9 +204,9 @@ The sheet keeps showing "A few seconds left", and progress never moves again: th
 
 **D2 · After a stalled export is cancelled, every later export fails.** After D1 the soak cancels the stuck job, through the controller as the sheet's Cancel does. From then on, every export in the process ends in `ExportFailed(exportFailed.unknown)`, with "The export didn't finish. Try again". This happened 10 times out of 10 in run 3, including in brand-new projects and minutes later. Each failing project is saved as `files/soak-failed-<op>.json`. Two reverse jobs failed in the same period of run 2 (`the reverse task failed`), and two background ops in run 3 saw a black preview 1 s after the return. The exporter (and possibly the shared writer and encoder) is left in a bad state, and only a relaunch clears it. The owner is the iOS export coordinator (IOS-13).
 
-### 2.2 Process death per job type
+### 3.2 Process death per job type
 
-`soak_host.py … death`: the full chain ran from 12:28 to 12:41. The captions phase was re-run at 12:47 after the test was fixed (§2.3).
+`soak_host.py … death`: the full chain ran from 12:28 to 12:41. The captions phase was re-run at 12:47 after the test was fixed (§3.3).
 
 | Job | Result | Evidence |
 |---|---|---|
@@ -143,7 +224,7 @@ The sheet keeps showing "A few seconds left", and progress never moves again: th
 
 The fix belongs in the editor's open path. Either the editor screen or session (UX-07 / UX-08) reads `tasksControllerProvider(id)` when the session attaches, or UX-35's `createTasksController` is started by the session. The QA-05 death phases will pass unchanged once it lands. They already wait 90 s without any user action.
 
-### 2.3 What changed in the suite while running it
+### 3.3 What changed in the suite while running it
 
 - **The captions wait.** It now treats new cue ids as "done". With "Replace previous captions", the cue count stays the same.
 - **No speech.** "No speech found" on an edited-down speech clip counts as an answer, not a failure.
@@ -153,7 +234,7 @@ The fix belongs in the editor's open path. Either the editor screen or session (
 - **Summary in the log.** The run summary is also printed as a `DV_SOAK summary` line. A failing `flutter test` uninstalls the app before the host can copy the JSON, so the host extracts the line into `files/soak-summary-log.json`.
 
 
-## 3. Deferred
+## 4. Deferred
 
 | Item | Status | How to run it |
 |---|---|---|
