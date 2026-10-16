@@ -81,13 +81,13 @@ Every in-app event prints a `DV_SOAK <kind> …` line. The kinds are `op`, `fail
 
 For every job, the project is then opened straight from the store and validated.
 
-## 2. Re-run after the D1, D2 and D3 fixes (QA-05-RERUN)
+## 3. Re-run after the D1, D2 and D3 fixes (QA-05-RERUN)
 
 All runs used the **iPhone 16 simulator on iOS 26.5** (`6663101E-6BE7-47D4-B3B8-055700BF2E02`), with Xcode 26.6, Flutter 3.44 and a debug build, on 2026-10-16, 16:41 to 17:55. The fixes under test are FIX-IOS-EXPORT-STALL (D1, D2: `ReaderWriterPipeline` spacer anchor, bounded writer waits, per-job work queues) and FIX-JOB-RESUME (D3: `createEditorController` reads `tasksControllerProvider` when the session attaches). Runs stayed at 15 minutes on this 8 GB Mac.
 
 **Verdict: not green.** D1 and D2 are fixed: the seeded soak with seed 5150 now passes. The D3 fix is incomplete: proxy, reverse and freeze still do not recover after process death, now because of a new defect, D5. Autosave, export and captions recover.
 
-### 2.1 Random soak, 15 min, seed 5150
+### 3.1 Random soak, 15 min, seed 5150
 
 `soak_host.py -p ios -d 6663101E-… -m ~/danaview-models soak --minutes 15 --seed 5150` ran three times. Evidence is in `build/soak/ios/<udid>/rerun-soak-{a,b,c}/` (the log, `soak-summary-log.json`, and the host's RSS samples in `memory-host.csv`). The CSV accumulates across runs, and each run has its own app pid.
 
@@ -115,7 +115,7 @@ Ops in run c (ran/skipped/failed):
 - text 23, marker 19, speed 25, transition 17, zoom 34, selectAll 16
 - reverse 21, freeze 17/1/0, proxy 9, export 13, captions 5/1/0
 - background 22, inactive 20, call 8 (simulated), offline 10
-- audioRoute 0/8 and lowStorage 0/10: refused on the simulator (see §4)
+- audioRoute 0/8 and lowStorage 0/10: refused on the simulator (see §5)
 - reopen 34
 
 **D1 is fixed.** Op #165, the export that used to stall at the first "complete" kind, completed in 8.9 s in run b. Every export completed, was cancelled or was correctly blocked: in run b there were 7 completions (2 of them after a background), 7 cancels, and 2 `ExportUiWaiting` blocks while a reverse was pending. Run c had the same mix with 13 exports. No export stalled.
@@ -129,7 +129,7 @@ Ops in run c (ran/skipped/failed):
 
 Runs b and c, with the same seed, did not reproduce it at those ops (they passed in 5–8 s). Run a used the original black-frame check, which could not tell black content from a dead preview, so #45 and #498 are inconclusive. #430 and #431 are not inconclusive: the preview phase stayed short of `ready` for over a minute. The owner is the preview's background and foreground lifecycle: the iOS preview session, and the editor's preview restart in UX-08. The suite now records the editor and preview phases in every stuck line. Its recovery also reopens the project when the preview is not live, so if this happens again it fails one op, not three.
 
-### 2.2 Process death per job type
+### 3.2 Process death per job type
 
 `soak_host.py … death`, 16:41 to 16:59. Evidence is in `build/soak/ios/<udid>/rerun-death/`.
 
@@ -154,7 +154,7 @@ The FIX-JOB-RESUME unit tests (`test/flows/tasks/job_resume_on_open_test.dart`, 
 
 A rig compiler that resolves only after an async first refresh would reproduce it in a unit test. The QA-05 death phases need no change; they wait 90 s without any user action.
 
-### 2.3 What changed in the suite in this re-run
+### 3.3 What changed in the suite in this re-run
 
 - **`background` op.** A black frame is compared with a reference frame taken before leaving (§1.1). In run b, the first version of this check failed op #789: playback had stopped at frame 815 in a gap, and the frame it started from was black too. With the reference check, the same op passed in run c ("frame 815 is black content; frame 0 shows a picture"). A preview that stays black after a re-seek is still a failure.
 - **Stuck lines.** Each stuck line now carries the editor phase, the preview phase and failure, and whether a preview session is open.
@@ -162,13 +162,13 @@ A rig compiler that resolves only after an async first refresh would reproduce i
 
 `flutter analyze integration_test/editor_soak`: no issues.
 
-## 3. First run, before the fixes (QA-05)
+## 4. First run, before the fixes (QA-05)
 
-All runs below used the **iPhone 16 simulator on iOS 26.5** (`6663101E-6BE7-47D4-B3B8-055700BF2E02`), with Xcode 26.6, Flutter 3.44 and a debug build, on 2026-10-16. On this 8 GB Mac the soak was kept to 15 minutes. The 1 h runs are in §4.
+All runs below used the **iPhone 16 simulator on iOS 26.5** (`6663101E-6BE7-47D4-B3B8-055700BF2E02`), with Xcode 26.6, Flutter 3.44 and a debug build, on 2026-10-16. On this 8 GB Mac the soak was kept to 15 minutes. The 1 h runs are in §5.
 
 **Verdict: not green.** The tooling works end to end. It found three product defects (D1–D3), and all of them are reproducible with the commands given.
 
-### 3.1 Random soak, 15 min, seed 5150
+### 4.1 Random soak, 15 min, seed 5150
 
 `soak_host.py -p ios -d 6663101E-… -m ~/danaview-models soak --minutes 15 --seed 5150` was run three times while the diagnostics were being tightened. The last run gave:
 
@@ -192,7 +192,7 @@ Ops that ran (ran/skipped/failed):
 - text 24, marker 20, speed 29, transition 17, zoom 36, selectAll 18
 - reverse 23, freeze 19/1/0, proxy 10, export 4/0/10, captions 5/2/0
 - background 25/0/2, inactive 25, call 9 (simulated), offline 10/0/1
-- audioRoute 0/9 and lowStorage 0/9: refused on the simulator (see §4)
+- audioRoute 0/9 and lowStorage 0/9: refused on the simulator (see §5)
 - reopen 38
 
 **D1 · Export stalls forever (iOS export).** This reproduced in all three runs with seed 5150, at the first export of a "complete" kind after about 160 random ops:
@@ -204,9 +204,9 @@ The sheet keeps showing "A few seconds left", and progress never moves again: th
 
 **D2 · After a stalled export is cancelled, every later export fails.** After D1 the soak cancels the stuck job, through the controller as the sheet's Cancel does. From then on, every export in the process ends in `ExportFailed(exportFailed.unknown)`, with "The export didn't finish. Try again". This happened 10 times out of 10 in run 3, including in brand-new projects and minutes later. Each failing project is saved as `files/soak-failed-<op>.json`. Two reverse jobs failed in the same period of run 2 (`the reverse task failed`), and two background ops in run 3 saw a black preview 1 s after the return. The exporter (and possibly the shared writer and encoder) is left in a bad state, and only a relaunch clears it. The owner is the iOS export coordinator (IOS-13).
 
-### 3.2 Process death per job type
+### 4.2 Process death per job type
 
-`soak_host.py … death`: the full chain ran from 12:28 to 12:41. The captions phase was re-run at 12:47 after the test was fixed (§3.3).
+`soak_host.py … death`: the full chain ran from 12:28 to 12:41. The captions phase was re-run at 12:47 after the test was fixed (§4.3).
 
 | Job | Result | Evidence |
 |---|---|---|
@@ -224,7 +224,7 @@ The sheet keeps showing "A few seconds left", and progress never moves again: th
 
 The fix belongs in the editor's open path. Either the editor screen or session (UX-07 / UX-08) reads `tasksControllerProvider(id)` when the session attaches, or UX-35's `createTasksController` is started by the session. The QA-05 death phases will pass unchanged once it lands. They already wait 90 s without any user action.
 
-### 3.3 What changed in the suite while running it
+### 4.3 What changed in the suite while running it
 
 - **The captions wait.** It now treats new cue ids as "done". With "Replace previous captions", the cue count stays the same.
 - **No speech.** "No speech found" on an edited-down speech clip counts as an answer, not a failure.
@@ -234,7 +234,7 @@ The fix belongs in the editor's open path. Either the editor screen or session (
 - **Summary in the log.** The run summary is also printed as a `DV_SOAK summary` line. A failing `flutter test` uninstalls the app before the host can copy the JSON, so the host extracts the line into `files/soak-summary-log.json`.
 
 
-## 4. Deferred
+## 5. Deferred
 
 | Item | Status | How to run it |
 |---|---|---|
