@@ -52,6 +52,8 @@
 #   DANAVIEW_E2E_KEEP_APP=0  let `flutter test` uninstall the app after each run (default 1: the
 #                           app stays installed so the staged fixtures under Android/data/<app>/files
 #                           and a phase's saved state survive into the next run)
+#   DANAVIEW_E2E_FRESH=1    uninstall the app before staging, so the run starts without the projects,
+#                           recovery records and media copies of earlier runs
 #   DANAVIEW_E2E_KEEP_EMULATOR=1  leave an emulator this script booted running at the end
 #   DANAVIEW_E2E_EMULATOR_ARGS  extra emulator arguments when booting
 set -euo pipefail
@@ -428,6 +430,7 @@ fi
 OUT="$ROOT/build/e2e/android/$SERIAL"
 if [ "$DRY_RUN" = 1 ]; then
   group "batches (dry run)"
+  [ "${DANAVIEW_E2E_FRESH:-}" != 1 ] || echo "  + adb uninstall com.vecvel.danaview (DANAVIEW_E2E_FRESH=1)"
   echo "  + (API >= 30) adb shell mkdir -p + chmod 2777 Android/data/com.vecvel.danaview/files/{,e2e_fixtures,e2e_models,e2e_handshake,e2e_out}"
   echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage"
   [ -z "$MODELS_DIR" ] || echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage-models <DANAVIEW_E2E_MODELS>"
@@ -455,6 +458,11 @@ if [ "$KEEP_APP" = 1 ]; then
 fi
 
 group "stage"
+if [ "${DANAVIEW_E2E_FRESH:-}" = 1 ]; then
+  # Projects, recovery records and copies left by earlier (killed) runs change what Projects shows.
+  run_with_timeout 120 "$ADB" -s "$SERIAL" uninstall com.vecvel.danaview >/dev/null 2>&1 || true
+  echo "fresh start: app uninstalled (its data and Android/data folder are gone)"
+fi
 setup_device
 endgroup
 
