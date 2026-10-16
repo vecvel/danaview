@@ -59,6 +59,10 @@
 #                           Android/data folder) and stage again, so no batch sees what an earlier
 #                           one left (default: on when DANAVIEW_E2E_FRESH=1; 0 turns it off). The
 #                           phases inside one batch (s09, the extra's pairs) still share state.
+#   DANAVIEW_E2E_NOTIFICATIONS=0  do not pre-grant POST_NOTIFICATIONS (default: on API 33+ the
+#                           runner grants it as soon as the app is installed in each batch, because
+#                           the export's first-run notification prompt is a system dialog the suite
+#                           cannot answer: unanswered, the export waits in "Preparing…" forever)
 #   DANAVIEW_E2E_KEEP_EMULATOR=1  leave an emulator this script booted running at the end
 #   DANAVIEW_E2E_EMULATOR_ARGS  extra emulator arguments when booting
 set -euo pipefail
@@ -74,6 +78,7 @@ BATCH_TIMEOUT="${DANAVIEW_E2E_BATCH_TIMEOUT:-2400}"
 PHASE_TIMEOUT="${DANAVIEW_E2E_PHASE_TIMEOUT:-1200}"
 KEEP_APP="${DANAVIEW_E2E_KEEP_APP:-1}"
 RESET="${DANAVIEW_E2E_RESET:-${DANAVIEW_E2E_FRESH:-}}"
+NOTIFICATIONS="${DANAVIEW_E2E_NOTIFICATIONS:-1}"
 EXTRA_PAIRS="fgs cancel swipe death"
 
 GHA="${GITHUB_ACTIONS:-}"
@@ -287,6 +292,22 @@ reset_app() {
   setup_device
 }
 
+# API 33+: grants POST_NOTIFICATIONS once the app is installed (the batch's flutter test installs it;
+# after a fresh start or a reset the grant is gone). Runs in the background during a batch; every
+# adb call is bounded. The app's in-context prompt then finds the permission granted and shows no
+# system dialog (Permissions.requestNotificationPermission).
+grant_notifications() {
+  [ "$NOTIFICATIONS" = 1 ] && [ "$API" -ge 33 ] || return 0
+  local _
+  for _ in $(seq 1 900); do
+    if run_with_timeout 20 "$ADB" -s "$SERIAL" shell pm grant com.vecvel.danaview android.permission.POST_NOTIFICATIONS >/dev/null 2>&1; then
+      echo "[e2e_android] POST_NOTIFICATIONS granted (no system prompt during exports)"
+      return 0
+    fi
+    sleep 2
+  done
+}
+
 # ---- batches ------------------------------------------------------------------------------------
 
 API=""
@@ -456,6 +477,7 @@ if [ "$DRY_RUN" = 1 ]; then
   echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage"
   [ -z "$MODELS_DIR" ] || echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage-models <DANAVIEW_E2E_MODELS>"
   [ "$KEEP_APP" != 1 ] || echo "  (flutter test runs with --no-uninstall: DANAVIEW_E2E_KEEP_APP=1)"
+  [ "$NOTIFICATIONS" != 1 ] || echo "  (API 33+, during every batch: adb shell pm grant com.vecvel.danaview android.permission.POST_NOTIFICATIONS once installed)"
   [ "$RESET" != 1 ] || echo "  (before every batch but the first: collect, adb shell pm clear com.vecvel.danaview, stage again: DANAVIEW_E2E_RESET=1)"
   for b in ${BATCHES[@]+"${BATCHES[@]}"}; do echo "batch $b (timeout ${BATCH_TIMEOUT}s)"; print_cmd "$b"; done
   for b in ${PENDING[@]+"${PENDING[@]}"}; do echo "batch $b PENDING: speech models not staged (DANAVIEW_E2E_MODELS)"; done
@@ -512,7 +534,11 @@ for b in ${BATCHES[@]+"${BATCHES[@]}"}; do
   started=$SECONDS
   status=PASS
   rc=0
+  grant_notifications > "$OUT/logs/batch-$label.grant.log" 2>&1 &
+  grant_pid=$!
   run_with_timeout "$BATCH_TIMEOUT" run_batch "$b" > "$blog" 2>&1 || rc=$?
+  kill_tree "$grant_pid"
+  wait "$grant_pid" 2>/dev/null || true
   if [ "$rc" -eq 124 ]; then status=TIMEOUT; elif [ "$rc" -ne 0 ]; then status=FAIL; fi
   kill_stray_flutter >> "$blog" 2>&1
   run_with_timeout 120 "$ADB" -s "$SERIAL" logcat -d > "$OUT/logs/batch-$label.logcat.txt" 2>/dev/null || true
