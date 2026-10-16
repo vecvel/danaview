@@ -31,6 +31,17 @@
 //   keeps a `completedDetached` record (output exempt from the work/ wipe) that `activeJobs()`
 //   reports once as completedWhileDetached; IOS-13's lifecycle hook may save it to Photos.
 // cancel(jobId): stops the job and deletes the partial output and every segment. Idempotent.
+//   A pipeline that has not returned `cancelGrace` after the cancel (blocked inside AVFoundation)
+//   is left behind and the job ends as cancelled anyway (FIX-IOS-EXPORT-STALL, QA-05 D2).
+// Stalls (FIX-IOS-EXPORT-STALL, QA-05 D1/D2): each job runs on its own work queue, so a pipeline
+//   left blocked inside AVFoundation never holds up a later job. Its writers get `stallTimeout`
+//   and `stopGrace` (IOS-17 bounded waits: a pump without progress fails the job with a typed
+//   `decodeFailed`/`encodingFailed` "export stalled" error). A watchdog on the export queue is the
+//   backstop for every other wait: a running job without any heartbeat (frame, audio buffer,
+//   concat sample, phase change) for `stallTimeout + watchdogSlack`, while not thermally paused,
+//   is stopped and ended with the same typed error. A job that ended this way releases all
+//   coordinator state at once (job table, preview suspension, JobInterruption registration), and
+//   a late completion of its pipeline is ignored.
 // resume(jobId): continues a paused job, or one whose checkpoint survived a process kill.
 // activeJobs(): running jobs; on-disk jobs not running in this process (resumable with finished
 //   segments, otherwise interrupted, one-shot); completedWhileDetached records; plus the records of
@@ -179,6 +190,17 @@ struct ExportEnvironment {
     var segmentDurationUs: Int64
     /// Thermal state source of the pumps.
     var thermalState: () -> ProcessInfo.ThermalState
+    /// Seconds without progress before a job counts as stalled (FIX-IOS-EXPORT-STALL).
+    var stallTimeout: TimeInterval = 60
+    /// Extra seconds the coordinator's watchdog waits beyond `stallTimeout` (the writer's own
+    /// bounded waits fire first).
+    var watchdogSlack: TimeInterval = 15
+    /// Seconds a stop request waits for a blocked writer pump.
+    var stopGrace: TimeInterval = 2
+    /// Seconds after a cancel before a pipeline that did not return is left behind.
+    var cancelGrace: TimeInterval = 5
+    /// Interval of the stall watchdog.
+    var watchdogInterval: TimeInterval = 1
 
     static func production(context: EngineContext) -> ExportEnvironment {
         ExportEnvironment(
@@ -256,8 +278,9 @@ final class ExportCoordinator: ExportCoordinating {
     /// Test hook: configures each pipeline before it runs.
     var configurePipeline: ((ReaderWriterPipeline) -> Void)?
 
-    private let workQueue = DispatchQueue(label: "com.vecvel.danaview.editor.export.work", qos: .userInitiated)
     private var queue: DispatchQueue { context.queues.export }
+    /// Pipelines left behind blocked inside AVFoundation (tests).
+    private(set) var abandonedPipelines = 0
     private var multiPassLookedUp = false
 
     /// A job of this process.
@@ -270,6 +293,11 @@ final class ExportCoordinator: ExportCoordinating {
         let throttle = NSLock()
         var lastEmit: TimeInterval = 0
         var lastMsg: ExportProgressMsg?
+        /// Set once the job ended (normally, by cancel grace or by the watchdog).
+        var ended = false
+        /// Runs of the pipeline started for this job (a late completion of an older run is ignored).
+        var runs = 0
+        var watchdog: DispatchSourceTimer?
 
         init(job: ExportJob) {
             self.job = job
@@ -503,6 +531,8 @@ final class ExportCoordinator: ExportCoordinating {
     private func register(_ job: ExportJob) -> Running {
         let running = Running(job: job)
         job.thermalState = environment.thermalState
+        job.stallTimeout = environment.stallTimeout
+        job.stopGrace = environment.stopGrace
         job.onChange = { [weak self, weak running] in
             guard let self = self, let running = running else { return }
             self.emitProgress(running, force: false)
@@ -557,8 +587,17 @@ final class ExportCoordinator: ExportCoordinating {
                 if running.state == .waitingForForeground {
                     interruption.unregister(jobId: jobId)
                     end(running, failure: EngineError.cancelled)
+                } else {
+                    // A running job ends through `completed` once its pipeline stops; a pipeline
+                    // blocked inside AVFoundation is left behind after the grace (QA-05 D2).
+                    let run = running.runs
+                    queue.asyncAfter(deadline: .now() + environment.cancelGrace) { [weak self, weak running] in
+                        guard let self = self, let running = running, !running.ended, running.runs == run else { return }
+                        Log.error(.export, "export \(jobId): pipeline did not stop \(self.environment.cancelGrace) s after cancel; left behind")
+                        self.abandonedPipelines += 1
+                        self.end(running, failure: EngineError.cancelled)
+                    }
                 }
-                // A running job ends through `completed` once its pipeline stops.
                 return reply(.success(()))
             }
             if let paths = context.paths {
@@ -653,9 +692,14 @@ final class ExportCoordinator: ExportCoordinating {
             return
         }
         running.state = .running
+        running.runs += 1
+        let run = running.runs
         job.prepareRun()
         emitProgress(running, force: true)
+        startWatchdog(running)
         let paths = context.paths
+        // One work queue per run: a pipeline left behind blocked never holds up a later job.
+        let workQueue = DispatchQueue(label: "com.vecvel.danaview.editor.export.work.\(job.id).\(run)", qos: .userInitiated)
         workQueue.async { [self] in
             let outcome: Result<ReaderWriterPipeline.Outcome, Error>
             do {
@@ -664,8 +708,57 @@ final class ExportCoordinator: ExportCoordinating {
             } catch {
                 outcome = .failure(error)
             }
-            queue.async { self.completed(running, outcome) }
+            queue.async {
+                guard !running.ended, running.runs == run else {
+                    Log.info(.export, "export \(job.id): late pipeline completion ignored")
+                    return
+                }
+                self.completed(running, outcome)
+            }
         }
+    }
+
+    // MARK: Stall watchdog (FIX-IOS-EXPORT-STALL)
+
+    /// The typed failure of a job without progress for [seconds].
+    static func stallFailure(seconds: TimeInterval, phase: ExportJobPhase) -> EngineError {
+        EngineError(.encodingFailed, "export stalled: no progress for \(Int(seconds.rounded())) s (phase \(phase.rawValue))", retryable: true)
+    }
+
+    private func startWatchdog(_ running: Running) {
+        guard running.watchdog == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + environment.watchdogInterval, repeating: environment.watchdogInterval)
+        timer.setEventHandler { [weak self, weak running] in
+            guard let self = self, let running = running else { return }
+            self.checkStall(running)
+        }
+        running.watchdog = timer
+        timer.resume()
+    }
+
+    private func stopWatchdog(_ running: Running) {
+        running.watchdog?.cancel()
+        running.watchdog = nil
+    }
+
+    /// Export queue: ends a running job without a heartbeat for `stallTimeout + watchdogSlack`.
+    private func checkStall(_ running: Running) {
+        let job = running.job
+        guard !running.ended, running.state == .running, jobs[job.id] === running else { return }
+        if job.isThermallyPaused {
+            job.heartbeat()
+            return
+        }
+        let limit = environment.stallTimeout + environment.watchdogSlack
+        let idle = job.secondsSinceActivity
+        guard idle >= limit else { return }
+        let failure = ExportCoordinator.stallFailure(seconds: idle, phase: job.phase)
+        Log.error(.export, "export \(job.id): \(failure.message); left behind")
+        abandonedPipelines += 1
+        // Stop whatever may still wake up, then end the job now.
+        job.cancel()
+        end(running, failure: failure)
     }
 
     /// The composition factory of [paths] (export variant: originals, output render size).
@@ -839,6 +932,8 @@ final class ExportCoordinator: ExportCoordinating {
 
     private func release(_ running: Running) {
         let job = running.job
+        running.ended = true
+        stopWatchdog(running)
         job.onChange = nil
         jobs[job.id] = nil
         interruption.unregister(jobId: job.id)

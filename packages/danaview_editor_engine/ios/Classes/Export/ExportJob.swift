@@ -15,6 +15,10 @@
 // - Thermal: while the thermal state is `.critical` the pumps wait (`waitWhileThermalCritical`),
 //   checked before every frame and audio buffer (ARCH §14.2).
 // - Progress = last video PTS / duration (ARCH §14.2); frames on the export grid.
+// - Stall bounds (FIX-IOS-EXPORT-STALL, QA-05 D1/D2): every segmented writer the job attaches gets
+//   the job's `stallTimeout` and `stopGrace` (IOS-17 bounded waits) and the thermal pause as its
+//   stall exemption; every frame, audio buffer, concat sample and phase change is a heartbeat
+//   (`secondsSinceActivity`), which the coordinator's watchdog reads.
 //
 // Thread-safety: flags and progress are lock-protected and read from the pump queues, the export
 // work queue and the export control queue.
@@ -106,6 +110,10 @@ final class ExportJob: InterruptibleJob, PipelineControl {
     var thermalPollInterval: TimeInterval = 0.5
     /// Called (any thread) whenever progress or a flag changed.
     var onChange: (() -> Void)?
+    /// Seconds without progress before an attached writer abandons its pump (nil: unbounded).
+    var stallTimeout: TimeInterval?
+    /// Seconds a stop request waits for a blocked writer pump (nil: unbounded).
+    var stopGrace: TimeInterval?
 
     private let lock = NSLock()
     private var cancelled = false
@@ -118,6 +126,7 @@ final class ExportJob: InterruptibleJob, PipelineControl {
     private var _warnings: [ExportWarningMsg] = []
     private var _thermalPauses = 0
     private var _window: (start: Double, span: Double) = (0, 1)
+    private var _lastActivity = Date()
 
     init(id: String, directory: URL, plan: RenderPlan, planData: Data, record: Record) {
         self.id = id
@@ -240,6 +249,7 @@ final class ExportJob: InterruptibleJob, PipelineControl {
     /// Clears the stop request before a (re)run; the job is no longer paused.
     func prepareRun() {
         lock.lock()
+        _lastActivity = Date()
         stopRequested = false
         _pausedInBackground = false
         _backgrounded = false
@@ -258,6 +268,13 @@ final class ExportJob: InterruptibleJob, PipelineControl {
     }
 
     func attach(_ writer: SegmentedWriter?) {
+        if let writer = writer {
+            writer.stallTimeout = stallTimeout
+            writer.stopGrace = stopGrace
+            writer.isStallExempt = { [weak self] in self?.isThermallyPaused ?? false }
+            writer.onActivity = { [weak self] in self?.heartbeat() }
+        }
+        heartbeat()
         lock.lock()
         self.writer = writer
         let stop = stopRequested
@@ -277,6 +294,25 @@ final class ExportJob: InterruptibleJob, PipelineControl {
         lock.lock()
         defer { lock.unlock() }
         return _thermalPauses
+    }
+
+    /// Whether the pumps are (or would be) waiting for a critical thermal state to clear.
+    var isThermallyPaused: Bool { thermalState() == .critical && !shouldStop }
+
+    // MARK: Heartbeat
+
+    /// Records progress of any kind (frames, audio buffers, concat samples, phases).
+    func heartbeat() {
+        lock.lock()
+        _lastActivity = Date()
+        lock.unlock()
+    }
+
+    /// Seconds since the last heartbeat.
+    var secondsSinceActivity: TimeInterval {
+        lock.lock()
+        defer { lock.unlock() }
+        return Date().timeIntervalSince(_lastActivity)
     }
 
     func waitWhileThermalCritical() {
@@ -305,6 +341,7 @@ final class ExportJob: InterruptibleJob, PipelineControl {
         lock.lock()
         let changed = _phase != phase
         _phase = phase
+        _lastActivity = Date()
         lock.unlock()
         if changed { onChange?() }
     }
@@ -312,6 +349,7 @@ final class ExportJob: InterruptibleJob, PipelineControl {
     func videoProgress(lastPtsUs: Int64) {
         lock.lock()
         _lastPtsUs = max(_lastPtsUs, lastPtsUs)
+        _lastActivity = Date()
         lock.unlock()
         onChange?()
     }
