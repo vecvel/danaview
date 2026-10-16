@@ -4,8 +4,9 @@
 // - barcodes strictly decreasing over the whole output; duration = range ± 1 frame;
 // - clicks of clap_flash_av mirrored within ±20 ms;
 // - peak work-dir size <= one chunk intermediate + output;
-// - peak memory delta <= 40 MB at 1080p and <= 90 MB at 4K (simulator measurement of the
-//   process footprint; device numbers are recorded by QA-04);
+// - peak memory delta <= 40 MB at 1080p and <= 90 MB at 4K (process footprint; on the simulator
+//   on top of its in-process software encoder's own working set, measured alone as a baseline;
+//   device numbers are recorded by QA-04);
 // - preflight refusals (range > 10 min, free space) tested;
 // - cancel removes the work files; a background interruption resumes from the last complete chunk
 //   and keeps the barcode sequence continuous;
@@ -228,13 +229,82 @@ final class ReverseJobTests: XCTestCase {
 
     // MARK: Memory
 
+    /// Peak footprint delta of the job's two encoders alone (the all-intra intermediate and the
+    /// output settings, one chunk each, fed straight from a decoder), measured like the job.
+    ///
+    /// The simulator has no hardware encoder: its software H.264 encoder runs in-process and costs
+    /// ≈ 180 MB per 1080p session before the first frame plus a queue of up to ≈ 80 input frames
+    /// (FIX-IOS-MEDIA measured 186 MB for 6 frames and a 458 MB plateau from 4 s on, with
+    /// nothing but a reader and an AVAssetWriter). That working set is the "codec working sets"
+    /// term of the IOS-07 budget, so on the simulator the budget applies on top of it; on a device
+    /// (hardware encoder, out of process) the budget is absolute (QA-04 records device numbers).
+    private func codecBaseline(_ url: URL, chunkSeconds: Double) throws -> Int64 {
+        let info = try VideoTrackInfo.load(url)
+        let (output, intermediate) = ReverseJob.encodeSettings(info)
+        return try MediaJobTestSupport.peakFootprintDelta {
+            for settings in [intermediate, output] {
+                try encodeChunk(info, settings: settings, seconds: chunkSeconds)
+            }
+        }
+    }
+
+    private func encodeChunk(_ info: VideoTrackInfo, settings: SegmentEncodeSettings, seconds: Double) throws {
+        let reader = try AVAssetReader(asset: info.asset)
+        reader.timeRange = CMTimeRange(start: .zero, duration: CMTime(seconds: seconds, preferredTimescale: 600))
+        let source = AVAssetReaderTrackOutput(
+            track: info.track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange])
+        source.alwaysCopiesSampleData = false
+        reader.add(source)
+        let url = roots.base.appendingPathComponent("baseline.\(settings.container.rawValue)")
+        try? FileManager.default.removeItem(at: url)
+        let writer = try AVAssetWriter(outputURL: url, fileType: settings.fileType)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings.videoOutputSettings)
+        input.expectsMediaDataInRealTime = false
+        writer.add(input)
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: nil)
+        XCTAssertTrue(reader.startReading())
+        XCTAssertTrue(writer.startWriting())
+        writer.startSession(atSourceTime: .zero)
+        var more = true
+        while more {
+            more = autoreleasepool {
+                guard let sample = source.copyNextSampleBuffer() else { return false }
+                guard let image = CMSampleBufferGetImageBuffer(sample) else { return true }
+                while !input.isReadyForMoreMediaData { usleep(1_000) }
+                return adaptor.append(image, withPresentationTime: CMSampleBufferGetPresentationTimeStamp(sample))
+            }
+        }
+        input.markAsFinished()
+        let done = DispatchSemaphore(value: 0)
+        writer.finishWriting { done.signal() }
+        done.wait()
+        XCTAssertEqual(writer.status, .completed)
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Asserts the job's peak footprint delta against [budgetMB] (on top of the encoders' own
+    /// working set on the simulator, see `codecBaseline`).
+    private func assertMemory(_ delta: Int64, baseline: Int64, budgetMB: Int64, label: String) {
+        let mb: (Int64) -> Int64 = { $0 / 1_048_576 }
+        #if targetEnvironment(simulator)
+        print("reverse \(label) peak footprint delta: \(mb(delta)) MB; encoders alone: \(mb(baseline)) MB; "
+              + "pipeline overhead: \(mb(delta - baseline)) MB (budget \(budgetMB) MB)")
+        XCTAssertLessThanOrEqual(delta, baseline + budgetMB * 1_048_576,
+                                 "pipeline overhead \(mb(delta - baseline)) MB over the encoders' \(mb(baseline)) MB")
+        #else
+        print("reverse \(label) peak footprint delta: \(mb(delta)) MB (budget \(budgetMB) MB)")
+        XCTAssertLessThanOrEqual(delta, budgetMB * 1_048_576)
+        #endif
+    }
+
     func testPeakMemoryAt1080p() throws {
+        let url = try ProbeFixtures.url("frame_counter_1080p30.mp4")
         let reverse = try job("frame_counter_1080p30.mp4", startUs: 0, endUs: 8_000_000, name: "mem1080")
         // Warm the codecs and caches once so the measurement sees the steady state.
         _ = try self.job("frame_counter_1080p30.mp4", startUs: 0, endUs: 500_000, name: "warm1080").run(JobControl(jobId: "w"))
+        let baseline = try codecBaseline(url, chunkSeconds: Double(ReverseJob.defaultChunkUs) / 1_000_000)
         let delta = try MediaJobTestSupport.peakFootprintDelta { _ = try reverse.run(JobControl(jobId: "m")) }
-        print("reverse 1080p peak footprint delta: \(delta / 1_048_576) MB")
-        XCTAssertLessThanOrEqual(delta, 40 * 1_048_576)
+        assertMemory(delta, baseline: baseline, budgetMB: 40, label: "1080p")
         let indices = try SegmentTestSupport.readBack(reverse.output).compactMap(\.index)
         XCTAssertEqual(indices, Array((0..<240).reversed()))
     }
@@ -245,11 +315,11 @@ final class ReverseJobTests: XCTestCase {
         let warm = ReverseJob(mediaURL: source, fingerprint: "uhd", startUs: 0, endUs: 300_000, audioStream: nil,
                               output: output("warm4k"), paths: paths)
         _ = try warm.run(JobControl(jobId: "w"))
+        let baseline = try codecBaseline(source, chunkSeconds: Double(ReverseJob.defaultChunkUs) / 1_000_000)
         let reverse = ReverseJob(mediaURL: source, fingerprint: "uhd", startUs: 0, endUs: 3_000_000, audioStream: nil,
                                  output: output("mem4k"), paths: paths)
         let delta = try MediaJobTestSupport.peakFootprintDelta { _ = try reverse.run(JobControl(jobId: "m")) }
-        print("reverse 4K peak footprint delta: \(delta / 1_048_576) MB")
-        XCTAssertLessThanOrEqual(delta, 90 * 1_048_576)
+        assertMemory(delta, baseline: baseline, budgetMB: 90, label: "4K")
         let indices = try SegmentTestSupport.readBack(reverse.output).compactMap(\.index)
         XCTAssertEqual(indices, Array((0..<90).reversed()))
     }

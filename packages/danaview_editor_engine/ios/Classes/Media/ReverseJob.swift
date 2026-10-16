@@ -102,6 +102,24 @@ final class ReverseJob: MediaJobBody {
         return Int(min(150_000_000, max(8_000_000, value)))
     }
 
+    /// The output segments' settings (H.264, 1 s GOP, AAC when the source has audio) and the
+    /// all-intra chunk intermediate's settings for a source.
+    static func encodeSettings(_ info: VideoTrackInfo) -> (output: SegmentEncodeSettings, intermediate: SegmentEncodeSettings) {
+        func even(_ v: Int) -> Int { max(2, v - v % 2) }
+        let width = even(info.width), height = even(info.height)
+        let fps = max(1, Int(info.nominalFps.rounded()))
+        let output = SegmentEncodeSettings(
+            codec: .h264, width: width, height: height, fps: fps,
+            averageBitRate: outputBitRate(width: width, height: height, fps: info.nominalFps),
+            maxKeyFrameIntervalFrames: nil, maxKeyFrameIntervalSeconds: 1, allowFrameReordering: false, container: .mp4,
+            audio: info.hasAudio ? SegmentEncodeSettings.Audio(sampleRate: audioSampleRate, channels: 2, bitRate: audioBitRate) : nil)
+        let intermediate = SegmentEncodeSettings(
+            codec: .h264, width: width, height: height, fps: fps,
+            averageBitRate: intermediateBitRate(width: width, height: height, fps: info.nominalFps),
+            maxKeyFrameIntervalFrames: 1, maxKeyFrameIntervalSeconds: nil, allowFrameReordering: false, container: .mov)
+        return (output, intermediate)
+    }
+
     /// Bytes of [bitRate] over [durationUs].
     static func bytes(bitRate: Int, durationUs: Int64) -> Int64 {
         Int64(Double(bitRate) / 8 * Double(durationUs) / 1_000_000)
@@ -135,13 +153,10 @@ final class ReverseJob: MediaJobBody {
         guard rangeEnd > rangeStart else { throw EngineError.invalidArgument("range", "empty or past the media end") }
         let durationUs = rangeEnd - rangeStart
 
-        func even(_ v: Int) -> Int { max(2, v - v % 2) }
-        let width = even(info.width), height = even(info.height)
-        let outputRate = ReverseJob.outputBitRate(width: width, height: height, fps: info.nominalFps)
-        let intermediateRate = ReverseJob.intermediateBitRate(width: width, height: height, fps: info.nominalFps)
+        let (settings, intermediateSettings) = ReverseJob.encodeSettings(info)
         let hasAudio = info.hasAudio
-        let estimate = ReverseJob.bytes(bitRate: outputRate + (hasAudio ? ReverseJob.audioBitRate : 0), durationUs: durationUs)
-        let chunkBytes = ReverseJob.bytes(bitRate: intermediateRate, durationUs: chunkDurationUs + 1_000_000)
+        let estimate = ReverseJob.bytes(bitRate: settings.averageBitRate + (hasAudio ? ReverseJob.audioBitRate : 0), durationUs: durationUs)
+        let chunkBytes = ReverseJob.bytes(bitRate: intermediateSettings.averageBitRate, durationUs: chunkDurationUs + 1_000_000)
         let free = try freeBytesOverride?() ?? Paths.freeBytes(at: paths.cacheRoot.path)
         try ReverseJob.preflight(rangeUs: durationUs, estimatedOutputBytes: estimate, chunkBytes: chunkBytes, freeBytes: free)
 
@@ -155,12 +170,6 @@ final class ReverseJob: MediaJobBody {
         try control.check()
         control.progress(0.02)
 
-        let settings = SegmentEncodeSettings(
-            codec: .h264, width: width, height: height, fps: max(1, Int(info.nominalFps.rounded())),
-            averageBitRate: outputRate, maxKeyFrameIntervalFrames: nil, maxKeyFrameIntervalSeconds: 1,
-            allowFrameReordering: false, container: .mp4,
-            audio: hasAudio ? SegmentEncodeSettings.Audio(sampleRate: ReverseJob.audioSampleRate, channels: 2,
-                                                          bitRate: ReverseJob.audioBitRate) : nil)
         let writer = try SegmentedWriter(
             directory: directory, jobKind: ReverseJob.jobKind,
             inputHash: "\(fingerprint)-\(rangeStart)-\(rangeEnd)-\(ReverseJob.settingsVersion)",
@@ -171,10 +180,6 @@ final class ReverseJob: MediaJobBody {
         }
         writer.onProgress = { control.progress(0.02 + $0 * 0.83) }
 
-        let intermediateSettings = SegmentEncodeSettings(
-            codec: .h264, width: width, height: height, fps: max(1, Int(info.nominalFps.rounded())),
-            averageBitRate: intermediateRate, maxKeyFrameIntervalFrames: 1, maxKeyFrameIntervalSeconds: nil,
-            allowFrameReordering: false, container: .mov)
         let source = ReverseFrameSource(
             info: info, timeline: timeline, intermediate: directory.appendingPathComponent("chunk.mov"),
             settings: intermediateSettings, control: control)
