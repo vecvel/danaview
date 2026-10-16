@@ -285,10 +285,10 @@ Future<String> _verify(WidgetTester tester, String job, ProjectId id, Map<String
         how = 'state ${state.name} on reopen, requested again';
         if (!ed.tasks.requestProxy(media)) throw StateError('the proxy cannot be requested again');
       }
-      await E2eApp.pumpUntil(tester, () {
+      await _resumes(tester, ed, 'proxy', () {
         if (ed.project.pool[media]!.proxy == ProxyState.failed) throw StateError('the proxy failed after the relaunch');
         return ed.project.pool[media]!.proxy == ProxyState.ready;
-      }, what: 'the proxy to finish after the relaunch (state ${ed.project.pool[media]!.proxy.name}, tasks ${ed.state.tasks.length})', timeout: const Duration(minutes: 4));
+      });
       await ed.close();
       return 'proxy ready ($how${restored ? ', journal restored' : ''})';
     case 'reverse' || 'freeze':
@@ -302,13 +302,13 @@ Future<String> _verify(WidgetTester tester, String job, ProjectId id, Map<String
         return 'the job finished before the kill; project valid';
       }
       final wasPending = targets.any((a) => a.status is PendingStatus);
-      await E2eApp.pumpUntil(tester, () {
+      await _resumes(tester, ed, job, () {
         final now = ed.project.pool.assets.values.where(isTarget).toList();
         for (final a in now) {
           if (a.status is FailedStatus) throw StateError('the $job asset failed: ${(a.status as FailedStatus).reason}');
         }
         return now.every((a) => a.status is ReadyStatus);
-      }, what: 'the $job asset to be ready after the relaunch', timeout: const Duration(minutes: 3));
+      });
       await ed.close();
       return '${wasPending ? 'pending on reopen, resumed' : 'already ready on reopen'} -> ready${restored ? ' (journal restored)' : ''}';
     case 'export':
@@ -372,6 +372,29 @@ Future<String> _verify(WidgetTester tester, String job, ProjectId id, Map<String
       return 'record at ${(record.doneFraction * 100).round()} %; notice once; gone after Discard';
   }
   throw StateError('unknown job $job');
+}
+
+/// Waits until [ready] holds with no user action (the editor alone must resume the pending job,
+/// ARCH §15 "jobs are re-queued"). When it does not within 90 s, it probes whether the job resumes
+/// once the Tasks controller exists (what any Tasks-sheet, Clip info or reverse/freeze action
+/// creates) and fails with that diagnosis.
+Future<void> _resumes(WidgetTester tester, E2eEditor ed, String job, bool Function() ready) async {
+  try {
+    await E2eApp.pumpUntil(tester, ready, what: 'the pending $job to resume on open', timeout: const Duration(seconds: 90));
+    return;
+  } on TestFailure {
+    soakLog('death', '$job: not resumed 90 s after open (tasks ${ed.state.tasks.length}); probing with the Tasks controller');
+  }
+  ed.tasks; // creates tasksControllerProvider(id), whose reconcile starts pending jobs
+  var resumedAfterProbe = false;
+  try {
+    await E2eApp.pumpUntil(tester, ready, what: 'the pending $job after the probe', timeout: const Duration(minutes: 3));
+    resumedAfterProbe = true;
+  } on TestFailure {
+    // Not even then.
+  }
+  throw StateError('the pending $job job is not resumed when the editor opens; '
+      '${resumedAfterProbe ? 'it resumes and completes only after tasksControllerProvider is first read (nothing reads it on open)' : 'it does not resume even after tasksControllerProvider is read'}');
 }
 
 void _expectValid(E2eEditor ed) {
