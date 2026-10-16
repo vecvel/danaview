@@ -4,7 +4,13 @@
 
 This report covers QA-00's app-level suite (`integration_test/editor`, ARCH §21.2) run on the iOS Simulator with the release dart-defines `DANAVIEW_EDITOR=true` and `DANAVIEW_AUTO_CAPTIONS=true` (BUILD_PLAN QA-01).
 
-**Status: not certified yet.** 11 of 18 scenarios pass, along with both iOS-relevant extras. Seven scenarios fail. Six of them trace to open FIX tickets in the app and one to a suite defect (FIX-QA-00-1). Scenario 13 also needs a device. QA-01 re-runs `scripts/ci/editor/e2e_ios.sh` once those tickets land, and updates this report.
+**Status: not certified yet (re-run 2 of 2026-10-16, 18:10–19:41).** On the iPhone, 14 of 18 scenarios pass, along with both iOS-relevant extras; the iOS 18.2 lane passes 3 of 3. That is up from 11 of 18 in the first run: FIX-UX-41-1, FIX-INT-02-2, FIX-UX-07-1, FIX-UX-07-2 and FIX-QA-00-1 have landed, and their scenarios now pass or get further. Four scenarios still fail:
+
+- s10 and s18 are app defects (FIX-UX-40-1, FIX-UX-14-1).
+- s12 is a suite defect (FIX-QA-00-2), on the iPhone and the iPad alike. Every keyboard step passes; only the closing marquee step fails.
+- s13 is a simulator timing reality. The clip now lands; only its latency and duration bounds miss. Deferred to a device.
+
+QA-01 re-runs `scripts/ci/editor/e2e_ios.sh` once those land, and updates this report.
 
 ## How to run
 
@@ -34,56 +40,64 @@ Evidence goes to `build/e2e/ios/<udid>/`: `logs/`, `screens/`, `files/` (exporte
 | legacy | iPhone 16, **iOS 18.2** (`7DF46AEE-…`) | s01, s02, s03 |
 | lab | iPhone 7 (iOS 15.8), iPhone 8 (iOS 16.7), set with `DV_E2E_LAB_UDIDS` | s01–s04 smoke |
 
-## Run of 2026-10-16
+## Run of 2026-10-16 (re-run 2, after the FIX round)
 
 Environment:
 
 - Xcode 26.6 (17F113), Flutter 3.44.2, debug builds.
-- `WhisperCore.xcframework` rebuilt with CMake 3.22.1 and Ninja; `check_ios_min_os` OK at iOS 15.0.
-- Models `ggml-tiny-q5_1.bin` and `ggml-silero-v6.2.0.bin` from `/Users/besaoct/danaview-models`. The owner approved them on 2026-10-15, and their SHA-256 is verified.
-- Nothing was downloaded.
-- `FIX-INT-02-1` workaround active: `E2eApp._boot` sets the documents root.
+- `WhisperCore.xcframework` rebuilt by the script with CMake 3.22.1, because the AI-05 build script changed (FIX-AI-05-1 landed, so the stamp no longer matched). `--status` reports `up-to-date` afterwards.
+- Models `ggml-tiny-q5_1.bin` and `ggml-silero-v6.2.0.bin` staged from `/Users/besaoct/danaview-models` (owner-approved, SHA-256 verified). Nothing was downloaded, and nothing was copied into the repo.
+- `FIX-INT-02-1` workaround still active: `E2eApp._boot` sets the documents root.
+- Load: another builder's `xcodebuild` ran at the same time. Swap stood at about 9 of 10 GB on the 8 GB Mac.
 
-### iPhone 16, iOS 26.5 (full suite)
+Commands:
+
+```sh
+DV_E2E_IPHONE="iPhone 16" scripts/ci/editor/e2e_ios.sh iphone                       # full suite
+DV_E2E_IPHONE="iPhone 16" scripts/ci/editor/e2e_ios.sh --target sNN iphone           # solo re-runs: s02, s18, s13
+DV_E2E_IPHONE="iPhone 16" scripts/ci/editor/e2e_ios.sh ipad legacy lab
+```
+
+### iPhone 16, iOS 26.5 (full suite, `6663101E-…`)
 
 | # | Result | Cause / evidence |
 |---|---|---|
 | s01 | pass | |
-| s02 | **fail** | FIX-UX-41-1. The player now reports 5 333 333 µs, but the editor still opens on frame 159 (`view.playhead 5 300 000`): it floors instead of rounding to the nearest frame. |
+| s02 | pass (solo re-run) | Failed in the full run with `Timed out after 60 s waiting for the editor to be ready` (preview start under swap pressure). It passes on its own re-run and on iOS 18.2: the editor opens on frame 160, barcode 160. FIX-UX-41-1 is confirmed fixed. Load flake, not a defect. |
 | s03 | pass | |
 | s04 | pass | |
 | s05 | pass | |
-| s06 | **fail** | FIX-INT-02-2. The freeze-frame still never renders (`the still shows source frame 60`: barcode null). |
-| s07 | pass | H.264/MP4 720p conforms. Burned and not-burned cues, typewriter, dissolve window and SRT/VTT round trip all pass. Reported, not failed: `HEVC/MOV not offered here (hevcEncode false, mov true)`. |
-| s08 | **fail** | **FIX-QA-00-1 (suite).** The models are staged and the pipeline runs. The sheet ends on "No audio to caption" (screenshot captured mid-run). The scenario imports `speech_10s.m4a` through New project › Files, and the import places audio on a **music** lane (domain.md: audio import → `AudioRole.music`). The "Whole video" scope leaves music unchecked by design (AI-12 planner, ai.md §8.2). `frame_counter_1080p30.mp4` has no audible speech stream, so the plan is empty. The app behaves as specified; the scenario has to caption the speech clip. |
+| s06 | pass | FIX-INT-02-2 is confirmed fixed: the freeze frame renders. |
+| s07 | pass | H.264/MP4 720p conforms. Reported, not failed: `HEVC/MOV not offered here (hevcEncode false, mov true)`. |
+| s08 | pass | FIX-QA-00-1 is confirmed fixed. Captioning "This clip" with the tiny model gives 3 cues ("Welcome to the video editor test, …"); the SRT round trips, and one undo removes them all. |
 | s09 | pass | Phase `edit` ends with the host kill; phase `recover` restores the edit. |
-| s10 | **fail** | FIX-UX-07-2. `missing-media-banner` never shows (`EditorHealthHost` is not mounted). |
+| s10 | **fail** | **FIX-UX-40-1.** FIX-UX-07-2 is confirmed fixed: the banner, Locate, Relink several and "Relink 3 files" all work, and every asset is relinked. But the preview shows no frame of the relinked file afterwards: `barcode().index` is `null` (expected 10) after `waitReady` and a seek to clip start + 10 frames. |
 | s11 | pass | No black frame 1 s after foreground. |
-| s12 | **fail** | FIX-UX-07-1. `EditorShortcuts` is not mounted, so Space does not start playback. |
-| s13 | **fail (simulator)** | The app no longer aborts. The recorder starts (`AVAudioEngine start`, `voiceover.recording`), records for 3 s and stops, but no clip lands on a voice lane within 30 s. This simulator has no real audio input, so it can't tell an empty capture from a commit defect. Deferred: no device available. Filed to check on a device as FIX-INT-07-1 (needs confirming). |
+| s12 | **fail** | **FIX-QA-00-2 (suite).** FIX-UX-07-1 is confirmed fixed. Space/K, ←/→ barcode frame step, Shift+←/→, S, Delete/Backspace, ⌘Z/⌘⇧Z, ⌘S in a text field, ⌘C/⌘V/⌘D, wheel/Shift+wheel/⌘+wheel and the right-click menu all pass. The last step (marquee) fails with `got {}`. The marquee starts at `project.duration + 0.5 s` on the main lane. On iOS the timeline is centre-locked by default, so zoom-to-fit keeps the playhead centred, and the end of the 14 s project lies past the right edge (screenshot `191028-s12_context_menu.png`: playhead 3:18, clips run off-screen). The drag starts outside the canvas. |
+| s13 | **fail (simulator)** | The earlier "no clip lands" is gone, and FIX-INT-07-1 is resolved: a WAV recording lands on a voice lane. Only the timing bounds miss on the simulator's virtual mic, differently on each run. Full run: duration 4 966 667 µs (bound 2.5–4 s). Solo re-run: start latency 533 334 µs (bound < 500 ms). Deferred: no device available (simulator audio latency). |
 | s14 | pass | |
-| s15 | pass | Now passes, so FIX-UX-22-2 has landed. `head -14.6 dBFS, body -9.0 dBFS` (fade-in quieter). |
-| s16 | **fail** | FIX-UX-07-1 (M adds no marker). |
-| s17 | **fail** | FIX-UX-07-1 (S does not split). |
-| s18 | **fail** | FIX-UX-07-1 (S does not split). |
-| x_ios_background_export | pass | Simulator reality: `pausedInBackground observed: false`, reported. IOS-01/IOS-13 verify the pause on iPhones. |
+| s15 | pass | `head -14.6 dBFS, body -9.0 dBFS` (fade-in quieter). |
+| s16 | pass | |
+| s17 | pass | |
+| s18 | **fail** | **FIX-UX-14-1.** Reproduced 2 of 2. After close and reopen, the timeline JSON is equal, but `playhead.value` is `0` (expected 2 566 667 µs, frame 77). Zoom is not reached. |
+| x_ios_background_export | pass | Simulator reality: `pausedInBackground observed: false`, reported. |
 | x_android_api28 | pass (trivial on iOS) | |
 | x_android_export_background | skipped on iOS | |
 
-### iPad Pro 13-inch (M5), iOS 26.5: scenario 12
+### iPad Pro 13-inch (M5), iOS 26.5: scenario 12 (`2C9213E9-…`)
 
 | # | Result | Cause |
 |---|---|---|
-| s12 | **fail** | FIX-UX-07-1, same as on the iPhone: `waiting for playback to start` after Space. |
+| s12 | **fail** | FIX-QA-00-2, the same as on the iPhone. Every keyboard and pointer step up to the marquee passes (`wheel: zoom 91.4 -> 152.3 px/s`); the marquee selects nothing. |
 
-**V-U5 (iPad hardware-keyboard ⌘ combos reach Flutter): not certified.** The app has no keyboard shortcuts while FIX-UX-07-1 is open. Re-run the ipad lane after the fix, then do manual checklist step 3 with I/O › Keyboard › Connect Hardware Keyboard.
+**V-U5 (iPad hardware-keyboard ⌘ combos reach Flutter): partly certified.** Every ⌘ combo in s12 (⌘Z, ⌘⇧Z, ⌘S in a text field, ⌘C/⌘V/⌘D, ⌘+wheel) reaches the editor's shortcuts on the iPad simulator through Flutter key events. Two things are still pending: the physical-keyboard check (manual checklist step 3, I/O › Keyboard › Connect Hardware Keyboard), and the green s12 that FIX-QA-00-2 needs.
 
-### iPhone 16, iOS 18.2: scenarios 1–3
+### iPhone 16, iOS 18.2: scenarios 1–3 (`7DF46AEE-…`)
 
 | # | Result | Cause |
 |---|---|---|
 | s01 | pass | |
-| s02 | **fail** | FIX-UX-41-1. On iOS 18.2 the player reports 5 333 000 µs and the editor opens on frame 159. The first attempt hung with `No tests ran.`, a harness hiccup under memory pressure; the script now retries such files once. The second attempt reached the assertion. |
+| s02 | pass | FIX-UX-41-1 is confirmed fixed on iOS 18.2. |
 | s03 | pass | |
 
 ### Lab devices (iPhone 7 iOS 15.8, iPhone 8 iOS 16.7)
@@ -92,12 +106,16 @@ Deferred: no device available. Under the owner default of 2026-10-08 (ARCH D-43)
 
 ### Manual checklist (iPad simulator)
 
-These steps have not been recorded yet. They need the editor wiring fixed first: FIX-UX-07-1 for the hardware-keyboard step and FIX-UX-07-2 for health. Each is recorded with screenshots on the re-run.
+These steps are not recorded yet. They need a person driving Split View with Files and Photos; the harness cannot do that.
 
 1. Drop from Files into the editor (Split View): pending.
 2. Drop from Photos (Split View): pending.
-3. Physical hardware keyboard and the ⌘/ sheet (V-U5): pending, blocked by FIX-UX-07-1.
-4. Pointer: hover pill, right-click menu, marquee: pending.
+3. Physical hardware keyboard and the ⌘/ sheet (V-U5): pending. It is no longer blocked, because FIX-UX-07-1 has landed.
+4. Pointer: hover pill, right-click menu, marquee: pending. The right-click menu is covered automatically in s12.
+
+### Earlier run (2026-10-16, first)
+
+Results: 11 of 18 on the iPhone; s12 failed on the iPad; the iOS 18.2 lane passed s01 and s03 and failed s02. The causes were FIX-UX-41-1, FIX-INT-02-2, FIX-QA-00-1, FIX-UX-07-1 and FIX-UX-07-2 (all since fixed) and FIX-INT-07-1 (resolved; see s13 above).
 
 ## Simulator realities (reported, not failed)
 
@@ -105,14 +123,16 @@ These steps have not been recorded yet. They need the editor wiring fixed first:
 - H.264 encoding is software.
 - Performance numbers are meaningless; QA-04 measures on devices.
 - The encoder keeps running in the background, so the background-export extra never pauses.
-- The Mac has no usable audio input, which affects s13.
+- The Mac's virtual audio input has unpredictable latency, which affects the s13 timing bounds.
+- Under memory pressure (8 GB Mac, parallel builders), the first editor open after a cold build can take more than 60 s (s02 in the full run).
 
 ## Defects filed
 
 | Id | Owner | File | What | Fix |
 |---|---|---|---|---|
-| FIX-QA-00-1 | QA-00 | `integration_test/editor/s08_auto_captions_test.dart` | Captions use the whole-video scope, but the speech clip sits on a music lane (the import default), which that scope excludes by design. The result is "No audio to caption". | Select the `speech_10s.m4a` clip and open Auto captions with the "This clip" scope (or check its track in the sheet). Alternatively, place the speech on a voice/original lane before the run. |
-| FIX-AI-05-1 | AI-05 | `packages/danaview_whisper/tool/build_ios_xcframework.sh` | `tree_digest` hashes every file under `third_party/whisper.cpp`, including the git-ignored `bindings/javascript/package.json` that whisper.cpp's CMake configure writes into the source tree. Once it exists, the build stops with "vendored sources differ" and `--status` reports `stale`. | Exclude git-ignored files from the digest (for example `git ls-files` or a `-not -path` for that file), or configure so nothing is written into the source tree. |
-| FIX-INT-07-1 (needs confirming) | INT-07 | voice recording commit path | On the iOS 26.5 simulator the recorder starts and stops cleanly, but no WAV clip lands on a voice lane. | Check on a device. If the capture is non-empty there and still nothing lands, trace the stop → commit path. |
+| FIX-UX-40-1 (needs triage, maybe INT-02) | UX-40 | `packages/danaview_editor/lib/src/editor/flows/relink/` (relink apply → preview) | After "Relink 3 files", every asset is relinked and the banner is gone. But after `waitReady` and a seek, the preview frame has no barcode (`null`, expected 10): the preview does not render the relinked media. | On relink apply, re-resolve the media paths in the compiled plan and push a new plan, or restart the preview, so it reads the new files. |
+| FIX-UX-14-1 (needs triage, maybe UX-08) | UX-14 | `packages/danaview_editor/lib/src/editor/state/playhead_controller.dart` / `editor_controller.dart` | Close and reopen restores the timeline but not the playhead: it is 0 instead of the saved view playhead (2 566 667 µs). Reproduced 2 of 2 on the iOS 26.5 simulator. Either the settled seek's `updateView` does not reach disk before close, or the reopened playhead does not `reset` to `view.playhead`. | Make sure close flushes the last settled view state, and that the reopened `PlayheadController` starts at `committed.view.playhead`. Add a unit test: seek, close, reopen, playhead equal. |
+| FIX-QA-00-2 | QA-00 | `integration_test/editor/s12_keyboard_pointer_test.dart` (marquee step) | The marquee starts at `project.duration + 0.5 s`. With the iOS default centre-locked timeline, zoom-to-fit keeps the playhead centred, so that point is past the right edge and the drag starts outside the canvas. The selection stays empty on the iPhone and the iPad. | Start the marquee at a visible point: clamp `from.dx` to the canvas's right edge minus a few px, over empty lane space, or switch the viewport to free mode / seek near the end before fitting. |
+| FIX-QA-00-3 (optional) | QA-00 | `integration_test/editor/s13_voiceover_test.dart` | The latency (< 500 ms) and duration (2.5–4 s) bounds miss on the simulator's virtual mic: 533 ms and 4.97 s on two runs. | Keep the bounds for devices, and on the simulator report the numbers (DV_E2E_REPORT) instead of failing, or measure the duration against the wall time up to the stop tap. |
 
-The app defects already filed by QA-00 still reproduce: FIX-UX-41-1, FIX-INT-02-1 (workaround still needed), FIX-INT-02-2, FIX-UX-07-1 and FIX-UX-07-2. FIX-UX-22-2 is fixed (s15 passes).
+FIX-AI-05-1 is fixed: the digest now uses `git ls-files`. FIX-INT-07-1 is resolved: the recording commits a clip.
