@@ -377,9 +377,8 @@ abstract final class Captions {
 
   /// Closes the captions sheet if it is still up (as the sheet's own close does: a route pop).
   static Future<void> closeSheet(E2eEditor ed) async {
-    final sheet = find.byKey(const ValueKey('captions-sheet'));
-    if (sheet.evaluate().isEmpty) return;
-    await Navigator.of(ed.tester.element(sheet.first)).maybePop();
+    if (!E2eApp.hasKey('captions-sheet')) return;
+    await E2eApp.tapKey(ed.tester, 'captions-cancel');
     await E2eApp.pumpUntil(ed.tester, () => !E2eApp.hasKey('captions-sheet'), what: 'the captions sheet to close');
   }
 
@@ -429,6 +428,16 @@ abstract final class Captions {
   return (target.path, text.existsSync() ? normalizedWords(text.readAsStringSync()) : const <String>[]);
 }
 
+/// [E2eEditor.createProject], printing what is on screen every 5 s while it waits (diagnostics).
+Future<E2eEditor> newProject(WidgetTester tester, {required String name, required List<String> media}) async {
+  final timer = Timer.periodic(const Duration(seconds: 5), (_) => print('DV_QA07_SCREEN ${E2eApp.describeScreen().replaceAll('\n', ' ')}'));
+  try {
+    return await E2eEditor.createProject(tester, name: name, media: media);
+  } finally {
+    timer.cancel();
+  }
+}
+
 MediaClip clipNamed(E2eEditor ed, String name) => ed.items<MediaClip>().firstWhere((c) => ed.assetOf(c).displayName == name);
 
 String stamp() => '${DateTime.now().millisecondsSinceEpoch % 100000}';
@@ -451,6 +460,8 @@ int changedIn(E2eFrame a, E2eFrame b, double y0, double y1) {
 /// A [testWidgets] that, when it fails, closes what it left open (sheets, the editor), so a failure
 /// does not leave an open editor session in the shared app wiring and break the next test.
 void qaTest(String name, Future<void> Function(WidgetTester tester) body, {bool skip = false}) {
+  const only = String.fromEnvironment('DV_QA07_ONLY');
+  final selected = only.isEmpty || only.split(',').any((id) => name.startsWith('${id.trim()} '));
   testWidgets(name, (tester) async {
     try {
       await body(tester);
@@ -458,7 +469,7 @@ void qaTest(String name, Future<void> Function(WidgetTester tester) body, {bool 
       await cleanup(tester);
       rethrow;
     }
-  }, skip: skip);
+  }, skip: skip || !selected);
 }
 
 Future<void> cleanup(WidgetTester tester) async {
@@ -510,7 +521,7 @@ void main() {
     final net = NetRecorder().install();
     addTearDown(net.uninstall);
 
-    final ed = await E2eEditor.createProject(tester, name: 'QA07 consent ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
+    final ed = await newProject(tester, name: 'QA07 consent ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
     await Captions.open(ed, [clipNamed(ed, Fx.speech).id]);
     await Captions.configure(ed, tier: SpeechModelTier.fast);
     await E2eApp.tapKey(tester, 'captions-create');
@@ -537,7 +548,7 @@ void main() {
   qaTest('q02 spoken language: explicit English, then "Detect automatically"', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
-    final ed = await E2eEditor.createProject(tester, name: 'QA07 language ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
+    final ed = await newProject(tester, name: 'QA07 language ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
     final speech = clipNamed(ed, Fx.speech).id;
 
     Captions.clearTranscripts();
@@ -567,7 +578,7 @@ void main() {
   qaTest('q03 generated captions: undo, SRT/VTT, regenerate, burn-in', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
-    final ed = await E2eEditor.createProject(tester, name: 'QA07 generated ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
+    final ed = await newProject(tester, name: 'QA07 generated ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
     final speech = clipNamed(ed, Fx.speech).id;
     Captions.clearTranscripts();
     await Captions.open(ed, [speech]);
@@ -674,7 +685,7 @@ void main() {
   qaTest('q04 split clip plus a 2x speed piece map to the timeline', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
-    final ed = await E2eEditor.createProject(tester, name: 'QA07 mapping ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
+    final ed = await newProject(tester, name: 'QA07 mapping ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
     final speech = clipNamed(ed, Fx.speech);
     final cut = speech.start + 5000000;
     ed.apply(SplitItems({speech.id}, cut));
@@ -708,7 +719,7 @@ void main() {
     await E2eApp.launch(tester);
     final tier = await Captions.stage(Qa07.requestedTier);
     final (clip, reference) = sixtySecondClip();
-    final ed = await E2eEditor.createProject(tester, name: 'QA07 sixty ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), clip]);
+    final ed = await newProject(tester, name: 'QA07 sixty ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), clip]);
     final item = clipNamed(ed, 'qa07-60s-en.m4a');
     Captions.clearTranscripts();
     await Captions.open(ed, [item.id]);
@@ -741,7 +752,7 @@ void main() {
     final id = Shared.sixtyProject;
     final ed = id != null
         ? await E2eEditor.openFromProjects(tester, id)
-        : await E2eEditor.createProject(tester, name: 'QA07 sixty ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), sixtySecondClip().$1]);
+        : await newProject(tester, name: 'QA07 sixty ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), sixtySecondClip().$1]);
     return (ed, clipNamed(ed, 'qa07-60s-en.m4a'), tier);
   }
 
@@ -831,7 +842,7 @@ void main() {
     await Captions.stage(SpeechModelTier.fast);
     final net = NetRecorder(refuse: true).install();
     addTearDown(net.uninstall);
-    final ed = await E2eEditor.createProject(tester, name: 'QA07 offline ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
+    final ed = await newProject(tester, name: 'QA07 offline ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
     Captions.clearTranscripts();
     await Captions.open(ed, [clipNamed(ed, Fx.speech).id]);
     await Captions.configure(ed, tier: SpeechModelTier.fast, language: const FixedLanguage('en'));
@@ -845,7 +856,7 @@ void main() {
   qaTest('q09 deleting the model asks for consent again', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
-    final ed = await E2eEditor.createProject(tester, name: 'QA07 delete ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
+    final ed = await newProject(tester, name: 'QA07 delete ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
     final speech = clipNamed(ed, Fx.speech).id;
     await Captions.open(ed, [speech]);
     await Captions.configure(ed, tier: SpeechModelTier.fast, language: const FixedLanguage('en'));
@@ -876,7 +887,7 @@ void main() {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
     final (clip, _) = sixtySecondClip();
-    final ed = await E2eEditor.createProject(tester, name: 'QA07 kill ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), clip]);
+    final ed = await newProject(tester, name: 'QA07 kill ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), clip]);
     Captions.clearTranscripts();
     await Captions.open(ed, [clipNamed(ed, 'qa07-60s-en.m4a').id]);
     await Captions.configure(ed, tier: SpeechModelTier.fast, language: const FixedLanguage('en'));
@@ -918,7 +929,7 @@ void main() {
   qaTest('download: consent, then the app is killed mid-download', (tester) async {
     await E2eApp.launch(tester);
     await Captions.service.deleteModel();
-    final ed = await E2eEditor.createProject(tester, name: 'QA07 download ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
+    final ed = await newProject(tester, name: 'QA07 download ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
     await Captions.open(ed, [clipNamed(ed, Fx.speech).id]);
     await Captions.configure(ed, tier: SpeechModelTier.fast, language: const FixedLanguage('en'));
     final net = NetRecorder().install();
