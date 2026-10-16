@@ -18,6 +18,11 @@
 // - detachedKeepForLaterKeepsTheFile: whenDetached keepForLater keeps the file, no gallery insert.
 // - onTimeoutInterruptsJobsAndExpiresLeases: the API 35 onTimeout handler interrupts the job (one-shot
 //   interrupted record), expires the lease (leaseExpiring) and stops the service.
+// Every step that must happen mid-export (Cancel, onTimeout, the activity or the sink going away,
+// the progress checks) runs while an EncoderGate holds the export after 30 encoded frames, and the
+// test asserts the job is still running at that moment, so a slow emulator cannot let the export
+// finish first (a late step fails loudly instead of passing or flaking); exports that must
+// complete open the gate afterwards.
 
 package com.vecvel.danaview.editor.engine.service
 
@@ -91,6 +96,21 @@ class ExportServiceTest {
 
     private fun activity(): FragmentRequests = FragmentRequests.launch().also { relays += it }
 
+    /** A gate installed on [h] before its export starts (file header). */
+    private fun gate(h: ExportHarness): EncoderGate = EncoderGate().also { it.install(h) }
+
+    /** Waits until [gate] holds [id]'s export, and asserts the job is still running. */
+    private fun awaitHeldRunning(gate: EncoderGate, h: ExportHarness, id: String) {
+        assertTrue("the export is held by the encoder gate", gate.awaitHeld())
+        assertRunning("held", h, id)
+    }
+
+    /** [id] has not ended and is still a running job of the coordinator. */
+    private fun assertRunning(what: String, h: ExportHarness, id: String) {
+        assertFalse("$what: the job has not ended", ServiceTest.ended(h, id))
+        assertTrue("$what: the job is still running", h.coordinator.runningJobs().any { it.jobId == id })
+    }
+
     private fun finishAndWait(relay: FragmentRequests) {
         relay.finish()
         assertTrue("activity destroyed", ServiceTest.waitFor(10_000) { relay.activity.isDestroyed })
@@ -100,6 +120,7 @@ class ExportServiceTest {
     fun foregroundTypeProgressAndStop() {
         val relay = activity()
         val h = harness("fgs")
+        val gate = gate(h)
         val id = h.start(ServiceTest.counterPlan(150), settings(), h.output("fgs"))
         val svc = ServiceTest.awaitForeground()
         val expected = ExportService.foregroundServiceTypeFor(Build.VERSION.SDK_INT)
@@ -123,11 +144,14 @@ class ExportServiceTest {
         assertTrue("ongoing", n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0)
         assertEquals(listOf(id), ExportService.activeJobIds())
 
-        // Progress reaches the notification while rendering.
+        // Progress reaches the notification while rendering (held mid-export).
+        awaitHeldRunning(gate, h, id)
         assertTrue(
             "progress shown",
-            ServiceTest.waitFor(60_000) { (ServiceTest.foregroundNotification()?.notification?.extras?.getInt(Notification.EXTRA_PROGRESS) ?: 0) > 0 || ServiceTest.ended(h, id) },
+            ServiceTest.waitFor(60_000) { (ServiceTest.foregroundNotification()?.notification?.extras?.getInt(Notification.EXTRA_PROGRESS) ?: 0) > 0 },
         )
+        assertRunning("progress shown", h, id)
+        gate.open()
         val outcome = h.await(id)
         outcome.requireResult()
         val posts = svc.notificationPostTimes()
@@ -145,10 +169,14 @@ class ExportServiceTest {
         val relay = activity()
         val h = harness("destroyed")
         val out = h.output("destroyed")
+        val gate = gate(h)
         val id = h.start(ServiceTest.counterPlan(120), settings(), out)
         ServiceTest.awaitForeground()
+        awaitHeldRunning(gate, h, id)
         finishAndWait(relay)
-        assertTrue("still in the foreground with the activity destroyed", ServiceTest.service()?.isForeground == true || ServiceTest.ended(h, id))
+        assertRunning("activity destroyed", h, id)
+        assertTrue("still in the foreground with the activity destroyed", ServiceTest.service()?.isForeground == true)
+        gate.open()
         val outcome = h.await(id)
         val result = outcome.requireResult()
         assertTrue("output written", out.isFile && out.length() == result.bytes)
@@ -161,9 +189,13 @@ class ExportServiceTest {
         val relay = activity()
         val h = harness("cancel")
         val out = h.output("cancel")
+        // Never opened: the export cannot finish before Cancel (more than 200 s at the trickle).
+        val gate = gate(h)
         val id = h.start(ServiceTest.counterPlan(240, 1920, 1080), settings(w = 1920, h = 1080), out)
         ServiceTest.awaitForeground()
         assertTrue(ServiceTest.waitFor(5_000) { ServiceTest.foregroundNotification() != null })
+        awaitHeldRunning(gate, h, id)
+        assertTrue("partial output on disk before Cancel", out.isFile)
         finishAndWait(relay)
         assertTrue("open the shade", device.openNotification())
         // Progress updates re-inflate the row, so the found button can go stale: re-find and retry.
@@ -179,6 +211,9 @@ class ExportServiceTest {
             }
             try {
                 val at = cancel.visibleCenter
+                // A tap must land while the export is still running (held), never after it finished.
+                if (taps == 0) assertRunning("Cancel pressed", h, id)
+                assertTrue("the gate still holds the export when Cancel is pressed", gate.isHeld)
                 device.click(at.x, at.y)
                 taps++
             } catch (e: androidx.test.uiautomator.StaleObjectException) {
@@ -194,7 +229,7 @@ class ExportServiceTest {
         assertFalse("partial output deleted", out.exists())
         assertTrue(ServiceTest.awaitStopped())
         assertNull(ServiceTest.foregroundNotification())
-        Log.i(SERVICE_TEST_TAG, "notification Cancel with the activity destroyed: job cancelled after ${outcome.progress.lastOrNull()?.fraction} progress ($taps tap(s))")
+        Log.i(SERVICE_TEST_TAG, "notification Cancel with the activity destroyed: job cancelled after ${outcome.progress.lastOrNull()?.fraction} progress, ${gate.passed} frames encoded (${gate.passedWhileHeld} while held) ($taps tap(s))")
     }
 
     @Test
@@ -204,11 +239,16 @@ class ExportServiceTest {
         val detach = DetachOnDestroy(h).apply { install() }
         try {
             val out = h.output("swipe")
+            val gate = gate(h)
             val id = h.start(ServiceTest.counterPlan(480, 1920, 1080, fps = 60), settings(w = 1920, h = 1080, fps = 60), out, DetachedHandoffMsg.SAVE_TO_GALLERY)
             ServiceTest.awaitForeground()
+            awaitHeldRunning(gate, h, id)
             swipeAppFromRecents(relay)
             assertTrue("the activity is destroyed by the swipe:\n" + SystemUi.dump(), detach.awaitDestroyed(15_000))
             assertTrue("the activity is gone", relay.activity.isDestroyed)
+            // The sink detached while the export was still running: it completes while detached.
+            assertRunning("swiped away", h, id)
+            gate.open()
             device.pressHome()
             val store = ActiveExportStore.of(h.paths)
             assertTrue(
@@ -262,8 +302,12 @@ class ExportServiceTest {
         val h = harness("keep")
         val out = h.output("keep")
         val before = ServiceTest.galleryIds().toSet()
+        val gate = gate(h)
         val id = h.start(ServiceTest.counterPlan(45), settings(), out, DetachedHandoffMsg.KEEP_FOR_LATER)
+        awaitHeldRunning(gate, h, id)
         h.detach()
+        assertRunning("detached", h, id)
+        gate.open()
         val store = ActiveExportStore.of(h.paths)
         assertTrue(ServiceTest.waitFor(180_000) { store.record(id)?.state == ActiveExportStore.State.COMPLETED_WHILE_DETACHED })
         val record = store.record(id)!!
@@ -285,8 +329,10 @@ class ExportServiceTest {
         activity()
         val h = harness("timeout")
         val out = h.output("timeout")
+        val gate = gate(h)
         val id = h.start(ServiceTest.counterPlan(240, 1920, 1080), settings(w = 1920, h = 1080), out)
         val svc = ServiceTest.awaitForeground()
+        awaitHeldRunning(gate, h, id)
         val lease = ServiceTest.onMain {
             var leaseId: String? = null
             h.ctx.backgroundGuard.acquire("Captions") { leaseId = it.getOrThrow() }
@@ -294,6 +340,7 @@ class ExportServiceTest {
         }
         assertNotNull(lease)
         // What the platform calls on API 35 when the mediaProcessing / dataSync time limit is reached.
+        assertRunning("onTimeout", h, id)
         ServiceTest.onMain { svc.onTimeout(1, svc.requestedForegroundType) }
         val outcome = h.await(id, timeoutSec = 60)
         assertEquals("interrupted", outcome.failure?.code)
