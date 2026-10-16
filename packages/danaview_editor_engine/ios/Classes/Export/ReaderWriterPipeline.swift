@@ -38,8 +38,8 @@
 // - every AVAssetReader is created, read, cancelled and released on ONE serial queue of its own
 //   (`MixReadSession`, `CompositionVideoSource`), and its queue closures hold the reader, its output
 //   and the composition, so nothing is cancelled or released while a call into it is outstanding;
-// - the audio watchdog only signals: a hung read is left blocked on its queue (its teardown queued
-//   behind it) and the read resumes on a fresh composition and reader from the frame after the last
+// - the audio watchdog only signals: a hung read is left blocked on its queue and its reader is
+//   never torn down (kept for the process, like IOS-17's abandoned pumps), and the read resumes on a fresh composition and reader from the frame after the last
 //   delivered buffer (`maxAudioResumes`), so the export completes; a stop request ends the wait at
 //   once (typed interruption);
 // - each export segment reads its own anchored copy of the composition (no composition is mutated
@@ -953,8 +953,11 @@ final class MixAudioSource: SegmentAudioSource {
                 hungReads += 1
                 onHung?()
                 // The watchdog only signals: the blocked call keeps its reader, and the reader is
-                // torn down on its own queue once (if ever) the call returns.
-                takeSession(hung: true)?.close()
+                // never cancelled or released, not even once the call returns (tearing down an
+                // audio mix reader whose render threads got stuck crashed inside AudioToolbox under
+                // Thread Sanitizer). It is left behind with its composition, like IOS-17's
+                // abandoned pumps.
+                takeSession(hung: true)?.abandon()
                 guard let reopen = reopen, resumes < maxResumes, CMTimeCompare(resumeTime, rangeEnd) < 0 else {
                     rejection = "hung"
                     throw EngineError(.decodeFailed, "audio read hung", retryable: true)
@@ -1331,6 +1334,13 @@ final class MixReadSession {
             closed.signal()
             work.forEach { $0() }
         }
+    }
+
+    /// Leaves the session behind for good: no teardown is ever queued, and the session (its
+    /// reader, output and composition) is kept alive for the rest of the process.
+    func abandon() {
+        guard requestClose() else { return }
+        SegmentedWriter.keepAbandoned([self])
     }
 
     /// Runs [body] after the teardown (at once on the queue when it already happened).

@@ -338,10 +338,11 @@ final class ExportD7Tests: XCTestCase {
         XCTAssertEqual(first.hungReads, 1)
         XCTAssertEqual(first.resumes, 1, "resumed on a fresh reader instead of failing the read")
         XCTAssertNotEqual(first.rejection, "hung")
-        // The hung reader is torn down only after its call returned.
-        XCTAssertTrue(JobEventRecorder.spin(timeout: 15) { log.gateOpenedAt != nil && log.teardowns >= 2 })
-        let opened = try XCTUnwrap(log.gateOpenedAt)
-        XCTAssertTrue(log.teardownTimes.contains { $0 >= opened }, "the blocked reader's teardown ran after its call")
+        // The resumed reader is torn down; the hung one is never touched, not even after its call
+        // returned (it is left behind with its composition).
+        XCTAssertTrue(JobEventRecorder.spin(timeout: 15) { log.gateOpenedAt != nil })
+        _ = JobEventRecorder.spin(timeout: 1) { false }
+        XCTAssertEqual(log.teardowns, 1, "only the resumed reader is torn down")
         // The speech plays across the resume point (buffer 3 is about 0.25 s in).
         let pcm = try ExportConformance.pcm(r.output)
         XCTAssertGreaterThan(ExportConformance.rmsDb(pcm, channel: 0, 4_800, 96_000), -45, "audio across the resume")
@@ -466,6 +467,7 @@ final class ExportD7Tests: XCTestCase {
             try? FileManager.default.removeItem(at: r.output)
         }
         XCTAssertGreaterThanOrEqual(log.made, 2 * plans.count, "a video and an audio composition per export")
-        XCTAssertEqual(SegmentedWriter.abandonedCount, abandonedBefore, "nothing left behind")
+        XCTAssertLessThanOrEqual(SegmentedWriter.abandonedCount, abandonedBefore + log.hungReads,
+                                 "nothing left behind but AVFoundation's own hung readers")
     }
 }
