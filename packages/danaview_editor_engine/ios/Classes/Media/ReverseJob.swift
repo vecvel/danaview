@@ -387,35 +387,43 @@ final class ReverseFrameSource: SegmentVideoSource {
         writer.startSession(atSourceTime: first)
         var written: [CMTime] = []
         var failure: Error?
-        while let sample = source.copyNextSampleBuffer() {
-            if let control = control, control.isStopped {
-                failure = EngineError(.interrupted, "stopped", retryable: true)
-                break
+        // One autorelease pool per frame: the reader and the encoder autorelease per-frame objects
+        // that otherwise pin every decoded frame of the chunk until the loop ends (FIX-IOS-MEDIA:
+        // 400+ MB at 1080p, 1.5 GB at 4K without it).
+        var more = true
+        while more {
+            more = autoreleasepool { () -> Bool in
+                guard let sample = source.copyNextSampleBuffer() else { return false }
+                if let control = control, control.isStopped {
+                    failure = EngineError(.interrupted, "stopped", retryable: true)
+                    return false
+                }
+                guard let image = CMSampleBufferGetImageBuffer(sample) else { return true }
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                if CMTimeCompare(pts, first) < 0 || CMTimeCompare(pts, last) > 0 { return true }
+                if let previous = written.last, CMTimeCompare(pts, previous) <= 0 { return true }
+                let frame: CVPixelBuffer
+                do {
+                    frame = try renderer.render(image)
+                } catch {
+                    failure = error
+                    return false
+                }
+                while !input.isReadyForMoreMediaData {
+                    if control?.isStopped == true { break }
+                    usleep(1_000)
+                }
+                if control?.isStopped == true {
+                    failure = EngineError(.interrupted, "stopped", retryable: true)
+                    return false
+                }
+                guard adaptor.append(frame, withPresentationTime: pts) else {
+                    failure = writer.error ?? EngineError(.encodingFailed, "intermediate append failed")
+                    return false
+                }
+                written.append(pts)
+                return true
             }
-            guard let image = CMSampleBufferGetImageBuffer(sample) else { continue }
-            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-            if CMTimeCompare(pts, first) < 0 || CMTimeCompare(pts, last) > 0 { continue }
-            if let previous = written.last, CMTimeCompare(pts, previous) <= 0 { continue }
-            let frame: CVPixelBuffer
-            do {
-                frame = try renderer.render(image)
-            } catch {
-                failure = error
-                break
-            }
-            while !input.isReadyForMoreMediaData {
-                if control?.isStopped == true { break }
-                usleep(1_000)
-            }
-            if control?.isStopped == true {
-                failure = EngineError(.interrupted, "stopped", retryable: true)
-                break
-            }
-            guard adaptor.append(frame, withPresentationTime: pts) else {
-                failure = writer.error ?? EngineError(.encodingFailed, "intermediate append failed")
-                break
-            }
-            written.append(pts)
         }
         if failure == nil, reader.status == .failed {
             failure = reader.error ?? EngineError(.decodeFailed, "chunk decode failed")
@@ -509,7 +517,7 @@ final class ReverseFrameSource: SegmentVideoSource {
         let index = intermediatePts.count - 1 - cursor
         if cursor > 0 {
             // Finish the previous range, then jump back one frame.
-            while output.copyNextSampleBuffer() != nil {}
+            while autoreleasepool(invoking: { output.copyNextSampleBuffer() != nil }) {}
             if reader.status == .failed {
                 throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "intermediate read failed")
             }
@@ -518,10 +526,15 @@ final class ReverseFrameSource: SegmentVideoSource {
         cursor += 1
         let wanted = intermediatePts[index]
         var picked: CVPixelBuffer?
-        while picked == nil, let sample = output.copyNextSampleBuffer() {
-            guard let image = CMSampleBufferGetImageBuffer(sample) else { continue }
-            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-            if abs(CMTimeSubtract(pts, wanted).seconds) < 0.0005 || CMTimeCompare(pts, wanted) >= 0 { picked = image }
+        while picked == nil {
+            let more = autoreleasepool { () -> Bool in
+                guard let sample = output.copyNextSampleBuffer() else { return false }
+                guard let image = CMSampleBufferGetImageBuffer(sample) else { return true }
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                if abs(CMTimeSubtract(pts, wanted).seconds) < 0.0005 || CMTimeCompare(pts, wanted) >= 0 { picked = image }
+                return true
+            }
+            if !more { break }
         }
         guard let image = picked else {
             throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "intermediate frame missing")

@@ -406,13 +406,19 @@ final class ProxyFrameSource: SegmentVideoSource {
 
     func nextFrame() throws -> SegmentFrame? {
         guard let output = output, let reader = reader else { return nil }
-        while let sample = output.copyNextSampleBuffer() {
-            if control?.isStopped == true { throw EngineError(.interrupted, "stopped", retryable: true) }
-            guard let image = CMSampleBufferGetImageBuffer(sample) else { continue }
-            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-            // Frames of the lead-in belong to the previous segment: skipped before rendering.
-            if CMTimeCompare(pts, segmentStart) < 0 { continue }
-            return SegmentFrame(pixelBuffer: try renderer.render(image), pts: pts)
+        while true {
+            // One pool per decoded frame (per-frame autoreleased reader objects; FIX-IOS-MEDIA).
+            let step = try autoreleasepool { () throws -> (frame: SegmentFrame?, more: Bool) in
+                guard let sample = output.copyNextSampleBuffer() else { return (nil, false) }
+                if control?.isStopped == true { throw EngineError(.interrupted, "stopped", retryable: true) }
+                guard let image = CMSampleBufferGetImageBuffer(sample) else { return (nil, true) }
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                // Frames of the lead-in belong to the previous segment: skipped before rendering.
+                if CMTimeCompare(pts, segmentStart) < 0 { return (nil, true) }
+                return (SegmentFrame(pixelBuffer: try renderer.render(image), pts: pts), true)
+            }
+            if let frame = step.frame { return frame }
+            if !step.more { break }
         }
         if reader.status == .failed {
             throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "reader failed")
