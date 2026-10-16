@@ -29,6 +29,7 @@ import 'package:danaview_editor_core/ops.dart' show EditCommand, SetProperty;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../../app/editor_providers.dart';
+import '../a11y/expanded_hit_area.dart';
 import '../editor_scope.dart';
 import '../state/editor_controller.dart';
 import '../state/playhead_controller.dart';
@@ -244,18 +245,22 @@ class _InspectorSliderRowState extends State<InspectorSliderRow> {
               },
             ),
           )
-        : DanaviewPressable(
-            onTap: enabled && w.onSubmitted != null ? () => setState(() => _editing = true) : null,
-            semanticLabel: '${w.label}, ${w.valueText}',
-            borderRadius: DanaviewRadius.smAll,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 32),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.xs),
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  widthFactor: 1,
-                  child: Text(w.valueText, maxLines: 1, softWrap: false, style: _valueStyle),
+        // The chip stays 32 px tall in the row; its hit area and screen-reader frame are 44×44
+        // (ExpandedHitArea), and the pressable's label carries the value, so it is read once.
+        : ExpandedHitArea(
+            child: DanaviewPressable(
+              onTap: enabled && w.onSubmitted != null ? () => setState(() => _editing = true) : null,
+              semanticLabel: '${w.label}, ${w.valueText}',
+              borderRadius: DanaviewRadius.smAll,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 32),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.xs),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    widthFactor: 1,
+                    child: ExcludeSemantics(child: Text(w.valueText, maxLines: 1, softWrap: false, style: _valueStyle)),
+                  ),
                 ),
               ),
             ),

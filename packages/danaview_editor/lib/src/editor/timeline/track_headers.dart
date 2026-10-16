@@ -13,6 +13,10 @@
 //   and (when they hold audio, or the flag is on) mute and solo; audio lanes mute, solo and lock;
 //   text and subtitle lanes visibility and lock. Every toggle is a `toggled:` semantics node
 //   named after the track.
+// * Hit areas (ARCH §17.9, lead decision on QA-08 FIX-UX-11-1): text and subtitle lanes stay 32 px
+//   tall (ARCH §17.2), and every header button (name/menu, toggles, the compact pressable) answers
+//   taps and screen readers over at least 44×44 through `ExpandedHitArea`, reaching into the
+//   neighbouring lanes' headers without growing the lane.
 // * Commands are the CORE-17 `SetTrackFlags`, `RenameTrack`, `SetAudioRole`, `MoveTrack`,
 //   `AddTrack` and `DeleteTrack`, issued through [TrackActions] (tests pass a recording sink).
 // * [TrackHeaders] is presentational (snapshot, viewport and metrics in; callbacks out);
@@ -30,6 +34,7 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../../app/editor_providers.dart';
 import '../../app/strings/track_strings.dart';
+import '../a11y/expanded_hit_area.dart';
 import '../layout/editor_layout.dart' show EditorLayoutKind;
 import '../layout/editor_layout_scope.dart';
 import '../state/editor_controller.dart';
@@ -454,7 +459,7 @@ class TrackHeaderCell extends StatelessWidget {
   }
 
   Widget _compact(String label, TrackHeaderPlan plan, VoidCallback open) {
-    return DanaviewPressable.builder(
+    return ExpandedHitArea(child: DanaviewPressable.builder(
       onTap: onOpenMenu == null ? null : open,
       semanticLabel: label,
       selected: selected ? true : null,
@@ -470,7 +475,7 @@ class TrackHeaderCell extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _expanded(BuildContext context, String label, TrackHeaderPlan plan, VoidCallback open) {
@@ -479,7 +484,7 @@ class TrackHeaderCell extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: DanaviewPressable.builder(
+            child: ExpandedHitArea(child: DanaviewPressable.builder(
               onTap: onOpenMenu == null ? null : open,
               semanticLabel: label,
               selected: selected ? true : null,
@@ -514,7 +519,7 @@ class TrackHeaderCell extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
+            )),
           ),
           for (final flag in plan.inline)
             TrackToggle(
@@ -607,7 +612,7 @@ class TrackToggle extends StatelessWidget {
     };
     final highlighted = on; // the flag's active state drives the fill
     final fg = highlighted ? DanaviewColors.primaryLight : DanaviewColors.textSecondary;
-    return DanaviewPressable.builder(
+    return ExpandedHitArea(child: DanaviewPressable.builder(
       onTap: onTap,
       enabled: onTap != null,
       toggled: toggled,
@@ -636,7 +641,7 @@ class TrackToggle extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _icon(bool on, Color color) => switch (flag) {

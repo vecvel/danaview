@@ -49,6 +49,7 @@ import '../editor_lifecycle.dart' show EditorBackDispatcher, EditorBackStep;
 import '../editor_scope.dart';
 import '../layout/editor_layout.dart' show EditorLayoutSpec;
 import '../layout/editor_layout_scope.dart';
+import '../layout/priority_row_planner.dart' show measureTextWidth;
 import '../state/editor_controller.dart';
 import '../state/editor_state.dart';
 import '../state/playhead_controller.dart';
@@ -289,6 +290,9 @@ class TimelineViewState extends ConsumerState<TimelineView> with TickerProviderS
       },
       openTransition: _openTransition,
       selectKeyframe: _selectKeyframe,
+      deleteMarker: (m) => _itemSemantics?.deleteMarker(m.id),
+      removeTransition: (ref) => _itemSemantics?.removeTransition(ref),
+      deleteKeyframe: (ref) => _itemSemantics?.deleteKeyframe(ref),
     );
     // Attaching notifies the viewport's listeners: done after the frame (_applyLink).
     _attached = false;
@@ -950,26 +954,49 @@ class _HoverPillView extends StatelessWidget {
 class _MultiSelectBanner extends StatelessWidget {
   const _MultiSelectBanner({required this.count, required this.onSelectAll, required this.onDone});
 
-  /// Below this width "Select all on track" becomes an icon button.
+  /// Below this width (or when the spelled-out banner does not fit) "Select all on track" becomes
+  /// an icon button.
   static const double compactBelow = 380;
 
   final int count;
   final VoidCallback? onSelectAll;
   final VoidCallback onDone;
 
+  // DanaviewButtonSize.sm: 13 px w600 labels with 12 px side padding.
+  static const TextStyle _buttonText = TextStyle(fontFamily: DanaviewFonts.family, fontSize: 13, fontWeight: FontWeight.w600, height: 1.2, letterSpacing: -0.1);
+
+  /// The width the banner needs with "Select all on track" spelled out (count, both buttons, gaps
+  /// and the surface padding), measured with the current text scale.
+  double _fullWidth(BuildContext context, TextStyle labelStyle) {
+    final scaler = MediaQuery.textScalerOf(context);
+    double text(String s, TextStyle style) => measureTextWidth(s, style, textScaler: scaler);
+    return DanaviewSpacing.md +
+        text(TimelineViewStrings.selected(count), labelStyle) +
+        DanaviewSpacing.xs +
+        text(TimelineViewStrings.selectAllOnTrack, _buttonText) +
+        24 +
+        DanaviewSpacing.xxs +
+        text(TimelineViewStrings.done, _buttonText) +
+        24 +
+        DanaviewSpacing.xs +
+        8; // rounding and glyph overhang
+  }
+
   @override
   Widget build(BuildContext context) {
+    final labelStyle = DanaviewTextStyles.label.copyWith(fontFamily: DanaviewFonts.family, color: DanaviewColors.textPrimary);
     final label = Text(
       TimelineViewStrings.selected(count),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: DanaviewTextStyles.label.copyWith(fontFamily: DanaviewFonts.family, color: DanaviewColors.textPrimary),
+      style: labelStyle,
     );
     return Align(
       alignment: Alignment.topCenter,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < compactBelow;
+          // Spelled out only when it fits whole (wide text scales and fallback fonts take the icon).
+          final compact = constraints.maxWidth < compactBelow || constraints.maxWidth < _fullWidth(context, labelStyle);
           return Semantics(
             container: true,
             liveRegion: true,

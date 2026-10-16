@@ -510,7 +510,7 @@ enum CompositionBuilder {
     /// Lays the spacer across [0, end) on [track] (see `spacerLayout`). Every edit either has an
     /// integral scale or none, so a reader or player starting anywhere gets samples.
     static func layoutSpacer(_ track: AVMutableCompositionTrack, source: AVAssetTrack, range: CMTimeRange, end: CMTime) throws {
-        guard let layout = spacerLayout(end: end, unit: range.duration), false else {
+        guard let layout = spacerLayout(end: end, unit: range.duration) else {
             // Unrepresentable ratio (not expected): the single scaled edit.
             try track.insertTimeRange(range, of: source, at: .zero)
             track.scaleTimeRange(CMTimeRange(start: .zero, duration: range.duration), toDuration: end)

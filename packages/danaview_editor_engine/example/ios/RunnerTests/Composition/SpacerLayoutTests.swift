@@ -9,7 +9,9 @@
 // - built compositions carry that layout (segment count, scale of each edit, end = K/gridFps);
 // - readers over the export composition (DVCompositor) starting at every grid frame and at µs
 //   offsets (segment starts, inside the remainder) deliver a sample or complete, within a timeout;
-// - preview playback over such a plan plays through to the last frame and stops there.
+// - preview playback over such a plan plays through to the last frame and stops there;
+// - a multi-pass precompose (IOS-20) of a 60 fps × 179-frame project with 1 s segments (segment
+//   readers start inside the spacer) completes with K frames ending on the grid end.
 
 import AVFoundation
 import XCTest
@@ -280,5 +282,37 @@ final class SpacerLayoutTests: XCTestCase {
             XCTAssertEqual(p.session.bridge.current?.k, k - 1, "\(fps)×\(k): the last frame is on the texture")
             await p.dispose()
         }
+    }
+
+    // MARK: Precompose (IOS-20)
+
+    func testPrecomposeOffTheWholeMicrosecondGridCompletes() throws {
+        let fps = 60
+        let k: Int64 = 179
+        let durUs = FrameGrid(fps).timeOfFrame(k)
+        let (w, h) = (320, 180)
+        var layers: [String] = []
+        for seq in 0..<3 {
+            layers.append(ExportPlans.mediaLayer(
+                "it_fc\(seq)00000000#v", asset: "md_fc0000000001", seq: seq, t0: 0, t1: durUs, s0: Int64(seq) * 1_000_000,
+                w: Double(w) / Double(seq + 1), h: Double(h) / Double(seq + 1), z: 10 + seq))
+        }
+        let plan = ExportPlans.plan(
+            w: w, h: h, fps: fps, durUs: durUs,
+            assets: [ExportPlans.video("md_fc0000000001", file: "frame_counter_720p25.mp4", w: 1280, h: 720, durUs: 8_000_000, hasAudio: false)],
+            layers: layers)
+        let settings = ExportPlans.settings(w, h, fps: fps, videoBitrate: 600_000)
+        let p = try PrecomposeHarness(decoderLimit: 2, segmentDurationUs: 1_000_000)
+        defer { p.h.remove() }
+        let output = p.h.outputURL("mp4")
+        let id = try p.h.export(self, plan: plan, settings: settings, output: output, timeout: 300)
+        if let failure = p.h.recorder.failure(id) {
+            XCTFail("precompose 60 fps × 179: \(failure.code) \(failure.message)")
+            return
+        }
+        XCTAssertFalse(p.exporter.runs.isEmpty, "the decoder limit forces precompose passes")
+        let facts = try ExportConformance.check(output, settings: settings, durUs: durUs, brand: "mp42", codec: "avc1", checkBitrate: false)
+        XCTAssertEqual(facts.frames, Int(k))
+        XCTAssertLessThanOrEqual(abs(Double(facts.videoDurationUs) - Double(k) * 1_000_000 / Double(fps)), 1_000, "video ends on the grid end")
     }
 }

@@ -185,7 +185,10 @@ class DanaviewSegmentedControl<T> extends StatelessWidget {
       Container(
         width: width,
         height: height,
-        padding: const EdgeInsets.all(_inset),
+        // Horizontal inset only: the segments span the full height so each one is a full-height
+        // tap target and screen-reader frame (44 px on touch); the vertical inset is drawn inside
+        // the segment and the indicator, so the control looks the same.
+        padding: const EdgeInsets.symmetric(horizontal: _inset),
         decoration: const BoxDecoration(
           color: DanaviewColors.surfaceElevatedHigher,
           borderRadius: DanaviewRadius.mdAll,
@@ -198,8 +201,8 @@ class DanaviewSegmentedControl<T> extends StatelessWidget {
                 duration: DanaviewMotion.normal,
                 curve: DanaviewMotion.curve,
                 left: segment * index,
-                top: 0,
-                bottom: 0,
+                top: _inset,
+                bottom: _inset,
                 width: segment,
                 child: const DecoratedBox(
                   decoration: BoxDecoration(
@@ -253,7 +256,7 @@ class _Segment<T> extends StatelessWidget {
       pressedScale: 0.97,
       builder: (context, state) {
         final tint = !selected && (state.hovered || state.pressed || state.focused);
-        return AnimatedContainer(
+        final inner = AnimatedContainer(
           duration: DanaviewMotion.fast,
           curve: DanaviewMotion.curve,
           alignment: Alignment.center,
@@ -275,16 +278,23 @@ class _Segment<T> extends StatelessWidget {
                   style: DefaultTextStyle.of(context)
                       .style
                       .merge(DanaviewSegmentedControl._labelStyle.copyWith(color: foreground)),
-                  child: Text(
-                    option.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
+                  // The pressable carries the label; the text is not read a second time.
+                  child: ExcludeSemantics(
+                    child: Text(
+                      option.label,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               ),
             ],
           ),
+        );
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: DanaviewSegmentedControl._inset),
+          child: inner,
         );
       },
     );

@@ -106,42 +106,8 @@ bool _fullMatch(Pattern pattern, String s) {
 
 /// Problems that belong to other tickets (each one is a FIX ticket in QA-08-a11y.md).
 final List<KnownA11yDefect> knownA11yDefects = [
-  KnownA11yDefect(
-    'FIX-UX-14-1',
-    'size',
-    RegExp(r'Playhead position(\nPlayhead position)?'),
-    'transport time readout button is 35-41 px tall and its label is read twice',
-  ),
-  KnownA11yDefect(
-    'FIX-UX-14-2',
-    'size',
-    RegExp(r'Play|Pause|Previous frame|Next frame|Previous edit point|Next edit point|Add marker|Snapping|Ripple editing|Zoom out|Zoom in|Fit timeline|More'),
-    'transport bar buttons are 40 px tall when the bar is 40 px (compact landscape and the narrowest surfaces at text scale 1.35)',
-  ),
-  KnownA11yDefect(
-    'FIX-UX-11-1',
-    'size',
-    RegExp(r'(.+, (video|audio|overlay|text|subtitles|voice|music) track.*|(Lock|Unlock|Show|Hide|Mute|Unmute|Solo|Unsolo) .+)'),
-    'track header buttons on 32 px text and subtitle lanes are 32 px tall',
-  ),
-  KnownA11yDefect(
-    'FIX-UX-16-1',
-    'size',
-    RegExp(r'([^\n]+), ([^\n]+)\n\2'),
-    'inspector slider-row value chips (tap to type a value) are 32 px tall and read their value twice',
-  ),
-  KnownA11yDefect(
-    'FIX-UX-22-1',
-    'label',
-    '',
-    'ManipulationOverlay with nothing selected exposes an unlabeled tap/long-press node over the preview',
-  ),
-  KnownA11yDefect(
-    'FIX-KIT-1',
-    'size',
-    RegExp(r'([^\n]+)\n\1'),
-    'DanaviewSegmentedControl segments are 38 px tall inside the 44 px control and read their label twice',
-  ),
+  // FIX-UX-14-1, FIX-UX-14-2, FIX-UX-11-1, FIX-UX-16-1, FIX-UX-22-1 and FIX-KIT-1 were fixed by
+  // FIX-A11Y (2026-10-16) and removed; the suite now enforces them.
 ];
 
 /// A thrown error owned by another ticket (QA-08-a11y.md, "Defects").
@@ -164,7 +130,8 @@ class KnownErrorDefect {
 final List<KnownErrorDefect> knownErrorDefects = [];
 
 /// Behaviour defects found by the timeline semantics tests (QA-08-a11y.md, "Defects").
-const List<String> knownTimelineDefects = ['FIX-UX-12-1', 'FIX-UX-12-2'];
+// FIX-UX-12-1 and FIX-UX-12-2 were fixed by FIX-A11Y (2026-10-16) and removed.
+const List<String> knownTimelineDefects = [];
 
 /// Whether FIX-UX-22-2 (selecting an audio clip throws) is still listed.
 bool get audioSelectionCrashOpen => knownErrorDefects.any((k) => k.fixTicket == 'FIX-UX-22-2');
