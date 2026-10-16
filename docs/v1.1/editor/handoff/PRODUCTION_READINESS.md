@@ -71,7 +71,10 @@ Lead-approved edits to INT-07/ENG-06 Android files:
 - **M-18:** correct error codes (permissionDenied, storage full, unreadable source), not mediaOffline for everything.
 - **M-19:** per-string English fallback for notification texts; never reset the texts process-wide.
 - **M-20:** decode %20 in file:// URIs.
+- **M-17 (native half):** check free space against the source size before materializing a pick. The Dart half is in round 7 on the Mac.
 - **M-12:** in `build.gradle.kts`, the lint tasks depend on `syncDanaviewTestFixtures`.
+
+Status 2026-10-17 00:35: these fixes are in progress on Windows (WIP backups up to 7ca3413, review running).
 
 Also: compile and run Int07GlueTest for the Mac's `RecordingSignals.kt` change (`installOnce` keyed per EngineContext).
 
