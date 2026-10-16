@@ -847,12 +847,14 @@ class ExportCoordinator(private val ctx: EngineContext) {
 
 /**
  * A failed export's cause chain for the log (QA-02): Media3 releases the Transformer before it
- * reports the error, so nothing else names the first failure. Class names, Media3 error code names
- * and the top frame of each cause only (no messages, which may carry paths).
+ * reports the error, so nothing else names the first failure. Class names, Media3 error code names,
+ * the top frame of each cause, and the messages of causes that are not I/O errors (an I/O message
+ * may carry a path), cut at 160 characters.
  */
 internal fun describeFailure(error: Throwable): String =
     generateSequence(error) { it.cause }.take(8).joinToString(" <- ") { t ->
         val code = (t as? ExportException)?.errorCodeName?.let { "[$it]" } ?: ""
         val top = t.stackTrace.firstOrNull()?.let { " at ${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" } ?: ""
-        "${t.javaClass.simpleName}$code$top"
+        val msg = if (t is java.io.IOException) "" else t.message?.take(160)?.let { " \"$it\"" } ?: ""
+        "${t.javaClass.simpleName}$code$msg$top"
     }
