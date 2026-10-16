@@ -21,6 +21,11 @@
 // * Interrupted captions (FIX-QA07, ai.md §8.6, UX-38): below the health banners the same slot
 //   holds InterruptedCaptionsBanner, "Auto captions were interrupted. Resume?" when the project
 //   opens with a resumable captions job (nothing when Auto captions are not wired).
+// * Export reattach on open (FIX-JOB-RESUME, ARCH §14.1, D-22, D-39): the first time the editor is
+//   ready, `ExportSheet.showIfPending` looks at `activeJobs()` once: a running export shows its
+//   progress, a resumable one "Resume export", an interrupted one or one that finished while away
+//   its one-shot notice (consumed when the sheet closes). Background media jobs (reverse, freeze,
+//   proxies) are re-queued by the session itself (`createEditorController`).
 // * Navigation callbacks come from the router (INT-02): `onClose` leaves the editor after the
 //   close flush, `onOpenProjects` is "Go to Projects" (null hides it).
 
@@ -40,6 +45,7 @@ import 'contracts/contracts.dart';
 import 'editor_lifecycle.dart';
 import 'editor_scope.dart';
 import 'flows/captions/interrupted_notice.dart' show InterruptedCaptionsBanner;
+import 'flows/export/export_sheet.dart' show ExportSheet;
 import 'flows/relink/editor_health_host.dart';
 import 'layout/editor_layout_scope.dart';
 import 'layout/editor_scaffold.dart';
@@ -197,28 +203,90 @@ class EditorScreen extends ConsumerWidget {
         delegate: shell,
         onExit: onClose,
         initialPlayhead: initialPlayhead,
-        child: EditorShortcuts(
-          child: Scaffold(
-            backgroundColor: DanaviewColors.background,
-            resizeToAvoidBottomInset: false,
-            body: _ShellStatusSelector<(EditorShellPhase, bool)>(
-              status: shell.shellStatus,
-              select: (s) => (s.phase, s.inspectorOpen),
-              builder: (context, selected) => switch (selected.$1) {
-                EditorShellPhase.opening || EditorShellPhase.ready => EditorScaffold(
-                    inspectorOpen: selected.$2,
-                    loading: selected.$1 == EditorShellPhase.opening,
-                    topBar: (context, transport) => _EditorTopBarHost(shell: shell, transport: transport),
-                    banner: shell is DetachedEditorShell ? null : const _EditorBanners(),
-                  ),
-                EditorShellPhase.notFound || EditorShellPhase.failed => _EditorUnavailable(shell: shell, onOpenProjects: onOpenProjects),
-              },
+        child: _ExportReattachOnOpen(
+          shell: shell,
+          child: EditorShortcuts(
+            child: Scaffold(
+              backgroundColor: DanaviewColors.background,
+              resizeToAvoidBottomInset: false,
+              body: _ShellStatusSelector<(EditorShellPhase, bool)>(
+                status: shell.shellStatus,
+                select: (s) => (s.phase, s.inspectorOpen),
+                builder: (context, selected) => switch (selected.$1) {
+                  EditorShellPhase.opening || EditorShellPhase.ready => EditorScaffold(
+                      inspectorOpen: selected.$2,
+                      loading: selected.$1 == EditorShellPhase.opening,
+                      topBar: (context, transport) => _EditorTopBarHost(shell: shell, transport: transport),
+                      banner: shell is DetachedEditorShell ? null : const _EditorBanners(),
+                    ),
+                  EditorShellPhase.notFound || EditorShellPhase.failed => _EditorUnavailable(shell: shell, onOpenProjects: onOpenProjects),
+                },
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Shows a pending export (running, resumable, interrupted, finished while away) once, the first
+/// time the open editor is ready (ARCH §14.1, D-22, D-39).
+class _ExportReattachOnOpen extends StatefulWidget {
+  const _ExportReattachOnOpen({required this.shell, required this.child});
+
+  final EditorShellDelegate shell;
+  final Widget child;
+
+  @override
+  State<_ExportReattachOnOpen> createState() => _ExportReattachOnOpenState();
+}
+
+class _ExportReattachOnOpenState extends State<_ExportReattachOnOpen> {
+  bool _checked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.shell.shellStatus.addListener(_changed);
+    _changed();
+  }
+
+  @override
+  void didUpdateWidget(_ExportReattachOnOpen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.shell, widget.shell)) {
+      oldWidget.shell.shellStatus.removeListener(_changed);
+      widget.shell.shellStatus.addListener(_changed);
+      _changed();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.shell.shellStatus.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (_checked || widget.shell is DetachedEditorShell || widget.shell.shellStatus.value.phase != EditorShellPhase.ready) return;
+    _checked = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_show());
+    });
+  }
+
+  Future<void> _show() async {
+    try {
+      await ExportSheet.showIfPending(context, projectId: EditorScope.idOf(context));
+    } on Object catch (e) {
+      // Export not wired (tests, a build without the engine): nothing to reattach.
+      debugPrint('[EditorScreen] Export reattach skipped: ${e.runtimeType}');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// The banners under the top bar: project health (UX-40), then the interrupted captions notice.

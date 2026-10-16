@@ -25,6 +25,12 @@
 // * Rows go to `EditorState.tasks` (`EditorController.setTasks`), which drives the preview's task
 //   badge and the Tasks sheet. When the editor closes the jobs are cancelled quietly (the assets
 //   stay pending and resume on the next open).
+// * **Resume on open** (FIX-JOB-RESUME, QA-05 D3, ARCH §15 "jobs are re-queued automatically"):
+//   `createEditorController` reads `tasksControllerProvider(id)` as soon as the session attaches,
+//   so pending reverse, freeze and proxy jobs left by a process death or a close mid-job start
+//   again without any user action. A controller that outlived a close (something still listened)
+//   is suspended; when the same project attaches again it [TasksController.resume]s and re-queues
+//   once.
 
 import 'dart:async';
 
@@ -350,6 +356,17 @@ class TasksController {
     _byAsset.clear();
   }
 
+  /// Starts again after [suspend] when the project attached again: re-queues the pending jobs
+  /// (once; the assets already being produced are tracked).
+  void resume() {
+    if (_disposed || !_suspended) return;
+    _suspended = false;
+    _queueReconcile();
+  }
+
+  /// Whether the controller is suspended (the editor closed while it was alive).
+  bool get suspended => _suspended;
+
   /// Stops listening and cancels running jobs quietly.
   void dispose() {
     if (_disposed) return;
@@ -368,6 +385,10 @@ class TasksController {
     final pool = state.project?.pool;
     if (pool == null || identical(pool, _seenPool)) return;
     _seenPool = pool;
+    _queueReconcile();
+  }
+
+  void _queueReconcile() {
     if (_reconcileQueued) return;
     _reconcileQueued = true;
     scheduleMicrotask(() {
@@ -623,7 +644,7 @@ class TasksController {
 }
 
 /// Builds the value of `tasksControllerProvider` for [id]: alive while the editor is open, then
-/// suspended and released when the session detaches.
+/// suspended and released when the session detaches; resumed when it attaches again while alive.
 TasksController createTasksController(Ref<Object?> ref, ProjectId id) {
   final session = ref.watch(editorSessionProvider(id));
   final editor = ref.watch(editorControllerProvider(id).notifier);
@@ -635,16 +656,22 @@ TasksController createTasksController(Ref<Object?> ref, ProjectId id) {
     jobs: ref.watch(editorEngineProvider).jobs,
     resolvePath: runtime == null ? TasksController.unconfiguredPath : runtime.roots.resolve,
   );
-  final link = ref.keepAlive();
+  KeepAliveLink? link = ref.keepAlive();
   var wasOpen = session.isOpen;
   void onAttached() {
     if (session.attached.value) {
       wasOpen = true;
+      if (link == null) {
+        // Reopened while this controller was still listened to: keep it and re-queue.
+        link = ref.keepAlive();
+        controller.resume();
+      }
       return;
     }
     if (!wasOpen) return;
     controller.suspend();
-    link.close();
+    link?.close();
+    link = null;
   }
 
   session.attached.addListener(onAttached);

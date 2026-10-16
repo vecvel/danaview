@@ -36,6 +36,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'e2e_config.dart';
 import 'e2e_engine.dart';
 import 'e2e_handshake.dart';
+import 'e2e_wait.dart';
 
 /// The wired app of this test process.
 final class E2eWorld {
@@ -154,33 +155,26 @@ abstract final class E2eApp {
   static ProviderContainer container(WidgetTester tester) =>
       ProviderScope.containerOf(tester.element(find.byType(DanaviewApp)), listen: false);
 
-  /// Pumps frames until [ready] holds, or fails after [timeout] naming [what].
+  /// Pumps frames until [ready] holds, or fails after [timeout] naming [what]. An exception from
+  /// [ready] fails the wait at once, except a lookup that has nothing to find yet (see [E2eWait];
+  /// [retryOn] adds exceptions that mean "not ready yet").
   static Future<void> pumpUntil(
     WidgetTester tester,
     bool Function() ready, {
     required String what,
     Duration timeout = const Duration(seconds: 30),
     Duration step = const Duration(milliseconds: 50),
-  }) async {
-    final deadline = DateTime.now().add(timeout);
-    while (true) {
-      await tester.pump();
-      bool ok;
-      try {
-        ok = ready();
-      } on TestFailure {
-        rethrow;
-      } on Object {
-        // Not there yet (a finder or a provider not built yet).
-        ok = false;
-      }
-      if (ok) return;
-      if (DateTime.now().isAfter(deadline)) {
-        throw TestFailure('Timed out after ${timeout.inSeconds} s waiting for $what\n${describeScreen()}');
-      }
-      await Future<void>.delayed(step);
-    }
-  }
+    bool Function(Object error)? retryOn,
+  }) =>
+      E2eWait.until(
+        () => tester.pump(),
+        ready,
+        what: what,
+        timeout: timeout,
+        step: step,
+        retryOn: retryOn,
+        describe: describeScreen,
+      );
 
   /// What is on screen, for a timeout message: the routes' texts (first 40) and the hit-testable
   /// keyed widgets, so a failed wait shows the dialog or sheet that was in the way.
