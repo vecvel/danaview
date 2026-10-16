@@ -66,10 +66,10 @@ Status values: **open** (work or evidence still missing), **ready** (evidence ex
 
 | Check | Status | Evidence / next step |
 |---|---|---|
-| Privacy policy and terms updated in the app | ready | UX-42 (`packages/danaview_features/lib/src/more/legal_texts.dart`); `test/privacy_policy_host_test.dart` (INT-04). `legalEffectiveDate` still has to move to the release date (§3.1). One open conflict is listed in §8 (defect 1): ARCH §20.3 wants the "Auto captions" terms to point to a licences screen the owner has removed. The lead or owner settles it before the hosted copy is published. |
+| Privacy policy and terms updated in the app | ready | UX-42 (`packages/danaview_features/lib/src/more/legal_texts.dart`); `test/privacy_policy_host_test.dart` (INT-04). `legalEffectiveDate` still has to move to the release date (§3.1). Owner decision 2026-10-16 (§8, defect 1): the "Open-source licences" page returns under Settings › About and the "Auto captions" terms link to it; ticket **FIX-LICENSES** builds it and must land before the hosted copy is published. |
 | Published at every store privacy URL with a diff or screenshot | owner | §5.1. iOS/macOS: `https://vecvel.com/ios/danaview/privacy`. Play: the listing's privacy URL in Play Console. |
 | Owner sign-offs of D-43 recorded | ready | ARCH D-43: owner defaults 2026-10-08 for (a)–(d) and (f), owner decision 2026-10-11 for (e). The owner may still revise them before go-live. |
-| Store descriptions, release notes, screenshots | open / owner | Texts drafted in §4 (not yet in `ios/fastlane/metadata/` or `android/fastlane/metadata/`). Screenshots are an owner step after v1.3 (§6). |
+| Store descriptions, release notes, screenshots | open / owner | Texts drafted in §4 (not yet in `ios/fastlane/metadata/` or `android/fastlane/metadata/`). Owner decision 2026-10-16: the 1.0 fastlane store descriptions are replaced with the new casual texts at launch time, not now (§8, defect 3). Screenshots are an owner step after v1.3 (§6). |
 | Privacy labels unchanged | ready | App Privacy: "Data Not Collected". Data safety: no data collected, no data shared. Reasons in §5.2 and §5.3. |
 
 ### 1.6 Flags, version, rollback (§23 items 6–8)
@@ -92,9 +92,9 @@ Status values: **open** (work or evidence still missing), **ready** (evidence ex
 
 ## 2. Release order (when the owner says go)
 
-1. Land every open FIX ticket, then re-run QA-01, QA-02, QA-07, QA-09 to green (§1.2).
+1. Land every open FIX ticket (including FIX-LICENSES, §8 defect 1), then re-run QA-01, QA-02, QA-07, QA-09 to green (§1.2).
 2. Apply §3.1 (version) and §3.2 (release builds) in one INT-05 commit. Apply §3.3 (the Auto captions flag) only once QA-07 says yes. If it doesn't, ship with Auto captions off and leave the captions text out of the store copy (§4.6).
-3. Copy the §4 texts into the fastlane metadata files listed in §4.5.
+3. Copy the §4 texts into the fastlane metadata files listed in §4.5, replacing the 1.0 store descriptions (owner decision 2026-10-16: at launch time, not before).
 4. Dry-run every release workflow and lane (§3.4). Upload to TestFlight and to the Play internal track.
 5. Owner steps in §6, then tag `v1.1.0` on `main`.
 
@@ -494,12 +494,9 @@ These need the owner's accounts, devices or decisions. Builders don't do them. T
 
 ## 8. Defects and follow-ups found while preparing
 
-1. **Conflict for the lead or owner: third-party licences in the "Auto captions" terms** (`legal_texts.dart`, UX-42). ARCH §20.3 says this terms section points to "Settings › About › Open-source licences". That was written before the owner removed the licences route: `test/editor_wiring_test.dart` asserts that `/settings/licenses` lands on Home, and nothing in `danaview_features` or `lib` links to a licences page. The current text has only the "may contain mistakes" sentence, which is correct for the app as it is. Do **not** add a reference to that screen to the in-app terms or the hosted policy (§5.1); it would point to nothing. Options for the lead or owner:
-   - (a) name the third-party components and their licences directly in the "Auto captions" terms text, the hosted page, or both: whisper.cpp/ggml (MIT), OpenAI Whisper weights (MIT), Silero VAD (MIT), plus AndroidX Media3 (Apache-2.0) and the content fonts and Figtree (OFL-1.1);
-   - (b) bring back a custom licences screen and its route (the "Licences screen" row in ARCH §20.4), which reverses the owner's decision and the wiring test;
-   - (c) accept the text as it is and record that ARCH §20.3 is superseded on this point.
+1. **Third-party licences in the "Auto captions" terms** (`legal_texts.dart`, UX-42). Owner decision 2026-10-16: the owner reverses the earlier removal of the licences route (option (b) of the earlier list). A simple, plain **"Open-source licences"** page returns under **Settings › About**, as ARCH §20.3 / §20.4 and UX-42 describe. It lists the notices for libmpv/FFmpeg (LGPL), whisper.cpp/ggml (MIT), the OFL fonts (Figtree and the content fonts, OFL-1.1), AndroidX Media3 (Apache-2.0) and the other bundled packages. The "Auto captions" terms link to it, in the app and in the hosted copy (§5.1).
 
-   Once settled, ARCH §20.3 (and §20.4 if needed) is updated to match, and a FIX ticket for UX-42 is opened only if the chosen option changes `legal_texts.dart`.
+   **Still to be built before release: ticket FIX-LICENSES** (app change, not done yet). Scope: the licences page and its `/settings/licenses` route under Settings › About; the notice list above, plain text in the owner UI rules; the link from the "Auto captions" terms in `legal_texts.dart`; `test/editor_wiring_test.dart` changed so `/settings/licenses` opens the licences page instead of landing on Home; a test that every bundled package with a licence notice appears on the page. Until FIX-LICENSES lands, the in-app terms and the hosted policy keep their current text and don't point to the page.
 2. **Version sync**: `app_info.dart` (`danaview_features`) has to change with `pubspec.yaml` (§3.1), or the root version test fails. INT-05 does it as an integration change, or a FIX ticket owns it.
-3. **Store copy**: the current 1.0 texts in `ios/fastlane/metadata/` and `android/fastlane/metadata/` use the spec terms the owner doesn't want (§4.4). They are replaced at release, not before, so that nothing uploads early.
+3. **Store copy**: the current 1.0 texts in `ios/fastlane/metadata/` and `android/fastlane/metadata/` use the spec terms the owner doesn't want (§4.4). Owner decision 2026-10-16: they are replaced with the new casual texts (§4) at launch time, not now, so that nothing uploads early. Leave the fastlane metadata files unchanged until release step 3 (§2).
 4. **QA reports still missing**: QA-02, QA-04 and QA-05 have no report in `qa/` yet.

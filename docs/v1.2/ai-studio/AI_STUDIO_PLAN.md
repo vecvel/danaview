@@ -4,6 +4,7 @@
 > **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` (decisions D-01 to D-44, "ARCH") and `docs/v1.1/editor/BUILD_PLAN.md` (158 tickets M0–M6, "BP"), plus the area designs in `docs/v1.1/editor/design/` (`domain.md`, `native.md`, `ux.md`, `ai.md`) and the code on `editor-wip`. ARCH stays the source of truth for v1 behaviour. This plan proposes decisions **D-45 to D-70**, plus **D-70a to D-70i** (added 2026-10-16, §7). AIS-01 records them in ARCH (an [INTEGRATION] change) once the owner has confirmed the ones marked **[OWNER]**.
 > **Release placement (2026-10-15):** 1.2.0 also ships the Files & Media Home (`docs/v1.2/files-media-home/FILES_MEDIA_HOME_PLAN.md`) and the Unified Photo & Video Editor (`docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md`); the desktop editor and the native camera moved to 1.3.0. AIS-04's schema 2 comes first; the photo/video editor's schema 3 (VED-15) builds on it. **Decision-number clash:** v1.1 ARCHITECTURE now has its own D-45 (render-preview cache, added 2026-10-11), so this plan's D-45…D-70 (and D-70a…D-70i) must be renumbered when AIS-01 records them in ARCH.
 > **Widened on 2026-10-16 (owner):** four additions, written up in §7 and folded into the tables of §1–§6: (1) **multi-speaker transcription with overlapping speech**, using on-device speaker diarization after whisper and per-speaker subtitle lanes (this replaces D-59's "no on-device diarization"); (2) **AI search over the Files & Media Home**, on-device by default with two opt-in AI Studio levels; (3) a **shared `danaview_ai` layer** used by the editor, search and later the camera and documents, behind the one AI Studio switch; (4) the first provider ticket is a **Genkit Dart spike** (AIS-42) that decides whether the provider adapters are built on Genkit or stay custom. New decisions are lettered **D-70a to D-70i** so the numbers of the other 1.2.0 plans are untouched; new tickets are **AIS-42 to AIS-54**. The privacy model (D-45: Send consent, a disclosure that equals the payload, the network guard, keys only to their own provider) applies to every addition unchanged.
+> **Owner decisions 2026-10-16** ("go with the recommendation"): diarization models download on demand with consent, like whisper, and the app install size does not grow (D-70c); a quieter overlapping voice that whisper missed gets an empty cue marked "needs text" (D-70e); AI search asks for Send on every question (D-70h); deep indexing sends photos and documents only, never video keyframes, at first (D-70i); Genkit is all or nothing, so if the spike fails for any provider the custom adapters are used for all of them (D-70b). §6.2 questions 11–14 and the matching §6.6 rows are closed.
 > **Scope:** 1.2.0 work starts after the v1 release ticket INT-05 lands. Every v1 ticket listed under "Depends on" is therefore already merged when its 1.2.0 dependant starts.
 > **Notation:** "ARCH §11.2" points into ARCHITECTURE.md and "BP §6" into BUILD_PLAN.md. **[OWNER]** marks a decision the owner must confirm. **[VERIFY]** marks a claim to check during implementation; the ticket that closes each one is listed in §6.3. "Extends CORE-15" means the ticket edits a file that v1 ticket CORE-15 created (§5.1 rule 2).
 
@@ -57,7 +58,7 @@ When AI Studio is off (the default), the editor works exactly as in v1: on devic
 ### 1.3 Non-goals for 1.2.0
 
 - On-device language models and on-device translation. (On-device speaker diarization was a non-goal until 2026-10-16; it is now in scope, D-70c.)
-- Any AI over video pictures in the editor (scene detection, auto-edit, summaries), dubbing or text-to-speech. Search's deep indexing (D-70i) may send photo thumbnails and video keyframes from a folder the user chose; that is the only exception.
+- Any AI over video pictures in the editor (scene detection, auto-edit, summaries), dubbing or text-to-speech. Search's deep indexing (D-70i) may send photo thumbnails from a folder the user chose; that is the only exception. Video keyframes are never sent in 1.2.0 (owner decision 2026-10-16).
 - A vecvel-run backend, proxy, account, key sharing or billing. Keys belong to the user's own provider accounts (D-49).
 - Custom or self-hosted endpoints (Ollama, Azure OpenAI, Vertex, Bedrock). OpenRouter covers other models (D-66).
 - Streaming responses in the UI (the capability flag exists but is unused, D-48).
@@ -122,14 +123,14 @@ Each decision lists options, a recommendation and its consequences. **[OWNER]** 
 | D-69 | Word timings stored on cues (generated, imported VTT, estimated) | – |
 | D-70 | 1.2.0 process: "extends" ownership of v1 files, skeleton placeholders, integration register | – |
 | D-70a | Shared `danaview_ai` layer for the editor, search and later the camera and documents; one app-level AI Studio switch (§7.1) | owner 2026-10-16 |
-| D-70b | Genkit Dart spike first (AIS-42); Genkit behind our `LlmProvider` interface only if our transport stays in control, else the custom adapters of AIS-08…AIS-10 (§7.2) | owner 2026-10-16 |
-| D-70c | On-device speaker diarization after whisper: sherpa-onnx, pyannote segmentation 3.0, a speaker-embedding model, downloaded once after consent (§7.3) | owner 2026-10-16; models and app size **[VERIFY]** / **[OWNER]** |
+| D-70b | Genkit Dart spike first (AIS-42); Genkit behind our `LlmProvider` interface only if our transport stays in control, else the custom adapters of AIS-08…AIS-10 (§7.2). All or nothing: if the spike fails for any provider, the custom adapters are used for all of them | owner 2026-10-16 |
+| D-70c | On-device speaker diarization after whisper: sherpa-onnx, pyannote segmentation 3.0, a speaker-embedding model, downloaded on demand after consent, like whisper; the app install size does not grow (§7.3) | owner 2026-10-16; models **[VERIFY]** |
 | D-70d | On-device search index over the Files & Media Home: image labels, text in images, document text, captions, transcripts, metadata (§7.6) | owner 2026-10-16 |
-| D-70e | Word-to-speaker assignment from whisper word timestamps; overlapping speech produces one cue per speaker, never a merged cue (§7.3) | owner 2026-10-16; overlap text **[OWNER]** |
+| D-70e | Word-to-speaker assignment from whisper word timestamps; overlapping speech produces one cue per speaker, never a merged cue; a voice whisper missed gets an empty cue marked "needs text" (§7.3) | owner 2026-10-16 |
 | D-70f | Per-speaker subtitle lanes: one subtitle track per speaker in a speaker group, per-speaker style, renamable speakers, export rules (§7.4) | owner 2026-10-16 |
 | D-70g | Optional cloud diarization when AI Studio is on (for example Gemini audio), behind Send (§7.5) | owner 2026-10-16 |
-| D-70h | AI search level (a), query to filters: only the typed question is sent; the model returns structured filters run over the local index (§7.7) | owner 2026-10-16; Send per question **[OWNER]** |
-| D-70i | AI search level (b), deep indexing: explicit per folder, content sent for descriptions or embeddings, behind Send with a token estimate (§7.8) | owner 2026-10-16; video keyframes **[OWNER]** |
+| D-70h | AI search level (a), query to filters: only the typed question is sent; the model returns structured filters run over the local index; Send on every question (§7.7) | owner 2026-10-16 |
+| D-70i | AI search level (b), deep indexing: explicit per folder, content sent for descriptions or embeddings, behind Send with a token estimate; photos and documents only, never video keyframes, at first (§7.8) | owner 2026-10-16 |
 
 ### D-45 · Privacy model **[OWNER]**
 
@@ -2071,7 +2072,7 @@ These v1 files are edited by 1.2.0 tickets. Each row is edited by exactly one 1.
 | 9 | AI search (a): question → filters, only the question is sent | D-70h; AIS-52 |
 | 9 | AI search (b): deep indexing per folder with a token estimate, behind Send | D-70i; AIS-53 |
 | 10 | Shared `danaview_ai` layer behind one AI Studio switch | D-70a; AIS-43 |
-| 11 | Genkit spike as the first provider ticket; adopt only if the transport is controllable | D-70b; AIS-42 |
+| 11 | Genkit spike as the first provider ticket; adopt only if the transport is controllable | D-70b; AIS-42 (all or nothing) |
 | Rules | No overflow, custom components, Figtree chrome, touch targets, a11y | AIS-01 (`expectOwnerUiRules`), every UI ticket's matrix tests, AIS-38 |
 | Rules | Project migration (schema 2) | D-53; AIS-04 |
 | Rules | Privacy policy and terms | §6.4; AIS-36, AIS-37 |
@@ -2100,9 +2101,9 @@ These v1 files are edited by 1.2.0 tickets. Each row is edited by exactly one 1.
 | RS14 | Provider safety filters block ordinary captions (profanity in film dialogue) | Per-batch `contentBlocked` with partial results; the user can switch provider or model (§3.9) |
 | RS15 | The size budget for Noto fonts is exceeded | A measurement tool and a fixed drop order (AIS-22) |
 | RS16 | Whisper transcribes only the louder voice in overlapping speech, so the quieter speaker's words are missing | Overlap cues are still created on the second lane with exact times and a "needs text" mark; cloud diarization (D-70g) can transcribe both voices; review shows every overlap (D-70e; AIS-46, AIS-48) |
-| RS17 | sherpa-onnx and ONNX Runtime add too much to the install size, or run too slowly on low-tier phones | Measured in AIS-44 against an owner-set budget; int8 models; diarization offered only on tiers that meet the speed target (D-70c) |
+| RS17 | sherpa-onnx and ONNX Runtime add to the install size, or run too slowly on low-tier phones | The owner set no install-size growth (2026-10-16): models download on demand, and AIS-44 must show a runtime path that keeps the install size unchanged; int8 models; diarization offered only on tiers that meet the speed target (D-70c) |
 | RS18 | A bundled ML Kit library makes its own network requests (usage logging), breaking G-S1 | Device network spy in AIS-50 and AIS-54; if ML Kit calls home, disable its logging or fall back to a different on-device path (D-70d) |
-| RS19 | Genkit pulls in heavy or changing dependencies, or hides the request bytes | The spike's criteria are hard gates; custom adapters stay the fallback (D-70b) |
+| RS19 | Genkit pulls in heavy or changing dependencies, or hides the request bytes | The spike's criteria are hard gates for every provider; a failure for any one means custom adapters for all (D-70b) |
 | RS20 | Deep indexing a large folder costs the user more than expected | Token and size estimate before Send, per-folder scope, a cap with a second tap, resumable batches, no automatic re-indexing (D-70i) |
 
 ### 6.2 Open questions for the owner
@@ -2117,10 +2118,10 @@ These v1 files are edited by 1.2.0 tickets. Each row is edited by exactly one 1.
 8. **D-66:** Confirm there are no custom endpoints in 1.2.0.
 9. Should accepting AI clean-up on generated captions keep `CueOrigin.generated` (so Regenerate warns about the edits), as proposed?
 10. Should the transcript view later replace v1's cue list entirely? This plan keeps both in 1.2.0.
-11. **D-70c:** What install-size increase is acceptable for on-device diarization (ONNX Runtime plus sherpa-onnx in the app; models downloaded)? AIS-44 measures it.
-12. **D-70e:** When whisper gives no words for the quieter speaker in an overlap, should the lane cue be left empty with a "needs text" mark (proposed) or show a placeholder such as "[overlapping speech]"?
-13. **D-70h:** Should AI search ask for Send on every question (D-45 as written), or may the user allow "questions only" to one provider for the session? The recommendation is Send every time, with the question shown in the disclosure.
-14. **D-70i:** May deep indexing send video keyframes (3 per video, proposed) as well as photo thumbnails and document text, or photos and documents only?
+11. ~~**D-70c:** install-size increase for on-device diarization~~ **Decided 2026-10-16:** models download on demand with consent, like whisper; the app install size does not grow.
+12. ~~**D-70e:** empty "needs text" cue or a placeholder~~ **Decided 2026-10-16:** the cue is left empty and marked "needs text".
+13. ~~**D-70h:** Send on every AI search question~~ **Decided 2026-10-16:** Send on every question, with the question shown in the disclosure.
+14. ~~**D-70i:** video keyframes in deep indexing~~ **Decided 2026-10-16:** photos and documents only, never video keyframes, at first.
 
 ### 6.3 [VERIFY] register
 
@@ -2144,7 +2145,7 @@ These v1 files are edited by 1.2.0 tickets. Each row is edited by exactly one 1.
 | V-S16 | Genkit Dart 1.0 facts as given by the owner (Apache-2.0; plugins `genkit_google_genai`, `genkit_openai`, `genkit_anthropic`, `genkit_mcp`; structured output, tools, streaming, embeddings; agents and sessions experimental), and every D-70b criterion: injectable HTTP client, visible and hashable payload bytes, client-side keys, OpenRouter and xAI through the OpenAI plugin with a fixed base URL, no telemetry or dev server in release, dependency weight, embeddings and multimodal input | AIS-42 |
 | V-S17 | Diarization model choice, sizes and licences: sherpa-onnx (Apache-2.0); pyannote segmentation 3.0 (MIT) as exported for sherpa-onnx, and whether its redistribution needs the Hugging Face gate terms; the speaker-embedding model (candidates from 3D-Speaker, WeSpeaker or NeMo, each with its own licence); a pinned Hugging Face mirror so no new host is needed | AIS-44 |
 | V-S18 | sherpa-onnx's offline diarization keeps overlapping segments from pyannote's multi-speaker output (not only the dominant speaker); otherwise AIS-46 reads the segmentation model's per-frame activity directly | AIS-44 |
-| V-S19 | Install-size increase of ONNX Runtime plus sherpa-onnx per platform (IPA, AAB per ABI) and diarization speed (real-time factor) on the low, mid and high tiers | AIS-44 |
+| V-S19 | Install-size effect of ONNX Runtime plus sherpa-onnx per platform (IPA, AAB per ABI), against the owner's rule that the install size does not grow (2026-10-16), and diarization speed (real-time factor) on the low, mid and high tiers | AIS-44 |
 | V-S20 | Apple Vision (`VNClassifyImageRequest`, `VNRecognizeTextRequest`) and ML Kit (image labeling and text recognition v2, bundled models) run fully offline; ML Kit's bundled models make no network requests from the app; their sizes and supported scripts | AIS-50 |
 | V-S21 | Full-text search in the library database (SQLite FTS5 through the `sqlite3` package, or a pure-Dart inverted index if FTS5 isn't available on every platform) | AIS-50 |
 | V-S22 | Provider support for image input and for embeddings (text and multimodal) per provider, and the token cost per image used in the D-70i estimate | AIS-53, AIS-40 |
@@ -2220,10 +2221,11 @@ For comparison, the v1 plan has 158 tickets. 1.2.0 was about a quarter of v1's t
 | D-55 | Emoji font | System emoji; AI emoji limited to Emoji ≤ 12.0 |
 | D-58 | Emotion labels and mapping | 10 labels, the emoji pools and colours in D-58 |
 | D-59 | Speaker labels | **Decided 2026-10-16:** manual, on-device diarization (D-70c), AI suggestions or cloud diarization when AI Studio is on |
-| D-70c | Diarization install size and models | Budget set by the owner after AIS-44 measures it |
-| D-70e | Overlap words whisper didn't catch | Empty lane cue marked "needs text" |
-| D-70h | Send per AI search question | Yes, every time |
-| D-70i | Deep indexing content | Photo thumbnails, document text, captions; video keyframes only if the owner agrees |
+| D-70b | Genkit partial pass | **Decided 2026-10-16:** all or nothing; a failure for any provider means custom adapters for all |
+| D-70c | Diarization install size and models | **Decided 2026-10-16:** models download on demand with consent, like whisper; no install-size growth |
+| D-70e | Overlap words whisper didn't catch | **Decided 2026-10-16:** empty lane cue marked "needs text" |
+| D-70h | Send per AI search question | **Decided 2026-10-16:** Send on every question |
+| D-70i | Deep indexing content | **Decided 2026-10-16:** photos and documents only, never video keyframes, at first |
 | D-60 | Bundled fonts | About 8 MB of non-CJK Noto; system CJK; no font packs unless asked (AIS-27) |
 | D-61 | Font import reminder | Reminder on every import; warn, don't block, on restricted fsType |
 | D-63 | Store declarations | Conservative labels; owner and legal choose; demo key decision; report option |
@@ -2271,7 +2273,7 @@ The owner approved these on 2026-10-16. They follow the D-45 privacy model witho
 **Rule.**
 - If every criterion passes, Genkit is used **behind our own interface**: `LlmProvider` (D-48) stays, a new `danaview_ai_genkit` package implements it with Genkit, and only that package imports Genkit (rule 19). AIS-09 and AIS-10 then build Genkit-backed adapters, and their hand-written golden-request fixtures stay exactly as specified.
 - If the transport can't be controlled (criterion 1 or 2 fails), the custom adapters AIS-08…AIS-10 are built as written, and D-47 (no vendor SDKs) stands.
-- A partial pass (for example Gemini only) is allowed only if the owner agrees; the default is all or nothing, so there is one code path to audit.
+- Owner decision 2026-10-16: **all or nothing.** If the spike fails any criterion for any provider (for example it passes for Gemini only), Genkit is not adopted and the custom adapters AIS-08…AIS-10 are built for all five providers, so there is one code path to audit.
 - Tools, agents, sessions, MCP and streaming are not used in 1.2.0 either way.
 
 ### 7.3 D-70c, D-70e · On-device diarization and word-to-speaker assignment
@@ -2291,14 +2293,14 @@ words + speaker timeline ──► assignment ──► per-speaker drafts ─�
 - **sherpa-onnx** (Apache-2.0), used through FFI in a small `danaview_diarization` plugin (or the `sherpa_onnx` Dart package if its size and API fit), with ONNX Runtime underneath.
 - **pyannote segmentation 3.0** (MIT), the ONNX export for sherpa-onnx. It detects overlapping speech (up to 3 speakers per 10 s window).
 - **A speaker-embedding model**, chosen by the spike from the sherpa-onnx-supported families (3D-Speaker, WeSpeaker, NeMo) on accuracy, size and licence.
-- **Download once, with consent,** through v1's downloader (AI-09) and consent view (§16.3 pattern), from a pinned Hugging Face revision so the privacy policy's hosts don't change. Stored with the speech models, backup-excluded (D-20).
-- **Install size:** the model files are downloaded, but ONNX Runtime and sherpa-onnx code ship inside the app (iOS can't download code). AIS-44 measures the increase; the owner sets the budget **[OWNER]**.
+- **Download on demand, with consent, like whisper** (owner decision 2026-10-16), through v1's downloader (AI-09) and consent view (§16.3 pattern), from a pinned Hugging Face revision so the privacy policy's hosts don't change. Stored with the speech models, backup-excluded (D-20).
+- **Install size:** Owner decision 2026-10-16: the app install size does not grow. Nothing for diarization is bundled; the model files download on demand after consent. ONNX Runtime and sherpa-onnx are native code, and iOS can't download code, so AIS-44 must show a runtime path per platform that keeps the install size unchanged **[VERIFY: AIS-44]**; if a platform has none, AIS-44 reports it before AIS-45 starts instead of growing the app.
 - **Speed target:** diarization ≤ 0.3× real time on the mid tier (a 10-minute video in ≤ 3 minutes), measured in AIS-44. Tiers that miss it hide "Detect speakers".
 
 **Word-to-speaker assignment (D-70e).**
 1. A word inside a single-speaker region goes to that speaker.
 2. A word in an overlap region goes to the speaker with the highest frame activity over the word's span (from the segmentation output).
-3. Every other speaker active in the overlap still gets **their own cue on their own lane**, timed exactly to their active region (on the frame grid). If whisper produced words for them, those words go in; if not (whisper usually transcribes the louder voice), the cue is created empty and marked **"needs text"** for review **[OWNER: or a placeholder such as "[overlapping speech]"]**.
+3. Every other speaker active in the overlap still gets **their own cue on their own lane**, timed exactly to their active region (on the frame grid). If whisper produced words for them, those words go in; if not (whisper usually transcribes the louder voice), the cue is created empty and marked **"needs text"** for review. Owner decision 2026-10-16: no placeholder text such as "[overlapping speech]"; the empty cue exports nothing until the user types its text.
 4. Overlapping speech is **never merged** into one cue.
 5. Cues are then segmented per speaker with AI-11's segmenter (words kept, AIS-15), so line length and timing rules hold on each lane.
 
@@ -2349,7 +2351,7 @@ When AI Studio is on and the chosen model has `audioInput`, "Detect speakers" of
 - **What is sent: only the typed question**, plus the fixed filter schema and today's date. No file names, folder names, labels found in the library, counts or any other library data. The disclosure shows the question exactly as it will be sent.
 - Contract `dv.search.filters.v1` returns structured filters: `{kinds[], subKinds[], dateFrom?, dateTo?, terms[], labels[], textContains[], people?: never, folderHint?, sizeMin?, sizeMax?, sort?}`. Labels and folder hints come back as plain words and are matched **locally** (synonyms table, folder-name match), so the model never sees the library.
 - The filters run over the local index; results appear as usual, with the filter chips shown and editable.
-- Send on every question **[OWNER]** (§6.2 question 13).
+- Owner decision 2026-10-16: **Send on every question**, with the question shown in the disclosure exactly as sent; there is no "allow for this session" option.
 
 ### 7.8 D-70i · AI search level (b): deep indexing per folder
 
@@ -2357,8 +2359,8 @@ When AI Studio is on and the chosen model has `audioInput`, "Detect speakers" of
 - **What is sent** (each item is listed by type and count in the disclosure):
   - photos: a 512 px JPEG thumbnail, no EXIF;
   - documents: extracted text, at most 4,000 characters per document;
-  - videos: captions and transcripts, plus 3 keyframes as thumbnails only if the owner agrees **[OWNER]**;
-  - never: file names, folder names, locations, other folders.
+  - videos: Owner decision 2026-10-16: **not sent at first.** Deep indexing covers photos and documents only and never sends video keyframes; videos in the folder are skipped (the disclosure says how many) and stay searchable through the on-device index (captions, transcripts, D-70d);
+  - never: video keyframes, file names, folder names, locations, other folders.
 - **What comes back:** a short description per item (multimodal model, schema mode) and an embedding vector per item (provider embeddings). Both are stored locally in the index and can be removed per folder ("Remove deep index").
 - **Search with a deep index:** the typed question is embedded by the same provider (the question is sent, as level a, with its own Send), then compared locally with the stored vectors (cosine similarity; brute force is fast enough below 100,000 items).
 - **Estimate first:** the disclosure shows items, bytes, estimated input tokens (images at the provider's per-image rate **[VERIFY: AIS-53]**) and embedding counts; above 200k tokens Send needs a second tap (D-49). Batches are resumable, and a resumed job asks again.
@@ -2371,7 +2373,7 @@ When AI Studio is on and the chosen model has `audioInput`, "Detect speakers" of
 - **Depends on:** AIS-01
 - **Owns:** `docs/v1.2/ai-studio/spikes/AIS-42-genkit.md`; a throwaway spike package outside `packages/` (deleted after the report)
 - **Spec:** D-70b. Run criteria 1–5 against the loopback fake server for Gemini, OpenAI, Anthropic, and OpenRouter and xAI through the OpenAI plugin. Record versions, transitive dependencies, licences and the AOT size delta.
-- **Acceptance criteria and tests:** a report with pass/fail per criterion and provider, evidence for the hash check, and a go/no-go. The owner signs the outcome; AIS-01's ARCH record notes it.
+- **Acceptance criteria and tests:** a report with pass/fail per criterion and provider, evidence for the hash check, and a go/no-go. All or nothing (owner decision 2026-10-16): a fail for any provider is a no-go for all, and AIS-08…AIS-10 are built custom. The owner signs the outcome; AIS-01's ARCH record notes it.
 
 #### AIS-43 · [INTEGRATION] Shared `danaview_ai` layer, `danaview_ai_ui`, app-level switch, feature registry
 
@@ -2387,7 +2389,7 @@ When AI Studio is on and the chosen model has `audioInput`, "Detect speakers" of
 - **Depends on:** AIS-01, AI-10
 - **Owns:** `docs/v1.2/ai-studio/spikes/AIS-44-diarization.md`, an eval set manifest `docs/v1.2/ai-studio/qa/diarization_eval.md` (CC-licensed or owner-recorded clips with overlaps)
 - **Spec:** D-70c. Closes V-S17, V-S18, V-S19: model candidates, licences, sizes, Hugging Face mirror, overlap output, install-size delta, real-time factor on three tiers, diarization error rate on the eval set.
-- **Acceptance criteria and tests:** a report with a recommended model pair and the numbers; the owner sets the install-size budget **[OWNER]**.
+- **Acceptance criteria and tests:** a report with a recommended model pair and the numbers, and a runtime path per platform that keeps the app install size unchanged (owner decision 2026-10-16: models download on demand with consent; no install-size growth). A platform with no such path is reported before AIS-45 starts.
 
 #### AIS-45 · `danaview_diarization` plugin and the consented speaker-model download
 
@@ -2402,7 +2404,7 @@ When AI Studio is on and the chosen model has `audioInput`, "Detect speakers" of
 - **Milestone:** S6 · **Area:** AI (diarization)
 - **Depends on:** AIS-45, AIS-15
 - **Owns:** `packages/danaview_transcription/lib/src/speakers/` (assignment, overlap cue builder, per-speaker segmentation), its tests
-- **Spec:** D-70e. Steps 1–5 of §7.3; source-µs to timeline mapping through `ClipTimeMap` (AI-12); "needs text" marks per the owner's answer.
+- **Spec:** D-70e. Steps 1–5 of §7.3; source-µs to timeline mapping through `ClipTimeMap` (AI-12); a voice whisper missed gets an empty cue marked "needs text" (owner decision 2026-10-16; no placeholder text).
 - **Acceptance criteria and tests:** on the eval set, every overlap region yields one cue per active speaker with edges within 1 frame of the speaker timeline; no cue holds words from two speakers; property tests (every word assigned exactly once; lanes non-overlapping).
 
 #### AIS-47 · Per-speaker subtitle lanes: model, commands, lowering, SRT/VTT rules
@@ -2458,8 +2460,8 @@ When AI Studio is on and the chosen model has `audioInput`, "Detect speakers" of
 - **Milestone:** S6 · **Area:** Search + AI Studio
 - **Depends on:** AIS-52
 - **Owns:** `packages/danaview_search/lib/src/ai/deep_index/`, the folder menu entry and progress UI
-- **Spec:** D-70i. Item selection per folder, thumbnails and text extraction, batching and resume, descriptions and embeddings, local vector search, "Remove deep index". Closes V-S22.
-- **Acceptance criteria and tests:** the disclosure lists exactly what the batches contain; file names and EXIF never appear in a body (test); removing the deep index deletes every stored description and vector; resumed jobs require a new Send.
+- **Spec:** D-70i. Item selection per folder (photos and documents only; videos skipped and counted in the disclosure, never keyframes), thumbnails and text extraction, batching and resume, descriptions and embeddings, local vector search, "Remove deep index". Closes V-S22.
+- **Acceptance criteria and tests:** the disclosure lists exactly what the batches contain; file names and EXIF never appear in a body (test); a folder with videos sends no video data (test); removing the deep index deletes every stored description and vector; resumed jobs require a new Send.
 
 #### AIS-54 · Diarization and search QA, network guard extension, on-device E2E
 

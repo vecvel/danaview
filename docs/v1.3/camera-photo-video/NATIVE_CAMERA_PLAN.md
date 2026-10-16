@@ -3,7 +3,7 @@
 > **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12, rewritten 2026-10-15 with the owner's decisions (§2). **Status:** plan, ready for the planning review that turns §10 into a BUILD_PLAN-style ticket file.
 > **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` ("ARCH"), `docs/v1.1/editor/BUILD_PLAN.md` ("BP"), the 1.2.0 plans `docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md` ("VED": face tracker VED-16, beauty shaders VED-20…25), `docs/v1.2/files-media-home/FILES_MEDIA_HOME_PLAN.md` ("HOM"), `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` ("AIS"), and the 1.3.0 desktop plan `docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md` ("DSK": shared Darwin engine, Rust engine for Windows/Linux).
 > **Scope:** a first-party camera on every platform Danaview runs on: full camera on iOS and Android, webcam and iPhone-as-webcam on macOS, webcam capture on Windows and Linux. Every control within one thumb's reach, fast to open and to shoot, built on each platform's native camera API.
-> **Decisions:** D-99 to D-115 (this plan's range; the earlier draft's decisions are replaced), plus D-115a to D-115n added on 2026-10-16. **[OWNER]** marks the few still open. **[VERIFY]** marks a claim a spike or ticket must prove.
+> **Decisions:** D-99 to D-115 (this plan's range; the earlier draft's decisions are replaced), plus D-115a to D-115n added on 2026-10-16. No decision is still marked **[OWNER]**; §11.3 keeps the remaining general questions. **Owner decisions 2026-10-16** ("go with the recommendation"): no "Load preview" for scanned links in 1.3.0 (D-115h); Create QR ships in 1.3.0, including a personal UPI receive QR (D-115m, CAM-59); scan history is on by default with a 30-day auto-delete (D-115l); a dismissed due-date reminder comes back once, the next day (D-115k). **[VERIFY]** marks a claim a spike or ticket must prove.
 > **Widened on 2026-10-16 (owner):** the camera also scans **documents** (edge detection, auto-capture, perspective correction, filters, on-device OCR, searchable PDFs, image to PDF) and **QR codes and barcodes** (smart result cards that preview before acting, payment hand-off to the user's own UPI or payment app, saved codes with reminders, scan history). Decisions **D-115a to D-115n** (lettered, because D-116 onwards belongs to the 1.2.0 editor plan) and tickets **CAM-46 to CAM-60**; details in §12 and §13. Saved codes extend the 1.2.0 Files & Media Home model (`docs/v1.2/files-media-home/FILES_MEDIA_HOME_PLAN.md` §8.1, HOM-16).
 > **Priorities set by the owner (2026-10-15):** most customisable camera, all controls in the hand, fast, native, cross-platform, production-ready.
 
@@ -105,12 +105,12 @@ Live beauty in the camera, beauty in the editor and beauty in exports run the **
 | **D-115e** | **Reuse the 1.2.0 PDF tools:** merge, page tools and compression come from the `danaview_pdf` plugin (HOM D-98j, HOM-24, HOM-28, HOM-31); the camera adds only the image-to-page writer and the OCR text layer to that plugin (§12.4) | owner 2026-10-16 |
 | **D-115f** | **Export and save:** PDF, JPEG or PNG; share sheet; save to Danaview folders, Files (iOS) or Downloads (Android); merge scans or PDFs (§12.4) | owner 2026-10-16 |
 | **D-115g** | **Code scanner:** live detection in the camera plus a dedicated Scan mode; AVFoundation metadata output and VisionKit `DataScannerViewController` (iOS 16+, metadata output below) on iOS; ML Kit Barcode Scanning (bundled, on device) on Android; scan from a photo or file in the library. Formats: QR, Data Matrix, Aztec, PDF417, EAN/UPC, Code 128 (§13.1) | owner 2026-10-16 |
-| **D-115h** | **Smart result card, preview before acting:** a scanned code never opens anything by itself. URLs show the full domain and local warnings (lookalike or IDN domains, shorteners, non-HTTPS, IP-address links); no automatic link preview (§13.2) | owner 2026-10-16; "Load preview" button **[OWNER]** |
+| **D-115h** | **Smart result card, preview before acting:** a scanned code never opens anything by itself. URLs show the full domain and local warnings (lookalike or IDN domains, shorteners, non-HTTPS, IP-address links); no automatic link preview and no "Load preview" button in 1.3.0 (§13.2) | owner 2026-10-16 |
 | **D-115i** | **Actions per payload type:** Wi-Fi join, contact, calendar event, email, SMS, phone, geo, plain text, app links, product barcodes (§13.3) | owner 2026-10-16; iOS Wi-Fi entitlement **[VERIFY: CAM-55]** |
 | **D-115j** | **Payments are a redirect only:** UPI and EMVCo / Bharat QR codes are parsed into a confirm card, then handed to the user's payment app (Android chooser; iOS detected UPI apps). Danaview never processes, stores or confirms payments and never handles money or credentials (§13.4) | owner 2026-10-16; iOS scheme list **[VERIFY: CAM-57]** |
-| **D-115k** | **Saved codes:** a new item type in the Files & Media Home, fileable in any Danaview folder, with raw payload, regenerated code image, decoded fields, title, note, tags, dates, optional reminder and optional location (§13.5) | owner 2026-10-16 |
-| **D-115l** | **Scan history:** local and private, can be turned off or cleared, with auto-expiry (§13.6) | owner 2026-10-16 |
-| **D-115m** | **Create QR:** link, text, Wi-Fi, contact, and a personal UPI receive QR (§13.7) | **[OWNER]** |
+| **D-115k** | **Saved codes:** a new item type in the Files & Media Home, fileable in any Danaview folder, with raw payload, regenerated code image, decoded fields, title, note, tags, dates, optional reminder (a dismissed reminder comes back once, the next day) and optional location (§13.5) | owner 2026-10-16 |
+| **D-115l** | **Scan history:** local and private, **on by default** with a **30-day auto-delete**; can be turned off or cleared (§13.6) | owner 2026-10-16 |
+| **D-115m** | **Create QR ships in 1.3.0:** link, text, Wi-Fi, contact, and a personal UPI receive QR (§13.7) | owner 2026-10-16 |
 | **D-115n** | **Privacy and safety:** scanning and decoding fully on device; no network unless the user taps an action that needs it; "quishing" warnings; payment codes never auto-redirect (§13.8) | owner 2026-10-16 |
 
 ---
@@ -379,14 +379,14 @@ Same process as v1 (BP §0–§2): exclusive file ownership, tests shipped with 
 | 52 | **CAM-52** | DART | Export and save (D-115f): PDF/JPEG/PNG, share, save to Danaview folders / Files / Downloads, merge scans or PDFs through HOM-28, compression through HOM-31. *Saved scans appear in the Home under Documents.* | CAM-51, HOM-31 |
 | 53 | **CAM-53** | IOS+AND | Code scanner core (D-115g): AVCaptureMetadataOutput on our session for live detection in every camera mode (opt-in chip), `DataScannerViewController` in Scan mode on iOS 16+ with the metadata-output fallback; ML Kit Barcode Scanning (bundled) on a CameraX `ImageAnalysis` stream; scanning from a photo or file (Vision `VNDetectBarcodesRequest`, ML Kit `InputImage`). *All listed formats decode from the fixture set on both platforms.* | CAM-07, CAM-12 |
 | 54 | **CAM-54** | DART | Payload parser (pure Dart): URL, Wi-Fi (`WIFI:`), vCard, MeCard, iCalendar `VEVENT`, `mailto:`/`MATMSG`, `SMSTO:`/`sms:`, `tel:`, `geo:`, app and deep links, EAN/UPC (check digit), UPI `upi://pay`, EMVCo merchant-presented QR (TLV, CRC-16 check). *Corpus and fuzz tests; malformed input never throws.* | CAM-01 |
-| 55 | **CAM-55** | DART | Result cards and actions (D-115h, D-115i): URL safety checks, Wi-Fi join (Android `WifiNetworkSuggestion` / Add-networks intent; iOS `NEHotspotConfiguration` if the entitlement holds, else copy password), contacts, calendar, compose, call, Maps, copy/share, app links with "Opens in <app>", product search on tap; "Load preview" per the owner. *Nothing opens without a tap (test); quishing test set flags every lookalike.* | CAM-53, CAM-54 |
-| 56 | **CAM-56** | DART | Saved codes (D-115k): new item kind in the Files & Media Home (extends HOM-16, HOM-17, HOM-19), fields and editor, regenerated code image, full-screen show, share as image, Pay now, reminders (local notifications), optional location, search, sort by due date, "Due soon" filter. *A saved code survives backup and restore with the Danaview folders.* | CAM-54, CAM-55, HOM-16, HOM-17, HOM-19, HOM-22 |
+| 55 | **CAM-55** | DART | Result cards and actions (D-115h, D-115i): URL safety checks, Wi-Fi join (Android `WifiNetworkSuggestion` / Add-networks intent; iOS `NEHotspotConfiguration` if the entitlement holds, else copy password), contacts, calendar, compose, call, Maps, copy/share, app links with "Opens in <app>", product search on tap; no "Load preview" in 1.3.0 (owner decision 2026-10-16): the domain and the safety warnings are shown. *Nothing opens without a tap and the card makes no network request (test); quishing test set flags every lookalike.* | CAM-53, CAM-54 |
+| 56 | **CAM-56** | DART | Saved codes (D-115k): new item kind in the Files & Media Home (extends HOM-16, HOM-17, HOM-19), fields and editor, regenerated code image, full-screen show, share as image, Pay now, reminders (local notifications; a dismissed reminder comes back once, the next day, then not again), optional location, search, sort by due date, "Due soon" filter. *A saved code survives backup and restore with the Danaview folders; a dismissed reminder fires once more the next day and never a third time.* | CAM-54, CAM-55, HOM-16, HOM-17, HOM-19, HOM-22 |
 | 57 | **CAM-57** | IOS+AND | Payment hand-off (D-115j): confirm card, Android `upi://` chooser, iOS UPI app detection with `canOpenURL` and the declared schemes, "No payment app found" with Copy VPA, "Returned from payment app". *On the lab phones, GPay, PhonePe, Paytm and BHIM (where installed) open with the payee and amount filled in; Danaview stores nothing about the payment.* | CAM-55 |
-| 58 | **CAM-58** | DART | Scan history (D-115l): local list, off switch, clear, auto-expiry (off / 7 / 30 / 90 days), save to Saved codes from history. *Turning history off deletes it and records nothing new.* | CAM-55 |
-| 59 | **CAM-59** | DART | Create QR (D-115m, only if the owner says yes): link, text, Wi-Fi, contact, personal UPI receive QR; save as a saved code or share as image. *Generated codes scan back to the same payload.* | CAM-56 |
-| 60 | **CAM-60** | IOS+AND | Scan QA: device suite (lighting, angles, damaged and small codes, multi-page documents), parser and quishing corpora, payment hand-off checklist per UPI app, network spy (zero requests while scanning and decoding), a11y (VoiceOver/TalkBack read the card before any action). | CAM-52, CAM-56…CAM-58 (+ CAM-59 if scheduled) |
+| 58 | **CAM-58** | DART | Scan history (D-115l): local list, **on by default**, off switch, clear, auto-expiry (7 / **30, default** / 90 days or never), save to Saved codes from history. *A fresh install records history and deletes items after 30 days; turning history off deletes it and records nothing new.* | CAM-55 |
+| 59 | **CAM-59** | DART | Create QR (D-115m, ships in 1.3.0, owner decision 2026-10-16): link, text, Wi-Fi, contact, personal UPI receive QR; save as a saved code or share as image. *Generated codes scan back to the same payload.* | CAM-56 |
+| 60 | **CAM-60** | IOS+AND | Scan QA: device suite (lighting, angles, damaged and small codes, multi-page documents), parser and quishing corpora, payment hand-off checklist per UPI app, network spy (zero requests while scanning and decoding), a11y (VoiceOver/TalkBack read the card before any action). | CAM-52, CAM-56…CAM-59 |
 
-Lane split: IOS 8, AND 7, IOS+AND 15, DART 25, DESK 5 (60 tickets; CAM-59 conditional).
+Lane split: IOS 8, AND 7, IOS+AND 15, DART 25, DESK 5 (60 tickets).
 
 ---
 
@@ -422,16 +422,16 @@ Lane split: IOS 8, AND 7, IOS+AND 15, DART 25, DESK 5 (60 tickets; CAM-59 condit
 1. Device lab: which phones can you provide (see §9)?
 2. Default save target on iOS: Photos "Danaview" album only, or also a copy inside Danaview's library?
 3. Should Danaview offer to become the default camera app on Android at first launch, or only from Settings?
-4. **D-115h:** Offer an explicit "Load preview" button for scanned links? It contacts the site (the site sees the user's IP) only after the tap. Recommendation: no in 1.3.0; the full domain and warnings are enough.
-5. **D-115m:** Ship Create QR (link, text, Wi-Fi, contact, personal UPI receive QR) in 1.3.0?
-6. **D-115l:** Scan history on by default with 30-day expiry (proposed), or off by default?
-7. **D-115k:** Should a dismissed due-date reminder come back once the next day (proposed), or remind once only?
+4. ~~**D-115h:** "Load preview" button for scanned links~~ **Decided 2026-10-16:** no in 1.3.0; the domain and the safety warnings are shown.
+5. ~~**D-115m:** Create QR in 1.3.0~~ **Decided 2026-10-16:** yes, including a personal UPI receive QR.
+6. ~~**D-115l:** scan history default~~ **Decided 2026-10-16:** on by default with a 30-day auto-delete; can be turned off or cleared.
+7. ~~**D-115k:** dismissed due-date reminders~~ **Decided 2026-10-16:** a dismissed reminder comes back once, the next day.
 
 ### 11.4 Effort
 
 45 tickets. iOS and Android in parallel about **4–5 weeks** (device testing sets the pace), macOS about **1 week**, Windows/Linux webcams about **1–1.5 weeks** (may move to 1.3.x, D-114).
 
-**Added 2026-10-16:** 15 more tickets (60 in total, CAM-59 conditional). Document scan & PDF (C7) about **1.5–2 weeks**, mostly reuse of the 1.2.0 PDF and analysis plugins; QR, barcodes, payments and saved codes (C8) about **2 weeks**, of which the payment hand-off checks on real phones with UPI apps set the pace. Both run in parallel with C2–C3.
+**Added 2026-10-16:** 15 more tickets (60 in total). Document scan & PDF (C7) about **1.5–2 weeks**, mostly reuse of the 1.2.0 PDF and analysis plugins; QR, barcodes, payments and saved codes (C8) about **2 weeks**, of which the payment hand-off checks on real phones with UPI apps set the pace. Both run in parallel with C2–C3.
 
 ---
 
@@ -522,7 +522,7 @@ A scanned code **never opens anything by itself.** It always opens a card that s
   - IP-address links and unusual ports;
   - user-info tricks (`https://bank.com@other.site`) and brand names buried in subdomains.
 - Buttons: **Open in browser**, Copy, Share, Save (as a saved code, §13.5).
-- **No automatic link preview:** fetching a title or image would contact the site (and tell it the user's IP) before the user decides. An explicit "Load preview" button is possible **[OWNER]**; the recommendation is no for 1.3.0.
+- **No automatic link preview:** fetching a title or image would contact the site (and tell it the user's IP) before the user decides. Owner decision 2026-10-16: there is **no "Load preview" button in 1.3.0**; the card shows the domain and the safety warnings, and nothing is fetched until the user opens the link in the browser.
 - **Quishing (QR phishing):** the card carries one plain line when any warning fires: "QR codes can lead to fake sites. Check the address before you sign in or pay."
 
 ### 13.3 Actions per payload type (D-115i)
@@ -589,19 +589,21 @@ What users can do: edit the info; **show full screen** (maximum brightness, so s
 
 Storage follows the Danaview folders (app-private, in app backups, HOM D-98b). Reminders are rescheduled after a restore.
 
+**Dismissed reminders (owner decision 2026-10-16):** a due-date reminder that the user dismisses without acting comes back **once, the next day** at the same time. After that second notification it does not repeat; the saved code stays in the "Due soon" filter until the date is changed or cleared.
+
 ### 13.6 Scan history (D-115l)
 
 - A local list of recent scans (payload, type, time; never the camera frame). Private, never synced, never sent.
-- Settings: **History on/off** (proposed on **[OWNER]**), **Clear history**, **Auto-delete after** 7 / 30 (default) / 90 days or never.
+- Settings: **History on/off** (owner decision 2026-10-16: **on by default**), **Clear history**, **Auto-delete after** 7 / 30 (default) / 90 days or never. A new install keeps history and deletes each scan after 30 days.
 - Turning history off deletes it and records nothing new. From history, any item can be saved as a saved code.
 
-### 13.7 Create QR (D-115m, **[OWNER]**)
+### 13.7 Create QR (D-115m)
 
-If the owner says yes: create a QR for a link, text, Wi-Fi network or contact, and a **personal UPI receive QR** (`pa`, `pn`, optional `am`) so someone can pay the user. Created codes can be saved as saved codes, shown full screen or shared as an image. Nothing is sent anywhere.
+Owner decision 2026-10-16: Create QR **ships in 1.3.0** (CAM-59). Create a QR for a link, text, Wi-Fi network or contact, and a **personal UPI receive QR** (`pa`, `pn`, optional `am`) so someone can pay the user. Created codes can be saved as saved codes, shown full screen or shared as an image. Nothing is sent anywhere.
 
 ### 13.8 Privacy and safety (D-115n)
 
-- **Fully on device:** detection, decoding, parsing, URL checks and history make **no network requests**. The network is used only when the user taps an action that needs it (Open in browser, Search the web, Load preview if offered), and then by the browser or the target app.
+- **Fully on device:** detection, decoding, parsing, URL checks and history make **no network requests**. The network is used only when the user taps an action that needs it (Open in browser, Search the web), and then by the browser or the target app.
 - **No automatic actions:** nothing opens, joins, dials, adds or pays without a tap on the card; payment codes always show the confirm card first.
 - **Quishing warnings** on suspicious links (§13.2), and "check the payee name" on every payment card.
 - **Permissions:** camera; notifications only when the user sets the first reminder; location only when the user turns on scan location; no contacts or calendar permission for adding entries through the system sheets **[VERIFY: CAM-55]**.
