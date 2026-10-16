@@ -11,6 +11,8 @@
 
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart' show SavePhase;
+import 'package:danaview_editor/src/editor/timeline/render_timeline_canvas.dart' show RenderTimelineCanvas;
+import 'package:danaview_editor/src/editor/timeline/timeline_hit.dart' show HitEmpty, HitGap;
 import 'package:danaview_editor_core/model.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -164,10 +166,30 @@ void main() {
     final canvasBox = tester.renderObject(ed.canvas);
     expect(hit.path.any((e) => e.target == canvasBox), isTrue,
         reason: 'the marquee start $from hits ${hit.path.take(6).map((e) => e.target.runtimeType).toList()}, not the timeline canvas');
+    // FIX-QA00-R7 (QA-02 M-3): the start must also be inside the lane area as the timeline's own
+    // hit test sees it: the marquee recognizer accepts only a gap or empty lane space at or below
+    // the ruler (`TimelineGestureArbiter._allowsMarquee`), not an item, a handle or the ruler.
+    final timelineBox = canvasBox as RenderTimelineCanvas;
+    final fromLocal = timelineBox.globalToLocal(from);
+    final typedHit = timelineBox.hitTestTimeline(fromLocal);
+    String describeHit() => 'typed hit $typedHit at local $fromLocal; hit path '
+        '${hit.path.take(12).map((e) => e.target.runtimeType).toList()}';
+    expect(
+      fromLocal.dy >= 0 && (typedHit is HitGap || (typedHit is HitEmpty && typedHit.lane == main.id)),
+      isTrue,
+      reason: 'the marquee start $from is not empty main-lane space: ${describeHit()}',
+    );
     // ignore: avoid_print
-    print('DV_E2E_REPORT s12 marquee: $from -> $to, visible ${visibleFrom()}..${visibleTo()} us, end $end us');
+    print('DV_E2E_REPORT s12 marquee: $from -> $to, visible ${visibleFrom()}..${visibleTo()} us, end $end us, ${describeHit()}');
     await ed.mouseDrag(from, to);
-    await E2eApp.pumpUntil(tester, () => ed.state.selection.items.length >= 2, what: 'the marquee selection (got ${ed.state.selection.items})');
+    try {
+      await E2eApp.pumpUntil(tester, () => ed.state.selection.items.length >= 2, what: 'the marquee selection (got ${ed.state.selection.items})');
+    } on TestFailure {
+      // ignore: avoid_print
+      print('DV_E2E_REPORT s12 marquee FAILED: selection ${ed.state.selection.items}; ${describeHit()}; '
+          'hit at the end ${timelineBox.hitTestTimeline(timelineBox.globalToLocal(to))}');
+      rethrow;
+    }
     await ed.close();
   });
 }

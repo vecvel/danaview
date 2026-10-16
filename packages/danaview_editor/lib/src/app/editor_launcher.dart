@@ -28,6 +28,11 @@
 // floors initial playheads onto the grid, so handing the raw value over opened one frame early
 // (FIX-UX-41-1). The launcher therefore reads the project's frame rate and hands over
 // `timeOfFrame(frameIndexNearest(position))`; if the rate can't be read, the raw value is passed.
+// FIX-M9 (QA-02 M-9, s02 on API 29 opened at 0 after a fresh install): the same grid time is also
+// written into the project's saved `view.playhead` before the editor opens, on every route (direct
+// create, the import job's create for a managed copy, and a reused untouched project), so an open
+// that falls back to the saved view state still lands on the player's frame. Debug builds log `at`,
+// the grid time and the saved playhead.
 //
 // `danaview_features` never imports the editor, and the editor sees `danaview_features` only through
 // chrome/orientation/storage (ARCH §4.2 rule 7), so the request and the player are ports here:
@@ -43,6 +48,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_editor_core/model.dart'
     show ContentUriLocator, FileLocator, FrameRate, FromPlayerOrigin, MediaAccessFailure, MediaAccessPort, MediaLocator, MediaOrigin, PickedMedia, ProjectId, ProjectOrigin, TimeUs;
+import 'package:danaview_editor_core/ops.dart' show EditSession;
 import 'package:danaview_editor_core/store.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -284,11 +290,13 @@ class EditorLauncher {
     if (copies) {
       final reused = await repository.findUntouchedProjectFor(request.pathOrUri);
       if (reused != null) {
+        if (kDebugMode) debugPrint('[EditorLauncher] Handoff: reusing an untouched project (copy route), at $at us');
         id = reused;
       } else {
         if (!context.mounted) return EditorLaunchOutcome.cancelled;
         final spec = await _specFor(request, pick, at);
         if (!context.mounted) return EditorLaunchOutcome.cancelled;
+        if (kDebugMode) debugPrint('[EditorLauncher] Handoff: creating a project through the import job (copy route), at $at us');
         final result = await showImportMediaSheet(
           context,
           picks: [pick],
@@ -305,6 +313,7 @@ class EditorLauncher {
     } else {
       final prepared = await _withPreparing(context, () async {
         final reused = await repository.findUntouchedProjectFor(request.pathOrUri);
+        if (kDebugMode) debugPrint('[EditorLauncher] Handoff: ${reused == null ? 'creating a project' : 'reusing an untouched project'}, at $at us');
         final made = reused ?? await repository.create(await _specFor(request, pick, at));
         return (made, await _gridTimeOf(made, at));
       });
@@ -318,6 +327,7 @@ class EditorLauncher {
     }
 
     final openAt = gridAt ?? await _gridTimeOf(id, at);
+    if (kDebugMode) debugPrint('[EditorLauncher] Handoff: opening the editor at $openAt us');
     if (!context.mounted) return EditorLaunchOutcome.cancelled;
 
     // 5. Hand the decoders over.
@@ -334,18 +344,50 @@ class EditorLauncher {
 
   /// [position] (a platform time, µs) on the frame grid of project [id]: the start of the nearest
   /// frame (D-35), or [position] unchanged when the project's rate can't be read.
+  ///
+  /// FIX-M9 (QA-02 M-9): the project itself is left on that frame too. A new project's store
+  /// floors `initialPlayhead` onto the grid (one frame early for a platform time) and a reused
+  /// untouched project keeps the playhead it was last closed on (0 for one never moved), so any
+  /// open that does not get the route's `t` (or falls back to the saved view state) started
+  /// elsewhere. When the saved `view.playhead` differs, it is set to the grid time (clamped to a
+  /// non-empty project's end) and saved before the editor opens; read-only projects and projects with a pending
+  /// recovery are left alone. Logs `at`, the grid time and the saved playhead (debug only).
   Future<TimeUs> _gridTimeOf(ProjectId id, TimeUs position) async {
-    FrameRate? rate;
+    final LoadedProject loaded;
     try {
-      final loaded = await repository.open(id);
-      rate = loaded.project.timeline.settings.frameRate;
+      loaded = await repository.open(id);
     } on Object catch (e) {
-      debugPrint('[EditorLauncher] Frame rate unavailable: ${e.runtimeType}');
+      debugPrint('[EditorLauncher] Frame rate unavailable: ${e.runtimeType}; opening at $position us');
+      return position;
+    }
+    try {
+      final project = loaded.project;
+      final rate = project.timeline.settings.frameRate;
+      final at = gridTimeFor(position, rate);
+      final saved = project.view.playhead;
+      // Past the end the editor clamps on open; an empty (or not yet measured) project keeps it.
+      final end = project.duration > 0 ? rate.quantize(project.duration) : null;
+      final target = end != null && at > end ? end : at;
+      if (kDebugMode) {
+        debugPrint('[EditorLauncher] Handoff: at $position us -> frame ${rate.frameIndexOf(at)} ($at us); '
+            'saved view.playhead $saved us; duration ${project.duration} us');
+      }
+      if (saved != target && !loaded.readOnly && loaded.pendingRecovery == null) {
+        final session = EditSession(project)..updateView((v) => v.copyWith(playhead: target));
+        try {
+          await repository.save(session, reason: SaveReason.manual);
+          if (kDebugMode) debugPrint('[EditorLauncher] Handoff: view.playhead $saved us -> $target us');
+        } on Object catch (e) {
+          debugPrint('[EditorLauncher] Saving the handoff playhead failed: ${e.runtimeType}');
+        }
+      }
+      return at;
+    } on Object catch (e) {
+      debugPrint('[EditorLauncher] Frame rate unavailable: ${e.runtimeType}; opening at $position us');
       return position;
     } finally {
-      if (rate != null) await _quietly(() => repository.close(id));
+      await _quietly(() => repository.close(id));
     }
-    return gridTimeFor(position, rate);
   }
 
   /// The plan-grid time the editor opens at for the player's [position] (a platform time, µs) in

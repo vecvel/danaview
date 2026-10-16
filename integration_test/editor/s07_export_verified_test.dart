@@ -18,6 +18,7 @@
 // ignore_for_file: implementation_imports
 
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
 import 'package:danaview_editor_core/formats.dart';
@@ -44,6 +45,21 @@ int changedIn(E2eFrame a, E2eFrame b, double y0, double y1) {
     }
   }
   return count;
+}
+
+/// The least number of [changedIn] samples a burned cue reading [text] in [style] must change in a
+/// frame [height] px high (FIX-QA00-R7, QA-02 M-2). It is derived from the cue's glyph area at the
+/// export size, not fixed: the glyph px size is `fontSizePt` at a 1,080 px short side scaled to
+/// [height]; a glyph box is about 0.55 em wide and 0.7 em (cap height) high; [changedIn] samples
+/// every 2nd px in both axes (÷ 4); and only a quarter of that box is ink a thin-glyph sans
+/// changes by > 40 luma after a 720p software H.264 encode (which blurs thin glyphs: QA-02 counted
+/// 293 for `BURNED TWO`, where the old fixed bound was 300). For the default 42 pt style at 720p and
+/// a 10-glyph cue this is about 190. It never drops below 3 × the "nothing burned" bound of 60.
+int burnedCueMinSamples(String text, SubtitleStyle style, int height) {
+  final px = style.fontSizePt * height / 1080;
+  final glyphs = text.replaceAll(RegExp(r'\s'), '').length;
+  final sampledBox = glyphs * (0.55 * px) * (0.7 * px) / 4;
+  return math.max(180, (sampledBox * 0.25).floor());
 }
 
 /// Pixels (sampled every 2 px) whose luma differs by more than 40 between [a] and [b] above row
@@ -168,8 +184,13 @@ void main() {
     final aAt = {for (final (i, k) in probes.keys.indexed) k: fa[i]};
     final bAt = {for (final (i, k) in probes.keys.indexed) k: fb[i]};
     const subY0 = 0.70;
-    for (final k in ['t1a', 't1b']) {
-      expect(changedIn(aAt[k]!, bAt[k]!, subY0, 1), greaterThan(300), reason: 'burned cue $k must show in the subtitle area');
+    final t1Style = ed.project.tracks.firstWhere((t) => t.id == t1.id).subtitle?.style ?? const SubtitleStyle();
+    for (final (k, cue) in [('t1a', t1Cues[0]), ('t1b', t1Cues[1])]) {
+      final changed = changedIn(aAt[k]!, bAt[k]!, subY0, 1);
+      final least = burnedCueMinSamples(cue.$3, t1Style, aAt[k]!.height);
+      // ignore: avoid_print
+      print('DV_E2E_REPORT s07: burned cue $k "${cue.$3}": $changed changed samples (needs > $least at ${aAt[k]!.height} px)');
+      expect(changed, greaterThan(least), reason: 'burned cue $k must show in the subtitle area');
     }
     for (final k in ['between', 't2']) {
       expect(changedIn(aAt[k]!, bAt[k]!, subY0, 1), lessThan(60), reason: 'nothing burned at $k');

@@ -57,6 +57,12 @@ abstract final class EditorShellStrings {
   /// Message of that confirmation.
   static const String leaveMessage = 'Leave anyway? Your last autosave is kept.';
 
+  /// Title of the confirmation when the close flush is still running at the timeout (FIX-M1).
+  static const String stillSavingTitle = 'Still saving your latest changes';
+
+  /// Message of that confirmation.
+  static const String stillSavingMessage = 'This is taking longer than usual. It closes on its own once saved, or leave now and saving finishes in the background.';
+
   /// Leave button of that confirmation.
   static const String leave = 'Leave';
 

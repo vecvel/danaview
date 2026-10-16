@@ -1,4 +1,6 @@
 // OWNER: QA-00
+// FIX-M1 (QA-02 M-1): close() waits for an idle save first.
+// FIX-QA00-R7 (QA-02 M-4, M-14): tapTile scrolls the tablet ToolRail; close() dismisses "export interrupted".
 //
 // Editor driver of the E2E suite: creates projects through the New project sheet (the Files picker
 // answered by `E2ePicker`), attaches to the open `EditorScreen`, runs editor actions through the
@@ -15,6 +17,7 @@ import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart';
 import 'package:danaview_editor/src/editor/contracts/action_binding.dart' show EditorActionContext, EditorActionSource;
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
 import 'package:danaview_editor/src/editor/flows/import_media_sheet.dart' show ImportMediaSheet;
+import 'package:danaview_editor/src/editor/layout/editor_shell_strings.dart' show EditorShellStrings;
 import 'package:danaview_editor/src/editor/state/editor_controller.dart';
 import 'package:danaview_editor/src/editor/state/editor_session.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
@@ -25,6 +28,8 @@ import 'package:danaview_editor/src/editor/timeline/timeline_gestures.dart';
 import 'package:danaview_editor/src/editor/timeline/timeline_hit.dart';
 import 'package:danaview_editor/src/editor/timeline/timeline_metrics.dart' show TimelineMetrics;
 import 'package:danaview_editor/src/editor/timeline/timeline_viewport.dart' show TimelineViewportController;
+import 'package:danaview_editor/src/editor/toolbar/tool_grid.dart' show ToolGrid;
+import 'package:danaview_editor/src/editor/toolbar/tool_rail.dart' show ToolRail;
 import 'package:danaview_editor/src/editor/toolbar/tool_strip.dart' show ToolStrip;
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart';
@@ -160,9 +165,93 @@ final class E2eEditor {
       );
 
   /// Closes the editor through the top bar's close button and waits until it is gone.
+  ///
+  /// FIX-M1 (QA-02 M-1): it first waits until the save is idle ([waitSaveIdle]), so a heavy
+  /// project on a loaded device never races the close flush. "Still saving" (the flush outlived
+  /// the tier timeout) is waited out: that dialog leaves on its own when the save lands. "Couldn't
+  /// save your latest changes" fails at once with the save state.
+  ///
+  /// FIX-QA00-R7 (QA-02 M-14): an "export interrupted" sheet left by an earlier run (a death phase,
+  /// no fresh install) sits on top of the editor and takes the Close tap. It is dismissed with its
+  /// Close (`export-interrupted-close`; the record stays for the next export) before the close, and
+  /// again if it shows up while the editor is closing (bounded).
   Future<void> close() async {
-    await E2eApp.tap(tester, find.bySemanticsLabel('Close editor'), what: 'Close editor');
-    await E2eApp.pumpUntil(tester, () => find.byType(EditorScreen).evaluate().isEmpty, what: 'the editor to close', timeout: const Duration(seconds: 30));
+    await waitSaveIdle();
+    for (var attempt = 0;; attempt++) {
+      await _dismissExportInterrupted();
+      await E2eApp.tap(tester, find.bySemanticsLabel('Close editor'), what: 'Close editor');
+      var interrupted = false;
+      await E2eApp.pumpUntil(
+        tester,
+        () {
+          if (find.text(EditorShellStrings.leaveTitle).evaluate().isNotEmpty) {
+            throw TestFailure('Closing the editor could not save (save: ${_saveOrGone()})\n${E2eApp.describeScreen()}');
+          }
+          if (find.byType(EditorScreen).evaluate().isEmpty) return true;
+          interrupted = _exportInterruptedShown();
+          return interrupted;
+        },
+        what: 'the editor to close',
+        timeout: const Duration(seconds: 60),
+      );
+      if (!interrupted) return;
+      if (attempt >= 2) {
+        throw TestFailure('The "export interrupted" sheet kept coming back while closing\n${E2eApp.describeScreen()}');
+      }
+    }
+  }
+
+  static const _exportInterruptedClose = 'export-interrupted-close';
+
+  bool _exportInterruptedShown() =>
+      find.byKey(const ValueKey<String>(_exportInterruptedClose)).hitTestable().evaluate().isNotEmpty;
+
+  /// Closes the "export interrupted" sheet (keys `export-interrupted-close` /
+  /// `export-start-again`) when it is on screen, and waits until it is gone.
+  Future<void> _dismissExportInterrupted() async {
+    if (!_exportInterruptedShown()) return;
+    await E2eApp.tapKey(tester, _exportInterruptedClose, ifStillThere: true);
+    await E2eApp.pumpUntil(
+      tester,
+      () => find.byKey(const ValueKey<String>(_exportInterruptedClose)).evaluate().isEmpty,
+      what: 'the "export interrupted" sheet to close',
+    );
+  }
+
+  /// Waits until no save is running or pending: unsaved edits are saved now (as ⌘S would, without
+  /// the toast), then the state must reach saved/clean. A failed save fails the test at once.
+  Future<void> waitSaveIdle({Duration timeout = const Duration(seconds: 90)}) async {
+    var requested = false;
+    await E2eApp.pumpUntil(
+      tester,
+      () {
+        final save = state.save;
+        switch (save.phase) {
+          case SavePhase.clean || SavePhase.saved || SavePhase.readOnly:
+            return true;
+          case SavePhase.failed:
+            throw TestFailure('The project could not be saved before closing: $save');
+          case SavePhase.edited:
+            if (!requested) {
+              requested = true;
+              controller.saveNow().ignore();
+            }
+            return false;
+          case SavePhase.saving:
+            return false;
+        }
+      },
+      what: 'the save to be idle before closing',
+      timeout: timeout,
+    );
+  }
+
+  String _saveOrGone() {
+    try {
+      return '${state.save}';
+    } on Object {
+      return 'editor gone';
+    }
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -261,21 +350,28 @@ final class E2eEditor {
     await tester.pump();
   }
 
-  /// Taps the tool tile keyed `tile.<key>` (`split`, `tool.media`, …). At phone width the bottom
-  /// tool strip is a lazy horizontal list that builds only the tiles on screen (QA-02 s12:
-  /// `tile.tool.format`), so the strip is scrolled until the tile is built first.
+  /// Taps the tool tile keyed `tile.<key>` (`split`, `tool.media`, …). The tool surfaces are lazy
+  /// lists that build only the tiles on screen: the phone's bottom `ToolStrip` (QA-02 s12:
+  /// `tile.tool.format`), and the tablet's vertical `ToolRail`, which a landscape tablet cuts off at
+  /// the timeline split (QA-02 M-4: Format and Filters are below the fold at 2560×1600). Each of
+  /// them (and the compact `ToolGrid`) is scrolled until the tile is built; `E2eApp.tap` then
+  /// scrolls it into view.
   Future<void> tapTile(String key) async {
     final tile = find.byKey(ValueKey<String>('tile.$key'));
-    if (tile.evaluate().isEmpty) await _scrollToolStripTo(tile);
+    if (tile.evaluate().isEmpty) {
+      for (final surface in [find.byType(ToolStrip), find.byType(ToolRail), find.byType(ToolGrid)]) {
+        await _scrollToolSurfaceTo(surface, tile);
+        if (tile.evaluate().isNotEmpty) break;
+      }
+    }
     await E2eApp.tap(tester, tile, what: 'tile.$key');
   }
 
-  /// Scrolls the tool strip from its start until [tile] is built (bounded; the rail and the grid
-  /// build every tile, so they have nothing to scroll).
-  Future<void> _scrollToolStripTo(Finder tile) async {
-    final strip = find.descendant(of: find.byType(ToolStrip), matching: find.byType(Scrollable));
-    if (strip.evaluate().isEmpty) return;
-    final position = tester.state<ScrollableState>(strip.first).position;
+  /// Scrolls the first Scrollable under [surface] from its start until [tile] is built (bounded).
+  Future<void> _scrollToolSurfaceTo(Finder surface, Finder tile) async {
+    final scrollable = find.descendant(of: surface, matching: find.byType(Scrollable));
+    if (scrollable.evaluate().isEmpty) return;
+    final position = tester.state<ScrollableState>(scrollable.first).position;
     position.jumpTo(position.minScrollExtent);
     await tester.pump();
     for (var i = 0; i < 60 && tile.evaluate().isEmpty; i++) {

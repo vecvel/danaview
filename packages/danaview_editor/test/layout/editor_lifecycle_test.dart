@@ -153,15 +153,18 @@ void main() {
       expect(h.closeRequests, 1);
     });
 
-    testWidgets('a flush slower than 3 s counts as failed', (tester) async {
+    testWidgets('a flush slower than the tier timeout asks "Still saving" (FIX-M1); Leave lets it finish', (tester) async {
       final (h, shell) = await _pump(tester);
       shell.flushResult = null;
       await _tapClose(tester);
-      await tester.pump(const Duration(milliseconds: 2900));
-      expect(find.text(EditorShellStrings.leaveTitle), findsNothing);
+      // The fake engine is mid tier: 6 s (EditorLifecycle.flushTimeoutFor).
+      await tester.pump(const Duration(milliseconds: 5900));
+      expect(find.text(EditorShellStrings.stillSavingTitle), findsNothing);
+      expect(find.text(EditorShellStrings.saving), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pumpAndSettle();
-      expect(find.text(EditorShellStrings.leaveTitle), findsOneWidget);
+      expect(find.text(EditorShellStrings.stillSavingTitle), findsOneWidget);
+      expect(find.text(EditorShellStrings.leaveTitle), findsNothing);
       await tester.tap(find.text(EditorShellStrings.leave));
       await tester.pumpAndSettle();
       expect(h.closeRequests, 1);

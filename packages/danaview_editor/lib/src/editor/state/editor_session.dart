@@ -11,7 +11,11 @@
 // * UX-18 calls `planSync.resync()` for "Restart preview";
 // * UX-35's Tasks controller waits for [EditorSession.mediaResolved] before it resolves sources
 //   (FIX-QA05-D5): the session compiler's media snapshot is only warm after its first resolve pass
-//   (INT-02 refreshes it before each plan compile), and before that every media reads offline.
+//   (INT-02 refreshes it before each plan compile), and before that every media reads offline;
+// * `EditorController.close` marks the session [EditorSession.closing] before anything else
+//   (FIX-M15, QA-02 M-15): the Tasks controller drops its pending resume work at once, and media
+//   resolves that finish after that are ignored, so nothing in the close waits on a job resume or
+//   on a media resolve.
 //
 // Mutations never go through here: every edit is `EditorController.apply` / `beginTransaction`.
 //
@@ -42,6 +46,7 @@ class EditorSession {
 
   final ValueNotifier<bool> _attached = ValueNotifier<bool>(false);
   final ValueNotifier<int> _mediaResolves = ValueNotifier<int>(0);
+  final ValueNotifier<bool> _closing = ValueNotifier<bool>(false);
   EditSession? _edit;
   LoadedProject? _loaded;
   EditorEngine? _engine;
@@ -74,8 +79,22 @@ class EditorSession {
   /// compile of the attached session's compiler completes, successfully or not). A pass of a
   /// compiler that is no longer attached is ignored.
   void markMediaResolved(SessionPlanCompiler compiler) {
-    if (_disposed || !isOpen || !identical(compiler, _compiler)) return;
+    if (_disposed || !isOpen || _closing.value || !identical(compiler, _compiler)) return;
     _mediaResolves.value++;
+  }
+
+  /// True from the moment `EditorController.close` starts until the session detaches (FIX-M15);
+  /// notifies on change. Background work stops resuming while it is set.
+  ValueListenable<bool> get closing => _closing;
+
+  /// Whether the attached session is closing (see [closing]).
+  bool get isClosing => _closing.value;
+
+  /// Marks the attached session as closing (called first by `EditorController.close`). Does
+  /// nothing when nothing is attached.
+  void markClosing() {
+    if (_disposed || !isOpen || _closing.value) return;
+    _closing.value = true;
   }
 
   /// Core session (history, transactions). Throws [StateError] before open.
@@ -147,6 +166,7 @@ class EditorSession {
     _byEdit[edit] = this;
     if (!_disposed) {
       _mediaResolves.value = 0;
+      _closing.value = false;
       _attached.value = true;
     }
   }
@@ -176,6 +196,7 @@ class EditorSession {
     if (!_disposed) {
       _mediaResolves.value = 0;
       _attached.value = false;
+      _closing.value = false;
     }
   }
 
@@ -185,6 +206,7 @@ class EditorSession {
     _disposed = true;
     _attached.dispose();
     _mediaResolves.dispose();
+    _closing.dispose();
   }
 
   @override

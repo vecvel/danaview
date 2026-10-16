@@ -152,6 +152,67 @@ void main() {
       expect((await w.service.import(w.session, [PickedMedia(uri: fits, displayName: 'ok.mp4', origin: MediaOrigin.player)])).single, isA<ImportedMedia>());
     });
 
+    group('free space is checked before a URI pick is materialized (QA-02 M-17)', () {
+      test('a non-persistable URI that does not fit is refused before the platform copy', () async {
+        w = MediaWorld(platform: ImportPlatform.android, freeSpace: (_) async => ImportPolicy.freeSpaceMarginBytes + 100);
+        final uri = w.contentUri('big.mp4', bytesOf(50, 101));
+        w.port.notPersistable.add(uri);
+        expect(reasonOf((await w.service.import(w.session, [PickedMedia(uri: uri, displayName: 'big.mp4')])).single), 'diskFull');
+        expect(w.materializer.calls, isEmpty, reason: 'no temporary copy is made when it cannot fit');
+        expect(Directory(w.roots.picksDir).existsSync() ? Directory(w.roots.picksDir).listSync(recursive: true).whereType<File>() : const <File>[], isEmpty);
+        expect(w.session.project.pool.isEmpty, isTrue);
+        expect(w.service.inFlightQuickHashes, isEmpty);
+      });
+
+      test('grant budget exhausted: the managed-copy fallback is refused before the platform copy', () async {
+        w = MediaWorld(platform: ImportPlatform.android, grantBudget: 0, freeSpace: (_) async => ImportPolicy.freeSpaceMarginBytes + 100);
+        final uri = w.contentUri('big.mp4', bytesOf(51, 101));
+        expect(reasonOf((await w.service.import(w.session, [PickedMedia(uri: uri, displayName: 'big.mp4')])).single), 'diskFull');
+        expect(w.materializer.calls, isEmpty);
+      });
+
+      test('a URI that fits exactly (size + margin) is materialized and moved into media/', () async {
+        final probes = <String>[];
+        w = MediaWorld(platform: ImportPlatform.android, freeSpace: (dir) async {
+          probes.add(dir);
+          return ImportPolicy.freeSpaceMarginBytes + 100;
+        });
+        final bytes = bytesOf(52, 100);
+        final uri = w.contentUri('ok.mp4', bytes);
+        w.port.notPersistable.add(uri);
+        final a = assetOf((await w.service.import(w.session, [PickedMedia(uri: uri, displayName: 'ok.mp4')])).single);
+        expect(a.ownership, MediaOwnership.managedCopy);
+        expect(w.materializer.calls, [uri]);
+        expect(File(w.pathOf(a.locator)).readAsBytesSync(), bytes);
+        expect(probes, [w.roots.editorSupport], reason: 'checked once, before the copy; the move needs no space');
+      });
+
+      test('less free space than the margin alone: diskFull, nothing copied', () async {
+        w = MediaWorld(platform: ImportPlatform.android, freeSpace: (_) async => 10);
+        final uri = w.contentUri('big.mp4', bytesOf(53, 101));
+        w.port.notPersistable.add(uri);
+        final out = (await w.service.import(w.session, [PickedMedia(uri: uri, displayName: 'big.mp4')])).single;
+        expect(reasonOf(out), 'diskFull');
+        expect(w.materializer.calls, isEmpty);
+      });
+
+      test('a URI LUT that does not fit is refused before the platform copy', () async {
+        w = MediaWorld(platform: ImportPlatform.android, grantBudget: 0, freeSpace: (_) async => ImportPolicy.freeSpaceMarginBytes);
+        final uri = w.contentUri('look.cube', u8(_cube.codeUnits));
+        final out = (await w.service.import(w.session, [PickedMedia(uri: uri, displayName: 'look.cube')])).single;
+        expect(reasonOf(out), 'diskFull');
+        expect(w.materializer.calls, isEmpty);
+      });
+
+      test('no free-space probe: materialization proceeds as before', () async {
+        w = MediaWorld(platform: ImportPlatform.android);
+        final uri = w.contentUri('n.mp4', bytesOf(54, 3000));
+        w.port.notPersistable.add(uri);
+        expect((await w.service.import(w.session, [PickedMedia(uri: uri, displayName: 'n.mp4')])).single, isA<ImportedMedia>());
+        expect(w.materializer.calls, [uri]);
+      });
+    });
+
     test('external drop → managed copy moved out of work/drops', () async {
       w = MediaWorld();
       final drop = w.dropCopy('d1', 'dropped.mp4', bytesOf(10, 2000));

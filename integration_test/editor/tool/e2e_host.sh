@@ -125,35 +125,114 @@ grant_mic() {
 }
 
 android_tap_text() { # <text>: taps the first node with that text (uiautomator)
-  adb -s "$DEVICE" shell uiautomator dump /sdcard/e2e_ui.xml >/dev/null
-  local xml bounds
-  xml="$(adb -s "$DEVICE" shell cat /sdcard/e2e_ui.xml | tr -d '\r')"
-  bounds="$(echo "$xml" | tr '>' '\n' | grep -i "text=\"$1\"" | head -1 | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/')"
-  [[ -n "$bounds" && "$bounds" != *"<"* ]] || return 1
-  read -r x1 y1 x2 y2 <<< "$bounds"
-  adb -s "$DEVICE" shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
+  # `uiautomator dump` fails ("could not get idle state") while a notification keeps updating, so a
+  # failed or empty dump is retried a few times before giving up.
+  local xml="" bounds attempt
+  for attempt in 1 2 3 4 5; do
+    if adb -s "$DEVICE" shell uiautomator dump /sdcard/e2e_ui.xml 2>&1 | tr -d '\r' | grep -q 'dumped to'; then
+      xml="$(adb -s "$DEVICE" shell cat /sdcard/e2e_ui.xml | tr -d '\r')"
+      bounds="$(echo "$xml" | tr '>' '\n' | grep -i "text=\"$1\"" | head -1 | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/')"
+      if [[ -n "$bounds" && "$bounds" != *"<"* ]]; then
+        read -r x1 y1 x2 y2 <<< "$bounds"
+        adb -s "$DEVICE" shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
+        return 0
+      fi
+    fi
+    log "uiautomator: no \"$1\" yet (attempt $attempt)"
+    sleep 1
+  done
+  return 1
 }
 
+# Export job ids the app's engine has on record (ActiveExportStore's export-jobs.json, read with
+# run-as; the test build is debuggable), else the ids the engine logged. One per line.
+android_export_job_ids() {
+  local f ids=""
+  f="$(adb -s "$DEVICE" shell "run-as $APP_ID find . -name export-jobs.json 2>/dev/null" | tr -d '\r' | head -1)"
+  if [[ -n "$f" ]]; then
+    ids="$(adb -s "$DEVICE" shell "run-as $APP_ID cat $f" 2>/dev/null | tr -d '\r' | grep -oE '"id" *: *"ex_[^"]+"' | sed -E 's/.*"(ex_[^"]+)"/\1/' || true)"
+  fi
+  if [[ -z "$ids" ]]; then
+    ids="$(adb -s "$DEVICE" logcat -d 2>/dev/null | tr -d '\r' | grep -oE 'ex_[A-Za-z0-9_-]+' | tail -5 || true)"
+  fi
+  printf '%s\n' "$ids" | awk 'NF && !seen[$0]++'
+}
+
+# Sends the export notification's Cancel action directly: the same intent its PendingIntent holds
+# (ExportService ACTION_CANCEL + EXTRA_JOB_ID, AND-12 ExportNotification.cancelIntent). The service is
+# not exported, so the plain shell is refused unless adb runs as root; it is retried through `su 0`
+# (emulator userdebug images) and run-as (as the app).
+# Returns 0 when at least one start was accepted.
+android_send_export_cancel() {
+  local svc="$APP_ID/com.vecvel.danaview.editor.engine.export.ExportService"
+  local act="com.vecvel.danaview.editor.engine.export.CANCEL" id out sent=1
+  for id in $(android_export_job_ids); do
+    for prefix in "" "su 0" "run-as $APP_ID"; do
+      out="$(adb -s "$DEVICE" shell "$prefix am startservice -n $svc -a $act --es jobId $id" 2>&1 | tr -d '\r')"
+      if [[ "$out" != *Error* && "$out" != *Exception* && "$out" == *Starting* ]]; then
+        log "cancel sent for $id${prefix:+ ($prefix)}"; sent=0; break
+      fi
+      log "cancel for $id${prefix:+ ($prefix)} refused: $(echo "$out" | tail -1)"
+    done
+  done
+  return $sent
+}
+
+# Whether the app has any ActivityRecord (any state, finishing included) in the activity manager.
+android_has_activity() {
+  adb -s "$DEVICE" shell dumpsys activity activities | tr -d '\r' | grep -qE "ActivityRecord\{[^}]* $APP_ID/"
+}
+
+# Whether the app has a task in recents.
+android_has_recent_task() {
+  adb -s "$DEVICE" shell dumpsys activity recents | tr -d '\r' | grep -E 'Recent #|Task\{' | grep -qE "[ :=]$APP_ID([ /}]|$)"
+}
+
+# Whether the top resumed activity is the app's.
+android_app_resumed() {
+  adb -s "$DEVICE" shell dumpsys activity activities | tr -d '\r' | grep -E 'topResumedActivity|mResumedActivity|ResumedActivity:' | head -1 | grep -q "$APP_ID/"
+}
+
+# Swipes the app's task away in recents: opens recents and waits until it is on screen (the app is
+# no longer resumed), swipes the centered card up, and repeats until `dumpsys activity recents` no
+# longer lists the task. Returns 0 only when the task is confirmed gone.
 android_swipe_from_recents() {
-  local size w h
-  size="$(adb -s "$DEVICE" shell wm size | tr -d '\r' | awk '{print $NF}')"
+  local size w h attempt
+  size="$(adb -s "$DEVICE" shell wm size | tr -d '\r' | awk '{print $NF}' | tail -1)"
   w="${size%x*}"; h="${size#*x}"
-  adb -s "$DEVICE" shell input keyevent KEYCODE_APP_SWITCH
-  sleep 1.5
-  adb -s "$DEVICE" shell input swipe $((w / 2)) $((h / 2)) $((w / 2)) $((h / 10)) 200
-  sleep 1
+  for attempt in 1 2 3 4 5; do
+    adb -s "$DEVICE" shell input keyevent KEYCODE_APP_SWITCH
+    for _ in $(seq 1 20); do android_app_resumed || break; sleep 0.5; done
+    sleep 1.5 # the overview animation settles (slow under an export's load)
+    adb -s "$DEVICE" shell input swipe $((w / 2)) $((h / 2)) $((w / 2)) $((h / 20)) 250
+    for _ in $(seq 1 10); do android_has_recent_task || break; sleep 0.5; done
+    if ! android_has_recent_task; then
+      adb -s "$DEVICE" shell input keyevent KEYCODE_HOME
+      log "swipeFromRecents: task gone (attempt $attempt)"; return 0
+    fi
+    log "swipeFromRecents: task still in recents after attempt $attempt"
+  done
   adb -s "$DEVICE" shell input keyevent KEYCODE_HOME
+  return 1
 }
 
-android_destroy_activity() {
-  adb -s "$DEVICE" shell settings put global always_finish_activities 1
-  adb -s "$DEVICE" shell input keyevent KEYCODE_HOME
-  sleep 2
-  adb -s "$DEVICE" shell settings put global always_finish_activities 0
+# Destroys the activity for real while the process lives on (AND-12 detached export): the host asks
+# the in-app test to finish its activity (`do-<seq>-<action>.json`, which E2eHandshake.requestAndDie
+# answers with SystemNavigator.pop(), i.e. Activity.finish()), then waits until `dumpsys activity
+# activities` has no ActivityRecord of the app. Returns 0 only when that is confirmed.
+android_destroy_activity() { # <seq> <action>
+  local seq="$1" action="$2" attempt
+  for attempt in 1 2 3; do
+    write_shared "e2e_handshake/do-$seq-$action.json" "{\"seq\":$seq,\"do\":\"finishActivity\",\"attempt\":$attempt}"
+    for _ in $(seq 1 30); do android_has_activity || break; sleep 0.5; done
+    if ! android_has_activity; then log "destroyActivity: no ActivityRecord left (attempt $attempt)"; return 0; fi
+    log "destroyActivity: activity still recorded after attempt $attempt"
+  done
+  return 1
 }
 
 screenshot() { # <name>
-  local f="$OUT/screens/$(date +%H%M%S)-$1.png"
+  local f; f="$OUT/screens/$(date +%H%M%S)-$1.png"
   if [[ "$PLATFORM" == ios ]]; then xcrun simctl io "$DEVICE" screenshot "$f" >/dev/null 2>&1
   else adb -s "$DEVICE" exec-out screencap -p > "$f"; fi
   log "screenshot $f"
@@ -185,19 +264,33 @@ serve_one() {
       else grant_notifications || { ok=false; detail="grant failed"; }; fi ;;
     screenshot) screenshot "$(json_arg "$body" name)" ;;
     tapNotificationCancel)
+      # The deterministic path sends the Cancel action's intent itself; the shade tap (uiautomator)
+      # is the fallback when no job id is found or the intent is refused.
       if [[ "$PLATFORM" == android ]]; then
-        adb -s "$DEVICE" shell cmd statusbar expand-notifications; sleep 1.5
-        android_tap_text "Cancel" || { ok=false; detail="no Cancel button in the shade"; }
-        adb -s "$DEVICE" shell cmd statusbar collapse
+        if android_send_export_cancel; then detail="cancel intent sent"
+        else
+          adb -s "$DEVICE" shell cmd statusbar expand-notifications; sleep 1.5
+          if android_tap_text "Cancel"; then detail="tapped Cancel in the shade"
+          else ok=false; detail="no cancel intent accepted and no Cancel button in the shade"; fi
+          adb -s "$DEVICE" shell cmd statusbar collapse
+        fi
       else ok=false; detail="android only"; fi ;;
     kill) app_kill; died=true ;;
-    swipeFromRecents) android_swipe_from_recents; died=true ;;
-    destroyActivity) android_destroy_activity; died=true ;;
+    swipeFromRecents)
+      if [[ "$PLATFORM" != android ]]; then ok=false; detail="android only"
+      elif android_swipe_from_recents; then died=true
+      else ok=false; detail="the task is still in recents after 5 swipes"; fi ;;
+    destroyActivity)
+      if [[ "$PLATFORM" != android ]]; then ok=false; detail="android only"
+      elif android_destroy_activity "$seq" "$action"; then died=true; detail="activity finished"
+      else ok=false; detail="an ActivityRecord of $APP_ID is still listed"; fi ;;
     relaunch) app_foreground ;;
     *) ok=false; detail="unknown action $action" ;;
   esac
-  if [[ "$died" == false ]]; then
-    write_shared "e2e_handshake/ack-$seq-$action.json" "{\"seq\":$seq,\"ok\":$ok,\"detail\":\"$detail\"}"
+  # Actions that end the app are acked only once confirmed (for the record; the app may be gone);
+  # a failed one is acked with ok=false, which E2eHandshake.requestAndDie turns into a failure.
+  if [[ "$died" == false || "$action" == destroyActivity ]]; then
+    write_shared "e2e_handshake/ack-$seq-$action.json" "{\"seq\":$seq,\"ok\":$ok,\"detail\":\"$detail\"}" || true
   fi
   # Requests are kept for the record but renamed so they are served once.
   if [[ "$PLATFORM" == ios ]]; then mv "$(ios_shared)/e2e_handshake/$req" "$(ios_shared)/e2e_handshake/done-$req"
@@ -308,7 +401,7 @@ run_phase() {
     [[ $served -eq 3 ]] && { log "phase $phase ended the app as expected"; return 0; }
     log "phase $phase was expected to end the app (status $status)"; return 1
   fi
-  [[ $status -eq 0 ]] && log "PASS $file ${phase}" || log "FAIL $file ${phase} (see $logf)"
+  if [[ $status -eq 0 ]]; then log "PASS $file ${phase}"; else log "FAIL $file ${phase} (see $logf)"; fi
   return $status
 }
 
