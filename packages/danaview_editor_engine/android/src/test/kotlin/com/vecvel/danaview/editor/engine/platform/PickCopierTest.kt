@@ -8,7 +8,9 @@
 // diskFull, other output errors → io (never mediaOffline / permissionDenied), an unreadable source →
 // permissionDenied, a missing source → mediaOffline, a failed read → io. And danaview-io stays
 // responsive while a copy hangs: the glue's isRecording, freeBytes and probe answer during a copy,
-// which is then cancelled when the engine detaches.
+// which is then cancelled when the engine detaches. An abort fires the source's hook (the provider
+// call's CancellationSignal) so a hung query/open returns, and deletes the partial copy off the
+// caller's thread even when the copy thread never wakes.
 
 package com.vecvel.danaview.editor.engine.platform
 
@@ -44,6 +46,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.After
@@ -207,6 +210,84 @@ class PickCopierTest {
             assertEquals(emptyList<File>(), leftovers())
         } finally {
             pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun anAbortFiresTheHookSoAHungProviderCallReturnsAndFreesItsThread() {
+        // A provider query that ignores interrupts and returns only when its CancellationSignal fires.
+        for (stall in listOf(false, true)) {
+            val signal = CountDownLatch(1)
+            val returned = CountDownLatch(1)
+            val hooks = AtomicInteger()
+            val done = Done<String>()
+            val copier = if (stall) PickCopier(openTimeoutMs = 300, stallTimeoutMs = 60_000) else PickCopier(stallTimeoutMs = 60_000)
+            val handle = copier.start(intoDir, {
+                try {
+                    while (!signal.await(10, TimeUnit.SECONDS)) Unit
+                    throw IllegalStateException("OperationCanceledException") // what ContentResolver.query throws
+                } finally {
+                    returned.countDown()
+                }
+            }, { hooks.incrementAndGet(); signal.countDown() }, done.completion)
+            if (!stall) {
+                Thread.sleep(100)
+                handle.cancel()
+                handle.cancel()
+            }
+            val code = codeOf(done.await())
+            assertEquals(if (stall) EngineErrorCode.io else EngineErrorCode.cancelled, code)
+            assertTrue("the provider call returned (stall=$stall)", returned.await(5, TimeUnit.SECONDS))
+            Thread.sleep(200)
+            assertEquals(1, hooks.get())
+            assertEquals(1, done.count.get())
+            assertEquals(emptyList<File>(), leftovers())
+        }
+    }
+
+    @Test
+    fun cancelDeletesThePartialCopyOffTheCallersThreadEvenIfTheCopyThreadNeverWakes() {
+        val release = CountDownLatch(1)
+        val reading = CountDownLatch(1)
+        val stuck = object : InputStream() { // ignores close and interrupts (a hung provider pipe)
+            var sent = false
+            @Volatile var woke = false
+            override fun read(): Int = throw UnsupportedOperationException()
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (!sent) {
+                    sent = true
+                    return len.coerceAtMost(4096)
+                }
+                reading.countDown()
+                while (true) {
+                    try {
+                        release.await()
+                        woke = true
+                        return -1
+                    } catch (e: InterruptedException) {
+                        // ignored, like a binder read
+                    }
+                }
+            }
+        }
+        val watchdog = ScheduledThreadPoolExecutor(1)
+        val watchdogBusy = CountDownLatch(1)
+        try {
+            val done = Done<String>()
+            val handle = PickCopier(watchdog = watchdog, stallTimeoutMs = 60_000).start(intoDir, { PickSource("clip.mp4", null) { stuck } }, done.completion)
+            assertTrue(reading.await(10, TimeUnit.SECONDS))
+            assertEquals(1, leftovers().size)
+            watchdog.execute { watchdogBusy.await() } // hold the watchdog so the delete waits there
+            handle.cancel()
+            assertEquals(EngineErrorCode.cancelled, codeOf(done.await()))
+            assertEquals("the caller's thread deleted nothing", 1, leftovers().size)
+            watchdogBusy.countDown()
+            awaitGone(::leftovers) // deleted by the watchdog while the copy thread is still stuck
+            assertTrue("the copy thread is still stuck", !stuck.woke)
+        } finally {
+            watchdogBusy.countDown()
+            release.countDown()
+            watchdog.shutdownNow()
         }
     }
 

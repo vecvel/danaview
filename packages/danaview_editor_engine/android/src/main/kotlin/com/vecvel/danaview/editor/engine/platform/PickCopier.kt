@@ -5,14 +5,16 @@
 // carries recorder control, probe, freeBytes and stat, so the copy must never run there (M-16):
 // - Every copy runs on its own daemon thread from a process-wide cached pool (`danaview-copy-N`,
 //   background priority); danaview-io only validates and hands off. A copy whose source never
-//   unblocks keeps its thread, but never a lane.
+//   unblocks keeps its thread, but never a lane; [start]'s `onAbort` hook (a CancellationSignal in
+//   PickMaterializer) lets a stall or cancel unblock a provider query or open that is still running.
 // - A watchdog (`danaview-copy-watch`) fails a copy that makes no progress: [openTimeoutMs] until
 //   the first byte arrives (provider query + open + first read; cloud providers may download before
 //   they answer) and [stallTimeoutMs] between later reads. A stalled copy fails with `io`
 //   (retryable), closes the source to unblock the read, and deletes its directory.
 // - [start] returns a [Cancellable]: cancelled copies fail with `cancelled` and delete their
 //   directory. Completion happens exactly once, whichever of success, failure, stall or cancel
-//   comes first; the copy thread deletes the directory again when it wakes up after a stall or
+//   comes first. An abort deletes the partial directory on the watchdog thread (never the caller's,
+//   which may be main), and the copy thread deletes it again when it wakes up after a stall or
 //   cancel (an open file cannot be deleted on every platform).
 // Error codes (M-18, Pigeon `materializePick` doc): the source side maps a SecurityException or an
 // EACCES/EPERM open to `permissionDenied`, a missing item to `mediaOffline`, a failed read to `io`;
@@ -68,8 +70,15 @@ class PickCopier(
      * Copies the source [prepare] describes (run on the copy thread: it may block on a provider)
      * into `<intoDir>/<uuid>/<fileName>` and completes [done] once with the copy's absolute path.
      */
-    fun start(intoDir: File, prepare: () -> PickSource, done: Completion<String>): Cancellable {
-        val task = Task(intoDir, prepare, done)
+    fun start(intoDir: File, prepare: () -> PickSource, done: Completion<String>): Cancellable =
+        start(intoDir, prepare, {}, done)
+
+    /**
+     * As [start], and [onAbort] runs once when the copy is stalled or cancelled, so that [prepare] or
+     * [PickSource.open] blocked in a provider call (which ignores interrupts) can be unblocked.
+     */
+    fun start(intoDir: File, prepare: () -> PickSource, onAbort: () -> Unit, done: Completion<String>): Cancellable {
+        val task = Task(intoDir, prepare, onAbort, done)
         task.arm()
         try {
             executor.execute(task)
@@ -82,6 +91,7 @@ class PickCopier(
     private inner class Task(
         private val intoDir: File,
         private val prepare: () -> PickSource,
+        private val onAbort: () -> Unit,
         private val done: Completion<String>,
     ) : Runnable {
         private val finished = AtomicBoolean(false)
@@ -112,13 +122,25 @@ class PickCopier(
             }
         }
 
-        /** Fails the copy now (stall, cancel, no thread): completion once, source closed, files deleted. */
+        /**
+         * Fails the copy now (stall, cancel, no thread): completion once, source closed and its
+         * provider call cancelled, files deleted off the caller's thread (a cancel may come from main).
+         */
         fun abort(error: EngineException) {
             if (!finished.compareAndSet(false, true)) return
             watch?.cancel(false)
+            try {
+                onAbort()
+            } catch (t: Throwable) {
+                // best effort: it only unblocks a provider call
+            }
             closeQuietly(input.getAndSet(null))
             synchronized(lock) { thread?.interrupt() }
-            deleteDir()
+            try {
+                watchdog.execute { deleteDir() }
+            } catch (e: RejectedExecutionException) {
+                deleteDir()
+            }
             done.fail(error)
         }
 
