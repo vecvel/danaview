@@ -79,9 +79,12 @@ object EngineErrors {
     /**
      * Converts any [Throwable] to an [EngineException]:
      * [EngineException] as is; [EnginePigeonError] by its code; [CancellationException] →
-     * `cancelled`; [SecurityException] → `permissionDenied`; [FileNotFoundException] → `mediaOffline`;
-     * an [IOException] whose message says ENOSPC → `diskFull`, any other → `io`; [InterruptedException]
-     * → `interrupted`; anything else → `internal` with the exception's class name only.
+     * `cancelled`; [SecurityException] → `permissionDenied`; a [FileNotFoundException] whose message
+     * says EACCES / EPERM ([isPermissionDenied]) → `permissionDenied`, ENOSPC ([isNoSpace]) →
+     * `diskFull`, any other → `mediaOffline` (the file is gone); an [IOException] whose message says
+     * ENOSPC → `diskFull`, any other → `io`; [InterruptedException] → `interrupted`; anything else →
+     * `internal` with the exception's class name only. Callers that know which side failed (e.g. an
+     * output file of the engine's own, M-18) classify before this.
      */
     fun from(error: Throwable): EngineException = when (error) {
         is EngineException -> error
@@ -91,10 +94,13 @@ object EngineErrors {
         }
         is CancellationException -> EngineException(EngineErrorCode.cancelled, "cancelled", cause = error)
         is SecurityException -> EngineException(EngineErrorCode.permissionDenied, "access denied", cause = error)
-        is FileNotFoundException -> EngineException(EngineErrorCode.mediaOffline, "file not found", cause = error)
+        is FileNotFoundException -> when {
+            isPermissionDenied(error) -> EngineException(EngineErrorCode.permissionDenied, "access denied", cause = error)
+            isNoSpace(error) -> EngineException(EngineErrorCode.diskFull, "no space left on device", cause = error)
+            else -> EngineException(EngineErrorCode.mediaOffline, "file not found", cause = error)
+        }
         is IOException -> {
-            val text = error.message.orEmpty()
-            if (text.contains("ENOSPC") || text.contains("No space left", ignoreCase = true)) {
+            if (isNoSpace(error)) {
                 EngineException(EngineErrorCode.diskFull, "no space left on device", cause = error)
             } else {
                 EngineException(EngineErrorCode.io, "I/O error (${error.javaClass.simpleName})", cause = error)
@@ -102,6 +108,20 @@ object EngineErrors {
         }
         is InterruptedException -> EngineException(EngineErrorCode.interrupted, "interrupted", cause = error)
         else -> EngineException(EngineErrorCode.internal, "unexpected ${error.javaClass.simpleName}", cause = error)
+    }
+
+    /** Whether [error]'s message reports a full volume (ENOSPC / EDQUOT, "No space left on device"). */
+    fun isNoSpace(error: Throwable): Boolean {
+        val text = error.message.orEmpty()
+        return text.contains("ENOSPC") || text.contains("EDQUOT") || text.contains("No space left", ignoreCase = true) ||
+            text.contains("Disk quota exceeded", ignoreCase = true)
+    }
+
+    /** Whether [error]'s message reports a refused open (EACCES / EPERM, "Permission denied"). */
+    fun isPermissionDenied(error: Throwable): Boolean {
+        val text = error.message.orEmpty()
+        return text.contains("EACCES") || text.contains("EPERM") || text.contains("Permission denied", ignoreCase = true) ||
+            text.contains("Operation not permitted", ignoreCase = true)
     }
 
     /** The Pigeon error for [error]: code = `EngineErrorCode.name`, scrubbed message, details map. */

@@ -8,18 +8,24 @@
 // name has none, a streamed copy, and the directory deleted when the copy fails half-way.
 // - A `file://` URI or absolute path already under `<cache>/danaview/editor/work/` (an app-owned
 //   temporary copy, ARCH §9.1) is returned as is (`mediaOffline` when it is gone); any other file
-//   path is copied the same way.
+//   path is copied the same way. `file://` URIs are percent-decoded like Dart's Uri.toFilePath
+//   (M-20, Paths.normalizeFileUriOrPath); plain paths are never decoded.
 // - Other schemes: `notSupportedOnDevice`.
-// - Failures: a missing item `mediaOffline`, a revoked grant `permissionDenied`, a full disk
-//   `diskFull`, other I/O `io` (EngineErrors.from).
-// Called on danaview-io by the glue (which checked that intoDir lies inside work/). Nothing here
-// logs URIs, names or paths.
+// - The copy runs on PickCopier's own thread, never on danaview-io, with a stall timeout and
+//   cancellation ([cancelAll], called when the Flutter engine that asked detaches) (M-16).
+// - Failures (M-18): an unreadable source (revoked grant, EACCES) `permissionDenied`, a missing item
+//   `mediaOffline`, a full disk or a known source size that does not fit `diskFull`, a stall and
+//   other I/O `io`, a cancel `cancelled` (PickCopier).
+// Called on danaview-io by the glue (which checked that intoDir lies inside work/); it only
+// normalizes the URI and hands off. Nothing here logs URIs, names or paths.
 
 package com.vecvel.danaview.editor.engine.platform
 
+import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
+import com.vecvel.danaview.editor.engine.core.Cancellable
 import com.vecvel.danaview.editor.engine.core.Completion
 import com.vecvel.danaview.editor.engine.core.EngineContext
 import com.vecvel.danaview.editor.engine.core.EngineErrorCode
@@ -31,39 +37,86 @@ import com.vecvel.danaview.editor.engine.core.succeed
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.InputStream
-import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /** Copies picks into the engine's work directory (file header). */
-class PickMaterializer(private val ctx: EngineContext) {
+class PickMaterializer(
+    private val paths: () -> Paths?,
+    private val resolver: () -> ContentResolver,
+    private val copier: PickCopier = PickCopier(),
+    private val openFile: (File) -> InputStream = { it.inputStream() },
+) {
+    /** The production materializer over the process context. */
+    constructor(ctx: EngineContext, copier: PickCopier = PickCopier()) :
+        this({ ctx.pathsOrNull }, { ctx.appContext.contentResolver }, copier)
+
+    private val inFlight: MutableSet<Cancellable> = ConcurrentHashMap.newKeySet()
+
     /** Copies [uri] into a new directory under [intoDir] and completes with the copy's path. */
     fun materialize(uri: String, intoDir: File, done: Completion<String>) {
         try {
-            done.succeed(copy(uri, intoDir))
+            val prepare = sourceOf(uri) { done.succeed(it) } ?: return
+            val handle = AtomicReference<Cancellable?>(null)
+            val finished = AtomicBoolean(false)
+            val c = copier.start(intoDir, prepare) { result ->
+                finished.set(true)
+                handle.getAndSet(null)?.let { inFlight.remove(it) }
+                done(result)
+            }
+            if (!finished.get()) {
+                inFlight.add(c)
+                handle.set(c)
+                if (finished.get()) handle.getAndSet(null)?.let { inFlight.remove(it) }
+            }
         } catch (t: Throwable) {
             done.fail(EngineErrors.from(t))
         }
     }
 
-    private fun copy(uri: String, intoDir: File): String {
-        val paths = ctx.pathsOrNull ?: throw EngineErrors.notInitialized()
-        if (uri.startsWith("/") || uri.startsWith("file://")) {
-            val file = Paths.normalize(uri) ?: throw EngineErrors.invalidArgument("uri", "not an absolute path")
-            if (Paths.isInside(file, paths.work)) {
+    /** Cancels every copy this materializer started that has not completed (each fails `cancelled`). */
+    fun cancelAll() {
+        for (c in inFlight.toList()) c.cancel()
+    }
+
+    /** Copies still running (tests). */
+    val running: Int get() = inFlight.size
+
+    /**
+     * The copy source of [uri], or null after answering [asIs] with an app-owned temporary copy.
+     * Only cheap checks run here (danaview-io); the provider query and open run on the copy thread.
+     */
+    private fun sourceOf(uri: String, asIs: (String) -> Unit): (() -> PickSource)? {
+        val roots = paths() ?: throw EngineErrors.notInitialized()
+        if (uri.startsWith("/") || uri.startsWith("file:")) {
+            val file = Paths.normalizeFileUriOrPath(uri) ?: throw EngineErrors.invalidArgument("uri", "not an absolute path")
+            if (Paths.isInside(file, roots.work)) {
                 if (!file.isFile) throw EngineException(EngineErrorCode.mediaOffline, "the picked copy is gone")
-                return file.absolutePath
+                asIs(file.absolutePath)
+                return null
             }
-            if (!file.isFile) throw EngineException(EngineErrorCode.mediaOffline, "the picked file is gone")
-            return copyStream(intoDir, sanitizedName(file.name, null)) { file.inputStream() }
+            return {
+                if (!file.isFile) throw EngineException(EngineErrorCode.mediaOffline, "the picked file is gone")
+                PickSource(sanitizedName(file.name, null), file.length()) { openFile(file) }
+            }
         }
         val parsed = Uri.parse(uri)
         if (parsed.scheme != "content") throw EngineErrors.notSupported("materializing this URI scheme")
-        val resolver = ctx.appContext.contentResolver
+        return { contentSource(parsed) }
+    }
+
+    private fun contentSource(parsed: Uri): PickSource {
+        val resolver = resolver()
         var name: String? = null
+        var size: Long? = null
         try {
-            resolver.query(parsed, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            resolver.query(parsed, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
                 if (c.moveToFirst()) {
-                    val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (i >= 0 && !c.isNull(i)) name = c.getString(i)
+                    val n = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (n >= 0 && !c.isNull(n)) name = c.getString(n)
+                    val s = c.getColumnIndex(OpenableColumns.SIZE)
+                    if (s >= 0 && !c.isNull(s)) size = c.getLong(s).takeIf { it >= 0 }
                 }
             }
         } catch (e: RuntimeException) {
@@ -76,27 +129,12 @@ class PickMaterializer(private val ctx: EngineContext) {
             null
         }
         val base = name ?: parsed.lastPathSegment?.substringAfterLast('/') ?: "pick"
-        return copyStream(intoDir, sanitizedName(base, mime)) {
+        return PickSource(sanitizedName(base, mime), size) {
             resolver.openInputStream(parsed) ?: throw FileNotFoundException("no stream")
         }
     }
 
-    private fun copyStream(intoDir: File, fileName: String, open: () -> InputStream): String {
-        val dir = File(intoDir, UUID.randomUUID().toString())
-        if (!dir.mkdirs()) throw EngineException(EngineErrorCode.io, "cannot create the pick directory")
-        val out = File(dir, fileName)
-        try {
-            open().use { input -> out.outputStream().use { o -> input.copyTo(o, BUFFER) } }
-        } catch (t: Throwable) {
-            dir.deleteRecursively()
-            throw t
-        }
-        return out.absolutePath
-    }
-
     companion object {
-        private const val BUFFER = 256 * 1024
-
         /** A safe file name for [name] (as for drops), with an extension from [mime] when it has none. */
         fun sanitizedName(name: String, mime: String?): String {
             val safe = DropTarget.sanitize(name).let { if (it == "drop") "pick" else it }

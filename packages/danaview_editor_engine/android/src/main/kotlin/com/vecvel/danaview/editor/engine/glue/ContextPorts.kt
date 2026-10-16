@@ -94,7 +94,10 @@ class ContextEngineRootPort(private val ctx: EngineContext) : EngineRootPort {
         threads.io.execute { guarded { ctx.diskCache.trim(level) } }
     }
 
-    override fun setExportTexts(texts: ExportNotificationTextsMsg) = ExportNotificationTexts.set(texts)
+    /** M-19: English defaults from a default-config engine keep another engine's localized texts. */
+    override fun setExportTexts(texts: ExportNotificationTextsMsg) {
+        ExportNotificationTexts.setFromInitialize(texts)
+    }
 
     private inline fun guarded(block: () -> Unit) {
         try {
@@ -237,6 +240,12 @@ class ContextRecorderPort(private val ctx: EngineContext) : RecorderPort {
 
 /** [PlatformPort] over pickers, handoff, media access, permissions, leases and the drop target. */
 class ContextPlatformPort(private val ctx: EngineContext) : PlatformPort {
+    /** This Flutter engine's pick copies (M-16: cancelled when the engine detaches). */
+    private val materializer = PickMaterializer(ctx)
+
+    /** Cancels the pick copies this engine started (GlueRegistrar.detach). */
+    fun cancelMaterializations() = materializer.cancelAll()
+
     override fun pick(request: MediaPickRequestMsg, done: Completion<List<PickedMediaMsg>>) = ctx.picker.pick(request, done)
 
     override fun saveToPhotos(path: String, done: Completion<FileHandoffResultMsg>) = ctx.mediaStore.saveToPhotos(path, done)
@@ -269,6 +278,7 @@ class ContextPlatformPort(private val ctx: EngineContext) : PlatformPort {
 
     override fun powerState(done: Completion<PowerStateMsg>) = RenderPreviewServices.of(ctx).power.powerState(done)
 
+    /** Hands off to the copy thread at once (M-16); danaview-io stays free during the copy. */
     override fun materializePick(uri: String, intoDir: File, done: Completion<String>) =
-        PickMaterializer(ctx).materialize(uri, intoDir, done)
+        materializer.materialize(uri, intoDir, done)
 }

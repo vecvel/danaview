@@ -2,12 +2,16 @@
 //
 // The INT-07 glue on Android against fake ports: materializePick (intoDir inside `<cache>/work/`,
 // danaview-io), isRecording (danaview-io), the localized notification texts of `initialize` and
-// `start` (validated, handed to the port before the job starts), the recording bridge (one
+// `start` (handed to the port before the job starts; M-19: a blank or over-long string falls back to
+// its English default for that string only, and a default-config `initialize` keeps the localized
+// texts another engine set), the recording bridge (one
 // `recordingChanged` event per change, the preview mute), and the notification text formatting.
 
 package com.vecvel.danaview.editor.engine.glue
 
+import android.content.ContextWrapper
 import com.vecvel.danaview.editor.engine.core.Completion
+import com.vecvel.danaview.editor.engine.core.EngineContext
 import com.vecvel.danaview.editor.engine.core.EventHub
 import com.vecvel.danaview.editor.engine.core.succeed
 import com.vecvel.danaview.editor.engine.export.ExportNotification
@@ -36,7 +40,7 @@ class Int07GlueTest {
     private var recording = false
     private val platformPort = object : PlatformPort by FakePlatformPort(calls) {
         override fun materializePick(uri: String, intoDir: File, done: Completion<String>) =
-            calls.call("materializePick", uri, intoDir.path, done = done)
+            calls.call("materializePick", uri, intoDir.invariantSeparatorsPath, done = done)
     }
     private val recorderPort = object : RecorderPort by FakeRecorderPort(calls) {
         override fun isRecording(done: Completion<Boolean>) {
@@ -136,9 +140,40 @@ class Int07GlueTest {
         call<Unit> { engine.initialize(config, it) }.value()
         assertEquals(listOf("setExportTexts", "installRoots"), calls.names())
         assertEquals("Abbrechen", texts.single().cancel)
-        val bad = EngineConfigMsg(cacheRoot = TestRoots.CACHE, supportRoot = TestRoots.SUPPORT, exportTexts = localized(cancel = " "))
-        call<Unit> { engine.initialize(bad, it) }.assertError("internal")
-        assertEquals(1, texts.size)
+    }
+
+    @Test
+    fun initializeFallsBackPerStringInsteadOfFailing() {
+        val bad = localized(cancel = " ").copy(more = "", doneChannelName = "x".repeat(257), workTitle = "y".repeat(256))
+        val config = EngineConfigMsg(cacheRoot = TestRoots.CACHE, supportRoot = TestRoots.SUPPORT, exportTexts = bad)
+        call<Unit> { engine.initialize(config, it) }.value()
+        assertEquals(listOf("setExportTexts", "installRoots"), calls.names())
+        val got = texts.single()
+        assertEquals(ExportNotificationTexts.DEFAULTS.cancel, got.cancel)
+        assertEquals(ExportNotificationTexts.DEFAULTS.more, got.more)
+        assertEquals(ExportNotificationTexts.DEFAULTS.doneChannelName, got.doneChannelName)
+        assertEquals("y".repeat(256), got.workTitle) // the limit itself is accepted
+        assertEquals("Export · {percent} %", got.exportingProgress) // the valid strings stay localized
+    }
+
+    @Test
+    fun aDefaultConfigEngineKeepsTheLocalizedTextsOfAnother() {
+        val port = ContextEngineRootPort(EngineContext(ContextWrapper(null), fake.threads))
+        port.setExportTexts(ExportNotificationTexts.withFallbacks(localized()))
+        assertEquals("Abbrechen", ExportNotificationTexts.current.cancel)
+        // A second Flutter engine initializes with the default (English) config: no process-wide reset.
+        port.setExportTexts(ExportNotificationTexts.DEFAULTS)
+        assertEquals("Abbrechen", ExportNotificationTexts.current.cancel)
+        assertEquals(false, ExportNotificationTexts.setFromInitialize(ExportNotificationTexts.DEFAULTS))
+        // Other localized texts from an initialize still apply; so do English texts an export start carries.
+        assertEquals(true, ExportNotificationTexts.setFromInitialize(localized(cancel = "Annuler")))
+        assertEquals("Annuler", ExportNotificationTexts.current.cancel)
+        ExportNotificationTexts.set(ExportNotificationTexts.DEFAULTS)
+        assertEquals(ExportNotificationTexts.DEFAULTS, ExportNotificationTexts.current)
+        // set() applies the per-string fallbacks too.
+        ExportNotificationTexts.set(localized(cancel = ""))
+        assertEquals(ExportNotificationTexts.DEFAULTS.cancel, ExportNotificationTexts.current.cancel)
+        assertEquals("+{count} weitere", ExportNotificationTexts.current.more)
     }
 
     @Test
@@ -152,8 +187,11 @@ class Int07GlueTest {
         assertEquals(listOf("setExportTexts", "start", "start"), calls.names())
         call<String> {
             export.start(plan, settings, "$work/e.mp4", "Trip", DetachedHandoffMsg.SAVE_TO_GALLERY, localized(cancel = "x".repeat(300)), it)
-        }.assertError("internal")
-        assertEquals(1, texts.size)
+        }.value()
+        assertEquals(listOf("setExportTexts", "start", "start", "setExportTexts", "start"), calls.names())
+        assertEquals(2, texts.size)
+        assertEquals(ExportNotificationTexts.DEFAULTS.cancel, texts[1].cancel) // that string only
+        assertEquals("+{count} weitere", texts[1].more)
     }
 
     @Test

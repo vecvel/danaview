@@ -1,5 +1,5 @@
 // OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-07: the localized export notification texts
-// of `initialize`, validated and handed to the port)
+// of `initialize`, handed to the port; M-19: a bad string falls back to its default, never a failure)
 //
 // `EngineHostApi` glue (ARCH §12.1, §12.6). Threads: initialize, capabilities, compatibility,
 // probe and freeBytes on danaview-io; trimCaches fans out to the cache owners' lanes.
@@ -13,6 +13,7 @@ import com.vecvel.danaview.editor.engine.pigeon.CapabilitiesMsg
 import com.vecvel.danaview.editor.engine.pigeon.CompatibilityMsg
 import com.vecvel.danaview.editor.engine.pigeon.EngineConfigMsg
 import com.vecvel.danaview.editor.engine.pigeon.EngineHostApi
+import com.vecvel.danaview.editor.engine.pigeon.ExportNotificationTextsMsg
 import com.vecvel.danaview.editor.engine.pigeon.ProbeMsg
 import com.vecvel.danaview.editor.engine.pigeon.ResolvedMediaMsg
 
@@ -24,11 +25,12 @@ class EngineHostApiImpl(
 ) : EngineHostApi {
     override fun initialize(config: EngineConfigMsg, callback: (Result<Unit>) -> Unit) {
         lateinit var paths: Paths
+        var texts: ExportNotificationTextsMsg? = null
         dispatch.async(threads.io, callback, check = {
             paths = Paths.fromDart(config.cacheRoot, config.supportRoot)
-            config.exportTexts?.let { Check.notificationTexts(it) }
+            texts = config.exportTexts?.let { Check.notificationTexts(it) }
         }) { done ->
-            config.exportTexts?.let { port.setExportTexts(it) }
+            texts?.let { port.setExportTexts(it) }
             port.installRoots(paths, done)
         }
     }
