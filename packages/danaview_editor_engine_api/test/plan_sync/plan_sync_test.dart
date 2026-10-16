@@ -319,7 +319,7 @@ void main() {
       final done = sync.flush().then((_) => flushed = true);
       await Future<void>.delayed(Duration.zero);
       expect(flushed, isFalse, reason: 'flush() waits for the pending patch');
-      gate!.complete();
+      gate.complete();
       await done;
       expect(sync.busy, isFalse);
       expect(sync.lastAck!.rev, 2);

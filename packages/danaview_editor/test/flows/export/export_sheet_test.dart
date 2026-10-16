@@ -293,6 +293,23 @@ void main() {
       expect(rig.harness.prefs.exportNotificationPermissionAsked, isTrue);
     });
 
+    testWidgets('UX-39: an unanswered notification dialog does not hold the export; the progress says so calmly', (tester) async {
+      final rig = ExportRig();
+      rig.fake.access.onRequestNotificationPermission = () => Completer<bool>().future;
+      await rig.pump(tester);
+      await rig.openSheet(tester);
+      await rig.tapKey(tester, 'export-start');
+      await rig.tapKey(tester, 'export-notice-continue');
+      expect(_key('export-running'), findsNothing, reason: 'waiting for the dialog');
+      await tester.pump(ExportEnvironment.defaultNotificationPermissionTimeout + const Duration(milliseconds: 100));
+      await rig.pumpSome(tester);
+      expect(_key('export-running'), findsOneWidget);
+      expect(rig.started, hasLength(1));
+      expect(find.text(ExportStrings.notificationsUnanswered), findsOneWidget);
+      expect(find.text(ExportStrings.backgroundCopy(BackgroundExportKind.foregroundService)), findsNothing);
+      expectNoOverflow(tester);
+    });
+
     testWidgets('iPhone: the first-export notice carries the pause copy', (tester) async {
       final rig = ExportRig(platform: TargetPlatform.iOS, caps: rigCaps.copyWith(backgroundKind: BackgroundExportKind.paused));
       await rig.pump(tester, surface: _iosPhone);

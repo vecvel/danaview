@@ -8,7 +8,7 @@
 //    in `EditorPrefs`).
 // 2. `start()`: free space against the estimate (+ one segment on iOS), the first-export notice
 //    (background copy and, on Android, the notification explainer and permission; the permission
-//    request is bounded by `notificationPermissionTimeout`, after which the export goes on without
+//    request is bounded by `ExportEnvironment.notificationPermissionTimeout`, after which the export goes on without
 //    notifications and the progress view says so once, UX-39), the sprite
 //    pre-pass (API-04, "Preparing"), `compileExport` (CORE-33; original media only), the engine's
 //    `preflight` (warnings the user confirms; with `layersVsResolution` the free-space check is
@@ -109,7 +109,6 @@ class ExportController extends StateNotifier<ExportUiState> {
     VoidCallback Function(void Function(EditorState state) listener)? listenEditor,
     ExportHost Function()? host,
     ExportUiState initial = const ExportUiIdle(),
-    this.notificationPermissionTimeout = defaultNotificationPermissionTimeout,
   })  : _session = session,
         _engine = engine,
         _prefs = prefs,
@@ -121,13 +120,6 @@ class ExportController extends StateNotifier<ExportUiState> {
 
   /// The project.
   final ProjectId id;
-
-  /// How long the start waits for the notification permission dialog (Android) before it goes on
-  /// without notifications (UX-39): an unanswered dialog must not hold the export at "Preparing".
-  final Duration notificationPermissionTimeout;
-
-  /// The default of [notificationPermissionTimeout].
-  static const Duration defaultNotificationPermissionTimeout = Duration(seconds: 10);
 
   final EditorSession _session;
   final EditorEngine _engine;
@@ -502,11 +494,11 @@ class ExportController extends StateNotifier<ExportUiState> {
     if (s.explainNotifications) {
       await _prefs.markExportNotificationPermissionAsked();
       try {
-        await _engine.access.requestNotificationPermission().timeout(notificationPermissionTimeout);
+        await _engine.access.requestNotificationPermission().timeout(_e.notificationPermissionTimeout);
       } on TimeoutException {
         // Nobody answered the system dialog (or the platform never reported back): export without
         // notifications rather than wait forever; a late answer is ignored.
-        debugPrint('[Export] Notification permission unanswered after ${notificationPermissionTimeout.inSeconds} s; exporting without notifications');
+        debugPrint('[Export] Notification permission unanswered after ${_e.notificationPermissionTimeout.inSeconds} s; exporting without notifications');
         _notificationsUnanswered = true;
       } on Object catch (e) {
         debugPrint('[Export] Notification permission request failed: ${e.runtimeType}');

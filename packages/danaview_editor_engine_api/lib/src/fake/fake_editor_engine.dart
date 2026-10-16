@@ -1235,8 +1235,19 @@ final class FakeMediaAccess implements MediaAccess {
   @override
   Future<int> remainingGrantBudget() async => grantBudget;
 
+  /// Answers [requestNotificationPermission] when set (a test holds the dialog open with a
+  /// completer that never completes); granted at once otherwise.
+  Future<bool> Function()? onRequestNotificationPermission;
+
+  /// How many times the notification permission was requested.
+  int notificationPermissionRequests = 0;
+
   @override
-  Future<bool> requestNotificationPermission() async => true;
+  Future<bool> requestNotificationPermission() async {
+    notificationPermissionRequests++;
+    final answer = onRequestNotificationPermission;
+    return answer == null ? true : answer();
+  }
 
   bool _inWork(String path) => path.startsWith('$workRoot/') && !path.split('/').contains('..');
 
