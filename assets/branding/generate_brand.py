@@ -2,8 +2,12 @@
 """Danaview brand + platform icon generator (final mark: 6B page-fold Dv).
 
 Everything is hand-written geometry on a 1024 grid; no fonts or downloads.
-Run from anywhere:  python3 assets/branding/generate_brand.py
-Needs /opt/homebrew/bin/rsvg-convert and magick.
+Run from anywhere:  python3 assets/branding/generate_brand.py [part ...]
+Parts: icons (masters, products, platform icons, preview sheet), wordmark, sheet
+(brand_sheet.png), store (Play feature graphic). No part means all of them.
+Needs /opt/homebrew/bin/rsvg-convert and magick. Text is outlined from the bundled
+Figtree TTFs (packages/danaview_ui_kit/fonts) by ttf_outline.py, so no SVG here
+depends on an installed font.
 
 Construction (1024 grid, glyph centred on 512,512):
   page        x 288-736, y 288-736 (448 square)
@@ -17,7 +21,7 @@ Construction (1024 grid, glyph centred on 512,512):
               set 20 in from AB and a 4 round stroke -> 40 visible gap.
   flap tone   #C9CBFF on the indigo tile (or the product accent).
 """
-import math, os, subprocess, base64, shutil, tempfile
+import math, os, subprocess, base64, shutil, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -33,6 +37,32 @@ PRODUCTS = [  # file, name, flap colour
     ("photos", "Photos", "#F59E0B"),
     ("docs", "Docs", "#10B981"),
 ]
+sys.path.insert(0, HERE)
+from ttf_outline import Font  # noqa: E402
+
+FONT_DIR = os.path.join(ROOT, "packages", "danaview_ui_kit", "fonts")
+_WEIGHTS = {400: "Regular", 500: "Medium", 600: "SemiBold", 700: "Bold"}
+_FONTS = {}
+
+
+def figtree(weight=400):
+    if weight not in _FONTS:
+        _FONTS[weight] = Font(os.path.join(FONT_DIR, f"Figtree-{_WEIGHTS[weight]}.ttf"))
+    return _FONTS[weight]
+
+
+def text_path(t, x, y, size, fill, weight=400, anchor="start", tracking=0.0, extra=""):
+    """Outlined text as one <path>. x is the pen origin (start), the ink centre (middle) or the
+    ink right edge (end); y is the baseline. tracking is in em."""
+    run = figtree(weight).layout(t.replace("&amp;", "&"), size, tracking)
+    if anchor == "middle":
+        x -= (run.ink[0] + run.ink[2]) / 2
+    elif anchor == "end":
+        x -= run.ink[2]
+    return f'<path d="{run.path(x, y)}" fill="{fill}"{extra}/>'
+
+
+# Font stack only for the preview sheet labels (not a brand asset).
 FONT = "Figtree, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 # ---------------------------------------------------------------- geometry
@@ -164,17 +194,40 @@ def mono_svg(uid, color="currentColor"):
     return svg(glyph(uid, page=color, flap=color))
 
 
+# Lockup construction (BRAND.md): tile side WM_TILE, clear space 1/4 of it on every edge, a gap of
+# 1/3 of it between the tile and the word's ink, and the word's cap height equal to the page
+# height inside the tile (448/1024), so the cap top and baseline line up with the page edges.
+WM_TILE = 128
+WM_CLEAR = WM_TILE / 4
+WM_GAP = WM_TILE / 3
+WM_TRACK = -0.01  # em
+
+
+def wordmark_run():
+    bold = figtree(700)
+    cap = (BB - T) / 1024 * WM_TILE
+    return bold.layout("Danaview", cap * bold.upm / bold.cap_height, WM_TRACK), cap
+
+
 def lockup(uid, layout, text_color):
     clip = f'<clipPath id="lc{uid}"><rect width="1024" height="1024" rx="229"/></clipPath>'
     mark = f'<g clip-path="url(#lc{uid})">{icon_body(uid)}</g>'
+    run, cap = wordmark_run()
+    k = WM_TILE / 1024
     if layout == "horizontal":
-        w, h = 600, 160
-        body = (f'<defs>{clip}</defs><g transform="translate(16 16) scale(0.125)">{mark}</g>'
-                f'<text x="170" y="103" fill="{text_color}" font-family="{FONT}" font-size="64" font-weight="700" letter-spacing="-0.6">Danaview</text>')
+        tx, ty = WM_CLEAR, WM_CLEAR
+        base = ty + BB * k                      # baseline on the page bottom
+        ink_x = tx + WM_TILE + WM_GAP
+        w = math.ceil(ink_x + run.ink_width + WM_CLEAR)
+        h = math.ceil(WM_TILE + 2 * WM_CLEAR)
     else:
-        w, h = 360, 290
-        body = (f'<defs>{clip}</defs><g transform="translate(116 16) scale(0.125)">{mark}</g>'
-                f'<text x="180" y="232" text-anchor="middle" fill="{text_color}" font-family="{FONT}" font-size="54" font-weight="700" letter-spacing="-0.5">Danaview</text>')
+        w = math.ceil(run.ink_width + 2 * WM_CLEAR)
+        tx, ty = (w - WM_TILE) / 2, WM_CLEAR
+        base = ty + WM_TILE + WM_GAP + cap      # cap top a gap below the tile
+        ink_x = (w - run.ink_width) / 2
+        h = math.ceil(base - run.ink[1] + WM_CLEAR)
+    body = (f'<defs>{clip}</defs><g transform="translate({f(tx)} {f(ty)}) scale({f(k)})">{mark}</g>'
+            f'<path d="{run.path(ink_x, base, ink_left=True)}" fill="{text_color}"/>')
     return svg(body, w, h)
 
 
@@ -202,9 +255,26 @@ def tmp_svg(tmp, name, text):
 
 
 # ---------------------------------------------------------------- main
-def main():
+def main(parts):
     tmp = tempfile.mkdtemp(prefix="dvbrand")
     br = "assets/branding"
+    if "icons" in parts:
+        build_icons(tmp, br)
+    if "wordmark" in parts:
+        build_wordmarks(br)
+    if "sheet" in parts:
+        build_brand_sheet(tmp)
+    if "store" in parts:
+        build_feature_graphic(tmp)
+    shutil.rmtree(tmp)
+
+
+def build_wordmarks(br):
+    for layout in ("horizontal", "stacked"):
+        write(f"{br}/wordmark/danaview_lockup_{layout}.svg", lockup("w" + layout[0], layout, "#FFFFFF"))
+        write(f"{br}/wordmark/danaview_lockup_{layout}_light.svg", lockup("l" + layout[0], layout, "#0F1118"))
+
+def build_icons(tmp, br):
     # 1. masters (same filenames and roles as before)
     icon = write(f"{br}/danaview_icon.svg", svg(icon_body("i")))
     rounded = write(f"{br}/danaview_icon_rounded.svg", tile_svg("r", 100))
@@ -217,9 +287,6 @@ def main():
     render(bgp, os.path.join(ROOT, br, "danaview_background.png"), 1024, opaque=True)
     for key, name, col in PRODUCTS:
         write(f"{br}/products/{key}.svg", svg(icon_body("p" + key, flap=col)))
-    for layout in ("horizontal", "stacked"):
-        write(f"{br}/wordmark/danaview_lockup_{layout}.svg", lockup("w" + layout[0], layout, "#FFFFFF"))
-        write(f"{br}/wordmark/danaview_lockup_{layout}_light.svg", lockup("l" + layout[0], layout, "#0F1118"))
 
     # 2. platform icons
     ios = "ios/Runner/Assets.xcassets/AppIcon.appiconset"
@@ -250,10 +317,8 @@ def main():
         frames.append(o)
     write_ico(tmp, frames, sizes, os.path.join(ROOT, "windows/runner/resources/app_icon.ico"))
 
-    # 3. sheets
+    # 3. preview sheet
     build_preview(tmp, icon, rounded)
-    build_brand_sheet(tmp)
-    shutil.rmtree(tmp)
 
 
 def write_ico(tmp, frames, sizes, out):
@@ -326,10 +391,9 @@ def build_preview(tmp, icon, rounded):
 
 
 def build_brand_sheet(tmp):
-    W, H = 2400, 3060
+    W, H = 2400, 3380
     P = [f'<rect width="{W}" height="{H}" fill="#07080C"/>']
-    tx = lambda x, y, s, t, c="#E6E7EE", w=400, a="start": P.append(
-        f'<text x="{x}" y="{y}" fill="{c}" font-family="{FONT}" font-size="{s}" font-weight="{w}" text-anchor="{a}">{t}</text>')
+    tx = lambda x, y, s, t, c="#E6E7EE", w=400, a="start": P.append(text_path(t, x, y, s, c, w, a))
     tx(120, 170, 76, "Danaview", "#FFFFFF", 700)
     tx(120, 236, 30, "Brand sheet · mark 6B page-fold Dv · v1", "#9A9DB0")
     # master
@@ -348,7 +412,7 @@ def build_brand_sheet(tmp):
              f'x2="{f(B[0] + 120 * math.cos(math.radians(FOLD_DEG)))}" y2="{f(B[1] + 120 * math.sin(math.radians(FOLD_DEG)))}" stroke="#06B6D4" stroke-width="4"/>')
     g.append(f'<circle cx="{BOWL_C[0]}" cy="{BOWL_C[1]}" r="{BOWL_R}" fill="none" stroke="#8B5CF6" stroke-width="3" stroke-dasharray="6 6"/>')
     for (x, y), n in ((A, "A"), (B, "B"), (C, "C")):
-        g.append(f'<circle cx="{f(x)}" cy="{f(y)}" r="9" fill="#FFFFFF"/><text x="{f(x + 16)}" y="{f(y - 14)}" fill="#FFFFFF" font-family="{FONT}" font-size="34">{n}</text>')
+        g.append(f'<circle cx="{f(x)}" cy="{f(y)}" r="9" fill="#FFFFFF"/>{text_path(n, x + 16, y - 14, 34, "#FFFFFF", 600)}')
     P.append(f'<g transform="translate({cx0} {cy0}) scale({k})">{"".join(g)}</g>')
     notes = ["Construction on a 1024 grid",
              f"Page 448 square (288 to 736), spine corners r {CORNER_R}",
@@ -392,12 +456,31 @@ def build_brand_sheet(tmp):
         tx(x, y + 400, 26, name, "#E6E7EE", 600); tx(x, y + 432, 22, col if key != "player" else "#C9CBFF (master)", "#7D8094")
     # wordmark
     y = 2150
-    tx(120, y, 34, "Wordmark · Figtree 700", "#FFFFFF", 700)
-    P.append(f'<g transform="translate(120 {y + 30}) scale(1.4)">{lockup("bsh", "horizontal", "#FFFFFF").split(">", 1)[1].rsplit("</svg>", 1)[0]}</g>')
-    P.append(f'<rect x="1100" y="{y + 30}" width="1180" height="260" rx="24" fill="#F3F3F7"/>')
-    P.append(f'<g transform="translate(1140 {y + 50}) scale(1.4)">{lockup("bsl", "horizontal", "#0F1118").split(">", 1)[1].rsplit("</svg>", 1)[0]}</g>')
+    tx(120, y, 34, "Wordmark · Figtree 700, outlined, tracking −1%", "#FFFFFF", 700)
+    inner = lambda uid, layout, col: lockup(uid, layout, col).split(">", 1)[1].rsplit("</svg>", 1)[0]
+    size = lambda layout: [int(lockup("x", layout, "#000").split(f'{a}="', 1)[1].split('"', 1)[0]) for a in ("width", "height")]
+
+    def panel(x, yy, layout, k, bgc, col, uid):
+        w, h = size(layout)
+        P.append(f'<rect x="{x}" y="{yy}" width="{f(w * k)}" height="{f(h * k)}" rx="20" fill="{bgc}" stroke="#2A2D3D" stroke-width="2"/>')
+        P.append(f'<g transform="translate({x} {yy}) scale({k})">{inner(uid, layout, col)}</g>')
+        return w * k
+
+    hw = panel(120, y + 30, "horizontal", 1.3, "#0F1118", "#FFFFFF", "bsh")
+    panel(120 + hw + 48, y + 30, "horizontal", 1.3, "#F3F3F7", "#0F1118", "bsl")
+    y2 = y + 330
+    sw = panel(120, y2, "stacked", 1.0, "#0F1118", "#FFFFFF", "bss")
+    panel(120 + sw + 48, y2, "stacked", 1.0, "#F3F3F7", "#0F1118", "bst")
+    notes = ["Lockup construction (tile side t)",
+             "Cap height = page height (448/1024 t); cap top and baseline sit on the page edges",
+             "Gap from tile to the word's ink = t/3 (beside it, or below it when stacked)",
+             "Clear space = t/4 on every edge, measured from the tile and the ink",
+             "Outlined paths from the bundled Figtree Bold, kerning from its GPOS",
+             "Files: wordmark/danaview_lockup_{horizontal,stacked}[_light].svg"]
+    for i, n in enumerate(notes):
+        tx(1100, y2 + 50 + i * 44, 26 if i else 30, n, "#FFFFFF" if i == 0 else "#A9ACBF", 700 if i == 0 else 400)
     # don'ts
-    y = 2560
+    y = 2880
     tx(120, y, 34, "Don't", "#FFFFFF", 700)
     donts = [("rotate(20 512 512)", "rotate it"), ("translate(512 512) scale(1.35 0.8) translate(-512 -512)", "stretch it"),
              ("", "recolour the page"), ("", "add a play triangle")]
@@ -417,5 +500,72 @@ def build_brand_sheet(tmp):
     subprocess.run([RSVG, "-o", os.path.join(ROOT, "assets/branding/brand_sheet.png"), p], check=True)
 
 
+# ---------------------------------------------------------------- store
+FEATURE_COPY = {
+    "eyebrow": "VECVEL PRESENTS",
+    "tagline": ("Your photos, videos and docs.", "View, edit and create \u2014 all in one place."),
+    "pills": ("VIEW &amp; PLAY", "EDIT &amp; CREATE", "PRIVATE BY DEFAULT"),
+}
+
+
+def feature_graphic_svg():
+    """Google Play feature graphic, 1024 x 500. Everything important stays at least 64 px from
+    the edges and out of the centre-bottom (x 352 to 672, y 380 and below)."""
+    W, H = 1024, 500
+    X = 80                                   # left text column
+    P = ['<defs>'
+         '<radialGradient id="fgGlow" gradientUnits="userSpaceOnUse" cx="800" cy="250" r="420">'
+         '<stop offset="0" stop-color="#5E60EE" stop-opacity="0.34"/><stop offset="0.45" stop-color="#5E60EE" stop-opacity="0.12"/>'
+         '<stop offset="1" stop-color="#5E60EE" stop-opacity="0"/></radialGradient>'
+         '<radialGradient id="fgGlow2" gradientUnits="userSpaceOnUse" cx="120" cy="40" r="520">'
+         '<stop offset="0" stop-color="#818CF8" stop-opacity="0.07"/><stop offset="1" stop-color="#818CF8" stop-opacity="0"/></radialGradient>'
+         '<filter id="fgShadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">'
+         '<feGaussianBlur in="SourceAlpha" stdDeviation="18"/><feOffset dy="14" result="b"/>'
+         '<feFlood flood-color="#000" flood-opacity="0.45"/><feComposite in2="b" operator="in"/></filter>'
+         '<clipPath id="fgTile"><rect width="1024" height="1024" rx="229"/></clipPath>'
+         '</defs>',
+         f'<rect width="{W}" height="{H}" fill="#07080C"/>',
+         f'<rect width="{W}" height="{H}" fill="url(#fgGlow)"/><rect width="{W}" height="{H}" fill="url(#fgGlow2)"/>']
+    # icon on the right: 232 tile centred on (800, 250)
+    side = 232
+    k = side / 1024
+    ix, iy = 800 - side / 2, 250 - side / 2
+    P.append(f'<rect x="{f(ix)}" y="{f(iy)}" width="{side}" height="{side}" rx="{f(229 * k)}" fill="#000" filter="url(#fgShadow)"/>')
+    P.append(f'<g transform="translate({f(ix)} {f(iy)}) scale({f(k)})"><g clip-path="url(#fgTile)">{icon_body("fg")}</g></g>')
+    # left column
+    P.append(text_path(FEATURE_COPY["eyebrow"], X, 132, 15, "#818CF8", 600, tracking=0.2))
+    run = figtree(700).layout("Danaview", 92, WM_TRACK)
+    P.append(f'<path d="{run.path(X, 222, ink_left=True)}" fill="#FFFFFF"/>')
+    l1, l2 = FEATURE_COPY["tagline"]
+    P.append(text_path(l1, X, 274, 24, "#C3C6D6", 500))
+    P.append(text_path(l2, X, 306, 24, "#C3C6D6", 500))
+    # pills
+    px, top, ph, pad, gap, size = X, 336, 34, 16, 10, 12.5
+    for label in FEATURE_COPY["pills"]:
+        r = figtree(600).layout(label.replace("&amp;", "&"), size, 0.1)
+        w = r.ink_width + 2 * pad
+        P.append(f'<rect x="{f(px)}" y="{top}" width="{f(w)}" height="{ph}" rx="{ph / 2}" fill="#5E60EE" fill-opacity="0.14" '
+                 f'stroke="#818CF8" stroke-opacity="0.38" stroke-width="1.2"/>')
+        cap = 0.7 * size
+        P.append(f'<path d="{r.path(px + pad, top + ph / 2 + cap / 2, ink_left=True)}" fill="#D6D8FF"/>')
+        px += w + gap
+    return svg("".join(P), W, H)
+
+
+def build_feature_graphic(tmp):
+    src = write("assets/branding/store/feature_graphic.svg", feature_graphic_svg())
+    out = os.path.join(ROOT, "android/fastlane/metadata/android/en-US/images/featureGraphic.png")
+    raw = os.path.join(tmp, "fg.png")
+    subprocess.run([RSVG, "-w", "1024", "-h", "500", "-o", raw, src], check=True)
+    subprocess.run([MAGICK, raw, "-background", "#07080C", "-alpha", "remove", "-alpha", "off",
+                    "-strip", "-define", "png:color-type=2", f"PNG24:{out}"], check=True)
+
+
+PARTS = ("icons", "wordmark", "sheet", "store")
+
 if __name__ == "__main__":
-    main()
+    asked = sys.argv[1:] or list(PARTS)
+    bad = [a for a in asked if a not in PARTS]
+    if bad:
+        sys.exit(f"unknown part(s) {bad}; choose from {PARTS}")
+    main(asked)
