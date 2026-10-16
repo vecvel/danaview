@@ -9,6 +9,9 @@
 // Rules: `stop` and `cancel` are idempotent and the first one wins. `stop` after `cancel` throws
 // `EngineCancelled`; `cancel` after `stop` is a no-op (the finished file belongs to the caller).
 // Either one closes both streams and releases the event route.
+//
+// INT-07: `isRecording` asks native (`RecorderHostApi.isRecording`) and `recordingChanged` is the
+// engine-wide `recordingChanged` event stream; native mutes every preview session meanwhile.
 
 import 'dart:async';
 
@@ -41,6 +44,12 @@ final class MobileVoiceRecorder implements VoiceRecorder {
     final id = await _channels.invoke(() => _channels.recorder.start(outputPath));
     return MobileRecordingSession._(_channels, id);
   }
+
+  @override
+  Future<bool> isRecording() => _channels.invoke(_channels.recorder.isRecording);
+
+  @override
+  Stream<bool> get recordingChanged => _channels.router.recording;
 }
 
 /// A recording in progress (ARCH §12.4, ENG-03). See the file header for the rules.

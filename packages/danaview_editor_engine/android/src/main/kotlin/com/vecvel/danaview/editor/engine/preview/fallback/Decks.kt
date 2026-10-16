@@ -753,6 +753,14 @@ internal class AudioDeck(
         if (this::sink.isInitialized) sink.leadUs = us
     }
 
+    /**
+     * Mutes the deck's output while a voice recording captures (INT-07). The lane gain lives in the
+     * envelope processor, so the player volume is free for this switch.
+     */
+    fun setMuted(muted: Boolean) {
+        player.volume = if (muted) 0f else 1f
+    }
+
     /** Seeks to item [i] at plan time [t]. */
     fun position(i: Int, t: Long) {
         val item = items[i]

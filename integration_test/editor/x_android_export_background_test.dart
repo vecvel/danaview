@@ -43,6 +43,7 @@ Future<E2eEditor> _startLongExport(WidgetTester tester, String tag) async {
     () {
       final s = E2eExport.state(ed);
       if (s is ExportUiNotice) E2eExport.controller(ed).confirmNotice();
+      if (s is ExportUiWarnings) E2eExport.controller(ed).confirmWarnings();
       return s is ExportUiRunning && s.fraction > 0.05;
     },
     what: 'the export to run',

@@ -138,7 +138,7 @@ final class GlueQueueHopTests: XCTestCase {
         check("preflight", queue: "export") { api.preflight(plan: bytes("{}"), settings: encodeSettings(), completion: $0) }
         check("exportStart", queue: "export") {
             api.start(
-                plan: bytes("{}"), settings: encodeSettings(), outputPath: output, title: "Trip", whenDetached: .saveToGallery,
+                plan: bytes("{}"), settings: encodeSettings(), outputPath: output, title: "Trip", whenDetached: .saveToGallery, texts: nil,
                 completion: $0)
         }
         XCTAssertEqual(fake.lastOutputURL?.path, URL(fileURLWithPath: output).standardizedFileURL.path)

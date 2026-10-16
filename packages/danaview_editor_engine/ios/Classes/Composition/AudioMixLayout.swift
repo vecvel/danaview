@@ -12,6 +12,25 @@
 //   enabled (`TapEnvelope.rampSeamCrossfadesEnabled`) get a PAIR of tracks: piece k goes to track
 //   k % 2, extended 2.5 ms over each inner seam, and both envelopes carry the seams' 5 ms
 //   equal-power crossfades. Ramp segments that do not overlap share a pair.
+// - Keep-pitch latency compensation (FIX-IOS-PITCH-SYNC, QA-03 finding 2): AVFoundation's
+//   `.timeDomain` time-pitch runs on a whole composition track as soon as one of its edits is
+//   scaled (a track of unscaled edits only is passed through untouched), and it moves the audio of
+//   every edit of such a track by a deterministic, rate-dependent amount — the same in
+//   AVAssetReaderAudioMixOutput (export) and AVPlayer (preview), measured on the iOS 26.5
+//   simulator: −36 ms at 0.5×, −14 ms at 0.75×, −4 ms at 1×, +6 ms at 1.5×, +9 ms at 2×, i.e.
+//   shift(r) ≈ A + B / r with A = +25.8 ms and B = −30.7 ms (output delay and source look-ahead of
+//   the grain search). Every piece of such a track therefore reads its source shifted by
+//   δ(r) = r · shift(r) = A·r + B (whole µs; rate and grid placement unchanged). Pieces of one
+//   segment at different rates get different offsets, so a seam skips or repeats |Δδ| (a few ms)
+//   of source, like the time-pitch's own grains; the seam transient is unchanged (QA-11 click
+//   test), but the phase of a pure tone is not continuous across seams. (A blend that kept the
+//   source continuous across seams, drifting each piece between shared seam offsets, made the
+//   seam transients 30× larger on the iOS 26.5 simulator and was dropped.)
+//   Where the shifted range (with its ramp-seam extensions) would leave [0, asset duration], the
+//   piece is trimmed at that edge by the missing source time / r (negative `preUs`/`postUs`; at
+//   most a few tens of ms of what is silence-before-the-source anyway) rather than read with a
+//   changed rate. Pieces of `.varispeed` tracks and of keep-pitch tracks without a scaled edit are
+//   not shifted.
 //
 // This file is the pure part (which segment and piece goes where, the envelopes); the
 // AVFoundation insertion is in CompositionBuilder.
@@ -35,7 +54,9 @@ struct AudioMixLayout: Equatable {
     }
 
     /// One piece of audio to insert: composition [t0, t1) ← source [s0, s1) µs. `t0Frame`/`t1Frame`
-    /// are the grid frames of the unextended piece; `preUs`/`postUs` the ramp-seam extensions.
+    /// are the grid frames of the unextended piece; `preUs`/`postUs` the ramp-seam extensions
+    /// (negative: the piece is trimmed at that edge by keep-pitch latency compensation, whose
+    /// shifted source would otherwise start before 0 or end past the asset).
     struct Piece: Equatable {
         let track: Int
         let segmentId: String
@@ -87,7 +108,65 @@ struct AudioMixLayout: Equatable {
                 }
             }
         }
+        compensatePitchLatency(&pieces, tracks: tracks, plan: plan)
         return AudioMixLayout(tracks: tracks, pieces: pieces)
+    }
+
+    // MARK: - Keep-pitch latency (FIX-IOS-PITCH-SYNC)
+
+    /// Output delay A of the `.timeDomain` time-pitch (composition µs).
+    static let pitchLatencyOutputUs = 25_800.0
+    /// Source look-ahead term B of the `.timeDomain` time-pitch (composition µs at 1×, ∝ 1/rate).
+    static let pitchLatencySourceUs = -30_700.0
+    /// Composition-time shift (µs) of audio inside a keep-pitch track at [rate] (uncompensated).
+    static func pitchShiftUs(rate: Double) -> Double {
+        pitchLatencyOutputUs + pitchLatencySourceUs / rate
+    }
+
+    /// Source offset (µs) that cancels `pitchShiftUs` at [rate]: reading the source δ later moves
+    /// the audio δ / rate earlier.
+    static func pitchCompensationUs(rate: Double) -> Int64 {
+        Int64((rate * pitchShiftUs(rate: rate)).rounded())
+    }
+
+    /// Whether piece [p] is inserted scaled (CompositionBuilder scales every non-unity piece).
+    private static func isScaled(_ p: Piece) -> Bool {
+        p.segment.s1 - p.segment.s0 != p.segment.t1 - p.segment.t0
+    }
+
+    /// Shifts the sources of every piece on a keep-pitch track that has a scaled piece by
+    /// `pitchCompensationUs` of its rate (pieces of other tracks stay as they are: a track without
+    /// a scaled piece is passed through untouched and must stay so).
+    private static func compensatePitchLatency(_ pieces: inout [Piece], tracks: [Track], plan: RenderPlan) {
+        let active = Set(pieces.filter { tracks[$0.track].pitch && isScaled($0) }.map(\.track))
+        guard !active.isEmpty else { return }
+        let assetBySeg = Dictionary(plan.audio.map { ($0.id, $0.asset) }, uniquingKeysWith: { _, b in b })
+        for i in pieces.indices where active.contains(pieces[i].track) {
+            let p = pieces[i]
+            let m = p.segment
+            let rate = m.rate
+            guard rate.isFinite, rate > 0 else { continue }
+            let delta = pitchCompensationUs(rate: rate)
+            guard delta != 0 else { continue }
+            let span = m.t1 - m.t0
+            var pre = p.preUs
+            var post = p.postUs
+            // The shifted source must stay inside [0, asset duration]. Where it would not, the piece
+            // is trimmed at that edge instead (a negative extension: it starts later / ends earlier
+            // in composition time by the part that has no source), keeping its rate; the trimmed
+            // part is the audio the time-pitch would have pulled from outside the source.
+            let first = m.s0 + delta - Int64((Double(pre) * rate).rounded())
+            if first < 0 { pre -= Int64((Double(-first) / rate).rounded(.up)) }
+            if let dur = assetBySeg[p.segmentId].flatMap({ plan.assets[$0]?.durUs }) {
+                let last = m.s1 + delta + Int64((Double(post) * rate).rounded())
+                if last > dur { post -= Int64((Double(last - dur) / rate).rounded(.up)) }
+            }
+            // Never trim a piece away (a piece shorter than twice the shift keeps its plain read).
+            guard span + pre + post > span / 2 else { continue }
+            pieces[i] = Piece(
+                track: p.track, segmentId: p.segmentId, mapIndex: p.mapIndex,
+                segment: MapSegment(m.t0, m.t1, m.s0 + delta, m.s1 + delta), preUs: pre, postUs: post)
+        }
     }
 
     /// The tap envelope of track [index] for [plan]'s current gains; nil when a segment of the

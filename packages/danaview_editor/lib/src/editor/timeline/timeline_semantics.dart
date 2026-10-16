@@ -10,11 +10,14 @@
 // * `TimelineItemSemantics.decorate` is the canvas' `semanticsDecorator`: every clip node gets a
 //   tap (select) and custom actions that run core commands through `EditorController.apply` (one
 //   history entry each): split at the playhead, delete (ripple when ripple mode is on), move by one
-//   frame or one second, and trim either edge by one frame or one second. Results are announced.
+//   frame or one second (a nudge, never a ripple reorder: it moves the item alone, with ripple mode
+//   on too), and trim either edge by one frame or one second. Results are announced.
 // * `TimelineSemanticsLayer` is a leaf render object over the ruler and the lanes that paints
 //   nothing and takes no hits; it only contributes semantics nodes: the playhead as an adjustable
 //   slider (one frame per increase/decrease), the visible markers, transition chips ("+" included)
 //   and the keyframe diamonds of selected items (all items while the Keyframes panel is open).
+//   Markers, transitions and keyframes carry custom actions (ux.md §19.1): jump to and delete a
+//   marker; open the settings of and remove a transition; jump to and delete a keyframe.
 //   Like the canvas it updates from the viewport without rebuilding widgets.
 
 import 'dart:async';
@@ -89,6 +92,34 @@ abstract final class TimelineSemanticsStrings {
   /// Hint of the playhead slider.
   static const String playheadHint = 'Swipe up or down to move one frame';
 
+  /// Marker action: move the playhead to the marker.
+  static const String jumpToMarker = 'Jump to marker';
+
+  /// Marker action: delete it.
+  static const String deleteMarker = 'Delete marker';
+
+  /// Transition action: open its settings.
+  static const String transitionSettings = 'Transition settings';
+
+  /// Transition action: remove it.
+  static const String removeTransition = 'Remove transition';
+
+  /// Keyframe action: move the playhead to the keyframe.
+  static const String jumpToKeyframe = 'Jump to keyframe';
+
+  /// Keyframe action: delete it.
+  static const String deleteKeyframe = 'Delete keyframe';
+
+  /// Announced after a marker is deleted.
+  static const String didDeleteMarker = 'Marker deleted';
+
+  /// Announced after a transition is removed.
+  static const String didRemoveTransition = 'Transition removed';
+
+  /// Announced after a keyframe is deleted.
+  static const String didDeleteKeyframe = 'Keyframe deleted';
+
+  /// Announced after a split.
   /// A marker node.
   static String marker(Marker marker) =>
       marker.name.isEmpty ? 'Marker at ${Timecode.clock(marker.time)}' : 'Marker ${marker.name} at ${Timecode.clock(marker.time)}';
@@ -313,7 +344,9 @@ class TimelineItemSemantics {
     final start = loc.item.start;
     final target = _offset(rate, start, frames, seconds);
     final c = _controller();
-    final result = c.apply(MoveItems({item}, target - start, ripple: _state().modes.ripple));
+    // A nudge moves the item alone: MoveItems(ripple: true) is a reorder and leaves a move shorter
+    // than the item's length unchanged, so ripple mode would make every nudge "Not changed".
+    final result = c.apply(MoveItems({item}, target - start, ripple: false));
     final moved = _state().project?.index.locate(item)?.item.start ?? target;
     return _report(result, TimelineSemanticsStrings.movedTo(moved));
   }
@@ -330,6 +363,16 @@ class TimelineItemSemantics {
     final duration = _state().project?.index.locate(item)?.item.duration ?? loc.item.duration;
     return _report(result, TimelineSemanticsStrings.trimmedTo(duration));
   }
+
+  /// Deletes [marker].
+  EditResult deleteMarker(MarkerId marker) => _report(_controller().apply(DeleteMarker(marker)), TimelineSemanticsStrings.didDeleteMarker);
+
+  /// Removes the transition at [ref].
+  EditResult removeTransition(TransitionRef ref) =>
+      _report(_controller().apply(SetTransition(ref, null)), TimelineSemanticsStrings.didRemoveTransition);
+
+  /// Deletes the keyframe [ref].
+  EditResult deleteKeyframe(KeyframeRef ref) => _report(_controller().apply(RemoveKeyframe(ref)), TimelineSemanticsStrings.didDeleteKeyframe);
 
   static TimeUs _offset(FrameRate rate, TimeUs t, int frames, int seconds) {
     final k = rate.frameIndexNearest(t) + frames;
@@ -356,6 +399,9 @@ final class TimelineSemanticsCallbacks {
     required this.selectMarker,
     required this.openTransition,
     required this.selectKeyframe,
+    this.deleteMarker,
+    this.removeTransition,
+    this.deleteKeyframe,
   });
 
   /// Seeks to a time (playhead slider steps).
@@ -369,6 +415,36 @@ final class TimelineSemanticsCallbacks {
 
   /// Selects a keyframe and seeks to it.
   final ValueChanged<KeyframeRef> selectKeyframe;
+
+  /// Deletes a marker (the marker node's "Delete marker" action; absent without it).
+  final ValueChanged<Marker>? deleteMarker;
+
+  /// Removes a transition (the transition node's "Remove transition" action; absent without it).
+  final ValueChanged<TransitionRef>? removeTransition;
+
+  /// Deletes a keyframe (the keyframe node's "Delete keyframe" action; absent without it).
+  final ValueChanged<KeyframeRef>? deleteKeyframe;
+}
+
+/// The custom actions of marker, transition and keyframe nodes (ux.md §19.1).
+abstract final class TimelineNodeActions {
+  /// Jump to marker.
+  static const CustomSemanticsAction jumpToMarker = CustomSemanticsAction(label: TimelineSemanticsStrings.jumpToMarker);
+
+  /// Delete marker.
+  static const CustomSemanticsAction deleteMarker = CustomSemanticsAction(label: TimelineSemanticsStrings.deleteMarker);
+
+  /// Transition settings.
+  static const CustomSemanticsAction transitionSettings = CustomSemanticsAction(label: TimelineSemanticsStrings.transitionSettings);
+
+  /// Remove transition.
+  static const CustomSemanticsAction removeTransition = CustomSemanticsAction(label: TimelineSemanticsStrings.removeTransition);
+
+  /// Jump to keyframe.
+  static const CustomSemanticsAction jumpToKeyframe = CustomSemanticsAction(label: TimelineSemanticsStrings.jumpToKeyframe);
+
+  /// Delete keyframe.
+  static const CustomSemanticsAction deleteKeyframe = CustomSemanticsAction(label: TimelineSemanticsStrings.deleteKeyframe);
 }
 
 /// Semantics nodes for the playhead (slider), markers, transitions and keyframes (ARCH §17.9).
@@ -641,7 +717,11 @@ class RenderTimelineSemanticsLayer extends RenderBox {
           ..textDirection = TextDirection.ltr
           ..sortKey = OrdinalSortKey(order++)
           ..label = TimelineSemanticsStrings.marker(m)
-          ..onTap = () => _callbacks.selectMarker(m),
+          ..onTap = (() => _callbacks.selectMarker(m))
+          ..customSemanticsActions = {
+            TimelineNodeActions.jumpToMarker: () => _callbacks.seek(m.time),
+            if (_callbacks.deleteMarker case final delete?) TimelineNodeActions.deleteMarker: () => delete(m),
+          },
       ));
     }
 
@@ -668,7 +748,12 @@ class RenderTimelineSemanticsLayer extends RenderBox {
             ..textDirection = TextDirection.ltr
             ..sortKey = OrdinalSortKey(order++)
             ..label = transition == null ? TimelineSemanticsStrings.addTransition(cut.at) : TimelineSemanticsStrings.transition(transition, cut.at)
-            ..onTap = () => _callbacks.openTransition(cut.ref),
+            ..onTap = (() => _callbacks.openTransition(cut.ref))
+            ..customSemanticsActions = {
+              if (transition != null) TimelineNodeActions.transitionSettings: () => _callbacks.openTransition(cut.ref),
+              if (transition != null && !lane.locked)
+                if (_callbacks.removeTransition case final remove?) TimelineNodeActions.removeTransition: () => remove(cut.ref),
+            },
         ));
       }
       if (lane.locked) continue;
@@ -693,7 +778,11 @@ class RenderTimelineSemanticsLayer extends RenderBox {
               ..textDirection = TextDirection.ltr
               ..sortKey = OrdinalSortKey(order++)
               ..label = TimelineSemanticsStrings.keyframe(ref.property, at)
-              ..onTap = () => _callbacks.selectKeyframe(ref),
+              ..onTap = (() => _callbacks.selectKeyframe(ref))
+              ..customSemanticsActions = {
+                TimelineNodeActions.jumpToKeyframe: () => _callbacks.seek(at),
+                if (_callbacks.deleteKeyframe case final delete?) TimelineNodeActions.deleteKeyframe: () => delete(ref),
+              },
           ));
         }
       }

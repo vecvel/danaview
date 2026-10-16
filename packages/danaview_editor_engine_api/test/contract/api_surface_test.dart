@@ -40,7 +40,7 @@ void main() {
       ExportCompletedWhileDetached, ExportDetachedHandoff, ExportProgress, ExportPhase, ExportResult, ExportWarning, VoiceRecorder,
       RecordingSession, MicPermission, RecordedAsset, RecordingInterruption, MediaPicker, MediaPickRequest, MediaPickSource,
       MediaPickKind, FileHandoff, FileHandoffResult, FileHandoffOutcome, MediaAccess, BackgroundWorkGuard, BackgroundLease,
-      ExternalDropTarget, ExternalDrop, PowerState,
+      ExternalDropTarget, ExternalDrop, PowerState, ExportNotificationTexts,
       // 12.5
       EditorCapabilities, DeviceTier, BackgroundExportKind, EngineErrorCode, EngineFailure, EngineError, EngineCancelled,
       UnsupportedReasons,
@@ -71,6 +71,25 @@ void main() {
     expect([power.charging, power.lowPowerMode], [true, false]);
     expect(renderedRangesProblem(const [range]), isNull);
     expect(RenderPreviewContractProbe, isNotNull);
+  });
+
+  test('the INT-07 additions are part of the surface', () {
+    final engine = FakeEditorEngine();
+    final MediaAccess access = engine.access;
+    final Future<String> Function(PickedMedia, String) materializePick = access.materializePick;
+    final VoiceRecorder recorder = engine.recorder;
+    final Future<bool> Function() isRecording = recorder.isRecording;
+    final Stream<bool> recordingChanged = recorder.recordingChanged;
+    final ExportService exporter = engine.exporter;
+    final Future<ExportJob> Function(RenderPlan, EncodeSettings,
+        {required String outputPath,
+        required String title,
+        ExportDetachedHandoff whenDetached,
+        ExportNotificationTexts? notificationTexts}) start = exporter.start;
+    expect([materializePick, isRecording, recordingChanged, start], everyElement(isNotNull));
+    const config = EditorEngineConfig(cacheRoot: 'c', supportRoot: 's');
+    expect(config.exportNotificationTexts, const ExportNotificationTexts());
+    expect(IntegrationContractProbe, isNotNull);
   });
 
   test('capabilities carry every field of ARCH §12.5', () {

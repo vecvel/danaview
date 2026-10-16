@@ -1,7 +1,9 @@
 // OWNER: API-01
 //
 // Export contract (ARCH §12.4, §14, D-22, D-39). Pigeon `ExportHostApi` mirrors it:
-// preflight, start(…, whenDetached), resume, cancel, activeJobs, consumeJobRecord.
+// preflight, start(…, whenDetached, texts), resume, cancel, activeJobs, consumeJobRecord.
+// INT-07 added the localized notification texts ([ExportNotificationTexts]): engine-wide through
+// `EditorEngineConfig.exportNotificationTexts`, per job through `ExportService.start`.
 
 import 'package:meta/meta.dart';
 import 'package:danaview_editor_core/model.dart';
@@ -16,6 +18,97 @@ enum ExportDetachedHandoff {
 
   /// Keep the file (exempt from the `work/` wipe for 7 days) and a one-shot record.
   keepForLater,
+}
+
+/// Localized texts of the Android export and background-work notifications (INT-07).
+///
+/// Dart owns all user-facing copy, so the app passes these engine-wide in
+/// `EditorEngineConfig.exportNotificationTexts` and, optionally, per job in
+/// [ExportService.start] (a later language change). The engine falls back to the English
+/// defaults below. iOS shows no export notification and ignores them. `{percent}` in
+/// [exportingProgress] / [workingProgress] and `{count}` in [more] are replaced natively.
+///
+/// See ARCH §12.4, §14.3.
+@immutable
+final class ExportNotificationTexts {
+  /// Creates the texts; every field defaults to the engine's English text.
+  const ExportNotificationTexts({
+    this.exportTitle = 'Exporting video',
+    this.workTitle = 'Working in the background',
+    this.exporting = 'Exporting',
+    this.exportingProgress = 'Exporting · {percent}%',
+    this.working = 'Working',
+    this.workingProgress = 'Working · {percent}%',
+    this.cancel = 'Cancel',
+    this.savedToGallery = 'Saved to Gallery',
+    this.exportFinished = 'Export finished',
+    this.more = '+{count} more',
+    this.progressChannelName = 'Video export',
+    this.progressChannelDescription = 'Progress of video exports and background work',
+    this.doneChannelName = 'Finished exports',
+    this.doneChannelDescription = 'Exports that finished while the app was closed',
+  });
+
+  /// Title when the job has none.
+  final String exportTitle;
+
+  /// Title of a background-work lease without one.
+  final String workTitle;
+
+  /// Text of an export without a known progress.
+  final String exporting;
+
+  /// Text of an export with progress (`{percent}` = 0..100).
+  final String exportingProgress;
+
+  /// Text of a background-work lease without progress.
+  final String working;
+
+  /// Text of a background-work lease with progress (`{percent}` = 0..100).
+  final String workingProgress;
+
+  /// Label of the Cancel action.
+  final String cancel;
+
+  /// Title of the completion notification after a detached save to the gallery (D-39).
+  final String savedToGallery;
+
+  /// Title of the completion notification otherwise.
+  final String exportFinished;
+
+  /// Sub text for further jobs not shown (`{count}`).
+  final String more;
+
+  /// Name of the progress notification channel (Android system settings).
+  final String progressChannelName;
+
+  /// Description of the progress channel.
+  final String progressChannelDescription;
+
+  /// Name of the completion notification channel.
+  final String doneChannelName;
+
+  /// Description of the completion channel.
+  final String doneChannelDescription;
+
+  /// Every text in declaration order (equality, validation and tests).
+  List<String> get all => [
+        exportTitle, workTitle, exporting, exportingProgress, working, workingProgress, cancel, savedToGallery, exportFinished, //
+        more, progressChannelName, progressChannelDescription, doneChannelName, doneChannelDescription,
+      ];
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! ExportNotificationTexts) return false;
+    final a = all, b = other.all;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(all);
 }
 
 /// Export phases.
@@ -220,12 +313,15 @@ abstract interface class ExportService {
   Future<ExportPreflight> preflight(RenderPlan plan, EncodeSettings settings);
 
   /// Starts an export to [outputPath] (`<cache>/danaview/editor/work/export-<jobId>.<ext>`).
+  /// [notificationTexts] (INT-07) replace the engine-wide notification texts from this job on;
+  /// null keeps them.
   Future<ExportJob> start(
     RenderPlan plan,
     EncodeSettings settings, {
     required String outputPath,
     required String title,
     ExportDetachedHandoff whenDetached = ExportDetachedHandoff.saveToGallery,
+    ExportNotificationTexts? notificationTexts,
   });
 
   /// Resumes an iOS segment-resumable job; `notSupportedOnDevice` elsewhere.

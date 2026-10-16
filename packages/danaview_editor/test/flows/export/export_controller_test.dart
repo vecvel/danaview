@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:flutter/painting.dart' show Size;
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:danaview_editor/src/app/strings/export_strings.dart';
 import 'package:danaview_editor/src/editor/flows/export/export_controller.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
 import 'package:danaview_editor_core/formats.dart';
@@ -406,6 +407,21 @@ void main() {
       expect(rig.exporter.lastWhenDetached, ExportDetachedHandoff.keepForLater);
     });
 
+    test('every job carries the app copy of the Android notification texts (INT-07, FIX-UX-39-1)', () async {
+      final rig = ExportRig();
+      final c = await readyNoNotice(rig);
+      await _run(rig, c);
+      expect(rig.exporter.notificationTexts, [same(ExportStrings.notificationTexts)]);
+    });
+
+    test('the notification copy is complete and keeps the native placeholders', () {
+      const t = ExportStrings.notificationTexts;
+      expect(t.all, everyElement(isNotEmpty));
+      expect(t.exportingProgress, contains('{percent}'));
+      expect(t.workingProgress, contains('{percent}'));
+      expect(t.more, contains('{count}'));
+    });
+
     test('preflight warnings (software encoder) ask before starting; Export anyway starts; Change settings returns', () async {
       final rig = ExportRig();
       rig.exporter.preflightResult = const ExportPreflight(ok: true, warnings: [ExportWarning('softwareEncoder'), ExportWarning('backgroundPauses')]);
@@ -433,6 +449,44 @@ void main() {
       expect(rig.started, isEmpty);
       c.lowerResolution();
       expect((c.state as ExportUiSetup).draft.settings.shortSide, 1080, reason: 'the largest size the plan can encode');
+    });
+
+    test('layersVsResolution adds the precompose intermediates to the disk check (D-45(B), FIX-PREFLIGHT)', () async {
+      final rig = ExportRig();
+      rig.exporter.preflightResult = const ExportPreflight(ok: true, warnings: [ExportWarning('layersVsResolution')]);
+      final c = await readyNoNotice(rig);
+      final estimate = (c.state as ExportUiSetup).resolved.estimatedBytes;
+      rig.fake.freeBytesValue = estimate; // room for the output alone
+      await c.start();
+      final s = c.state as ExportUiSetup;
+      final ready = rig.compiles.last.$2 as ExportReady;
+      final extra = ready.precomposeExtraBytes;
+      expect(extra, greaterThan(0));
+      expect(extra, precomposeExtraBytesOf(ready.encode, ready.plan.durUs, ready.plan.canvas.gridFps));
+      expect(s.issue!.kind, ExportIssueKind.lowStorage);
+      expect(s.issue!.neededBytes, estimate + extra, reason: 'max(2·I, I + output) − output on top of the output');
+      expect(s.issue!.freeBytes, estimate);
+      expect(s.checkingStorage, isFalse);
+      expect(rig.started, isEmpty);
+
+      // With room for the intermediates the warning is confirmed as usual and the export starts.
+      rig.fake.freeBytesValue = estimate + extra;
+      await c.start();
+      final w = c.state as ExportUiWarnings;
+      expect([for (final x in w.warnings) x.code], ['layersVsResolution']);
+      await c.confirmWarnings();
+      await _until<ExportUiRunning>(rig, c);
+      expect(rig.started, hasLength(1));
+    });
+
+    test('without layersVsResolution the intermediates are not counted (single pass)', () async {
+      final rig = ExportRig();
+      rig.exporter.preflightResult = const ExportPreflight(ok: true, warnings: []);
+      final c = await readyNoNotice(rig);
+      rig.fake.freeBytesValue = (c.state as ExportUiSetup).resolved.estimatedBytes;
+      await c.start();
+      await _until<ExportUiRunning>(rig, c);
+      expect(rig.started, hasLength(1));
     });
 
     test('media that goes offline between the check and the start sends the user to relink', () async {

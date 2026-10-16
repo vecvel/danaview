@@ -8,6 +8,12 @@
 // deleted); `FakePreviewSession.renderedRanges` records `setRenderedRanges` and drops the ranges a
 // patch touches ([patchTouchesRange]) or a `setPlan` replaces; `FakeBackgroundWorkGuard` reports a
 // scripted power state (`setPowerState`).
+//
+// INT-07 additions: `FakeExportService` records the notification texts of each start;
+// `FakeVoiceRecorder` reports `isRecording` / `recordingChanged`, and the engine mutes every preview
+// session while a recording captures (`FakePreviewSession.audioMuted`, also for sessions opened
+// meanwhile); `FakeMediaAccess.materializePick` "copies" a pick into a `work/` directory (paths
+// only, recorded in `materialized`) with the native refusals.
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -85,7 +91,7 @@ final class FakeEditorEngine implements EditorEngine {
     waveforms = FakeWaveformSource(log);
     jobs = FakeMediaJobs(log, validatePlans);
     exporter = FakeExportService(log);
-    recorder = FakeVoiceRecorder(log);
+    recorder = FakeVoiceRecorder(log).._onChanged = _recordingChanged;
     picker = FakeMediaPicker(log);
     files = FakeFileHandoff(log);
   }
@@ -119,6 +125,12 @@ final class FakeEditorEngine implements EditorEngine {
 
   void _call(String name) => log.hit(name);
 
+  void _recordingChanged(bool recording) {
+    for (final s in sessions) {
+      s.audioMuted = recording;
+    }
+  }
+
   /// Emits an engine signal.
   void emitSignal(EngineSignal signal) => _signals.add(signal);
 
@@ -145,7 +157,8 @@ final class FakeEditorEngine implements EditorEngine {
   @override
   Future<PreviewSession> openPreview(PreviewConfig config) async {
     _call('openPreview');
-    final s = FakePreviewSession(textureId: 100 + sessions.length, config: config, log: log, validatePlans: validatePlans);
+    final s = FakePreviewSession(textureId: 100 + sessions.length, config: config, log: log, validatePlans: validatePlans)
+      ..audioMuted = recorder.recording;
     sessions.add(s);
     return s;
   }
@@ -238,6 +251,10 @@ final class FakePreviewSession implements PreviewSession {
 
   /// Whether proxies are used.
   late bool useProxies = config.useProxies;
+
+  /// Whether the session's audio is muted because a voice recording captures (INT-07; set by
+  /// [FakeEditorEngine]).
+  bool audioMuted = false;
 
   /// Whether playing.
   bool playing = false;
@@ -893,6 +910,9 @@ final class FakeExportService implements ExportService {
   /// Last `whenDetached` passed to [start].
   ExportDetachedHandoff? lastWhenDetached;
 
+  /// Notification texts passed to each [start], in order (null when the call passed none; INT-07).
+  final List<ExportNotificationTexts?> notificationTexts = [];
+
   @override
   Future<ExportPreflight> preflight(RenderPlan plan, EncodeSettings settings) async {
     _log.hit('exporter.preflight');
@@ -901,9 +921,13 @@ final class FakeExportService implements ExportService {
 
   @override
   Future<ExportJob> start(RenderPlan plan, EncodeSettings settings,
-      {required String outputPath, required String title, ExportDetachedHandoff whenDetached = ExportDetachedHandoff.saveToGallery}) async {
+      {required String outputPath,
+      required String title,
+      ExportDetachedHandoff whenDetached = ExportDetachedHandoff.saveToGallery,
+      ExportNotificationTexts? notificationTexts}) async {
     _log.hit('exporter.start');
     lastWhenDetached = whenDetached;
+    this.notificationTexts.add(notificationTexts);
     final job = FakeExportJob('export-${_n++}', outputPath, plan.durUs);
     started.add(job);
     records.add(ExportRunning(job));
@@ -937,14 +961,34 @@ final class FakeExportService implements ExportService {
   }
 }
 
-/// Fake recorder: always granted, records nothing.
+/// Fake recorder: always granted, records nothing. It is recording from [start] until the
+/// session stops, is cancelled or is interrupted (INT-07).
 ///
-/// See ARCH §12.4.
+/// See ARCH §12.4, §15.
 final class FakeVoiceRecorder implements VoiceRecorder {
   /// Creates the fake.
   FakeVoiceRecorder([FakeCallLog? log]) : _log = log ?? FakeCallLog();
 
   final FakeCallLog _log;
+  final StreamController<bool> _changes = StreamController<bool>.broadcast(sync: true);
+  void Function(bool recording)? _onChanged;
+  final Set<FakeRecordingSession> _capturing = {};
+
+  /// Whether a session is capturing now (synchronous view of [isRecording]).
+  bool get recording => _capturing.isNotEmpty;
+
+  void _setCapturing(FakeRecordingSession s, bool on) {
+    final before = recording;
+    if (on) {
+      _capturing.add(s);
+    } else {
+      _capturing.remove(s);
+    }
+    if (recording != before) {
+      _onChanged?.call(recording);
+      _changes.add(recording);
+    }
+  }
 
   /// Permission reported.
   MicPermission permissionState = MicPermission.granted;
@@ -974,21 +1018,40 @@ final class FakeVoiceRecorder implements VoiceRecorder {
   Future<RecordingSession> start({required String outputPath}) async {
     _log.hit('recorder.start');
     if (permissionState != MicPermission.granted) throw EngineFailure.of(EngineErrorCode.permissionDenied);
-    final s = FakeRecordingSession(outputPath);
+    if (recording) throw EngineFailure.of(EngineErrorCode.busy, debugDetail: 'one recording at a time');
+    final s = FakeRecordingSession(outputPath, onEnded: (s) => _setCapturing(s, false));
     sessions.add(s);
+    _setCapturing(s, true);
     return s;
   }
+
+  @override
+  Future<bool> isRecording() async {
+    _log.hit('recorder.isRecording');
+    return recording;
+  }
+
+  @override
+  Stream<bool> get recordingChanged => _changes.stream;
 }
 
 /// A fake recording; tests push levels and interruptions.
 ///
 /// See ARCH §12.4.
 final class FakeRecordingSession implements RecordingSession {
-  /// Creates a session writing (nominally) to [path].
-  FakeRecordingSession(this.path);
+  /// Creates a session writing (nominally) to [path]; [onEnded] runs once when it stops capturing.
+  FakeRecordingSession(this.path, {void Function(FakeRecordingSession)? onEnded}) : _onEnded = onEnded;
 
   /// WAV path.
   final String path;
+
+  void Function(FakeRecordingSession)? _onEnded;
+
+  void _ended() {
+    final f = _onEnded;
+    _onEnded = null;
+    f?.call(this);
+  }
 
   final StreamController<double> _levels = StreamController<double>.broadcast();
   final StreamController<RecordingInterruption> _interruptions = StreamController<RecordingInterruption>.broadcast();
@@ -1009,6 +1072,7 @@ final class FakeRecordingSession implements RecordingSession {
   void interrupt(RecordingInterruption why) {
     _interruptions.add(why);
     stopped = true;
+    _ended();
   }
 
   @override
@@ -1020,6 +1084,7 @@ final class FakeRecordingSession implements RecordingSession {
   @override
   Future<RecordedAsset> stop() async {
     stopped = true;
+    _ended();
     await _levels.close();
     await _interruptions.close();
     return RecordedAsset(path: path, durationUs: durationUs, startLatencyUs: 20000);
@@ -1028,6 +1093,7 @@ final class FakeRecordingSession implements RecordingSession {
   @override
   Future<void> cancel() async {
     cancelled = true;
+    _ended();
     await _levels.close();
     await _interruptions.close();
   }
@@ -1093,13 +1159,27 @@ final class FakeFileHandoff implements FileHandoff {
 }
 
 /// Fake media access over fake paths. `excludeFromBackup` refuses paths outside [editorRoots]
-/// exactly like the real implementations must (D-44).
+/// exactly like the real implementations must (D-44); `materializePick` refuses directories
+/// outside [workRoot] (INT-07).
+///
+/// See ARCH §9, §12.4, D-44.
 final class FakeMediaAccess implements MediaAccess {
   /// Creates the fake.
-  FakeMediaAccess({required this.editorRoots});
+  FakeMediaAccess({required this.editorRoots, this.workRoot = '/fake/cache/danaview/editor/work'});
 
   /// Roots where `excludeFromBackup` is allowed.
   final List<String> editorRoots;
+
+  /// `<cache>/danaview/editor/work`: `materializePick` only writes below it.
+  final String workRoot;
+
+  /// Copies made by [materializePick] (absolute paths, in order).
+  final List<String> materialized = [];
+
+  /// Error the next [materializePick] throws (consumed when hit).
+  Object? materializeFailure;
+
+  var _copies = 0;
 
   /// URIs reported missing by [stat].
   final Set<String> missing = {};
@@ -1150,6 +1230,28 @@ final class FakeMediaAccess implements MediaAccess {
 
   @override
   Future<bool> requestNotificationPermission() async => true;
+
+  bool _inWork(String path) => path.startsWith('$workRoot/') && !path.split('/').contains('..');
+
+  @override
+  Future<String> materializePick(PickedMedia picked, String intoDir) async {
+    final f = materializeFailure;
+    materializeFailure = null;
+    if (f != null) throw f;
+    final dir = intoDir.endsWith('/') ? intoDir.substring(0, intoDir.length - 1) : intoDir;
+    if (!_inWork('$dir/x')) throw const MediaAccessFailure(MediaAccessFailureKind.outsideEditorRoots);
+    if (missing.contains(picked.uri)) throw const MediaAccessFailure(MediaAccessFailureKind.notFound);
+    final sourcePath = picked.uri.startsWith('file://') ? Uri.parse(picked.uri).toFilePath() : (picked.uri.startsWith('/') ? picked.uri : null);
+    if (picked.isTemporaryCopy && sourcePath != null && _inWork(sourcePath)) return sourcePath;
+    if (!picked.uri.startsWith('content://') && sourcePath == null) {
+      throw const MediaAccessFailure(MediaAccessFailureKind.io, 'notSupportedOnDevice');
+    }
+    final safe = picked.displayName.replaceAll(RegExp(r'[/\\:\x00]'), '_').trim();
+    final name = safe.isEmpty || safe == '.' || safe == '..' ? 'pick' : safe;
+    final out = '$dir/m${_copies++}/$name';
+    materialized.add(out);
+    return out;
+  }
 }
 
 /// Fake background guard (leases always granted) with a scripted power state.

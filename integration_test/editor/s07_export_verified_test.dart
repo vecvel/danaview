@@ -30,21 +30,20 @@ import 'package:integration_test/integration_test.dart';
 
 import 'support/e2e.dart';
 
-/// Mean absolute luma difference of [a] and [b] inside the fractional rows [y0, y1) (same size).
-double lumaDiff(E2eFrame a, E2eFrame b, double y0, double y1, {List<(double, double)> excludeRows = const []}) {
+/// Pixels (sampled every 2 px) whose luma differs by more than 40 between [a] and [b] in the rows
+/// [y0, y1) (fractions of the height). A burned cue changes a compact box (about 2 % of the band at
+/// 720p), which a mean over the band would hide under codec noise, so cues are counted, not averaged.
+int changedIn(E2eFrame a, E2eFrame b, double y0, double y1) {
   expect((a.width, a.height), (b.width, b.height));
-  var sum = 0, n = 0;
-  final r0 = (a.height * y0).floor(), r1 = (a.height * y1).ceil();
-  for (var y = r0; y < r1; y += 2) {
-    if (excludeRows.any((e) => y >= a.height * e.$1 && y < a.height * e.$2)) continue;
+  var count = 0;
+  for (var y = (a.height * y0).floor(); y < a.height * y1; y += 2) {
     for (var x = 0; x < a.width; x += 2) {
       final (ar, ag, ab, _) = a.pixel(x, y);
       final (br, bg, bb, _) = b.pixel(x, y);
-      sum += ((ar * 299 + ag * 587 + ab * 114) - (br * 299 + bg * 587 + bb * 114)).abs() ~/ 1000;
-      n++;
+      if (((ar * 299 + ag * 587 + ab * 114) - (br * 299 + bg * 587 + bb * 114)).abs() > 40000) count++;
     }
   }
-  return n == 0 ? 0 : sum / n;
+  return count;
 }
 
 /// Pixels (sampled every 2 px) whose luma differs by more than 40 between [a] and [b] above row
@@ -85,6 +84,15 @@ void main() {
     await ed.seekFrame(120);
     await ed.invoke(EditorActionId.split);
     await ed.waitProject((p) => p.timeline.mainTrack!.items.length == 2, what: 'the split');
+    // A dissolve over a continuous cut mixes the same source frame with itself (the handles carry
+    // on the same media), so nothing would blend. Remove 15 frames at the head of the right piece
+    // (ripple: it stays at the cut) so the two sides differ: timeline frame k shows source k before
+    // the cut and source k + 15 after it.
+    const jump = 15;
+    final right = ed.mainTrack.items[1];
+    ed.apply(TrimItem(right.id, TrimEdge.start, r.timeOfFrame(120 + jump), ripple: true));
+    await ed.waitProject((p) => (ed.item(right.id) as MediaClip).start == r.timeOfFrame(120) && ed.item(right.id).duration < right.duration,
+        what: 'the right piece trimmed at its head');
     final pieces = ed.mainTrack.items;
     const d = 15;
     ed.apply(SetTransition(TransitionRef(ed.mainTrack.id, pieces[0].id, pieces[1].id), const TransitionSpec(TransitionKind.crossDissolve, d)));
@@ -161,10 +169,10 @@ void main() {
     final bAt = {for (final (i, k) in probes.keys.indexed) k: fb[i]};
     const subY0 = 0.70;
     for (final k in ['t1a', 't1b']) {
-      expect(lumaDiff(aAt[k]!, bAt[k]!, subY0, 1), greaterThan(4), reason: 'burned cue $k must show in the subtitle area');
+      expect(changedIn(aAt[k]!, bAt[k]!, subY0, 1), greaterThan(300), reason: 'burned cue $k must show in the subtitle area');
     }
     for (final k in ['between', 't2']) {
-      expect(lumaDiff(aAt[k]!, bAt[k]!, subY0, 1), lessThan(2.5), reason: 'nothing burned at $k');
+      expect(changedIn(aAt[k]!, bAt[k]!, subY0, 1), lessThan(60), reason: 'nothing burned at $k');
     }
     final inks = [for (final k in ['tw1', 'tw2', 'tw3']) ink(aAt[k]!, bAt[k]!, subY0)];
     expect(inks[0], lessThan(inks[1]), reason: 'typewriter glyphs grow: $inks');
@@ -177,11 +185,13 @@ void main() {
     for (final (i, k) in ks.indexed) {
       final reading = frames[i].barcode;
       final inside = k * 2 >= 2 * 120 - d && k * 2 < 2 * 120 + d;
+      final source = k < 120 ? k : k + jump;
       if (inside) {
-        expect(reading.status == FrameBarcodeStatus.blended || reading.index == k, isTrue, reason: 'frame $k inside the dissolve: $reading');
+        expect(reading.status == FrameBarcodeStatus.blended || reading.index == k || reading.index == k + jump, isTrue,
+            reason: 'frame $k inside the dissolve: $reading');
         if (reading.status == FrameBarcodeStatus.blended) blendedInside++;
       } else {
-        expect(reading.index, k, reason: 'frame $k outside the dissolve: $reading');
+        expect(reading.index, source, reason: 'frame $k outside the dissolve: $reading');
       }
     }
     expect(blendedInside, greaterThan(0), reason: 'the dissolve blends frames');

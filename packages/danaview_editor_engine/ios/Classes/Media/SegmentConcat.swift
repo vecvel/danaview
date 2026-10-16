@@ -28,7 +28,7 @@ enum SegmentConcat {
 
     static func concat(
         checkpoint: SegmentCheckpoint, directory: URL, segmentURL: @escaping (Int) -> URL, audioURL: URL?,
-        to output: URL, transform: CGAffineTransform = .identity, isCancelled: @escaping () -> Bool
+        to output: URL, transform: CGAffineTransform = .identity, end: CMTime? = nil, isCancelled: @escaping () -> Bool
     ) throws -> Result {
         let segments = checkpoint.completed.filter { $0.frames > 0 }.sorted { $0.index < $1.index }
         guard let firstSegment = segments.first else { throw EngineError(.encodingFailed, "no video segments") }
@@ -43,8 +43,11 @@ enum SegmentConcat {
             throw EngineError.from(error)
         }
         writer.shouldOptimizeForNetworkUse = true
+        // Same exact timescale as the segments (FIX-48FPS-TIMESCALE: 600 cannot hold 48 fps).
+        writer.movieTimeScale = checkpoint.settings.videoTimescale
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: hint)
         videoInput.expectsMediaDataInRealTime = false
+        videoInput.mediaTimeScale = checkpoint.settings.videoTimescale
         videoInput.transform = transform
         guard writer.canAdd(videoInput) else { throw EngineError(.encodingFailed, "concat video input refused") }
         writer.add(videoInput)
@@ -87,7 +90,8 @@ enum SegmentConcat {
             try? FileManager.default.removeItem(at: output)
             throw EngineError.from(failure)
         }
-        writer.endSession(atSourceTime: CMTime(value: checkpoint.endUs, timescale: 1_000_000))
+        // [end]: the exact output end when the µs endUs only approximates it (D-35 grid end).
+        writer.endSession(atSourceTime: end ?? CMTime(value: checkpoint.endUs, timescale: 1_000_000))
         let finished = DispatchSemaphore(value: 0)
         writer.finishWriting { finished.signal() }
         finished.wait()
@@ -381,8 +385,10 @@ enum SegmentConcat {
             track: track,
             outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange])
         reader.add(output)
+        writer.movieTimeScale = settings.videoTimescale
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings.videoOutputSettings)
         input.expectsMediaDataInRealTime = false
+        input.mediaTimeScale = settings.videoTimescale
         writer.add(input)
         guard reader.startReading(), writer.startWriting() else {
             throw (reader.error ?? writer.error).map(EngineError.from) ?? EngineError(.encodingFailed, "re-encode did not start")

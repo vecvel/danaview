@@ -65,6 +65,11 @@ final class SegmentedWriter {
     var settingsOverride: ((_ segment: Int) -> SegmentEncodeSettings?)?
     /// Output-time progress 0...1 of the video (called on the pump queue).
     var onProgress: ((Double) -> Void)?
+    /// The exact end of the output (e.g. an export's grid end `CMTime(K, gridFps)`, D-35) when the
+    /// µs `endUs` only approximates it. Every session end and frame cutoff is clamped to it, so no
+    /// writer runs past the source composition (FIX-IOS-DURATION). Not persisted: callers set it
+    /// on every run.
+    var exactEnd: CMTime?
 
     private let pumpQueue = DispatchQueue(label: "com.vecvel.danaview.editor.segments.pump", qos: .userInitiated)
     private let lock = NSLock()
@@ -113,6 +118,13 @@ final class SegmentedWriter {
     }
 
     var segmentCount: Int { checkpoint.segmentCount }
+
+    /// Output time of [us], clamped to `exactEnd`.
+    func outputTime(us: Int64) -> CMTime {
+        let time = CMTime(value: us, timescale: 1_000_000)
+        guard let end = exactEnd, end.isNumeric else { return time }
+        return CMTimeMinimum(time, end)
+    }
 
     func segmentURL(_ index: Int) -> URL {
         directory.appendingPathComponent("v-\(index).\(checkpoint.settings.container.rawValue)")
@@ -200,8 +212,11 @@ final class SegmentedWriter {
         } catch {
             throw EngineError.from(error)
         }
+        writer.movieTimeScale = settings.videoTimescale
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings.videoOutputSettings)
         input.expectsMediaDataInRealTime = false
+        // Exact ticks for every project rate (600 cannot hold 48 fps; FIX-48FPS-TIMESCALE).
+        input.mediaTimeScale = settings.videoTimescale
         guard writer.canAdd(input) else { throw EngineError(.encoderUnavailable, "segment input refused") }
         writer.add(input)
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: nil)
@@ -211,8 +226,8 @@ final class SegmentedWriter {
         guard writer.startWriting() else {
             throw writer.error.map(EngineError.from) ?? EngineError(.encoderUnavailable, "segment writer did not start")
         }
-        let start = CMTime(value: range.startUs, timescale: 1_000_000)
-        let end = CMTime(value: range.endUs, timescale: 1_000_000)
+        let start = outputTime(us: range.startUs)
+        let end = outputTime(us: range.endUs)
         writer.startSession(atSourceTime: start)
 
         var frames = 0
@@ -338,8 +353,8 @@ final class SegmentedWriter {
         guard writer.startWriting() else {
             throw writer.error.map(EngineError.from) ?? EngineError(.encoderUnavailable, "audio writer did not start")
         }
-        let start = CMTime(value: checkpoint.startUs, timescale: 1_000_000)
-        let end = CMTime(value: checkpoint.endUs, timescale: 1_000_000)
+        let start = outputTime(us: checkpoint.startUs)
+        let end = outputTime(us: checkpoint.endUs)
         writer.startSession(atSourceTime: start)
         var failure: Error?
         var stopped = false
@@ -420,7 +435,7 @@ final class SegmentedWriter {
         let result = try SegmentConcat.concat(
             checkpoint: checkpoint, directory: directory, segmentURL: segmentURL,
             audioURL: checkpoint.audioComplete ? audioURL : nil, to: output, transform: transform,
-            isCancelled: { [weak self] in self?.isCancelled ?? true })
+            end: outputTime(us: checkpoint.endUs), isCancelled: { [weak self] in self?.isCancelled ?? true })
         SegmentCheckpoint.delete(in: directory)
         try? FileManager.default.removeItem(at: audioURL)
         return result

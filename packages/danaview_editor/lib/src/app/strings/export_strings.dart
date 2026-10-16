@@ -8,7 +8,7 @@
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:danaview_editor_core/model.dart' show AspectRatio;
 import 'package:danaview_editor_core/plan.dart' show ExportContainer, ExportPresetId, ExportQuality, SideFileFormat, VideoCodec;
-import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' show BackgroundExportKind, ExportPhase;
+import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' show BackgroundExportKind, ExportNotificationTexts, ExportPhase;
 import 'package:danaview_features/storage.dart' show formatDataSize;
 
 /// Copy of the export sheet and its controller.
@@ -247,6 +247,29 @@ abstract final class ExportStrings {
 
   /// The continue button of the notice.
   static const String noticeContinue = 'Start export';
+
+  // ---- Android export notifications (INT-07) --------------------------------------------------
+
+  /// The texts of the Android export and background-work notifications, from this copy. Handed to
+  /// the engine at start-up (`EditorEngineConfig.exportNotificationTexts`) and with every export job
+  /// (`ExportService.start(notificationTexts:)`), so the notification follows the app's language.
+  /// `{percent}` and `{count}` are filled in natively.
+  static const ExportNotificationTexts notificationTexts = ExportNotificationTexts(
+    exportTitle: 'Exporting video',
+    workTitle: 'Working in the background',
+    exporting: 'Exporting',
+    exportingProgress: 'Exporting · {percent}%',
+    working: 'Working',
+    workingProgress: 'Working · {percent}%',
+    cancel: 'Cancel',
+    savedToGallery: 'Saved to Gallery',
+    exportFinished: 'Export finished',
+    more: '+{count} more',
+    progressChannelName: 'Video export',
+    progressChannelDescription: 'Progress of video exports and background work',
+    doneChannelName: 'Finished exports',
+    doneChannelDescription: 'Exports that finished while the app was closed',
+  );
 
   /// The back button of the notice.
   static const String noticeBack = 'Back';

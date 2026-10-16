@@ -35,6 +35,10 @@ void main() {
     expect(controller.tier, RenderTier.low);
     expect(controller.value.setting, RenderPreviewSetting.auto, reason: 'tier default on low');
     expect(controller.plan, isNotNull, reason: 'the applied plan of the open session');
+    // Range rule (FIX-RANGE-RULE): with the plan sync idle the engine holds the controller's plan,
+    // so the rendered-range list was sent rather than deferred.
+    expect(controller.sendDeferred, isFalse);
+    expect(h.engine.calls, contains('preview.setRenderedRanges'));
 
     await EditorTierDefaults.setRenderPreview(h.prefs, RenderPreviewSetting.manual);
     await tester.pump();

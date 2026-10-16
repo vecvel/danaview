@@ -1,4 +1,5 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: `powerState`, D-45, on main)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: `powerState`, D-45, on main; by INT-07:
+// `materializePick` on danaview-io, intoDir inside `<cache>/work/` or `permissionDenied`)
 //
 // `PlatformHostApi` glue (ARCH §9, §12.4, §12.6, §15). UI flows (pick, saveToFiles, share,
 // notification permission, background leases, drop target) run on main; saveToPhotos, URI grants,
@@ -90,6 +91,14 @@ class PlatformHostApiImpl(
 
     override fun setDropTargetEnabled(enabled: Boolean, callback: (Result<Unit>) -> Unit) =
         dispatch.async(threads.main, callback) { done -> port.setDropTargetEnabled(enabled, done) }
+
+    override fun materializePick(uri: String, intoDir: String, callback: (Result<String>) -> Unit) {
+        lateinit var dir: java.io.File
+        dispatch.async(threads.io, callback, check = {
+            Check.mediaUri("uri", uri)
+            dir = Check.workDir("intoDir", intoDir, paths())
+        }) { done -> port.materializePick(uri, dir, done) }
+    }
 
     override fun powerState(callback: (Result<PowerStateMsg>) -> Unit) =
         dispatch.async(threads.main, callback) { done -> port.powerState(done) }

@@ -260,6 +260,12 @@ final class GainTapRenderState {
             done += n
         }
         if metering { meter?.accumulate(preSumSq: preSumSq, postSumSq: postSumSq, samples: metered) }
+        if let meter, meter.capturing, let first = buffers.first, let data = first.mData, isFloat, bitsPerChannel == 32 {
+            let channels = max(Int(first.mNumberChannels), 1)
+            let samples = data.assumingMemoryBound(to: Float.self)
+            let count = min(frames, Int(first.mDataByteSize) / MemoryLayout<Float>.size / channels)
+            meter.recordSamples(startUs: t0, (0..<count).map { samples[$0 * channels] })
+        }
     }
 
     /// The multipliers of [count] samples from [startUs], including a pending swap blend.
@@ -312,8 +318,12 @@ final class GainTapMeter {
     private var _calls: [Call] = []
     private var _failures: [OSStatus] = []
     private var _format: AudioStreamBasicDescription?
+    private var _captured: [(startUs: Double, samples: [Float])] = []
     /// Level accumulation only counts while this is true (tests skip the ramp-up).
     var accumulating = true
+    /// When true, the tap's output samples (first channel, Float32 formats) are kept with the
+    /// composition time of their first sample (FIX-IOS-PITCH-SYNC: click timing in AVPlayer).
+    var capturing = false
 
     init() {}
 
@@ -329,6 +339,19 @@ final class GainTapMeter {
         lock.lock()
         _calls.append(Call(startUs: startUs, frames: frames))
         lock.unlock()
+    }
+
+    fileprivate func recordSamples(startUs: Double, _ samples: [Float]) {
+        lock.lock()
+        _captured.append((startUs, samples))
+        lock.unlock()
+    }
+
+    /// Captured output blocks (see `capturing`), in render order.
+    var captured: [(startUs: Double, samples: [Float])] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _captured
     }
 
     fileprivate func recordFailure(_ status: OSStatus) {

@@ -383,15 +383,19 @@ void main() {
       semantics.dispose();
     });
 
-    testWidgets('keyboard: Down/Up step the focused splitter', (tester) async {
+    testWidgets('keyboard: Page Down/Page Up step the focused splitter; the arrows stay the editor\'s', (tester) async {
       await _pump(tester, const EditorSurface(Size(1194, 834), platform: TargetPlatform.iOS));
       final start = specOf(tester).splitRatio;
       tester.widget<Focus>(find.descendant(of: find.byType(EditorSplitter), matching: find.byType(Focus)).first).focusNode!.requestFocus();
       await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
       await tester.pump();
       expect(specOf(tester).splitRatio, closeTo(start + 0.05, 0.005));
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageUp);
+      await tester.pump();
+      expect(specOf(tester).splitRatio, closeTo(start, 0.005));
+      // ARCH §17.6: ↑/↓ are edit-point navigation even over a focused control.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
       expect(specOf(tester).splitRatio, closeTo(start, 0.005));
     });

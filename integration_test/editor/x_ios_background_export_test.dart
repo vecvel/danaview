@@ -34,6 +34,8 @@ void main() {
       () {
         final s = E2eExport.state(ed);
         if (s is ExportUiNotice) E2eExport.controller(ed).confirmNotice();
+        // The simulator encodes in software, which the setup warns about first (ux.md §11.1).
+        if (s is ExportUiWarnings) E2eExport.controller(ed).confirmWarnings();
         return s is ExportUiRunning && s.fraction > 0.1;
       },
       what: 'the export to pass 10 %',

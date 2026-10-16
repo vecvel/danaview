@@ -264,7 +264,7 @@ class HostApisTest {
         val plan = "{}".toByteArray()
         calls.answer = { name, _ -> if (name == "start") Result.success("export-1") else Result.success(emptyList<Any>()) }
         call<Any?> { export.preflight(plan, settings, it) }
-        assertEquals("export-1", call<String> { export.start(plan, settings, work, "My video", DetachedHandoffMsg.SAVE_TO_GALLERY, it) }.value())
+        assertEquals("export-1", call<String> { export.start(plan, settings, work, "My video", DetachedHandoffMsg.SAVE_TO_GALLERY, null, it) }.value())
         call<Unit> { export.cancel("export-1", it) }
         call<Any?> { export.activeJobs(it) }
         fake.main.onMain { export.consumeJobRecord("export-1") }
@@ -276,9 +276,9 @@ class HostApisTest {
     @Test
     fun exportChecksAndResume() {
         val plan = "{}".toByteArray()
-        call<String> { export.start(plan, settings, "/sdcard/Movies/x.mp4", "t", DetachedHandoffMsg.SAVE_TO_GALLERY, it) }
+        call<String> { export.start(plan, settings, "/sdcard/Movies/x.mp4", "t", DetachedHandoffMsg.SAVE_TO_GALLERY, null, it) }
             .assertError("permissionDenied")
-        call<String> { export.start(ByteArray(0), settings, work, "t", DetachedHandoffMsg.SAVE_TO_GALLERY, it) }.assertError("planInvalid")
+        call<String> { export.start(ByteArray(0), settings, work, "t", DetachedHandoffMsg.SAVE_TO_GALLERY, null, it) }.assertError("planInvalid")
         call<Any?> { export.preflight(plan, settings.copy(fps = 23), it) }.assertError("internal")
         call<Any?> { export.preflight(plan, settings.copy(width = 0), it) }.assertError("internal")
         call<String> { export.resume("export-1", it) }.assertError("notSupportedOnDevice")

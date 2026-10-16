@@ -3,14 +3,22 @@
 // ARCH §21.2 scenario 8: Auto captions with the tiny model (pre-staged through
 // `ModelStore.installFromFile`, no network) on speech_10s.m4a: at least one cue, the exported SRT
 // parses back to the same cues, and one undo removes them all.
+//
+// The import places audio on a music lane (domain.md: audio import -> AudioRole.music), and the
+// "Whole video" scope leaves music out by design (ai.md §8.2), so the scenario captions the speech
+// clip itself: it selects it and opens Auto captions from the clip's context menu, which preselects
+// "This clip" (FIX-QA-00-1).
 
 // ignore_for_file: implementation_imports
 
 import 'dart:io';
 
+import 'package:danaview_editor/src/app/strings/captions_strings.dart';
+import 'package:danaview_editor/src/editor/contracts/action_binding.dart';
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
 import 'package:danaview_editor_core/formats.dart';
 import 'package:danaview_editor_core/model.dart';
+import 'package:flutter/widgets.dart' show ValueKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -33,9 +41,19 @@ void main() {
     );
     final subtitleTracks = ed.tracksOf(TrackKind.subtitle).length;
 
-    await ed.invoke(EditorActionId.autoCaptions);
+    // Caption the speech clip ("This clip"), wherever the import put it.
+    final speech = ed.items<MediaClip>().where((c) => ed.assetOf(c).displayName == Fx.speech).toList();
+    expect(speech, hasLength(1), reason: '${Fx.speech} is on the timeline');
+    await ed.select(speech.single.id);
+    await ed.invoke(EditorActionId.autoCaptions, source: EditorActionSource.contextMenu);
     await E2eApp.waitKey(tester, 'captions-sheet');
     await E2eApp.waitKey(tester, 'captions-configure', timeout: const Duration(seconds: 30));
+    expect(E2eApp.hasKey('captions-scope'), isTrue, reason: 'the sheet offers "This clip" for the selected speech clip');
+    await E2eApp.tap(
+      tester,
+      find.descendant(of: find.byKey(const ValueKey('captions-scope')), matching: find.text(CaptionsStrings.selectionScope(1))),
+      what: 'the "This clip" scope',
+    );
     if (E2eApp.hasKey('captions-tier-fast')) await E2eApp.tapKey(tester, 'captions-tier-fast');
     await E2eApp.tapKey(tester, 'captions-create');
     bool generated() => ed.tracksOf(TrackKind.subtitle).length > subtitleTracks && ed.items<SubtitleCue>().isNotEmpty;

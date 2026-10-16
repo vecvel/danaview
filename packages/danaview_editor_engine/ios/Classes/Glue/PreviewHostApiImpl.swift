@@ -4,6 +4,8 @@
 // `previewControlQueue`, delegate to PreviewSessionManager (IOS-11), reply asynchronously.
 // `setRenderedRanges` (D-45, INT-06) goes to the rendered-range handler (IOS-19).
 // `setTransient`/`clearTransient` are fire-and-forget; the manager coalesces them to one per frame.
+// INT-07: after a successful `open` the current recording state is applied to every session, so a
+// session opened while a recording captures plays muted (RecordingMute.swift).
 
 import Flutter
 import Foundation
@@ -27,8 +29,13 @@ final class PreviewHostApiImpl: PreviewHostApi {
                 _ = try context.requirePaths()
                 try Validate.previewConfig(config)
             }
-        ) { [manager = self.manager] _, reply in
-            manager.open(config, reply: reply)
+        ) { [manager = self.manager, queue = self.queue] _, reply in
+            manager.open(config) { result in
+                if case .success = result {
+                    RecordingMuteBridge.apply(VoiceRecorder.isRecording, to: manager, on: queue)
+                }
+                reply(result)
+            }
         }
     }
 

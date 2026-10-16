@@ -133,8 +133,49 @@ The app writes `req-<seq>-<action>.json`. The host carries the action out, write
 - Performance numbers are meaningless here. QA-04 measures on devices.
 - The simulator keeps the encoder in the background, so the iOS background extra may finish without ever pausing. That outcome is reported; IOS-01/IOS-13 verify the pause on real iPhones.
 - Scenario 13 records the Mac's input device on the simulator and the virtual microphone on the emulator. A host with no microphone input records silence, which fails the audibility check. QA-01/QA-02 record the input device they used.
+- On the iOS Simulator, `simctl privacy grant microphone` terminates a running app, so the host grants it before s13 starts. On this Mac (2026-10-16), starting the recorder aborted the app in `AVAudioEngine.inputNode` (`AURemoteIO` RPC timeout). A simulator with no usable audio input cannot run s13, which then needs a device.
 
 ## Status (QA-00)
 
-- The suite compiles against the real app: `flutter analyze integration_test/editor` is clean, and every test file builds in one Flutter test build.
-- The required first passes on one simulator and one emulator are QA-01's and QA-02's runs. Defects they find are filed as FIX tickets against the owning ticket's files.
+- **Analyzer:** `flutter analyze integration_test/editor` is clean.
+- **Simulator run (2026-10-16):** `tool/e2e_host.sh -p ios -d 8FDBFBEF-0D3D-4D4C-8995-F1021988835F run all` on the **iPhone 17, iOS 26.5** simulator (Xcode 26.6, Flutter 3.44, debug). This Mac has no "iPhone 16" runtime on iOS 26.5, so the booted iPhone 17 on that runtime was used. The models for scenario 8 were not staged (see below). Logs are in `build/e2e/ios/<udid>/logs/`.
+- **Emulator run: deferred: Windows lane (QA-02).**
+
+| # | Result | Cause (FIX tickets: `docs/v1.1/editor/handoff/BUILD_STATE.md`, "Open FIX tickets filed by QA") |
+|---|---|---|
+| s01 | pass | |
+| s02 | **fail** | FIX-UX-41-1. The player hands over 5 333 000 µs (millisecond precision). The editor floors that to frame 159 and opens there, not on frame 160. |
+| s03 | pass | |
+| s04 | pass | |
+| s05 | pass | |
+| s06 | **fail** | FIX-INT-02-2. After the freeze-frame still is `Ready` and its PNG exists, the preview still shows the grey placeholder. The barcode is unreadable. |
+| s07 | pass | H.264/MP4 720p conforms. Burned and not-burned cues, typewriter, blend only inside the dissolve, and SRT/VTT round trip all pass. HEVC/MOV: `hevcEncode false` on the simulator, reported, not failed. |
+| s08 | **not run** | The tiny model and the VAD are not staged on this Mac (`~/.cache/danaview-ci/whisper` is empty). The suite downloads nothing. Stage them with `scripts/ci/editor/whisper_host.sh --download-models` and run `-m <dir> run s08`. |
+| s09 | pass | Both phases: `edit` ends with the host kill, and `recover` restores the edit. |
+| s10 | **fail** | FIX-UX-07-2. `EditorHealthHost` (the missing-media banner and the health subscription) is never mounted, so the banner never shows. |
+| s11 | pass | |
+| s12 | **fail** | FIX-UX-07-1. `EditorShortcuts` is never mounted in `EditorScreen`, so no keyboard shortcut works in the app. |
+| s13 | **fail (simulator)** | The app aborts in `AVAudioEngine.inputNode` (`AURemoteIO::Initialize` RPC timeout, `_ReportRPCTimeout`) when recording starts. This Mac's simulator has no usable audio input. Deferred: device. |
+| s14 | pass | |
+| s15 | **fail** | FIX-UX-22-2, now confirmed in the real app: selecting the extracted audio clip throws in `ManipulationOverlay.build`. The fade/level part ran (`head -14.6 dBFS, body -9.0 dBFS`). |
+| s16 | **fail** | FIX-UX-07-1 (M does nothing). |
+| s17 | **fail** | FIX-UX-07-1 (S does nothing). |
+| s18 | **fail** | FIX-UX-07-1 (S does nothing). |
+| x_ios_background_export | pass | Simulator reality: `pausedInBackground observed: false`, reported. The four inputs are the same file, so the pool dedupes them into one 8 s clip. The run therefore spans one segment, not several. |
+| x_android_api28 | pass (trivial on iOS) | |
+| x_android_export_background | skipped on iOS | |
+
+**Suite-wide workaround.** FIX-INT-02-1 is a blocker. Nothing in the app sets `MobileMediaAccess.documentsRoot`, so every Files import under Documents resolves as `accessLost: documents root not available`. In the app this shows as black or grey preview frames, an export blocked with "Relink N missing files", and unreadable barcodes. `E2eApp._boot` sets the root itself so the other scenarios can run. Pass `-D DV_E2E_NO_WORKAROUNDS=true` to run against the app as it is. Remove the workaround when FIX-INT-02-1 lands.
+
+**Suite fixes made while running it (QA-00).**
+- Taps wait until the target is hit-testable, because a route still animating in drops pointer events. This had lost the "New" tap in s03, s04 and s06.
+- `tapKey(..., ifStillThere: true)` is used for the import summary, which may close itself.
+- A wait that times out now prints the visible texts and keys.
+- Export "Done" goes through the button (the controller's `done` does not close the sheet).
+- The s03 duplicate step waits for the copy's card instead of the toast.
+- In s07, the burned-cue check counts changed pixels in the subtitle band instead of averaging over the band.
+- In s07, the dissolve is placed on a cut with a 15-frame source jump. On a continuous cut, both sides show the same frame and nothing blends.
+- In x_ios, the software-encoder warning is confirmed.
+- `e2e_host.sh` has a per-phase watchdog (`DV_E2E_PHASE_TIMEOUT`, default 900 s).
+- `e2e_host.sh` grants the microphone on iOS before s13 starts, because `simctl privacy grant` terminates a running app.
+- `e2e_host.sh` copies `e2e_out` out while a test runs, because `flutter test` uninstalls the app, and its sandbox, when it ends.

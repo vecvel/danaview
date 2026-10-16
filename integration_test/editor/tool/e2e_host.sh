@@ -168,7 +168,11 @@ serve_one() {
       local secs; secs="$(json_arg "$body" seconds)"; secs="${secs:-3}"
       app_background; sleep "$secs"; app_foreground; sleep 0.5; detail="background ${secs}s" ;;
     foreground) app_foreground ;;
-    grantMic) grant_mic || { ok=false; detail="grant failed"; } ;;
+    grantMic)
+      # iOS: `simctl privacy grant` terminates a running app, so run_file grants the microphone
+      # before the phase starts and this request only confirms it.
+      if [[ "$PLATFORM" == ios ]]; then detail="granted before launch"
+      else grant_mic || { ok=false; detail="grant failed"; }; fi ;;
     screenshot) screenshot "$(json_arg "$body" name)" ;;
     tapNotificationCancel)
       if [[ "$PLATFORM" == android ]]; then
@@ -194,8 +198,11 @@ serve_one() {
 
 # Serves requests while the flutter process <pid> runs. Exit 0 normally, 3 when an action ended the app.
 serve() {
-  local pid="$1" status=0
+  local pid="$1" status=0 tick=0
   while kill -0 "$pid" 2>/dev/null; do
+    # `flutter test` uninstalls the app when it ends (and the sandbox with it), so exported files
+    # are copied out while the test still runs (every ~6 s), not only by `collect` at the end.
+    tick=$((tick + 1)); if (( tick % 20 == 0 )); then collect_quietly; fi
     for req in $(list_requests); do
       rm -f "$OUT/.died"
       serve_one "$req" >> "$OUT/logs/host-actions.log" 2>&1 || log "action failed for $req"
@@ -235,6 +242,14 @@ stage_models() {
     adb -s "$DEVICE" shell mkdir -p "$ANDROID_SHARED/e2e_models"
     for m in "${MODEL_FILES[@]}"; do adb -s "$DEVICE" push "$dir/$m" "$ANDROID_SHARED/e2e_models/" >/dev/null; done
     log "pushed models to $ANDROID_SHARED/e2e_models"
+  fi
+}
+
+collect_quietly() {
+  if [[ "$PLATFORM" == ios ]]; then
+    local d; d="$(ios_shared)"; [[ -n "$d" && -d "$d/e2e_out" ]] && cp -R "$d/e2e_out/." "$OUT/files/" 2>/dev/null || true
+  else
+    adb -s "$DEVICE" pull "$ANDROID_SHARED/e2e_out/." "$OUT/files/" >/dev/null 2>&1 || true
   fi
 }
 
@@ -290,6 +305,9 @@ run_phase() {
 run_file() {
   local file="$1" name; name="$(basename "$file" .dart)"
   case "$name" in
+    s13_voiceover_test)
+      if [[ "$PLATFORM" == ios ]]; then grant_mic || log "microphone grant failed (is the app installed?)"; fi
+      run_phase "$file" "" pass ;;
     s09_recovery_after_kill_test) run_phase "$file" edit dies && run_phase "$file" recover pass ;;
     x_android_export_background_test)
       [[ "$PLATFORM" == android ]] || { log "skip $name on $PLATFORM"; return 0; }

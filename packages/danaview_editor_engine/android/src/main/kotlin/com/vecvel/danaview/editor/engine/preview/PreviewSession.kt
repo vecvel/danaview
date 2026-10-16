@@ -229,6 +229,12 @@ interface PreviewBackend {
 
     /** Releases everything (session dispose). */
     fun release(done: Completion<Unit>)
+
+    /**
+     * Mutes (true) or unmutes the backend's audio output while a voice recording captures (INT-07,
+     * ARCH §15); applies to decks created later too. Backends without audio ignore it.
+     */
+    fun setMuted(muted: Boolean) = Unit
 }
 
 /** One live preview session (ARCH §12.2, §13; AND-10; file header). */
@@ -663,6 +669,17 @@ class PreviewSession internal constructor(
     }
 
     /** Switches proxies on or off. */
+    /** Whether the session's audio is muted while a voice recording captures (INT-07; preview thread). */
+    var recordingMuted: Boolean = false
+        private set
+
+    /** Mutes or unmutes the audio while a recording captures (INT-07, ARCH §15). Called on danaview-preview. */
+    fun setRecordingMuted(muted: Boolean) {
+        if (disposed || recordingMuted == muted) return
+        recordingMuted = muted
+        backend.setMuted(muted)
+    }
+
     fun setUseProxies(on: Boolean, done: Completion<Unit>) {
         if (disposed) return done.fail(cancelled())
         useProxies = on

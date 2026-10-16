@@ -168,6 +168,8 @@ struct VideoTrackInfo {
     let bitDepth: Int
     let hasAudio: Bool
     let sampleTimescale: CMTimeScale
+    /// The track's edit list (media → track time). Passthrough readers return media times.
+    let edits: TrackEdits
 
     static func load(_ url: URL) throws -> VideoTrackInfo {
         guard FileManager.default.fileExists(atPath: url.path) else { throw EngineError(.mediaOffline, "media file missing") }
@@ -185,6 +187,7 @@ struct VideoTrackInfo {
              try await track.load(.timeRange), try await track.load(.formatDescriptions),
              try await track.load(.naturalTimeScale))
         }
+        let edits = try TrackEdits.load(track)
         var hdr = false
         var depth = 8
         if let description = facts.5.first {
@@ -203,13 +206,86 @@ struct VideoTrackInfo {
         return VideoTrackInfo(
             asset: asset, track: track, width: Int(abs(facts.0.width).rounded()), height: Int(abs(facts.0.height).rounded()),
             transform: facts.1, nominalFps: facts.2 > 0 ? Double(facts.2) : 30, estimatedDataRate: Double(facts.3),
-            endUs: Probe.microseconds(end), isHDR: hdr, bitDepth: depth, hasAudio: loaded.1, sampleTimescale: facts.6)
+            endUs: Probe.microseconds(end), isHDR: hdr, bitDepth: depth, hasAudio: loaded.1, sampleTimescale: facts.6,
+            edits: edits)
     }
 
     /// The reader pixel format: 10-bit for HDR / high bit depth sources (tone-mapped later), 420v
     /// otherwise.
     var decodePixelFormat: OSType {
         isHDR || bitDepth > 8 ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+    }
+}
+
+// MARK: - Edit list
+
+/// A track's edit list: maps MEDIA time (what a passthrough `AVAssetReaderTrackOutput` with nil
+/// output settings returns) to TRACK time (what decoded outputs, reader time ranges and
+/// compositions use). Encoders that reorder frames (B-frames) usually write an edit that starts
+/// the media at the first composition offset (e.g. media 0.108 s → track 0), so the two differ
+/// (FIX-IOS-MEDIA).
+struct TrackEdits: Equatable {
+    struct Edit: Equatable {
+        let source: CMTimeRange
+        let target: CMTimeRange
+    }
+
+    /// Non-empty edits in track order; empty = identity.
+    let edits: [Edit]
+
+    static let identity = TrackEdits(edits: [])
+
+    static func load(_ track: AVAssetTrack) throws -> TrackEdits {
+        let segments = try MediaBlocking.await { try await track.load(.segments) }
+        return TrackEdits(edits: segments.compactMap { segment in
+            guard !segment.isEmpty, segment.timeMapping.source.start.isNumeric,
+                  segment.timeMapping.source.duration.isNumeric, segment.timeMapping.target.duration.isNumeric else { return nil }
+            return Edit(source: segment.timeMapping.source, target: segment.timeMapping.target)
+        })
+    }
+
+    /// Track time of the media interval [mediaStart, mediaEnd) for every edit that presents part of
+    /// it (a frame straddling an edit's start is shown from that edit's target start).
+    func trackTimes(mediaStart: CMTime, mediaEnd: CMTime) -> [CMTime] {
+        guard !edits.isEmpty else { return [mediaStart] }
+        var times: [CMTime] = []
+        for edit in edits {
+            let sourceEnd = edit.source.end
+            guard CMTimeCompare(mediaStart, sourceEnd) < 0, CMTimeCompare(mediaEnd, edit.source.start) > 0 else { continue }
+            let offset = CMTimeSubtract(CMTimeMaximum(mediaStart, edit.source.start), edit.source.start)
+            let scaled: CMTime
+            if CMTimeCompare(edit.source.duration, edit.target.duration) == 0 || edit.source.duration.seconds <= 0 {
+                scaled = offset
+            } else {
+                scaled = CMTimeMultiplyByFloat64(offset, multiplier: edit.target.duration.seconds / edit.source.duration.seconds)
+            }
+            times.append(CMTimeAdd(edit.target.start, scaled))
+        }
+        return times
+    }
+
+    /// Track times of a list of media sample PTS (any order): each sample covers up to the next
+    /// media PTS ([mediaEnd] for the last); samples no edit presents are dropped. Sorted, unique.
+    func trackTimes(ofMediaPts pts: [CMTime], mediaEnd: CMTime) -> [CMTime] {
+        let sorted = pts.sorted { CMTimeCompare($0, $1) < 0 }
+        guard !edits.isEmpty else { return TrackEdits.unique(sorted) }
+        var result: [CMTime] = []
+        for (i, p) in sorted.enumerated() {
+            let next = i + 1 < sorted.count ? sorted[i + 1] : CMTimeMaximum(mediaEnd, CMTimeAdd(p, CMTime(value: 1, timescale: 1_000_000)))
+            result.append(contentsOf: trackTimes(mediaStart: p, mediaEnd: next))
+        }
+        return TrackEdits.unique(result.sorted { CMTimeCompare($0, $1) < 0 })
+    }
+
+    /// End of the media covered by the edits (the last sample's end), or nil without edits.
+    var mediaEnd: CMTime? {
+        edits.map(\.source.end).max { CMTimeCompare($0, $1) < 0 }
+    }
+
+    private static func unique(_ sorted: [CMTime]) -> [CMTime] {
+        var out: [CMTime] = []
+        for t in sorted where out.last.map({ CMTimeCompare($0, t) != 0 }) ?? true { out.append(t) }
+        return out
     }
 }
 
@@ -292,6 +368,13 @@ final class ProxyFrameSource: SegmentVideoSource {
     private let control: JobControl?
     private var reader: AVAssetReader?
     private var output: AVAssetReaderTrackOutput?
+    private var segmentStart = CMTime.zero
+
+    /// How far before a segment's start its reader begins. A decoding reader returns the frame that
+    /// straddles its range start re-stamped to that start (a VFR frame at 1.983 s comes back at
+    /// 2.000 s for a range starting at 2 s, a duplicate of the previous segment's last frame); with
+    /// the range opened earlier that copy lands before the segment and is skipped (FIX-IOS-MEDIA).
+    static let readerLeadUs: Int64 = 100_000
 
     init(info: VideoTrackInfo, width: Int, height: Int, control: JobControl?) {
         self.info = info
@@ -307,7 +390,8 @@ final class ProxyFrameSource: SegmentVideoSource {
         } catch {
             throw EngineError.from(error)
         }
-        reader.timeRange = CMTimeRange(start: CMTime(value: startUs, timescale: 1_000_000),
+        segmentStart = CMTime(value: startUs, timescale: 1_000_000)
+        reader.timeRange = CMTimeRange(start: CMTime(value: max(0, startUs - ProxyFrameSource.readerLeadUs), timescale: 1_000_000),
                                        end: CMTime(value: endUs, timescale: 1_000_000))
         let output = AVAssetReaderTrackOutput(
             track: info.track, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: info.decodePixelFormat])
@@ -322,10 +406,19 @@ final class ProxyFrameSource: SegmentVideoSource {
 
     func nextFrame() throws -> SegmentFrame? {
         guard let output = output, let reader = reader else { return nil }
-        while let sample = output.copyNextSampleBuffer() {
-            if control?.isStopped == true { throw EngineError(.interrupted, "stopped", retryable: true) }
-            guard let image = CMSampleBufferGetImageBuffer(sample) else { continue }
-            return SegmentFrame(pixelBuffer: try renderer.render(image), pts: CMSampleBufferGetPresentationTimeStamp(sample))
+        while true {
+            // One pool per decoded frame (per-frame autoreleased reader objects; FIX-IOS-MEDIA).
+            let step = try autoreleasepool { () throws -> (frame: SegmentFrame?, more: Bool) in
+                guard let sample = output.copyNextSampleBuffer() else { return (nil, false) }
+                if control?.isStopped == true { throw EngineError(.interrupted, "stopped", retryable: true) }
+                guard let image = CMSampleBufferGetImageBuffer(sample) else { return (nil, true) }
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                // Frames of the lead-in belong to the previous segment: skipped before rendering.
+                if CMTimeCompare(pts, segmentStart) < 0 { return (nil, true) }
+                return (SegmentFrame(pixelBuffer: try renderer.render(image), pts: pts), true)
+            }
+            if let frame = step.frame { return frame }
+            if !step.more { break }
         }
         if reader.status == .failed {
             throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "reader failed")

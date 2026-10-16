@@ -9,9 +9,12 @@
 //   **before** each compile (`MediaAccessPort.resolve` for originals, the proxy folder for ready
 //   proxies, `.vlut` headers for looks and imported LUTs) and publishes a plain
 //   `MapPlanAssetResolver` snapshot that gesture transients and poster requests read synchronously.
-// * Resolutions are cached per (media id, locator): a relink changes the locator and re-resolves;
-//   a failed resolve is retried only when the availability report changes (CORE-28 refreshes it on
-//   app resume and after relink), so a missing file does not cost a platform call per commit.
+// * Resolutions are cached per (media id, locator, status, fingerprint): a relink changes the
+//   locator and re-resolves; a derived asset (freeze still, reversed rendition) that turns from
+//   pending to ready, or is produced again, re-resolves at once (FIX-INT-02-2: its file did not exist
+//   while pending, and the cached miss used to hide the finished still). Any other failed resolve is
+//   retried only when the availability report changes (CORE-28 refreshes it on app resume and after
+//   relink), so a missing file does not cost a platform call per commit.
 // * Availability (CORE-28 `AvailabilityMonitor.last`): missing, access-lost, changed and
 //   derived-missing media are offline in the plan (the compiler emits the placeholder and lists the
 //   id in `req.offline`).
@@ -151,9 +154,14 @@ final class DefaultSessionPlanCompiler implements SessionPlanCompiler {
 }
 
 final class _Resolution {
-  _Resolution(this.locator, this.media, this.report);
+  _Resolution(this.locator, this.status, this.fingerprint, this.media, this.report);
 
   final MediaLocator locator;
+
+  /// The asset's status and fingerprint when it was resolved (a change re-resolves).
+  final AssetStatus status;
+  final MediaFingerprint fingerprint;
+
   final ResolvedMedia? media;
 
   /// The availability report in force when a failed resolve happened (retry once it changes).
@@ -274,7 +282,7 @@ final class SessionAssetResolver {
 
   Future<ResolvedMedia?> _original(MediaAsset asset, MediaAvailabilityReport? report) async {
     final cached = _originals[asset.id];
-    if (cached != null && cached.locator == asset.locator) {
+    if (cached != null && cached.locator == asset.locator && cached.status == asset.status && cached.fingerprint == asset.fingerprint) {
       if (cached.media != null) return cached.media;
       if (identical(cached.report, report)) return null;
     }
@@ -290,7 +298,7 @@ final class SessionAssetResolver {
       debugPrint('[PlanCompiler] Resolve failed: ${e.runtimeType}');
       media = null;
     }
-    _originals[asset.id] = _Resolution(asset.locator, media, report);
+    _originals[asset.id] = _Resolution(asset.locator, asset.status, asset.fingerprint, media, report);
     return media;
   }
 

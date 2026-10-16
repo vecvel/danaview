@@ -109,7 +109,7 @@ jobs:
           cp -r build/linux/x64/release/bundle/* "$DEB_ROOT/opt/danaview/"
           ln -s "/opt/danaview/danaview" "$DEB_ROOT/usr/bin/danaview"
           cp linux/packaging/com.vecvel.danaview.desktop "$DEB_ROOT/usr/share/applications/"
-          cp assets/branding/danaview_icon.png "$DEB_ROOT/usr/share/icons/hicolor/256x256/apps/danaview.png"
+          cp assets/branding/linux/danaview_256.png "$DEB_ROOT/usr/share/icons/hicolor/256x256/apps/danaview.png"
 
           {
             echo "Package: danaview"

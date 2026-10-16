@@ -1,4 +1,5 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: render-preview requests, rendered ranges)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: render-preview requests, rendered ranges;
+// by INT-07: workDir, notificationTexts)
 //
 // Argument checks of the host handlers (ARCH §12.6: handlers validate before posting work). A bad
 // argument is a Dart bug, so it fails with `internal` (ARCH §19: UnknownFailure + debug assert);
@@ -17,6 +18,7 @@ import com.vecvel.danaview.editor.engine.core.Paths
 import com.vecvel.danaview.editor.engine.pigeon.EditingModeKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.EditingModeMsg
 import com.vecvel.danaview.editor.engine.pigeon.EncodeSettingsMsg
+import com.vecvel.danaview.editor.engine.pigeon.ExportNotificationTextsMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobRequestMsg
 import com.vecvel.danaview.editor.engine.pigeon.LookSpecMsg
@@ -113,6 +115,29 @@ object Check {
     fun fileName(name: String, value: String) {
         id(name, value)
         if (value.contains('/') || value.contains('\\') || value == "." || value == "..") fail(name, "not a plain file name")
+    }
+
+    /** A directory inside `<cache>/work/` (INT-07 materializePick); `permissionDenied` outside it. */
+    fun workDir(name: String, path: String, paths: Paths?): File {
+        val roots = paths ?: throw EngineErrors.notInitialized()
+        val dir = Paths.normalize(path) ?: fail(name, "not an absolute path")
+        if (!Paths.isInside(dir, roots.work)) throw EngineException(EngineErrorCode.permissionDenied, "$name is outside the work directory")
+        return dir
+    }
+
+    /** INT-07: every localized notification text non-empty and at most 256 chars. */
+    fun notificationTexts(t: ExportNotificationTextsMsg) {
+        val all = listOf(
+            "exportTitle" to t.exportTitle, "workTitle" to t.workTitle, "exporting" to t.exporting,
+            "exportingProgress" to t.exportingProgress, "working" to t.working, "workingProgress" to t.workingProgress,
+            "cancel" to t.cancel, "savedToGallery" to t.savedToGallery, "exportFinished" to t.exportFinished, "more" to t.more,
+            "progressChannelName" to t.progressChannelName, "progressChannelDescription" to t.progressChannelDescription,
+            "doneChannelName" to t.doneChannelName, "doneChannelDescription" to t.doneChannelDescription,
+        )
+        for ((name, value) in all) {
+            if (value.isBlank()) fail("texts.$name", "empty")
+            if (value.length > 256) fail("texts.$name", "too long")
+        }
     }
 
     /** A free-text title (notification text): at most 1024 chars. */

@@ -1,4 +1,5 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06 for the D-45 render-preview calls)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06 for the D-45 render-preview calls and
+// by INT-07: notification texts, isRecording, materializePick)
 //
 // What the host API glue needs from the engine, one port per host API (ARCH §12.6). The glue
 // validates arguments, chooses the thread and maps errors; the ports only do the work. Production
@@ -10,7 +11,8 @@
 //
 // The D-45 render-preview methods (INT-06: startRenderPreview, setRenderedRanges, powerState) have
 // default bodies that fail with `notSupportedOnDevice`, so port fakes written before INT-06 keep
-// compiling; the Context ports route them to AND-18's `preview/render/` services.
+// compiling; the Context ports route them to AND-18's `preview/render/` services. The INT-07
+// methods (setExportTexts, isRecording, materializePick) have defaults for the same reason.
 
 package com.vecvel.danaview.editor.engine.glue
 
@@ -26,6 +28,7 @@ import com.vecvel.danaview.editor.engine.pigeon.DetachedHandoffMsg
 import com.vecvel.danaview.editor.engine.pigeon.EditingModeMsg
 import com.vecvel.danaview.editor.engine.pigeon.EncodeSettingsMsg
 import com.vecvel.danaview.editor.engine.pigeon.ExportJobRecordMsg
+import com.vecvel.danaview.editor.engine.pigeon.ExportNotificationTextsMsg
 import com.vecvel.danaview.editor.engine.pigeon.ExportPreflightMsg
 import com.vecvel.danaview.editor.engine.pigeon.FileHandoffResultMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobPriorityMsg
@@ -51,6 +54,7 @@ import com.vecvel.danaview.editor.engine.pigeon.SeekAckMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbPriorityMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbnailRequestMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbnailTileMsg
+import java.io.File
 
 /** `EngineHostApi` work. */
 interface EngineRootPort {
@@ -74,6 +78,9 @@ interface EngineRootPort {
 
     /** Drops caches per level (fans out to the cache owners' lanes). */
     fun trimCaches(level: CacheTrimLevelMsg)
+
+    /** The localized export notification texts from `initialize` (INT-07; validated by the glue). */
+    fun setExportTexts(texts: ExportNotificationTextsMsg) = Unit
 }
 
 /** `PreviewHostApi` work (danaview-preview). Unknown session ids fail with `internal`, except dispose. */
@@ -140,6 +147,9 @@ interface ExportPort {
     fun cancel(jobId: String, done: Completion<Unit>)
     fun activeJobs(done: Completion<List<ExportJobRecordMsg>>)
     fun consumeJobRecord(jobId: String)
+
+    /** Texts an export `start` carried (INT-07): they replace the current ones before the job starts. */
+    fun setExportTexts(texts: ExportNotificationTextsMsg) = Unit
 }
 
 /** `RecorderHostApi` work (permission/start/stop/cancel on danaview-io; request/settings on main). */
@@ -150,6 +160,9 @@ interface RecorderPort {
     fun start(outputPath: String, done: Completion<String>)
     fun stop(recordingId: String, done: Completion<RecordedAssetMsg>)
     fun cancel(recordingId: String, done: Completion<Unit>)
+
+    /** Whether a recording captures now (INT-07, danaview-io); changes are `recordingChanged` events. */
+    fun isRecording(done: Completion<Boolean>) = done.fail(EngineErrors.notSupported("recording state"))
 }
 
 /** `PlatformHostApi` work (UI flows on main; access, stat, hash and gallery on danaview-io). */
@@ -171,4 +184,10 @@ interface PlatformPort {
 
     /** Charging and battery-saver state (D-45, main); changes are `signal(powerStateChanged)` events. */
     fun powerState(done: Completion<PowerStateMsg>) = done.fail(EngineErrors.notSupported("power state"))
+
+    /**
+     * Copies a non-persistable pick into a new directory under [intoDir] (inside `<cache>/work/`,
+     * checked by the glue) and completes with the copy's path (INT-07, danaview-io).
+     */
+    fun materializePick(uri: String, intoDir: File, done: Completion<String>) = done.fail(EngineErrors.notSupported("materializePick"))
 }

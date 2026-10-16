@@ -82,13 +82,7 @@ const bool overflowStrict = bool.fromEnvironment('DANAVIEW_OVERFLOW_STRICT');
 /// Open defects in other tickets' files that this suite finds (reported to their owners; see
 /// docs/v1.1/editor/qa/QA-09-overflow.md). A problem matching one is printed as KNOWN DEFECT and
 /// does not fail the run unless [overflowStrict]. Remove an entry when its fix lands.
-const List<({String id, String pattern, String what})> knownDefects = [
-  (
-    id: 'FIX-UX-22-2',
-    pattern: 'property "transform.scale" does not apply to this item: MediaClip',
-    what: 'ManipulationOverlay evaluates transform.scale on a selected audio clip (no visual) and throws while building',
-  ),
-];
+const List<({String id, String pattern, String what})> knownDefects = [];
 
 /// The known defect [problem] matches, if any.
 String? knownDefectOf(String problem) {

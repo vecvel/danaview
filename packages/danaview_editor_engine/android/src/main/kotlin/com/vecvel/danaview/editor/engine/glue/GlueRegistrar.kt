@@ -1,4 +1,5 @@
-// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: the preview glue gets the roots)
+// OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: the preview glue gets the roots; by
+// INT-07: the recording bridge, RecordingSignals, installed once per process)
 //
 // Installs the six Pigeon host APIs and the event stream handler of ARCH §12.6 on one Flutter
 // engine's messenger, and removes them when that engine detaches. Every Flutter engine shares the
@@ -75,6 +76,7 @@ class GlueRegistrar private constructor(
             EngineEventsStreamHandler.register(messenger, events)
 
             MemorySignals.installOnce(ctx.appContext, ctx.events, { ctx.pathsOrNull != null }) { level -> root.trimCaches(level) }
+            RecordingSignals.installOnce(ctx)
             return GlueRegistrar(ctx, messenger, previewPort, events)
         }
     }

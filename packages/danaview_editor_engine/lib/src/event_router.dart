@@ -18,6 +18,7 @@
 // - A job route ends with its first terminal event (`jobDone`, or `failure` carrying a jobId):
 //   the stream closes and later events for that id are dropped. Session routes end with
 //   [EngineEventRouter.release] (dispose); late events are dropped.
+// - `recordingChanged` (INT-07) is engine-wide and goes to [EngineEventRouter.recording].
 
 import 'dart:async';
 import 'dart:collection';
@@ -93,6 +94,7 @@ final class EngineEventRouter {
 
   final StreamController<SignalMsg> _signals = StreamController<SignalMsg>.broadcast();
   final StreamController<DropMsg> _drops = StreamController<DropMsg>.broadcast();
+  final StreamController<bool> _recording = StreamController<bool>.broadcast();
   final StreamController<EngineFailure> _failures = StreamController<EngineFailure>.broadcast();
 
   /// Whether the source stream is subscribed.
@@ -145,6 +147,9 @@ final class EngineEventRouter {
   /// External drops (D-18).
   Stream<DropMsg> get drops => _drops.stream;
 
+  /// Voice recording state changes (INT-07): true when a capture starts, false when it ends.
+  Stream<bool> get recording => _recording.stream;
+
   /// Errors raised on the event channel itself and failures that name no session or job.
   Stream<EngineFailure> get failures => _failures.stream;
 
@@ -165,7 +170,7 @@ final class EngineEventRouter {
     _sessions.clear();
     _jobs.clear();
     await sub?.cancel();
-    await Future.wait([_signals.close(), _drops.close(), _failures.close()]);
+    await Future.wait([_signals.close(), _drops.close(), _recording.close(), _failures.close()]);
   }
 
   _Route _route(Map<String, _Route> routes, String id, {required bool isJob}) {
@@ -201,6 +206,8 @@ final class EngineEventRouter {
         if (event.signal case final s?) _signals.add(s);
       case EngineEventKindMsg.drop:
         if (event.drop case final d?) _drops.add(d);
+      case EngineEventKindMsg.recordingChanged:
+        if (event.recording case final r?) _recording.add(r);
     }
   }
 
@@ -255,6 +262,7 @@ bool _hasPayload(EngineEventMsg e) => switch (e.kind) {
       EngineEventKindMsg.leaseExpiring => true,
       EngineEventKindMsg.signal => e.signal != null,
       EngineEventKindMsg.drop => e.drop != null,
+      EngineEventKindMsg.recordingChanged => e.recording != null,
     };
 
 /// The rate-limited sample kinds.

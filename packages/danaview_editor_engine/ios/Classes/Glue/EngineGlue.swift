@@ -2,7 +2,8 @@
 //
 // Installs the glue of one Flutter engine (ARCH §12.6): the six host APIs generated in
 // Pigeon/EngineApi.g.swift, the `EngineEventsApi.engineEvents` stream handler (EventHub) and the
-// system signal observers. `uninstall` clears every handler (plugin detach).
+// system signal observers. `uninstall` clears every handler (plugin detach). INT-07 adds the
+// recording bridge (`recordingChanged` events and the preview mute while recording).
 
 import Flutter
 import Foundation
@@ -17,6 +18,7 @@ final class EngineGlue {
     let recorderApi: RecorderHostApiImpl
     let platformApi: PlatformHostApiImpl
     let signals: SystemSignals
+    let recordingMute: RecordingMuteBridge
 
     init(context: EngineContext, services: EngineServices) {
         self.context = context
@@ -28,6 +30,7 @@ final class EngineGlue {
         recorderApi = RecorderHostApiImpl(context: context, services: services)
         platformApi = PlatformHostApiImpl(context: context, services: services)
         signals = SystemSignals(context: context, services: services)
+        recordingMute = RecordingMuteBridge(context: context, services: services)
     }
 
     /// Registers every host API and the event stream on the context's messenger (main thread).
@@ -41,6 +44,7 @@ final class EngineGlue {
         PlatformHostApiSetup.setUp(binaryMessenger: messenger, api: platformApi)
         EngineEventsStreamHandler.register(with: messenger, streamHandler: context.events)
         signals.start()
+        recordingMute.start()
         Log.debug(.glue, "installed")
     }
 
@@ -58,6 +62,7 @@ final class EngineGlue {
         _ = messenger.setMessageHandlerOnChannel(EngineGlue.eventChannelName, binaryMessageHandler: nil)
         context.events.onCancel(withArguments: nil)
         signals.stop()
+        recordingMute.stop()
         Log.debug(.glue, "uninstalled")
     }
 

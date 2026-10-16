@@ -19,6 +19,9 @@
 // * Actions owned by other features (marker, snapping, ripple) show only while they are bound.
 // * At ladder step 4 of the layout (`transportInTopBar`) the bar sits in the top bar's title slot
 //   and shows play/pause and the compact time only.
+// * Tap targets (ARCH §17.9): every button and the readout answer taps and screen readers over at
+//   least 44×44 through `ExpandedHitArea`, also when the bar is 40 px tall (compact landscape,
+//   568×320), without growing the bar.
 // * Rebuilds (ux.md §16.6): the bar rebuilds when the project's duration or frame rate, the edit
 //   modes, the preview quality or the editor phase change, never per playback frame. Per frame only
 //   `TimecodeText` rebuilds, and the play button when playback starts or stops.
@@ -36,6 +39,7 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../../app/editor_providers.dart';
 import '../../debug/rebuild_counters.dart';
+import '../a11y/expanded_hit_area.dart';
 import '../actions/editor_action_registry.dart';
 import '../contracts/contracts.dart';
 import '../editor_scope.dart';
@@ -107,7 +111,8 @@ class TransportBar extends ConsumerWidget {
         final width = constraints.maxWidth.isFinite ? constraints.maxWidth : 400.0;
 
         double timecodeExtent(bool compact) =>
-            measureTextWidth(TimecodeText.widest(view.duration, view.frameRate, compact: compact), TimecodeText.style, textScaler: textScaler) + 2 * timecodePadding;
+            measureTextWidth(TimecodeText.widest(view.duration, view.frameRate, compact: compact), TimecodeText.style, textScaler: textScaler) +
+            2 * timecodePadding;
 
         final play = _PlayButton(transport: transport, registry: registry, enabled: view.canPlay, extent: extent);
         Widget readout(bool compact) => _TimecodeButton(
@@ -190,7 +195,8 @@ class TransportBar extends ConsumerWidget {
     _BarState view,
     double extent,
   ) {
-    Widget action(EditorActionId id, {bool selected = false}) => _ActionButton(spec: registry.spec(id), registry: registry, ctx: ctx, selected: selected, enabled: view.ready);
+    Widget action(EditorActionId id, {bool selected = false}) =>
+        _ActionButton(spec: registry.spec(id), registry: registry, ctx: ctx, selected: selected, enabled: view.ready);
     return switch (item) {
       TransportItem.frames => Row(mainAxisSize: MainAxisSize.min, children: [
           _StepButton(transport: transport, direction: -1, registry: registry, enabled: view.ready),
@@ -287,13 +293,15 @@ class _PlayButton extends StatelessWidget {
       valueListenable: transport.playing,
       builder: (context, playing, _) {
         final label = playing ? TransportStrings.pause : TransportStrings.play;
-        return DanaviewIconButton(
-          icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          iconSize: 28,
-          size: TransportBar.buttonSize,
-          tooltip: registry.tooltip(EditorActionId.playPause, label),
-          semanticLabel: label,
-          onPressed: enabled ? () => unawaited(transport.togglePlay()) : null,
+        return ExpandedHitArea(
+          child: DanaviewIconButton(
+            icon: playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            iconSize: 28,
+            size: TransportBar.buttonSize,
+            tooltip: registry.tooltip(EditorActionId.playPause, label),
+            semanticLabel: label,
+            onPressed: enabled ? () => unawaited(transport.togglePlay()) : null,
+          ),
         );
       },
     );
@@ -313,14 +321,16 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final runnable = enabled && spec.isEnabled(ctx);
-    return DanaviewIconButton(
-      icon: spec.icon,
-      iconSize: 22,
-      size: TransportBar.buttonSize,
-      selected: selected,
-      tooltip: registry.tooltip(spec.id),
-      semanticLabel: spec.label,
-      onPressed: runnable ? () => registry.invoke(spec.id, ctx) : null,
+    return ExpandedHitArea(
+      child: DanaviewIconButton(
+        icon: spec.icon,
+        iconSize: 22,
+        size: TransportBar.buttonSize,
+        selected: selected,
+        tooltip: registry.tooltip(spec.id),
+        semanticLabel: spec.label,
+        onPressed: runnable ? () => registry.invoke(spec.id, ctx) : null,
+      ),
     );
   }
 }
@@ -370,17 +380,19 @@ class _StepButtonState extends State<_StepButton> {
   Widget build(BuildContext context) {
     final back = widget.direction < 0;
     final label = back ? TransportStrings.previousFrame : TransportStrings.nextFrame;
-    return Listener(
-      onPointerDown: _pointerDown,
-      onPointerUp: _pointerEnd,
-      onPointerCancel: _pointerEnd,
-      child: DanaviewIconButton(
-        icon: back ? Icons.keyboard_arrow_left_rounded : Icons.keyboard_arrow_right_rounded,
-        iconSize: 26,
-        size: TransportBar.buttonSize,
-        tooltip: widget.registry.tooltip(_id, label),
-        semanticLabel: label,
-        onPressed: widget.enabled ? _activate : null,
+    return ExpandedHitArea(
+      child: Listener(
+        onPointerDown: _pointerDown,
+        onPointerUp: _pointerEnd,
+        onPointerCancel: _pointerEnd,
+        child: DanaviewIconButton(
+          icon: back ? Icons.keyboard_arrow_left_rounded : Icons.keyboard_arrow_right_rounded,
+          iconSize: 26,
+          size: TransportBar.buttonSize,
+          tooltip: widget.registry.tooltip(_id, label),
+          semanticLabel: label,
+          onPressed: widget.enabled ? _activate : null,
+        ),
       ),
     );
   }
@@ -426,15 +438,18 @@ class _TimecodeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DanaviewPressable(
-      enabled: enabled,
-      onTap: enabled ? () => unawaited(_enterTime(context)) : null,
-      semanticLabel: TransportStrings.time,
-      tooltip: TransportStrings.timeHint,
-      borderRadius: DanaviewRadius.smAll,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: TransportBar.timecodePadding, vertical: DanaviewSpacing.sm),
-        child: TimecodeText(playhead: playhead, duration: duration, frameRate: frameRate, compact: compact),
+    // The pressable names the readout; the text adds only its value, so the label is read once.
+    return ExpandedHitArea(
+      child: DanaviewPressable(
+        enabled: enabled,
+        onTap: enabled ? () => unawaited(_enterTime(context)) : null,
+        semanticLabel: TransportStrings.time,
+        tooltip: TransportStrings.timeHint,
+        borderRadius: DanaviewRadius.smAll,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: TransportBar.timecodePadding, vertical: DanaviewSpacing.sm),
+          child: TimecodeText(playhead: playhead, duration: duration, frameRate: frameRate, compact: compact, semanticsLabel: false),
+        ),
       ),
     );
   }
@@ -478,7 +493,8 @@ class _QualityMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DanaviewMenuIconTrigger(
+    return ExpandedHitArea(
+        child: DanaviewMenuIconTrigger(
       icon: Icons.hd_rounded,
       iconSize: 22,
       size: TransportBar.buttonSize,
@@ -488,7 +504,7 @@ class _QualityMenu extends StatelessWidget {
       enabled: view.ready,
       menuWidth: 280,
       entries: _qualityEntries(ctx, view),
-    );
+    ));
   }
 }
 
@@ -541,7 +557,8 @@ class _MoreMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DanaviewMenuIconTrigger(
+    return ExpandedHitArea(
+        child: DanaviewMenuIconTrigger(
       icon: Icons.more_horiz_rounded,
       iconSize: 22,
       size: TransportBar.buttonSize,
@@ -549,6 +566,6 @@ class _MoreMenu extends StatelessWidget {
       semanticLabel: TransportStrings.more,
       menuWidth: 280,
       entries: _entries(),
-    );
+    ));
   }
 }

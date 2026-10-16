@@ -42,9 +42,23 @@ void main() {
       await E2eApp.tap(tester, find.byType(DanaviewPlayerScreen), what: 'player surface');
       await E2eApp.pumpUntil(tester, () => edit.hitTestable().evaluate().isNotEmpty, what: 'the Edit button');
     }
+    final handedOver = c.read(playerControllerProvider).position;
     await E2eApp.tap(tester, edit, what: 'player Edit');
     final ed = await E2eEditor.attach(tester);
-    expect(ed.playheadFrame, 160, reason: 'playhead ${ed.playhead.value} us');
+    // The editor seeks to its initial playhead after the preview is ready: give it a moment.
+    try {
+      await E2eApp.pumpUntil(tester, () => ed.playhead.value == ed.project.view.playhead && !ed.playhead.isSeeking,
+          what: 'the playhead to reach the project position', timeout: const Duration(seconds: 10));
+    } on TestFailure {
+      // Reported by the expectation below with the numbers.
+    }
+    expect(
+      ed.playheadFrame,
+      160,
+      reason: 'playhead ${ed.playhead.value} us; player position at Edit ${handedOver.inMicroseconds} us; '
+          'project view.playhead ${ed.project.view.playhead} us, duration ${ed.project.duration} us, '
+          '${ed.mainTrack.items.length} clip(s)',
+    );
     final reading = await ed.barcode();
     expect(reading.index, 160, reason: '$reading');
     await E2eApp.screenshot(tester, 's02_editor_at_160');

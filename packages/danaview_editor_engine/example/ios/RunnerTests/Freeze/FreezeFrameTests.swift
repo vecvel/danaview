@@ -6,6 +6,9 @@
 // - cancel removes the partial PNG; a missing source fails with mediaOffline;
 // - sampleColor (3×3 average) is within ±2/255 of the reference: the 420v decode of the same
 //   frame converted with the BT.709 matrix (gamma-encoded R'G'B', colour management off);
+// - freeze stills keep the decoded colours (ARCH §11.6, colour management off; QA-03 finding 3):
+//   mid-grey, a mid orange and a dark grey on a BT.709-tagged clip come back within ±2/255 of the
+//   matrix-only decode, at full size and scaled;
 // - the cache is bounded by the tier memory budget, evicts least recently used frames and serves
 //   hits without decoding.
 
@@ -63,6 +66,40 @@ final class FreezeFrameTests: XCTestCase {
         let image = try FreezeFrameTests.loadPNG(output)
         XCTAssertEqual(image.width, 720)
         XCTAssertEqual(image.height, 1280)
+        // Same orientation as AVFoundation's own display-oriented decode (the generator lifts the
+        // colours a little, a wrong rotation or flip differs by far more).
+        let asset = AVURLAsset(url: try ProbeFixtures.url("rotated_90.mov"))
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        let display = try generator.copyCGImage(at: CMTime(value: 1_000_001, timescale: 1_000_000), actualTime: nil)
+        XCTAssertEqual(display.width, 720)
+        XCTAssertLessThan(try FreezeFrameTests.meanDifference(image, display), 15)
+    }
+
+    /// Mean |Δ| (0...255) over R, G, B of two same-size images, both read as 8-bit RGBA raw values.
+    private static func meanDifference(_ a: CGImage, _ b: CGImage) throws -> Double {
+        func raw(_ image: CGImage) throws -> [UInt8] {
+            var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+            let ok: Bool = pixels.withUnsafeMutableBytes { buffer in
+                guard let context = CGContext(
+                    data: buffer.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8,
+                    bytesPerRow: image.width * 4, space: image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+                context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+                return true
+            }
+            XCTAssertTrue(ok)
+            return pixels
+        }
+        let pa = try raw(a), pb = try raw(b)
+        XCTAssertEqual(pa.count, pb.count)
+        var sum = 0.0, n = 0.0
+        for i in stride(from: 0, to: min(pa.count, pb.count), by: 4) {
+            for c in 0..<3 { sum += abs(Double(pa[i + c]) - Double(pb[i + c])); n += 1 }
+        }
+        return n > 0 ? sum / n : 0
     }
 
     func testHdrSourceGivesAnSdrStill() throws {
@@ -174,6 +211,92 @@ final class FreezeFrameTests: XCTestCase {
             XCTAssertEqual(sampled.alpha, 1, accuracy: 1e-6)
         }
         XCTAssertEqual(cache.decodeCount, 1, "one decode serves every sample of the frame")
+    }
+
+    /// Writes a 1 s 30 fps H.264 clip (BT.709 tagged) of vertical stripes in [colors] (0xRRGGBB).
+    private func makeStripeClip(_ url: URL, colors: [Int], width: Int = 640, height: Int = 360) throws {
+        try? FileManager.default.removeItem(at: url)
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: width, AVVideoHeightKey: height,
+            AVVideoColorPropertiesKey: [
+                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
+            ],
+            AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 8_000_000, AVVideoMaxKeyFrameIntervalKey: 30],
+        ])
+        input.expectsMediaDataInRealTime = false
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: width, kCVPixelBufferHeightKey as String: height,
+        ])
+        writer.add(input)
+        XCTAssertTrue(writer.startWriting())
+        writer.startSession(atSourceTime: .zero)
+        for index in 0..<30 {
+            while !input.isReadyForMoreMediaData { usleep(2_000) }
+            var buffer: CVPixelBuffer?
+            CVPixelBufferPoolCreatePixelBuffer(nil, try XCTUnwrap(adaptor.pixelBufferPool), &buffer)
+            let pixelBuffer = try XCTUnwrap(buffer)
+            CVPixelBufferLockBaseAddress(pixelBuffer, [])
+            let bpr = CVPixelBufferGetBytesPerRow(pixelBuffer)
+            let base = CVPixelBufferGetBaseAddress(pixelBuffer)!.assumingMemoryBound(to: UInt8.self)
+            for y in 0..<height {
+                for x in 0..<width {
+                    let c = colors[min(colors.count - 1, x * colors.count / width)]
+                    let p = y * bpr + x * 4
+                    base[p] = UInt8(c & 0xFF); base[p + 1] = UInt8((c >> 8) & 0xFF)
+                    base[p + 2] = UInt8((c >> 16) & 0xFF); base[p + 3] = 255
+                }
+            }
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+            XCTAssertTrue(adaptor.append(pixelBuffer, withPresentationTime: CMTime(value: Int64(index), timescale: 30)))
+        }
+        input.markAsFinished()
+        let done = DispatchSemaphore(value: 0)
+        writer.finishWriting { done.signal() }
+        done.wait()
+        XCTAssertEqual(writer.status, .completed, "\(String(describing: writer.error))")
+    }
+
+    /// The 8-bit R, G, B of [image] at pixel ([x], [y]) (top-left origin), read in the image's own
+    /// space (no conversion).
+    private static func pixel(_ image: CGImage, _ x: Int, _ y: Int) throws -> [Int] {
+        let color = try SourceFrameCache.averageColor(
+            of: image, x: (Double(x) + 0.5) / Double(image.width), y: (Double(y) + 0.5) / Double(image.height))
+        return [color.red, color.green, color.blue].map { Int(($0 * 255).rounded()) }
+    }
+
+    func testFreezeStillsKeepTheDecodedColours() throws {
+        let colors = [0x808080, 0xC08040, 0x202020, 0xFF0000, 0x00FF00, 0x0000FF]
+        let url = roots.base.appendingPathComponent("stripes.mp4")
+        try makeStripeClip(url, colors: colors)
+        let points = colors.indices.map { ((Double($0) + 0.5) / Double(colors.count), 0.5) }
+        let reference = try FreezeFrameTests.referenceColor(url, timeUs: 333_333, points: points)
+        let output = stillPath("colours")
+        _ = try FreezeFrameJob(mediaURL: url, sourceTimeUs: 333_333, output: output).run(JobControl(jobId: "colour"))
+        let still = try FreezeFrameTests.loadPNG(output)
+        XCTAssertEqual(still.width, 640)
+        XCTAssertEqual(still.height, 360)
+        let scaled = try SourceFrameCache(tier: .high).frame(url: url, sourceTimeUs: 333_333, maxLongSide: 320)
+        XCTAssertEqual(scaled.width, 320)
+        XCTAssertEqual(scaled.height, 180)
+        var worst = 0
+        for (i, (point, expected)) in zip(points, reference).enumerated() {
+            let want = [expected.0, expected.1, expected.2].map { Int(($0 * 255).rounded()) }
+            for image in [still, scaled] {
+                let got = try FreezeFrameTests.pixel(image, Int(point.0 * Double(image.width)), image.height / 2)
+                for ch in 0..<3 {
+                    worst = max(worst, abs(got[ch] - want[ch]))
+                    XCTAssertEqual(got[ch], want[ch], accuracy: 2, "colour #\(String(colors[i], radix: 16)) channel \(ch) at \(image.width) px")
+                }
+            }
+        }
+        // The encode itself is close to the painted colours (mid-grey 128 is not lifted to 139).
+        let grey = try FreezeFrameTests.pixel(still, 640 / 12, 180)
+        XCTAssertEqual(grey[0], 128, accuracy: 3)
+        print("FreezeColour|worstDelta=\(worst)")
     }
 
     func testAverageColourOfASyntheticImage() throws {

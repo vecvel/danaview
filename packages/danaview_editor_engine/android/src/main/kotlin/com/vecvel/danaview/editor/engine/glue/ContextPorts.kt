@@ -5,7 +5,9 @@
 // service ticket owns lives here too: freeBytes (StatFs), cache-trim fan-out, and preview session
 // lookup. The D-45 render-preview calls (INT-06) go to AND-18's `preview/render/` services
 // (placeholders failing with `notSupportedOnDevice` until AND-18 lands), one instance per process
-// context (`RenderPreviewServices.of(ctx)`).
+// context (`RenderPreviewServices.of(ctx)`). INT-07: notification texts go to
+// `export/ExportNotificationTexts`, isRecording to the voice recorder, materializePick to
+// `platform/PickMaterializer`.
 
 package com.vecvel.danaview.editor.engine.glue
 
@@ -24,7 +26,9 @@ import com.vecvel.danaview.editor.engine.pigeon.CompatibilityMsg
 import com.vecvel.danaview.editor.engine.pigeon.DetachedHandoffMsg
 import com.vecvel.danaview.editor.engine.pigeon.EditingModeMsg
 import com.vecvel.danaview.editor.engine.pigeon.EncodeSettingsMsg
+import com.vecvel.danaview.editor.engine.export.ExportNotificationTexts
 import com.vecvel.danaview.editor.engine.pigeon.ExportJobRecordMsg
+import com.vecvel.danaview.editor.engine.pigeon.ExportNotificationTextsMsg
 import com.vecvel.danaview.editor.engine.pigeon.ExportPreflightMsg
 import com.vecvel.danaview.editor.engine.pigeon.FileHandoffResultMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobPriorityMsg
@@ -50,6 +54,7 @@ import com.vecvel.danaview.editor.engine.pigeon.SeekAckMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbPriorityMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbnailRequestMsg
 import com.vecvel.danaview.editor.engine.pigeon.ThumbnailTileMsg
+import com.vecvel.danaview.editor.engine.platform.PickMaterializer
 import com.vecvel.danaview.editor.engine.preview.PreviewSession
 import com.vecvel.danaview.editor.engine.preview.render.RenderPreviewServices
 import io.flutter.view.TextureRegistry
@@ -88,6 +93,8 @@ class ContextEngineRootPort(private val ctx: EngineContext) : EngineRootPort {
         }
         threads.io.execute { guarded { ctx.diskCache.trim(level) } }
     }
+
+    override fun setExportTexts(texts: ExportNotificationTextsMsg) = ExportNotificationTexts.set(texts)
 
     private inline fun guarded(block: () -> Unit) {
         try {
@@ -207,6 +214,8 @@ class ContextExportPort(private val ctx: EngineContext) : ExportPort {
     override fun activeJobs(done: Completion<List<ExportJobRecordMsg>>) = ctx.exports.activeJobs(done)
 
     override fun consumeJobRecord(jobId: String) = ctx.exports.consumeJobRecord(jobId)
+
+    override fun setExportTexts(texts: ExportNotificationTextsMsg) = ExportNotificationTexts.set(texts)
 }
 
 /** [RecorderPort] over the voice recorder. */
@@ -222,6 +231,8 @@ class ContextRecorderPort(private val ctx: EngineContext) : RecorderPort {
     override fun stop(recordingId: String, done: Completion<RecordedAssetMsg>) = ctx.recorder.stop(recordingId, done)
 
     override fun cancel(recordingId: String, done: Completion<Unit>) = ctx.recorder.cancel(recordingId, done)
+
+    override fun isRecording(done: Completion<Boolean>) = done.succeed(ctx.recorder.isRecording)
 }
 
 /** [PlatformPort] over pickers, handoff, media access, permissions, leases and the drop target. */
@@ -257,4 +268,7 @@ class ContextPlatformPort(private val ctx: EngineContext) : PlatformPort {
     override fun setDropTargetEnabled(enabled: Boolean, done: Completion<Unit>) = ctx.dropTarget.setEnabled(enabled, done)
 
     override fun powerState(done: Completion<PowerStateMsg>) = RenderPreviewServices.of(ctx).power.powerState(done)
+
+    override fun materializePick(uri: String, intoDir: File, done: Completion<String>) =
+        PickMaterializer(ctx).materialize(uri, intoDir, done)
 }

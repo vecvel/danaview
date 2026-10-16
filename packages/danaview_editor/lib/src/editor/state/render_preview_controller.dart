@@ -11,6 +11,16 @@
 //   index. The engine already dropped every rendered range the applied patch touched (INT-06
 //   contract), so a stale render never plays; this resend restores the untouched ones (setPlan
 //   drops them all) at their new positions (hashes ignore absolute time, so a ripple keeps them).
+//   Range rule (FIX-RANGE-RULE): native engines see plans, not patches, so they drop a rendered
+//   range when the difference between two plans touches it (CORE-37 `rangeTouched`, the same rule
+//   as IOS-19 / AND-18, checked on the shared vectors). That rule drops more than the hashes do
+//   (a ripple, a proxy or `uri` change, a seq change), never fewer: a range the engine keeps has an
+//   unchanged hash. The engine binds a `setRenderedRanges` list to the plan it holds when the call
+//   arrives, so the list must describe exactly that plan: the controller sends only while the
+//   engine holds the controller's plan with nothing newer in flight ([engineHolds], wired to the
+//   session's PlanSync: acknowledged plan identical, not applying) and otherwise defers the send to
+//   [planSettled] or the next plan. A list computed for an older plan and bound to a newer one
+//   could play a stale render; a later patch is safe because the engine applies the rule to it.
 // * Automatic renders (Auto setting on the minimal and low tiers, `RenderPolicy.shouldAutoRender`):
 //   only while the editor is idle (no playback, edit or other job for 5 s, its own timer) and the
 //   device is charging (the engine's power signal, `background.powerState` /
@@ -328,8 +338,10 @@ class RenderPreviewController extends ValueNotifier<RenderPreviewState> {
     required RenderBudget budget,
     required RenderPreviewSetting Function() setting,
     this.previewSize,
+    bool Function(RenderPlan plan)? engineHolds,
     Duration idleAfter = RenderPolicy.idleAfter,
   })  : _jobs = jobs,
+        _engineHolds = engineHolds,
         _power = power,
         _store = store,
         _tier = tier,
@@ -350,6 +362,13 @@ class RenderPreviewController extends ValueNotifier<RenderPreviewState> {
   final RenderPreviewSetting Function() _setting;
   final Duration _idleAfter;
 
+  /// Whether the engine holds exactly [plan] now, with no newer plan or patch queued before a call
+  /// made at this instant (null: always; the provider wires it to the session's PlanSync).
+  final bool Function(RenderPlan plan)? _engineHolds;
+
+  /// A send was skipped because the engine did not hold the controller's plan ([planSettled]).
+  bool _sendDeferred = false;
+
   /// Preview render size included in the hashes (null: canvas size).
   final RenderSize? previewSize;
 
@@ -359,6 +378,9 @@ class RenderPreviewController extends ValueNotifier<RenderPreviewState> {
   PreviewSession? _session;
   RenderPlan? _plan;
   List<RangeStatus> _ranges = const [];
+
+  /// The plan [_ranges] was computed for (lags [_plan] while [planChanged] opens the index).
+  RenderPlan? _rangesPlan;
   final List<_Task> _queue = [];
   _Task? _activeTask;
   MediaJob<GeneratedAsset>? _activeJob;
@@ -438,6 +460,17 @@ class RenderPreviewController extends ValueNotifier<RenderPreviewState> {
     await _send();
     _pump();
   }
+
+  /// The session's plan sync settled (idle or failed) without a new plan: sends the rendered
+  /// ranges a send deferred while a plan was in flight (file header, range rule).
+  void planSettled() {
+    if (_disposed || !_sendDeferred) return;
+    unawaited(_send());
+  }
+
+  /// Whether the last send was deferred because the engine did not hold the controller's plan.
+  @visibleForTesting
+  bool get sendDeferred => _sendDeferred;
 
   /// Playback started or stopped.
   void playingChanged(bool playing) {
@@ -610,6 +643,7 @@ class RenderPreviewController extends ValueNotifier<RenderPreviewState> {
 
   void _recompute() {
     final plan = _plan;
+    _rangesPlan = plan;
     if (plan == null) {
       _ranges = const [];
       return;
@@ -782,7 +816,17 @@ class RenderPreviewController extends ValueNotifier<RenderPreviewState> {
   Future<void> _sendNow() async {
     final session = _session;
     final store = _store;
-    if (_disposed || session == null || store == null || _plan == null) return;
+    final plan = _plan;
+    if (_disposed || session == null || store == null || plan == null) return;
+    // The engine binds the list to the plan it holds when the call arrives (range rule): send
+    // only ranges computed for the plan the engine holds now. A list not yet recomputed for
+    // [_plan] waits for [planChanged]'s own send.
+    final holds = _engineHolds;
+    if (!identical(_rangesPlan, plan) || (holds != null && !holds(plan))) {
+      _sendDeferred = true;
+      return;
+    }
+    _sendDeferred = false;
     final ranges = [
       for (final r in _ranges)
         if (r.state == RangeState.rendered) RenderedRange(range: r.range.range, uri: Uri.file(store.pathFor(r.hash)).toString(), hash: r.hash),
@@ -971,6 +1015,8 @@ final renderPreviewControllerProvider = Provider.autoDispose.family<RenderPrevie
   final store = ref.watch(renderPreviewStoreProvider);
   final session = ref.watch(editorSessionProvider(id));
   final defaults = ref.read(editorTierDefaultsProvider);
+  // The session's PlanSync (null while closed); the range rule needs it before the controller.
+  PlanSync? wired;
   final controller = RenderPreviewController(
     jobs: engine.jobs,
     power: engine.background,
@@ -978,6 +1024,11 @@ final renderPreviewControllerProvider = Provider.autoDispose.family<RenderPrevie
     tier: defaults.renderTier,
     budget: renderBudgetOf(ref.read(editorCapabilitiesProvider).valueOrNull),
     setting: () => ref.read(editorTierDefaultsProvider).effectiveRenderPreview(prefs),
+    // The engine holds the plan PlanSync acknowledged last while no patch or plan is in flight.
+    engineHolds: (plan) {
+      final sync = wired;
+      return sync != null && identical(sync.appliedPlan, plan) && sync.currentStatus != PlanSyncStatus.applying;
+    },
   );
 
   // Capabilities (tier and budget) may arrive after the controller.
@@ -992,7 +1043,6 @@ final renderPreviewControllerProvider = Provider.autoDispose.family<RenderPrevie
 
   // Plans: every applied plan of the session's PlanSync.
   StreamSubscription<PlanSyncStatus>? statusSub;
-  PlanSync? wired;
   RenderPlan? lastPlan;
   void offerPlan() {
     final plan = wired?.appliedPlan;
@@ -1014,6 +1064,10 @@ final renderPreviewControllerProvider = Provider.autoDispose.family<RenderPrevie
       if (status == PlanSyncStatus.idle) {
         controller.attach(session.preview);
         offerPlan();
+        controller.planSettled();
+      } else if (status == PlanSyncStatus.failed) {
+        // A failed patch leaves the engine on the acknowledged plan: a deferred send may go now.
+        controller.planSettled();
       }
     });
     offerPlan();

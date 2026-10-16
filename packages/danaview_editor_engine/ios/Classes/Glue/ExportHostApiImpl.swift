@@ -3,6 +3,8 @@
 // Glue of `ExportHostApi` (ARCH §12.4, §12.6, §14.2, D-22, D-39): validate on main, hop to the
 // export control queue, delegate to ExportCoordinator (IOS-12; background and records IOS-13).
 // The output path must lie inside the editor roots (`<cache>/danaview/editor/work/export-<id>.<ext>`).
+// INT-07: `start` carries optional localized notification texts; iOS shows no export notification,
+// so they are only validated (bounded text) and otherwise ignored.
 
 import Flutter
 import Foundation
@@ -35,13 +37,15 @@ final class ExportHostApiImpl: ExportHostApi {
 
     func start(
         plan: FlutterStandardTypedData, settings: EncodeSettingsMsg, outputPath: String, title: String,
-        whenDetached: DetachedHandoffMsg, completion: @escaping (Result<String, Error>) -> Void
+        whenDetached: DetachedHandoffMsg, texts: ExportNotificationTextsMsg?,
+        completion: @escaping (Result<String, Error>) -> Void
     ) {
         GlueDispatch.hop(
             "export.start", on: queue, completion: completion,
             validate: { () -> (Data, URL) in
                 try Validate.encodeSettings(settings)
                 try Validate.text(title, "title")
+                if let texts = texts { try Validate.notificationTexts(texts) }
                 let bytes = try Validate.plan(plan, "plan")
                 let output = try context.requirePaths().requireWritable(outputPath, name: "outputPath")
                 return (bytes, output)

@@ -4,7 +4,7 @@
 // Dart-supplied `derived/<specHash>.mp4`. Bounded memory and disk:
 //
 // 1. Timeline: one cheap passthrough read of the compressed video samples gives every frame's
-//    PTS (no decode). A source frame i covering [p_i, e_i) (e_i = next PTS, capped at the range
+//    PTS (no decode; media times mapped to track time through the edit list). A source frame i covering [p_i, e_i) (e_i = next PTS, capped at the range
 //    end E) is shown in the output at the MIRRORED time E − e_i, so the last source frame comes
 //    first and every frame keeps its own duration (VFR preserved).
 // 2. Chunks from the end: the output is written by the IOS-17 SegmentedWriter in segments of
@@ -102,6 +102,24 @@ final class ReverseJob: MediaJobBody {
         return Int(min(150_000_000, max(8_000_000, value)))
     }
 
+    /// The output segments' settings (H.264, 1 s GOP, AAC when the source has audio) and the
+    /// all-intra chunk intermediate's settings for a source.
+    static func encodeSettings(_ info: VideoTrackInfo) -> (output: SegmentEncodeSettings, intermediate: SegmentEncodeSettings) {
+        func even(_ v: Int) -> Int { max(2, v - v % 2) }
+        let width = even(info.width), height = even(info.height)
+        let fps = max(1, Int(info.nominalFps.rounded()))
+        let output = SegmentEncodeSettings(
+            codec: .h264, width: width, height: height, fps: fps,
+            averageBitRate: outputBitRate(width: width, height: height, fps: info.nominalFps),
+            maxKeyFrameIntervalFrames: nil, maxKeyFrameIntervalSeconds: 1, allowFrameReordering: false, container: .mp4,
+            audio: info.hasAudio ? SegmentEncodeSettings.Audio(sampleRate: audioSampleRate, channels: 2, bitRate: audioBitRate) : nil)
+        let intermediate = SegmentEncodeSettings(
+            codec: .h264, width: width, height: height, fps: fps,
+            averageBitRate: intermediateBitRate(width: width, height: height, fps: info.nominalFps),
+            maxKeyFrameIntervalFrames: 1, maxKeyFrameIntervalSeconds: nil, allowFrameReordering: false, container: .mov)
+        return (output, intermediate)
+    }
+
     /// Bytes of [bitRate] over [durationUs].
     static func bytes(bitRate: Int, durationUs: Int64) -> Int64 {
         Int64(Double(bitRate) / 8 * Double(durationUs) / 1_000_000)
@@ -135,13 +153,10 @@ final class ReverseJob: MediaJobBody {
         guard rangeEnd > rangeStart else { throw EngineError.invalidArgument("range", "empty or past the media end") }
         let durationUs = rangeEnd - rangeStart
 
-        func even(_ v: Int) -> Int { max(2, v - v % 2) }
-        let width = even(info.width), height = even(info.height)
-        let outputRate = ReverseJob.outputBitRate(width: width, height: height, fps: info.nominalFps)
-        let intermediateRate = ReverseJob.intermediateBitRate(width: width, height: height, fps: info.nominalFps)
+        let (settings, intermediateSettings) = ReverseJob.encodeSettings(info)
         let hasAudio = info.hasAudio
-        let estimate = ReverseJob.bytes(bitRate: outputRate + (hasAudio ? ReverseJob.audioBitRate : 0), durationUs: durationUs)
-        let chunkBytes = ReverseJob.bytes(bitRate: intermediateRate, durationUs: chunkDurationUs + 1_000_000)
+        let estimate = ReverseJob.bytes(bitRate: settings.averageBitRate + (hasAudio ? ReverseJob.audioBitRate : 0), durationUs: durationUs)
+        let chunkBytes = ReverseJob.bytes(bitRate: intermediateSettings.averageBitRate, durationUs: chunkDurationUs + 1_000_000)
         let free = try freeBytesOverride?() ?? Paths.freeBytes(at: paths.cacheRoot.path)
         try ReverseJob.preflight(rangeUs: durationUs, estimatedOutputBytes: estimate, chunkBytes: chunkBytes, freeBytes: free)
 
@@ -155,12 +170,6 @@ final class ReverseJob: MediaJobBody {
         try control.check()
         control.progress(0.02)
 
-        let settings = SegmentEncodeSettings(
-            codec: .h264, width: width, height: height, fps: max(1, Int(info.nominalFps.rounded())),
-            averageBitRate: outputRate, maxKeyFrameIntervalFrames: nil, maxKeyFrameIntervalSeconds: 1,
-            allowFrameReordering: false, container: .mp4,
-            audio: hasAudio ? SegmentEncodeSettings.Audio(sampleRate: ReverseJob.audioSampleRate, channels: 2,
-                                                          bitRate: ReverseJob.audioBitRate) : nil)
         let writer = try SegmentedWriter(
             directory: directory, jobKind: ReverseJob.jobKind,
             inputHash: "\(fingerprint)-\(rangeStart)-\(rangeEnd)-\(ReverseJob.settingsVersion)",
@@ -171,10 +180,6 @@ final class ReverseJob: MediaJobBody {
         }
         writer.onProgress = { control.progress(0.02 + $0 * 0.83) }
 
-        let intermediateSettings = SegmentEncodeSettings(
-            codec: .h264, width: width, height: height, fps: max(1, Int(info.nominalFps.rounded())),
-            averageBitRate: intermediateRate, maxKeyFrameIntervalFrames: 1, maxKeyFrameIntervalSeconds: nil,
-            allowFrameReordering: false, container: .mov)
         let source = ReverseFrameSource(
             info: info, timeline: timeline, intermediate: directory.appendingPathComponent("chunk.mov"),
             settings: intermediateSettings, control: control)
@@ -297,7 +302,11 @@ struct ReverseTimeline {
             throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "timeline read failed")
         }
         let trackEnd = CMTime(value: info.endUs, timescale: 1_000_000)
-        return ReverseTimeline(pts: pts, trackEnd: trackEnd, startUs: startUs, endUs: endUs)
+        // Passthrough samples carry MEDIA times; every later step (chunk readers, output timing)
+        // works in TRACK time, so the edit list is applied here (B-frame sources start their media
+        // at the first composition offset, e.g. 0.08 s → 0; FIX-IOS-MEDIA).
+        let trackPts = info.edits.trackTimes(ofMediaPts: pts, mediaEnd: info.edits.mediaEnd ?? trackEnd)
+        return ReverseTimeline(pts: trackPts, trackEnd: trackEnd, startUs: startUs, endUs: endUs)
     }
 
     /// Frames shown in output [outputStartUs, outputEndUs), in source order.
@@ -383,35 +392,43 @@ final class ReverseFrameSource: SegmentVideoSource {
         writer.startSession(atSourceTime: first)
         var written: [CMTime] = []
         var failure: Error?
-        while let sample = source.copyNextSampleBuffer() {
-            if let control = control, control.isStopped {
-                failure = EngineError(.interrupted, "stopped", retryable: true)
-                break
+        // One autorelease pool per frame: the reader and the encoder autorelease per-frame objects
+        // that otherwise pin every decoded frame of the chunk until the loop ends (FIX-IOS-MEDIA:
+        // 400+ MB at 1080p, 1.5 GB at 4K without it).
+        var more = true
+        while more {
+            more = autoreleasepool { () -> Bool in
+                guard let sample = source.copyNextSampleBuffer() else { return false }
+                if let control = control, control.isStopped {
+                    failure = EngineError(.interrupted, "stopped", retryable: true)
+                    return false
+                }
+                guard let image = CMSampleBufferGetImageBuffer(sample) else { return true }
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                if CMTimeCompare(pts, first) < 0 || CMTimeCompare(pts, last) > 0 { return true }
+                if let previous = written.last, CMTimeCompare(pts, previous) <= 0 { return true }
+                let frame: CVPixelBuffer
+                do {
+                    frame = try renderer.render(image)
+                } catch {
+                    failure = error
+                    return false
+                }
+                while !input.isReadyForMoreMediaData {
+                    if control?.isStopped == true { break }
+                    usleep(1_000)
+                }
+                if control?.isStopped == true {
+                    failure = EngineError(.interrupted, "stopped", retryable: true)
+                    return false
+                }
+                guard adaptor.append(frame, withPresentationTime: pts) else {
+                    failure = writer.error ?? EngineError(.encodingFailed, "intermediate append failed")
+                    return false
+                }
+                written.append(pts)
+                return true
             }
-            guard let image = CMSampleBufferGetImageBuffer(sample) else { continue }
-            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-            if CMTimeCompare(pts, first) < 0 || CMTimeCompare(pts, last) > 0 { continue }
-            if let previous = written.last, CMTimeCompare(pts, previous) <= 0 { continue }
-            let frame: CVPixelBuffer
-            do {
-                frame = try renderer.render(image)
-            } catch {
-                failure = error
-                break
-            }
-            while !input.isReadyForMoreMediaData {
-                if control?.isStopped == true { break }
-                usleep(1_000)
-            }
-            if control?.isStopped == true {
-                failure = EngineError(.interrupted, "stopped", retryable: true)
-                break
-            }
-            guard adaptor.append(frame, withPresentationTime: pts) else {
-                failure = writer.error ?? EngineError(.encodingFailed, "intermediate append failed")
-                break
-            }
-            written.append(pts)
         }
         if failure == nil, reader.status == .failed {
             failure = reader.error ?? EngineError(.decodeFailed, "chunk decode failed")
@@ -505,7 +522,7 @@ final class ReverseFrameSource: SegmentVideoSource {
         let index = intermediatePts.count - 1 - cursor
         if cursor > 0 {
             // Finish the previous range, then jump back one frame.
-            while output.copyNextSampleBuffer() != nil {}
+            while autoreleasepool(invoking: { output.copyNextSampleBuffer() != nil }) {}
             if reader.status == .failed {
                 throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "intermediate read failed")
             }
@@ -514,10 +531,15 @@ final class ReverseFrameSource: SegmentVideoSource {
         cursor += 1
         let wanted = intermediatePts[index]
         var picked: CVPixelBuffer?
-        while picked == nil, let sample = output.copyNextSampleBuffer() {
-            guard let image = CMSampleBufferGetImageBuffer(sample) else { continue }
-            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-            if abs(CMTimeSubtract(pts, wanted).seconds) < 0.0005 || CMTimeCompare(pts, wanted) >= 0 { picked = image }
+        while picked == nil {
+            let more = autoreleasepool { () -> Bool in
+                guard let sample = output.copyNextSampleBuffer() else { return false }
+                guard let image = CMSampleBufferGetImageBuffer(sample) else { return true }
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                if abs(CMTimeSubtract(pts, wanted).seconds) < 0.0005 || CMTimeCompare(pts, wanted) >= 0 { picked = image }
+                return true
+            }
+            if !more { break }
         }
         guard let image = picked else {
             throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "intermediate frame missing")

@@ -109,6 +109,9 @@ final class PrecomposePass {
             directory: input.workDirectory, jobKind: PrecomposePass.jobKind, inputHash: input.hash,
             settings: PrecomposePass.segmentSettings(input.settings, layout: input.layout),
             startUs: 0, endUs: plan.durUs, segmentDurationUs: input.segmentDurationUs)
+        // D-35 (FIX-IOS-SPACER): the last segment and the concat end on the composition's grid end
+        // CMTime(K, gridFps), not on durUs (up to 1 µs later at 24/30/48/60 fps).
+        writer.exactEnd = ExportTime.gridEnd(plan)
         startSegment = writer.checkpoint.nextSegment
         if let progress = onProgress { writer.onProgress = progress }
         configureWriter?(writer)

@@ -6,8 +6,15 @@
 //
 // * `StoreRoots` from danaview_data `AppStorage` (Application Support, Caches/temporary) and the
 //   "On This Device" Documents folder (ARCH §8.1); editor files never go into Documents.
+// * The engine's Documents root (`MobileMediaAccess.documentsRoot`) from `StoreRoots.documents`, so
+//   `AppRelativeLocator(documents, …)` resolves: Files imports kept by reference (ARCH §9.1) and the
+//   "Keep a copy in Danaview" exports (D-44). The engine plugin is out of reach here (ARCH §4.2
+//   rule 7), so [EditorBootstrap.bindDocumentsRoot] sets it through the access's `documentsRoot`
+//   setter when the engine's access has one (FIX-INT-02-1).
 // * `FileMediaPoolService` over `engine.access`/`engine.probe` with the free-space preflight
-//   (`engine.freeBytes`) and CORE-28's `MediaRelinkService` (availability re-checked on app resume).
+//   (`engine.freeBytes`) and CORE-28's `MediaRelinkService` (availability re-checked on app resume);
+//   both copy non-persistable picks through `engine.access.materializePick` (INT-07).
+// * `EditorEngineConfig` carries `ExportStrings.notificationTexts` (INT-07).
 // * `FileProjectRepository` with the pool, the engine's access, `allow2160` from the capabilities,
 //   the poster capture (UX-08) and the GC hook; autosave runs with the repository's default policy.
 // * `MediaGarbageCollector` + `GcScheduler`: the first run starts after 30 s idle; every run first
@@ -45,6 +52,7 @@ import 'editor_prefs.dart';
 import 'editor_providers.dart';
 import 'editor_storage_contributor.dart';
 import 'editor_tier_defaults.dart';
+import 'strings/export_strings.dart';
 
 /// Whether the GC may sweep now: false while an export runs or waits to be resumed (ARCH §9.4).
 /// Unknown (never refreshed, or the engine could not answer) counts as "export in progress", so a
@@ -194,8 +202,27 @@ abstract final class EditorBootstrap {
   }
 
   /// The engine's directories under [roots] (ARCH §12.1).
-  static EditorEngineConfig engineConfigOf(StoreRoots roots) =>
-      EditorEngineConfig(cacheRoot: roots.editorCache, supportRoot: roots.editorSupport);
+  static EditorEngineConfig engineConfigOf(StoreRoots roots) => EditorEngineConfig(
+        cacheRoot: roots.editorCache,
+        supportRoot: roots.editorSupport,
+        exportNotificationTexts: ExportStrings.notificationTexts,
+      );
+
+  /// Gives [access] the Documents directory [documents] (`StoreRoots.documents`) when it takes one
+  /// (the platform engine's `MobileMediaAccess.documentsRoot`, reached without importing the
+  /// plugin, ARCH §4.2 rule 7). Returns whether it was set; an access without the setter (a fake,
+  /// a desktop stub) is left alone. Without it every `AppRelativeLocator(documents, …)` resolves
+  /// as access-lost (FIX-INT-02-1).
+  static bool bindDocumentsRoot(MediaAccess access, String documents) {
+    try {
+      (access as dynamic).documentsRoot = documents;
+      return true;
+    } on NoSuchMethodError {
+      return false;
+    } on TypeError {
+      return false;
+    }
+  }
 
   /// The overrides of a build where the editor is hidden (desktop, web, `DANAVIEW_EDITOR` off, no
   /// engine): no storage contributors and no runtime. The root providers stay unconfigured; the
@@ -259,9 +286,19 @@ abstract final class EditorBootstrap {
     bool listenToLifecycle = true,
     Duration gcStartDelay = const Duration(seconds: 30),
   }) async {
+    if (!bindDocumentsRoot(engine.access, roots.documents)) {
+      debugPrint('[EditorBootstrap] The engine access takes no Documents root');
+    }
     final capabilities = await _capabilitiesOf(engine);
     final deleter = OwnedFileDeleter(roots, fs: fs);
-    final relinker = MediaRelinkService(access: engine.access, probe: engine.probe, roots: roots, fs: fs, deleter: deleter);
+    final relinker = MediaRelinkService(
+      access: engine.access,
+      probe: engine.probe,
+      roots: roots,
+      fs: fs,
+      deleter: deleter,
+      materialize: engine.access.materializePick,
+    );
     final pool = FileMediaPoolService(
       access: engine.access,
       probe: engine.probe,
@@ -270,6 +307,7 @@ abstract final class EditorBootstrap {
       deleter: deleter,
       freeSpace: engine.freeBytes,
       relinker: relinker,
+      materialize: engine.access.materializePick,
     );
     final exportGate = EditorExportGate(engine.exporter);
     late final GcScheduler gcScheduler;

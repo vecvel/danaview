@@ -120,8 +120,8 @@ final class JobRegistryTests: XCTestCase {
         return (registry, interruption)
     }
 
-    private func spin(_ condition: () -> Bool) {
-        XCTAssertTrue(JobEventRecorder.spin(until: condition), "condition not reached")
+    private func spin(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(JobEventRecorder.spin(until: condition), "condition not reached", file: file, line: line)
     }
 
     func testConcurrencyPerTier() {

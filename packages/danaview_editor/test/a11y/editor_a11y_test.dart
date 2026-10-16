@@ -105,16 +105,14 @@ void main() {
       final rig = await A11yEditorRig.pump(tester, surface: _wide);
       expect(rig.state.modes.ripple, isTrue);
       tester.takeAnnouncements();
+      final before = rig.state.history.position;
       tester.semantics.customAction(_logo(), const CustomSemanticsAction(label: TimelineSemanticsStrings.moveSecondLater));
       await tester.pump();
-      final heard = tester.takeAnnouncements().map((a) => a.message).toList();
-      final moved = rig.project.index.locate(const ItemId('it_o1'))!.item.start != 1 * s;
-      if (!moved) {
-        // Known: MoveItems(ripple: true) by less than the item's length is a no-op, so every nudge
-        // says "Not changed" until FIX-UX-12-1 lands.
-        expect(heard, [TimelineSemanticsStrings.notChanged]);
-        expect(knownTimelineDefects, contains('FIX-UX-12-1'));
-      }
+      // A nudge moves the item alone (never a ripple reorder), so it works with ripple on.
+      expect(rig.project.index.locate(const ItemId('it_o1'))!.item.start, 2 * s);
+      expect(rig.state.history.position, before + 1);
+      expect(tester.takeAnnouncements().map((a) => a.message), [TimelineSemanticsStrings.movedTo(2 * s)]);
+      expect(knownTimelineDefects, isNot(contains('FIX-UX-12-1')));
       await tester.pump(const Duration(seconds: 2));
       semantics.dispose();
     });
@@ -194,20 +192,58 @@ void main() {
     testWidgets('markers, transitions and keyframes carry custom actions (FIX-UX-12-2)', (tester) async {
       final semantics = tester.ensureSemantics();
       final rig = await A11yEditorRig.pump(tester, surface: _wide);
+      final playhead = rig.container.read(playheadProvider(rig.id));
       rig.editor.select(const ItemId('it_o1'));
       await rig.settle();
-      final nodes = {
-        'marker': find.semantics.byLabel('Marker at 0:03').evaluate().single,
-        'transition': find.semantics.byLabel(RegExp(r'^Cross dissolve transition at ')).evaluate().single,
-        'keyframe': find.semantics.byLabel(RegExp(r' keyframe at \d')).evaluate().first,
-      };
-      final without = [
-        for (final MapEntry(key: kind, value: node) in nodes.entries)
-          if (customActionLabels(node).isEmpty) kind,
-      ];
-      // ARCH §17.9 asks for custom actions on these nodes (ux.md §19.1: select, delete, jump); they
-      // only have tap (select / open) today. Recorded as FIX-UX-12-2 until it lands.
-      if (without.isNotEmpty) expect(knownTimelineDefects, contains('FIX-UX-12-2'), reason: 'no custom actions on $without');
+      final marker = find.semantics.byLabel('Marker at 0:03');
+      final transition = find.semantics.byLabel(RegExp(r'^Cross dissolve transition at '));
+      final keyframe = find.semantics.byLabel(RegExp(r' keyframe at \d'));
+      expect(customActionLabels(marker.evaluate().single), [TimelineSemanticsStrings.jumpToMarker, TimelineSemanticsStrings.deleteMarker]);
+      expect(
+        customActionLabels(transition.evaluate().single),
+        [TimelineSemanticsStrings.transitionSettings, TimelineSemanticsStrings.removeTransition],
+      );
+      expect(customActionLabels(keyframe.evaluate().first), [TimelineSemanticsStrings.jumpToKeyframe, TimelineSemanticsStrings.deleteKeyframe]);
+
+      // Jump to marker seeks without editing.
+      final before = rig.state.history.position;
+      tester.semantics.customAction(marker, TimelineNodeActions.jumpToMarker);
+      await rig.settle();
+      expect(playhead.value, 3 * s);
+      expect(rig.state.history.position, before);
+
+      // Delete marker, remove transition and delete keyframe are one history entry each.
+      tester.takeAnnouncements();
+      tester.semantics.customAction(find.semantics.byLabel('Marker at 0:03'), TimelineNodeActions.deleteMarker);
+      await rig.settle();
+      expect(rig.project.markers, isEmpty);
+      expect(rig.state.history.position, before + 1);
+      expect(tester.takeAnnouncements().map((a) => a.message), [TimelineSemanticsStrings.didDeleteMarker]);
+      await tester.pump(const Duration(seconds: 2));
+
+      tester.semantics.customAction(find.semantics.byLabel(RegExp(r'^Cross dissolve transition at ')), TimelineNodeActions.removeTransition);
+      await rig.settle();
+      expect(find.semantics.byLabel(RegExp(r'^Cross dissolve transition at ')), findsNothing);
+      expect(rig.state.history.position, before + 2);
+      await tester.pump(const Duration(seconds: 2));
+
+      final keysBefore = find.semantics.byLabel(RegExp(r' keyframe at \d')).evaluate().length;
+      tester.semantics.customAction(find.semantics.byLabel(RegExp(r' keyframe at \d')).first, TimelineNodeActions.deleteKeyframe);
+      await rig.settle();
+      expect(find.semantics.byLabel(RegExp(r' keyframe at \d')).evaluate().length, keysBefore - 1);
+      expect(rig.state.history.position, before + 3);
+      expect(knownTimelineDefects, isEmpty);
+      await tester.pump(const Duration(seconds: 2));
+      semantics.dispose();
+    });
+
+    testWidgets('with nothing selected the preview overlay is named (FIX-UX-22-1)', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final rig = await A11yEditorRig.pump(tester, surface: _wide);
+      rig.editor.clearSelection();
+      await rig.settle();
+      expect(find.semantics.byLabel(ManipulationStrings.idle), findsOne);
+      await expectA11yGuidelines(tester, contrast: false, where: 'nothing selected');
       semantics.dispose();
     });
 

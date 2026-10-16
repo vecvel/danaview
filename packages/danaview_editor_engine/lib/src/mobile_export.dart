@@ -1,6 +1,7 @@
 // OWNER: ENG-04
 //
-// Export over `ExportHostApi` (ARCH §12.4, §14, D-22, D-39).
+// Export over `ExportHostApi` (ARCH §12.4, §14, D-22, D-39). INT-07: `start` forwards the optional
+// per-job notification texts (null keeps the engine-wide texts from `initialize`).
 //
 // Rules:
 // - Plans cross the channel as UTF-8 JSON bytes (`PlanTransport.encodePlan`, API-02; large plans
@@ -72,10 +73,12 @@ final class MobileExportService implements ExportService {
     required String outputPath,
     required String title,
     ExportDetachedHandoff whenDetached = ExportDetachedHandoff.saveToGallery,
+    ExportNotificationTexts? notificationTexts,
   }) async {
     final bytes = await PlanTransport.encodePlan(plan);
+    final texts = notificationTexts == null ? null : exportNotificationTextsToMsg(notificationTexts);
     final jobId = await _channels.invoke(
-      () => _channels.export.start(bytes, encodeSettingsToMsg(settings), outputPath, title, detachedHandoffToMsg(whenDetached)),
+      () => _channels.export.start(bytes, encodeSettingsToMsg(settings), outputPath, title, detachedHandoffToMsg(whenDetached), texts),
     );
     return _attach(jobId);
   }

@@ -125,6 +125,13 @@ abstract final class ManipulationStrings {
 
   /// Semantics label of a selected subtitle track.
   static const String selectedCaptions = 'Selected captions';
+
+  /// Semantics label of the overlay with nothing selected (screen readers would otherwise say
+  /// "button" for its tap/long-press node).
+  static const String idle = 'Video preview';
+
+  /// Semantics hint of the overlay with nothing selected.
+  static const String idleHint = 'Tap an item to select it';
 }
 
 /// Step sizes of the semantics actions.
@@ -947,10 +954,11 @@ class ManipulationOverlayState extends ConsumerState<ManipulationOverlay> {
     overlay = Semantics(
       container: true,
       label: !selectedVisible
-          ? null
+          ? ManipulationStrings.idle
           : cue
               ? ManipulationStrings.selectedCaptions
               : ManipulationStrings.selected(_kindOf(selectedItem), transform?.$1 ?? 1, transform?.$2 ?? 0),
+      hint: selectedVisible ? null : ManipulationStrings.idleHint,
       customSemanticsActions: selectedVisible ? _semanticsActions(cue) : null,
       child: overlay,
     );
@@ -997,6 +1005,8 @@ class ManipulationOverlayState extends ConsumerState<ManipulationOverlay> {
   }
 
   static (double, double)? _transformOf(TimelineItem item, TimeUs t) {
+    // Audio clips have no visual properties; evaluating them throws.
+    if (!PropertyKeys.scale.appliesToItem(item) || !PropertyKeys.rotation.appliesToItem(item)) return null;
     final local = (t - item.start).clamp(0, item.duration);
     return (evaluate(item, PropertyKeys.scale, local), evaluate(item, PropertyKeys.rotation, local));
   }

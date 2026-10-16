@@ -1,12 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <defs>
-    <filter id="glyphShadow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="17.067"/>
-      <feOffset dy="10.24" result="blur"/>
-      <feFlood flood-color="#000000" flood-opacity="0.16"/>
-      <feComposite in2="blur" operator="in" result="shadow"/>
-      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-  <path d="M405.338 416.427 A47.787 47.787 0 0 1 477.018 375.042 L642.556 470.616 A47.787 47.787 0 0 1 642.556 553.384 L477.018 648.958 A47.787 47.787 0 0 1 405.338 607.573 Z" fill="#FFFFFF" filter="url(#glyphShadow)"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs><filter id="gsg" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="17.067"/><feOffset dy="10.24" result="blur"/><feFlood flood-color="#000000" flood-opacity="0.16"/><feComposite in2="blur" operator="in" result="shadow"/><feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g filter="url(#gsg)"><g transform="translate(512 512) scale(0.6667) translate(-512 -512)"><defs><mask id="kg" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#fff"/><polygon points="516,288 591.24,494.73 736,442.05" fill="#000" stroke="#000" stroke-width="88" stroke-linejoin="round"/></mask></defs><path d="M356 288 L516 288 L736 442.05 L736 520 A216 216 0 0 1 520 736 L356 736 A68 68 0 0 1 288 668 L288 356 A68 68 0 0 1 356 288 Z" fill="#FFFFFF" mask="url(#kg)"/><polygon points="527.93,320.77 591.24,494.73 713.06,450.4" fill="#C9CBFF" stroke="#C9CBFF" stroke-width="8" stroke-linejoin="round"/></g></g></svg>

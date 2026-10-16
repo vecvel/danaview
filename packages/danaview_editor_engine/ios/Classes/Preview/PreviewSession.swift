@@ -19,6 +19,9 @@
 // - Transients are merged into the snapshot as they arrive and redrawn at most once per output
 //   frame while paused (a newer one supersedes a queued redraw); playback picks them up on the
 //   next composed frame.
+// End of the timeline (FIX-IOS-END-HOLD): the composition's last edge composes the frame at
+//   durUs (k = frameCount, black); the display link only shows frames ≤ frameCount − 1, and playback
+//   that reaches the end stops on the last frame with a settle seek, so it holds the last frame.
 // Clock and seq (§12.2): `seq` increases with every seek, play and pause; clock samples carry the
 //   seq of the last command (10 Hz while playing, plus every state change).
 // Seeks: SeekController (exact ack of the displayed `danaview.frame`, 500 ms timeout; scrub with
@@ -189,6 +192,7 @@ final class PreviewSession {
         private let lock = NSLock()
         private var _playing = false
         private var _minFrame: Int64 = 0
+        private var _maxFrame: Int64 = .max
         private var _lastK: Int64?
 
         func set(playing: Bool, minFrame: Int64) {
@@ -216,6 +220,22 @@ final class PreviewSession {
             lock.lock()
             defer { lock.unlock() }
             return _minFrame
+        }
+
+        /// The last output frame of the timeline: the composition also composes the frame at its
+        /// end time (k = frameCount, nothing active: black), which must never reach the texture
+        /// (FIX-IOS-END-HOLD).
+        var maxFrame: Int64 {
+            get {
+                lock.lock()
+                defer { lock.unlock() }
+                return _maxFrame
+            }
+            set {
+                lock.lock()
+                _maxFrame = newValue
+                lock.unlock()
+            }
         }
 
         /// Records displayed frame [k]; returns the frames skipped since the previous one.
@@ -869,6 +889,7 @@ final class PreviewSession {
         playing = true
         wantsPlaying = true
         governor.playbackStarted(at: deps.now())
+        tick.maxFrame = max(0, frameCount - 1)
         tick.set(playing: true, minFrame: currentFrame)
         player.playImmediately(atRate: 1)
         displayLink.start()
@@ -907,7 +928,11 @@ final class PreviewSession {
         let host = t.targetTimestamp + displayLink.textureLatency
         let itemTime = output.itemTime(forHostTime: host)
         let minFrame = tick.minFrame
-        guard let frame = bridge.pull(itemTime: itemTime, accept: { k in (k ?? Int64.max) >= minFrame }), let k = frame.k else {
+        let maxFrame = tick.maxFrame
+        guard let frame = bridge.pull(itemTime: itemTime, accept: { k in
+            guard let k else { return true }
+            return k >= minFrame && k <= maxFrame
+        }), let k = frame.k else {
             return
         }
         let missed = tick.displayed(k)
@@ -1039,11 +1064,21 @@ final class PreviewSession {
         }
         updateRanges(at: frameCount)
         stopPlayback()
-        if let k = bridge.lastComposed?.k { currentFrame = clampFrame(k) }
+        // The end of the timeline holds its last frame (ARCH §12.2, FIX-IOS-END-HOLD): the display
+        // link never shows the black frame at durUs, and a settle seek re-composes the last frame
+        // when it was dropped or the compositor's last request (the paused-redraw source) was
+        // the end frame.
+        let last = clampFrame(frameCount - 1)
+        currentFrame = last
         emitClock()
         if playingStills || renderedPlan != nil {
             // Ended on a stills or rendered composition: paused edits and seeks need the full one.
             rebuild(frame: currentFrame, resume: false) { _ in }
+        } else {
+            seeks.exact(last) { [weak self] o in
+                guard let self, !self.playing else { return }
+                self.currentFrame = o.frame
+            }
         }
     }
 

@@ -9,6 +9,7 @@
 // on minimal/low/mid tiers; preflight warnings; the audio read is validated and redone.
 
 import AVFoundation
+import VideoToolbox
 import XCTest
 
 @testable import danaview_editor_engine
@@ -81,6 +82,11 @@ final class ExportCoordinatorTests: XCTestCase {
         XCTAssertEqual(compression[AVVideoAverageBitRateKey] as? Int, 8_000_000)
         XCTAssertEqual(compression[AVVideoExpectedSourceFrameRateKey] as? Int, 30)
         XCTAssertEqual(compression[AVVideoMaxKeyFrameIntervalDurationKey] as? Double, 2)
+        // DataRateLimits hard cap next to AverageBitRate: 1.5× the average per 1 s (QA-11, FIX-IOS-DURATION).
+        let limits = try XCTUnwrap(compression[kVTCompressionPropertyKey_DataRateLimits as String] as? [NSNumber])
+        XCTAssertEqual(limits.map(\.doubleValue), [1_500_000, 1])
+        XCTAssertNil(SegmentEncodeSettings(width: 640, height: 360, fps: 30, averageBitRate: 1_000_000).dataRateLimits,
+                     "proxy/reverse/precompose writers stay uncapped")
 
         let rotated = s.segmentSettings(layout: .rotated)
         XCTAssertEqual(rotated.width, 1920)
@@ -118,6 +124,17 @@ final class ExportCoordinatorTests: XCTestCase {
                        .encoderUnavailable)
         XCTAssertEqual(EncoderErrors.map(NSError(domain: AVFoundationErrorDomain, code: -11833), settings: landscape, probe: all).code,
                        .decoderInitFailed, "decoder errors keep their code")
+        // VideoToolbox refusals arrive already converted by ENG-07 (`internal`, tag "<domain> <code>").
+        for vt in [-12902, -12908, -12915] {
+            let converted = EngineError.from(NSError(domain: NSOSStatusErrorDomain, code: vt))
+            XCTAssertTrue(EncoderErrors.isEncoderRefusal(converted), "VT \(vt) is a refusal")
+            XCTAssertTrue(EncoderErrors.isEncoderRefusal(NSError(domain: NSOSStatusErrorDomain, code: vt)))
+            XCTAssertEqual(EncoderErrors.map(converted, settings: landscape, probe: refuseBig).code, .encoderSizeLimit)
+            XCTAssertEqual(EncoderErrors.map(converted, settings: landscape, probe: none).code, .encoderUnavailable)
+        }
+        XCTAssertFalse(EncoderErrors.isEncoderRefusal(EngineError.from(NSError(domain: NSOSStatusErrorDomain, code: -50))))
+        XCTAssertFalse(EncoderErrors.isEncoderRefusal(EngineError(.internal, "NSOSStatusErrorDomain -12902 extra")),
+                       "only an exact tag matches, never free text")
 
         // Through the coordinator: start fails with the mapped code, nothing is left behind.
         let h = try make(ExportHarness.Options(probe: EncoderProbe.refusing { _, w, _ in w > 640 }))
@@ -201,6 +218,37 @@ final class ExportCoordinatorTests: XCTestCase {
         XCTAssertEqual(layouts, [.native, .rotated])
         XCTAssertTrue(h.progress(id).last?.warnings.contains { $0.code == "portraitRetried" } ?? false)
         try assertUprightPortrait(output)
+    }
+
+    func testPortraitRefusedByVideoToolboxRetriesOnceRotated() throws {
+        let h = try make()
+        var layouts: [EncodeLayout] = []
+        h.coordinator.configurePipeline = { p in
+            layouts.append(p.input.layout)
+            if p.input.layout == .native {
+                p.configureWriter = { writer in
+                    writer.faultInjector = { _, _ in NSError(domain: NSOSStatusErrorDomain, code: -12902) }
+                }
+            }
+        }
+        let output = h.outputURL()
+        let id = try h.export(self, plan: portraitPlan(durUs: 1_000_000), settings: ExportPlans.settings(360, 640, fps: 30), output: output)
+        XCTAssertNil(h.recorder.failure(id))
+        XCTAssertEqual(layouts, [.native, .rotated])
+        XCTAssertTrue(h.progress(id).last?.warnings.contains { $0.code == "portraitRetried" } ?? false)
+        try assertUprightPortrait(output)
+    }
+
+    func testPortraitRefusedByVideoToolboxInBothOrientationsFailsWithSizeLimit() throws {
+        let h = try make()
+        h.coordinator.configurePipeline = { p in
+            p.configureWriter = { $0.faultInjector = { _, _ in NSError(domain: NSOSStatusErrorDomain, code: -12902) } }
+        }
+        let output = h.outputURL()
+        let id = try h.export(self, plan: portraitPlan(durUs: 1_000_000), settings: ExportPlans.settings(360, 640, fps: 30), output: output)
+        XCTAssertEqual(h.recorder.failure(id)?.code, "encoderSizeLimit")
+        XCTAssertFalse(exists(output))
+        XCTAssertFalse(exists(jobDirectory(h, id)))
     }
 
     func testPortraitRefusedInBothOrientationsFailsWithSizeLimit() throws {
@@ -309,12 +357,16 @@ final class ExportCoordinatorTests: XCTestCase {
         try ExportConformance.check(output, settings: settings, durUs: durUs, brand: "mp42", codec: "avc1", checkBitrate: false)
     }
 
-    func testMultiPassHookDiscoveryFindsNothingUntilIOS20() throws {
+    func testHookDiscoveryFindsPrecomposeExporterAndActiveExportStore() throws {
         let h = try make()
-        // No `PrecomposeExporter` is linked yet: the lookup answers nil (the coordinator then runs
-        // the single pass).
-        XCTAssertNil(ExportCoordinator.discoverMultiPass(context: h.context))
-        XCTAssertNil(ExportCoordinator.discoverLifecycle(context: h.context))
+        // IOS-20's `PrecomposeExporter` (the multi-pass hook) and IOS-13's `ActiveExportStore`
+        // (the job lifecycle hook) are linked: discovery finds both on the context.
+        let multiPass = ExportCoordinator.discoverMultiPass(context: h.context)
+        XCTAssertNotNil(multiPass)
+        XCTAssertTrue(multiPass is PrecomposeExporter, "multi-pass hook is \(String(describing: multiPass))")
+        let lifecycle = ExportCoordinator.discoverLifecycle(context: h.context)
+        XCTAssertNotNil(lifecycle)
+        XCTAssertTrue(lifecycle is ActiveExportStore, "lifecycle hook is \(String(describing: lifecycle))")
     }
 
     // MARK: Thermal

@@ -347,6 +347,10 @@ func writeMovie(_ spec: MovieSpec) throws {
     vSettings[AVVideoCompressionPropertiesKey] = props
     let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: vSettings)
     vInput.expectsMediaDataInRealTime = false
+    // Store the spec's ticks as written. Left at 0, AVAssetWriter picks 600, which cannot hold
+    // 48 fps (odd frames up to 833 us off k/48; QA-03 finding 4, FIX-48FPS-TIMESCALE).
+    vInput.mediaTimeScale = spec.timescale
+    writer.movieTimeScale = spec.timescale
     if case .bgraRotated90 = spec.pixelMode {
         // Encoded landscape, displayed portrait (iPhone style): a=0 b=1 c=-1 d=0 tx=encodedHeight.
         vInput.transform = CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: CGFloat(spec.encodedHeight), ty: 0)

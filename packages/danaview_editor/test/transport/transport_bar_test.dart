@@ -86,7 +86,10 @@ void main() {
       await rig.real(() => rig.transport.seekTo(1 * s));
       final handle = tester.ensureSemantics();
       await tester.pump();
-      expect(tester.getSemantics(find.byType(TimecodeText)).value, '00:01:00 of 00:07:00');
+      // One node: the readout button names it once and carries the value (FIX-UX-14-1).
+      final node = find.semantics.byLabel(TransportStrings.time).evaluate().single.getSemanticsData();
+      expect(node.label, TransportStrings.time);
+      expect(node.value, '00:01:00 of 00:07:00');
       handle.dispose();
     });
   });

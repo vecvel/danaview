@@ -140,7 +140,9 @@ abstract final class E2eExport {
     // ignore: avoid_print
     print('DV_E2E_EXPORT ${done.fileName} ${done.result.bytes} B ${done.result.duration} us encoder ${done.result.videoEncoderName} -> $video');
     if (closeAfter) {
-      await c.done();
+      // Done as the user does it: the button cleans up and closes the sheet (the controller's
+      // `done` only cleans up).
+      await E2eApp.tapKey(ed.tester, 'export-done');
       await E2eApp.pumpUntil(ed.tester, () => !E2eApp.hasKey('export-sheet'), what: 'the export sheet to close');
     }
     return E2eExported(video: video, result: done.result, settings: settings, sideFiles: sides);

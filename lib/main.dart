@@ -13,7 +13,14 @@ import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart'
     show EditorEngine, EngineSignal, MemoryWarningSignal, ThermalSignal;
 import 'package:danaview_platform/danaview_platform.dart';
 import 'package:danaview_transcription/danaview_transcription.dart'
-    show DeviceResources, ModelDownloaderConfig, ModelStorePlatform, TranscriptionService, WhisperDeviceModelStorePlatform, WhisperDeviceResources;
+    show
+        DeviceResources,
+        ModelDownloaderConfig,
+        ModelStorePlatform,
+        TranscriptionService,
+        TranscriptionServiceImpl,
+        WhisperDeviceModelStorePlatform,
+        WhisperDeviceResources;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:danaview_whisper/danaview_whisper.dart';
 import 'app.dart';
@@ -110,9 +117,25 @@ AutoCaptionsRuntime createAutoCaptions({
     device: EngineSignalDeviceResources(WhisperDeviceResources(device), engine.signals),
     storePlatform: storePlatform ?? WhisperDeviceModelStorePlatform(device),
     appVersion: danaviewAppVersion,
-    createService: createService,
+    createService: createService ?? sharedDeviceServiceFactory(supportDirectory: supportDirectory, device: device),
     downloaderConfig: downloaderConfig,
   );
+}
+
+/// The production service factory: the whisper runtime opens over the same [device] channel the
+/// governor listens to (QA-07 D1), so lifecycle, thermal and memory events reach both.
+AutoCaptionsServiceFactory sharedDeviceServiceFactory({
+  required String supportDirectory,
+  required WhisperDeviceChannel device,
+}) {
+  return ({required store, required extractor, required governor, required leases}) => TranscriptionServiceImpl(
+        supportDirectory: supportDirectory,
+        store: store,
+        extractor: extractor,
+        governor: governor,
+        leases: leases,
+        openRuntime: () => WhisperRuntime.open(channel: device),
+      );
 }
 
 /// The governor's [DeviceResources]: [device] (the danaview_whisper channel) with the engine's

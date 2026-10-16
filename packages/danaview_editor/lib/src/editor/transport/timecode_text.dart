@@ -21,6 +21,7 @@ class TimecodeText extends StatelessWidget {
     required this.duration,
     required this.frameRate,
     this.compact = false,
+    this.semanticsLabel = true,
   });
 
   /// The playhead (rebuilds this widget when its frame changes).
@@ -34,6 +35,10 @@ class TimecodeText extends StatelessWidget {
 
   /// Whether to show the short form.
   final bool compact;
+
+  /// Whether the readout names itself ("Playhead position"); false under a control that already
+  /// carries that label (the transport's readout button), so a screen reader says it once.
+  final bool semanticsLabel;
 
   /// The text style of the readout: Figtree with tabular figures so the digits don't jitter.
   static const TextStyle style = TextStyle(
@@ -74,7 +79,7 @@ class TimecodeText extends StatelessWidget {
         EditorRebuildCounters.count('TimecodeText');
         final now = position(t, frameRate, compact: compact);
         return Semantics(
-          label: TransportStrings.time,
+          label: semanticsLabel ? TransportStrings.time : null,
           value: TransportStrings.timeValue(now, total),
           excludeSemantics: true,
           child: Text.rich(

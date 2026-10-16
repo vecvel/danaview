@@ -1,4 +1,5 @@
-// OWNER: ENG-07 (frozen by ENG-06; amended by INT-06: render-preview requests, rendered ranges)
+// OWNER: ENG-07 (frozen by ENG-06; amended by INT-06: render-preview requests, rendered ranges;
+// by INT-07: export notification texts)
 //
 // Argument validation of the host APIs (ARCH §12.6). Dart is trusted but buggy callers must fail
 // with a typed error instead of reaching media code: contract violations are `internal`
@@ -48,6 +49,20 @@ enum Validate {
 
     static func unit(_ value: Double, _ name: String) throws {
         guard value.isFinite && value >= 0 && value <= 1 else { throw EngineError.invalidArgument(name, "not in 0...1") }
+    }
+
+    /// INT-07: every localized notification text non-empty and at most 256 UTF-8 bytes.
+    static func notificationTexts(_ t: ExportNotificationTextsMsg) throws {
+        let all: [(String, String)] = [
+            (t.exportTitle, "exportTitle"), (t.workTitle, "workTitle"), (t.exporting, "exporting"),
+            (t.exportingProgress, "exportingProgress"), (t.working, "working"), (t.workingProgress, "workingProgress"),
+            (t.cancel, "cancel"), (t.savedToGallery, "savedToGallery"), (t.exportFinished, "exportFinished"), (t.more, "more"),
+            (t.progressChannelName, "progressChannelName"), (t.progressChannelDescription, "progressChannelDescription"),
+            (t.doneChannelName, "doneChannelName"), (t.doneChannelDescription, "doneChannelDescription"),
+        ]
+        for (value, name) in all {
+            try text(value, "texts.\(name)", maxBytes: 256, allowEmpty: false)
+        }
     }
 
     static func text(_ value: String, _ name: String, maxBytes: Int = 1024, allowEmpty: Bool = true) throws {

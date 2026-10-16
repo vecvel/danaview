@@ -78,7 +78,8 @@ void main() {
       expect(b.id, 'exp-1');
       final calls = h.argsOf('ExportHostApi', 'start');
       expect(calls[0][0], isA<Uint8List>());
-      expect(calls[0].sublist(2), ['/c/danaview/editor/work/export-x.mov', 'My film', DetachedHandoffMsg.saveToGallery]);
+      expect(calls[0].sublist(2, 5), ['/c/danaview/editor/work/export-x.mov', 'My film', DetachedHandoffMsg.saveToGallery]);
+      expect(calls[0][5], isNull, reason: 'no per-job notification texts (INT-07)');
       expect(calls[1][4], DetachedHandoffMsg.keepForLater);
     });
 
