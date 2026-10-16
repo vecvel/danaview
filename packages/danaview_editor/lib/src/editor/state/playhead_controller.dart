@@ -214,6 +214,11 @@ class PlayheadController extends ChangeNotifier implements ValueListenable<TimeU
   /// Drives [session]: listens to its clock and sends it seeks and play/pause. [initial] is the
   /// acknowledgement of the seek that positioned the preview (adopted as the playhead). Exact seeks
   /// wait for [planSync] (the session's plan sync) to be idle, see the file header.
+  ///
+  /// Without [initial] the session is new and its first command is the exact seek that positions
+  /// it (the open's or "Restart preview"'s, seq 1): clock samples before it (seq 0, e.g. the one
+  /// sent when the first plan is applied) show the session's start frame, not the playhead the
+  /// project was saved with, so they are ignored (FIX-UX-14-1).
   void attach(PreviewSession session, {SeekAck? initial, PlanSync? planSync}) {
     if (_disposed) return;
     detach();
@@ -221,7 +226,7 @@ class PlayheadController extends ChangeNotifier implements ValueListenable<TimeU
     _planSync = planSync;
     _generation++;
     _maxSeen = -1;
-    _minAccept = 0;
+    _minAccept = initial == null ? 1 : 0;
     _clockSub = session.clock.listen(_onClock, onError: (Object _) {});
     if (initial != null) {
       _maxSeen = initial.seq;
@@ -604,6 +609,9 @@ PlayheadController createPlayheadController(Ref<Object?> ref, ProjectId id, {Pla
     clock: clock,
     onSettled: (t) => editor.updateView((v) => v.copyWith(playhead: t)),
   );
+  // A settle still debounced when the editor saves on close (or the app is hidden) is written
+  // first, so the reopened project starts on the frame it closed on (FIX-UX-14-1).
+  final removeFlusher = editor.addViewFlusher(controller.flushSettled);
   var wasOpen = false;
 
   void sync() {
@@ -615,7 +623,8 @@ PlayheadController createPlayheadController(Ref<Object?> ref, ProjectId id, {Pla
     }
     final committed = edit.committedProject;
     controller.setContent(frameRate: committed.settings.frameRate, duration: committed.duration);
-    if (!wasOpen) {
+    final opening = !wasOpen;
+    if (opening) {
       wasOpen = true;
       controller.reset(committed.view.playhead);
     }
@@ -624,7 +633,9 @@ PlayheadController createPlayheadController(Ref<Object?> ref, ProjectId id, {Pla
       if (preview == null) {
         controller.detach();
       } else {
-        controller.attach(preview, initial: session.initialSeek, planSync: session.planSync);
+        // The open's seek ack positions only the preview the editor opened with; a preview made by
+        // "Restart preview" is positioned by its own first seek (seq 1, see `attach`).
+        controller.attach(preview, initial: opening ? session.initialSeek : null, planSync: session.planSync);
       }
     }
   }
@@ -642,6 +653,7 @@ PlayheadController createPlayheadController(Ref<Object?> ref, ProjectId id, {Pla
   });
 
   ref.onDispose(() {
+    removeFlusher();
     session.attached.removeListener(sync);
     controller.dispose();
   });

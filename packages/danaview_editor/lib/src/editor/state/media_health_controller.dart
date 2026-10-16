@@ -14,6 +14,10 @@
 //   card, the toolbar and the export pre-check read, and keeps the banner's "dismissed for this
 //   session" flag: the banner comes back on [resurfaceBanner] (the export pre-check) and whenever
 //   more media goes missing than the user dismissed.
+// * Every report that changes the availability of any asset also calls `onAvailabilityChanged`
+//   (`EditorController.mediaAvailabilityChanged`), which compiles the plan again: the compiler
+//   reads the latest report before it resolves, and the commit of a relink compiles before the
+//   re-check after it reports (FIX-UX-40-1: relinked media stayed offline in the preview).
 //
 // `mediaHealthControllerProvider(id)` is started by the widget that shows the banner
 // (`EditorHealthHost`): reading it is what starts the subscription.
@@ -122,17 +126,25 @@ final class MediaHealthState {
 class MediaHealthController extends StateNotifier<MediaHealthState> {
   /// Creates the controller. [source] opens a fresh availability stream (the real service checks
   /// when it is listened to); [publish] receives the [MediaHealth] after every change.
-  MediaHealthController({required Stream<MediaAvailabilityReport> Function() source, required ValueChanged<MediaHealth> publish})
-      : _source = source,
+  /// [onAvailabilityChanged] runs when a report changes the availability of any asset (the plan
+  /// is compiled again).
+  MediaHealthController({
+    required Stream<MediaAvailabilityReport> Function() source,
+    required ValueChanged<MediaHealth> publish,
+    VoidCallback? onAvailabilityChanged,
+  })  : _source = source,
         _publish = publish,
+        _onAvailabilityChanged = onAvailabilityChanged,
         super(MediaHealthState.unknown);
 
   final Stream<MediaAvailabilityReport> Function() _source;
   final ValueChanged<MediaHealth> _publish;
+  final VoidCallback? _onAvailabilityChanged;
   StreamSubscription<MediaAvailabilityReport>? _subscription;
   EditProject? _project;
   Object? _usedTimeline;
   MediaHealth _published = MediaHealth.ok;
+  Map<MediaId, MediaAvailability>? _reported;
 
   /// Whether the controller is watching availability.
   bool get isWatching => _subscription != null;
@@ -167,6 +179,11 @@ class MediaHealthController extends StateNotifier<MediaHealthState> {
   }
 
   void _onReport(MediaAvailabilityReport report) {
+    if (!mounted) return;
+    final changed = !mapEquals(_reported, report.byMedia);
+    _reported = Map.of(report.byMedia);
+    // Before the state changes, so the new plan is scheduled before the banner goes.
+    if (changed) _onAvailabilityChanged?.call();
     if (!mounted) return;
     _set(state.copyWith(byMedia: report.byMedia, checked: true));
   }
@@ -227,6 +244,7 @@ MediaHealthController createMediaHealthController(Ref<Object?> ref, ProjectId id
   final controller = MediaHealthController(
     source: () => _watch(pool, session),
     publish: editor.setMediaHealth,
+    onAvailabilityChanged: editor.mediaAvailabilityChanged,
   );
 
   void attachment() {

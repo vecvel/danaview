@@ -179,6 +179,7 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
   bool _txEmitScheduled = false;
   EditorPerfSpan? _openSpan;
   bool _released = false;
+  final List<VoidCallback> _viewFlushers = [];
 
   /// Called once when the controller no longer needs to be kept alive (after [close]); the
   /// provider factory closes its `keepAlive` link here.
@@ -370,6 +371,7 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
   Future<bool> flushBeforeClose() async {
     if (!_session.isOpen || _readOnly) return true;
     _closeTx(emit: true);
+    _flushViews();
     try {
       return await _flush(SaveReason.close).timeout(flushTimeout, onTimeout: () => false);
     } catch (_) {
@@ -515,6 +517,7 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
   void onAppHidden() {
     if (!_session.isOpen || _readOnly) return;
     _closeTx(emit: true);
+    _flushViews();
     unawaited(_quietly(() => _flush(SaveReason.lifecycle)));
   }
 
@@ -1040,6 +1043,24 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
     _set(state.copyWith(modes: next, project: edit?.project ?? state.project));
   }
 
+  /// Registers [flush], called right before the editor saves on close or when the app is hidden,
+  /// to write view state that is still debounced (the playhead's settle, UX-14; FIX-UX-14-1: a seek
+  /// right before "Close editor" must reach the saved view state). Returns the remover.
+  VoidCallback addViewFlusher(VoidCallback flush) {
+    _viewFlushers.add(flush);
+    return () => _viewFlushers.remove(flush);
+  }
+
+  void _flushViews() {
+    for (final flush in [..._viewFlushers]) {
+      try {
+        flush();
+      } catch (e, s) {
+        _report(e, s, 'writing the view state');
+      }
+    }
+  }
+
   /// Persists view state (playhead, zoom, scroll) without history (UX-09, UX-14).
   void updateView(ViewState Function(ViewState view) update) {
     final edit = _session.editOrNull;
@@ -1052,6 +1073,28 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
   void setMediaHealth(MediaHealth media) {
     if (!mounted || state.media == media) return;
     _set(state.copyWith(media: media));
+  }
+
+  /// A new availability report changed what is on- or offline (UX-40's media health: after a
+  /// relink, on app resume). The compiler reads the report before it resolves, so the plan is
+  /// compiled again (FIX-UX-40-1: the relink commit compiled against the report from before the
+  /// relink, so the relinked media stayed offline in the preview until the project was reopened).
+  void mediaAvailabilityChanged() {
+    if (!mounted || !_session.isOpen) return;
+    final edit = _session.editOrNull;
+    final compiler = _session.compiler;
+    if (edit == null || compiler == null) return;
+    final sync = _session.planSync;
+    if (sync != null) {
+      if (sync.currentStatus == PlanSyncStatus.failed) {
+        sync.resync();
+      } else {
+        sync.schedule(edit.committedProject);
+      }
+    } else {
+      // No preview: refresh the compiler's media snapshot for posters and background jobs.
+      unawaited(_quietly(() => _resolvingCompile(compiler)(edit.committedProject)));
+    }
   }
 
   /// Background tasks from UX-35's tasks controller.
