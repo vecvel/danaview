@@ -15,6 +15,23 @@
 // Threading: `writeVideo`, `writeAudio` and `concat` block the calling queue (a job queue, never
 // main); the writer pumps run on a private serial queue via requestMediaDataWhenReady.
 // `interrupt()` and `cancel()` may be called from any thread.
+//
+// Bounded waits (FIX-IOS-EXPORT-STALL, QA-05 D1/D2). The calling queue waits for a pump in short
+// slices instead of forever:
+// - a writer that failed while its input was not ready (AVFoundation then never calls the block
+//   again) ends the pump with the writer's error (an interruption code still means `.interrupted`);
+// - with `stopGrace` set, a stop request (`interrupt`/`cancel`) whose pump does not return within
+//   that grace (the pump is blocked inside the source or the encoder) abandons the segment;
+// - with `stallTimeout` set, a pump without any progress (no frame or audio buffer read) for that
+//   long abandons the segment and throws a stall error (`decodeFailed` when the pump is blocked in
+//   the source, `encodingFailed` otherwise); `isStallExempt` (thermal pause) stops that clock.
+//   `finishWriting` is bounded by the same timeout.
+// Abandoning never touches the blocked objects: calling `cancelReading` while
+// `copyNextSampleBuffer` is blocked crashes (SIGSEGV in FigVisualContextGetEarliestSequentialImageTime,
+// measured on the iOS 26.5 simulator), so the writer, input and source of an abandoned pump are
+// kept alive forever (`abandonedObjects`) and the pump returns without touching them if it ever
+// wakes. Callers (exports) set both bounds; proxies and reverse keep the unbounded behaviour.
+// `onActivity` is called for every frame, audio buffer and concat sample (the export's heartbeat).
 
 import AVFoundation
 import CoreMedia
@@ -70,6 +87,20 @@ final class SegmentedWriter {
     /// writer runs past the source composition (FIX-IOS-DURATION). Not persisted: callers set it
     /// on every run.
     var exactEnd: CMTime?
+    /// Seconds a pump may go without progress before the segment is abandoned with a stall error
+    /// (nil: wait forever). Also bounds `finishWriting` (FIX-IOS-EXPORT-STALL).
+    var stallTimeout: TimeInterval?
+    /// Seconds a stop request waits for a blocked pump before the segment is abandoned (nil: wait).
+    var stopGrace: TimeInterval?
+    /// While true the stall clock does not run (e.g. the export's thermal pause).
+    var isStallExempt: (() -> Bool)?
+    /// Called for every frame, audio buffer and concat sample (any thread).
+    var onActivity: (() -> Void)?
+    /// Test hook: returns true to block the pump before it reads (segment, frame) from the source,
+    /// as AVFoundation's hung `copyNextSampleBuffer` did (the block then waits forever).
+    var stallInjector: ((_ segment: Int, _ frame: Int) -> Bool)?
+    /// Slice of the bounded waits.
+    static let waitSlice: TimeInterval = 0.1
 
     private let pumpQueue = DispatchQueue(label: "com.vecvel.danaview.editor.segments.pump", qos: .userInitiated)
     private let lock = NSLock()
@@ -169,6 +200,9 @@ final class SegmentedWriter {
         return cancelled
     }
 
+    /// Whether a stop was requested by `cancel()` (vs `interrupt()`).
+    var wasCancelled: Bool { isCancelled }
+
     private func clearInterrupt() {
         lock.lock()
         interruptRequested = false
@@ -222,7 +256,8 @@ final class SegmentedWriter {
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: nil)
 
         try source.openSegment(startUs: range.startUs, endUs: range.endUs)
-        defer { source.closeSegment() }
+        var abandoned = false
+        defer { if !abandoned { source.closeSegment() } }
         guard writer.startWriting() else {
             throw writer.error.map(EngineError.from) ?? EngineError(.encoderUnavailable, "segment writer did not start")
         }
@@ -232,46 +267,47 @@ final class SegmentedWriter {
 
         var frames = 0
         var firstPts: CMTime?
-        var failure: Error?
-        var stopped = false
-        var finished = false
-        let done = DispatchSemaphore(value: 0)
+        let pump = PumpState()
         let total = Double(max(1, checkpoint.endUs - checkpoint.startUs))
         let jobStart = checkpoint.startUs
+        let stallInjector = stallInjector
         input.requestMediaDataWhenReady(on: pumpQueue) { [self] in
-            guard !finished else { return }
-            func finish() {
-                finished = true
-                done.signal()
-            }
+            guard pump.enter() else { return }
             while input.isReadyForMoreMediaData {
                 if shouldStop {
-                    stopped = true
-                    return finish()
+                    pump.stopped = true
+                    return pump.finish()
                 }
                 if let fault = faultInjector?(index, frames) {
-                    failure = fault
-                    return finish()
+                    pump.failure = fault
+                    return pump.finish()
                 }
                 let frame: SegmentFrame?
                 do {
-                    frame = try source.nextFrame()
+                    frame = try pump.inSource {
+                        if stallInjector?(index, frames) == true { PumpState.blockForever() }
+                        return try source.nextFrame()
+                    }
                 } catch {
-                    failure = error
-                    return finish()
+                    pump.failure = error
+                    return pump.finish()
                 }
+                // Abandoned while blocked in the source: touch nothing (the objects are leaked).
+                if pump.isAbandoned { return }
+                pump.tick()
+                onActivity?()
                 guard let frame = frame else {
                     input.markAsFinished()
-                    return finish()
+                    return pump.finish()
                 }
                 if CMTimeCompare(frame.pts, start) < 0 { continue }
                 if CMTimeCompare(frame.pts, end) >= 0 {
                     input.markAsFinished()
-                    return finish()
+                    return pump.finish()
                 }
                 guard adaptor.append(frame.pixelBuffer, withPresentationTime: frame.pts) else {
-                    failure = writer.error ?? EngineError(.encodingFailed, "segment append failed")
-                    return finish()
+                    pump.failure = writer.error ?? EngineError(.encodingFailed, "segment append failed")
+                    return pump.finish()
                 }
                 if firstPts == nil { firstPts = frame.pts }
                 frames += 1
@@ -280,8 +316,17 @@ final class SegmentedWriter {
                     progress(min(1, max(0, (us - Double(jobStart)) / total)))
                 }
             }
+            pump.leave()
         }
-        done.wait()
+        if let error = awaitPump(pump, writer: writer, segment: index) {
+            abandoned = true
+            SegmentedWriter.keepAbandoned([writer, input, adaptor, source, pump])
+            try? FileManager.default.removeItem(at: partial)
+            if let error = error { throw error }
+            return .interrupted
+        }
+        let stopped = pump.stopped
+        let failure = pump.failure
 
         if stopped || failure != nil {
             writer.cancelWriting()
@@ -300,9 +345,7 @@ final class SegmentedWriter {
             return .completed
         }
         writer.endSession(atSourceTime: end)
-        let finishedWriting = DispatchSemaphore(value: 0)
-        writer.finishWriting { finishedWriting.signal() }
-        finishedWriting.wait()
+        try finish(writer, what: "segment \(index)")
         guard writer.status == .completed else {
             try? FileManager.default.removeItem(at: partial)
             let error: Error = writer.error ?? EngineError(.encodingFailed, "segment writer did not complete")
@@ -349,48 +392,54 @@ final class SegmentedWriter {
         guard writer.canAdd(input) else { throw EngineError(.encoderUnavailable, "audio input refused") }
         writer.add(input)
         try source.openAudio(startUs: checkpoint.startUs, endUs: checkpoint.endUs)
-        defer { source.closeAudio() }
+        var audioAbandoned = false
+        defer { if !audioAbandoned { source.closeAudio() } }
         guard writer.startWriting() else {
             throw writer.error.map(EngineError.from) ?? EngineError(.encoderUnavailable, "audio writer did not start")
         }
         let start = outputTime(us: checkpoint.startUs)
         let end = outputTime(us: checkpoint.endUs)
         writer.startSession(atSourceTime: start)
-        var failure: Error?
-        var stopped = false
-        var finished = false
         var appended = 0
-        let done = DispatchSemaphore(value: 0)
+        let pump = PumpState()
         input.requestMediaDataWhenReady(on: pumpQueue) { [self] in
-            guard !finished else { return }
-            func finish() {
-                finished = true
-                done.signal()
-            }
+            guard pump.enter() else { return }
             while input.isReadyForMoreMediaData {
                 if shouldStop {
-                    stopped = true
-                    return finish()
+                    pump.stopped = true
+                    return pump.finish()
                 }
                 let sample: CMSampleBuffer?
                 do {
-                    sample = try source.nextAudio()
+                    sample = try pump.inSource { try source.nextAudio() }
                 } catch {
-                    failure = error
-                    return finish()
+                    pump.failure = error
+                    return pump.finish()
                 }
+                if pump.isAbandoned { return }
+                pump.tick()
+                onActivity?()
                 guard let buffer = sample else {
                     input.markAsFinished()
-                    return finish()
+                    return pump.finish()
                 }
                 guard input.append(buffer) else {
-                    failure = writer.error ?? EngineError(.encodingFailed, "audio append failed")
-                    return finish()
+                    pump.failure = writer.error ?? EngineError(.encodingFailed, "audio append failed")
+                    return pump.finish()
                 }
                 appended += 1
             }
+            pump.leave()
         }
-        done.wait()
+        if let error = awaitPump(pump, writer: writer, segment: nil) {
+            audioAbandoned = true
+            SegmentedWriter.keepAbandoned([writer, input, source, pump])
+            try? FileManager.default.removeItem(at: partialAudioURL)
+            if let error = error { throw error }
+            return .interrupted
+        }
+        let stopped = pump.stopped
+        let failure = pump.failure
         if stopped || failure != nil || appended == 0 {
             writer.cancelWriting()
             try? FileManager.default.removeItem(at: partialAudioURL)
@@ -403,9 +452,7 @@ final class SegmentedWriter {
         }
         // Trim to the output duration (the reader may run past it, ARCH §14.2).
         writer.endSession(atSourceTime: end)
-        let finishedWriting = DispatchSemaphore(value: 0)
-        writer.finishWriting { finishedWriting.signal() }
-        finishedWriting.wait()
+        try finish(writer, what: "audio")
         guard writer.status == .completed else {
             try? FileManager.default.removeItem(at: partialAudioURL)
             let error: Error = writer.error ?? EngineError(.encodingFailed, "audio writer did not complete")
@@ -435,10 +482,104 @@ final class SegmentedWriter {
         let result = try SegmentConcat.concat(
             checkpoint: checkpoint, directory: directory, segmentURL: segmentURL,
             audioURL: checkpoint.audioComplete ? audioURL : nil, to: output, transform: transform,
-            end: outputTime(us: checkpoint.endUs), isCancelled: { [weak self] in self?.isCancelled ?? true })
+            end: outputTime(us: checkpoint.endUs), isCancelled: { [weak self] in
+                guard let self = self else { return true }
+                self.onActivity?()
+                return self.isCancelled
+            })
         SegmentCheckpoint.delete(in: directory)
         try? FileManager.default.removeItem(at: audioURL)
         return result
+    }
+
+    // MARK: Bounded waits (FIX-IOS-EXPORT-STALL)
+
+    /// Objects of abandoned pumps, kept alive forever (releasing or cancelling them while a call
+    /// into them is blocked would crash).
+    private static var abandonedObjects: [AnyObject] = []
+    private static let abandonedLock = NSLock()
+
+    static func keepAbandoned(_ objects: [AnyObject]) {
+        abandonedLock.lock()
+        abandonedObjects.append(contentsOf: objects)
+        abandonedLock.unlock()
+    }
+
+    /// Number of objects kept for abandoned pumps (tests).
+    static var abandonedCount: Int {
+        abandonedLock.lock()
+        defer { abandonedLock.unlock() }
+        return abandonedObjects.count
+    }
+
+    /// The stall error of a pump without progress for [seconds].
+    func stallError(segment: Int?, seconds: TimeInterval, inSource: Bool) -> EngineError {
+        let part = segment.map { "segment \($0)" } ?? "audio"
+        return EngineError(
+            inSource ? .decodeFailed : .encodingFailed,
+            "\(checkpoint.jobKind) stalled: no progress for \(Int(seconds.rounded())) s in \(part) (\(inSource ? "reader" : "writer"))",
+            retryable: true)
+    }
+
+    /// Waits for [pump] (see the file comment). Returns nil when the pump finished normally;
+    /// otherwise the pump was abandoned and the result is the error to throw (`.some(nil)`: a stop
+    /// request, the caller returns `.interrupted`).
+    private func awaitPump(_ pump: PumpState, writer: AVAssetWriter, segment: Int?) -> Error?? {
+        var lastActivity = pump.activity
+        var lastChange = Date()
+        var stopSince: Date?
+        while true {
+            if pump.wait(SegmentedWriter.waitSlice) { return nil }
+            let now = Date()
+            let activity = pump.activity
+            if activity != lastActivity {
+                lastActivity = activity
+                lastChange = now
+            }
+            // A writer that failed while its input was not ready never calls the block again.
+            if writer.status == .failed, pump.finishIfIdle(failure: writer.error ?? EngineError(.encodingFailed, "writer failed")) {
+                continue
+            }
+            if shouldStop, let grace = stopGrace {
+                let since = stopSince ?? now
+                stopSince = since
+                if now.timeIntervalSince(since) >= grace, pump.abandon() {
+                    Log.error(.jobs, "segmented \(checkpoint.jobKind): pump did not stop within \(grace) s; abandoned")
+                    return .some(nil)
+                }
+            }
+            if let timeout = stallTimeout, now.timeIntervalSince(lastChange) >= timeout {
+                // The exemption (thermal pause) is only asked once the clock ran out.
+                if isStallExempt?() == true {
+                    lastChange = now
+                    continue
+                }
+                let inSource = pump.isInSource
+                if pump.abandon() {
+                    let error = stallError(segment: segment, seconds: timeout, inSource: inSource)
+                    Log.error(.jobs, "segmented \(checkpoint.jobKind): \(error.message)")
+                    return .some(error)
+                }
+            }
+        }
+    }
+
+    /// `finishWriting`, bounded by `stallTimeout` (the writer is abandoned on a timeout).
+    private func finish(_ writer: AVAssetWriter, what: String) throws {
+        let finished = DispatchSemaphore(value: 0)
+        writer.finishWriting { finished.signal() }
+        guard let timeout = stallTimeout else { return finished.wait() }
+        let deadline = Date().addingTimeInterval(timeout)
+        while finished.wait(timeout: .now() + SegmentedWriter.waitSlice) == .timedOut {
+            if Date() >= deadline {
+                SegmentedWriter.keepAbandoned([writer])
+                let error = EngineError(
+                    .encodingFailed, "\(checkpoint.jobKind) stalled: \(what) did not finish writing in \(Int(timeout.rounded())) s",
+                    retryable: true)
+                Log.error(.jobs, "segmented \(checkpoint.jobKind): \(error.message)")
+                throw error
+            }
+        }
     }
 
     // MARK: Files
@@ -475,6 +616,117 @@ final class SegmentedWriter {
             }
         }
         return total
+    }
+}
+
+// MARK: - Pump state
+
+/// One requestMediaDataWhenReady pump and the queue waiting for it (FIX-IOS-EXPORT-STALL).
+/// `stopped` and `failure` are written by the pump before `finish()` and read by the waiter after
+/// `wait` returned true (the semaphore orders them).
+final class PumpState {
+    private let lock = NSLock()
+    private let done = DispatchSemaphore(value: 0)
+    private var finished = false
+    private var abandoned = false
+    private var inBlock = false
+    private var inSourceCall = false
+    private var ticks = 0
+    var stopped = false
+    var failure: Error?
+
+    /// Entering the block; false once the pump is over (finished or abandoned).
+    func enter() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finished && !abandoned else { return false }
+        inBlock = true
+        return true
+    }
+
+    /// The block returned without finishing (the input is not ready).
+    func leave() {
+        lock.lock()
+        inBlock = false
+        lock.unlock()
+    }
+
+    func finish() {
+        lock.lock()
+        guard !finished && !abandoned else { return lock.unlock() }
+        finished = true
+        inBlock = false
+        lock.unlock()
+        done.signal()
+    }
+
+    /// Finishes with [failure] when the block is not running (a failed writer never calls it
+    /// again). Returns whether it did.
+    func finishIfIdle(failure: Error) -> Bool {
+        lock.lock()
+        guard !finished && !abandoned && !inBlock else {
+            lock.unlock()
+            return false
+        }
+        finished = true
+        self.failure = failure
+        lock.unlock()
+        done.signal()
+        return true
+    }
+
+    /// Gives the pump up. False when it finished in between (the waiter then sees `done`).
+    func abandon() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finished else { return false }
+        abandoned = true
+        return true
+    }
+
+    var isAbandoned: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return abandoned
+    }
+
+    var isInSource: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return inSourceCall
+    }
+
+    var activity: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return ticks
+    }
+
+    func tick() {
+        lock.lock()
+        ticks += 1
+        lock.unlock()
+    }
+
+    /// Runs a source call, marked as such (a stall inside it is a reader stall).
+    func inSource<T>(_ body: () throws -> T) rethrows -> T {
+        lock.lock()
+        inSourceCall = true
+        lock.unlock()
+        defer {
+            lock.lock()
+            inSourceCall = false
+            lock.unlock()
+        }
+        return try body()
+    }
+
+    /// Waits [seconds] for the pump; true when it finished.
+    func wait(_ seconds: TimeInterval) -> Bool { done.wait(timeout: .now() + seconds) == .success }
+
+    /// Test hook (`stallInjector`): blocks the calling pump forever.
+    static func blockForever() {
+        DispatchSemaphore(value: 0).wait()
     }
 }
 

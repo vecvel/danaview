@@ -419,6 +419,58 @@ void main() {
       expect(rig.editor.state.project!.pool[const MediaId('md_1')]!.locator, isA<AppRelativeLocator>(), reason: 'the switched-off pair stays missing');
     });
 
+    test('UX-40: a file located first is not "still missing" and is counted in the confirm', () async {
+      await start(three(), allMissing());
+      rig.harness.engine.picker.nextPicks = [pickOf('IMG_0001.MOV')];
+      await controller().locate(const MediaId('md_1'), MediaPickSource.files);
+      await settle();
+      expect(row('md_1').willRelink, isTrue);
+
+      final picks = [pickOf('beach.mp4'), pickOf('drone.mp4')];
+      rig.harness.engine.picker.nextPicks = picks;
+      rig.pool.onAutoMatch = (p) => [
+            RelinkProposal(pick: p[0], media: const MediaId('md_2'), check: const RelinkMatch(exactFingerprint: true)),
+            RelinkProposal(pick: p[1], media: const MediaId('md_3'), check: const RelinkMatch(exactFingerprint: true)),
+          ];
+      await controller().relinkSeveral(MediaPickSource.files);
+      final plan = state().several!;
+      expect(plan.matches, hasLength(2));
+      expect(plan.stillMissing, isEmpty, reason: 'md_1 is already located');
+      expect(plan.alreadyStaged, {const MediaId('md_1')});
+      expect(plan.includedCount, 2);
+      expect(plan.relinkCount, 3, reason: 'confirming relinks the located file too');
+
+      controller().setMatchIncluded(0, false);
+      expect(state().several!.relinkCount, 2);
+      expect(state().several!.alreadyStaged, {const MediaId('md_1')}, reason: 'kept across a switch');
+      expect(state().several!.stillMissing, isEmpty, reason: 'the list was built once from the picks');
+      controller().setMatchIncluded(0, true);
+
+      expect(await controller().confirmSeveral(), isTrue);
+      expect(rig.pool.lastRelink!.keys.map((k) => k.value).toSet(), {'md_1', 'md_2', 'md_3'});
+      expect(state().lastRelinked, 3);
+      expect(rig.editor.session.historyEntries, hasLength(1));
+    });
+
+    test('UX-40: a pair for an already located asset is counted once', () async {
+      await start(three(), allMissing());
+      rig.harness.engine.picker.nextPicks = [pickOf('IMG_0001.MOV')];
+      await controller().locate(const MediaId('md_1'), MediaPickSource.files);
+      await settle();
+      rig.harness.engine.picker.nextPicks = [pickOf('again.MOV'), pickOf('beach.mp4')];
+      rig.pool.onAutoMatch = (p) => [
+            RelinkProposal(pick: p[0], media: const MediaId('md_1'), check: const RelinkMatch(exactFingerprint: true)),
+            RelinkProposal(pick: p[1], media: const MediaId('md_2'), check: const RelinkMatch(exactFingerprint: true)),
+          ];
+      await controller().relinkSeveral(MediaPickSource.files);
+      final plan = state().several!;
+      expect(plan.relinkCount, 2);
+      expect(plan.stillMissing.map((a) => a.id.value), ['md_3']);
+      expect(await controller().confirmSeveral(), isTrue);
+      expect(rig.pool.lastRelink!.keys.map((k) => k.value).toSet(), {'md_1', 'md_2'});
+      expect(state().lastRelinked, 2);
+    });
+
     test('nothing matched: the confirm list says so and relinks nothing; back returns', () async {
       await start(three(), allMissing());
       rig.harness.engine.picker.nextPicks = photos(2);

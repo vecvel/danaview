@@ -19,8 +19,10 @@
 //   q08 offline after the download: a job runs with every HTTP connection refused
 //   q09 deleting the model asks for consent again
 // Phases driven by the host (each a separate run, in this order):
-//   DV_QA07_PHASE=job-kill        start a 60 s job, the host kills the app mid-transcription
-//   DV_QA07_PHASE=job-resume      relaunch: the interrupted-job notice resumes from the checkpoint
+//   DV_QA07_PHASE=job-kill        start a job on the long clip (> one 180 s chunk), the host kills the
+//                                 app after the first chunk was checkpointed, mid second chunk
+//   DV_QA07_PHASE=job-resume      relaunch: the interrupted-job notice resumes from the checkpoint (the
+//                                 first transcribing sample starts at the checkpointed chunk end, not 0)
 //   DV_QA07_PHASE=download        REAL NETWORK (needs DV_QA07_NETWORK=true): consent, download, the host
 //                                 kills the app mid-download
 //   DV_QA07_PHASE=download-resume REAL NETWORK: the download resumes from the partial file and the job runs
@@ -29,6 +31,8 @@
 // DV_E2E_HOST):
 //   DV_QA07_CLIP=<file>       the 60 s English clip (default <shared>/e2e_qa07/qa07-60s-en.m4a)
 //   DV_QA07_CLIP_TEXT=<file>  its reference transcript (default: the clip path with .txt)
+//   DV_QA07_LONG_CLIP=<file>  the long English clip of job-kill/job-resume, longer than one chunk
+//                             (default <shared>/e2e_qa07/qa07-long-en.m4a)
 //   DV_QA07_TIER=balanced     tier of q05-q07 (falls back to fast, reported, when the model is not staged)
 //   DV_QA07_BUDGET_MS=<ms>    q05 budget (device: the ai-eval.md §5 figure; default sized for a simulator)
 //   DV_QA07_NETWORK=true      allows the download phases
@@ -69,6 +73,7 @@ abstract final class Qa07 {
   static const String phase = String.fromEnvironment('DV_QA07_PHASE');
   static const String _clip = String.fromEnvironment('DV_QA07_CLIP');
   static const String _clipText = String.fromEnvironment('DV_QA07_CLIP_TEXT');
+  static const String _longClip = String.fromEnvironment('DV_QA07_LONG_CLIP');
   static const String _tier = String.fromEnvironment('DV_QA07_TIER', defaultValue: 'balanced');
   static const int _budgetMs = int.fromEnvironment('DV_QA07_BUDGET_MS');
   static const bool network = bool.fromEnvironment('DV_QA07_NETWORK');
@@ -77,6 +82,16 @@ abstract final class Qa07 {
   static const double maxWer = 0.15;
 
   static String get clipPath => _clip.isNotEmpty ? _clip : '${E2eConfig.hostSharedDir}/e2e_qa07/qa07-60s-en.m4a';
+
+  static String get longClipPath => _longClip.isNotEmpty ? _longClip : '${E2eConfig.hostSharedDir}/e2e_qa07/qa07-long-en.m4a';
+
+  /// Transcription chunks are about 180 s, cut at the quietest point within ±15 s (ai.md §6.2), so
+  /// the first checkpoint ends between 165 s and 195 s of the unit.
+  static const TimeUs firstChunkMinEnd = 165 * 1000000;
+  static const TimeUs firstChunkMaxEnd = 195 * 1000000;
+
+  /// job-kill kills the app once this much is transcribed: past the first chunk, so a checkpoint exists.
+  static const TimeUs killAfter = 215 * 1000000;
 
   static String get clipTextPath {
     if (_clipText.isNotEmpty) return _clipText;
@@ -427,6 +442,22 @@ abstract final class Captions {
   }
   final text = File(Qa07.clipTextPath);
   return (target.path, text.existsSync() ? normalizedWords(text.readAsStringSync()) : const <String>[]);
+}
+
+/// The long English clip of job-kill/job-resume (more than one 180 s chunk) copied into the media
+/// folder; returns its path.
+String longClip() {
+  final source = File(Qa07.longClipPath);
+  if (!source.existsSync()) {
+    throw StateError('The long English clip is not staged at ${Qa07.longClipPath}. Generate it (docs/v1.1/editor/qa/QA-07-ai.md §2) and pass '
+        '--dart-define=DV_QA07_LONG_CLIP=<path> (iOS Simulator: the host path) or push it to <shared>/e2e_qa07/ (Android).');
+  }
+  final target = File('${E2eMedia.dir}/qa07-long-en.m4a');
+  if (!target.existsSync()) {
+    target.parent.createSync(recursive: true);
+    source.copySync(target.path);
+  }
+  return target.path;
 }
 
 /// [E2eEditor.createProject], printing what is on screen every 5 s while it waits (diagnostics).
@@ -966,18 +997,22 @@ void main() {
   qaTest('job-kill: the app is killed mid-transcription', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
-    final (clip, _) = sixtySecondClip();
-    final ed = await newProject(tester, name: 'QA07 kill ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), clip]);
+    final ed = await newProject(tester, name: 'QA07 kill ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), longClip()]);
+    final item = clipNamed(ed, 'qa07-long-en.m4a');
+    expect(item.duration, greaterThan(Qa07.killAfter + 30 * 1000000), reason: 'the long clip spans more than one chunk');
     Captions.clearTranscripts();
-    await Captions.open(ed, [clipNamed(ed, 'qa07-60s-en.m4a').id]);
+    await Captions.open(ed, [item.id]);
     await Captions.configure(ed, tier: SpeechModelTier.fast, language: const FixedLanguage('en'));
     await Captions.create(
       ed,
-      trigger: (w) => w.transcribing && (w.last?.fraction ?? 0) >= 0.4,
+      // Past the first chunk (its checkpoint is written when the chunk ends), inside the second.
+      trigger: (w) => w.transcribing && (w.last?.processed ?? 0) >= Qa07.killAfter,
       action: (w) async {
         E2eHandshake.saveState('qa07-job', {'project': ed.id.value, 'fraction': w.last?.fraction, 'processed': w.last?.processed});
+        Qa07.report('job-kill', 'killing at ${w.last?.processed} us of ${item.duration} us (fraction ${w.last?.fraction})');
         await E2eHandshake.requestAndDie(tester, 'kill');
       },
+      timeout: const Duration(minutes: 10),
     );
     fail('the host did not kill the app');
   }, skip: Qa07.phase != 'job-kill' || !E2eHandshake.available);
@@ -1000,9 +1035,18 @@ void main() {
     await E2eApp.tapKey(tester, 'captions-interrupted-resume');
     final run = await Captions.create(ed, pressCreate: false);
     final first = run.watch.firstTranscribing ?? watch.firstTranscribing;
-    Qa07.report('job-resume', 'record ${(resumable.doneFraction * 100).round()}% done; first transcribing sample processed ${first?.processed} us, '
-        'fraction ${first?.fraction}; ${run.cues.length} cues');
-    expect((first?.fraction ?? 0) > 0.05 || (first?.processed ?? 0) > 0, isTrue, reason: 'resumed from the checkpoint, not from zero');
+    final killedAt = (saved['processed'] as num?)?.toInt() ?? 0;
+    final resumedAt = first?.processed ?? 0;
+    Qa07.report('job-resume', 'record ${(resumable.doneFraction * 100).round()}% done; killed at $killedAt us; first transcribing sample processed '
+        '$resumedAt us, fraction ${first?.fraction}; ${run.cues.length} cues, last cue ends ${run.cues.isEmpty ? '-' : run.cues.last.end} us');
+    // ai.md §8.6 / ARCH §16.5: the unit in progress continues from its last checkpointed chunk end,
+    // so the first transcribing sample starts at the first chunk's end (165-195 s), not at 0, and the
+    // work lost to the kill is at most one chunk.
+    expect(resumedAt, inInclusiveRange(Qa07.firstChunkMinEnd, Qa07.firstChunkMaxEnd), reason: 'resumed from the first checkpoint, not from zero');
+    expect(resumedAt, lessThanOrEqualTo(killedAt), reason: 'nothing after the kill point was kept');
+    expect(run.cues, isNotEmpty);
+    expect(run.cues.first.start, lessThan(Qa07.firstChunkMinEnd), reason: 'the checkpointed chunk\'s captions are inserted too');
+    expect(run.cues.last.end, greaterThan(Qa07.killAfter), reason: 'the rest of the clip was transcribed');
     await ed.close();
   }, skip: Qa07.phase != 'job-resume');
 

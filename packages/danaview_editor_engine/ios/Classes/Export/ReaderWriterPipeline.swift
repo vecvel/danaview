@@ -10,8 +10,10 @@
 // segment). Every reader range and writer session end is clamped to the grid end CMTime(K, gridFps)
 // (`ExportTime`, FIX-IOS-DURATION: the µs durUs = ceil(K·10⁶/fps) lies past it at 24/30/48/60 fps
 // and a reader past the last instruction fails with −11841). IOS-08 lays the spacer without a
-// fractionally scaled edit (FIX-IOS-SPACER), so a segment reader may start anywhere. Frames are
-// BGRA IOSurface buffers; with the `.rotated` layout (ARCH §14.1) each frame
+// fractionally scaled edit (FIX-IOS-SPACER) but as ONE sample across the timeline, so before each
+// segment reader opens, `ExportSpacer` re-lays it with a sample starting at the reader's start
+// (FIX-IOS-EXPORT-STALL, QA-05 D1: a reader starting past every media track never delivered a
+// frame). Frames are BGRA IOSurface buffers; with the `.rotated` layout (ARCH §14.1) each frame
 // is turned 90° counter-clockwise into a landscape buffer and the final file gets a 90° clockwise
 // `preferredTransform`, set on the concat writer's video input (no extra remux copy).
 //
@@ -93,6 +95,60 @@ enum ExportTime {
         let end = gridEnd(plan)
         let start = CMTimeMinimum(FrameGrid.cmTime(us: startUs), end)
         return CMTimeRange(start: start, end: clamp(us: endUs, to: end))
+    }
+}
+
+// MARK: - Spacer anchor (FIX-IOS-EXPORT-STALL, QA-05 D1)
+
+/// Puts a spacer sample start at a reader's start time.
+///
+/// IOS-08 lays the one-frame spacer as ONE edit scaled across n whole frames (FIX-IOS-SPACER), so
+/// the spacer track holds one sample that starts at 0 and lasts the whole timeline. An
+/// `AVAssetReaderVideoCompositionOutput` whose `timeRange` starts where no other video track has
+/// a sample (past the end of every media track, or in a stretch of images, text or gaps) then
+/// never delivers a frame: `copyNextSampleBuffer` blocks forever (iOS 26.5 simulator, measured by
+/// `ExportStallTests`: [21 s, 25 s) and [30 s, 31.03 s) of a project whose video ends at 20 s
+/// hang with 0 frames, [0, 31.03 s) reads all 931). That was the soak's stalled export: the
+/// segment after the last media frame opened its reader and waited forever.
+///
+/// Before a reader opens at time T > 0, the spacer track is re-laid as [0, T) and [T, end), each
+/// with the same integral-scale-plus-unscaled-remainder layout as IOS-08, so a spacer sample starts
+/// exactly at T. Nothing visible changes (the spacer is black and never drawn: the compositor only
+/// needs it to run for every output frame).
+enum ExportSpacer {
+    /// Test hook: false reproduces the soak's hang (the reader then opens inside the one sample).
+    static var isEnabled = true
+
+    /// Re-lays [built]'s spacer so that a sample starts at [start] (no-op at 0, past the end, or
+    /// without a spacer). Call only while no reader of the composition is reading.
+    static func anchor(_ built: BuiltComposition, at start: CMTime) throws {
+        guard let id = built.spacerTrackID, let source = built.sources.spacerTrack, let unit = built.sources.spacerRange,
+              let track = built.composition.track(withTrackID: id) else { return }
+        let end = track.timeRange.end
+        guard start.isNumeric, end.isNumeric, CMTimeCompare(start, .zero) > 0, CMTimeCompare(start, end) < 0 else { return }
+        track.removeTimeRange(CMTimeRange(start: .zero, end: end))
+        try lay(track, source: source, unit: unit, at: .zero, duration: start)
+        try lay(track, source: source, unit: unit, at: start, duration: CMTimeSubtract(end, start))
+    }
+
+    /// The spacer across [at, at + duration): n whole units as one integrally scaled edit, then an
+    /// unscaled remainder shorter than one unit (`CompositionBuilder.spacerLayout`).
+    private static func lay(_ track: AVMutableCompositionTrack, source: AVAssetTrack, unit: CMTimeRange, at: CMTime, duration: CMTime) throws {
+        guard let layout = CompositionBuilder.spacerLayout(end: duration, unit: unit.duration) else {
+            try track.insertTimeRange(unit, of: source, at: at)
+            track.scaleTimeRange(CMTimeRange(start: at, duration: unit.duration), toDuration: duration)
+            return
+        }
+        if layout.n > 0 {
+            try track.insertTimeRange(unit, of: source, at: at)
+            if layout.n > 1 {
+                track.scaleTimeRange(CMTimeRange(start: at, duration: unit.duration), toDuration: layout.whole)
+            }
+        }
+        if layout.remainder > .zero {
+            try track.insertTimeRange(
+                CMTimeRange(start: unit.start, duration: layout.remainder), of: source, at: CMTimeAdd(at, layout.whole))
+        }
     }
 }
 
@@ -306,13 +362,16 @@ final class CompositionVideoSource: SegmentVideoSource {
         closeSegment()
         if let fault = openFault?(startUs) { throw fault }
         let built = composition.built
+        let range = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: built.plan)
+        // QA-05 D1: a spacer sample must start where the reader starts (see `ExportSpacer`).
+        if ExportSpacer.isEnabled { try ExportSpacer.anchor(built, at: range.start) }
         let reader: AVAssetReader
         do {
             reader = try AVAssetReader(asset: built.composition)
         } catch {
             throw EngineError.from(error)
         }
-        reader.timeRange = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: built.plan)
+        reader.timeRange = range
         let output = AVAssetReaderVideoCompositionOutput(
             videoTracks: built.composition.tracks(withMediaType: .video), videoSettings: CompositionVideoSource.videoSettings)
         output.videoComposition = built.videoComposition

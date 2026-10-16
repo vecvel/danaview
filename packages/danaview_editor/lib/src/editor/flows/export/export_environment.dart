@@ -175,7 +175,11 @@ final class ExportEnvironment {
     this.now = DateTime.now,
     this.wakelock = _defaultWakelock,
     this.newToken = _defaultToken,
+    this.notificationPermissionTimeout = defaultNotificationPermissionTimeout,
   });
+
+  /// The default of [notificationPermissionTimeout].
+  static const Duration defaultNotificationPermissionTimeout = Duration(seconds: 10);
 
   /// The environment over the app's storage roots and the local file system. Export sprites lay
   /// text out with [fontResolver] (default: UX-30's `FontCatalog.instance`), the resolver of the
@@ -237,6 +241,10 @@ final class ExportEnvironment {
 
   /// A unique token for output names (`export-<token>.mp4`).
   final String Function() newToken;
+
+  /// How long the start waits for the notification permission dialog (Android) before it goes on
+  /// without notifications (UX-39): an unanswered dialog must not hold the export at "Preparing".
+  final Duration notificationPermissionTimeout;
 
   /// The platform in effect.
   TargetPlatform get targetPlatform => platform ?? defaultTargetPlatform;

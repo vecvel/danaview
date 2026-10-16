@@ -9,3 +9,4 @@ export 'e2e_engine.dart';
 export 'e2e_export.dart';
 export 'e2e_handshake.dart';
 export 'e2e_media.dart';
+export 'e2e_wait.dart';

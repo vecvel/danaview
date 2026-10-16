@@ -16,6 +16,11 @@
 //   `scrub` seeks (fast, may show the nearest decodable frame) go out during the drag and one
 //   `exact` seek on release; the playhead adopts `SeekAck.displayedFrameTime`, which makes seeking
 //   frame-accurate.
+// * Plan first (ENG-02 / API-02): an exact seek waits while the session's `PlanSync` has a plan or
+//   patch in flight (compiling, applying, or scheduled) and goes out once it is acked. The engine
+//   clamps a seek to the duration of the plan it holds, so a seek sent right after a paste or a
+//   duplicate would otherwise land on the old last frame. Scrub seeks don't wait (they are
+//   superseded by the exact seek on release).
 // * The settled playhead (pause, seek ack, end of a scrub) is written to the project's `ViewState`
 //   through `onSettled` (the provider wires `EditorController.updateView`): immediately after a
 //   pause or a scrub, debounced during frame stepping. Never per frame.
@@ -31,7 +36,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_editor_core/model.dart' show FrameRate, ProjectId, TimeRange, TimeUs;
-import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' show PreviewClock, PreviewSession, SeekAck, SeekKind;
+import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' show PlanSync, PreviewClock, PreviewSession, SeekAck, SeekKind;
 
 import '../../app/editor_providers.dart';
 import 'editor_state.dart';
@@ -144,6 +149,8 @@ class PlayheadController extends ChangeNotifier implements ValueListenable<TimeU
   bool _disposed = false;
 
   PreviewSession? _preview;
+  PlanSync? _planSync;
+  bool _waitingForPlan = false;
   StreamSubscription<PreviewClock>? _clockSub;
   int _generation = 0;
 
@@ -191,8 +198,12 @@ class PlayheadController extends ChangeNotifier implements ValueListenable<TimeU
   /// The preview the playhead drives, or null (not open, or the preview failed to start).
   PreviewSession? get preview => _preview;
 
-  /// Whether a seek is waiting for the engine.
+  /// Whether a seek is waiting for the engine (or for the plan it must follow).
   bool get isSeeking => _inFlight != null || _pending != null;
+
+  /// Whether an exact seek is held until the pending plan is acknowledged (tests).
+  @visibleForTesting
+  bool get isWaitingForPlan => _waitingForPlan;
 
   /// The sequence number below which clock samples are ignored (tests).
   @visibleForTesting
@@ -201,11 +212,13 @@ class PlayheadController extends ChangeNotifier implements ValueListenable<TimeU
   // ---- Session link ----------------------------------------------------------------------------
 
   /// Drives [session]: listens to its clock and sends it seeks and play/pause. [initial] is the
-  /// acknowledgement of the seek that positioned the preview (adopted as the playhead).
-  void attach(PreviewSession session, {SeekAck? initial}) {
+  /// acknowledgement of the seek that positioned the preview (adopted as the playhead). Exact seeks
+  /// wait for [planSync] (the session's plan sync) to be idle, see the file header.
+  void attach(PreviewSession session, {SeekAck? initial, PlanSync? planSync}) {
     if (_disposed) return;
     detach();
     _preview = session;
+    _planSync = planSync;
     _generation++;
     _maxSeen = -1;
     _minAccept = 0;
@@ -225,6 +238,8 @@ class PlayheadController extends ChangeNotifier implements ValueListenable<TimeU
     unawaited(_clockSub?.cancel());
     _clockSub = null;
     _preview = null;
+    _planSync = null;
+    _waitingForPlan = false;
     _stopExtrapolation();
     _setPlaying(false);
     _failSeeks();
@@ -431,7 +446,19 @@ class PlayheadController extends ChangeNotifier implements ValueListenable<TimeU
   void _pump() {
     final session = _preview;
     final request = _pending;
-    if (session == null || request == null || _inFlight != null) return;
+    if (session == null || request == null || _inFlight != null || _waitingForPlan) return;
+    final sync = _planSync;
+    if (request.kind == SeekKind.exact && sync != null && sync.busy) {
+      // The engine still holds the previous plan (and its duration): seek once it is acked.
+      _waitingForPlan = true;
+      final generation = _generation;
+      sync.flush().then<void>((_) {
+        if (_disposed || generation != _generation) return;
+        _waitingForPlan = false;
+        _pump();
+      });
+      return;
+    }
     _pending = null;
     _inFlight = request;
     final generation = _generation;
@@ -597,7 +624,7 @@ PlayheadController createPlayheadController(Ref<Object?> ref, ProjectId id, {Pla
       if (preview == null) {
         controller.detach();
       } else {
-        controller.attach(preview, initial: session.initialSeek);
+        controller.attach(preview, initial: session.initialSeek, planSync: session.planSync);
       }
     }
   }

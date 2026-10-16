@@ -4,8 +4,6 @@
 // subscription, so the governor keeps receiving lifecycle/thermal/memory events after the whisper
 // runtime (which listens to the device events too) is opened.
 
-import 'dart:async';
-
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_whisper/danaview_whisper.dart';

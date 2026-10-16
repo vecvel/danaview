@@ -23,6 +23,8 @@
 //   the poster through EditorPosterCapture), onAppInactive cancels the gesture and requests an
 //   autosave.
 // * Implements UX-07's EditorShellDelegate, so `editorShellProvider` drives the shell from it.
+// * Background jobs (FIX-JOB-RESUME): once the session attaches, the provider factory starts
+//   `tasksControllerProvider(id)`, which re-queues pending reverse, freeze and proxy jobs.
 // * No editor action crashes the app: unexpected errors become UnknownFailure (ARCH §19).
 
 import 'dart:async';
@@ -46,6 +48,7 @@ import 'editor_events.dart';
 import 'editor_session.dart';
 import 'editor_state.dart';
 import 'plan_compiler_port.dart';
+import 'tasks_controller.dart' show tasksControllerProvider;
 
 export 'edit_transaction.dart';
 export 'editor_events.dart';
@@ -1293,5 +1296,36 @@ EditorController createEditorController(Ref<Object?> ref, ProjectId id) {
     compilers: ref.read(planCompilerPortProvider),
   );
   controller.onReleased = link.close;
+
+  // Background jobs resume on open (FIX-JOB-RESUME, QA-05 D3, ARCH §15): pending reverse, freeze
+  // and proxy jobs (a process death or a close mid-job) are re-queued by the Tasks controller,
+  // which nothing else may read until the user touches a clip. Read it once the session attaches;
+  // it keeps itself alive until the session detaches.
+  var disposed = false;
+  void startTasks() {
+    if (disposed || !session.isOpen) return;
+    try {
+      // Through the container: the Tasks controller watches this provider, so reading it through
+      // this provider's own ref would be a circular dependency.
+      ref.container.read(tasksControllerProvider(id));
+    } on Object catch (e) {
+      debugPrint('[EditorController] Could not start the background tasks: ${e.runtimeType}');
+    }
+  }
+
+  void onAttached() {
+    // After the listeners of this notification (the state follows the attach in the same turn).
+    if (session.attached.value) scheduleMicrotask(startTasks);
+  }
+
+  session.attached.addListener(onAttached);
+  ref.onDispose(() {
+    disposed = true;
+    try {
+      session.attached.removeListener(onAttached);
+    } on Object catch (_) {
+      // The session's notifier was disposed first.
+    }
+  });
   return controller;
 }

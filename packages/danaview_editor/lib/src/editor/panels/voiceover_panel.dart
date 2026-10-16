@@ -10,7 +10,8 @@
 // * Countdown 3-2-1 before recording (skippable with "Start now", cancellable). With reduced
 //   motion (`MediaQuery.disableAnimations`) the digits change without the scale/fade animation.
 // * Recording starts at the playhead. With "Play project while recording" (default on) the
-//   project plays from the playhead; the engine mutes the preview while recording (IOS-14 /
+//   project plays from the playhead, started just before the recorder so the recorder's audio
+//   session wins on iOS (FIX-IOS-RECORD); the engine mutes the preview while recording (IOS-14 /
 //   AND-13), so the project sound is not recorded. The level meter draws the `levels` stream
 //   (20 Hz) as bars; the elapsed time runs from the start.
 // * Stop: the WAV the engine wrote under `projects/<id>/assets/recordings/` is imported through
@@ -351,12 +352,36 @@ class VoiceoverController extends ChangeNotifier {
       return;
     }
     _starting = true;
+    // The project starts playing BEFORE the recorder (FIX-IOS-RECORD): starting a preview switches
+    // the shared iOS audio session to playback (IOS-11), which silently stops the microphone input
+    // of a recording already capturing (QA-01 s13: a 3 s take came back as 0-288 ms). Started
+    // first, the recorder's own session (.playAndRecord) wins and is restored when it ends. The
+    // engine mutes the preview as soon as the recorder starts.
+    if (_playProject && playhead.value < playhead.duration && transport.canPlay && !transport.playing.value) {
+      _startedPlayback = true;
+      try {
+        await transport.play();
+      } on Object catch (e) {
+        _startedPlayback = false;
+        debugPrint('[VoiceoverPanel] Playing the project failed: ${e.runtimeType}');
+      }
+      if (_disposed || _phase != VoiceoverPhase.countdown) {
+        _starting = false;
+        await _stopPlayback();
+        return;
+      }
+    }
+    // The record start is the playhead when the recorder is asked to start; `startLatencyUs` is
+    // measured from that moment to the first captured sample, so start + latency is the timeline
+    // time of the first sample while the project plays.
+    final recordStart = playhead.value;
     RecordingSession recording;
     try {
       recording = await r.start(outputPath: pathOf(_fileName()));
     } on Object catch (e) {
       _starting = false;
       debugPrint('[VoiceoverPanel] Recording failed to start: ${e.runtimeType}');
+      await _stopPlayback();
       if (_disposed) return;
       _set(VoiceoverPhase.idle);
       _tell(const VoiceoverNotice(VoiceoverStrings.startFailed, toast: true, error: true));
@@ -365,11 +390,12 @@ class VoiceoverController extends ChangeNotifier {
     _starting = false;
     if (_disposed || _phase != VoiceoverPhase.countdown) {
       // Cancelled (or the panel went away during a countdown) while the recorder started.
+      await _stopPlayback();
       await _discard(recording);
       return;
     }
     _recording = recording;
-    _recordStart = playhead.value;
+    _recordStart = recordStart;
     level.value = 0;
     _levels = recording.levels.listen((v) => level.value = v.isNaN ? 0 : v.clamp(0.0, 1.0).toDouble(), onError: (Object _) {});
     _interruptions = recording.interruptions.listen(
@@ -380,10 +406,6 @@ class VoiceoverController extends ChangeNotifier {
       },
     );
     _set(VoiceoverPhase.recording);
-    if (_playProject && playhead.value < playhead.duration && transport.canPlay && !transport.playing.value) {
-      _startedPlayback = true;
-      await transport.play();
-    }
   }
 
   /// Stops and adds the recording.
@@ -454,6 +476,7 @@ class VoiceoverController extends ChangeNotifier {
       _tell(const VoiceoverNotice(VoiceoverStrings.saveFailed, toast: true, error: true));
       return;
     }
+    debugPrint('[VoiceoverPanel] Recorded ${asset.durationUs} us (start latency ${asset.startLatencyUs} us)');
     final notice = await _place(asset);
     _set(VoiceoverPhase.idle);
     if (notice != null) {
@@ -481,11 +504,13 @@ class VoiceoverController extends ChangeNotifier {
     final outcome = outcomes.isEmpty ? null : outcomes.first;
     if (outcome is! ImportedMedia) {
       final reason = outcome is ImportRejected ? outcome.reason : '';
+      debugPrint('[VoiceoverPanel] The recording was not imported: ${reason.isEmpty ? outcome.runtimeType : reason}');
       return VoiceoverNotice(reason == 'diskFull' ? VoiceoverStrings.diskFull : VoiceoverStrings.saveFailed, toast: true, error: true);
     }
     if (!editor.mounted) return const VoiceoverNotice(VoiceoverStrings.saveFailed, toast: true, error: true);
     final at = voiceoverClipStart(_recordStart, asset);
     final result = editor.apply(CompositeCommand(VoiceoverStrings.history, [InsertMedia([outcome.asset.id], at, mode: InsertMode.newLane)]));
+    if (!result.applied) debugPrint('[VoiceoverPanel] Placing the recording was refused: $result');
     // A refused insert is explained by the editor's own toast (ARCH §19 rule 4); the recording
     // stays in the media bin.
     return result.applied ? null : const VoiceoverNotice('', toast: false);

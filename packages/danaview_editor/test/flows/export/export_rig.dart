@@ -248,6 +248,7 @@ class ExportRig {
     TargetPlatform platform = TargetPlatform.android,
     bool withHost = true,
     List<Override> overrides = const [],
+    Duration notificationPermissionTimeout = ExportEnvironment.defaultNotificationPermissionTimeout,
   })  : repo = FakeProjectRepository(),
         scripted = ScriptedFiles(),
         fake = FakeEditorEngine(caps: caps, validatePlans: false),
@@ -269,6 +270,7 @@ class ExportRig {
       now: clock.call,
       wakelock: wakelock.add,
       newToken: () => 't${_tokens++}',
+      notificationPermissionTimeout: notificationPermissionTimeout,
     );
     engine = RigEngine(fake, scripted);
     harness = EditorTestHarness(

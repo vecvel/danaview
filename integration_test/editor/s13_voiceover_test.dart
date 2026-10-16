@@ -52,7 +52,7 @@ void main() {
     final lane = ed.project.tracks.firstWhere((t) => t.kind == TrackKind.audio && t.audioRole == AudioRole.voice);
     final clip = lane.items.single as MediaClip;
     final asset = ed.assetOf(clip);
-    expect(asset.kind, MediaKind.audio);
+    expect(asset.kind, MediaKind.recording, reason: 'a voiceover is stored as a recording');
     expect(asset.displayName.toLowerCase(), endsWith('.wav'));
     expect(clip.start, greaterThanOrEqualTo(at));
     expect(clip.start - at, lessThan(500000), reason: 'start latency ${clip.start - at} us');

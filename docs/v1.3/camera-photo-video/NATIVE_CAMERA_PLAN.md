@@ -1,9 +1,10 @@
 # Danaview 1.3.0: In-House Native Camera (Photo & Video Capture)
 
 > **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12, rewritten 2026-10-15 with the owner's decisions (§2). **Status:** plan, ready for the planning review that turns §10 into a BUILD_PLAN-style ticket file.
-> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` ("ARCH"), `docs/v1.1/editor/BUILD_PLAN.md` ("BP"), the 1.2.0 plans `docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md` ("VED": face tracker VED-16, beauty shaders VED-20…25), `docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md` ("HOM"), `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` ("AIS"), and the 1.3.0 desktop plan `docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md` ("DSK": shared Darwin engine, Rust engine for Windows/Linux).
+> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` ("ARCH"), `docs/v1.1/editor/BUILD_PLAN.md` ("BP"), the 1.2.0 plans `docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md` ("VED": face tracker VED-16, beauty shaders VED-20…25), `docs/v1.2/files-media-home/FILES_MEDIA_HOME_PLAN.md` ("HOM"), `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` ("AIS"), and the 1.3.0 desktop plan `docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md` ("DSK": shared Darwin engine, Rust engine for Windows/Linux).
 > **Scope:** a first-party camera on every platform Danaview runs on: full camera on iOS and Android, webcam and iPhone-as-webcam on macOS, webcam capture on Windows and Linux. Every control within one thumb's reach, fast to open and to shoot, built on each platform's native camera API.
-> **Decisions:** D-99 to D-115 (this plan's range; the earlier draft's decisions are replaced). **[OWNER]** marks the few still open. **[VERIFY]** marks a claim a spike or ticket must prove.
+> **Decisions:** D-99 to D-115 (this plan's range; the earlier draft's decisions are replaced), plus D-115a to D-115n added on 2026-10-16. No decision is still marked **[OWNER]**; §11.3 keeps the remaining general questions. **Owner decisions 2026-10-16** ("go with the recommendation"): no "Load preview" for scanned links in 1.3.0 (D-115h); Create QR ships in 1.3.0, including a personal UPI receive QR (D-115m, CAM-59); scan history is on by default with a 30-day auto-delete (D-115l); a dismissed due-date reminder comes back once, the next day (D-115k). **[VERIFY]** marks a claim a spike or ticket must prove.
+> **Widened on 2026-10-16 (owner):** the camera also scans **documents** (edge detection, auto-capture, perspective correction, filters, on-device OCR, searchable PDFs, image to PDF) and **QR codes and barcodes** (smart result cards that preview before acting, payment hand-off to the user's own UPI or payment app, saved codes with reminders, scan history). Decisions **D-115a to D-115n** (lettered, because D-116 onwards belongs to the 1.2.0 editor plan) and tickets **CAM-46 to CAM-60**; details in §12 and §13. Saved codes extend the 1.2.0 Files & Media Home model (`docs/v1.2/files-media-home/FILES_MEDIA_HOME_PLAN.md` §8.1, HOM-16).
 > **Priorities set by the owner (2026-10-15):** most customisable camera, all controls in the hand, fast, native, cross-platform, production-ready.
 
 ---
@@ -11,7 +12,7 @@
 ## 0. Contents
 
 1. Summary, goals, non-goals, what already exists
-2. Decisions D-99 to D-115
+2. Decisions D-99 to D-115 (plus D-115a to D-115n, 2026-10-16)
 3. Architecture
 4. Controls in the hand: layout, dial, hardware buttons, launch points, gestures
 5. Capture features (photo, video, pro, cinematic, dual camera, overlays, audio, beauty)
@@ -21,6 +22,8 @@
 9. Testing and the device lab
 10. Tickets (milestones, lanes, index, ticket specs)
 11. Risks, [VERIFY] register, open questions, effort
+12. Document scan & PDF (added 2026-10-16; D-115a to D-115f)
+13. QR and barcode scanning, payment hand-off, saved codes (added 2026-10-16; D-115g to D-115n)
 Appendix A. Beauty catalogue (owner's list) with live tiers
 
 ---
@@ -53,11 +56,15 @@ Live beauty in the camera, beauty in the editor and beauty in exports run the **
 | G-C6 | **Never lose a shot:** captures are written atomically and survive a crash, a phone call or the app being killed mid-recording (the file is finalised on next launch) | D-108; CAM-14, CAM-15 |
 | G-C7 | **Private:** no network use; location only when the user turns on the location overlay or geotagging | §8 |
 | G-C8 | **Owner UI rules:** custom components, Figtree, dark viewfinder chrome, computed contrast, touch targets ≥ 44 px, no overflow at 280–1280 px and text scale 0.85–1.35 | ARCH §1.3; CAM-24 |
+| G-C9 | **Scan to a searchable PDF on device:** edge detection, perspective correction, filters and OCR without any network; the text feeds AI search's on-device index | D-115a…D-115f; CAM-46…CAM-52 |
+| G-C10 | **Codes never act on their own:** every QR or barcode opens a result card that shows what it will do; payment codes only hand off to the user's own payment app after a confirm card; scanning is fully on device | D-115g…D-115n; CAM-53…CAM-60 |
 
 ### 1.3 Non-goals for 1.3.0
 
 - Recording other apps' sound on iOS (not available to camera apps, D-107), and iOS night mode (not available to third-party apps; Apple's quality prioritisation is used instead).
-- Live streaming, video calls, QR/document scanning, AR scene effects beyond face-anchored stickers.
+- Live streaming, video calls, AR scene effects beyond face-anchored stickers. (QR and document scanning moved into scope on 2026-10-16, §12 and §13.)
+- Processing, storing or confirming payments; handling money, bank details or payment credentials (D-115j). Danaview only hands a payment code to the user's own payment app.
+- Online link reputation checks (they would send every scanned URL to a third party); the URL checks of D-115h are local.
 - Apple Watch or Wear OS remotes (Bluetooth remotes that send volume-key events work, §4.4).
 - Spatial video, 360°, external-monitor clean output.
 
@@ -70,7 +77,7 @@ Live beauty in the camera, beauty in the editor and beauty in exports run the **
 
 ---
 
-## 2. Decisions D-99 to D-115
+## 2. Decisions D-99 to D-115 (plus D-115a to D-115n, added 2026-10-16)
 
 | ID | Decision | Status |
 |---|---|---|
@@ -91,6 +98,20 @@ Live beauty in the camera, beauty in the editor and beauty in exports run the **
 | **D-113** | **Thermal manager:** steps down live heavy beauty, then live core beauty to preview-only, then frame rate, then resolution, before the OS throttles; restores after sustained recovery | – |
 | **D-114** | **Rollout order:** iOS and Android are the 1.3.0 camera. macOS follows in the same release. Windows/Linux webcam capture is the last milestone and may ship in a 1.3.x update without holding 1.3.0 | owner 2026-10-15 |
 | **D-115** | **Owner UI rules** on every camera surface (ARCH §1.3), dark viewfinder chrome, left-handed mirror layout | – |
+| **D-115a** | **Scan mode for documents:** VisionKit `VNDocumentCameraViewController` on iOS; Google ML Kit Document Scanner on Android, with a Danaview fallback (own capture, edge detection, manual corners) where Google Play services or the scanner module is missing. Edge detection, auto-capture, perspective correction, filters colour / greyscale / black-and-white (§12.1) | owner 2026-10-16; ML Kit availability and terms **[VERIFY: CAM-46]** |
+| **D-115b** | **On-device OCR** with Apple Vision and ML Kit text recognition through the 1.2.0 `danaview_media_analysis` plugin (AI Studio plan D-70d); scans become searchable, selectable PDFs (invisible text layer), and the text feeds the AI search index (§12.2) | owner 2026-10-16 |
+| **D-115c** | **Image to PDF:** one or many images; page size, margins, quality, order, compression (§12.3) | owner 2026-10-16 |
+| **D-115d** | **"Export as PDF" in the Files & Media Home:** select photos, then Export as PDF with the D-115c options (§12.3) | owner 2026-10-16 |
+| **D-115e** | **Reuse the 1.2.0 PDF tools:** merge, page tools and compression come from the `danaview_pdf` plugin (HOM D-98j, HOM-24, HOM-28, HOM-31); the camera adds only the image-to-page writer and the OCR text layer to that plugin (§12.4) | owner 2026-10-16 |
+| **D-115f** | **Export and save:** PDF, JPEG or PNG; share sheet; save to Danaview folders, Files (iOS) or Downloads (Android); merge scans or PDFs (§12.4) | owner 2026-10-16 |
+| **D-115g** | **Code scanner:** live detection in the camera plus a dedicated Scan mode; AVFoundation metadata output and VisionKit `DataScannerViewController` (iOS 16+, metadata output below) on iOS; ML Kit Barcode Scanning (bundled, on device) on Android; scan from a photo or file in the library. Formats: QR, Data Matrix, Aztec, PDF417, EAN/UPC, Code 128 (§13.1) | owner 2026-10-16 |
+| **D-115h** | **Smart result card, preview before acting:** a scanned code never opens anything by itself. URLs show the full domain and local warnings (lookalike or IDN domains, shorteners, non-HTTPS, IP-address links); no automatic link preview and no "Load preview" button in 1.3.0 (§13.2) | owner 2026-10-16 |
+| **D-115i** | **Actions per payload type:** Wi-Fi join, contact, calendar event, email, SMS, phone, geo, plain text, app links, product barcodes (§13.3) | owner 2026-10-16; iOS Wi-Fi entitlement **[VERIFY: CAM-55]** |
+| **D-115j** | **Payments are a redirect only:** UPI and EMVCo / Bharat QR codes are parsed into a confirm card, then handed to the user's payment app (Android chooser; iOS detected UPI apps). Danaview never processes, stores or confirms payments and never handles money or credentials (§13.4) | owner 2026-10-16; iOS scheme list **[VERIFY: CAM-57]** |
+| **D-115k** | **Saved codes:** a new item type in the Files & Media Home, fileable in any Danaview folder, with raw payload, regenerated code image, decoded fields, title, note, tags, dates, optional reminder (a dismissed reminder comes back once, the next day) and optional location (§13.5) | owner 2026-10-16 |
+| **D-115l** | **Scan history:** local and private, **on by default** with a **30-day auto-delete**; can be turned off or cleared (§13.6) | owner 2026-10-16 |
+| **D-115m** | **Create QR ships in 1.3.0:** link, text, Wi-Fi, contact, and a personal UPI receive QR (§13.7) | owner 2026-10-16 |
+| **D-115n** | **Privacy and safety:** scanning and decoding fully on device; no network unless the user taps an action that needs it; "quishing" warnings; payment codes never auto-redirect (§13.8) | owner 2026-10-16 |
 
 ---
 
@@ -160,7 +181,7 @@ photo capture (full res, ZSL) ─────► same effect chain at full res (
 |  0.5×   1×   2×   5×        [quick bar ▲]   |   lens chips, user's quick bar (up to 5 controls)
 |  ╭───────── THUMB DIAL ──────────╮          |   dial: zoom / EV / ISO / shutter / focus / WB / beauty
 |  ╰───────────────────────────────╯          |
-| [gallery]   PHOTO  VIDEO  PRO  CINEMA  ...  [flip] |
+| [gallery]   PHOTO  VIDEO  PRO  CINEMA  SCAN ... [flip] |
 |                ( SHUTTER )                  |
 +---------------------------------------------+
 ```
@@ -270,6 +291,7 @@ Thermal steps (D-113) are logged and shown as a small status chip, never as an e
 - Location metadata off by default; "Remove location on share" option.
 - Recording indicator rules respected (the OS indicators cannot be hidden and are never covered by our UI).
 - Privacy policy and App Store / Play data-safety updates in CAM-45.
+- Document scanning, codes, payments and saved codes: §12.5 and §13.8.
 
 ---
 
@@ -296,6 +318,8 @@ Same process as v1 (BP §0–§2): exclusive file ownership, tests shipped with 
 | **C4** macOS | CAM-32…CAM-33 | Webcams and Continuity Camera with beauty and overlays |
 | **C5** Windows and Linux webcams (may ship in 1.3.x, D-114) | CAM-34…CAM-37 | Webcam capture with beauty, overlays, dual webcam, internal audio |
 | **C6** QA and release | CAM-38…CAM-45 | §6 budgets met on the lab phones; parity; release |
+| **C7** Document scan & PDF (2026-10-16) | CAM-46…CAM-52 | Scan to a searchable PDF on iOS and Android, with and without Google Play services |
+| **C8** QR, barcodes, payments, saved codes (2026-10-16) | CAM-53…CAM-60 | Every payload type opens the right card; payment hand-off works with the lab's UPI apps; saved codes live in the Home |
 
 ### 10.2 Index and specs
 
@@ -345,9 +369,24 @@ Same process as v1 (BP §0–§2): exclusive file ownership, tests shipped with 
 | 42 | **CAM-42** | IOS+AND | Thermal and soak: 4K60 10 min, 30 min 1080p recording, 500-photo burst session. | CAM-30, CAM-38 |
 | 43 | **CAM-43** | DART | Overflow, accessibility (VoiceOver/TalkBack labels, shutter and recording announcements), left-handed layout. | CAM-20…CAM-25 |
 | 44 | **CAM-44** | DART | Capability matrix tests across recorded device profiles (hidden-not-disabled for every control). | CAM-08, CAM-04 |
-| 45 | **CAM-45** | DART | [INTEGRATION] Release: flag on, Info.plist usage texts, extension target, Android manifest (intents, tile, foreground service type `camera`/`microphone` if needed), privacy policy and store data-safety updates, user guide. | CAM-39…CAM-44 |
+| 45 | **CAM-45** | DART | [INTEGRATION] Release: flag on, Info.plist usage texts, extension target, Android manifest (intents, tile, foreground service type `camera`/`microphone` if needed), privacy policy and store data-safety updates, user guide. **Since 2026-10-16 also:** `LSApplicationQueriesSchemes` for UPI apps, the Hotspot Configuration capability if CAM-55 keeps it, Android `<queries>` for `upi://`, notification permission texts, privacy text for scanning, payments hand-off and saved codes (§12.5, §13.8). | CAM-39…CAM-44, CAM-52, CAM-60 |
+| 46 | **CAM-46** | IOS+AND | Scan spike: VisionKit document camera (quality, filters, page limits, how results come back), ML Kit Document Scanner (Play services module download, minimum device, offline use, terms and licence, UI customisation), the fallback path's edge detection quality, OCR scripts and sizes. *Report with a go/no-go per path.* | CAM-01 |
+| 47 | **CAM-47** | IOS | iOS Scan mode: `VNDocumentCameraViewController` from the mode carousel and from Home; results into the scan review screen. *Multi-page scan of 10 pages returns 10 corrected images.* | CAM-46 |
+| 48 | **CAM-48** | AND | Android Scan mode: ML Kit Document Scanner (`GmsDocumentScanning`, JPEG pages; its PDF output isn't used, so our own writer adds the OCR layer) and the fallback scanner on our CameraX session (quad detection on a downscaled frame, auto-capture when stable, manual corners, perspective warp in GLES). *Same 10-page test with and without Play services.* | CAM-46, CAM-12 |
+| 49 | **CAM-49** | DART | Scan review screen: reorder, rotate, re-crop corners, filters (colour, greyscale, black-and-white), retake, delete page, add page. *Edits are non-destructive until Save; golden tests per filter.* | CAM-47, CAM-48 |
+| 50 | **CAM-50** | IOS+AND | OCR and searchable PDFs: Vision / ML Kit text recognition through `danaview_media_analysis` (AIS-50), invisible text layer per page in `danaview_pdf` (extends HOM-24), text sent to the on-device search index. *Text in the PDF can be selected and searched in PDFKit and in another PDF app; Home search finds it.* | CAM-49, AIS-50, HOM-24 |
+| 51 | **CAM-51** | DART | Image to PDF (D-115c) in `danaview_pdf` (extends HOM-28's page writer) and Home "Export as PDF" for selected photos (D-115d). *Page size, margins, quality, order and compression options produce the expected PDFs (fixture tests).* | CAM-50, HOM-22, HOM-28 |
+| 52 | **CAM-52** | DART | Export and save (D-115f): PDF/JPEG/PNG, share, save to Danaview folders / Files / Downloads, merge scans or PDFs through HOM-28, compression through HOM-31. *Saved scans appear in the Home under Documents.* | CAM-51, HOM-31 |
+| 53 | **CAM-53** | IOS+AND | Code scanner core (D-115g): AVCaptureMetadataOutput on our session for live detection in every camera mode (opt-in chip), `DataScannerViewController` in Scan mode on iOS 16+ with the metadata-output fallback; ML Kit Barcode Scanning (bundled) on a CameraX `ImageAnalysis` stream; scanning from a photo or file (Vision `VNDetectBarcodesRequest`, ML Kit `InputImage`). *All listed formats decode from the fixture set on both platforms.* | CAM-07, CAM-12 |
+| 54 | **CAM-54** | DART | Payload parser (pure Dart): URL, Wi-Fi (`WIFI:`), vCard, MeCard, iCalendar `VEVENT`, `mailto:`/`MATMSG`, `SMSTO:`/`sms:`, `tel:`, `geo:`, app and deep links, EAN/UPC (check digit), UPI `upi://pay`, EMVCo merchant-presented QR (TLV, CRC-16 check). *Corpus and fuzz tests; malformed input never throws.* | CAM-01 |
+| 55 | **CAM-55** | DART | Result cards and actions (D-115h, D-115i): URL safety checks, Wi-Fi join (Android `WifiNetworkSuggestion` / Add-networks intent; iOS `NEHotspotConfiguration` if the entitlement holds, else copy password), contacts, calendar, compose, call, Maps, copy/share, app links with "Opens in <app>", product search on tap; no "Load preview" in 1.3.0 (owner decision 2026-10-16): the domain and the safety warnings are shown. *Nothing opens without a tap and the card makes no network request (test); quishing test set flags every lookalike.* | CAM-53, CAM-54 |
+| 56 | **CAM-56** | DART | Saved codes (D-115k): new item kind in the Files & Media Home (extends HOM-16, HOM-17, HOM-19), fields and editor, regenerated code image, full-screen show, share as image, Pay now, reminders (local notifications; a dismissed reminder comes back once, the next day, then not again), optional location, search, sort by due date, "Due soon" filter. *A saved code survives backup and restore with the Danaview folders; a dismissed reminder fires once more the next day and never a third time.* | CAM-54, CAM-55, HOM-16, HOM-17, HOM-19, HOM-22 |
+| 57 | **CAM-57** | IOS+AND | Payment hand-off (D-115j): confirm card, Android `upi://` chooser, iOS UPI app detection with `canOpenURL` and the declared schemes, "No payment app found" with Copy VPA, "Returned from payment app". *On the lab phones, GPay, PhonePe, Paytm and BHIM (where installed) open with the payee and amount filled in; Danaview stores nothing about the payment.* | CAM-55 |
+| 58 | **CAM-58** | DART | Scan history (D-115l): local list, **on by default**, off switch, clear, auto-expiry (7 / **30, default** / 90 days or never), save to Saved codes from history. *A fresh install records history and deletes items after 30 days; turning history off deletes it and records nothing new.* | CAM-55 |
+| 59 | **CAM-59** | DART | Create QR (D-115m, ships in 1.3.0, owner decision 2026-10-16): link, text, Wi-Fi, contact, personal UPI receive QR; save as a saved code or share as image. *Generated codes scan back to the same payload.* | CAM-56 |
+| 60 | **CAM-60** | IOS+AND | Scan QA: device suite (lighting, angles, damaged and small codes, multi-page documents), parser and quishing corpora, payment hand-off checklist per UPI app, network spy (zero requests while scanning and decoding), a11y (VoiceOver/TalkBack read the card before any action). | CAM-52, CAM-56…CAM-59 |
 
-Lane split: IOS 7, AND 6, IOS+AND 10, DART 17, DESK 5.
+Lane split: IOS 8, AND 7, IOS+AND 15, DART 25, DESK 5 (60 tickets).
 
 ---
 
@@ -372,16 +411,203 @@ Lane split: IOS 7, AND 6, IOS+AND 10, DART 17, DESK 5.
 | `CameraEffect` GLES chain sustains core beauty at 60 fps on Pixel and 30 fps on the budget phone | CAM-03 |
 | MultiCam + beauty on both streams fits the iPhone XR thermal budget | CAM-02 |
 | `AudioPlaybackCapture` works with common music apps the owner cares about | CAM-03 |
+| ML Kit Document Scanner: availability through Google Play services, minimum device, offline use after the module download, terms and licence, and how well the fallback scanner does without it | CAM-46 |
+| ML Kit text recognition and barcode scanning run fully offline with bundled models and make no network requests of their own | CAM-46, CAM-60 |
+| `NEHotspotConfiguration` needs the Hotspot Configuration capability; whether App Review accepts it for a camera app's Wi-Fi QR join | CAM-55 |
+| iOS URL schemes of common UPI apps (for example GPay, PhonePe, Paytm, BHIM) and whether each accepts the `upi://pay` parameters; whether UPI apps limit payments started from another app (for example to personal payees) | CAM-57 |
+| `DataScannerViewController` device support (it needs newer hardware) and its behaviour next to our own capture session | CAM-53 |
 
 ### 11.3 Open questions for the owner
 
 1. Device lab: which phones can you provide (see §9)?
 2. Default save target on iOS: Photos "Danaview" album only, or also a copy inside Danaview's library?
 3. Should Danaview offer to become the default camera app on Android at first launch, or only from Settings?
+4. ~~**D-115h:** "Load preview" button for scanned links~~ **Decided 2026-10-16:** no in 1.3.0; the domain and the safety warnings are shown.
+5. ~~**D-115m:** Create QR in 1.3.0~~ **Decided 2026-10-16:** yes, including a personal UPI receive QR.
+6. ~~**D-115l:** scan history default~~ **Decided 2026-10-16:** on by default with a 30-day auto-delete; can be turned off or cleared.
+7. ~~**D-115k:** dismissed due-date reminders~~ **Decided 2026-10-16:** a dismissed reminder comes back once, the next day.
 
 ### 11.4 Effort
 
 45 tickets. iOS and Android in parallel about **4–5 weeks** (device testing sets the pace), macOS about **1 week**, Windows/Linux webcams about **1–1.5 weeks** (may move to 1.3.x, D-114).
+
+**Added 2026-10-16:** 15 more tickets (60 in total). Document scan & PDF (C7) about **1.5–2 weeks**, mostly reuse of the 1.2.0 PDF and analysis plugins; QR, barcodes, payments and saved codes (C8) about **2 weeks**, of which the payment hand-off checks on real phones with UPI apps set the pace. Both run in parallel with C2–C3.
+
+---
+
+## 12. Document scan & PDF (added 2026-10-16; D-115a to D-115f)
+
+The scanner turns paper into clean, searchable PDFs on the device. It reuses two 1.2.0 pieces instead of building its own: the `danaview_pdf` plugin from the Files & Media Home plan (PDF tools, HOM-24…HOM-31) and the `danaview_media_analysis` plugin from the AI Studio plan (Vision / ML Kit, AIS-50).
+
+### 12.1 Scan mode (D-115a)
+
+| Step | iOS / iPadOS | Android (Google Play services) | Android fallback (no Play services or scanner module) |
+|---|---|---|---|
+| Capture UI | VisionKit `VNDocumentCameraViewController` (system UI, iOS 13+) | ML Kit Document Scanner (`GmsDocumentScanning`; Google's scanner UI, delivered as a Play services module) **[VERIFY: CAM-46]** | Danaview's own Scan mode on the CameraX session (CAM-48) |
+| Edge detection | built in | built in | quad detection on a downscaled frame (pure on-device code; no new library unless the spike shows it's needed) |
+| Auto-capture | built in | built in | when the detected edges hold still for about 0.6 s |
+| Perspective correction | built in | built in | GLES perspective warp at full resolution |
+| Filters | colour, greyscale, black-and-white in Danaview's review screen (CAM-49), applied to the corrected images | same | same |
+
+- Entry points: SCAN in the camera's mode carousel (scanning documents and codes; a toggle picks Document or Code), and "Scan document" in the Files & Media Home's add menu.
+- **Review screen (CAM-49):** reorder, rotate, re-crop corners, filter per page or all pages, retake, add or delete pages. Nothing is written until Save.
+- **Google's terms:** ML Kit is free but closed-source and covered by Google's terms, not an open-source licence; the scanner module is downloaded by Google Play services, not by Danaview **[VERIFY: CAM-46]**. Where it's missing (for example phones without Google services) the fallback runs, so scanning always works.
+
+### 12.2 OCR and searchable PDFs (D-115b)
+
+- **Engines:** Apple Vision `VNRecognizeTextRequest` (accurate mode, the user's languages) on iOS and macOS; ML Kit text recognition v2 with bundled models on Android (Latin by default; Devanagari, Chinese, Japanese and Korean models as bundled extras if the size budget allows **[VERIFY: CAM-46]**). Both run fully on device.
+- **Searchable, selectable PDF:** each page is the corrected image plus an invisible text layer placed over the recognised words, so the text can be selected, copied and searched in Danaview's PDF viewer and in any other PDF app. The text layer writer is added to `danaview_pdf` (CAM-50 extends HOM-24).
+- **AI search:** the recognised text goes into the on-device search index (AI Studio plan D-70d), so "find the electricity bill from March" can match the scan's text. It stays on the device; AI search's cloud levels follow that plan's rules.
+- OCR can be turned off per scan (faster, smaller file).
+
+### 12.3 Image to PDF and "Export as PDF" (D-115c, D-115d)
+
+| Option | Values |
+|---|---|
+| Pages | one image per page, in the chosen order (drag to reorder) |
+| Page size | Fit to image, A4, US Letter, Legal, A5 |
+| Orientation | Auto (per image), portrait, landscape |
+| Margins | None, small (6 mm), normal (12 mm) |
+| Image quality | High (JPEG 90), Medium (JPEG 75), Small (JPEG 60, max 2000 px) |
+| Compression | the 1.2.0 compress presets (HOM-31) on the finished file |
+| OCR | on / off |
+
+- **From the Home:** select photos (and scans), then **Export as PDF** in the multi-select bar (HOM-22), with the options above. The originals are untouched; the PDF is a new file in the chosen Danaview folder.
+
+### 12.4 Merge, export and save (D-115e, D-115f)
+
+- **Merge** scans with each other or with existing PDFs through the 1.2.0 page tools (HOM-28); split, reorder, rotate, delete pages, annotate, sign and compress are the same tools (HOM-28…HOM-31). The camera adds no second PDF implementation.
+- **Export as** PDF (default), JPEG or PNG (one file per page, zipped only if the user asks).
+- **Save to** a Danaview folder (default `Scans`), Files (iOS, "Save to Files") or Downloads (Android, "Save to Downloads"), or share through the system share sheet (HOM §8.3).
+
+### 12.5 Privacy
+
+- No network: capture, correction, filters, OCR and PDF writing are all on device. (Google Play services may update its own scanner module in the background; that is Google's system update, not a request from Danaview, and the privacy text says so.)
+- Scans are stored like any other Danaview file: app-private, included in app backups (HOM D-98b).
+- Camera permission only; no photo library permission is needed to save scans into Danaview folders.
+
+---
+
+## 13. QR and barcode scanning, payment hand-off, saved codes (added 2026-10-16; D-115g to D-115n)
+
+### 13.1 Scanner (D-115g)
+
+**Where it works:**
+- **Live in the camera:** an opt-in "Detect codes" chip in Photo and Video modes; a found code shows a small floating chip ("QR · link · example.com"); tapping it opens the result card. Capture is never interrupted.
+- **SCAN mode (Code):** a dedicated full-screen scanner with a target frame, torch, zoom, and multiple-code picking when several codes are visible.
+- **From the library:** "Scan code in image" on any photo, screenshot or PDF page in the Home, and from the share sheet ("Open with Danaview").
+
+**Capabilities:**
+
+| Capability | iOS / iPadOS | Android | macOS |
+|---|---|---|---|
+| Live detection on our capture session | `AVCaptureMetadataOutput` on the camera's `AVCaptureSession` (iOS 7+; Data Matrix iOS 8+; micro QR and others iOS 15.4+) | ML Kit Barcode Scanning, **bundled** model (`com.google.mlkit:barcode-scanning`), on a CameraX `ImageAnalysis` stream | `AVCaptureMetadataOutput` is iOS-only; Vision `VNDetectBarcodesRequest` on frames |
+| Dedicated scanner UI | VisionKit `DataScannerViewController` (iOS 16+, supported devices only, `isSupported` **[VERIFY: CAM-53]**); below that, our own view on `AVCaptureMetadataOutput` | our own view on CameraX + ML Kit | our own view (webcam) |
+| Scan from an image or file | Vision `VNDetectBarcodesRequest` | ML Kit on an `InputImage` | Vision `VNDetectBarcodesRequest` |
+| Formats | QR, Data Matrix, Aztec, PDF417, EAN-13, EAN-8, UPC-E (UPC-A as EAN-13), Code 128, plus Code 39/93, ITF, Codabar where the API has them | QR, Data Matrix, Aztec, PDF417, EAN-13, EAN-8, UPC-A, UPC-E, Code 128, Code 39/93, ITF, Codabar | as iOS |
+| Network | none | none with the bundled model **[VERIFY: CAM-60]** | none |
+
+Windows and Linux: scanning from an image or file only, with a pure on-device decoder chosen in CAM-34's webcam spike (no live scanning in 1.3.0).
+
+### 13.2 Smart result card: preview before acting (D-115h)
+
+A scanned code **never opens anything by itself.** It always opens a card that shows what the code contains and what each button will do. Buttons are plain verbs ("Open in browser", "Join network", "Pay with…").
+
+**Links (URL):**
+- The **full domain** is shown large and on its own line (`login.example.com`), with the rest of the URL below in smaller text; long URLs wrap, never truncate the domain.
+- **Local warnings** (no network, CAM-55):
+  - lookalike or internationalised domains: punycode (`xn--`), mixed scripts, and confusable characters (Unicode TR39 skeleton compared with a short list of well-known brands and banks);
+  - link shorteners (a bundled list, for example `bit.ly`, `t.co`, `tinyurl.com`): "This short link hides where it goes";
+  - non-HTTPS links: "Not a secure link";
+  - IP-address links and unusual ports;
+  - user-info tricks (`https://bank.com@other.site`) and brand names buried in subdomains.
+- Buttons: **Open in browser**, Copy, Share, Save (as a saved code, §13.5).
+- **No automatic link preview:** fetching a title or image would contact the site (and tell it the user's IP) before the user decides. Owner decision 2026-10-16: there is **no "Load preview" button in 1.3.0**; the card shows the domain and the safety warnings, and nothing is fetched until the user opens the link in the browser.
+- **Quishing (QR phishing):** the card carries one plain line when any warning fires: "QR codes can lead to fake sites. Check the address before you sign in or pay."
+
+### 13.3 Actions per payload type (D-115i)
+
+| Payload | Shown on the card | Actions (each needs a tap) |
+|---|---|---|
+| Wi-Fi (`WIFI:T:…;S:…;P:…;;`) | network name, security type, password (hidden, tap to show) | **Join network**: Android 10+ `WifiNetworkSuggestion` (or the Android 11+ "add networks" system dialog); iOS `NEHotspotConfiguration`, which needs the Hotspot Configuration capability **[VERIFY: CAM-55]**; if unavailable, **Copy password** and "Open Wi-Fi settings" |
+| Contact (vCard, MeCard) | name, phone, email, organisation | **Add to contacts** (iOS `CNContactViewController` for a new contact; Android `ACTION_INSERT`; no contacts permission needed **[VERIFY: CAM-55]**), Copy, Share |
+| Calendar event (iCalendar `VEVENT`) | title, date and time, place | **Add to calendar** (iOS `EKEventEditViewController`; Android `ACTION_INSERT` on `CalendarContract.Events`) |
+| Email (`mailto:`, `MATMSG`) | address, subject | **Write email** (opens the mail app with the fields filled in) |
+| SMS (`SMSTO:`, `sms:`) | number, message | **Write message** |
+| Phone (`tel:`) | number | **Call** (the system asks before dialling) |
+| Geo (`geo:`) | coordinates, label | **Open in Maps** |
+| Plain text | the text | Copy, Share, Save |
+| App links and deep links (custom schemes, universal / app links) | the link and a clear line **"Opens in <app>"** (from the scheme or domain; "Opens in an app on your phone" when unknown) | **Open in <app>**, Copy |
+| Product barcode (EAN/UPC) | the number, with the check digit verified | Copy, **Search the web** (opens the browser with the number, only on tap) |
+| Payment (UPI, EMVCo) | §13.4 | §13.4 |
+| Unknown | raw text | Copy, Share |
+
+### 13.4 Payments: redirect only (D-115j)
+
+**Parsing (pure Dart, CAM-54):**
+- **UPI** `upi://pay?…`: `pa` (payee VPA), `pn` (payee name), `am` (amount), `cu` (currency), `tn` (note), `tr` (reference), `mc` (merchant code); other parameters are kept and passed through unchanged.
+- **Bharat QR and other EMVCo merchant-presented QR codes** (TLV format with a CRC-16 check): payee or merchant name, merchant city, amount, currency, and any UPI fields inside, where decodable. A failed CRC shows "This code may be damaged or altered" and no Pay button.
+- Other payment schemes found in EMVCo codes (for example PIX, PayNow, PromptPay) are shown as decoded text with Copy; they get a Pay button only if a matching installed app can be handed the code.
+
+**Confirm card:**
+```
+Pay with UPI
+  To          ANITA STORES            ← payee name, large
+  UPI ID      anitastores@okbank
+  Amount      ₹ 450.00                ← or "Amount entered in your payment app"
+  Note        Order 1182
+  Check the payee name before paying.
+[ Copy UPI ID ]   [ Save for later ]   [ Pay with… ]
+```
+
+**Hand-off:**
+- **Android:** `Intent(ACTION_VIEW, upi://pay?…)` through the system chooser of installed UPI apps (`Intent.createChooser`), with a `<queries>` entry for the `upi` scheme for package visibility on Android 11+.
+- **iOS:** there's no generic chooser. Danaview declares `LSApplicationQueriesSchemes` for common UPI apps (for example GPay, PhonePe, Paytm, BHIM; exact schemes **[VERIFY: CAM-57]**), detects the installed ones with `canOpenURL`, lists them, and opens the chosen app with the same parameters. If none is installed: **"No payment app found"** plus Copy UPI ID.
+- Some UPI apps limit payments started from another app (for example to personal payees or above an amount) **[VERIFY: CAM-57]**; when an app refuses, the card stays open with Copy UPI ID.
+
+**Rules:**
+- Payment codes **never auto-redirect**, even from history or a saved code: Pay always goes through the confirm card.
+- Danaview **never processes, stores or confirms payments**, and never handles money, bank details or payment credentials. It only hands off to the user's payment app.
+- Payment result callbacks, if a payment app sends one, are ignored except to show **"Returned from payment app"**. Danaview never says "Paid".
+
+### 13.5 Saved codes (D-115k)
+
+A new **Saved code** item type in the Files & Media Home (HOM §8.1's open kind list; extended by CAM-56 on top of HOM-16, HOM-17 and HOM-19). Saved codes can be filed into any Danaview folder and appear under a `Saved codes` filter.
+
+| Field | Notes |
+|---|---|
+| Raw payload | exactly the decoded bytes / text, and the symbology (QR, EAN-13, …) |
+| Code image | a crisp image **regenerated** from the payload (pure-Dart encoder, licence checked in CAM-56), not the blurry photo |
+| Decoded type and fields | from the CAM-54 parser (URL, Wi-Fi, UPI payee and amount, …) |
+| Title | "Whose QR is this", for example "Electricity bill" or "Ravi's UPI" |
+| Note, tags | free text, user tags |
+| Date saved | automatic |
+| Due date / reminder | optional; a **local notification** on the device (no server, no push), for example "Pay electricity bill" |
+| Scan location | optional, **off by default**; one location fix at save time with when-in-use permission |
+
+What users can do: edit the info; **show full screen** (maximum brightness, so someone else can scan it); share as an image (the regenerated code plus its title); **Pay now** (the same confirm card and hand-off as §13.4); search saved codes by title, note, tags, payee or domain; sort by due date; a **"Due soon"** filter (due in the next 7 days or overdue).
+
+Storage follows the Danaview folders (app-private, in app backups, HOM D-98b). Reminders are rescheduled after a restore.
+
+**Dismissed reminders (owner decision 2026-10-16):** a due-date reminder that the user dismisses without acting comes back **once, the next day** at the same time. After that second notification it does not repeat; the saved code stays in the "Due soon" filter until the date is changed or cleared.
+
+### 13.6 Scan history (D-115l)
+
+- A local list of recent scans (payload, type, time; never the camera frame). Private, never synced, never sent.
+- Settings: **History on/off** (owner decision 2026-10-16: **on by default**), **Clear history**, **Auto-delete after** 7 / 30 (default) / 90 days or never. A new install keeps history and deletes each scan after 30 days.
+- Turning history off deletes it and records nothing new. From history, any item can be saved as a saved code.
+
+### 13.7 Create QR (D-115m)
+
+Owner decision 2026-10-16: Create QR **ships in 1.3.0** (CAM-59). Create a QR for a link, text, Wi-Fi network or contact, and a **personal UPI receive QR** (`pa`, `pn`, optional `am`) so someone can pay the user. Created codes can be saved as saved codes, shown full screen or shared as an image. Nothing is sent anywhere.
+
+### 13.8 Privacy and safety (D-115n)
+
+- **Fully on device:** detection, decoding, parsing, URL checks and history make **no network requests**. The network is used only when the user taps an action that needs it (Open in browser, Search the web), and then by the browser or the target app.
+- **No automatic actions:** nothing opens, joins, dials, adds or pays without a tap on the card; payment codes always show the confirm card first.
+- **Quishing warnings** on suspicious links (§13.2), and "check the payee name" on every payment card.
+- **Permissions:** camera; notifications only when the user sets the first reminder; location only when the user turns on scan location; no contacts or calendar permission for adding entries through the system sheets **[VERIFY: CAM-55]**.
+- **Privacy policy (CAM-45):** add plain bullets: codes are read on the device; scan history and saved codes stay on the device (in app backups with the Danaview folders); payment codes are handed to the payment app the user picks, and Danaview sees no payment details beyond what the code contains.
 
 ---
 

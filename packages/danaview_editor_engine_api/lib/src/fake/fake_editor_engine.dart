@@ -280,6 +280,11 @@ final class FakePreviewSession implements PreviewSession {
   /// Frames a scrub seek may be off by (0 = exact; ARCH §12.2 allows ±1 GOP).
   int scrubOffsetFrames = 0;
 
+  /// Whether seeks clamp to the last frame of the plan the session holds, as the production
+  /// engines do (ENG-02). Off by default so tests that seek without a plan keep their frames; a
+  /// test of "seek after a lengthening edit" turns it on.
+  bool clampSeeksToPlan = false;
+
   /// Rendered ranges the engine would play from their files (D-45): set by [setRenderedRanges],
   /// pruned by every patch that touches a range ([patchTouchesRange]) and cleared by [setPlan].
   List<RenderedRange> renderedRanges = const [];
@@ -403,6 +408,8 @@ final class FakePreviewSession implements PreviewSession {
     _log.hit('preview.seek');
     var k = _grid.frameIndexOf(t < 0 ? 0 : t);
     if (kind == SeekKind.scrub && k + scrubOffsetFrames >= 0) k += scrubOffsetFrames;
+    final end = plan?.durUs ?? 0;
+    if (clampSeeksToPlan && end > 0 && k > _grid.frameIndexOf(end - 1)) k = _grid.frameIndexOf(end - 1);
     time = _grid.timeOfFrame(k);
     sourceFrame = null;
     seq++;
@@ -1228,8 +1235,19 @@ final class FakeMediaAccess implements MediaAccess {
   @override
   Future<int> remainingGrantBudget() async => grantBudget;
 
+  /// Answers [requestNotificationPermission] when set (a test holds the dialog open with a
+  /// completer that never completes); granted at once otherwise.
+  Future<bool> Function()? onRequestNotificationPermission;
+
+  /// How many times the notification permission was requested.
+  int notificationPermissionRequests = 0;
+
   @override
-  Future<bool> requestNotificationPermission() async => true;
+  Future<bool> requestNotificationPermission() async {
+    notificationPermissionRequests++;
+    final answer = onRequestNotificationPermission;
+    return answer == null ? true : answer();
+  }
 
   bool _inWork(String path) => path.startsWith('$workRoot/') && !path.split('/').contains('..');
 

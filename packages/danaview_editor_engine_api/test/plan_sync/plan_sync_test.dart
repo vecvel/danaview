@@ -290,6 +290,46 @@ void main() {
     });
   });
 
+  group('seeks after an edit (ENG-02 / API-02)', () {
+    // The engine clamps a seek to the plan it holds. A seek sent while a lengthening patch is
+    // still compiling lands on the old last frame; a seek sent after `flush()` lands on target.
+    test('busy until the patch is acked; a seek after flush() is not clamped to the old plan', () async {
+      final (_, s) = await openFake();
+      s.clampSeeksToPlan = true;
+      final compiler = CountingCompiler();
+      Completer<void>? gate;
+      final sync = PlanSync(s, compile: (p) async {
+        final g = gate;
+        if (g != null) await g.future;
+        return compiler.call(p);
+      });
+      sync.schedule(project(n: 3, revision: 1)); // 90 frames
+      await sync.flush();
+      final target = FrameRate.fps30.timeOfFrame(120);
+
+      gate = Completer<void>();
+      sync.schedule(project(n: 5, revision: 2)); // 150 frames
+      await Future<void>.delayed(Duration.zero);
+      expect(sync.busy, isTrue);
+      expect(sync.currentStatus, PlanSyncStatus.compiling);
+      final early = await s.seek(target);
+      expect(early.displayedFrame, 89, reason: 'the engine still holds the 90-frame plan');
+
+      var flushed = false;
+      final done = sync.flush().then((_) => flushed = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(flushed, isFalse, reason: 'flush() waits for the pending patch');
+      gate.complete();
+      await done;
+      expect(sync.busy, isFalse);
+      expect(sync.lastAck!.rev, 2);
+      final late = await s.seek(target);
+      expect(late.displayedFrame, 120);
+      expect(late.displayedFrameTime, target);
+      await sync.dispose();
+    });
+  });
+
   group('transients', () {
     test('rate limited to <= 60 Hz, newest per item wins', () async {
       final (engine, s) = await openFake();

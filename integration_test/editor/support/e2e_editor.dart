@@ -8,10 +8,13 @@
 
 // ignore_for_file: implementation_imports
 
+import 'dart:math' as math;
+
 import 'package:danaview_editor/danaview_editor.dart';
 import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart';
 import 'package:danaview_editor/src/editor/contracts/action_binding.dart' show EditorActionContext, EditorActionSource;
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
+import 'package:danaview_editor/src/editor/flows/import_media_sheet.dart' show ImportMediaSheet;
 import 'package:danaview_editor/src/editor/state/editor_controller.dart';
 import 'package:danaview_editor/src/editor/state/editor_session.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
@@ -22,6 +25,7 @@ import 'package:danaview_editor/src/editor/timeline/timeline_gestures.dart';
 import 'package:danaview_editor/src/editor/timeline/timeline_hit.dart';
 import 'package:danaview_editor/src/editor/timeline/timeline_metrics.dart' show TimelineMetrics;
 import 'package:danaview_editor/src/editor/timeline/timeline_viewport.dart' show TimelineViewportController;
+import 'package:danaview_editor/src/editor/toolbar/tool_strip.dart' show ToolStrip;
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart';
 import 'package:danaview_editor_engine/testing.dart';
@@ -29,6 +33,7 @@ import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show Scrollable, ScrollableState, ValueKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -97,10 +102,26 @@ final class E2eEditor {
     await E2eApp.enterText(tester, 'new-project-name', name);
     await E2eApp.tapKey(tester, 'new-project-create');
     bool editorOpen() => find.byType(EditorScreen).evaluate().isNotEmpty;
+    // The sheet going away without the editor opening (QA-07 D3) fails at once with the screen,
+    // instead of after the two-minute wait.
+    var sheetGoneSince = 0;
+    bool sheetGone() {
+      if (E2eApp.hasKey('new-project-sheet') || find.byType(ImportMediaSheet).evaluate().isNotEmpty || editorOpen()) {
+        sheetGoneSince = 0;
+        return false;
+      }
+      return ++sheetGoneSince > 40;
+    }
+
     while (!editorOpen()) {
       await E2eApp.pumpUntil(
         tester,
-        () => editorOpen() || E2eApp.hasKey('import-finish'),
+        () {
+          if (sheetGone()) {
+            throw TestFailure('The New project sheet closed without opening the editor of "$name"\n${E2eApp.describeScreen()}');
+          }
+          return editorOpen() || E2eApp.hasKey('import-finish');
+        },
         what: 'the editor of the new project "$name"',
         timeout: const Duration(minutes: 2),
       );
@@ -240,8 +261,29 @@ final class E2eEditor {
     await tester.pump();
   }
 
-  /// Taps the tool tile keyed `tile.<key>` (`split`, `tool.media`, …).
-  Future<void> tapTile(String key) => E2eApp.tapKey(tester, 'tile.$key');
+  /// Taps the tool tile keyed `tile.<key>` (`split`, `tool.media`, …). At phone width the bottom
+  /// tool strip is a lazy horizontal list that builds only the tiles on screen (QA-02 s12:
+  /// `tile.tool.format`), so the strip is scrolled until the tile is built first.
+  Future<void> tapTile(String key) async {
+    final tile = find.byKey(ValueKey<String>('tile.$key'));
+    if (tile.evaluate().isEmpty) await _scrollToolStripTo(tile);
+    await E2eApp.tap(tester, tile, what: 'tile.$key');
+  }
+
+  /// Scrolls the tool strip from its start until [tile] is built (bounded; the rail and the grid
+  /// build every tile, so they have nothing to scroll).
+  Future<void> _scrollToolStripTo(Finder tile) async {
+    final strip = find.descendant(of: find.byType(ToolStrip), matching: find.byType(Scrollable));
+    if (strip.evaluate().isEmpty) return;
+    final position = tester.state<ScrollableState>(strip.first).position;
+    position.jumpTo(position.minScrollExtent);
+    await tester.pump();
+    for (var i = 0; i < 60 && tile.evaluate().isEmpty; i++) {
+      if (position.pixels >= position.maxScrollExtent) break;
+      position.jumpTo(math.min(position.pixels + position.viewportDimension * 0.6, position.maxScrollExtent));
+      await tester.pump();
+    }
+  }
 
   // ---------------------------------------------------------------------------------------------
   // Timeline drags (the canvas' drag delegate, with its snapping)
@@ -300,10 +342,29 @@ final class E2eEditor {
   Future<SeekAck?> seekFrame(int k) => seekTo(rate.timeOfFrame(k));
 
   /// Exact seek to [t]; returns the engine's ack.
+  ///
+  /// Waits first until the plan sync is idle (QA-02 s04): the engine clamps a seek to the plan it
+  /// holds, so a seek sent before a paste's or duplicate's patch is acked lands on the old last
+  /// frame. Then checks that the engine showed the target frame.
   Future<SeekAck?> seekTo(TimeUs t) async {
+    await waitPlanIdle();
     final ack = await E2eApp.pumpWhile(tester, playhead.seekExact(t), what: 'seek to $t');
     await E2eApp.pumpUntil(tester, () => !playhead.isSeeking, what: 'the seek to settle');
+    if (ack != null) {
+      final end = project.duration;
+      final want = rate.frameIndexOf(rate.quantize(t.clamp(0, end)));
+      // A seek to the end shows the last frame (the engines differ on which side of the end).
+      final ok = t >= end ? <int>{want, want - 1} : <int>{want};
+      expect(ok, contains(ack.displayedFrame), reason: 'seek to $t: the engine showed frame ${ack.displayedFrame}, not $want');
+    }
     return ack;
+  }
+
+  /// Waits until the plan sync has nothing compiling, applying or scheduled.
+  Future<void> waitPlanIdle({Duration timeout = const Duration(seconds: 30)}) async {
+    final sync = session.planSync;
+    if (sync == null) return;
+    await E2eApp.pumpUntil(tester, () => !sync.busy, what: 'the plan to reach the engine (${sync.currentStatus.name})', timeout: timeout);
   }
 
   /// The project frame under the playhead.

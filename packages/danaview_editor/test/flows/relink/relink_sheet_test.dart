@@ -389,6 +389,32 @@ void main() {
       expect(rig.pool.calls, isNot(contains('relink')));
     });
 
+    testWidgets('UX-40: a file located first is listed as located and counted: "Relink 3 files"', (tester) async {
+      final rig = _rig(_three());
+      await _pumpHost(tester, rig);
+      await _report(tester, rig, _missing(['md_1', 'md_2', 'md_3']));
+      await _openSheet(tester);
+      await _locate(tester, rig, 'md_1', _pick('IMG_0001.MOV'));
+      final picks = [_pick('beach.mp4'), _pick('drone.mp4')];
+      rig.harness.engine.picker.nextPicks = picks;
+      rig.pool.onAutoMatch = (p) => [
+            RelinkProposal(pick: p[0], media: const MediaId('md_2'), check: const RelinkMatch(exactFingerprint: true)),
+            RelinkProposal(pick: p[1], media: const MediaId('md_3'), check: const RelinkMatch(exactFingerprint: true)),
+          ];
+      await _tap(tester, _key('relink-several-button'));
+      await _tap(tester, find.text('From Files').last);
+      expect(_key('relink-confirm'), findsOneWidget);
+      expect(find.text('Still missing'), findsNothing, reason: 'IMG_0001.MOV was located');
+      expect(find.text('Already located'), findsOneWidget);
+      expect(find.descendant(of: _key('relink-already-located'), matching: find.text('IMG_0001.MOV')), findsOneWidget);
+      expect(find.text('Relink 3 files'), findsOneWidget);
+      expectNoOverflow(tester);
+      await _tap(tester, _key('relink-confirm-apply'));
+      expect(rig.pool.lastRelink!.keys.map((k) => k.value).toSet(), {'md_1', 'md_2', 'md_3'});
+      expect(rig.editor.session.historyEntries, hasLength(1));
+      expect(find.text('Relinked 3 files'), findsOneWidget);
+    });
+
     testWidgets('no match at all: the list says so and offers only Back', (tester) async {
       final rig = _rig(_three());
       await _pumpHost(tester, rig);

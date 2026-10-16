@@ -16,7 +16,8 @@
 //   clips forward again (one history entry "Cancel reverse"); cancelling a freeze removes the
 //   waiting still with ripple (one entry "Cancel freeze frame"). A failed job keeps a failed row with
 //   "Try again" (the asset goes back to pending-unstarted) and "Dismiss".
-// * **Proxies** (`requestProxy`) follow the asset's `ProxyState`; pending proxies are resumed too.
+// * **Proxies** (`requestProxy`) follow the asset's `ProxyState`; pending proxies are resumed too
+//   (one whose media is offline stays pending until the media is back).
 // * **Other producers** (waveforms, captions, model download) report through [TasksController.track]
 //   (a `MediaJob`) or [TasksController.begin] (a handle they drive).
 // * **Export gating.** [TasksController.exportBlockersOf] counts the clips that wait for a pending
@@ -25,6 +26,12 @@
 // * Rows go to `EditorState.tasks` (`EditorController.setTasks`), which drives the preview's task
 //   badge and the Tasks sheet. When the editor closes the jobs are cancelled quietly (the assets
 //   stay pending and resume on the next open).
+// * **Resume on open** (FIX-JOB-RESUME, QA-05 D3, ARCH §15 "jobs are re-queued automatically"):
+//   `createEditorController` reads `tasksControllerProvider(id)` as soon as the session attaches,
+//   so pending reverse, freeze and proxy jobs left by a process death or a close mid-job start
+//   again without any user action. A controller that outlived a close (something still listened)
+//   is suspended; when the same project attaches again it [TasksController.resume]s and re-queues
+//   once.
 
 import 'dart:async';
 
@@ -350,6 +357,17 @@ class TasksController {
     _byAsset.clear();
   }
 
+  /// Starts again after [suspend] when the project attached again: re-queues the pending jobs
+  /// (once; the assets already being produced are tracked).
+  void resume() {
+    if (_disposed || !_suspended) return;
+    _suspended = false;
+    _queueReconcile();
+  }
+
+  /// Whether the controller is suspended (the editor closed while it was alive).
+  bool get suspended => _suspended;
+
   /// Stops listening and cancels running jobs quietly.
   void dispose() {
     if (_disposed) return;
@@ -368,6 +386,10 @@ class TasksController {
     final pool = state.project?.pool;
     if (pool == null || identical(pool, _seenPool)) return;
     _seenPool = pool;
+    _queueReconcile();
+  }
+
+  void _queueReconcile() {
     if (_reconcileQueued) return;
     _reconcileQueued = true;
     scheduleMicrotask(() {
@@ -408,7 +430,7 @@ class TasksController {
             break;
         }
       } else if (status is ReadyStatus && asset.proxy == ProxyState.pending) {
-        _startProxy(asset.id);
+        _startProxy(asset.id, resume: true);
       }
     }
   }
@@ -523,13 +545,15 @@ class TasksController {
     _editor.apply(CompositeCommand(label, commands));
   }
 
-  bool _startProxy(MediaId id) {
+  /// Starts the proxy job of [id]. A [resume]d pending proxy whose source is offline stays
+  /// pending (it starts once the media is back); a requested one goes back to none.
+  bool _startProxy(MediaId id, {bool resume = false}) {
     final project = _project;
     final asset = project?.pool[id];
     if (project == null || asset == null) return false;
     final source = _session.compiler?.resolve(project, id);
     if (source == null) {
-      _update(id, (a) => a.copyWith(proxy: ProxyState.none));
+      if (!resume) _update(id, (a) => a.copyWith(proxy: ProxyState.none));
       return false;
     }
     final MediaJob<GeneratedAsset> job;
@@ -623,7 +647,7 @@ class TasksController {
 }
 
 /// Builds the value of `tasksControllerProvider` for [id]: alive while the editor is open, then
-/// suspended and released when the session detaches.
+/// suspended and released when the session detaches; resumed when it attaches again while alive.
 TasksController createTasksController(Ref<Object?> ref, ProjectId id) {
   final session = ref.watch(editorSessionProvider(id));
   final editor = ref.watch(editorControllerProvider(id).notifier);
@@ -635,16 +659,22 @@ TasksController createTasksController(Ref<Object?> ref, ProjectId id) {
     jobs: ref.watch(editorEngineProvider).jobs,
     resolvePath: runtime == null ? TasksController.unconfiguredPath : runtime.roots.resolve,
   );
-  final link = ref.keepAlive();
+  KeepAliveLink? link = ref.keepAlive();
   var wasOpen = session.isOpen;
   void onAttached() {
     if (session.attached.value) {
       wasOpen = true;
+      if (link == null) {
+        // Reopened while this controller was still listened to: keep it and re-queue.
+        link = ref.keepAlive();
+        controller.resume();
+      }
       return;
     }
     if (!wasOpen) return;
     controller.suspend();
-    link.close();
+    link?.close();
+    link = null;
   }
 
   session.attached.addListener(onAttached);

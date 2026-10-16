@@ -3,8 +3,6 @@
 // QA-07 D1: the governor built by `createAutoCaptions` keeps receiving the plugin's lifecycle and
 // thermal events after the whisper runtime has been opened and listens to the device events too.
 
-import 'dart:async';
-
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview/main.dart';

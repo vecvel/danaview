@@ -314,6 +314,57 @@ void main() {
       expect(rig.started, hasLength(1));
     });
 
+    test('UX-39: an unanswered notification dialog times out; the export starts without notifications and says so once', () async {
+      final rig = ExportRig(notificationPermissionTimeout: const Duration(milliseconds: 50));
+      final never = Completer<bool>();
+      rig.fake.access.onRequestNotificationPermission = () => never.future;
+      final c = await _ready(rig);
+      await c.start();
+      expect((c.state as ExportUiNotice).explainNotifications, isTrue);
+      final sw = Stopwatch()..start();
+      await c.confirmNotice().timeout(const Duration(seconds: 5));
+      sw.stop();
+      expect(sw.elapsed, greaterThanOrEqualTo(const Duration(milliseconds: 50)));
+      final running = await _until<ExportUiRunning>(rig, c);
+      expect(rig.fake.access.notificationPermissionRequests, 1);
+      expect(running.notificationsUnanswered, isTrue);
+      expect(rig.started, hasLength(1));
+      rig.started.single.report(0.2);
+      await rig.settle();
+      expect((c.state as ExportUiRunning).notificationsUnanswered, isTrue, reason: 'kept while this export runs');
+
+      // A late answer changes nothing.
+      never.complete(true);
+      await rig.settle();
+      expect((c.state as ExportUiRunning).notificationsUnanswered, isTrue);
+
+      // The next export neither asks again nor repeats the message.
+      await c.cancel();
+      await rig.settle();
+      await c.prepare();
+      await c.start();
+      final next = await _until<ExportUiRunning>(rig, c);
+      expect(next.notificationsUnanswered, isFalse);
+      expect(rig.fake.access.notificationPermissionRequests, 1);
+    });
+
+    test('UX-39: an answered or failing permission request starts the export with no message', () async {
+      for (final answer in <Future<bool> Function()>[
+        () async => true,
+        () async => false,
+        () async => throw StateError('no activity'),
+      ]) {
+        final rig = ExportRig(notificationPermissionTimeout: const Duration(seconds: 5));
+        rig.fake.access.onRequestNotificationPermission = answer;
+        final c = await _ready(rig);
+        await c.start();
+        await c.confirmNotice();
+        final running = await _until<ExportUiRunning>(rig, c);
+        expect(running.notificationsUnanswered, isFalse);
+        expect(rig.started, hasLength(1));
+      }
+    });
+
     test('the notice is shown only once', () async {
       final rig = ExportRig();
       final c = await _ready(rig);

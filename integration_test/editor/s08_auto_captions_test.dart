@@ -8,12 +8,16 @@
 // "Whole video" scope leaves music out by design (ai.md §8.2), so the scenario captions the speech
 // clip itself: it selects it and opens Auto captions from the clip's context menu, which preselects
 // "This clip" (FIX-QA-00-1).
+//
+// The SRT step uses the single-track export path: the subtitle export panel lists the tracks only
+// when there is more than one, so the track row is tapped only when it is there (FIX-QA07, D4).
 
 // ignore_for_file: implementation_imports
 
 import 'dart:io';
 
 import 'package:danaview_editor/src/app/strings/captions_strings.dart';
+import 'package:danaview_editor/src/app/strings/subtitle_io_strings.dart';
 import 'package:danaview_editor/src/editor/contracts/action_binding.dart';
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
 import 'package:danaview_editor_core/formats.dart';
@@ -70,8 +74,12 @@ void main() {
         timeout: const Duration(minutes: 5),
         step: const Duration(milliseconds: 250),
       );
-      // Low-confidence language question: the clip is English.
-      if (!generated()) await E2eApp.tapKey(tester, 'captions-candidate-en');
+      // Low-confidence language question: the clip is English. Picking a candidate only selects it;
+      // Continue resumes the job (FIX-QA07, QA-07 D4).
+      if (!generated()) {
+        await E2eApp.tapKey(tester, 'captions-candidate-en');
+        await E2eApp.tapKey(tester, 'captions-continue');
+      }
     }
     final track = ed.tracksOf(TrackKind.subtitle).last;
     final cues = [for (final i in track.items) i as SubtitleCue];
@@ -86,12 +94,22 @@ void main() {
     final handoffs = E2eApp.world.engine.files.records.length;
     await ed.invoke(EditorActionId.exportSubtitles);
     await E2eApp.waitKey(tester, 'subtitleIo.export');
-    await E2eApp.tapKey(tester, 'subtitleIo.exportTrack.${track.id.value}');
+    // The panel lists the tracks only when the project has more than one subtitle track; with the
+    // single generated track it exports that one directly (FIX-QA07, QA-07 D4).
+    final pick = 'subtitleIo.exportTrack.${track.id.value}';
+    if (E2eApp.hasKey(pick)) await E2eApp.tapKey(tester, pick);
+    await E2eApp.tap(
+      tester,
+      find.descendant(of: find.byKey(const ValueKey('subtitleIo.format')), matching: find.text(SubtitleIoStrings.srt)),
+      what: 'format SRT',
+    );
     await E2eApp.tapKey(tester, 'subtitleIo.saveToFiles');
     await E2eApp.pumpUntil(tester, () => E2eApp.world.engine.files.records.length > handoffs, what: 'the SRT handoff');
     final parsed = SubtitleCodec.parse(File(E2eApp.world.engine.files.records.last.copyPath).readAsBytesSync(), hint: SubtitleFormat.srt);
     int ms(int us) => (us / 1000).round();
     expect([for (final c in parsed.cues) (ms(c.startUs), ms(c.endUs), c.text)], [for (final c in cues) (ms(c.start), ms(c.end), c.text)]);
+    if (E2eApp.hasKey('subtitleIo.closeButton')) await E2eApp.tapKey(tester, 'subtitleIo.closeButton', ifStillThere: true);
+    await E2eApp.pumpUntil(tester, () => !E2eApp.hasKey('subtitleIo.export'), what: 'the subtitle export panel to close');
 
     // One undo removes every generated caption.
     await ed.invoke(EditorActionId.undo);

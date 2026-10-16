@@ -17,6 +17,8 @@
 //   foreground               bring the app back (after `background` with seconds = 0)
 //   kill                     kill the app process (no ack: the test that asked ends there)
 //   grantMic                 grant the microphone permission (simctl privacy / pm grant)
+//   grantNotifications       Android: grant POST_NOTIFICATIONS (pm grant), so the export's
+//                            permission dialog never appears; a no-op on iOS
 //   swipeFromRecents         Android: remove the task from recents (no ack)
 //   destroyActivity          Android: finish the activity while the process lives on
 //   tapNotificationCancel    Android: press Cancel in the export notification

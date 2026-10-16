@@ -7,7 +7,9 @@
 //    itself), then builds the setup from the project's last-used settings (remembered per project
 //    in `EditorPrefs`).
 // 2. `start()`: free space against the estimate (+ one segment on iOS), the first-export notice
-//    (background copy and, on Android, the notification explainer and permission), the sprite
+//    (background copy and, on Android, the notification explainer and permission; the permission
+//    request is bounded by `ExportEnvironment.notificationPermissionTimeout`, after which the export goes on without
+//    notifications and the progress view says so once, UX-39), the sprite
 //    pre-pass (API-04, "Preparing"), `compileExport` (CORE-33; original media only), the engine's
 //    `preflight` (warnings the user confirms; with `layersVsResolution` the free-space check is
 //    repeated with the multi-pass precompose intermediates added, `max(2·I, I + output) − output`,
@@ -146,6 +148,7 @@ class ExportController extends StateNotifier<ExportUiState> {
   EditProject? _runProject;
   String _runFileName = 'Danaview export';
   BackgroundExportKind _runKind = BackgroundExportKind.none;
+  bool _notificationsUnanswered = false;
   String? _resumableJobId;
   bool _wakelockOn = false;
   bool _cleaned = false;
@@ -438,6 +441,7 @@ class ExportController extends StateNotifier<ExportUiState> {
   Future<void> _begin(ExportUiSetup setup, {bool noticeDone = false}) async {
     final epoch = ++_epoch;
     _cancelRequested = false;
+    _notificationsUnanswered = false;
     _lastSetup = setup;
     _remember(setup.draft);
     _set(setup.copyWith(checkingStorage: true, clearIssue: true));
@@ -486,10 +490,16 @@ class ExportController extends StateNotifier<ExportUiState> {
     final epoch = ++_epoch;
     _set(const ExportUiPreparing());
     await _prefs.markExportBackgroundNoticeShown();
+    _notificationsUnanswered = false;
     if (s.explainNotifications) {
       await _prefs.markExportNotificationPermissionAsked();
       try {
-        await _engine.access.requestNotificationPermission();
+        await _engine.access.requestNotificationPermission().timeout(_e.notificationPermissionTimeout);
+      } on TimeoutException {
+        // Nobody answered the system dialog (or the platform never reported back): export without
+        // notifications rather than wait forever; a late answer is ignored.
+        debugPrint('[Export] Notification permission unanswered after ${_e.notificationPermissionTimeout.inSeconds} s; exporting without notifications');
+        _notificationsUnanswered = true;
       } on Object catch (e) {
         debugPrint('[Export] Notification permission request failed: ${e.runtimeType}');
       }
@@ -652,7 +662,7 @@ class ExportController extends StateNotifier<ExportUiState> {
     _cleaned = false;
     _samples.clear();
     _setWakelock(true);
-    _set(ExportUiRunning(phase: ExportPhase.preparing, fraction: 0, backgroundKind: _runKind));
+    _set(ExportUiRunning(phase: ExportPhase.preparing, fraction: 0, backgroundKind: _runKind, notificationsUnanswered: _notificationsUnanswered));
     _progressSub?.cancel();
     _progressSub = job.progress.listen(_onProgress, onError: (Object _) {});
     unawaited(job.result.then(_onResult, onError: (Object e) => _onJobError(e)));
@@ -678,6 +688,7 @@ class ExportController extends StateNotifier<ExportUiState> {
       eta: p.pausedInBackground ? null : _eta(),
       warnings: p.warnings,
       backgroundKind: _runKind,
+      notificationsUnanswered: _notificationsUnanswered,
     ));
   }
 
@@ -696,6 +707,7 @@ class ExportController extends StateNotifier<ExportUiState> {
 
   Future<void> _onResult(ExportResult result) async {
     _job = null;
+    _notificationsUnanswered = false;
     _setWakelock(false);
     unawaited(_progressSub?.cancel());
     _progressSub = null;
@@ -709,6 +721,7 @@ class ExportController extends StateNotifier<ExportUiState> {
   void _onJobError(Object e) {
     final job = _job;
     _job = null;
+    _notificationsUnanswered = false;
     _setWakelock(false);
     unawaited(_progressSub?.cancel());
     _progressSub = null;
