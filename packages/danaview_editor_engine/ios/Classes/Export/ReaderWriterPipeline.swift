@@ -636,6 +636,7 @@ final class MixAudioSource: SegmentAudioSource {
     private var mono2: Float?
     private var seamStats: [SeamStats] = []
     private var seamCursor = 0
+    private var seamsEvaluated = false
 
     /// Peak second differences around one seam.
     private struct SeamStats {
@@ -881,6 +882,8 @@ final class MixAudioSource: SegmentAudioSource {
 
     /// Counts the seam steps of the seams the read covered completely.
     private func evaluateSeams() {
+        guard !seamsEvaluated else { return }
+        seamsEvaluated = true
         for stats in seamStats where stats.complete {
             guard stats.window >= TimePitchWatch.abruptEdge,
                   stats.window > TimePitchWatch.seamStepRatio * stats.reference else { continue }
