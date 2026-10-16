@@ -690,18 +690,23 @@ final class _Soak {
     final scope = find.descendant(of: find.byKey(const ValueKey('captions-scope')), matching: find.text(CaptionsStrings.selectionScope(1)));
     if (scope.evaluate().isNotEmpty) await E2eApp.tap(tester, scope, what: 'This clip');
     if (E2eApp.hasKey('captions-tier-fast')) await E2eApp.tapKey(tester, 'captions-tier-fast');
-    final cuesBefore = ed.items<SubtitleCue>().length;
+    final cuesBefore = {for (final c in ed.items<SubtitleCue>()) c.id};
     await E2eApp.tapKey(tester, 'captions-create');
     final cancel = rng.nextBool();
     final service = E2eApp.world.captions!.service;
-    bool generated() => ed.items<SubtitleCue>().length > cuesBefore && service.activeJob == null;
+    // Done when new cues replaced or joined the old ones ("Replace previous captions" keeps the cue
+    // count, so the count alone cannot tell) and the job ended.
+    bool generated() => service.activeJob == null && {for (final c in ed.items<SubtitleCue>()) c.id}.difference(cuesBefore).isNotEmpty;
+    // Random edits can leave the speech clip as a piece without speech: that is an answer, not a defect.
+    bool noSpeech() => find.text('No speech found').evaluate().isNotEmpty || find.text('No audio to caption').evaluate().isNotEmpty;
     var outcome = '';
     while (true) {
       await E2eApp.pumpUntil(
         tester,
         () {
-          if (E2eApp.hasKey('captions-failed')) throw StateError('Auto captions failed');
+          if (E2eApp.hasKey('captions-failed') && !noSpeech()) throw StateError('Auto captions failed');
           return generated() ||
+              noSpeech() ||
               (E2eApp.hasKey('captions-needs-language') && E2eApp.hasKey('captions-candidate-en')) ||
               (cancel && service.activeJob != null && E2eApp.hasKey('captions-cancel'));
         },
@@ -709,8 +714,12 @@ final class _Soak {
         timeout: const Duration(minutes: 5),
         step: const Duration(milliseconds: 150),
       );
+      if (noSpeech()) {
+        outcome = 'no speech in the (edited) clip';
+        break;
+      }
       if (generated()) {
-        outcome = '${ed.items<SubtitleCue>().length - cuesBefore} cues';
+        outcome = '${ed.items<SubtitleCue>().where((c) => !cuesBefore.contains(c.id)).length} new cues';
         break;
       }
       if (E2eApp.hasKey('captions-needs-language')) {
