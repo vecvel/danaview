@@ -43,6 +43,8 @@ import 'package:danaview_editor/src/editor/contracts/action_binding.dart' show E
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
 import 'package:danaview_editor/src/editor/flows/export/export_controller.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart' show EditorTaskKind;
+import 'package:danaview_editor/src/editor/state/tasks_controller.dart' show TasksController;
+import 'package:danaview_editor_core/codec.dart' show ProjectJsonCodec;
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart';
 import 'package:danaview_editor_core/plan.dart' show ExportContainer, ExportPresetId, VideoCodec;
@@ -539,9 +541,14 @@ final class _Soak {
   Future<String> _reverse() async {
     final clips = [for (final c in ed.videoClips) if (c.duration <= 10000000) c];
     if (clips.isEmpty) throw _Skip('no short video clip');
-    await ed.select(_pick(clips).id);
+    final clip = _pick(clips);
+    await ed.select(clip.id);
     final r = await ed.tryInvoke(EditorActionId.reverse);
     if (r != EditorActionResult.ran) return r.name;
+    final now = ed.item(clip.id) as MediaClip;
+    if (!now.reversed) return 'turned off (plays forward)';
+    final rendition = TasksController.renditionFor(ed.project.pool, now);
+    if (rendition?.status is ReadyStatus) return 'reused a ready rendition';
     return _task(EditorTaskKind.reverse, cancelAfterStart: rng.nextInt(3) == 0);
   }
 
@@ -860,6 +867,7 @@ final class _ExportWatch {
             lastFraction = s.fraction;
             lastChange = DateTime.now();
           } else if (!s.pausedInBackground && DateTime.now().difference(lastChange) > const Duration(seconds: 120)) {
+            _dumpProject(ed, 'stall-${soak._op}');
             stalled = 'no progress for 120 s at ${(s.fraction * 100).toStringAsFixed(1)} % (${s.framesDone}/${s.framesTotal} frames, '
                 'phase ${s.phase.name}, project ${ed.project.duration ~/ 1000} ms)';
             return true;
@@ -880,7 +888,19 @@ final class _ExportWatch {
     );
     if (stalled != null) throw TestFailure('$what: export stalled: $stalled');
     final f = failed;
+    if (f != null && !done(f)) _dumpProject(ed, 'failed-${soak._op}');
     if (f != null && !done(f)) throw StateError('export failed: ${f.failure}; details: ${c.detailsOf(f.failure).replaceAll('\n', ' ')}');
+  }
+}
+
+/// Writes the project as edited now (canonical body JSON) to `<shared>/e2e_out/soak-<tag>.json`,
+/// so a stalled or failed export can be replayed outside the soak.
+void _dumpProject(E2eEditor ed, String tag) {
+  try {
+    soakWriteJson(tag, jsonDecode(ProjectJsonCodec().encode(ed.project)));
+    soakLog('dump', 'project written to e2e_out/soak-$tag.json');
+  } on Object catch (e) {
+    soakLog('dump', 'could not write the project: ${e.runtimeType}');
   }
 }
 
