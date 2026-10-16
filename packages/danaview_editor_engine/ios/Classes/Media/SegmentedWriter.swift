@@ -87,6 +87,20 @@ final class SegmentedWriter {
     /// writer runs past the source composition (FIX-IOS-DURATION). Not persisted: callers set it
     /// on every run.
     var exactEnd: CMTime?
+    /// Seconds a pump may go without progress before the segment is abandoned with a stall error
+    /// (nil: wait forever). Also bounds `finishWriting` (FIX-IOS-EXPORT-STALL).
+    var stallTimeout: TimeInterval?
+    /// Seconds a stop request waits for a blocked pump before the segment is abandoned (nil: wait).
+    var stopGrace: TimeInterval?
+    /// While true the stall clock does not run (e.g. the export's thermal pause).
+    var isStallExempt: (() -> Bool)?
+    /// Called for every frame, audio buffer and concat sample (any thread).
+    var onActivity: (() -> Void)?
+    /// Test hook: returns true to block the pump before it reads (segment, frame) from the source,
+    /// as AVFoundation's hung `copyNextSampleBuffer` did (the block then waits forever).
+    var stallInjector: ((_ segment: Int, _ frame: Int) -> Bool)?
+    /// Slice of the bounded waits.
+    static let waitSlice: TimeInterval = 0.1
 
     private let pumpQueue = DispatchQueue(label: "com.vecvel.danaview.editor.segments.pump", qos: .userInitiated)
     private let lock = NSLock()
@@ -518,7 +532,7 @@ final class SegmentedWriter {
             if pump.wait(SegmentedWriter.waitSlice) { return nil }
             let now = Date()
             let activity = pump.activity
-            if activity != lastActivity || isStallExempt?() == true {
+            if activity != lastActivity {
                 lastActivity = activity
                 lastChange = now
             }
@@ -535,6 +549,11 @@ final class SegmentedWriter {
                 }
             }
             if let timeout = stallTimeout, now.timeIntervalSince(lastChange) >= timeout {
+                // The exemption (thermal pause) is only asked once the clock ran out.
+                if isStallExempt?() == true {
+                    lastChange = now
+                    continue
+                }
                 let inSource = pump.isInSource
                 if pump.abandon() {
                     let error = stallError(segment: segment, seconds: timeout, inSource: inSource)

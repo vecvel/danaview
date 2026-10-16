@@ -746,13 +746,14 @@ final class ExportCoordinator: ExportCoordinating {
     private func checkStall(_ running: Running) {
         let job = running.job
         guard !running.ended, running.state == .running, jobs[job.id] === running else { return }
+        let limit = environment.stallTimeout + environment.watchdogSlack
+        let idle = job.secondsSinceActivity
+        guard idle >= limit else { return }
+        // A thermal pause is not a stall (asked only once the clock ran out).
         if job.isThermallyPaused {
             job.heartbeat()
             return
         }
-        let limit = environment.stallTimeout + environment.watchdogSlack
-        let idle = job.secondsSinceActivity
-        guard idle >= limit else { return }
         let failure = ExportCoordinator.stallFailure(seconds: idle, phase: job.phase)
         Log.error(.export, "export \(job.id): \(failure.message); left behind")
         abandonedPipelines += 1

@@ -87,6 +87,14 @@ final class JobInterruption {
         return interrupted
     }
 
+    /// Ids of the registered running jobs (tests; FIX-IOS-EXPORT-STALL checks a stalled export
+    /// leaves none behind).
+    var registeredJobIds: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return jobs.keys.sorted()
+    }
+
     /// Registers a running job. Returns false (and interrupts it on main) when the app is already
     /// in the background: the job waits for the foreground re-queue.
     @discardableResult
