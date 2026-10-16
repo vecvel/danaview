@@ -230,8 +230,8 @@ ensure_device() {
   RESTARTS=$((RESTARTS + 1))
   run_with_timeout 30 "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
   run_with_timeout 30 "$ADB" kill-server >/dev/null 2>&1 || true
+  # A restarted emulator is left running at the end exactly when the original one would have been.
   boot_avd "$EMU_AVD"
-  BOOTED_BY_US=1
   setup_device
 }
 
