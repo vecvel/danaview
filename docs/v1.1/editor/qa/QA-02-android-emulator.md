@@ -7,14 +7,18 @@ Emulators on the Windows laptop (BUILD_PLAN QA-02). It also holds the API 28 bel
 Android export extra on API 34 and API 35, the tablet run of scenario 12, and the manual tablet
 steps for the owner (hardware keyboard, mouse, drag from Files and Photos).
 
-**Status (2026-10-16, end of day): not certified.**
+**Status (2026-10-16, 23:50): not certified.**
 
-- **API 35 phone:** 11 of 18 scenarios pass. s16 and s18 last ran on code before e0fa7e8 and
-  failed there. The other 5 still fail on d723c10 code; every one of those 5 points at a test or
-  harness (Mac-owned) cause, except s10, which needs a diagnostic.
-- **Export extra:** 4 of 7 phases pass on both API 34 and API 35. The 3 that fail do so because
-  the host actions do not do what they claim on these images (the activity is not destroyed, the
-  task is not swiped away, Cancel cannot be found).
+- **API 35 phone, full pass on code C (0cfc691, 22:07–23:06, one emulator, fresh install,
+  audio):** 11 of 18 scenarios pass in the batch (s01, s03, s04, s05, s08, s11, s14–s17; s08 and
+  s16 for the first time on recent code). Rerun alone: s02 and s06 pass (flaky in the batch); s18
+  passes after an Android-lane fix to `debugCaptureFrame` (see "Android-lane fixes"). Still failing
+  alone: s07, s09, s10, s12, s13, all with Mac-owned causes. s10 is decided: the engine draws the
+  plan's offline placeholder after the relink (FIX M-8, now a Dart request). s09's recover phase is
+  a new failure on C (FIX M-15).
+- **Export extra:** 4 of 7 phases pass on API 34 (code B) and on API 35 (code C). The 3 that fail
+  do so because the host actions do not do what they claim on these images (the activity is not
+  destroyed, the task is not swiped away, Cancel cannot be found).
 - **Gate devices:** API 29 and API 29 2 GB pass s01, s03 and s04 (and s18 on API 29). s02 fails
   there (Mac, UX-41). The API 28 manual checks pass; the API 28 automated test skips itself (Mac).
 - **Tablet:** s12 fails. The manual checklist has not been run yet.
@@ -182,10 +186,22 @@ notification request, and the s06/s08/s10/s12/s13 test fixes) reached this branc
 | Label | Code | Used for |
 |---|---|---|
 | **A** (before the fixes) | 542dcc6 + Android-lane backups up to 75b6a53, before e0fa7e8 | API 35 full pass 1 (13:12–14:38) and pass 2 (failed batches, 14:43–16:37); API 28 / 29 / 29 2 GB (14:23–16:06, from the `dv2` copy) |
-| **B** (current) | d723c10 + merge 2be8a84 + the final AND-14 `Permissions.kt` (e6a9340) and its tests, up to 0ad2477 | API 35 reruns (19:27–21:44, main checkout); API 34 and tablet runs (19:33–21:10, `dv2` refreshed from the main checkout's tracked files) |
+| **B** | d723c10 + merge 2be8a84 + the final AND-14 `Permissions.kt` (e6a9340) and its tests, up to 0ad2477 | API 35 reruns (19:27–21:44, main checkout); API 34 and tablet runs (19:33–21:10, `dv2` refreshed from the main checkout's tracked files) |
+| **C** (current) | 0cfc691: editor-wip c93ad22 merged (incl. the Mac's ebc2fb2: job resume after the first media resolve, preview restart, captions resume fraction) + AND-18's range-touch vectors | API 35 full pass (22:07–23:06) and the solo reruns of the failed batches (23:09–23:43), main checkout, `emulator-5554` only |
+| **C+** | C + the `PreviewSession.debugCaptureFrame` fix (WIP 550b8ac) | the s09 recover phase run alone (23:14–23:16) and the solo reruns from s02 on (23:17–23:43: s02, s06, s07, s12, s13, the extra phases), the s18 rerun at 23:44–23:46 and the PreviewSessionTest run. The fix only changes `debugCaptureFrame` |
 
 Runs on A and on B differ only in the e0fa7e8 fixes, AND-14 and the runner changes. Every API 35
-scenario that failed on A was rerun on B, except s16 and s18 (see the matrix).
+scenario that failed on A was rerun on B, except s16 and s18 (see the matrix). C has no QA-00 test
+or harness change since B (`git diff 0ad2477 0cfc691 -- integration_test/` is empty): none of FIX
+M-1 to M-14 has landed yet. The API 28, API 29, API 29 2 GB results are from code A; the API 34 and
+tablet results are from code B. None of them was rerun on C.
+
+On C the JVM tests asked for with the merge ran on Windows (one Gradle worker,
+`testDebugUnitTest --tests '*Int07GlueTest*' --tests '*RangeTouchVectorTest*' --tests '*RangeTouchTest*'`):
+`Int07GlueTest` compiles with the Mac's `RecordingSignals.installOnce` keyed per `EngineContext`
+and passes 8 of 9, including `theBridgeEmitsOnceperChangeAndMutes`; the one failure is the known
+Windows-only path test (FIX M-11). `RangeTouchVectorTest` (new, FIX-AND-18-1) passes 1 of 1 and
+`RangeTouchTest` 3 of 3 (0cfc691's commit message).
 
 ## Results matrix
 
@@ -195,39 +211,39 @@ in scope but has not run yet.
 
 | # | API 35 phone | API 29 | API 29 2 GB | Tablet | Note |
 |---|---|---|---|---|---|
-| s01 | **pass** 13:14 A | **pass** A | **pass** A | — | |
-| s02 | **pass** 13:16 A | **fail** 2 of 2 runs, A | **fail** in the full run, **pass** alone, A | — | FIX M-9 (UX-41) |
-| s03 | **pass** 13:19 A | **pass** A | **pass** A | — | |
-| s04 | **pass** 19:29 B | **pass** A | **pass** A | — | the e0fa7e8 seek fix works on API 35 |
-| s05 | **pass** 13:25 A | — | — | — | |
-| s06 | **fail** 21:38 B (3 of 3 runs) | — | — | — | transition step passes now; close blocked by "Couldn't save your latest changes" (FIX M-1) |
-| s07 | **fail** 21:44 B (3 of 3 runs) | — | — | — | alone: both exports complete, burned caption 293 px (> 300 needed) (FIX M-2); batched: emulator crash (reality) |
-| s08 | **pass** 21:35 B (alone, fresh install) | — | — | — | failed in both batched runs right after an emulator reboot ("This file is empty.", see Emulator realities) |
-| s09 | **pass** 13:45 A (recover phase) | — | — | — | the edit phase ends with the host kill by design |
-| s10 | **fail** 21:40 B (3 of 3 runs) | — | — | — | relink now works; then no readable frame after the seek (FIX M-8, needs a diagnostic) |
-| s11 | **pass** 13:51 A | — | — | — | |
-| s12 | **fail** 21:08 B (2 of 2 runs) | — | — | **fail** 20:31 B (2 of 2 runs) | phone: marquee (FIX M-3); tablet: `tile.tool.format` off the tool rail (FIX M-4), then the same marquee failure |
-| s13 | **fail** 21:10 B (2 of 2 runs) | — | — | — | recording works; the clip is 13.03 s / 10.33 s, 2.5–4 s expected (FIX M-5) |
-| s14 | **pass** 20:04 B | — | — | — | the export works with the `grantNotifications` host action |
-| s15 | **pass** 20:08 B | — | — | — | |
-| s16 | **fail** 15:53 A (2 of 2 runs), **not rerun on B** | — | — | — | same "Couldn't save your latest changes" close dialog as s06 |
-| s17 | **pass** 20:13 B | — | — | — | |
-| s18 | **fail** 16:04 A (2 of 2 runs), **not rerun on B** | **pass** A | not run | — | pass 1: the s06 close dialog; pass 2: the editor did not close in 30 s |
+| s01 | **pass** 22:09 C | **pass** A | **pass** A | — | |
+| s02 | **pass** 23:18 C+ (alone); **fail** 22:11 C (batch) | **fail** 2 of 2 runs, A | **fail** in the full run, **pass** alone, A | — | API 35 batch: the player never reached 0:05:10 within 30 s (`s02_player_to_editor_test.dart:33`, screen 00:00 / 00:08), before the editor opens; seen once on API 29 too. Flaky (player seek, media_kit), not the editor. API 29: FIX M-9 (UX-41) |
+| s03 | **pass** 22:13 C | **pass** A | **pass** A | — | |
+| s04 | **pass** 22:15 C | **pass** A | **pass** A | — | the e0fa7e8 seek fix works on API 35 |
+| s05 | **pass** 22:17 C | — | — | — | |
+| s06 | **pass** 23:21 C+ (alone, fresh install); **fail** 22:20 C (batch) | — | — | — | batch: close blocked by "Couldn't save your latest changes" (FIX M-1), as in 3 of 3 runs on B. Passed alone for the first time: timing-dependent |
+| s07 | **fail** 22:24 C (batch) and 23:26 C+ (alone) | — | — | — | both exports complete; burned caption t1b 293 px (> 300 needed), the same count as on B (FIX M-2). No emulator death this time |
+| s08 | **pass** 22:26 C (in the batch, after a reset) | — | — | — | first batched pass: 3 cues, SRT round trip and undo. The earlier batched failures (B) came right after emulator reboots; there were none in this pass |
+| s09 | **fail** 22:30 C (batch) and 23:16 C/C+ (alone: edit phase on C, recover phase on C+) | — | — | — | edit phase ends with the host kill as designed; the recover phase restores the project and the text, then the editor does not close in 30 s, with no dialog on screen (FIX M-15). Passed on A |
+| s10 | **fail** 23:09 C (2 of 2 runs) | — | — | — | relink works; after it the preview shows the plan's offline placeholder (solid 0x303030), so no barcode: decided, a Dart (INT-02 / PlanSync) cause, not AND-16/ENG-08 (FIX M-8) |
+| s11 | **pass** 22:34 C | — | — | — | |
+| s12 | **fail** 22:37 C (batch) and 23:29 C+ (alone) | — | — | **fail** 20:31 B (2 of 2 runs) | phone: marquee (FIX M-3); tablet: `tile.tool.format` off the tool rail (FIX M-4), then the same marquee failure |
+| s13 | **fail** 22:39 C (batch) and 23:31 C+ (alone) | — | — | — | recording works (host mic on); the clip is 10.63 s (batch) / 10.10 s (alone), 2.5–4 s expected (FIX M-5) |
+| s14 | **pass** 22:42 C | — | — | — | the export works with the `grantNotifications` host action |
+| s15 | **pass** 22:44 C | — | — | — | |
+| s16 | **pass** 22:46 C | — | — | — | first run on recent code; no close dialog |
+| s17 | **pass** 22:48 C | — | — | — | |
+| s18 | **pass** 23:46 C+ (alone, fresh install); **fail** 22:50 and 23:12 C | **pass** A | not run | — | on C the reopen step failed with `EngineFailure(internal: nothing composed)` from `debugCaptureFrame` (2 of 2): an Android-lane defect, fixed (see "Android-lane fixes"). Not yet rerun inside a full batch |
 
 The per-device times for API 29 / 29 2 GB are in their `summary.txt` files (s01 552 s / 479 s,
 s03 283 s / 507 s, s04 280 s / 242 s, s18 255 s on API 29).
 
 ### Android export extra (`x_android_export_background`)
 
-| Phase | API 35 (B, 20:13–21:27) | API 34 (B, 19:33–20:21) | Note |
+| Phase | API 35 (batch 22:51–23:06 on C, alone 23:32–23:43 on C+) | API 34 (B, 19:33–20:21) | Note |
 |---|---|---|---|
 | fgs | **pass** (2 of 2) | **pass** (2 of 2) | the export keeps running as a foreground service after `destroyActivity`; the host ends the app |
 | fgs-check | **fail** (2 of 2): `ExportReattach.none`, expected `finished` | **fail** (2 of 2): same | harness: the activity is never destroyed, so the export finishes attached (FIX M-6) |
-| cancel | **fail** (2 of 2): no Cancel tapped (`x_android_export_background_test.dart:102`) | **fail** (2 of 2): "no Cancel button in the shade" | harness: `uiautomator dump` fails while the notification updates (FIX M-7) |
+| cancel | **fail** (2 of 2): "no Cancel button in the shade" | **fail** (2 of 2): "no Cancel button in the shade" | harness: `uiautomator dump` fails while the notification updates (FIX M-7) |
 | swipe | **pass** (2 of 2) | **pass** (2 of 2) | the host reports the app ended |
 | swipe-check | **fail** (2 of 2): `none`, expected `finished` | **fail** (2 of 2): same | harness: the task is still there after the swipe under load (FIX M-6) |
-| death | **pass** (run 2) | **pass** (rerun) | `am kill` mid-export; needed the runner race fix (see "Android-lane fixes") |
-| death-check | **pass** (run 2) | **pass** (rerun) | exactly one interrupted record; reattach `interrupted` |
+| death | **pass** (batch; not rerun, it passed) | **pass** (rerun) | `am kill` mid-export; needed the runner race fix (see "Android-lane fixes") |
+| death-check | **pass** (batch) | **pass** (rerun) | exactly one interrupted record; reattach `interrupted` |
 
 **What the extra proves and what it does not.** The export runs as a foreground service of the
 right type on both images. A process death mid-export leaves exactly one interrupted record. The
@@ -264,22 +280,31 @@ s12 result.
 ## Measured values
 
 All on emulators with software codecs and SwiftShader GL. They are **not** performance numbers;
-QA-04 measures on devices.
+QA-04 measures on devices. All values below are from code C on API 35 (`emulator-5554/full/` for the batch,
+`emulator-5554/solo/<batch>/` for the reruns alone), except where API 34 is named.
 
 | What | Value | Where |
 |---|---|---|
-| s07 exports (alone, B) | 4 305 971 B and 4 259 887 B, 8.0 s each, `c2.android.avc.encoder` | `emulator-5554/solo/s07/` |
-| s07 burned caption t1b | 293 changed pixels in the subtitle area (threshold > 300); t1a passed | `solo/s07/s07_export_verified_test.log` |
-| s14 export | "E2E pip", 4 771 418 B, 8.0 s, `c2.android.avc.encoder` | `emulator-5554/logs/batch-s14.log` |
-| s15 export and levels | "E2E audio", 4 511 851 B, 10.0 s; head −15.1 dBFS, body −9.0 dBFS | `logs/batch-s15.log` |
-| s08 captions | 3 cues from whisper-tiny ("Welcome to the video editor test, \| the quick brown fox jumps over the …"); SRT round trip and undo pass; batch 108 s | `solo/s08/` |
-| s12 wheel (phone) | Ctrl+wheel zoom 45.45 → 75.76 px/s; scroll −2.00 → 0.63 s | `api35` run 2 batch log |
-| s13 recording length | 13.03 s (run 1), 10.33 s (run 2), for a 3 s recording | `logs/s13_voiceover_test.log`, `logs/host.log` |
-| Extra export (API 35) | 7 789 785 B, `c2.android.avc.encoder (hardware=false)`, `detached=false` | `logs/batch-x_android_export_background-fgs.logcat.txt` |
-| Extra export (API 34) | gallery insert done, 7 785 197 B, `detached=false` | `emulator-5556_Pixel_API_34/rerun_alone/` |
-| FGS on API 35 | `isForeground=true types=0x00002000` (mediaProcessing), channel `danaview_editor_export`, category progress, 1 action | `api35` run logs, `DV_E2E_FGS` lines |
-| FGS on API 34 | `types=00000001` (dataSync); logcat `export service: foreground (type 1, API 34)` | `emulator-5556_Pixel_API_34/run1/`, `rerun_alone/` |
-| Batch times on API 35 (B) | s04 148 s, s14 ~370 s, s15 ~170 s, s17 ~270 s, s08 108 s (alone) | `summary.txt`, run logs |
+| Encoders | every export: video `c2.android.avc.encoder` (`hardware=false`), audio `c2.android.aac.encoder` (software codecs, as before) | `DanaviewEngine: export … done, encoder …` lines in `full/logs/batch-*.logcat.txt` |
+| s07 exports | 4 305 971 B and 4 259 887 B, 8.0 s each (identical in the batch and alone) | `full/logs/s07_export_verified_test.log`, `solo/s07/` |
+| s07 burned caption t1b | 293 changed pixels in the subtitle area (threshold > 300), in both runs; t1a passed | same |
+| s14 export | "E2E pip", 4 771 418 B, 8.0 s | `full/logs/s14_pip_overlay_test.log` |
+| s15 export and levels | "E2E audio", 4 511 851 B, 10.0 s; head −15.1 dBFS, body −9.0 dBFS | `full/logs/s15_extract_audio_music_test.log` |
+| s08 captions | 3 cues from whisper-tiny ("Welcome to the video editor test, \| the quick brown fox jumps over the …"); SRT round trip and undo pass; batch 103 s | `full/logs/s08_auto_captions_test.log` |
+| s12 wheel (phone) | Ctrl+wheel zoom 45.45 → 75.76 px/s; scroll −1.53 → 1.10 s (batch), −1.50 → 1.13 s (alone) | `full/logs/s12_keyboard_pointer_test.log`, `solo/s12/` |
+| s13 microphone | `DANAVIEW_E2E_AUDIO=1`: the AVD booted with audio, `adb emu avd hostmicon` on; the host input is the laptop's Built-in Microphone Array (Intel Smart Sound Technology for Digital Microphones). The app's `VoiceRecorder` held audio focus 22:39:12.495–22:39:23.403 | `full/runner.log` ("host microphone: on"), `full/logs/batch-s13.logcat.txt` |
+| s13 recording length | 10.63 s (batch), 10.10 s (alone), for a 3 s recording | `full/logs/s13_voiceover_test.log`, `solo/s13/` |
+| Extra export (API 35) | 7 789 785 B, `detached=false` | `full/logs/batch-x_android_export_background-fgs.logcat.txt` |
+| Extra export (API 34, B) | gallery insert done, 7 785 197 B, `detached=false` | `emulator-5556_Pixel_API_34/rerun_alone/` |
+| FGS on API 35 | `isForeground=true types=0x00002000` (mediaProcessing), channel `danaview_editor_export`, category progress, 1 action | `DV_E2E_FGS` lines in `full/logs/batch-x_android_export_background-{fgs,cancel,swipe}.log` |
+| FGS on API 34 (B) | `types=00000001` (dataSync); logcat `export service: foreground (type 1, API 34)` | `emulator-5556_Pixel_API_34/run1/`, `rerun_alone/` |
+| Batch times on API 35 (C) | s01 79 s, s03 102 s, s04 106 s, s05 96 s, s08 103 s, s11 103 s, s14 136 s, s15 127 s, s16 97 s, s17 94 s; extra fgs 250 s, cancel 108 s, swipe 249 s, death 235 s; emulator restarts: 0 | `full/summary.txt` |
+
+`DV_E2E_*` values of this pass. Build defines: `DANAVIEW_EDITOR=true`, `DANAVIEW_AUTO_CAPTIONS=true`,
+`DV_E2E_HOST=true`, `DV_E2E_PHASE=<phase>` (extra and s09); runner `DV_E2E_PHASE_TIMEOUT=1200`.
+Reported lines: `DV_E2E_EXPORT` (the s07, s14 and s15 exports above), `DV_E2E_REPORT` (s08 cues,
+s12 wheel, s15 levels), `DV_E2E_FGS` (fgs, cancel, swipe), `DV_E2E_HANDSHAKE` (`grantNotifications`
+before every export, `grantMic` in s13, screenshots, `kill` in s09, the extra's host actions).
 
 ### GLES 3 and tier
 
@@ -301,16 +326,38 @@ The engine logs one capabilities line per process (`core/Capabilities.kt`).
 
 ## Emulator realities (reported, not failed)
 
-- **Emulator process crashes under parallel load.** In both batched API 35 reruns the emulator
-  process died about 30 s into s07 (19:36 and 20:53). The qemu log ends at a crash report that was
-  not kept (no consent), and there is no logcat. At 20:53:07 the tablet emulator on
-  `emulator-5556` died at the same moment (`gpu_host/run2`). Alone, with one emulator, s07 ran to
-  the end three times without a crash. Treat this as a host-level emulator crash while two
-  emulators run video work, not an app crash. It does not explain s07's real failure (FIX M-2).
+- **Emulator process deaths during s07 (cause unproven).** The API 35 emulator died during s07
+  three times:
+  - 10:35–10:38, an early-morning full run on code older than A (`_rerun4_cert/summary.txt`:
+    `s07 FAIL*`, "emulator restarts: 1"). No evidence shows a second emulator running then; the
+    earliest `emulator-5556` evidence is from 14:18.
+  - 19:36, batched rerun 1 on B (from the run-1 runner log, which is not kept under `build/`).
+    The API 34 runs on `emulator-5556` were going at the time (19:33–20:21).
+  - 20:53, batched rerun 2 on B (`emulator-5554/summary_run2.txt`: `s07 FAIL*`). At 20:53:07 the
+    tablet emulator on `emulator-5556` died at the same moment (`gpu_host/run2`).
+
+  The qemu log ends at a crash report that was not kept (no consent), and there is no logcat. s07
+  ran to the end without an emulator death three times: pass 1 at 13:29–13:37 (A, export timed
+  out), pass 2 at 14:52–14:59 (A, export failed) and alone at 21:41–21:44 (B, the only solo s07 run
+  on B, `solo/s07/runner.log`). The cause of the deaths is not proven; parallel load may play a
+  part but does not explain the 10:35 death. The deaths do not explain s07's real failure on B
+  (FIX M-2).
+  On code C, with only `emulator-5554` running, s07 ran twice (batch 22:21–22:24, alone 23:22–23:26)
+  and the whole pass had 0 emulator restarts.
 - **Imports refused right after an emulator reboot.** In both batched runs s08 ran directly after
   the runner rebooted the emulator. Both fixtures were refused at import as "This file is empty.",
-  although the files on the device had their full sizes. Alone, on a fresh install, s08 passed.
-  This was seen only right after a reboot; the cause is not proven.
+  although the files on the device had their full sizes (from the run-1 and run-2 test logs, since
+  overwritten; the runner logs show s08 starting 19:40 and 20:57, right after the s07 restarts).
+  Alone, on a fresh install, s08 passed (`solo/s08/`). This was seen only right after a reboot; the
+  cause is not proven.
+- **s08 depends on the app state left by earlier phases.** Run alone at 21:30–21:32 without a fresh
+  install or a reset (`solo/s08_nofresh/`, no `reset.log`), right after the death and death-check
+  phases (21:22–21:26), s08 made its 3 captions and then failed at `ed.close()`
+  (`s08_auto_captions_test.dart:118`, `e2e_editor.dart:165`): "Timed out after 30 s waiting for
+  the editor to close", with "The export was interrupted / Start it again. Your project is
+  unchanged." on screen. The likely source is the interrupted-export record the death phase leaves
+  on purpose. The certifying command clears app data before every batch, and the extra runs after
+  s08, so this should not hit that run; the helper still cannot close past the sheet (FIX M-14).
 - **`always_finish_activities` has no effect** on the API 34 and API 35 images. After
   `settings put global always_finish_activities 1` and HOME, `dumpsys activity` still shows
   MainActivity STOPPED and in history, even with the setting held for 8–10 s. This is why fgs-check
@@ -338,11 +385,50 @@ The engine logs one capabilities line per process (`core/Capabilities.kt`).
 - **Host keyboard and mouse.** Emulator 36.6.11 has `VirtioMouse` on by default. Ctrl shortcuts
   reach the tablet only with Extended controls > Settings > General > "Send keyboard shortcuts to:
   Virtual device".
-- **GPU modes.** `-gpu angle_indirect` is rejected by emulator 36.6.11 (falls back to SwiftShader).
-  `-gpu host` (Intel Arc) and `-gpu swiftshader_indirect` gave the same s12 result as the default,
-  and each died once under parallel load.
+- **GPU modes (tablet).** `-gpu angle_indirect` is not a valid mode in emulator 36.6.11 (it falls
+  back to SwiftShader). `-gpu host` (Intel Arc) and `-gpu swiftshader_indirect` gave the same s12
+  result as the default. `-gpu swiftshader_indirect` survived 1 of 2 runs. `-gpu host` survived 3
+  of 4 (`gpu_host/run1`, `gpu_host_patched` run1 and run2; it died in `gpu_host/run2`, together
+  with `emulator-5554`). **Recommended tablet boot flag: `-gpu host`.** Evidence:
+  `emulator-5556_Pixel_Tablet_API_35/gpu_*` and `gpu_trials_README.txt`.
 
 ## Android-lane fixes this round
+
+Android-lane commits of this round, all on `editor-android` and all in code C or C+:
+
+| Commit | What |
+|---|---|
+| 0f15c97 | AND-14: the notification-permission request always returns (landing record) |
+| 9ef20b8 | AND-16: no crash when a recording mutes a preview that is still opening |
+| 696fe0b | AND-15: copied file names capped in UTF-8 bytes, not only characters |
+| 0cfc691 | AND-18: `RangeTouchVectorTest` replays the shared range-touch vectors (FIX-AND-18-1) |
+| 550b8ac (WIP) | `PreviewSession.debugCaptureFrame` waits for a seek in flight (s18, this pass); landing record still to come |
+
+### `debugCaptureFrame` waits for a seek in flight (s18, code C+)
+
+**Defect.** s18 reopens a project and reads the frame barcode at once. On C it failed 2 of 2
+(batch 22:50, alone 23:12) with `EngineFailure(internal: nothing composed)` from
+`PreviewHostApi.debugCaptureFrame`, thrown by `FallbackGl.capture` (`preview/fallback`). The
+editor's opening exact seek hands the Surface from the paused renderer to the contingency backend
+(`ensureOwner(BACKEND)`), and the backend composes only when the seek's frame arrives. A capture
+queued in that window read the backend's canvas, which did not exist yet, although the Surface
+still showed the renderer's frame. iOS reads the frame on screen (`TextureBridge.captureRGBA`), so
+this was an Android-only gap (AND-16/ENG-08 area, the preview session).
+
+**Fix.** `preview/PreviewSession.kt` `debugCaptureFrame`: while a seek is in flight
+(`SeekController.isBusy`), the capture waits, polling every 20 ms, up to the seek's own exact
+timeout plus 500 ms, then reads the Surface's owner as before. Only this debug/QA call changes; no
+assertion or test changed. Landed in WIP backup 550b8ac.
+
+**Proof.**
+
+- s18 alone on C+: **pass** (23:46, `solo/s18_capturefix/`), including the barcode of frame 77
+  after the reopen.
+- `PreviewSessionTest` (instrumented, 11 tests incl. the capture-equals-producer check) on
+  `emulator-5554`, API 35: 11 of 11 pass (`solo/s18_capturefix/PreviewSessionTest_connected.log`).
+- JVM `preview.*` unit tests (`RecordingMuteRaceTest`, 3): pass
+  (`solo/s18_capturefix/preview_unit.log`).
+- Not yet: s18 inside a full batch, and `lintDebug` (the change adds no API).
 
 ### AND-14: the notification-permission request always returns
 
@@ -423,26 +509,33 @@ host for `grantNotifications` and the export started. None waited at "Preparing�
   stops a restart from cutting off the other emulator. `bash -n` and a dry run pass. The restart
   path ran twice on API 35 this round (after the two s07 crashes); both restarts booted the
   emulator again and the run went on.
-- Note: the first API 35 rerun ended with `e2e_android.sh: line 577: syntax error`. That happened
-  because the death fix was saved into the script while bash was still reading it. The current
-  file passes `bash -n`.
+- Note: the first API 35 rerun ended early with `e2e_android.sh: line 577: syntax error`, after its
+  death phase and before the summary, so it wrote no `summary.txt`. That happened because the death
+  fix was saved into the script while bash was still reading it. Run 2 covers the death phases. The
+  current file passes `bash -n`.
 
 ### Other Android-lane changes in this window (for completeness)
 
 - `core/Capabilities.kt`: the one-line capabilities log (1dede14). It is proven by the on-device
   output on API 28, 29, 29 2 GB, 34 and 35 shown above.
-- AND-15 (696fe0b): copied file names are capped in UTF-8 bytes. AND-16 (9ef20b8): no crash when a
-  recording mutes a preview that is still opening. They have their own landing records. In this
-  suite, s13 (recording with the preview open) did not crash on code B.
+- AND-15 (696fe0b): copied file names are capped at 200 UTF-8 bytes (`DropTarget.MAX_NAME_BYTES`),
+  not only in characters. AND-16 (9ef20b8): no crash when a recording mutes a preview that is still
+  opening (`setMuted` before `open` only stores the mute), and the mute fan-out in
+  `PreviewSessionManager` is guarded, so one failing session cannot stop the others. They have
+  their own landing records. In this suite, s13 (recording with the preview open) did not crash on
+  code B.
 
 ## FIX requests for the Mac (still open)
 
 Each request below either reproduced on code B (d723c10 or later), or is about a file that is
-unchanged on B and has a deterministic cause (M-10). The fixes from e0fa7e8 are confirmed on
+unchanged on B and has a deterministic cause (M-10). M-1, M-2, M-3, M-5, M-6, M-7 and M-8 were
+checked again on code C (0cfc691) on 2026-10-16 22:07–23:43: each still reproduces (M-1 only in the
+batch); M-11 still fails on C. M-15 is new on C. M-4, M-9, M-10, M-12, M-13 and M-14 were not
+rerun on C; their files are unchanged since B. The fixes from e0fa7e8 are confirmed on
 API 35 and are closed: s04 seek, s06 transition handles, the s07/s14 notification dialog, the s08
 track row, the s10 extra step, the s12 phone `tapTile`, and the s13 `MediaKind`.
 
-**M-1. s06 (and probably s16, s18): closing hits "Couldn't save your latest changes"**
+**M-1. s06: closing hits "Couldn't save your latest changes"**
 (QA-00 test, or UX-39 / EditorLifecycle).
 - **Where:** `s06_speed_effects_test.dart:130` `ed.close()`.
 - **Symptom:** `E2eEditor.close` times out after 30 s with "Couldn't save your latest changes /
@@ -450,7 +543,10 @@ track row, the s10 extra step, the s12 phone `tapTile`, and the s13 `MediaKind`.
   including alone on a fresh install.
 - **Cause:** `EditorLifecycle.flushTimeout` is 3 s (`editor_lifecycle.dart:290`). Saving this
   effects-heavy project takes longer on the loaded software-GPU emulator.
-- **Also seen:** s16:37 and s18:49 failed the same way on code A (not rerun on B).
+- **Also seen:** s16:37 and s18:49 failed the same way on code A. On code C, s16 and s18 do not
+  show the dialog (s16 passes; s18's failure was the Android capture defect, now fixed).
+- **On C:** s06 failed the same way in the batch (22:20) and **passed alone** on a fresh install
+  (23:21): the save races the 3 s timeout, so the result depends on the load.
 - **Fix:** either `E2eEditor.close` waits for the save to be idle before it closes, or it answers
   the dialog with Stay and retries. Also consider a longer flush timeout on the LOW/MINIMAL tier.
   A slow phone that shows this dialog on a normal close is a product issue, not only a test one.
@@ -490,6 +586,14 @@ track row, the s10 extra step, the s12 phone `tapTile`, and the s13 `MediaKind`.
 - **Cause:** the test asks the host for a screenshot before tapping Stop. On the loaded emulator
   the request, `adb screencap` and ack round trip took 4–8 s (`host.log` 21:10:48 request, 21:10:52
   screenshot). The microphone, `MediaKind.recording` and the voice lane all pass.
+- **On C:** 10.63 s (batch) and 10.10 s (alone). Batch timeline (device clock, from
+  `full/logs/batch-s13.logcat.txt` and `host.log`): the recorder takes audio focus at 22:39:12.5;
+  the screenshot request arrives at 22:39:19 (the test's 3 s count starts when the `recording` key
+  shows, so the UI showed it about 3 s after the recorder started); the screenshot is written at
+  22:39:21; focus is released at 22:39:23.4. So about 4–5 s come from the screenshot and about 3 s
+  from the time between the recorder start and the `recording` key on this loaded emulator. Taking
+  the screenshot after Stop alone may not bring the clip under 4 s here; comparing with the
+  device-side Record→Stop time is the robust fix.
 - **Fix:** take the screenshot after Stop. Or compare the clip length with the time between the
   Record tap and the Stop tap (both on the device clock) instead of a fixed range.
 
@@ -514,17 +618,28 @@ track row, the s10 extra step, the s12 phone `tapTile`, and the s13 `MediaKind`.
 - **Fix:** send the notification's cancel action directly (a broadcast or service intent with
   `-p com.vecvel.danaview`; the deterministic option). Or retry the dump with the shade expanded.
 
-**M-8. s10: no readable frame after relink** (owner unclear: Dart PlanSync/relink, or Android
-preview AND-16/ENG-08).
-- **Where:** `s10_missing_media_relink_test.dart:80`.
-- **Symptom:** after Confirm relinks all three files (the banner clears and the sheet closes), the
-  test seeks to frame 10 of the relinked first clip. The barcode is null: `Expected 10, Actual null`.
-  This happened in 3 of 3 runs on B.
-- **What the logs show:** the engine logs no seek or frame-fetch error. The test takes no
-  screenshot after the relink.
-- **Request:** add a screenshot and log the seek ack (`displayedFrame`, the source path in the plan)
-  after the relink step. The Android lane will then tell whether the preview still holds the old
-  (missing) source or captures black. Not counted as an Android defect until that is known.
+**M-8. s10: after the relink the preview draws the offline placeholder** (Dart: INT-02
+`SessionAssetResolver` / PlanSync after a relink, or CORE-28 availability; decided on C, not an
+Android-lane defect).
+- **Where:** `s10_missing_media_relink_test.dart:80`, `Expected 10, Actual null`. 3 of 3 runs on B,
+  2 of 2 on C.
+- **Evidence (C, `solo/s10/`):** a host screenshot every 1–2 s during the run (`hostcaps/`). Before
+  the relink the preview shows the Media missing card. After "Relink 3 files" ("Everything is
+  back", 23:09:14) the preview is a flat grey under the sheet's scrim (19, 19, 19). Once the sheet
+  is closed, at the seek to 00:00:00:10 (23:09:16, `hostcaps/230916.png`), the whole preview area
+  is a flat **(48, 48, 48)**, which is exactly `offlinePlaceholderColor` 0xFF303030
+  (`danaview_editor_core/lib/src/plan/lowering_visual.dart:46`), and the timeline clips still have
+  no thumbnails. The Android engine has no grey of its own: it clears to black, and 0x303030 can
+  only come from a `solid` layer in the plan. So the engine holds a plan in which the clip is still
+  the offline placeholder; it draws that plan faithfully, acks the seek with frame 10, and the
+  capture has no barcode. The relinked file never reached the engine's plan.
+- **Likely place:** `default_plan_compiler.dart` resolves each asset once per (media id, locator,
+  status, fingerprint) and retries a failed resolve only when the availability report changes. After
+  the relink either the report is not refreshed before the next compile, or the compiler still
+  sees the asset as `missing`, or PlanSync does not resend after the relink.
+- **Request:** after a relink, recompile with fresh availability and push the plan; add a unit test
+  "relink → compiled plan has a `media` layer with the new uri, no offline solid". Keep the s10
+  check as it is.
 
 **M-9. s02 on API 29: the player-to-editor handoff loses the playhead** (UX-41).
 - **Symptom:** `Expected 160, Actual 0` with "player position at Edit 5333000 us; project
@@ -547,6 +662,8 @@ preview AND-16/ENG-08).
 - **Test:** `Int07GlueTest.materializePickRunsOnIoWithTheNormalizedDirectory`.
 - **Symptom:** expected `/data/user/0/app/cache/danaview/editor/work/picks/u1/clip.mp4` but got
   backslashes. The fake records `File.path`. It passes on macOS and on the device.
+- **On C:** the same single failure (8 of 9 pass; the Mac's per-`EngineContext` `installOnce`
+  change compiles and its test passes). `Int07GlueTest.kt:38-39` is unchanged.
 - **Fix:** use `intoDir.invariantSeparatorsPath` in the test's fake (`Int07GlueTest.kt:39`).
 
 **M-12. `lintDebug` and `connectedDebugAndroidTest` in one Gradle invocation fail validation**
@@ -558,6 +675,36 @@ preview AND-16/ENG-08).
 
 **M-13. Docs** (QA-00): `docs/v1.1/editor/qa/README.md` still says "Emulator run: deferred:
 Windows lane (QA-02)". Point it to this report.
+
+**M-14. s08: `E2eEditor.close` cannot get past the "export interrupted" sheet** (QA-00 helper or
+test).
+- **Where:** `s08_auto_captions_test.dart:118` `ed.close()`, `support/e2e_editor.dart:165`.
+- **Symptom:** in `solo/s08_nofresh` (no fresh install, no reset, right after the death phases)
+  the captions passed, then the close timed out with "The export was interrupted" on screen (keys
+  `export-interrupted-close`, `export-start-again`).
+- **Fix:** have `E2eEditor.close` dismiss that sheet (Close), or have s08 start from clean state.
+
+**M-15. s09 recover: the editor does not close after a restore** (new on C; UX-35 tasks /
+EditorLifecycle; suspect ebc2fb2).
+- **Where:** `s09_recovery_after_kill_test.dart:60` `ed.close()` in the recover phase.
+- **Symptom:** the restore works (the project and the `RECOVER …` text come back), then Close
+  times out after 30 s with the editor still on screen ("Saved", no dialog). 2 of 2 on C (batch
+  22:30, alone 23:16). The same phase passed on A (13:45); it was not rerun on B.
+- **What the logs show:** after Close, the preview's deck players are never released (in a normal
+  close, e.g. s18, the four deck `ExoPlayerImpl` instances are released when
+  the editor closes); there is no engine error. So the close flow stops before the preview session is
+  released, or the release never returns. The only editor change between A/B and C in this area
+  is ebc2fb2 (FIX-QA05-D5: tasks wait for the first media resolve before resuming jobs; preview
+  restart after resume), and a restored session is exactly the case that resumes jobs.
+- **Request:** a debug log of each close step (`flushBeforeClose` result, `_release` start/end,
+  `EditorSession.close`, the tasks controller's pending resume) and a unit test "close right after
+  a recovery restore completes". The Android lane will then check the native release if the Dart
+  side reaches it.
+
+**Flaky, no request (s02 on API 35).** In the C batch the player never reached 0:05:10 within 30 s
+(`s02_player_to_editor_test.dart:33`, the screen shows 00:00 / 00:08), before the editor is
+involved; alone it passed. The same symptom was seen once on API 29 (M-9). If it recurs, the test
+could retry the player seek once.
 
 The code-review findings on the native glue (D2–D6 in the Android lane's Mac list: the copy on the
 io lane, the free-space check, error codes, notification-text validation, `file://` decoding) are
@@ -718,12 +865,19 @@ rows passed or failed (one line each is enough). This report then links the scre
 
 ## Evidence
 
-Paths are relative to `build/e2e/android/` (local to the Windows laptop; not committed).
+Paths are relative to `build/e2e/android/` (local to the Windows laptop; not committed). Before
+the code C pass, everything that was in `emulator-5554/` was moved to
+`_before_c93ad22/emulator-5554/`. Paths of code B runs cited elsewhere in this report as
+`emulator-5554/…` or `solo/…` (with "B") are now under that folder.
 
 | Folder | Device | Code | Content |
 |---|---|---|---|
-| `emulator-5554/` (`logs/`, `screens/`, `screens_run2/`, `files/`) | API 35 | B | rerun run 1 (19:27–20:30) and run 2 (20:40–21:27); `logs/` holds the latest of each batch |
-| `emulator-5554/solo/{s06,s07,s08,s08_nofresh,s10}/` | API 35 | B | single-batch reruns on a fresh install (21:30–21:44) |
+| `emulator-5554/full/` (`logs/`, `screens/`, `files/`, `summary.txt`, `runner.log`) | API 35 | C | the full pass, 22:07–23:06, fresh install, audio, models, one emulator |
+| `emulator-5554/solo/{s10,s18,s09,s02,s06,s07,s12,s13,x_fgs,x_cancel,x_swipe}/` | API 35 | C (s02 on: C+) | each failed batch rerun alone on a fresh install (23:07–23:43); `s10/hostcaps/` holds the host screenshots of the relink |
+| `emulator-5554/solo/s18_capturefix/` | API 35 | C+ | s18 alone after the capture fix (pass), `PreviewSessionTest_connected.log`, `preview_unit.log` |
+| `_before_c93ad22/emulator-5554/` (`logs/`, `screens/`, `screens_run2/`, `files/`, `summary_run2.txt`) | API 35 | B | rerun run 1 (19:27–20:30) and run 2 (20:40–21:27). `logs/` holds only the latest log of each batch, so later runs overwrote run 1's logs of s06–s13. Run 1 wrote no `summary.txt`; its runner log was not kept under `build/`. `summary.txt` now holds only the solo s07 row. |
+| `_before_c93ad22/emulator-5554/solo/{s06,s07,s08,s10}/` | API 35 | B | single-batch reruns on a fresh install (21:33–21:44) |
+| `_before_c93ad22/emulator-5554/solo/s08_nofresh/` | API 35 | B | s08 alone at 21:30–21:32, no fresh install and no reset, right after the death phases |
 | `_prev/emulator-5554-20261016-1926/pass1/` | API 35 | A | full pass 1 (13:12–14:38): s01, s02, s03, s05, s09, s11 pass |
 | `_prev/emulator-5554-20261016-1926/logs/` | API 35 | A | pass 2, failed batches (14:43–16:37), incl. s16 and s18 |
 | `emulator-5556/avd-Pixel_API_28/` | API 28 | A | automated log and manual screenshots |
@@ -743,15 +897,17 @@ BUILD_PLAN acceptance: every scenario passes on API 35, the gate/minimal/FGS che
 and 34, the API 28 checks pass, and the tablet keyboard/mouse and drop evidence is recorded, with
 artifacts attached.
 
-1. **Mac fixes** (QA-00 unless noted): M-1 (s06 close; check s16 and s18 too), M-2 (s07
-   threshold), M-3 and M-4 (s12 marquee and tablet rail), M-5 (s13 screenshot timing), M-6
-   (destroyActivity and swipeFromRecents), M-7 (notification Cancel), M-10 (API 28 skip), M-9
-   (UX-41, s02 on API 29), M-8 (the s10 diagnostic, then whoever owns the cause).
+1. **Mac fixes** (QA-00 unless noted): M-1 (s06 close), M-2 (s07 threshold), M-3 and M-4 (s12
+   marquee and tablet rail), M-5 (s13 recording length), M-6 (destroyActivity and
+   swipeFromRecents), M-7 (notification Cancel), M-8 (INT-02/PlanSync: the relinked media never
+   reaches the plan), M-9 (UX-41, s02 on API 29), M-10 (API 28 skip), M-14 (s08 close past the
+   "export interrupted" sheet), M-15 (s09 recover close), and the test/build items M-11 (INT-07
+   test path on Windows) and M-12 (`build.gradle.kts` lint input).
 2. **API 35 full pass on one code version** after those fixes, with only one emulator running:
    `DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=<models dir> scripts/ci/editor/e2e_android.sh`.
-   It must include s16 and s18, which have not run on code B, and s01–s03, s05, s09 and s11 again
-   on the final code. All 18 scenarios and all 7 extra phases must pass. s08 must pass inside the
-   batch, not only alone.
+   All 18 scenarios and all 7 extra phases must pass in the batch. On code C, 11 scenarios and 4
+   phases already pass in the batch; s18 must also pass inside a batch with the capture fix, and
+   s02 and s06 must pass in the batch, not only alone.
 3. **The detached export (AND-12)** must be shown on API 34 and API 35: fgs-check and swipe-check
    return `finished`, after M-6 makes the host really destroy the activity or remove the task. If
    they still fail after that, it is an Android-lane defect (AND-12).
@@ -765,5 +921,11 @@ artifacts attached.
 8. **README**: QA-00's README status line points here (M-13).
 9. **Artifacts**: list the final evidence folders here, and remove or mark the superseded ones.
 
-Android-lane items still open from this round: none besides answering M-8 once the diagnostic
-exists, and AND-12 if item 3 fails after M-6.
+Android-lane items still open from this round:
+
+- s18 inside a full batch with the `debugCaptureFrame` fix, `lintDebug` on that change, and its
+  landing record (it is only in WIP 550b8ac so far);
+- the native side of M-15, if the Dart close reaches the preview release and it does not return;
+- AND-12, if item 3 still fails after M-6.
+
+M-8 is answered: not an Android-lane defect.
