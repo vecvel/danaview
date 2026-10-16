@@ -464,10 +464,24 @@ void main() {
       rig.attach(initial: SeekAck(requested: 0, displayedFrameTime: 0, displayedFrame: 0, seq: 40));
       final next = ScriptedPreview();
       rig.controller.attach(next);
-      expect(rig.controller.minAcceptedSeq, 0);
+      expect(rig.controller.minAcceptedSeq, 1, reason: 'the new session\'s first command is seq 1');
       next.emit(at: f(9), playing: false, seq: 1);
       expect(rig.controller.value, f(9));
       rig.controller.dispose();
+    });
+
+    test('a new session\'s samples before its first seek do not move or persist the playhead (FIX-UX-14-1)', () {
+      fakeAsync((async) {
+        final rig = Rig(initial: f(77));
+        rig.attach();
+        rig.preview.emit(at: 0, playing: false, seq: 0); // the first plan was applied, frame 0
+        async.elapse(const Duration(seconds: 1));
+        expect(rig.controller.value, f(77));
+        expect(rig.settled, isEmpty);
+        rig.preview.emit(at: f(77), playing: false, seq: 1); // the opening exact seek
+        expect(rig.controller.value, f(77));
+        rig.controller.dispose();
+      });
     });
   });
 }

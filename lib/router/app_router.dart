@@ -5,10 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:danaview_data/danaview_data.dart' show LibraryRepository;
 import 'package:danaview_editor/danaview_editor.dart';
-// The editor barrel does not export the content-font licence registration (UX-30's font_catalog
-// re-exports it from danaview_editor_fonts, which the app does not depend on directly).
-// ignore: implementation_imports
-import 'package:danaview_editor/src/editor/text/font_catalog.dart' show registerContentFontLicenses;
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/licenses.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewToast, DanaviewToastKind;

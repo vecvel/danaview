@@ -10,7 +10,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:danaview_features/storage.dart';
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
@@ -45,7 +44,6 @@ class _FakeContributor extends StorageContributor {
     this.icon = Icons.movie_edit,
     this.withClear = false,
     this.withOpen = false,
-    this.clearResult = const StorageClearOutcome.done(freedBytes: 240000000),
     this.owned = const {},
     this.failMeasure = false,
   });
@@ -64,7 +62,7 @@ class _FakeContributor extends StorageContributor {
   StorageContributorUsage usage;
   final bool withClear;
   final bool withOpen;
-  StorageClearOutcome clearResult;
+  StorageClearOutcome clearResult = const StorageClearOutcome.done(freedBytes: 240000000);
   final Set<String> owned;
   final bool failMeasure;
 

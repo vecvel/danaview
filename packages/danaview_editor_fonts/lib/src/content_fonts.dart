@@ -110,8 +110,8 @@ List<ContentFontFamily> get bundledContentFontFamilies => [
 bool _licensesRegistered = false;
 
 /// Adds the OFL text of every bundled family to Flutter's [LicenseRegistry] (ARCH §17.8), for a
-/// host that shows licences; the app has no licences screen today, so it does not call this. Safe
-/// to call more than once.
+/// host that shows licences: the app's Settings > About > Open-source licences screen
+/// (FIX-LICENSES) calls this through the editor barrel. Safe to call more than once.
 void registerContentFontLicenses({AssetBundle? bundle}) {
   if (_licensesRegistered) return;
   _licensesRegistered = true;

@@ -136,10 +136,36 @@ void main() {
     ed.controller.clearSelection();
     await tester.pump();
 
-    // Marquee from past the end of the main lane back over the last two clips.
+    // Marquee from empty lane space past the end of the main lane back over the last two clips.
+    // The start point comes from the visible timeline geometry (FIX-QA-00-2): the iOS default is
+    // centre-locked, so zoom-to-fit keeps the playhead centred and `duration + 0.5 s` can lie past
+    // the right edge. Seeking to the end puts it at the centre line (centre-locked) or in view
+    // (free mode); zoom out while the empty space or the target clip is not visible.
     final items = ed.mainTrack.items;
-    final from = ed.laneAt(main.id, ed.project.duration + 500000);
-    final to = ed.laneAt(main.id, items[items.length - 2].start + 100000) + const Offset(0, 4);
+    final end = ed.project.duration;
+    final target = items[items.length - 2].start + 100000;
+    await ed.seekTo(end);
+    final vp = ed.viewport;
+    TimeUs visibleFrom() => vp.timeAt(0);
+    TimeUs visibleTo() => vp.timeAt(vp.lanesWidth);
+    bool fits() => visibleTo() - end >= 400000 && visibleFrom() <= target - 100000;
+    for (var i = 0; i < 4 && !fits() && vp.canZoomOut; i++) {
+      await ed.invoke(EditorActionId.zoomOut);
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(fits(), isTrue,
+        reason: 'visible ${visibleFrom()}..${visibleTo()} us, end $end us, target $target us (centre-locked ${vp.centerLocked})');
+    // Halfway between the end and the right edge of the lanes: empty main-lane space.
+    final from = ed.laneAt(main.id, end + (visibleTo() - end) ~/ 2);
+    final to = ed.laneAt(main.id, target) + const Offset(0, 4);
+    final rect = tester.getRect(ed.canvas);
+    expect(rect.contains(from) && rect.contains(to), isTrue, reason: 'marquee $from -> $to outside the canvas $rect');
+    final hit = tester.hitTestOnBinding(from);
+    final canvasBox = tester.renderObject(ed.canvas);
+    expect(hit.path.any((e) => e.target == canvasBox), isTrue,
+        reason: 'the marquee start $from hits ${hit.path.take(6).map((e) => e.target.runtimeType).toList()}, not the timeline canvas');
+    // ignore: avoid_print
+    print('DV_E2E_REPORT s12 marquee: $from -> $to, visible ${visibleFrom()}..${visibleTo()} us, end $end us');
     await ed.mouseDrag(from, to);
     await E2eApp.pumpUntil(tester, () => ed.state.selection.items.length >= 2, what: 'the marquee selection (got ${ed.state.selection.items})');
     await ed.close();

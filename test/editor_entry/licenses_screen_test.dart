@@ -13,9 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-// ignore: implementation_imports
-import 'package:danaview_editor/src/editor/text/font_catalog.dart'
-    show contentFontFamilies, registerContentFontLicenses;
+import 'package:danaview_editor/danaview_editor.dart' show contentFontFamilies, registerContentFontLicenses;
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/licenses.dart';
 import 'package:danaview_features/src/more/legal_texts.dart';

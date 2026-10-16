@@ -231,9 +231,11 @@ final class _Soak {
       await soakDismissAll(tester, _ed);
       final e = _ed;
       // Ready includes a live preview: a preview that did not come back is reopened, so one defect
-      // does not fail every later op that waits for the preview.
+      // does not fail every later op that waits for the preview. A `degraded` preview (a quality
+      // step) is still showing frames, so it counts as live (FIX-QA05-D5 finding).
+      final phase = e?.state.preview.phase;
       if (e != null && find.byType(EditorScreen).evaluate().isNotEmpty && e.state.isReady &&
-          e.state.preview.phase == PreviewPhase.ready && e.session.preview != null) {
+          (phase == PreviewPhase.ready || phase == PreviewPhase.degraded) && e.session.preview != null) {
         return;
       }
       soakLog('recover', 'reopening the project');

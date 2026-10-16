@@ -18,5 +18,9 @@ export 'src/app/editor_providers.dart';
 export 'src/app/editor_storage_contributor.dart';
 export 'src/app/speech_storage_contributor.dart';
 export 'src/editor/editor_screen.dart';
+// The app's Settings > About > Open-source licences screen registers the content-font OFL texts
+// and lists the families (FIX-LICENSES, FIX-TESTS-R6).
+export 'src/editor/text/font_catalog.dart'
+    show ContentFontFamily, contentFontFamilies, registerContentFontLicenses;
 export 'src/projects/projects_screen.dart';
 export 'src/settings/editor_settings_screen.dart';

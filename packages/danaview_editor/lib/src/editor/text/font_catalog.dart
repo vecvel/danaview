@@ -18,8 +18,9 @@
 // [fontCatalogProvider] also supplies the catalog to the text panel (tests override it).
 // Bold: Flutter applies the `wght` axis of a variable font for `FontWeight.w700` (checked on
 // Flutter 3.44: identical ink to `FontVariation('wght', 700)`), so no explicit variation is needed.
-// The licences screen was removed by the owner; nothing consumes LicenseRegistry, so the app does
-// not call `registerContentFontLicenses()` (the OFL texts stay bundled as assets).
+// Licences: the app's Settings > About > Open-source licences screen (FIX-LICENSES) calls
+// `registerContentFontLicenses()` from the router, so the OFL text of every bundled family is
+// listed there; the package barrel exports it for the app.
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' show FontResolver;

@@ -18,7 +18,7 @@ import 'package:danaview_editor/src/editor/state/media_health_controller.dart';
 import 'package:danaview_editor/src/editor/state/plan_compiler_port.dart';
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart' show EditOutcome, EditSession;
-import 'package:danaview_editor_core/plan.dart' show PlanLayerKind, RenderPlan;
+import 'package:danaview_editor_core/plan.dart' show PlanLayerKind, RenderPlan, offlinePlaceholderColor;
 import 'package:danaview_editor_core/store.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' show MediaPickSource;
 import 'package:danaview_editor_engine_api/testing.dart';
@@ -113,6 +113,7 @@ void main() {
     expect(rig.editor.state.media.missing, hasLength(3));
     expect(plan().req?.offline.toSet(), {'md_1', 'md_2', 'md_3'});
     expect(mediaUris(plan()), isEmpty);
+    expect(plan().layers.where((l) => l.kind == PlanLayerKind.solid && l.color == offlinePlaceholderColor), hasLength(3));
   });
 
   test('Relink several: the relinked files reach the next plan without a reopen', () async {
@@ -137,7 +138,8 @@ void main() {
     await settle();
 
     expect(rig.editor.state.media.missing, isEmpty, reason: 'the banner goes');
-    expect(plan().req?.offline ?? const <String>[], isEmpty, reason: 'nothing offline in the preview plan');
+    // `req` is informational and not part of a patch, so the layers tell: no placeholder is left.
+    expect(plan().layers.where((l) => l.kind == PlanLayerKind.solid && l.color == offlinePlaceholderColor), isEmpty);
     expect(mediaUris(plan()), {'file:///restored/a.mov', 'file:///restored/b.mov', 'file:///restored/c.mov'});
 
     // The preview shows the relinked clip at clip start + 10 frames.
@@ -148,5 +150,25 @@ void main() {
     final shown = plan().layers.where((l) => l.kind == PlanLayerKind.media && l.t0 <= t && t < l.t1).toList();
     expect(shown, hasLength(1));
     expect(plan().assets[shown.single.asset]!.uri, 'file:///restored/a.mov');
+  });
+
+  test('MediaHealthController asks for a new plan only when a report changes availability', () async {
+    final reports = StreamController<MediaAvailabilityReport>.broadcast();
+    var replans = 0;
+    final c = MediaHealthController(source: () => reports.stream, publish: (_) {}, onAvailabilityChanged: () => replans++);
+    addTearDown(() async {
+      c.dispose();
+      await reports.close();
+    });
+    c.start(projectWithMedia(FakeProjectRepositoryHolder.make(), three()));
+    reports.add(MediaAvailabilityReport({const MediaId('md_1'): MediaAvailability.missing}));
+    await settle();
+    expect(replans, 0, reason: 'the first report confirms the open');
+    reports.add(MediaAvailabilityReport({const MediaId('md_1'): MediaAvailability.missing}));
+    await settle();
+    expect(replans, 0, reason: 'the same report again');
+    reports.add(MediaAvailabilityReport({const MediaId('md_1'): MediaAvailability.available}));
+    await settle();
+    expect(replans, 1, reason: 'the file is back');
   });
 }

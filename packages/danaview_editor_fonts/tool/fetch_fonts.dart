@@ -90,7 +90,11 @@ Future<void> _fetch(Directory root, String ref) async {
         if (response.statusCode != 200) {
           throw HttpException('HTTP ${response.statusCode} for $url', uri: url);
         }
-        final bytes = await response.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
+        var bytes = await response.fold<List<int>>(<int>[], (a, b) => a..addAll(b));
+        // google/fonts ships some OFL.txt files with CRLF (oswald at [_ref]); the repository
+        // stores text with LF (.gitattributes `* text=auto eol=lf`), so a checkout would not
+        // match the recorded size and sha256. Text is stored as checked out (FIX-TESTS-R6).
+        if (name.endsWith('.txt')) bytes = normalizeLineEndings(bytes);
         target.writeAsBytesSync(bytes);
         stdout.writeln('fetched $dir/$name -> ${localFontName(name)} (${bytes.length} bytes)');
       }
@@ -98,6 +102,20 @@ Future<void> _fetch(Directory root, String ref) async {
   } finally {
     client.close();
   }
+}
+
+/// [bytes] with every CRLF (and lone CR) turned into LF, as git checks text files out here.
+List<int> normalizeLineEndings(List<int> bytes) {
+  final out = <int>[];
+  for (var i = 0; i < bytes.length; i++) {
+    if (bytes[i] == 0x0D) {
+      out.add(0x0A);
+      if (i + 1 < bytes.length && bytes[i + 1] == 0x0A) i++;
+    } else {
+      out.add(bytes[i]);
+    }
+  }
+  return out;
 }
 
 /// The generated pubspec section and bundled-id file for the files present under [root]/fonts.

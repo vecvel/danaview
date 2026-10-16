@@ -14,7 +14,7 @@
 //   card, the toolbar and the export pre-check read, and keeps the banner's "dismissed for this
 //   session" flag: the banner comes back on [resurfaceBanner] (the export pre-check) and whenever
 //   more media goes missing than the user dismissed.
-// * Every report that changes the availability of any asset also calls `onAvailabilityChanged`
+// * Every later report that changes the availability of any asset also calls `onAvailabilityChanged`
 //   (`EditorController.mediaAvailabilityChanged`), which compiles the plan again: the compiler
 //   reads the latest report before it resolves, and the commit of a relink compiles before the
 //   re-check after it reports (FIX-UX-40-1: relinked media stayed offline in the preview).
@@ -180,10 +180,12 @@ class MediaHealthController extends StateNotifier<MediaHealthState> {
 
   void _onReport(MediaAvailabilityReport report) {
     if (!mounted) return;
-    final changed = !mapEquals(_reported, report.byMedia);
+    final previous = _reported;
     _reported = Map.of(report.byMedia);
-    // Before the state changes, so the new plan is scheduled before the banner goes.
-    if (changed) _onAvailabilityChanged?.call();
+    // The first report only confirms what the open compiled (it had no report yet, and a file it
+    // could not resolve is already a placeholder). Later changes compile again, before the state
+    // changes, so the new plan is scheduled before the banner goes.
+    if (previous != null && !mapEquals(previous, report.byMedia)) _onAvailabilityChanged?.call();
     if (!mounted) return;
     _set(state.copyWith(byMedia: report.byMedia, checked: true));
   }

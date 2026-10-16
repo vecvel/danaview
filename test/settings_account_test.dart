@@ -8,6 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:danaview_data/danaview_data.dart';
 import 'package:danaview_domain/danaview_domain.dart';
 import 'package:danaview_features/danaview_features.dart';
+// The effective date's source of truth is the legal texts file, which the barrel does not export.
+// ignore: implementation_imports
+import 'package:danaview_features/src/more/legal_texts.dart' show legalEffectiveDate;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import 'library_test_utils.dart';
@@ -558,7 +561,7 @@ void main() {
       ));
       await pumpFrames(tester);
       expect(find.text('Privacy Policy'), findsOneWidget);
-      expect(find.text('Effective 3 October 2026'), findsOneWidget);
+      expect(find.text('Effective $legalEffectiveDate'), findsOneWidget);
       expect(find.textContaining('keeps everything on your device'), findsOneWidget);
       await tester.scrollUntilVisible(find.textContaining('speed.cloudflare.com'), 300);
       expect(find.textContaining('speed.cloudflare.com'), findsOneWidget);
