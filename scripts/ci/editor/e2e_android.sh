@@ -396,6 +396,17 @@ extra_phase() {
     sleep 1
   done
   if [ "$fstatus" -ne 124 ]; then wait "$fpid" 2>/dev/null || fstatus=$?; fi
+  # A `kill` ends the app at once and flutter test exits on the lost connection before `serve`
+  # (which returns a minute after the action) has reported it: wait for serve's own status then.
+  if [ -z "$died" ] && [ "$expect" = dies ] && [ "$fstatus" -ne 124 ]; then
+    local waited=0
+    while kill -0 "$spid" 2>/dev/null && [ "$waited" -lt 90 ]; do sleep 1; waited=$((waited + 1)); done
+    if ! kill -0 "$spid" 2>/dev/null; then
+      wait "$spid" || sstatus=$?
+      died=1
+      [ "$sstatus" -eq 3 ] && echo "[e2e_android] phase $phase: the host ended the app (flutter test had already exited)"
+    fi
+  fi
   if [ -z "$died" ]; then
     kill_tree "$spid"
     wait "$spid" 2>/dev/null || true
