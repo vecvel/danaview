@@ -38,7 +38,7 @@ Emulator realities are reported, not failed.
 
 ## How to run
 
-Use Git Bash. Start each window with `source ~/danaview_env.sh` and `cd /c/dev/danaview`.
+Use Git Bash. Start each window with `source ~/danaview_env.sh` and `cd` to the repo root.
 
 ```bash
 scripts/ci/editor/e2e_android.sh                          # Pixel_9_Pro_XL_API_35, every batch
@@ -51,14 +51,14 @@ DANAVIEW_E2E_DRY_RUN=1 scripts/ci/editor/e2e_android.sh   # print batches and co
 The certifying API 35 command:
 
 ```bash
-DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=/c/dev/models scripts/ci/editor/e2e_android.sh
+DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=<models dir> scripts/ci/editor/e2e_android.sh
 ```
 
 Useful settings (the full list is in the script header):
 
 | Setting | Effect |
 |---|---|
-| `DANAVIEW_E2E_MODELS=/c/dev/models` | stages the speech models for s08; without it, s08 is PENDING |
+| `DANAVIEW_E2E_MODELS=<models dir>` | stages the speech models for s08; without it, s08 is PENDING |
 | `DANAVIEW_E2E_AUDIO=1` | boots with audio and turns the host mic on (`adb emu avd hostmicon`), for s13 |
 | `DANAVIEW_E2E_FRESH=1` | uninstalls the app first; also turns on `DANAVIEW_E2E_RESET` |
 | `DANAVIEW_E2E_RESET=1` | clears app data (`pm clear`) and restages before every batch except the first |
@@ -85,7 +85,7 @@ The owner approved running a second emulator in parallel, under these rules:
 
 - **Separate checkouts.** Two `flutter` builds in one checkout clash in
   `:app:compressDebugAssets` (`kernel_blob.bin`), and the single Gradle worker does not prevent
-  it. The second emulator builds only from a plain copy of the tracked files (`C:/dev/dv2`), which
+  it. The second emulator builds only from a plain copy of the tracked files (a sibling folder, `dv2`), which
   is refreshed from the main checkout before each round. Its evidence is copied back to
   `build/e2e/android/` in the main checkout.
 - **Separate serials and locks.** `emulator-5554` (lock `build/danaview_locks/emulator`) and
@@ -139,7 +139,7 @@ Collected 2026-10-16 with read-only commands on the Windows laptop (Git Bash aft
 | Emulator | 36.6.11.0 (build 15507667). `VirtioMouse` is on by default. |
 | System images | android-28, -29, -34, -35 `google_apis` x86_64 |
 
-**Speech models for s08.** Staged from `C:\dev\models`, which is outside the repo. The suite
+**Speech models for s08.** Staged from a models folder outside the repo (`<models dir>`; never copied in). The suite
 downloads nothing. The SHA-256 values were checked on 2026-10-16, and both match the catalog.
 
 | File | Size (bytes) | SHA-256 |
@@ -181,8 +181,8 @@ notification request, and the s06/s08/s10/s12/s13 test fixes) reached this branc
 
 | Label | Code | Used for |
 |---|---|---|
-| **A** (before the fixes) | 542dcc6 + Android-lane backups up to 75b6a53, before e0fa7e8 | API 35 full pass 1 (13:12–14:38) and pass 2 (failed batches, 14:43–16:37); API 28 / 29 / 29 2 GB (14:23–16:06, from the `C:/dev/dv2` copy) |
-| **B** (current) | d723c10 + merge 2be8a84 + the final AND-14 `Permissions.kt` (e6a9340) and its tests, up to 0ad2477 | API 35 reruns (19:27–21:44, main checkout); API 34 and tablet runs (19:33–21:10, `C:/dev/dv2` refreshed from the main checkout's tracked files) |
+| **A** (before the fixes) | 542dcc6 + Android-lane backups up to 75b6a53, before e0fa7e8 | API 35 full pass 1 (13:12–14:38) and pass 2 (failed batches, 14:43–16:37); API 28 / 29 / 29 2 GB (14:23–16:06, from the `dv2` copy) |
+| **B** (current) | d723c10 + merge 2be8a84 + the final AND-14 `Permissions.kt` (e6a9340) and its tests, up to 0ad2477 | API 35 reruns (19:27–21:44, main checkout); API 34 and tablet runs (19:33–21:10, `dv2` refreshed from the main checkout's tracked files) |
 
 Runs on A and on B differ only in the e0fa7e8 fixes, AND-14 and the runner changes. Every API 35
 scenario that failed on A was rerun on B, except s16 and s18 (see the matrix).
@@ -573,7 +573,7 @@ Use **Git Bash**. Start each new window with:
 
 ```bash
 source ~/danaview_env.sh
-cd /c/dev/danaview
+cd <repo root>
 mkdir -p build/e2e/android/manual
 ```
 
@@ -585,7 +585,7 @@ Screenshots go to `build/e2e/android/manual/` (`build/` is not committed). Name 
    keyboard reaches the tablet as a hardware keyboard. If it ever reverts, fix it while the tablet
    emulator is **off**: Android Studio > Device Manager > Pixel_Tablet_API_35 > Edit (pencil) >
    Additional settings > tick **Enable keyboard input** > Finish. Or edit
-   `C:\Users\Masud\.android\avd\Pixel_Tablet_API_35.avd\config.ini` in Notepad: `hw.keyboard=yes`.
+   `%USERPROFILE%\.android\avd\Pixel_Tablet_API_35.avd\config.ini` in Notepad: `hw.keyboard=yes`.
 2. **Start the tablet** with a window and with audio (no `-no-window`, no `-no-audio`):
 
    ```bash
@@ -628,7 +628,7 @@ Screenshots go to `build/e2e/android/manual/` (`build/` is not committed). Name 
    name it `Manual QA-02` > **Create**. Wait until the preview shows the frame counter.
 
 **Screenshots.** Use either the emulator's **camera** button (set Extended controls > Settings >
-General > Screenshot save location to `C:\dev\danaview\build\e2e\android\manual` once, then rename
+General > Screenshot save location to the repo's `build\e2e\android\manual` folder once, then rename
 each file), or:
 
 ```bash
@@ -748,7 +748,7 @@ artifacts attached.
    (destroyActivity and swipeFromRecents), M-7 (notification Cancel), M-10 (API 28 skip), M-9
    (UX-41, s02 on API 29), M-8 (the s10 diagnostic, then whoever owns the cause).
 2. **API 35 full pass on one code version** after those fixes, with only one emulator running:
-   `DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=/c/dev/models scripts/ci/editor/e2e_android.sh`.
+   `DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=<models dir> scripts/ci/editor/e2e_android.sh`.
    It must include s16 and s18, which have not run on code B, and s01–s03, s05, s09 and s11 again
    on the final code. All 18 scenarios and all 7 extra phases must pass. s08 must pass inside the
    batch, not only alone.
