@@ -18,8 +18,13 @@
 //   and D-14 limits surfaced as events) -> EditSession with the device's EditPolicy -> preview
 //   session + PlanSync over the PlanCompilerPort -> first plan -> exact seek to the initial
 //   playhead (quantized and clamped to the project).
-// * close(): flush (≤ 3 s) -> dispose PlanSync and preview -> repository.close -> release the
-//   provider's keepAlive. Never throws. onAppHidden saves (lifecycle save; the repository renders
+// * close(): flush (≤ flushTimeout, tier-aware: FIX-M1) -> dispose PlanSync and preview -> repository.close -> release the
+//   provider's keepAlive. Never throws. It never waits on background work (FIX-M15, QA-02 M-15):
+//   the session is marked closing first (the Tasks controller drops its pending job resume), an
+//   open that already attached is not awaited (its first plan and exact seek may wait on a media
+//   resolve that never comes; disposing the preview ends them), an open that has not attached yet
+//   is awaited at most `flushTimeout`, and each release step is bounded. Each step is logged
+//   (`[EditorClose]`, debug and profile builds; no paths or user text). onAppHidden saves (lifecycle save; the repository renders
 //   the poster through EditorPosterCapture), onAppInactive cancels the gesture and requests an
 //   autosave.
 // * Implements UX-07's EditorShellDelegate, so `editorShellProvider` drives the shell from it.
@@ -40,6 +45,7 @@ import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' hide
 import '../../app/editor_messages.dart';
 import '../../app/editor_prefs.dart';
 import '../../app/editor_providers.dart';
+import '../../app/editor_tier_defaults.dart' show editorTierDefaultsProvider;
 import '../../debug/debug.dart';
 import '../contracts/contracts.dart';
 import '../editor_lifecycle.dart';
@@ -134,8 +140,10 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
     PlanSyncFactory? planSyncFactory,
     IdGenerator? ids,
     DateTime Function()? clock,
-    this.flushTimeout = const Duration(seconds: 3),
-  })  : _session = session,
+    Duration flushTimeout = const Duration(seconds: 3),
+    Duration Function()? flushTimeoutOf,
+  })  : _flushTimeoutOf = flushTimeoutOf ?? (() => flushTimeout),
+        _session = session,
         _repository = repository,
         _engine = engine,
         _prefs = prefs,
@@ -152,7 +160,12 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
   final ProjectId id;
 
   /// Longest flush on close (ux.md §4.7).
-  final Duration flushTimeout;
+  ///
+  /// FIX-M1: resolved each time a flush or close needs it, so building the controller does not
+  /// read the device tier (that read starts the engine capabilities probe before the editor
+  /// opens; UX-14/15 keeps engine calls empty until open), and the tier is never stale.
+  Duration get flushTimeout => _flushTimeoutOf();
+  final Duration Function() _flushTimeoutOf;
 
   final EditorSession _session;
   final ProjectRepository _repository;
@@ -179,6 +192,7 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
   bool _txEmitScheduled = false;
   EditorPerfSpan? _openSpan;
   bool _released = false;
+  int _openGen = 0;
   final List<VoidCallback> _viewFlushers = [];
 
   /// Called once when the controller no longer needs to be kept alive (after [close]); the
@@ -210,9 +224,14 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
   @override
   Future<void> open({TimeUs? initialPlayhead}) {
     final pending = _opening;
-    if (pending != null) return pending;
+    // An open that a close left behind (it may still wait on its first plan) is not reused.
+    if (pending != null && _closing == null) return pending;
     if (_session.isOpen && _closing == null) return Future.value();
-    return _opening = _openAfterClose(initialPlayhead).whenComplete(() => _opening = null);
+    late final Future<void> opening;
+    opening = _openAfterClose(initialPlayhead).whenComplete(() {
+      if (identical(_opening, opening)) _opening = null;
+    });
+    return _opening = opening;
   }
 
   Future<void> _openAfterClose(TimeUs? initialPlayhead) async {
@@ -224,15 +243,19 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
       _released = false;
     }
     _closeRequested = false;
+    final gen = ++_openGen;
     try {
-      await _open(initialPlayhead);
+      await _open(initialPlayhead, gen);
     } catch (e, s) {
       _report(e, s, 'opening the editor');
       _fail(EditorFailures.fromError(e, opening: true));
     }
   }
 
-  Future<void> _open(TimeUs? initialPlayhead) async {
+  /// Whether the open of generation [gen] must stop (a close was requested, or a newer open runs).
+  bool _openStale(int gen) => !mounted || _closeRequested || gen != _openGen;
+
+  Future<void> _open(TimeUs? initialPlayhead, int gen) async {
     _set(const EditorState.opening());
     _openSpan = EditorPerfHooks.begin(EditorPerfMarks.editorOpenToFirstFrame);
     final LoadedProject loaded;
@@ -242,7 +265,7 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
       _fail(EditorFailures.fromError(e, opening: true));
       return;
     }
-    if (!mounted || _closeRequested) {
+    if (_openStale(gen)) {
       await _quietly(() => _repository.close(id));
       return;
     }
@@ -300,7 +323,7 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
     } catch (e) {
       previewFailure = _previewFailureOf(e);
     }
-    if (!mounted || _closeRequested) {
+    if (_openStale(gen)) {
       await _quietly(() async => sync?.dispose());
       await _quietly(() async => preview?.dispose());
       await _quietly(() => _repository.close(id));
@@ -348,9 +371,12 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
         if (!_session.isOpen || !identical(_session.preview, preview)) return;
         ack = await preview.seek(t);
       } catch (e) {
+        // A close (or a newer open) released this session meanwhile: nothing to report.
+        if (!identical(_session.editOrNull, edit)) return;
         _setPreviewFailed(_previewFailureOf(e));
       }
     }
+    if (!identical(_session.editOrNull, edit)) return;
     _session.markOpenedAt(t, ack);
   }
 
@@ -367,13 +393,34 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
 
   /// Flushes the latest edits before the editor closes; true when they are on disk (or there was
   /// nothing to save). Bounded by [flushTimeout]; never throws.
+  ///
+  /// FIX-M1 (QA-02 M-1): a timeout only stops the waiting. The save keeps going in the
+  /// repository's write queue (the state stays `saving` until it lands), and a second call while
+  /// it runs, with no newer edit, joins it instead of queueing another full save.
   @override
   Future<bool> flushBeforeClose() async {
     if (!_session.isOpen || _readOnly) return true;
     _closeTx(emit: true);
     _flushViews();
+    final revision = _session.editOrNull?.committedProject.docRevision;
+    var running = _closeFlush;
+    if (running == null || _closeFlushRevision != revision) {
+      final started = _flushQuietly(SaveReason.close);
+      _closeFlush = running = started;
+      _closeFlushRevision = revision;
+      unawaited(started.whenComplete(() {
+        if (identical(_closeFlush, started)) _closeFlush = null;
+      }));
+    }
+    return running.timeout(flushTimeout, onTimeout: () => false);
+  }
+
+  Future<bool>? _closeFlush;
+  int? _closeFlushRevision;
+
+  Future<bool> _flushQuietly(SaveReason reason) async {
     try {
-      return await _flush(SaveReason.close).timeout(flushTimeout, onTimeout: () => false);
+      return await _flush(reason);
     } catch (_) {
       return false;
     }
@@ -405,17 +452,33 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
   Future<CloseOutcome> _close() async {
     _closeRequested = true;
     final opening = _opening;
+    _closeLog('start (attached: ${_session.isOpen}, open pending: ${opening != null})');
+    // First: background work stops resuming (the Tasks controller suspends; FIX-M15).
+    _session.markClosing();
     if (opening != null) {
-      try {
-        await opening;
-      } catch (_) {}
+      if (_session.isOpen) {
+        // The open attached and now waits for its first plan / exact seek, which may wait on a
+        // media resolve: never await it. Releasing the preview below ends it.
+        _closeLog('open still finishing (first plan / seek): not awaited');
+      } else {
+        // Not attached yet: the open sees the close and cleans up itself; wait for that, bounded.
+        var finished = true;
+        try {
+          await opening.timeout(flushTimeout, onTimeout: () => finished = false);
+        } catch (_) {}
+        _closeLog(finished ? 'pending open finished' : 'pending open did not finish in ${flushTimeout.inMilliseconds} ms: not awaited');
+      }
     }
+    // Any open still running is stale from here on (it never attaches).
+    _openGen++;
     var outcome = const CloseOutcome(saved: true);
     try {
       if (_session.isOpen) {
+        _session.markClosing();
         if (mounted && state.phase == EditorPhase.ready) _set(state.copyWith(phase: EditorPhase.closing));
         _closeTx(emit: false);
         final saved = _readOnly ? true : await flushBeforeClose();
+        _closeLog('flushBeforeClose: ${saved ? 'saved' : 'not saved'}');
         outcome = CloseOutcome(saved: saved, failure: saved ? null : state.save.failure);
         await _releaseSession();
         if (mounted && state.phase != EditorPhase.failed) _set(state.copyWith(phase: EditorPhase.closed));
@@ -425,10 +488,12 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
       await _releaseSession();
     }
     _release();
+    _closeLog('done ($outcome)');
     return outcome;
   }
 
   Future<void> _releaseSession() async {
+    _closeLog('release: start');
     for (final sub in _subscriptions) {
       unawaited(sub.cancel());
     }
@@ -437,9 +502,31 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
     final preview = _session.preview;
     final wasOpen = _session.isOpen;
     _session.detach();
-    await _quietly(() async => sync?.dispose());
-    await _quietly(() async => preview?.dispose());
-    if (wasOpen) await _quietly(() => _repository.close(id).timeout(flushTimeout));
+    _closeLog('release: session detached (EditorSession closed)');
+    // Each step is bounded: a release that never returns must not keep the close open.
+    await _releaseStep('plan sync dispose', sync?.dispose);
+    await _releaseStep('preview dispose', preview?.dispose);
+    if (wasOpen) await _releaseStep('repository close', () => _repository.close(id));
+    _closeLog('release: end');
+  }
+
+  Future<void> _releaseStep(String what, Future<void> Function()? body) async {
+    if (body == null) return;
+    _closeLog('release: $what');
+    try {
+      await Future<void>.sync(body).timeout(flushTimeout);
+    } on TimeoutException {
+      _closeLog('release: $what timed out after ${flushTimeout.inMilliseconds} ms');
+    } catch (e) {
+      _closeLog('release: $what failed (${e.runtimeType})');
+    }
+  }
+
+  /// A close-step log line (FIX-M15, QA-02 M-15): debug and profile builds only; no paths or user
+  /// text (ARCH §19 rule 3).
+  void _closeLog(String step) {
+    if (kReleaseMode) return;
+    debugPrint('[EditorClose] ${id.value}: $step');
   }
 
   void _release() {
@@ -1357,6 +1444,15 @@ EditorController createEditorController(Ref<Object?> ref, ProjectId id) {
     engine: ref.read(editorEngineProvider),
     prefs: ref.read(editorPrefsProvider),
     compilers: ref.read(planCompilerPortProvider),
+    // FIX-M1 (QA-02 M-1): the same tier-aware bound the shell waits for (longer on low/minimal).
+    // Read lazily (on the first flush / close), never while the controller is built.
+    flushTimeoutOf: () {
+      try {
+        return EditorLifecycle.flushTimeoutFor(ref.read(editorTierDefaultsProvider).tier);
+      } on Object {
+        return EditorLifecycle.defaultFlushTimeout;
+      }
+    },
   );
   controller.onReleased = link.close;
 

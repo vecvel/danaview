@@ -139,7 +139,8 @@ The app writes `req-<seq>-<action>.json`. The host carries the action out, write
 
 - **Analyzer:** `flutter analyze integration_test/editor` is clean.
 - **Simulator run (2026-10-16):** `tool/e2e_host.sh -p ios -d 8FDBFBEF-0D3D-4D4C-8995-F1021988835F run all` on the **iPhone 17, iOS 26.5** simulator (Xcode 26.6, Flutter 3.44, debug). This Mac has no "iPhone 16" runtime on iOS 26.5, so the booted iPhone 17 on that runtime was used. The models for scenario 8 were not staged (see below). Logs are in `build/e2e/ios/<udid>/logs/`.
-- **Emulator run: deferred: Windows lane (QA-02).**
+- **Emulator run:** done on the Windows lane; see [QA-02-android-emulator.md](QA-02-android-emulator.md) for the results per API level and its "FIX requests for the Mac".
+- **UX note (QA-02 M-4):** on a landscape tablet (Pixel Tablet, 2560×1600) the `ToolRail` is cut off at the timeline split, so Format and Filters are reachable only by scrolling the rail. `E2eEditor.tapTile` scrolls the rail (and the phone `ToolStrip`); the layout itself is a UX follow-up.
 
 | # | Result | Cause (FIX tickets: `docs/v1.1/editor/handoff/BUILD_STATE.md`, "Open FIX tickets filed by QA") |
 |---|---|---|

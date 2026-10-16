@@ -8,6 +8,8 @@
 //
 //   app  -> host   req-<seq>-<action>.json   {"seq", "action", "args": {...}, "at"}
 //   host -> app    ack-<seq>-<action>.json   {"seq", "ok": true|false, "detail"}
+//   host -> app    do-<seq>-<action>.json    {"seq", "do", "attempt"}  a step the host needs the
+//                                            app to take while it serves <seq> (finishActivity)
 //
 // `<seq>` is a per-run counter persisted in `seq` so the phases of one scenario never reuse a
 // number. The app waits for the ack by polling the folder while pumping frames: an explicit wait
@@ -19,9 +21,14 @@
 //   grantMic                 grant the microphone permission (simctl privacy / pm grant)
 //   grantNotifications       Android: grant POST_NOTIFICATIONS (pm grant), so the export's
 //                            permission dialog never appears; a no-op on iOS
-//   swipeFromRecents         Android: remove the task from recents (no ack)
-//   destroyActivity          Android: finish the activity while the process lives on
-//   tapNotificationCancel    Android: press Cancel in the export notification
+//   swipeFromRecents         Android: remove the task from recents; the host confirms with
+//                            `dumpsys activity recents` (ok=false ack when the task stays)
+//   destroyActivity          Android: finish the activity while the process lives on; the host
+//                            writes do-<seq> {"do": "finishActivity"}, the app answers with
+//                            SystemNavigator.pop() (Activity.finish()), and the host acks once
+//                            `dumpsys activity activities` lists no ActivityRecord of the app
+//   tapNotificationCancel    Android: the export notification's Cancel (the host sends its
+//                            ExportService intent, or taps Cancel in the shade)
 //   relaunch                 start the app again (used by the host between phases)
 //
 // Without a host driver (`DV_E2E_HOST` not set), [E2eHandshake.available] is false and the
@@ -30,6 +37,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'e2e_config.dart';
@@ -105,18 +113,57 @@ abstract final class E2eHandshake {
     return result;
   }
 
-  /// Asks the host for [action] that ends this process (kill, swipe from recents): posts the
-  /// request and keeps the app alive and pumping until the host acts. Never returns normally; the
-  /// host driver treats the lost connection of this phase as the expected outcome.
+  /// Asks the host for [action] that ends this process (kill, swipe from recents, destroy the
+  /// activity): posts the request and keeps the app alive and pumping until the host acts. Takes
+  /// the steps the host asks of the app (`do-<seq>-<action>.json`, e.g. finishActivity). Never
+  /// returns normally; the host driver treats the lost connection of this phase as the expected
+  /// outcome. An ok=false ack (the host could not do it) fails the test with the host's detail.
   static Future<Never> requestAndDie(WidgetTester tester, String action, {Map<String, Object?> args = const {}}) async {
     if (!available) throw StateError('No host driver: run through integration_test/editor/tool/e2e_host.sh');
-    post(action, args: args);
+    final seq = post(action, args: args);
+    final doFile = File('${_dir.path}/do-$seq-$action.json');
+    final ack = File('${_dir.path}/ack-$seq-$action.json');
+    final handled = <String>{};
     final deadline = DateTime.now().add(const Duration(minutes: 3));
     while (DateTime.now().isBefore(deadline)) {
+      if (doFile.existsSync()) {
+        final body = _readJson(doFile);
+        final attempt = '${body?['attempt'] ?? 0}';
+        if (body != null && handled.add(attempt)) await _perform('${body['do']}', seq);
+      }
+      if (ack.existsSync()) {
+        final body = _readJson(ack);
+        if (body != null && body['ok'] != true) {
+          throw TestFailure('The host could not "$action" the app (#$seq): ${body['detail'] ?? ''}');
+        }
+      }
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await tester.pump();
     }
     throw TestFailure('The host did not "$action" the app within 3 minutes');
+  }
+
+  static Map<String, Object?>? _readJson(File f) {
+    try {
+      return jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
+    } on Object {
+      return null; // being replaced; read again on the next poll
+    }
+  }
+
+  /// A step the host asked of the app (test-only; this file only runs under DV_E2E_HOST).
+  static Future<void> _perform(String step, int seq) async {
+    // ignore: avoid_print
+    print('DV_E2E_HANDSHAKE do $seq $step');
+    switch (step) {
+      case 'finishActivity':
+        // Android: PlatformPlugin.popSystemNavigator → FlutterActivity.finish() (the activity is
+        // destroyed, the process and its foreground service live on).
+        await SystemNavigator.pop();
+      default:
+        // ignore: avoid_print
+        print('DV_E2E_HANDSHAKE unknown step "$step" (ignored)');
+    }
   }
 
   /// Persists [value] under [key] for a later phase of the same scenario.

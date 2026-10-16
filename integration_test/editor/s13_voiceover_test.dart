@@ -10,8 +10,14 @@
 // started by then), not with the seek target. The device budget is < 100 ms
 // (`--dart-define=DV_E2E_DEVICE=true`); simulators and emulators get their measured audio start
 // latency. The 3 s window starts when recording appears and includes the host screenshot
-// handshake, and the clip length is compared with the window actually recorded (Record shown to
-// Stop tapped, both on the device clock), so a slow screenshot round trip does not fail the run.
+// handshake, and the clip length is compared with the window actually recorded, so a slow
+// screenshot round trip does not fail the run.
+//
+// FIX-QA00-R7 (QA-02 M-5): on a loaded emulator the recorder starts about 3 s before the
+// `recording` key shows, so "recording shown → Stop" alone undercounts. The clip length must lie
+// between the inner window (recording shown → just before the Stop tap) and the outer window (the
+// tap that started the recorder, i.e. Record or the explain/countdown tap after it → the Stop tap
+// done), both on the device clock, each with the tolerance.
 
 // ignore_for_file: implementation_imports
 
@@ -28,7 +34,7 @@ const bool _onDevice = bool.fromEnvironment('DV_E2E_DEVICE');
 /// Allowed |clip start - playhead when recording appeared| (device budget: 100 ms).
 const int _startToleranceUs = _onDevice ? 100000 : 750000;
 
-/// Allowed |clip length - recorded window|.
+/// Allowed distance of the clip length outside the [inner, outer] recorded window.
 const int _lengthToleranceUs = _onDevice ? 250000 : 750000;
 
 void main() {
@@ -45,6 +51,8 @@ void main() {
     final seekAt = ed.playhead.value;
     await ed.invoke(EditorActionId.recordVoiceover);
     await E2eApp.waitKey(tester, 'voiceover.record');
+    // The last tap that can start the recorder (Record, then Continue / Skip when they show).
+    var startTapAt = DateTime.now();
     await E2eApp.tapKey(tester, 'voiceover.record');
     await E2eApp.pumpUntil(
       tester,
@@ -52,8 +60,14 @@ void main() {
       what: 'the recorder to start',
     );
     expect(E2eApp.hasKey('voiceover.denied'), isFalse, reason: 'microphone permission denied');
-    if (E2eApp.hasKey('voiceover.explain')) await E2eApp.tapKey(tester, 'voiceover.continue');
-    if (E2eApp.hasKey('voiceover.countdown')) await E2eApp.tapKey(tester, 'voiceover.skip');
+    if (E2eApp.hasKey('voiceover.explain')) {
+      startTapAt = DateTime.now();
+      await E2eApp.tapKey(tester, 'voiceover.continue');
+    }
+    if (E2eApp.hasKey('voiceover.countdown')) {
+      startTapAt = DateTime.now();
+      await E2eApp.tapKey(tester, 'voiceover.skip');
+    }
     await E2eApp.waitKey(tester, 'voiceover.recording');
     final started = DateTime.now();
     final at = ed.playhead.value;
@@ -61,8 +75,11 @@ void main() {
     // lasts at least 3 s (the scenario's length, not a wait for something to happen).
     await E2eApp.screenshot(tester, 's13_recording');
     await E2eApp.pumpUntil(tester, () => DateTime.now().difference(started) >= const Duration(seconds: 3), what: '3 s of recording');
-    final recordedUs = DateTime.now().difference(started).inMicroseconds;
+    final stopTapAt = DateTime.now();
     await E2eApp.tapKey(tester, 'voiceover.stop');
+    final stopDoneAt = DateTime.now();
+    final innerUs = stopTapAt.difference(started).inMicroseconds;
+    final outerUs = stopDoneAt.difference(startTapAt).inMicroseconds;
 
     await ed.waitProject(
       (p) => p.tracks.any((t) => t.kind == TrackKind.audio && t.audioRole == AudioRole.voice && t.items.isNotEmpty),
@@ -76,13 +93,13 @@ void main() {
     expect(asset.displayName.toLowerCase(), endsWith('.wav'));
     // ignore: avoid_print
     print('DV_E2E_REPORT s13 timing: seek $seekAt us, playhead at recording $at us, clip ${clip.start}+${clip.duration} us, '
-        'window $recordedUs us (device $_onDevice)');
+        'window inner $innerUs us (recording shown -> Stop) outer $outerUs us (start tap -> Stop done) (device $_onDevice)');
     expect(clip.start, greaterThanOrEqualTo(seekAt), reason: 'the recording starts at or after the playhead');
     expect((clip.start - at).abs(), lessThan(_startToleranceUs),
         reason: 'start ${clip.start} us vs playhead $at us when recording appeared (budget $_startToleranceUs us)');
     expect(clip.duration, greaterThanOrEqualTo(2500000), reason: 'a 3 s take');
-    expect((clip.duration - recordedUs).abs(), lessThan(_lengthToleranceUs),
-        reason: 'clip ${clip.duration} us vs recorded window $recordedUs us');
+    expect(clip.duration, inInclusiveRange(innerUs - _lengthToleranceUs, outerUs + _lengthToleranceUs),
+        reason: 'clip ${clip.duration} us vs recorded window [$innerUs, $outerUs] us (tolerance $_lengthToleranceUs us)');
 
     final out = await E2eExport.run(ed);
     final (samples, rate) = await E2eExport.pcm(ed, out.video, TimeRange(clip.start, clip.end));

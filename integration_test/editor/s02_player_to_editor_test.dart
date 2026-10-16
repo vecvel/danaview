@@ -29,12 +29,19 @@ void main() {
     const at = Duration(microseconds: 5333334);
     final player = c.read(playerControllerProvider.notifier);
     await player.pause();
+    // FIX-QA00-R7 (QA-02 s02 FYI): on a loaded emulator the player once never reached 0:05:10, so
+    // a seek that has not landed after 15 s is sent once more (then 30 s more for that one).
+    bool reached() => (c.read(playerControllerProvider).position - at).abs() < const Duration(milliseconds: 17);
     await player.seek(at, mode: SeekMode.exact);
-    await E2eApp.pumpUntil(
-      tester,
-      () => (c.read(playerControllerProvider).position - at).abs() < const Duration(milliseconds: 17),
-      what: 'the player position to reach 0:05:10',
-    );
+    try {
+      await E2eApp.pumpUntil(tester, reached, what: 'the player position to reach 0:05:10', timeout: const Duration(seconds: 15));
+    } on TestFailure {
+      // ignore: avoid_print
+      print('DV_E2E_REPORT s02: the player is at ${c.read(playerControllerProvider).position}, not 0:05:10; seeking again');
+      await player.pause();
+      await player.seek(at, mode: SeekMode.exact);
+      await E2eApp.pumpUntil(tester, reached, what: 'the player position to reach 0:05:10 (after a second seek)');
+    }
 
     final edit = find.byKey(const ValueKey('player-edit-video'));
     if (edit.hitTestable().evaluate().isEmpty) {

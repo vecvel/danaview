@@ -515,7 +515,7 @@ final class FileMediaPoolService implements MediaPoolService {
         return (FileLocator(decision.sourcePath!) as MediaLocator, MediaOwnership.external);
 
       case ImportRoute.projectLut:
-        final source = await _readablePath(picked, decision);
+        final source = await _readablePath(picked, decision, stat.sizeBytes);
         if (source == null) return ImportRejected(picked, 'notPersistable');
         final bytes = await _fs.readBytes(source.path);
         final lut = CubeLut.parse(bytes);
@@ -528,7 +528,7 @@ final class FileMediaPoolService implements MediaPoolService {
 
       case ImportRoute.projectRecording:
       case ImportRoute.projectStill:
-        final source = await _readablePath(picked, decision);
+        final source = await _readablePath(picked, decision, stat.sizeBytes);
         if (source == null) return ImportRejected(picked, 'notPersistable');
         final pid = session.committedProject.id;
         final inBundle = roots.relativize(source.path);
@@ -552,7 +552,7 @@ final class FileMediaPoolService implements MediaPoolService {
       if (decision.temporary && decision.sourcePath != null) await store.discardTemporary(decision.sourcePath!);
       return (known.locator as MediaLocator, MediaOwnership.managedCopy);
     }
-    final source = await _readablePath(picked, decision);
+    final source = await _readablePath(picked, decision, stat.sizeBytes);
     if (source == null) return ImportRejected(picked, 'notPersistable');
     await _preflight(stat.sizeBytes, moving: source.temporary && await store.deleter.canConsume(source.path));
     final stored = await store.adopt(source.path, quickHash: hash, displayName: picked.displayName, temporary: source.temporary);
@@ -560,21 +560,30 @@ final class FileMediaPoolService implements MediaPoolService {
   }
 
   /// A plain path Dart can read for [picked]: the pick itself, or a platform copy of a URI.
-  Future<({String path, bool temporary})?> _readablePath(PickedMedia picked, ImportDecision decision) async {
+  ///
+  /// The platform copy lands in `work/picks` under the editor roots, so its free space is checked
+  /// against the source size ([sizeBytes] plus the margin) before anything is copied (QA-02 M-17):
+  /// the later preflight treats the copy as a move and skips, so this is the only check it gets.
+  Future<({String path, bool temporary})?> _readablePath(PickedMedia picked, ImportDecision decision, int sizeBytes) async {
     final path = decision.sourcePath;
     if (path != null) return (path: path, temporary: decision.temporary);
     final copier = materialize;
     if (copier == null) return null;
+    await _preflight(sizeBytes, moving: false, stage: 'materialize');
     final copied = await copier(picked, roots.picksDir);
     return (path: copied, temporary: true);
   }
 
-  Future<void> _preflight(int sizeBytes, {required bool moving}) async {
+  /// Refuses a copy of [sizeBytes] when the editor volume has less than that plus
+  /// [ImportPolicy.freeSpaceMarginBytes] free; a move needs no new space. Throws a
+  /// [StoreFailureKind.diskFull] [StoreFailure], which `import` reports as `diskFull`.
+  Future<void> _preflight(int sizeBytes, {required bool moving, String stage = 'copy'}) async {
     final probeFree = freeSpace;
     if (probeFree == null || moving) return;
     final free = await probeFree(roots.editorSupport);
-    if (free != null && free < sizeBytes + ImportPolicy.freeSpaceMarginBytes) {
-      throw const StoreFailure(StoreFailureKind.diskFull, 'preflight');
+    final needed = (sizeBytes < 0 ? 0 : sizeBytes) + ImportPolicy.freeSpaceMarginBytes;
+    if (free != null && free < needed) {
+      throw StoreFailure(StoreFailureKind.diskFull, 'preflight $stage: needs $needed bytes, $free free');
     }
   }
 

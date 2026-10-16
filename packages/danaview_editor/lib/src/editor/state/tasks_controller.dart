@@ -37,6 +37,10 @@
 //   first pass every media reads offline. So nothing that needs a source starts (or fails as
 //   offline) until `EditorSession.mediaResolved`; the controller reconciles again after the first
 //   pass, and after every later pass while a resumed proxy waits for its media to come back.
+// * **Close never waits on resume work** (FIX-M15, QA-02 M-15): when the editor starts to close
+//   (`EditorSession.closing`) the controller suspends at once: running jobs are cancelled quietly,
+//   the resume that waits for a media resolve is dropped, and no later resolve starts anything.
+//   Nothing in the close flow awaits this controller; the pending assets resume on the next open.
 
 import 'dart:async';
 
@@ -91,6 +95,8 @@ class TasksController {
         _clock = clock ?? (() => DateTime.now().toUtc()) {
     _removeListener = editor.addListener(_onState, fireImmediately: true);
     session.mediaResolves.addListener(_onMediaResolved);
+    session.closing.addListener(_onClosing);
+    if (session.isClosing) _onClosing();
   }
 
   /// The project.
@@ -354,8 +360,12 @@ class TasksController {
   /// Cancels the running jobs without touching the project (editor closing); pending assets
   /// resume on the next open.
   void suspend() {
+    // Pending resume work (waiting for a media resolve) is dropped too (FIX-M15).
+    _deferredForMedia = false;
+    _waitingForMedia = false;
     if (_suspended) return;
     _suspended = true;
+    if (_tasks.isNotEmpty) debugPrint('[TasksController] suspend: cancelling ${_tasks.length} task(s) quietly');
     for (final t in _tasks.values.toList()) {
       t.sub?.cancel();
       t.quiet = true;
@@ -388,6 +398,11 @@ class TasksController {
     } on Object catch (_) {
       // The session's notifier was disposed first.
     }
+    try {
+      _session.closing.removeListener(_onClosing);
+    } on Object catch (_) {
+      // The session's notifier was disposed first.
+    }
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -402,10 +417,17 @@ class TasksController {
     _queueReconcile();
   }
 
+  /// The editor started to close (FIX-M15): stop now; nothing in the close waits for this.
+  void _onClosing() {
+    if (_disposed || !_session.isClosing) return;
+    debugPrint('[TasksController] editor closing: suspending (pending resume: ${_deferredForMedia || _waitingForMedia})');
+    suspend();
+  }
+
   /// A media-resolve pass finished: start what waited for the first one, and retry resumed proxies
   /// whose media read offline (it may be back).
   void _onMediaResolved() {
-    if (!_session.mediaResolved) return;
+    if (_disposed || _suspended || _session.isClosing || !_session.mediaResolved) return;
     if (_deferredForMedia || _waitingForMedia) _queueReconcile();
   }
 
@@ -420,7 +442,7 @@ class TasksController {
 
   /// Starts a job for every pending asset that needs one and is not tracked.
   void _reconcile() {
-    if (_disposed || _suspended || !_session.isOpen) return;
+    if (_disposed || _suspended || !_session.isOpen || _session.isClosing) return;
     final project = _project;
     if (project == null) return;
     if (!_session.mediaResolved) {

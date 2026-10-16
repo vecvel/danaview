@@ -40,6 +40,7 @@ import 'package:danaview_editor_core/store.dart' show ProjectRepository, Project
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../app/editor_providers.dart';
+import '../app/editor_tier_defaults.dart' show editorTierDefaultsProvider;
 import 'actions/editor_shortcuts.dart';
 import 'contracts/contracts.dart';
 import 'editor_lifecycle.dart';
@@ -197,12 +198,15 @@ class EditorScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final shell = ref.watch(editorShellProvider(projectId));
+    // FIX-M1 (QA-02 M-1): a slower tier waits longer for the close flush before it asks.
+    final flushTimeout = EditorLifecycle.flushTimeoutFor(ref.watch(editorTierDefaultsProvider.select((d) => d.tier)));
     return EditorScope(
       projectId: projectId,
       child: EditorLifecycle(
         delegate: shell,
         onExit: onClose,
         initialPlayhead: initialPlayhead,
+        flushTimeout: flushTimeout,
         child: _ExportReattachOnOpen(
           shell: shell,
           child: EditorShortcuts(

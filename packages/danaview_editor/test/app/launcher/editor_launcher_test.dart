@@ -9,6 +9,10 @@
 // editor route pops, and the orientation owner stack gives the player its mode back.
 // FIX-UX-41-1: the player's position is a platform time, so the editor route gets the start of
 // the nearest frame of the project's grid (D-35), e.g. 5 333 333 µs and 5 333 000 µs → frame 160.
+// FIX-M9 (QA-02 M-9): on the production store (FileProjectRepository in memory), a fresh install or
+// a data clear (no projects), the managed-copy import job, a reused untouched project saved at 0
+// and a route that ignores `t` all open on frame 160, and the project's saved view.playhead is
+// frame 160 before the editor opens.
 
 import 'dart:async';
 
@@ -20,7 +24,9 @@ import 'package:danaview_editor/src/app/strings/launcher_strings.dart';
 import 'package:danaview_editor/src/editor/flows/import_media_sheet.dart';
 import 'package:danaview_editor/danaview_editor.dart';
 import 'package:danaview_editor_core/model.dart';
+import 'package:danaview_editor_core/ops.dart' show EditSession;
 import 'package:danaview_editor_core/store.dart';
+import 'package:danaview_editor_core/testing.dart' show InMemoryProjectRepository;
 import 'package:danaview_editor_engine_api/testing.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 import 'package:danaview_features/orientation.dart';
@@ -173,6 +179,142 @@ Future<void> _tapKey(WidgetTester tester, String key) async {
   await tester.pump();
   await tester.tap(finder);
   await _settle(tester);
+}
+
+// ---- FIX-M9: the production store ----------------------------------------------------------------
+
+/// Frame 160 of the 30 fps frame counter (0:05:10), the s02 position.
+const _frame160 = 5333334;
+
+/// The played file as the store sees it: 120 MB, quick hash 'qh' (what `playerOrigin` stores).
+final class _Access implements MediaAccessPort {
+  @override
+  Future<MediaStat?> stat(MediaLocator locator) async => const MediaStat(sizeBytes: 120 * _mb);
+
+  @override
+  Future<String> quickHash(MediaLocator locator) async => 'qh';
+
+  @override
+  Future<ResolvedMedia> resolve(MediaLocator locator) => throw UnimplementedError();
+
+  @override
+  Future<MediaLocator> persist(PickedMediaHandle handle) => throw UnimplementedError();
+
+  @override
+  Future<void> release(MediaLocator locator) async {}
+
+  @override
+  Future<void> excludeFromBackup(String dirPath) async {}
+
+  @override
+  Future<int> remainingGrantBudget() async => 100;
+}
+
+/// Imports every pick as an 8 s 1080p30 managed copy into the session's pool (CORE-27's result).
+final class _CopyingPool extends FakeMediaPoolService {
+  int imports = 0;
+
+  @override
+  Future<List<ImportOutcome>> import(EditSession session, List<PickedMedia> picked, {ImportTarget? target}) async {
+    calls.add('import');
+    final out = <ImportOutcome>[];
+    for (final pick in picked) {
+      final n = imports++;
+      final asset = MediaAsset(
+        id: MediaId('md_counter_$n'),
+        kind: MediaKind.video,
+        displayName: pick.displayName,
+        locator: AppRelativeLocator(AppRoot.support, 'danaview/editor/media/qh/counter_$n.mp4'),
+        ownership: MediaOwnership.managedCopy,
+        fingerprint: const MediaFingerprint(sizeBytes: 120 * _mb, quickHash: 'qh'),
+        probe: MediaProbe(kind: MediaKind.video, duration: 8000000, hasVideo: true, width: 1920, height: 1080, nominalFps: 30),
+        origin: MediaOrigin.player,
+        addedAt: DateTime.utc(2026, 10, 17),
+      );
+      session.applyPoolChange(AddAssets([asset]));
+      out.add(ImportedMedia(pick, asset));
+    }
+    return out;
+  }
+}
+
+/// The editor route as the editor applies it: `t` when the route has one, else the project's saved
+/// view.playhead (what an open without `t`, or a reopen, starts on), read when the route opens.
+class _StoreRoute {
+  _StoreRoute(this.store, {this.honoursT = true});
+
+  final ProjectRepository store;
+  final bool honoursT;
+  final List<(ProjectId, TimeUs)> opened = [];
+  final List<TimeUs> startsAt = [];
+
+  Future<void> open(ProjectId id, TimeUs at) async {
+    opened.add((id, at));
+    final loaded = await store.open(id);
+    try {
+      final rate = loaded.project.settings.frameRate;
+      startsAt.add(rate.quantize(honoursT ? at : loaded.project.view.playhead));
+    } finally {
+      await store.close(id);
+    }
+  }
+}
+
+/// One player Edit at [position] on [store] (managed copy when [copies], as on Android).
+Future<(EditorLaunchOutcome?, _StoreRoute)> _editOnStore(
+  WidgetTester tester,
+  InMemoryProjectRepository store, {
+  Duration position = const Duration(microseconds: 5333000),
+  bool copies = true,
+  bool honoursT = true,
+}) async {
+  final engine = FakeEditorEngine(caps: fakeDefaultCapabilities);
+  final space = _check(copies: copies, free: 10 * 1024 * _mb);
+  final h = EditorTestHarness(engine: engine, overrides: [importSpaceCheckProvider.overrideWithValue(space)]);
+  final launcher = EditorLauncher(
+    engine: engine,
+    repository: store,
+    capabilities: engine.capabilities,
+    spaceCheck: () => space,
+    access: _Access(),
+    fileExists: (_) async => true,
+    fileSize: (_) async => 120 * _mb,
+  );
+  final route = _StoreRoute(store, honoursT: honoursT);
+  EditorLaunchOutcome? outcome;
+  await h.pumpApp(
+    tester,
+    Scaffold(
+      body: Builder(
+        builder: (context) => Center(
+          child: GestureDetector(
+            onTap: () => launcher
+                .openFromPlayer(
+                  EditorLaunchRequest(pathOrUri: _path, title: 'frame counter', position: position),
+                  context,
+                  player: _FakePlayer(),
+                  openEditor: route.open,
+                )
+                .then((o) => outcome = o),
+            child: const Text('Edit'),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('Edit'));
+  for (var i = 0; i < 40 && outcome == null; i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  return (outcome, route);
+}
+
+/// The saved view.playhead of [id] in [store].
+Future<TimeUs> _savedPlayhead(InMemoryProjectRepository store, ProjectId id) async {
+  final loaded = await store.open(id);
+  await store.close(id);
+  return loaded.project.view.playhead;
 }
 
 void main() {
@@ -433,6 +575,94 @@ void main() {
       await _tapEdit(tester);
       expect(run.route.opened.single.$2, 5333000);
       expect(run.outcome, isNull, reason: 'the editor is still open');
+    });
+  });
+
+  group('fresh install and data clear on the production store (FIX-M9, QA-02 M-9)', () {
+    for (final copies in [true, false]) {
+      final label = copies ? 'managed copy (Android import job)' : 'direct create';
+      testWidgets('first Edit after a fresh install, $label: opens and is saved on frame 160', (tester) async {
+        final store = InMemoryProjectRepository(media: _CopyingPool(), access: _Access());
+        final (outcome, route) = await _editOnStore(tester, store, copies: copies);
+        expect(outcome, EditorLaunchOutcome.opened);
+        final (id, at) = route.opened.single;
+        expect(at, _frame160);
+        expect(FrameRate.fps30.frameIndexOf(route.startsAt.single), 160);
+        final saved = (await tester.runAsync(() => _savedPlayhead(store, id)))!;
+        expect(FrameRate.fps30.frameIndexOf(saved), 160, reason: 'the store floors 5 333 000 µs to frame 159; the launcher saves frame 160');
+        expect(saved, _frame160);
+        final summaries = (await tester.runAsync(store.summaries))!;
+        expect(summaries, hasLength(1));
+        await tester.runAsync(store.dispose);
+      });
+    }
+
+    testWidgets('a route that drops `t` still starts on frame 160 (the saved view state)', (tester) async {
+      final store = InMemoryProjectRepository(media: _CopyingPool(), access: _Access());
+      final (outcome, route) = await _editOnStore(tester, store, honoursT: false);
+      expect(outcome, EditorLaunchOutcome.opened);
+      expect(FrameRate.fps30.frameIndexOf(route.startsAt.single), 160);
+      await tester.runAsync(store.dispose);
+    });
+
+    testWidgets('Edit again: the untouched project (saved at 0) is reused and moved to frame 160', (tester) async {
+      final store = InMemoryProjectRepository(media: _CopyingPool(), access: _Access());
+      final (_, first) = await _editOnStore(tester, store, position: Duration.zero);
+      final id = first.opened.single.$1;
+      expect((await tester.runAsync(() => _savedPlayhead(store, id)))!, 0);
+
+      final (outcome, second) = await _editOnStore(tester, store, honoursT: false);
+      expect(outcome, EditorLaunchOutcome.opened);
+      expect(second.opened.single, (id, _frame160), reason: 'Edit twice never litters Projects');
+      expect(FrameRate.fps30.frameIndexOf(second.startsAt.single), 160);
+      expect((await tester.runAsync(() => _savedPlayhead(store, id)))!, _frame160);
+      final summaries = (await tester.runAsync(store.summaries))!;
+      expect(summaries, hasLength(1));
+      expect(summaries.single.id, id);
+      await tester.runAsync(store.dispose);
+    });
+
+    testWidgets('after a data clear (empty store) a new project is created on frame 160', (tester) async {
+      final before = InMemoryProjectRepository(media: _CopyingPool(), access: _Access());
+      await _editOnStore(tester, before, position: Duration.zero);
+      await tester.runAsync(before.dispose);
+      // pm clear: the projects are gone, the same file is played again.
+      final cleared = InMemoryProjectRepository(media: _CopyingPool(), access: _Access());
+      final (outcome, route) = await _editOnStore(tester, cleared);
+      expect(outcome, EditorLaunchOutcome.opened);
+      final (id, at) = route.opened.single;
+      expect(at, _frame160);
+      expect((await tester.runAsync(() => _savedPlayhead(cleared, id)))!, _frame160);
+      await tester.runAsync(cleared.dispose);
+    });
+
+    testWidgets('a position past the end opens there but is saved on the last frame', (tester) async {
+      final store = InMemoryProjectRepository(media: _CopyingPool(), access: _Access());
+      final (_, route) = await _editOnStore(tester, store, position: const Duration(seconds: 20));
+      final (id, at) = route.opened.single;
+      expect(at, 20000000, reason: 'the editor clamps on open');
+      expect((await tester.runAsync(() => _savedPlayhead(store, id)))!, FrameRate.fps30.quantize(8000000));
+      await tester.runAsync(store.dispose);
+    });
+
+    testWidgets('a project with a pending recovery keeps its saved playhead', (tester) async {
+      final repo = _GatedRepository();
+      final existing = repo.seedEmpty('Holiday').id;
+      repo.untouchedByPath[_path] = existing;
+      repo.openResults[existing] = (p) => LoadedProject(
+            project: p,
+            pendingRecovery: RecoverableSession(
+              projectId: p.id,
+              projectName: p.name,
+              journalSavedAt: DateTime.utc(2026, 10, 17),
+              journalRevision: 2,
+              mainRevision: 1,
+            ),
+          );
+      final run = await _pump(tester, repository: repo, position: const Duration(microseconds: 5333000));
+      await _tapEdit(tester);
+      expect(run.route.opened.single.$2, _frame160);
+      expect(repo.calls, isNot(contains('save')));
     });
   });
 
