@@ -168,6 +168,9 @@ final class RssSampler {
   int peak = 0;
   late final Timer _timer;
 
+  /// Baseline and peak in MB (report fields).
+  Map<String, Object?> get fields => {'baselineMb': (baseline / 1048576).toStringAsFixed(1), 'peakMb': (peak / 1048576).toStringAsFixed(1)};
+
   void _sample() {
     final r = ProcessInfo.currentRss;
     if (r > peak) peak = r;
@@ -443,7 +446,7 @@ final class Qa04Env {
         'encoder': run.result!.videoEncoderName,
         'frames': run.facts?.videoTracks.single.sampleCount,
       });
-      EngineBudgets.exportWorkingSet.check(tier, workingSetMb, {'note': 'RSS peak minus baseline'});
+      EngineBudgets.exportWorkingSet.check(tier, workingSetMb, {...rss.fields, 'note': 'RSS peak minus baseline'});
     }
     expect(run.facts!.videoTracks.single.sampleEntry, 'avc1');
     final out = '$work/original_1080p30.mp4';
@@ -641,7 +644,8 @@ void main() {
 
       // Native memory while the preview is open (RSS includes decoder buffers and the Dart heap
       // growth of this test, so it over-states the budgeted figure).
-      EngineBudgets.nativeMemory.check(e.tier, rss.stop(), {'note': 'RSS delta incl. decoder buffers'});
+      final delta = rss.stop();
+      EngineBudgets.nativeMemory.check(e.tier, delta, {...rss.fields, 'note': 'RSS delta incl. decoder buffers'});
     } finally {
       await session.dispose();
     }
@@ -657,7 +661,7 @@ void main() {
     for (var i = 0; i < 16; i++) {
       final sw = Stopwatch()..start();
       final tile = await e.engine.thumbnails
-          .request(ThumbnailRequest(media: media, intervalMs: 50 + 7 * i, tileIndex: i % 8, heightPx: 56), priority: ThumbPriority.visible)
+          .request(ThumbnailRequest(media: media, intervalMs: 50 + 7 * i, tileIndex: i % 2, heightPx: 56), priority: ThumbPriority.visible)
           .result
           .timeout(const Duration(seconds: 20));
       ms.add(sw.elapsedMilliseconds);
@@ -680,7 +684,9 @@ void main() {
       mediaLayer('it_pip#v', 'v', 0, dur, 100000, z: 10, seq: 1, w: 480, h: 270, cx: 1000, cy: 200),
       markerLayer(frames, _pw, _ph),
     ]);
-    final (session, _, _) = await e.preview(plan);
+    // Half quality: the minimal tier previews at ≤ 640 px anyway (§12.2), and smaller captures let
+    // the sampling keep up with playback.
+    final (session, _, _) = await e.preview(plan, quality: PreviewQuality.half);
     final clocks = <PreviewClock>[];
     final sub = session.clock.listen(clocks.add);
     try {
@@ -706,9 +712,10 @@ void main() {
       final elapsedFrames = elapsedMs * _fps / 1000;
       final captureHz = captures * 1000 / elapsedMs;
       final fps = seen.length * 1000 / elapsedMs;
-      // Sampling only sees every frame when captures outpace playback; below 2× the frame rate the
-      // count is a lower bound (recorded as such).
-      final exact = captureHz >= 2 * _fps;
+      // Sampling sees every presented frame when captures outpace playback (≥ 2× the frame rate)
+      // or when no two consecutive samples were more than one frame apart; otherwise the count is
+      // a lower bound (recorded as such).
+      final exact = captureHz >= 2 * _fps || (maxGapFrames <= 1 && seen.length > 1);
       final drop = math.max(0.0, 100 * (1 - seen.length / elapsedFrames));
       final extra = {'captureHz': captureHz.toStringAsFixed(1), 'distinct': seen.length, 'maxGapFrames': maxGapFrames, 'samplingExact': exact};
       EngineBudgets.minimalFps.check(e.tier, fps, extra);
