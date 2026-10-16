@@ -5,9 +5,10 @@
 //
 // D7, the hang. AVAssetReaderAudioMixOutput over the soak project (seed 5150 op #800: 2× reversed
 // keep-pitch pieces on one composition audio track) sometimes blocks inside copyNextSampleBuffer
-// for good. On the iOS 26.5 simulator about 1 read in 20 stopped for good (e.g. after 28 buffers at
-// 4.46 s, inside the 2× pieces) while the rest read all 39 s (`testSoakMixReadHangsSometimes`
-// reports the rate). That is AVFoundation, not the plan: the same composition reads fine next time.
+// for good. On the iOS 26.5 simulator 0 to 3 of 8 fresh reads stopped for good per run (after
+// 14–39 buffers, at 1.9–6.4 s, inside the 2× pieces) while the rest read all 39 s
+// (`testSoakMixReadHangsSometimes` reports the rate; the export tests also met it on their own and
+// resumed). That is AVFoundation, not the plan: the same composition reads fine the next time.
 //
 // D7, the crash. The old watchdog called cancelReading() on the blocked reader, and the source then
 // released the reader while copyNextSampleBuffer was still inside it (the read closure held only the

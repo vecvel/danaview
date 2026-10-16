@@ -33,8 +33,8 @@
 //
 // Reader threading and hangs (FIX-IOS-D7, QA-05 D7, QA-01 FIX-IOS-12-1). AVAssetReaderAudioMixOutput
 // over a keep-pitch scaled track sometimes blocks inside `copyNextSampleBuffer` for good
-// (`remakerFamily_renderPipelineRanDry`; `ExportD7Tests` sees it in about 1 of 20 reads of the soak
-// project on the iOS 26.5 simulator, the soak under load in every read). Rules:
+// (`remakerFamily_renderPipelineRanDry`; `ExportD7Tests` sees it in 0 to 3 of 8 fresh reads of the
+// soak project on the iOS 26.5 simulator, the soak under load in every read). Rules:
 // - every AVAssetReader is created, read, cancelled and released on ONE serial queue of its own
 //   (`MixReadSession`, `CompositionVideoSource`), and its queue closures hold the reader, its output
 //   and the composition, so nothing is cancelled or released while a call into it is outstanding;
