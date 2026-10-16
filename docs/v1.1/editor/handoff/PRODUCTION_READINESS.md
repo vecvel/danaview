@@ -6,13 +6,13 @@
 
 ---
 
-## 0. Live status (kept current; last update 2026-10-17 00:50 IST)
+## 0. Live status (kept current; last update 2026-10-17 00:50 IST; Android fixes merged 00:47)
 
 | Ticket | State | What's left |
 |---|---|---|
 | **QA-01** iOS simulator E2E | **Nearly certified.** Full run 16/18; s07 and s13 pass when re-run alone. iPad s12 passes (V-U5 certified on the simulator). iOS 18.2 lane 3/3 | Fix **FIX-IOS-12-1**: the second back-to-back export stalls in "rendering" in the s07 full run (IOS-12 `ExportCoordinator.swift` and its writer; probably the same family as D7). The manual iPad Files/Photos drop and the physical-keyboard step need a person (screenshots in `build/e2e/ios/2C9213E9-.../manual/`). The iPhone 7/8 smoke needs devices |
 | **QA-05** soak and crash recovery | **Partial.** The process-death phases pass after FIX-QA05-D5. The seeded soak (5150) fails on **D7** | Fix **D7**: iOS export audio read hang, or SIGSEGV in `MixAudioSource.nextAudio()` `copyNextSampleBuffer` (§4.1), then re-run the soak |
-| **QA-02** Android emulator E2E | **Windows lane, in progress.** The Kotlin INT-07/ENG-06 fixes (M-11, M-12, M-16, M-17 native, M-18, M-19, M-20) are being made; review running (WIP up to `2171828`) | After the Mac merges round 7: one clean full QA-02 pass (§4.3) |
+| **QA-02** Android emulator E2E | **Windows lane.** The Kotlin INT-07/ENG-06 fixes are **done and merged** into `editor-wip` (00:47): M-11 `e5ba18d`, M-12 `583c693`, M-16 `e42522a`, M-18 with the native M-17 free-space preflight `7467769`, M-19 `19338db`, M-20 `ee908e4` | After the Mac merges round 7: one clean full QA-02 pass (§4.3) |
 | **INT-05** release | **Prepared, not applied** (release-checklist) | Owner "go" |
 | Round 7 (Mac Dart fixes M-1, M-2..M-7, M-9, M-10, M-13..M-15, M-17 Dart) | **All 6 tickets done**, review running in worktree `parallel-r7` | Commit the worktree, merge into `editor-wip`, re-run the iOS scenarios it touches (s02, s06, s09, s12, s13) |
 
