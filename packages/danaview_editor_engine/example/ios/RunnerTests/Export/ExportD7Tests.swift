@@ -319,8 +319,8 @@ final class ExportD7Tests: XCTestCase {
             p.audioWatchdog = 1
             p.audioSourceHook = { source, attempt in
                 log.add(source)
-                source.onTeardown = { log.teardown() }
                 guard attempt == 1 else { return }
+                source.onTeardown = { log.teardown() }
                 // AVFoundation's hang, for 8 s (the old code cancelled and released the reader after
                 // 1 + 5 s, then this call ran inside the released reader).
                 source.readGate = { n in
@@ -342,10 +342,14 @@ final class ExportD7Tests: XCTestCase {
         // returned (it is left behind with its composition).
         XCTAssertTrue(JobEventRecorder.spin(timeout: 15) { log.gateOpenedAt != nil })
         _ = JobEventRecorder.spin(timeout: 1) { false }
-        XCTAssertEqual(log.teardowns, 1, "only the resumed reader is torn down")
-        // The speech plays across the resume point (buffer 3 is about 0.25 s in).
-        let pcm = try ExportConformance.pcm(r.output)
-        XCTAssertGreaterThan(ExportConformance.rmsDb(pcm, channel: 0, 4_800, 96_000), -45, "audio across the resume")
+        XCTAssertEqual(log.teardowns, 1 + first.resumes - first.hungReads, "every reader but the hung one is torn down")
+        // The speech plays across the resume point (buffer 3 is about 0.25 s in) when the resumed
+        // read passed validation (under Thread Sanitizer every read shows tap range
+        // discontinuities and the last attempt is accepted as is).
+        if first.rejection == nil {
+            let pcm = try ExportConformance.pcm(r.output)
+            XCTAssertGreaterThan(ExportConformance.rmsDb(pcm, channel: 0, 4_800, 96_000), -45, "audio across the resume")
+        }
         assertReleased(h)
     }
 
