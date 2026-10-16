@@ -54,13 +54,18 @@ enum D7Plans {
     /// the reader).
     static func soak800(w: Int = 640, h: Int = 360, durUs: Int64 = durUs, audio include: (String) -> Bool = { _ in true }) -> Data {
         let W = Double(w), H = Double(h)
-        var layers = clips.map { layer($0.0, $0.1, $0.2, $0.3, $0.4, $0.5, w: W, h: H) }
-        layers.append(ExportPlans.imageLayer("it_wtA9BE8zi7pK#v", asset: still, t0: 10_066_667, t1: 11_500_000, w: W, h: H))
-        layers.append(ExportPlans.imageLayer("it_p3RqcVEHtbDf#v", asset: still, t0: 11_500_000, t1: 13_066_667, w: W, h: H))
-        var audio = [seg("it_dVNOVTtWDHIE", speech, 0, 10_000_000, 0, 10_000_000)]
-        audio += clips.map { seg($0.0, $0.1, $0.2, $0.3, $0.4, $0.5) }
-        audio = audio.filter { a in include(a) }
-        return ExportPlans.plan(w: w, h: h, fps: 30, gridFps: 30, durUs: durUs, assets: assets(), layers: layers, audio: audio)
+        var layers = clips.map { (t0: $0.2, json: layer($0.0, $0.1, $0.2, $0.3, $0.4, $0.5, w: W, h: H)) }
+        layers.append((10_066_667, ExportPlans.imageLayer("it_wtA9BE8zi7pK#v", asset: still, t0: 10_066_667, t1: 11_500_000, w: W, h: H)))
+        layers.append((11_500_000, ExportPlans.imageLayer("it_p3RqcVEHtbDf#v", asset: still, t0: 11_500_000, t1: 13_066_667, w: W, h: H)))
+        layers.sort { $0.t0 < $1.t0 }
+        // Compiled order: by start, then id.
+        var audio = [(t0: Int64(0), id: "it_dVNOVTtWDHIE", json: seg("it_dVNOVTtWDHIE", speech, 0, 10_000_000, 0, 10_000_000))]
+        audio += clips.map { (t0: $0.2, id: $0.0, json: seg($0.0, $0.1, $0.2, $0.3, $0.4, $0.5)) }
+        audio.sort { ($0.t0, $0.id) < ($1.t0, $1.id) }
+        return ExportPlans.plan(w: w, h: h, fps: 30, gridFps: 30, durUs: durUs, assets: assets(), layers: layers.map(\.json),
+                                audio: audio.map(\.json).filter(include))
+    }
+    static func unused() {
     }
 }
 

@@ -31,9 +31,26 @@
 //   segment, see `TimePitchWatch`) and redone with a fresh composition, at most twice; the last attempt is
 //   accepted (sanitised) unless it hangs or fails.
 //
+// Reader threading and hangs (FIX-IOS-D7, QA-05 D7, QA-01 FIX-IOS-12-1). AVAssetReaderAudioMixOutput
+// over a keep-pitch scaled track sometimes blocks inside `copyNextSampleBuffer` for good
+// (`remakerFamily_renderPipelineRanDry`; `ExportD7Tests` sees it in about 1 of 20 reads of the soak
+// project on the iOS 26.5 simulator, the soak under load in every read). Rules:
+// - every AVAssetReader is created, read, cancelled and released on ONE serial queue of its own
+//   (`MixReadSession`, `CompositionVideoSource`), and its queue closures hold the reader, its output
+//   and the composition, so nothing is cancelled or released while a call into it is outstanding;
+// - the audio watchdog only signals: a hung read is left blocked on its queue (its teardown queued
+//   behind it) and the read resumes on a fresh composition and reader from the frame after the last
+//   delivered buffer (`maxAudioResumes`), so the export completes; a stop request ends the wait at
+//   once (typed interruption);
+// - each export segment reads its own anchored copy of the composition (no composition is mutated
+//   while a reader uses it), every audio read gets a fresh composition (never the video phase's),
+//   and each phase's readers are torn down, and their compositions released, before the next phase
+//   or the next export starts.
+//
 // Order: video segments (phase rendering; progress = last video PTS / duration), then the audio
 // file and the concat (phase finishing). Pumps run on IOS-17's serial pump queue with
-// requestMediaDataWhenReady; this class blocks the calling queue (the export work queue).
+// requestMediaDataWhenReady and call into the readers through their own queues; this class blocks
+// the calling queue (the export work queue).
 // Interruptions (background, AVFoundation −11847/−11819) return `.interrupted` with the checkpoint
 // kept; `cancel` throws `cancelled` (the coordinator deletes the files).
 
@@ -122,8 +139,15 @@ enum ExportSpacer {
     /// Re-lays [built]'s spacer so that a sample starts at [start] (no-op at 0, past the end, or
     /// without a spacer). Call only while no reader of the composition is reading.
     static func anchor(_ built: BuiltComposition, at start: CMTime) throws {
+        try anchor(built.composition, built: built, at: start)
+    }
+
+    /// Re-lays the spacer of [composition] (a copy of [built]'s composition, or that composition
+    /// itself) so that a sample starts at [start] (FIX-IOS-D7: each export segment anchors its
+    /// own copy, so no composition a reader still uses is ever mutated).
+    static func anchor(_ composition: AVMutableComposition, built: BuiltComposition, at start: CMTime) throws {
         guard let id = built.spacerTrackID, let source = built.sources.spacerTrack, let unit = built.sources.spacerRange,
-              let track = built.composition.track(withTrackID: id) else { return }
+              let track = composition.track(withTrackID: id) else { return }
         let end = track.timeRange.end
         guard start.isNumeric, end.isNumeric, CMTimeCompare(start, .zero) > 0, CMTimeCompare(start, end) < 0 else { return }
         track.removeTimeRange(CMTimeRange(start: .zero, end: end))
@@ -187,8 +211,14 @@ final class ReaderWriterPipeline {
     var segmentDurationUs = SegmentedWriter.defaultSegmentDurationUs
     /// Audio reads per job (the first plus at most two redos).
     var maxAudioAttempts = 3
-    /// Seconds one audio buffer may take before the read counts as hung.
-    var audioWatchdog: TimeInterval = 30
+    /// Seconds one audio buffer may take before the read counts as hung (FIX-IOS-D7: the
+    /// watchdog only signals; the read resumes on a fresh reader, see `MixAudioSource`).
+    var audioWatchdog: TimeInterval = 8
+    /// Resumes per audio read after hung reads.
+    var maxAudioResumes = 3
+    /// Seconds the pipeline waits for a reader's teardown at the end of a phase (a reader blocked
+    /// inside AVFoundation is not waited for: it is left behind, untouched).
+    var teardownTimeout: TimeInterval = 2
     /// Encoder probe used to classify video encoder failures (`encoderSizeLimit` vs
     /// `encoderUnavailable`); decoder and media errors keep their codes (`decoderInitFailed` routes
     /// the job to the multi-pass hook).
@@ -235,18 +265,18 @@ final class ReaderWriterPipeline {
         if control.isCancelled { throw EngineError.cancelled }
         if let job = control as? ExportJob { job.restoreProgress(doneUs: writer.checkpoint.resumeTimeUs) }
 
-        var composition: ExportComposition?
-        defer { composition?.release() }
-
         // Video segments.
         if !writer.checkpoint.isVideoComplete {
             control.enter(.preparing)
             let built = try makeComposition(plan)
-            composition = built
             let rotator = input.layout == .rotated
                 ? FrameRotator(sourceWidth: input.settings.width, sourceHeight: input.settings.height) : nil
             let source = CompositionVideoSource(composition: built, control: control, rotator: rotator)
             source.openFault = videoOpenFault
+            // FIX-IOS-D7: the video phase's reader, compositor session and composition are gone
+            // before the audio read (and before the next export) starts. A reader still blocked
+            // inside AVFoundation is never touched: its teardown runs on its queue once it returns.
+            defer { ReaderWriterPipeline.retire(source, built, timeout: teardownTimeout) }
             control.enter(.rendering)
             let outcome: SegmentedWriter.Outcome
             do {
@@ -266,14 +296,12 @@ final class ReaderWriterPipeline {
         // Audio and concat.
         control.enter(.finishing)
         if !writer.checkpoint.audioComplete {
-            if try writeAudio(writer, composition: &composition) == .interrupted {
+            if try writeAudio(writer) == .interrupted {
                 if control.isCancelled { throw EngineError.cancelled }
                 return .interrupted
             }
         }
         if control.isCancelled { throw EngineError.cancelled }
-        composition?.release()
-        composition = nil
 
         // The rotated layout's preferredTransform is set by the concat writer itself (one copy).
         let transform = input.layout == .rotated
@@ -295,25 +323,25 @@ final class ReaderWriterPipeline {
             frames: concat.frames, peakDiskBytes: concat.peakDiskBytes, reencodedSegments: concat.reencodedSegments))
     }
 
-    private func writeAudio(_ writer: SegmentedWriter, composition: inout ExportComposition?) throws -> SegmentedWriter.Outcome {
+    private func writeAudio(_ writer: SegmentedWriter) throws -> SegmentedWriter.Outcome {
         let plan = input.plan
         if plan.audio.isEmpty {
             wroteSilentAudio = true
             return try writer.writeAudio(source: SilentAudioSource(control: control))
         }
         let audible = ReaderWriterPipeline.hasAudibleAudio(plan)
+        let factory = makeComposition
         var attempt = 0
         while true {
             attempt += 1
             audioAttempts = attempt
-            if composition == nil || attempt > 1 {
-                composition?.release()
-                composition = nil
-                composition = try makeComposition(plan)
-            }
-            guard let built = composition else { throw EngineError(.internal, "no export composition") }
+            control.enter(.finishing) // a heartbeat per attempt
+            // FIX-IOS-D7: every read gets its own fresh composition (never the video phase's, never
+            // the one a hung read still holds).
+            let built = try factory(plan)
             guard built.built.audioMix != nil, !built.audioTracks.isEmpty else {
                 // Every segment was skipped (missing streams): silence, never a mix over zero tracks.
+                built.release()
                 wroteSilentAudio = true
                 return try writer.writeAudio(source: SilentAudioSource(control: control))
             }
@@ -321,7 +349,10 @@ final class ReaderWriterPipeline {
             source.timePitchWatch = TimePitchWatch.of(plan)
             source.validates = attempt < maxAudioAttempts
             source.watchdog = audioWatchdog
+            source.maxResumes = maxAudioResumes
+            source.reopen = { try factory(plan) }
             audioSourceHook?(source, attempt)
+            defer { ReaderWriterPipeline.retire(source, timeout: teardownTimeout) }
             do {
                 return try writer.writeAudio(source: source)
             } catch {
@@ -331,17 +362,57 @@ final class ReaderWriterPipeline {
             }
         }
     }
+
+    // MARK: Teardown (FIX-IOS-D7)
+
+    /// Releases the video phase: closes the segment reader (queued behind any outstanding call)
+    /// and releases [composition] once the reader is gone, waiting up to [timeout] for that.
+    static func retire(_ source: CompositionVideoSource, _ composition: ExportComposition, timeout: TimeInterval) {
+        source.closeSegment()
+        if source.waitForTeardown(timeout: timeout) {
+            composition.release()
+        } else {
+            Log.error(.export, "video reader still blocked at teardown; left behind")
+            source.afterTeardown { composition.release() }
+        }
+    }
+
+    /// Releases an audio read: every reader of [source] is closed (queued behind any outstanding
+    /// call) and its compositions are released once their readers are gone.
+    static func retire(_ source: MixAudioSource, timeout: TimeInterval) {
+        source.closeAudio()
+        let compositions = source.compositions
+        if source.waitForTeardown(timeout: timeout) {
+            compositions.forEach { $0.release() }
+        } else {
+            source.retire { compositions.forEach { $0.release() } }
+        }
+    }
 }
 
 // MARK: - Video source
 
 /// Frames of the export composition per segment (AVAssetReaderVideoCompositionOutput).
+///
+/// FIX-IOS-D7 / FIX-IOS-12-1: every call into a segment's reader and output (creation, the
+/// spacer anchor, `startReading`, `copyNextSampleBuffer`, `status`, `cancelReading`, release) runs
+/// on this source's serial reader queue, so a reader is never cancelled or released while a call
+/// into it is outstanding (`closeSegment` queues the teardown behind it). Each segment reads its
+/// own copy of the composition with the spacer anchored at the segment start, so the composition
+/// a previous (cancelled, still tearing down) reader used is never mutated under it.
 final class CompositionVideoSource: SegmentVideoSource {
     private let composition: ExportComposition
     private let control: PipelineControl
     private let rotator: FrameRotator?
+    private let readerQueue = DispatchQueue(label: "com.vecvel.danaview.editor.export.videoread", qos: .userInitiated)
+    // Reader-queue state.
     private var reader: AVAssetReader?
     private var output: AVAssetReaderVideoCompositionOutput?
+    private var segmentAsset: AVComposition?
+    private var after: [() -> Void] = []
+    // Caller-side state (lock-protected: the work queue opens and closes, the pump reads).
+    private let lock = NSLock()
+    private var outstanding = 0
     /// Test hook: an error to throw when opening the segment that starts at the given µs.
     var openFault: ((Int64) -> Error?)?
     /// Frames delivered (all segments).
@@ -361,19 +432,33 @@ final class CompositionVideoSource: SegmentVideoSource {
     func openSegment(startUs: Int64, endUs: Int64) throws {
         closeSegment()
         if let fault = openFault?(startUs) { throw fault }
+        try call { try self.open(startUs: startUs, endUs: endUs) }
+    }
+
+    /// Reader queue: the segment's reader over its own anchored copy of the composition.
+    private func open(startUs: Int64, endUs: Int64) throws {
         let built = composition.built
         let range = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: built.plan)
-        // QA-05 D1: a spacer sample must start where the reader starts (see `ExportSpacer`).
-        if ExportSpacer.isEnabled { try ExportSpacer.anchor(built, at: range.start) }
+        let asset: AVComposition
+        if ExportSpacer.isEnabled {
+            // QA-05 D1: a spacer sample must start where the reader starts (see `ExportSpacer`).
+            guard let copy = built.composition.mutableCopy() as? AVMutableComposition else {
+                throw EngineError(.internal, "composition copy failed")
+            }
+            try ExportSpacer.anchor(copy, built: built, at: range.start)
+            asset = copy
+        } else {
+            asset = built.composition
+        }
         let reader: AVAssetReader
         do {
-            reader = try AVAssetReader(asset: built.composition)
+            reader = try AVAssetReader(asset: asset)
         } catch {
             throw EngineError.from(error)
         }
         reader.timeRange = range
         let output = AVAssetReaderVideoCompositionOutput(
-            videoTracks: built.composition.tracks(withMediaType: .video), videoSettings: CompositionVideoSource.videoSettings)
+            videoTracks: asset.tracks(withMediaType: .video), videoSettings: CompositionVideoSource.videoSettings)
         output.videoComposition = built.videoComposition
         output.alwaysCopiesSampleData = false
         guard reader.canAdd(output) else { throw EngineError(.decoderInitFailed, "video composition output refused") }
@@ -383,29 +468,75 @@ final class CompositionVideoSource: SegmentVideoSource {
         }
         self.reader = reader
         self.output = output
+        segmentAsset = asset
     }
 
     func nextFrame() throws -> SegmentFrame? {
         control.waitWhileThermalCritical()
-        guard let output = output, let reader = reader else { return nil }
-        while let sample = output.copyNextSampleBuffer() {
-            guard let image = CMSampleBufferGetImageBuffer(sample) else { continue }
-            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-            let frame = try rotator?.rotate(image) ?? image
-            framesRead += 1
-            control.videoProgress(lastPtsUs: FrameGrid.us(pts))
-            return SegmentFrame(pixelBuffer: frame, pts: pts)
+        let read: (CVPixelBuffer, CMTime)? = try call {
+            guard let output = self.output, let reader = self.reader else { return nil }
+            while let sample = output.copyNextSampleBuffer() {
+                guard let image = CMSampleBufferGetImageBuffer(sample) else { continue }
+                return (image, CMSampleBufferGetPresentationTimeStamp(sample))
+            }
+            if reader.status == .failed {
+                throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "export reader failed")
+            }
+            return nil
         }
-        if reader.status == .failed {
-            throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "export reader failed")
-        }
-        return nil
+        guard let (image, pts) = read else { return nil }
+        let frame = try rotator?.rotate(image) ?? image
+        framesRead += 1
+        control.videoProgress(lastPtsUs: FrameGrid.us(pts))
+        return SegmentFrame(pixelBuffer: frame, pts: pts)
     }
 
+    /// Queues the teardown of the current segment's reader behind any outstanding call.
     func closeSegment() {
-        if reader?.status == .reading { reader?.cancelReading() }
-        reader = nil
-        output = nil
+        readerQueue.async { [self] in
+            if reader?.status == .reading { reader?.cancelReading() }
+            reader = nil
+            output = nil
+            segmentAsset = nil
+            let work = after
+            after = []
+            work.forEach { $0() }
+        }
+    }
+
+    /// Waits up to [timeout] for the queued teardown; false at once when a call into the reader is
+    /// still outstanding (blocked inside AVFoundation: it is left alone).
+    func waitForTeardown(timeout: TimeInterval) -> Bool {
+        if isCalling { return false }
+        let done = DispatchSemaphore(value: 0)
+        readerQueue.async { done.signal() }
+        return done.wait(timeout: .now() + timeout) == .success
+    }
+
+    /// Runs [body] on the reader queue once the queued work (a teardown included) is done.
+    func afterTeardown(_ body: @escaping () -> Void) {
+        readerQueue.async { [self] in
+            if reader == nil { body() } else { after.append(body) }
+        }
+    }
+
+    private var isCalling: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return outstanding > 0
+    }
+
+    /// Runs [body] on the reader queue (counted as an outstanding call while it runs).
+    private func call<T>(_ body: () throws -> T) throws -> T {
+        lock.lock()
+        outstanding += 1
+        lock.unlock()
+        defer {
+            lock.lock()
+            outstanding -= 1
+            lock.unlock()
+        }
+        return try readerQueue.sync(execute: body)
     }
 }
 
@@ -656,20 +787,41 @@ final class MixAudioSource: SegmentAudioSource {
     private let composition: ExportComposition
     private let expectAudible: Bool
     private let control: PipelineControl?
-    private let readQueue = DispatchQueue(label: "com.vecvel.danaview.editor.export.audioread", qos: .userInitiated)
-    private var reader: AVAssetReader?
-    private var output: AVAssetReaderAudioMixOutput?
+    /// The reader in use (pump queue only); its AVAssetReader lives on the session's own queue.
+    private var session: MixReadSession?
+    /// Sessions opened by this source (the first plus resumes), for validation and teardown.
+    private var sessions: [MixReadSession] = []
+    /// Reader range end (resumes read to it).
+    private var rangeEnd: CMTime = .invalid
+    /// Absolute 48 kHz frame of the next frame the writer gets (continuity across a resume).
+    private var nextFrame: Int64 = 0
+    /// A real buffer held back while the silence of a resume gap goes first.
+    private var pending: CMSampleBuffer?
 
     /// Reject bad reads (false on the last attempt: the read is accepted, sanitised).
     var validates = true
-    /// Seconds one buffer may take.
-    var watchdog: TimeInterval = 30
+    /// Seconds one buffer may take before the read counts as hung (the watchdog only signals: the
+    /// blocked reader is never cancelled or released while its call is outstanding).
+    var watchdog: TimeInterval = 8
+    /// A fresh export composition for a resume after a hung read (nil: a hung read fails the read).
+    var reopen: (() throws -> ExportComposition)?
+    /// Resumes per read after hung reads (each on a fresh composition and reader from the frame
+    /// after the last delivered buffer).
+    var maxResumes = 3
     /// Test hook: rewrites the floats of buffer n (0-based) before validation.
     var corrupt: ((Int, UnsafeMutableBufferPointer<Float>) -> Void)?
-    /// Test hook: runs on the read queue right before read n (0-based) calls copyNextSampleBuffer
-    /// (block it to simulate AVFoundation's hung read).
+    /// Test hook: runs on the reader's queue right before read n (0-based, over all sessions)
+    /// calls copyNextSampleBuffer (block it to simulate AVFoundation's hung read).
     var readGate: ((Int) -> Void)?
+    /// Test hook: called on a session's queue once its reader is cancelled and released.
+    var onTeardown: (() -> Void)?
     private var reads = 0
+
+    /// Resumes done after hung reads.
+    private(set) var resumes = 0
+    /// Hung reads seen (each one left alone on its own queue).
+    private(set) var hungReads = 0
+    private var hung: [MixReadSession] = []
 
     /// Why the read was rejected (nil = accepted or not finished).
     private(set) var rejection: String?
@@ -721,69 +873,134 @@ final class MixAudioSource: SegmentAudioSource {
 
     func openAudio(startUs: Int64, endUs: Int64) throws {
         closeAudio()
-        let built = composition.built
-        let tracks = composition.audioTracks
-        guard let mix = built.audioMix, !tracks.isEmpty else {
+        guard composition.built.audioMix != nil, !composition.audioTracks.isEmpty else {
             // D-38: never construct a mix output over zero tracks.
             throw EngineError(.internal, "audio mix without tracks")
         }
-        let reader: AVAssetReader
-        do {
-            reader = try AVAssetReader(asset: built.composition)
-        } catch {
-            throw EngineError.from(error)
-        }
-        reader.timeRange = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: built.plan)
-        let output = AVAssetReaderAudioMixOutput(audioTracks: tracks, audioSettings: ExportPCM.readerSettings)
-        output.audioMix = mix
-        output.audioTimePitchAlgorithm = .timeDomain
-        output.alwaysCopiesSampleData = false
-        guard reader.canAdd(output) else { throw EngineError(.decodeFailed, "audio mix output refused") }
-        reader.add(output)
-        guard reader.startReading() else {
-            throw reader.error.map(EngineError.from) ?? EngineError(.decoderInitFailed, "audio reader did not start")
-        }
-        self.reader = reader
-        self.output = output
+        let range = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: composition.built.plan)
+        rangeEnd = range.end
+        nextFrame = MixAudioSource.frame(range.start)
+        try open(composition, range: range)
+    }
+
+    private func open(_ composition: ExportComposition, range: CMTimeRange) throws {
+        let s = try MixReadSession(composition: composition, range: range, onTeardown: onTeardown)
+        session = s
+        sessions.append(s)
+    }
+
+    static func frame(_ time: CMTime) -> Int64 {
+        Int64((time.seconds * Double(ExportPCM.sampleRate)).rounded())
     }
 
     func nextAudio() throws -> CMSampleBuffer? {
         control?.waitWhileThermalCritical()
-        guard let output = output, let reader = reader else { return nil }
-        let box = SampleBox()
-        let done = DispatchSemaphore(value: 0)
-        let gate = readGate
-        let n = reads
-        reads += 1
-        readQueue.async {
-            gate?(n)
-            box.sample = output.copyNextSampleBuffer()
-            done.signal()
+        if let held = pending {
+            pending = nil
+            return try sanitized(held, skip: 0)
         }
-        if done.wait(timeout: .now() + watchdog) == .timedOut {
-            rejection = "hung"
-            reader.cancelReading()
-            _ = done.wait(timeout: .now() + 5)
-            throw EngineError(.decodeFailed, "audio read hung", retryable: true)
-        }
-        guard let sample = box.sample else {
-            if reader.status == .failed {
+        while true {
+            guard let current = session else { return nil }
+            let n = reads
+            reads += 1
+            switch try waitFor(current.read(gate: readGate, index: n)) {
+            case .sample(let sample):
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                guard pts.isNumeric else { return try sanitized(sample, skip: 0) }
+                let first = MixAudioSource.frame(pts)
+                let count = Int64(CMSampleBufferGetNumSamples(sample))
+                if first + count <= nextFrame && sessions.count > 1 { continue } // read again after a resume
+                if first > nextFrame && sessions.count > 1 {
+                    // A resumed reader started late: silence for the gap, then the buffer.
+                    pending = sample
+                    let gap = Int(first - nextFrame)
+                    let silence = try ExportPCM.makeBuffer(
+                        frames: gap, pts: CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate))) { _ in }
+                    return try sanitized(silence, skip: 0, real: false)
+                }
+                let skip = sessions.count > 1 ? Int(max(0, nextFrame - first)) : 0
+                return try sanitized(sample, skip: skip)
+            case .end:
+                try finishValidation()
+                return nil
+            case .failed(let error):
                 rejection = "failed"
-                throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "audio reader failed")
+                throw error.map(EngineError.from) ?? EngineError(.decodeFailed, "audio reader failed")
+            case .hung:
+                hungReads += 1
+                hung.append(current)
+                // The watchdog only signals: the blocked call keeps its reader, and the reader is
+                // torn down on its own queue once (if ever) the call returns.
+                current.close()
+                session = nil
+                guard let reopen = reopen, resumes < maxResumes, CMTimeCompare(resumeTime, rangeEnd) < 0 else {
+                    rejection = "hung"
+                    throw EngineError(.decodeFailed, "audio read hung", retryable: true)
+                }
+                resumes += 1
+                Log.info(.export, "audio read hung at \(resumeTime.seconds) s; resuming on a fresh reader (\(resumes))")
+                try open(try reopen(), range: CMTimeRange(start: resumeTime, end: rangeEnd))
             }
-            try finishValidation()
-            return nil
         }
-        return try sanitized(sample)
     }
 
-    private final class SampleBox {
-        var sample: CMSampleBuffer?
+    private var resumeTime: CMTime { CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate)) }
+
+    /// Waits for [ticket] in short slices: at most `watchdog` seconds (then `.hung`), and never
+    /// past a stop request (a cancel or background interruption ends the read at once, typed as
+    /// an interruption; the blocked call is left to its queue).
+    private func waitFor(_ ticket: MixReadSession.Ticket) throws -> MixReadSession.Outcome {
+        let deadline = Date().addingTimeInterval(watchdog)
+        while true {
+            if let outcome = ticket.wait(SegmentedWriter.waitSlice) { return outcome }
+            if control?.shouldStop == true {
+                session?.close()
+                session = nil
+                throw EngineError(.interrupted, "audio read stopped", retryable: true)
+            }
+            if Date() >= deadline { return .hung }
+        }
     }
+
+    /// Waits until every reader of this source is torn down (false when one is still blocked
+    /// inside AVFoundation after [timeout] s: it is then left behind, untouched).
+    @discardableResult
+    func waitForTeardown(timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        var all = true
+        for s in sessions {
+            s.close()
+            // A hung reader is not waited for (its call may never return).
+            if hung.contains(where: { $0 === s }) {
+                all = false
+                continue
+            }
+            if !s.waitClosed(until: deadline) { all = false }
+        }
+        return all
+    }
+
+    /// Runs [body] once every reader of this source is torn down (on the last session's queue,
+    /// after any blocked call returned): used to release the compositions only then.
+    func retire(_ body: @escaping () -> Void) {
+        let all = sessions
+        guard !all.isEmpty else { return body() }
+        let group = DispatchGroup()
+        for s in all {
+            group.enter()
+            s.close() // queued behind any outstanding call: safe even for a blocked reader
+            s.afterTeardown { group.leave() }
+        }
+        group.notify(queue: .global(qos: .utility), execute: body)
+    }
+
+    /// The compositions this source read (the first plus one per resume).
+    var compositions: [ExportComposition] { sessions.map(\.composition) }
 
     private func finishValidation() throws {
         var reason: String?
-        let jumps = composition.built.gainTaps.map(\.rangeDiscontinuities).reduce(0, +)
+        // A resumed session's taps start at its own range start (no discontinuity there).
+        let jumps = sessions.flatMap { $0.composition.built.gainTaps }.map(\.rangeDiscontinuities).reduce(0, +)
         if nanSamples > 0 {
             reason = "NaN"
         } else if expectAudible && peak < MixAudioSource.silencePeak {
@@ -805,23 +1022,28 @@ final class MixAudioSource: SegmentAudioSource {
         throw EngineError(.decodeFailed, "audio read rejected: \(reason)", retryable: true)
     }
 
-    /// A copy of [sample] with NaN → 0 and every sample clamped to [−1, 1].
-    private func sanitized(_ sample: CMSampleBuffer) throws -> CMSampleBuffer {
+    /// A copy of [sample] without its first [skip] frames, NaN → 0 and every sample clamped to
+    /// [−1, 1]. [real] false: generated silence (not counted as a read buffer for `corrupt`).
+    private func sanitized(_ sample: CMSampleBuffer, skip: Int, real: Bool = true) throws -> CMSampleBuffer {
         guard let block = CMSampleBufferGetDataBuffer(sample) else { throw EngineError(.decodeFailed, "audio buffer without data") }
         let length = CMBlockBufferGetDataLength(block)
         let count = length / MemoryLayout<Float>.size
-        let frameCount = count / ExportPCM.channels
-        guard frameCount > 0 else { return try ExportPCM.makeBuffer(frames: 1, pts: CMSampleBufferGetPresentationTimeStamp(sample)) { _ in } }
+        let total = count / ExportPCM.channels
+        let frameCount = total - skip
+        var pts = CMSampleBufferGetPresentationTimeStamp(sample)
+        if skip > 0 { pts = CMTimeAdd(pts, CMTime(value: CMTimeValue(skip), timescale: CMTimeScale(ExportPCM.sampleRate))) }
+        guard frameCount > 0 else { return try ExportPCM.makeBuffer(frames: 1, pts: pts) { _ in } }
         let index = buffers
-        buffers += 1
+        if real { buffers += 1 }
         var nan = 0
         var clipped = 0
         var localPeak: Float = 0
-        let out = try ExportPCM.makeBuffer(frames: frameCount, pts: CMSampleBufferGetPresentationTimeStamp(sample)) { dst in
+        let offset = skip * ExportPCM.channels * 4
+        let out = try ExportPCM.makeBuffer(frames: frameCount, pts: pts) { dst in
             _ = dst.withMemoryRebound(to: UInt8.self) { bytes in
-                CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: frameCount * ExportPCM.channels * 4, destination: bytes.baseAddress!)
+                CMBlockBufferCopyDataBytes(block, atOffset: offset, dataLength: frameCount * ExportPCM.channels * 4, destination: bytes.baseAddress!)
             }
-            corrupt?(index, dst)
+            if real { corrupt?(index, dst) }
             for i in 0..<dst.count {
                 var v = dst[i]
                 if v.isNaN {
@@ -840,6 +1062,7 @@ final class MixAudioSource: SegmentAudioSource {
             }
         }
         frames += frameCount
+        if pts.isNumeric { nextFrame = MixAudioSource.frame(pts) + Int64(frameCount) }
         nanSamples += nan
         clippedSamples += clipped
         peak = max(peak, localPeak)
@@ -962,8 +1185,157 @@ final class MixAudioSource: SegmentAudioSource {
     }
 
     func closeAudio() {
-        if reader?.status == .reading { reader?.cancelReading() }
-        reader = nil
-        output = nil
+        session?.close()
+        session = nil
+        pending = nil
+    }
+}
+
+/// One AVAssetReader over an export composition's audio mix (FIX-IOS-D7, QA-05 D7).
+///
+/// Every call into the reader and its output (creation, `startReading`, `copyNextSampleBuffer`,
+/// `status`, `error`, `cancelReading`, release) runs on the session's own serial queue, so nothing
+/// ever cancels or releases the reader while a call into it is outstanding. The queue's closures
+/// hold the reader, its output and the composition (taps, compositor session), so a read that
+/// AVFoundation leaves blocked keeps them all alive; `close()` is queued behind it and runs only
+/// once that call returned. Before this, the 30 s watchdog called `cancelReading()` on the blocked
+/// reader and the source then released it while `copyNextSampleBuffer` was still inside it (the
+/// closure held only the output, which does not keep its reader alive): run b's SIGSEGV in
+/// `assetReader_ExtractAndRetainNextSampleBuffer`, reproduced by `ExportD7Tests` as
+/// "cannot copy next sample buffer before adding this output to an instance of AVAssetReader".
+final class MixReadSession {
+    enum Outcome {
+        case sample(CMSampleBuffer)
+        case end
+        case failed(Error?)
+        case hung
+    }
+
+    /// One read handed to the session's queue.
+    final class Ticket {
+        private let done = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var outcome: Outcome?
+
+        fileprivate func complete(_ value: Outcome) {
+            lock.lock()
+            outcome = value
+            lock.unlock()
+            done.signal()
+        }
+
+        /// The outcome, or nil when the read is still running after [seconds].
+        func wait(_ seconds: TimeInterval) -> Outcome? {
+            guard done.wait(timeout: .now() + seconds) == .success else { return nil }
+            lock.lock()
+            defer { lock.unlock() }
+            return outcome
+        }
+    }
+
+    let composition: ExportComposition
+    private let queue = DispatchQueue(label: "com.vecvel.danaview.editor.export.audioread", qos: .userInitiated)
+    private let onTeardown: (() -> Void)?
+    private let closed = DispatchSemaphore(value: 0)
+    // Queue-only state.
+    private var reader: AVAssetReader?
+    private var output: AVAssetReaderAudioMixOutput?
+    private var isClosed = false
+    private var after: [() -> Void] = []
+    private let flagLock = NSLock()
+    private var _closeRequested = false
+
+    /// Marks the close as requested; false when it already was.
+    private func requestClose() -> Bool {
+        flagLock.lock()
+        defer { flagLock.unlock() }
+        guard !_closeRequested else { return false }
+        _closeRequested = true
+        return true
+    }
+
+    private var closeRequested: Bool {
+        flagLock.lock()
+        defer { flagLock.unlock() }
+        return _closeRequested
+    }
+
+    init(composition: ExportComposition, range: CMTimeRange, onTeardown: (() -> Void)?) throws {
+        self.composition = composition
+        self.onTeardown = onTeardown
+        try queue.sync { try self.start(range) }
+    }
+
+    /// Queue: builds and starts the reader.
+    private func start(_ range: CMTimeRange) throws {
+        let built = composition.built
+        let tracks = composition.audioTracks
+        guard let mix = built.audioMix, !tracks.isEmpty else {
+            // D-38: never construct a mix output over zero tracks.
+            throw EngineError(.internal, "audio mix without tracks")
+        }
+        let reader: AVAssetReader
+        do {
+            reader = try AVAssetReader(asset: built.composition)
+        } catch {
+            throw EngineError.from(error)
+        }
+        reader.timeRange = range
+        let output = AVAssetReaderAudioMixOutput(audioTracks: tracks, audioSettings: ExportPCM.readerSettings)
+        output.audioMix = mix
+        output.audioTimePitchAlgorithm = .timeDomain
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { throw EngineError(.decodeFailed, "audio mix output refused") }
+        reader.add(output)
+        guard reader.startReading() else {
+            throw reader.error.map(EngineError.from) ?? EngineError(.decoderInitFailed, "audio reader did not start")
+        }
+        self.reader = reader
+        self.output = output
+    }
+
+    /// Queues one `copyNextSampleBuffer` (and the status check of an end) on the session's queue.
+    func read(gate: ((Int) -> Void)?, index: Int) -> Ticket {
+        let ticket = Ticket()
+        queue.async { [self] in
+            gate?(index)
+            guard let output = output, let reader = reader else { return ticket.complete(.end) }
+            if let sample = output.copyNextSampleBuffer() { return ticket.complete(.sample(sample)) }
+            ticket.complete(reader.status == .failed ? .failed(reader.error) : .end)
+        }
+        return ticket
+    }
+
+    /// Queues the teardown behind any outstanding call: cancel (if still reading), release, then
+    /// the `afterTeardown` work. Idempotent; never blocks the caller.
+    func close() {
+        guard requestClose() else { return }
+        queue.async { [self] in
+            if reader?.status == .reading { reader?.cancelReading() }
+            reader = nil
+            output = nil
+            isClosed = true
+            onTeardown?()
+            let work = after
+            after = []
+            closed.signal()
+            work.forEach { $0() }
+        }
+    }
+
+    /// Runs [body] after the teardown (at once on the queue when it already happened).
+    func afterTeardown(_ body: @escaping () -> Void) {
+        queue.async { [self] in
+            if isClosed { body() } else { after.append(body) }
+        }
+    }
+
+    /// Waits for the teardown until [deadline] (false: still blocked or never closed).
+    func waitClosed(until deadline: Date) -> Bool {
+        guard closeRequested else { return false }
+        let seconds = max(0, deadline.timeIntervalSinceNow)
+        guard closed.wait(timeout: .now() + seconds) == .success else { return false }
+        closed.signal()
+        return true
     }
 }
