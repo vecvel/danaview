@@ -209,8 +209,12 @@ boot_avd() { # <avd>: boots it headless on $SERIAL's port and waits for sys.boot
 
 # Whether the device answers (bounded: a dead emulator can leave adb waiting forever).
 device_ok() {
-  [ "$(run_with_timeout 30 "$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '
-')" = 1 ]
+  local _
+  for _ in 1 2 3; do
+    [ "$(run_with_timeout 30 "$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && return 0
+    sleep 5
+  done
+  return 1
 }
 
 # Before a batch: an emulator that died (it happens under long exports on this host) is booted
@@ -400,8 +404,7 @@ else
   pick_device
   API="$("$ADB" -s "$SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
   echo "device $SERIAL, API $API, $("$ADB" -s "$SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')$([ -n "$BOOTED_BY_US" ] && echo ", booted by this script")"
-  case "$SERIAL" in emulator-*) EMU_AVD="$(run_with_timeout 30 "$ADB" -s "$SERIAL" emu avd name 2>/dev/null | tr -d '
-' | head -1)" ;; esac
+  case "$SERIAL" in emulator-*) EMU_AVD="$(run_with_timeout 30 "$ADB" -s "$SERIAL" emu avd name 2>/dev/null | tr -d '\r' | head -1)" ;; esac
   [ -z "$EMU_AVD" ] || echo "emulator AVD: $EMU_AVD (booted again from it if it dies mid-run)"
 fi
 endgroup
