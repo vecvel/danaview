@@ -6,7 +6,7 @@
 
 ---
 
-## 0. Live status (kept current; last update 2026-10-17 00:50 IST; Android fixes merged 00:47)
+## 0. Live status (kept current; last update 2026-10-17 01:10 IST)
 
 | Ticket | State | What's left |
 |---|---|---|
@@ -14,7 +14,7 @@
 | **QA-05** soak and crash recovery | **Partial.** The process-death phases pass after FIX-QA05-D5. The seeded soak (5150) fails on **D7** | Fix **D7**: iOS export audio read hang, or SIGSEGV in `MixAudioSource.nextAudio()` `copyNextSampleBuffer` (§4.1), then re-run the soak |
 | **QA-02** Android emulator E2E | **Windows lane.** The Kotlin INT-07/ENG-06 fixes are **done and merged** into `editor-wip` (00:47): M-11 `e5ba18d`, M-12 `583c693`, M-16 `e42522a`, M-18 with the native M-17 free-space preflight `7467769`, M-19 `19338db`, M-20 `ee908e4` | After the Mac merges round 7: one clean full QA-02 pass (§4.3) |
 | **INT-05** release | **Prepared, not applied** (release-checklist) | Owner "go" |
-| Round 7 (Mac Dart fixes M-1, M-2..M-7, M-9, M-10, M-13..M-15, M-17 Dart) | **All 6 tickets done**, review running in worktree `parallel-r7` | Commit the worktree, merge into `editor-wip`, re-run the iOS scenarios it touches (s02, s06, s09, s12, s13) |
+| Round 7 (Mac Dart fixes for QA-02: M-1, M-2..M-7, M-9, M-10, M-13..M-15, M-17 Dart) | **Done and merged** into `editor-wip` (`c336899`, 01:10). M-15: the Dart close no longer waits and releases the preview; whether the remaining 30 s on-screen delay is native shows in the new `[EditorClose]`/`[EditorLifecycle]` logs ("leaving the editor" with no "exit callback" means the Android native release blocks the main thread) | Windows: pull `editor-wip`, run the full QA-02 pass; on s09 check the M-15 logs |
 
 Other follow-ups found by QA-01 (not blocking):
 - The player library screens (`danaview_home_screen.dart`, `danaview_folder_screen.dart`, `library_storage.dart`) have a follow-up noted in `QA-01-ios-simulator.md`.
@@ -23,7 +23,7 @@ Other follow-ups found by QA-01 (not blocking):
 **Running (2026-10-17 ~00:55):** Mac round 8 (`editor-build-mac-r8.js`): FIX-IOS-D7 (D7 plus the back-to-back export stall), then the QA-05 re-run and the QA-01 re-check on the iOS simulator. Round 6 and round 7 reviews are finishing.
 
 **Next actions, in order:**
-1. Merge `parallel-r7` once both reviews finish.
+1. ~~Merge `parallel-r7`~~ done (`c336899`).
 2. iOS round: fix D7 and FIX-IOS-12-1, re-run QA-05 and the affected QA-01 scenarios.
 3. Windows: merge `editor-wip`, then the full QA-02 pass.
 4. Close QA-01, QA-02 and QA-05.
