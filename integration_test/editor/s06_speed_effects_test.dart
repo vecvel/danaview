@@ -81,7 +81,22 @@ void main() {
       await E2eApp.pumpUntil(tester, () => ed.state.tasks.isEmpty, what: 'the reverse task', timeout: const Duration(seconds: 90));
     }
 
-    // Cross dissolve (Transitions panel) on the cut before the reversed clip.
+    // Cross dissolve (Transitions panel) on the cut before the reversed clip. A dissolve needs
+    // spare footage (handles) on both sides of the cut, and both clips use their media to the
+    // end, so first trim 15 frames off each side of the cut (ripple, as s07 does): the left piece
+    // loses its tail, the reversed clip its head, and the cut stays closed.
+    const handle = 15;
+    final before = ed.mainTrack.items;
+    final leftId = before[before.indexWhere((i) => i.id == c2.id) - 1].id;
+    final leftEnd = ed.item(leftId).end;
+    ed.apply(TrimItem(leftId, TrimEdge.end, leftEnd - r.timeOfFrame(handle), ripple: true));
+    await ed.waitProject((p) => ed.item(leftId).end == leftEnd - r.timeOfFrame(handle) && ed.item(c2.id).start == ed.item(leftId).end,
+        what: 'the left piece trimmed at its tail');
+    final revStart = ed.item(c2.id).start;
+    final revDuration = ed.item(c2.id).duration;
+    ed.apply(TrimItem(c2.id, TrimEdge.start, revStart + r.timeOfFrame(handle), ripple: true));
+    await ed.waitProject((p) => ed.item(c2.id).start == revStart && ed.item(c2.id).duration < revDuration,
+        what: 'the reversed clip trimmed at its head');
     final mainNow = ed.mainTrack;
     final idx = mainNow.items.indexWhere((i) => i.id == c2.id);
     final cut = TransitionRef(mainNow.id, mainNow.items[idx - 1].id, c2.id);

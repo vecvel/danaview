@@ -8,7 +8,9 @@
 //   unsupported); "Use updated file" stages the file a `changed` asset already points at; "Find in
 //   same folder" stages the other files next to a picked path (path picks only).
 // * "Relink several": one multi-pick, `autoMatch` pairs picks with missing assets, a confirm list
-//   shows the matched pairs and what stayed unmatched, and confirming relinks them in one go.
+//   shows the matched pairs and what stayed unmatched, and confirming relinks them in one go,
+//   together with the files already located one by one (UX-40: those are not "still missing", and
+//   the button counts them: "Relink 3 files" relinks 3).
 // * Nothing changes the project until [RelinkController.apply]: every staged file is relinked in
 //   ONE undoable "Relink media" history entry. The pool service persists the files and decides the
 //   clamps of a shorter file; it applies them to the session it is given, so [apply] gives it a
@@ -181,10 +183,15 @@ final class RelinkMatchEntry {
 @immutable
 final class RelinkSeveralPlan {
   /// Creates a plan.
-  RelinkSeveralPlan({required List<RelinkMatchEntry> matches, required List<RelinkProposal> unmatchedPicks, required List<MediaAsset> stillMissing})
-      : matches = List.unmodifiable(matches),
+  RelinkSeveralPlan({
+    required List<RelinkMatchEntry> matches,
+    required List<RelinkProposal> unmatchedPicks,
+    required List<MediaAsset> stillMissing,
+    Set<MediaId> alreadyStaged = const {},
+  })  : matches = List.unmodifiable(matches),
         unmatchedPicks = List.unmodifiable(unmatchedPicks),
-        stillMissing = List.unmodifiable(stillMissing);
+        stillMissing = List.unmodifiable(stillMissing),
+        alreadyStaged = Set.unmodifiable(alreadyStaged);
 
   /// Pairs found.
   final List<RelinkMatchEntry> matches;
@@ -192,14 +199,25 @@ final class RelinkSeveralPlan {
   /// Picks that matched nothing (unassigned, ambiguous, other kind, unreadable).
   final List<RelinkProposal> unmatchedPicks;
 
-  /// Offline assets nothing was matched to.
+  /// Offline assets nothing was matched to and no file is staged for.
   final List<MediaAsset> stillMissing;
+
+  /// Assets whose file was already located (one by one) before "Relink several": confirming
+  /// relinks them too.
+  final Set<MediaId> alreadyStaged;
 
   /// Files that were picked.
   int get picked => matches.length + unmatchedPicks.length;
 
   /// Pairs the user keeps.
   int get includedCount => matches.where((m) => m.included).length;
+
+  /// Files confirming relinks: the kept pairs plus the files already located (an asset counted
+  /// once when a kept pair replaces its located file).
+  int get relinkCount {
+    final kept = {for (final m in matches) if (m.included) m.asset.id};
+    return kept.length + alreadyStaged.where((id) => !kept.contains(id)).length;
+  }
 }
 
 /// State of the relink flow (ux.md §13.2).
@@ -564,7 +582,8 @@ class RelinkController extends StateNotifier<RelinkState> {
         several: RelinkSeveralPlan(
           matches: matches,
           unmatchedPicks: unmatched,
-          stillMissing: [for (final r in state.rows) if (!taken.contains(r.asset.id)) r.asset],
+          stillMissing: [for (final r in state.rows) if (!taken.contains(r.asset.id) && !r.willRelink) r.asset],
+          alreadyStaged: {for (final r in state.rows) if (r.willRelink) r.asset.id},
         ),
       );
     } on Object catch (e) {
@@ -582,7 +601,12 @@ class RelinkController extends StateNotifier<RelinkState> {
     if (plan == null || index < 0 || index >= plan.matches.length) return;
     final matches = [for (final (i, m) in plan.matches.indexed) i == index ? m.withIncluded(included) : m];
     state = state.copyWith(
-      several: RelinkSeveralPlan(matches: matches, unmatchedPicks: plan.unmatchedPicks, stillMissing: plan.stillMissing),
+      several: RelinkSeveralPlan(
+        matches: matches,
+        unmatchedPicks: plan.unmatchedPicks,
+        stillMissing: plan.stillMissing,
+        alreadyStaged: plan.alreadyStaged,
+      ),
     );
   }
 

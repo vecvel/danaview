@@ -112,6 +112,13 @@ app_kill() {
   fi
 }
 
+# Android 13+ asks for POST_NOTIFICATIONS on the first export of a fresh install; nobody answers that
+# dialog in a test run, so the export would wait at "Preparing…". iOS needs nothing (no-op).
+grant_notifications() {
+  if [[ "$PLATFORM" == ios ]]; then return 0; fi
+  adb -s "$DEVICE" shell pm grant "$APP_ID" android.permission.POST_NOTIFICATIONS
+}
+
 grant_mic() {
   if [[ "$PLATFORM" == ios ]]; then xcrun simctl privacy "$DEVICE" grant microphone "$APP_ID"
   else adb -s "$DEVICE" shell pm grant "$APP_ID" android.permission.RECORD_AUDIO; fi
@@ -173,6 +180,9 @@ serve_one() {
       # before the phase starts and this request only confirms it.
       if [[ "$PLATFORM" == ios ]]; then detail="granted before launch"
       else grant_mic || { ok=false; detail="grant failed"; }; fi ;;
+    grantNotifications)
+      if [[ "$PLATFORM" == ios ]]; then detail="not needed on iOS"
+      else grant_notifications || { ok=false; detail="grant failed"; }; fi ;;
     screenshot) screenshot "$(json_arg "$body" name)" ;;
     tapNotificationCancel)
       if [[ "$PLATFORM" == android ]]; then

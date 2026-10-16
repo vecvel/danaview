@@ -365,6 +365,7 @@ final class ExportUiRunning extends ExportUiState {
     this.eta,
     List<ExportWarning> warnings = const [],
     this.backgroundKind = BackgroundExportKind.none,
+    this.notificationsUnanswered = false,
   }) : warnings = List.unmodifiable(warnings);
 
   /// Engine phase.
@@ -393,6 +394,10 @@ final class ExportUiRunning extends ExportUiState {
 
   /// What the device does in the background (copy).
   final BackgroundExportKind backgroundKind;
+
+  /// Android: the notification permission dialog went unanswered at start (UX-39), so this export
+  /// runs without notifications; the progress view says so once, for this run.
+  final bool notificationsUnanswered;
 }
 
 /// Cancel was confirmed; the job is stopping and deleting its partial file.

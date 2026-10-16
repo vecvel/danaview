@@ -26,6 +26,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'e2e_app.dart';
 import 'e2e_config.dart';
 import 'e2e_editor.dart';
+import 'e2e_handshake.dart';
 
 /// A finished export.
 final class E2eExported {
@@ -89,8 +90,18 @@ abstract final class E2eExport {
     c.setDestination(destination);
     await ed.tester.pump();
     final settings = (state(ed) as ExportUiSetup).draft.settings;
+    await grantNotifications(ed);
     await E2eApp.tapKey(ed.tester, 'export-start');
     return settings;
+  }
+
+  /// Android: has the host grant POST_NOTIFICATIONS before Start, so the system dialog (shown on
+  /// every fresh install, unanswered in a test run) cannot hold the export at "Preparing…". A no-op
+  /// on iOS and without a host driver.
+  static Future<void> grantNotifications(E2eEditor ed) async {
+    if (!Platform.isAndroid || !E2eHandshake.available) return;
+    final ack = await E2eHandshake.request(ed.tester, 'grantNotifications', timeout: const Duration(seconds: 30));
+    if (!ack.ok) throw TestFailure('The host could not grant POST_NOTIFICATIONS: ${ack.detail}');
   }
 
   /// Waits for the started export to complete and be handed off (answers the first-export notice

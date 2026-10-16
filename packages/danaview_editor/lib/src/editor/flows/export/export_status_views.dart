@@ -268,7 +268,9 @@ class ExportRunningView extends StatelessWidget {
         ? ExportStrings.pausedInBackground
         : state.backgrounded
             ? ExportStrings.runningInBackground
-            : ExportStrings.backgroundCopy(state.backgroundKind);
+            : state.notificationsUnanswered
+                ? ExportStrings.notificationsUnanswered
+                : ExportStrings.backgroundCopy(state.backgroundKind);
     final eta = state.eta;
     return Column(
       key: const ValueKey('export-running'),

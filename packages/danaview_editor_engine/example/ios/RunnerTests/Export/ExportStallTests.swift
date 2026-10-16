@@ -107,3 +107,82 @@ final class ExportStallTests: XCTestCase {
         }
     }
 }
+
+final class ExportStallReaderProbe: XCTestCase {
+    static var planVariant: (Bool, Bool, Bool) = (false, false, false)
+
+    func probe(_ a: Int64, _ b: Int64, durUs: Int64 = 31_033_334, cancel: Bool = false, mode: Int = 0) throws {
+        let h = try ExportHarness()
+        defer { h.remove() }
+        let plan = try RenderPlanDecoder.decodePlan(ExportStallTests.soakPlan(images: false, audioOn: false, speeds: false, durUs: durUs))
+        let paths = h.paths
+        let session = try DVRenderSession(snapshots: ParamSnapshotStore(ParamSnapshot(plan: plan)), qos: .userInitiated)
+        var options = CompositionBuildOptions(spacerDirectory: paths.engineAssets)
+        options.renderSize = CGSize(width: plan.canvas.w, height: plan.canvas.h)
+        options.validate = false
+        options.resolveURL = { _, asset in
+            let name = URL(string: asset.uri)?.lastPathComponent ?? ""
+            return TestFixtures.url(.engine, "media/\(name)")!
+        }
+        session.configure(&options)
+        let input = UncheckedSendable((plan, options))
+        let built = try MediaBlocking.await { try await CompositionBuilder.build(plan: input.value.0, options: input.value.1) }
+        let comp = ExportComposition(built: built, session: session)
+        var c: AVComposition = comp.built.composition
+        if mode == 2 {
+            let m = comp.built.composition.mutableCopy() as! AVMutableComposition
+            for t in m.tracks(withMediaType: .video) where CMTimeCompare(t.timeRange.end, m.duration) < 0 {
+                let end = t.timeRange.end
+                t.insertEmptyTimeRange(CMTimeRange(start: end, end: m.duration))
+            }
+            c = m
+        }
+        print("PROBE composition duration \(c.duration.seconds) tracks:")
+        for t in c.tracks {
+            print("PROBE   track \(t.trackID) \(t.mediaType.rawValue) range \(t.timeRange.start.seconds)-\(t.timeRange.end.seconds) segs \(t.segments.count) last \(t.segments.last.map { "\($0.timeMapping.target.start.seconds)+\($0.timeMapping.target.duration.seconds) empty=\($0.isEmpty)" } ?? "-")")
+        }
+        let reader = try AVAssetReader(asset: c)
+        reader.timeRange = ExportTime.readerRange(startUs: a, endUs: b, plan: plan)
+        var tracks = c.tracks(withMediaType: .video)
+        if mode == 1 {
+            let range = reader.timeRange
+            tracks = tracks.filter { CMTimeCompare($0.timeRange.end, range.start) > 0 }
+        }
+        let output = AVAssetReaderVideoCompositionOutput(videoTracks: tracks, videoSettings: CompositionVideoSource.videoSettings)
+        output.videoComposition = comp.built.videoComposition
+        reader.add(output)
+        let started = reader.startReading()
+        print("PROBE mode \(mode) tracks \(tracks.map(\.trackID)) started=\(started) error=\(String(describing: reader.error))")
+        let q = DispatchQueue(label: "probe")
+        let lock = NSLock()
+        var frames = 0
+        var last = CMTime.invalid
+        let done = DispatchSemaphore(value: 0)
+        q.async {
+            while let s = output.copyNextSampleBuffer() {
+                lock.lock(); frames += 1; last = CMSampleBufferGetPresentationTimeStamp(s); lock.unlock()
+            }
+            done.signal()
+        }
+        let hung = done.wait(timeout: .now() + 15) == .timedOut
+        lock.lock(); let f = frames; let l = last; lock.unlock()
+        print("PROBE [\(a),\(b)) dur \(durUs) hung=\(hung) frames=\(f) last=\(l.seconds) status=\(reader.status.rawValue)")
+        XCTAssertFalse(hung, "[\(a),\(b)) hung after \(f) frames")
+        if hung && cancel {
+            let cs = DispatchSemaphore(value: 0)
+            DispatchQueue.global().async { reader.cancelReading(); cs.signal() }
+            let returned = cs.wait(timeout: .now() + 10) == .success
+            let ended = done.wait(timeout: .now() + 5) == .success
+            print("PROBE cancel returned=\(returned) copy ended=\(ended)")
+        }
+        if hung { Thread.sleep(forTimeInterval: 1); exit(0) }
+        comp.release()
+    }
+
+    func testA1_filter_30_end() throws { try probe(30_000_000, 31_033_334, mode: 1) }
+    func testA2_filter_21_25() throws { try probe(21_000_000, 25_000_000, mode: 1) }
+    func testA3_filter_10_20() throws { try probe(10_000_000, 20_000_000, mode: 1) }
+    func testB1_pad_30_end() throws { try probe(30_000_000, 31_033_334, mode: 2) }
+    func testB2_pad_21_25() throws { try probe(21_000_000, 25_000_000, mode: 2) }
+    func testB3_pad_0_end() throws { try probe(0, 31_033_334, mode: 2) }
+}

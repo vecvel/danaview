@@ -245,6 +245,10 @@ abstract final class ExportStrings {
   static const String notificationExplainer =
       'Danaview shows export progress in a notification while it is in the background. Android may ask you to allow notifications.';
 
+  /// The running export after the notification permission dialog went unanswered (UX-39).
+  static const String notificationsUnanswered =
+      "Exporting without notifications. Keep Danaview open to follow the progress here; you can allow notifications later in Settings.";
+
   /// The continue button of the notice.
   static const String noticeContinue = 'Start export';
 

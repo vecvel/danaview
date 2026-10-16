@@ -3,8 +3,8 @@
 // ARCH §21.2 scenario 10: missing media and relink on sandbox copies. Three files the project
 // references in place (Documents) are moved to another folder while the project is closed; on
 // reopening, the missing-media banner opens the Missing media sheet, one file is located by itself
-// ("Locate… › From Files") and the other two with "Relink several"; one Relink commits all and the
-// preview shows the right frames again.
+// ("Locate… › From Files") and the other two with "Relink several"; its confirm relinks all three
+// in one go and the preview shows the right frames again.
 
 import 'dart:io';
 
@@ -56,9 +56,9 @@ void main() {
     if (find.text('From Files').evaluate().isNotEmpty) await E2eApp.tap(tester, find.text('From Files').last, what: 'From Files');
     await E2eApp.waitKey(tester, 'relink-confirm');
     await E2eApp.screenshot(tester, 's10_relink_several_confirm');
+    // Confirming relinks everything staged, the located file included ("Relink 3 files", UX-40);
+    // there is no separate apply step after it.
     await E2eApp.tapKey(tester, 'relink-confirm-apply');
-    await E2eApp.waitKey(tester, 'relink-apply');
-    await E2eApp.tapKey(tester, 'relink-apply');
 
     await E2eApp.pumpUntil(
       tester,
@@ -66,6 +66,9 @@ void main() {
       what: 'every file relinked',
       timeout: const Duration(seconds: 60),
     );
+    // The sheet stays up showing "Everything is back"; close it as the user would.
+    if (E2eApp.hasKey('relink-close')) await E2eApp.tapKey(tester, 'relink-close', ifStillThere: true);
+    await E2eApp.pumpUntil(tester, () => !E2eApp.hasKey('relink-close'), what: 'the Missing media sheet to close');
     final relinked = {for (final a in ed.project.pool.assets.values) a.displayName: a};
     for (final t in targets) {
       expect(relinked[t.split('/').last], isNotNull);

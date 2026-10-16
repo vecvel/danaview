@@ -255,6 +255,12 @@ abstract final class RelinkStrings {
   /// Header of the assets that stay missing.
   static const String stillMissingHeader = 'Still missing';
 
+  /// Header of the files located one by one before "Relink several" (relinked too).
+  static const String alreadyLocatedHeader = 'Already located';
+
+  /// Subtitle of an already located file.
+  static const String alreadyLocated = 'Relinked with the others';
+
   /// Matches and a missing name.
   static String replacesName(String name) => 'Replaces $name';
 

@@ -598,7 +598,9 @@ class _ConfirmView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final plan = state.several!;
-    final kept = plan.includedCount;
+    final kept = plan.relinkCount;
+    final keptIds = {for (final m in plan.matches) if (m.included) m.asset.id};
+    final located = [for (final r in state.rows) if (plan.alreadyStaged.contains(r.asset.id) && !keptIds.contains(r.asset.id)) r];
     return Column(
       key: const ValueKey('relink-confirm'),
       mainAxisSize: MainAxisSize.min,
@@ -638,6 +640,21 @@ class _ConfirmView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [for (final p in plan.unmatchedPicks) _UnmatchedRow(pick: p.pick, check: p.check)],
+            ),
+          ),
+        ],
+        if (located.isNotEmpty) ...[
+          const DanaviewSectionHeader(RelinkStrings.alreadyLocatedHeader),
+          DanaviewSurface(
+            key: const ValueKey('relink-already-located'),
+            color: DanaviewColors.surface,
+            padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.md, vertical: DanaviewSpacing.xs),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final r in located)
+                  _NameRow(icon: relinkKindIcon(r.asset.kind), color: DanaviewColors.success, title: r.asset.displayName, subtitle: RelinkStrings.alreadyLocated),
+              ],
             ),
           ),
         ],
