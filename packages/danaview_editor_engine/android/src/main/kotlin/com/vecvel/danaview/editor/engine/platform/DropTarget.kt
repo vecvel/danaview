@@ -239,14 +239,80 @@ class DropTarget(private val ctx: EngineContext) {
             return out.toList()
         }
 
-        /** A file name without separators or control characters, at most 120 characters. */
+        /** Longest sanitized name in UTF-16 characters. */
+        internal const val MAX_NAME_CHARS = 120
+
+        /**
+         * Longest sanitized name in UTF-8 bytes. ext4 and f2fs cap a name at 255 bytes; this leaves
+         * room for the MIME extension that drops and picks may append (INT-07 review D4).
+         */
+        internal const val MAX_NAME_BYTES = 200
+
+        /** Extensions shorter than this (UTF-16 characters) are kept when a name is shortened. */
+        private const val MAX_KEPT_EXTENSION = 10
+
+        /**
+         * A file name without separators, control characters or unpaired surrogates, at most
+         * [MAX_NAME_CHARS] characters and [MAX_NAME_BYTES] UTF-8 bytes. A shortened name keeps a short
+         * extension and is cut only between code points (never inside a surrogate pair).
+         */
         internal fun sanitize(name: String): String {
-            val cleaned = name.map { c -> if (c == '/' || c == '\\' || c == ':' || c.code < 0x20) '_' else c }
-                .joinToString("").trim().trimStart('.')
-            val safe = cleaned.ifEmpty { "drop" }
-            if (safe.length <= 120) return safe
+            val cleaned = StringBuilder(name.length)
+            var i = 0
+            while (i < name.length) {
+                val c = name[i]
+                when {
+                    c == '/' || c == '\\' || c == ':' || c.code < 0x20 -> cleaned.append('_')
+                    c.isHighSurrogate() && i + 1 < name.length && name[i + 1].isLowSurrogate() -> {
+                        cleaned.append(c).append(name[i + 1])
+                        i++
+                    }
+                    c.isSurrogate() -> cleaned.append('_')
+                    else -> cleaned.append(c)
+                }
+                i++
+            }
+            val safe = cleaned.toString().trim().trimStart('.').ifEmpty { "drop" }
+            if (safe.length <= MAX_NAME_CHARS && utf8Length(safe) <= MAX_NAME_BYTES) return safe
             val ext = safe.substringAfterLast('.', "")
-            return if (ext.isNotEmpty() && ext.length < 10) safe.take(119 - ext.length) + "." + ext else safe.take(120)
+            if (ext.isEmpty() || ext.length >= MAX_KEPT_EXTENSION) return truncate(safe, MAX_NAME_CHARS, MAX_NAME_BYTES)
+            val stem = safe.substring(0, safe.length - ext.length - 1)
+            return truncate(stem, MAX_NAME_CHARS - ext.length - 1, MAX_NAME_BYTES - utf8Length(ext) - 1) + "." + ext
+        }
+
+        /** UTF-8 length of [s] in bytes ([sanitize] leaves no unpaired surrogates; one would count 1, as `?`). */
+        internal fun utf8Length(s: String): Int {
+            var bytes = 0
+            var i = 0
+            while (i < s.length) {
+                val cp = s.codePointAt(i)
+                bytes += utf8Length(cp)
+                i += Character.charCount(cp)
+            }
+            return bytes
+        }
+
+        private fun utf8Length(cp: Int): Int = when {
+            cp < 0x80 -> 1
+            cp < 0x800 -> 2
+            cp in 0xD800..0xDFFF -> 1
+            cp < 0x10000 -> 3
+            else -> 4
+        }
+
+        /** The longest prefix of [s] that ends between code points and fits [maxChars] and [maxBytes]. */
+        private fun truncate(s: String, maxChars: Int, maxBytes: Int): String {
+            var bytes = 0
+            var i = 0
+            while (i < s.length) {
+                val cp = s.codePointAt(i)
+                val n = Character.charCount(cp)
+                val b = utf8Length(cp)
+                if (i + n > maxChars || bytes + b > maxBytes) break
+                bytes += b
+                i += n
+            }
+            return s.substring(0, i)
         }
 
         /** [name] with an extension derived from [mime] when it has none. */
