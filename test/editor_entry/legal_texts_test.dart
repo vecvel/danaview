@@ -59,7 +59,15 @@ void main() {
     for (final text in [policy, terms]) {
       expect(text, isNot(contains('Flutter')));
       expect(text, isNot(contains('whisper')));
-      expect(text, isNot(contains('open-source licen')));
     }
+  });
+
+  test('the Auto captions terms point to Settings › About › Open-source licences (owner decision 2026-10-16)', () {
+    final section = termsOfUseText.sections.singleWhere((s) => s.heading == 'Auto captions');
+    final text = section.blocks.map((b) => b.text ?? '').join('\n');
+    expect(text, contains('Settings › About › Open-source licences'));
+    expect(text, contains('On iPhone, iPad and Android'));
+    // Only the terms carry the pointer; the privacy policy has no licence text.
+    expect(policy, isNot(contains('Open-source licences')));
   });
 }

@@ -32,6 +32,11 @@
 //   again without any user action. A controller that outlived a close (something still listened)
 //   is suspended; when the same project attaches again it [TasksController.resume]s and re-queues
 //   once.
+// * **Wait for the first media resolve** (FIX-QA05-D5, QA-05 re-run): sources resolve through the
+//   session compiler's synchronous snapshot, which INT-02 fills before each plan compile; before the
+//   first pass every media reads offline. So nothing that needs a source starts (or fails as
+//   offline) until `EditorSession.mediaResolved`; the controller reconciles again after the first
+//   pass, and after every later pass while a resumed proxy waits for its media to come back.
 
 import 'dart:async';
 
@@ -85,6 +90,7 @@ class TasksController {
         _ids = ids ?? SecureIdGenerator(),
         _clock = clock ?? (() => DateTime.now().toUtc()) {
     _removeListener = editor.addListener(_onState, fireImmediately: true);
+    session.mediaResolves.addListener(_onMediaResolved);
   }
 
   /// The project.
@@ -102,6 +108,8 @@ class TasksController {
   VoidCallback? _removeListener;
   MediaPool? _seenPool;
   bool _reconcileQueued = false;
+  bool _deferredForMedia = false;
+  bool _waitingForMedia = false;
   bool _disposed = false;
   bool _suspended = false;
   int _local = 0;
@@ -375,6 +383,11 @@ class TasksController {
     _disposed = true;
     _removeListener?.call();
     _removeListener = null;
+    try {
+      _session.mediaResolves.removeListener(_onMediaResolved);
+    } on Object catch (_) {
+      // The session's notifier was disposed first.
+    }
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -387,6 +400,13 @@ class TasksController {
     if (pool == null || identical(pool, _seenPool)) return;
     _seenPool = pool;
     _queueReconcile();
+  }
+
+  /// A media-resolve pass finished: start what waited for the first one, and retry resumed proxies
+  /// whose media read offline (it may be back).
+  void _onMediaResolved() {
+    if (!_session.mediaResolved) return;
+    if (_deferredForMedia || _waitingForMedia) _queueReconcile();
   }
 
   void _queueReconcile() {
@@ -403,6 +423,13 @@ class TasksController {
     if (_disposed || _suspended || !_session.isOpen) return;
     final project = _project;
     if (project == null) return;
+    if (!_session.mediaResolved) {
+      // Every source would read offline (FIX-QA05-D5): wait for the first resolve pass.
+      _deferredForMedia = true;
+      return;
+    }
+    _deferredForMedia = false;
+    _waitingForMedia = false;
     Set<MediaId>? used;
     Set<MediaId> usedMedia() => used ??= {
           for (final t in project.tracks)
@@ -551,9 +578,18 @@ class TasksController {
     final project = _project;
     final asset = project?.pool[id];
     if (project == null || asset == null) return false;
+    if (!_session.mediaResolved) {
+      // Not resolvable yet (FIX-QA05-D5): the proxy stays pending and starts after the first pass.
+      _deferredForMedia = true;
+      return !resume;
+    }
     final source = _session.compiler?.resolve(project, id);
     if (source == null) {
-      if (!resume) _update(id, (a) => a.copyWith(proxy: ProxyState.none));
+      if (resume) {
+        _waitingForMedia = true;
+      } else {
+        _update(id, (a) => a.copyWith(proxy: ProxyState.none));
+      }
       return false;
     }
     final MediaJob<GeneratedAsset> job;

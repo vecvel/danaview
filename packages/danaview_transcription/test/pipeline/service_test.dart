@@ -178,6 +178,58 @@ void main() {
       expect(await h.service.resumableFor(const ProjectId('pr_other0000000')), isNull);
     });
 
+    test('resumableFor counts the checkpointed range of the unit in progress (FIX-QA07-D5)', () async {
+      h.runtime.transcribeScript = (j) {
+        j.status(fraction: 0.4, chunksCompleted: 1, processed: const Duration(seconds: 4));
+        j.chunk(0, [fixtureSegments.first]);
+      };
+      final (job, _) = h.start();
+      await until(() => h.runtime.transcribeJobs.isNotEmpty);
+      await settle();
+      job.cancel();
+      await expectLater(job.result, throwsA(isA<TranscriptionCancelled>()));
+
+      final unit = (await h.service.records.read(job.id))!.units.single;
+      expect(unit.state, isNot(JobUnitState.done));
+      final replay = (await h.service.checkpoints.replay(unit.transcriptKey))!;
+      final duration = unit.sourceRange.end - unit.sourceRange.start;
+      final expected = (replay.resumeFromUs - unit.sourceRange.start) / duration;
+      expect(expected, greaterThan(0.3));
+
+      final r = (await h.service.resumableFor(h.project.id))!;
+      expect(r.doneFraction, closeTo(expected, 1e-9));
+      expect((r.doneFraction * 100).round(), greaterThan(0), reason: 'the notice shows a percent, not 0 %');
+    });
+
+    test('resumableFor ignores a checkpoint of another range and weights finished units by duration', () async {
+      h.project = twoClipProject();
+      h.runtime.transcribeScript = (j) {
+        if (h.runtime.transcribeJobs.length == 1) {
+          j.chunk(0, fixtureSegments);
+          j.status(fraction: 1, chunksCompleted: 1, processed: const Duration(seconds: 10));
+          j.succeed(segments: fixtureSegments);
+        }
+      };
+      final (job, _) = h.start();
+      await until(() => h.runtime.transcribeJobs.length == 2);
+      await settle();
+      job.cancel();
+      await expectLater(job.result, throwsA(isA<TranscriptionCancelled>()));
+
+      final units = (await h.service.records.read(job.id))!.units;
+      expect(units.first.state, JobUnitState.done);
+      int len(JobUnitRecord u) => u.sourceRange.end - u.sourceRange.start;
+      final r = (await h.service.resumableFor(h.project.id))!;
+      expect(r.doneFraction, closeTo(len(units.first) / (len(units.first) + len(units.last)), 1e-9));
+
+      // A checkpoint whose header names another unit start does not count.
+      await h.service.checkpoints.append(units.last.transcriptKey,
+          CheckpointChunk(index: 0, startUs: units.last.sourceRange.start + 999999, endUs: units.last.sourceRange.end),
+          unitStartUs: units.last.sourceRange.start + 999999);
+      final again = (await h.service.resumableFor(h.project.id))!;
+      expect(again.doneFraction, closeTo(r.doneFraction, 1e-9));
+    });
+
     test('a memory warning releases idle models now, or after the running job', () async {
       h.device.emit(const MemoryWarning());
       await settle();

@@ -7,8 +7,9 @@
 #   1. packages/danaview_editor/test/overflow/ (QA-09's long-content suite with real fonts), and
 #   2. every other danaview_editor test file with per-ticket matrix tests (files outside test/support/ calling
 #      `testSurfaces(`, discovered at run time, so new matrix tests join automatically);
-#   3. at the repository root, the Home header and player matrix tests (danaview_features surfaces):
-#      test/editor_entry/home_edit_button_test.dart and test/editor_entry/player_edit_action_test.dart.
+#   3. at the repository root, the Home header, player and licences matrix tests (danaview_features
+#      surfaces): test/editor_entry/home_edit_button_test.dart, test/editor_entry/player_edit_action_test.dart
+#      and test/editor_entry/licenses_screen_test.dart.
 # flutter-packages CI runs the same danaview_editor tests over the 6-surface PR subset.
 #
 # Usage:
@@ -33,7 +34,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 PKG="$ROOT/packages/danaview_editor"
 SELF="scripts/ci/editor/nightly.d/overflow_full.sh"
-ROOT_TESTS=(test/editor_entry/home_edit_button_test.dart test/editor_entry/player_edit_action_test.dart)
+ROOT_TESTS=(test/editor_entry/home_edit_button_test.dart test/editor_entry/player_edit_action_test.dart test/editor_entry/licenses_screen_test.dart)
 
 JOBS="${OVERFLOW_JOBS:-2}"
 OUT="${OVERFLOW_OUT:-$PKG/build/overflow_full}"
@@ -134,7 +135,7 @@ run_package() {
 
 run_root() {
   local log="$OUT/root_entry.log"
-  group "root: Home header and player matrix tests"
+  group "root: Home header, player and licences matrix tests"
   local rc=0
   (cd "$ROOT" && flutter pub get >/dev/null && flutter test -r expanded "${ROOT_TESTS[@]}") 2>&1 | tee "$log" || rc=$?
   endgroup

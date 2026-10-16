@@ -5,7 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:danaview_data/danaview_data.dart' show LibraryRepository;
 import 'package:danaview_editor/danaview_editor.dart';
+// The editor barrel does not export the content-font licence registration (UX-30's font_catalog
+// re-exports it from danaview_editor_fonts, which the app does not depend on directly).
+// ignore: implementation_imports
+import 'package:danaview_editor/src/editor/text/font_catalog.dart' show registerContentFontLicenses;
 import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_features/licenses.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewToast, DanaviewToastKind;
 
 String folderLocation(String path) => '/folder?path=${Uri.encodeQueryComponent(path)}';
@@ -19,6 +24,16 @@ const projectsLocation = '/projects';
 
 /// The editor's settings, an explicit child of `/settings` (not a [SettingsDestination] value).
 const editorSettingsLocation = '/settings/editor';
+
+/// Settings › About › Open-source licences, an explicit child of `/settings` (ARCH §17.1).
+const licensesLocation = '/settings/licenses';
+
+/// Registers the licence texts the page shows beyond Flutter's NOTICES: the Figtree app font and
+/// the editor's content fonts (OFL-1.1). Idempotent.
+void registerAppLicenses() {
+  registerDanaviewLicenses();
+  registerContentFontLicenses();
+}
 
 /// The editor on [id], seeking exactly to [initialPlayhead] (µs) on open (ARCH §17.1).
 String editorLocation(ProjectId id, {TimeUs? initialPlayhead}) {
@@ -146,6 +161,7 @@ Widget _settingsPage(BuildContext context, SettingsDestination destination) {
         onBack: back,
         onOpenPrivacy: () => context.push(settingsLocation(SettingsDestination.privacy)),
         onOpenTerms: () => context.push(settingsLocation(SettingsDestination.terms)),
+        onOpenLicenses: () => context.push(licensesLocation),
       ),
     SettingsDestination.privacy => DanaviewLegalScreen(document: LegalDocument.privacy, onBack: back),
     SettingsDestination.terms => DanaviewLegalScreen(document: LegalDocument.terms, onBack: back),
@@ -184,6 +200,14 @@ GoRouter createAppRouter() => GoRouter(
                     path: destination.path,
                     builder: (context, state) => _settingsPage(context, destination),
                   ),
+                GoRoute(
+                  path: 'licenses',
+                  name: 'licenses',
+                  builder: (context, state) {
+                    registerAppLicenses();
+                    return DanaviewLicensesScreen(onBack: () => _back(context));
+                  },
+                ),
                 GoRoute(
                   path: 'editor',
                   name: 'editorSettings',

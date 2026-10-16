@@ -7,7 +7,8 @@
 // editor at the player's position -> back to the player), Auto captions in the editor and the
 // "Speech model" storage row; and the macOS build (D-17): no Edit in the player top bar or the
 // Playback sheet, no "E – Edit video" shortcut line, no speech storage contributor, no editor
-// providers. The licences screen was removed by the owner, so `/settings/licenses` is not a route.
+// providers. Settings › About › Open-source licences (`/settings/licenses`, restored by the owner
+// 2026-10-16, FIX-LICENSES) opens the licences page from About on iOS and on macOS.
 
 import 'dart:async';
 
@@ -33,6 +34,7 @@ import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' hide
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' as api show ThermalLevel;
 import 'package:danaview_editor_engine_api/testing.dart';
 import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_features/licenses.dart' show DanaviewLicensesScreen;
 import 'package:danaview_transcription/danaview_transcription.dart';
 import 'package:danaview_transcription/testing.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -486,12 +488,28 @@ void main() {
       }
     });
 
-    testWidgets('the licences route stays removed (owner decision): /settings/licenses lands on Home', (tester) async {
+    testWidgets('Settings › About › Open-source licences opens the licences page at /settings/licenses', (tester) async {
       final app = await pumpWiredApp(tester, platform: TargetPlatform.iOS);
       try {
-        await app.go('/settings/licenses');
-        expect(app.location, '/');
-        expect(find.byType(DanaviewHomeScreen), findsOneWidget);
+        await app.go(settingsLocation(SettingsDestination.about));
+        final row = find.text('Open-source licences');
+        await tester.scrollUntilVisible(row, 200, scrollable: find.byType(Scrollable).last);
+        await tester.tap(row);
+        await pumpFrames(tester, count: 10);
+        expect(app.location, licensesLocation);
+        expect(find.byType(DanaviewLicensesScreen), findsOneWidget);
+        expect(find.text('FFmpeg'), findsOneWidget);
+        expect(find.text('mpv'), findsOneWidget);
+
+        // A deep link opens it too, and Back returns to Settings.
+        await app.go(licensesLocation);
+        expect(app.location, '/settings/licenses');
+        expect(find.byType(DanaviewLicensesScreen), findsOneWidget);
+        expect(find.byType(DanaviewHomeScreen), findsNothing);
+        await tester.tap(find.byTooltip('Back'));
+        await pumpFrames(tester, count: 10);
+        expect(find.byType(DanaviewLicensesScreen), findsNothing);
+        expect(tester.takeException(), isNull);
       } finally {
         await app.dispose();
       }
@@ -534,6 +552,19 @@ void main() {
         await pumpFrames(tester);
         expect(find.textContaining('Edit video'), findsNothing);
         expect(app.engine.log.calls, isEmpty);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await app.dispose();
+      }
+    });
+
+    testWidgets('the licences page is reachable without the editor (its gate is "always")', (tester) async {
+      final app = await pumpWiredApp(tester, platform: TargetPlatform.macOS, engine: wiredEngine(), size: const Size(1280, 800));
+      try {
+        await app.go(licensesLocation);
+        expect(app.location, licensesLocation);
+        expect(find.byType(DanaviewLicensesScreen), findsOneWidget);
+        expect(find.text('FFmpeg'), findsOneWidget);
         expect(tester.takeException(), isNull);
       } finally {
         await app.dispose();

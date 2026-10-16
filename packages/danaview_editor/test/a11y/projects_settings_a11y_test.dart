@@ -4,7 +4,10 @@
 // with every badge and the recovery banner, the project actions menu, the New project sheet) and
 // Editor settings (scrolled through to its last row, including the Render preview section), on
 // the narrowest, a phone and a tablet surface. Tap targets ≥ 44×44 with labels, text contrast
-// ≥ 4.5:1, nothing overflows. (The licences screen, UX-42, was removed by the owner.)
+// ≥ 4.5:1, nothing overflows. The licences page (UX-42, restored by FIX-LICENSES) lives in
+// danaview_features, which this package may not import (ARCH §4.2 rule 7); its accessibility checks
+// (labelled tap targets ≥ 44, computed contrast, Figtree, expanded state) run at the repository root
+// in test/editor_entry/licenses_screen_test.dart.
 
 import 'package:flutter/widgets.dart' hide AspectRatio;
 import 'package:flutter_test/flutter_test.dart';

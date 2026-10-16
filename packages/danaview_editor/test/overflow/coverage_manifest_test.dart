@@ -5,9 +5,10 @@
 // the per-ticket matrix tests (`testSurfaces`) that cover a flow's deeper states. Both kinds run
 // over the PR subset in flutter-packages CI and over the full matrix in
 // scripts/ci/editor/nightly.d/overflow_full.sh (`--dart-define=DANAVIEW_SURFACE_MATRIX=full`). The
-// Home header and player surfaces live in danaview_features and are tested at the repository root
-// (danaview_editor may not import them, ARCH §4.2 rule 7). The licences screen (UX-42) was removed
-// by the owner and is not part of the matrix.
+// Home header, player and licences surfaces live in danaview_features and are tested at the
+// repository root (danaview_editor may not import them, ARCH §4.2 rule 7). The licences page (UX-42,
+// restored by FIX-LICENSES after the owner decision of 2026-10-16) is covered by
+// test/editor_entry/licenses_screen_test.dart.
 
 import 'dart:io';
 
@@ -71,6 +72,7 @@ const Map<String, List<String>> overflowCoverage = {
     'packages/danaview_editor/test/overflow/screens_overflow_test.dart',
     'packages/danaview_editor/test/settings/editor_settings_screen_test.dart',
   ],
+  'licences': ['test/editor_entry/licenses_screen_test.dart'],
   'home header': ['test/editor_entry/home_edit_button_test.dart'],
   'player top bar': ['test/editor_entry/player_edit_action_test.dart'],
   "the player's Playback more sheet with the 'Edit video' row": ['test/editor_entry/player_edit_action_test.dart'],

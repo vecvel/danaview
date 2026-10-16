@@ -295,7 +295,7 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
         quality: quality,
         useProxies: useProxies,
       ));
-      sync = _planSyncFactory(preview, compiler.compile);
+      sync = _planSyncFactory(preview, _resolvingCompile(compiler));
     } catch (e) {
       previewFailure = _previewFailureOf(e);
     }
@@ -308,6 +308,9 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
 
     _session.attach(edit: edit, loaded: loaded, engine: _engine, capabilities: caps, compiler: compiler, preview: preview, planSync: sync);
     _listenPreview(preview, sync);
+    // Without a preview nothing compiles, so warm the compiler's media snapshot once: background
+    // jobs and posters resolve through it (FIX-QA05-D5).
+    if (sync == null) unawaited(_quietly(() => _resolvingCompile(compiler)(edit.committedProject)));
     _listenAutosave();
 
     final view = edit.committedProject.view;
@@ -349,6 +352,12 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
     }
     _session.markOpenedAt(t, ack);
   }
+
+  /// [compiler]'s compile that records each finished pass on the session (FIX-QA05-D5): INT-02's
+  /// compiler resolves the project's media before it compiles, and its synchronous `resolve`
+  /// answers from that snapshot, so the Tasks controller resolves sources only after a pass.
+  PlanCompile _resolvingCompile(SessionPlanCompiler compiler) =>
+      (project) => compiler.compile(project).whenComplete(() => _session.markMediaResolved(compiler));
 
   void _fail(EditorFailure failure) {
     _openSpan = null;
@@ -509,11 +518,18 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
     unawaited(_quietly(() => _flush(SaveReason.lifecycle)));
   }
 
-  /// The app came back: redraw the preview and resend the plan if it had failed.
+  /// The app came back: redraw the preview and resend the plan if it had failed. A preview that
+  /// stopped while the app was away (a recoverable failure) restarts at once, as "Restart preview"
+  /// would (FIX-QA05-D5 / QA-05 D6): with the plan in step, nothing else would ever leave `failed`.
   @override
   void onAppResumed() {
     final preview = _session.preview;
     if (preview == null) return;
+    final status = state.preview;
+    if (status.phase == PreviewPhase.failed && status.failure?.recoverable != false) {
+      unawaited(_quietly(restartPreview));
+      return;
+    }
     unawaited(_quietly(preview.refresh));
     final sync = _session.planSync;
     if (sync != null && sync.currentStatus == PlanSyncStatus.failed) sync.resync();
@@ -537,7 +553,9 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
     if (sync != null) {
       _subscriptions.add(sync.events.listen(_onPreviewEvent, onError: (Object _) {}));
       _subscriptions.add(sync.status.listen((s) {
-        if (s != PlanSyncStatus.failed && state.preview.phase == PreviewPhase.failed && _session.preview != null) {
+        // Only an applied plan (idle) brings a failed preview back: `compiling` or `applying` after
+        // a failure has not reached the engine yet (QA-05 D6).
+        if (s == PlanSyncStatus.idle && state.preview.phase == PreviewPhase.failed && identical(_session.planSync, sync)) {
           _setPreview(state.preview.copyWith(phase: PreviewPhase.ready));
         }
       }, onError: (Object _) {}));
@@ -551,6 +569,8 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
         _openSpan = null;
         if (state.preview.phase == PreviewPhase.starting) _setPreview(state.preview.copyWith(phase: PreviewPhase.ready));
       case PreviewDegraded(:final quality):
+        // A quality step never hides a stopped preview ("Restart preview" stays; QA-05 D6).
+        if (state.preview.phase == PreviewPhase.failed) break;
         _setPreview(state.preview.copyWith(phase: PreviewPhase.degraded, quality: quality));
       case PreviewRecovered():
         if (state.preview.phase != PreviewPhase.failed) _setPreview(state.preview.copyWith(phase: PreviewPhase.ready));
@@ -606,7 +626,7 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
         await _quietly(s.dispose);
         return;
       }
-      final ps = _planSyncFactory(s, compiler.compile);
+      final ps = _planSyncFactory(s, _resolvingCompile(compiler));
       _session.replacePreview(s, ps);
       _listenPreview(s, ps);
       _setPreview(state.preview.copyWith(phase: PreviewPhase.starting));
