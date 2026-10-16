@@ -41,7 +41,7 @@
 |---|---|---|---|
 | **1.0** ✅ | Player | Cross-platform player on libmpv, library, playlists, queue, tools | – |
 | **1.1** 🚧 | Video editor | Multi-track video editor with on-device AI subtitles on iOS, iPadOS and Android | [Architecture](docs/v1.1/editor/ARCHITECTURE.md) · [Build plan](docs/v1.1/editor/BUILD_PLAN.md) |
-| **1.2** 🗓️ | Photos and files join videos | Files & Media Home for photos, videos and documents with PDF tools; AI Studio, rich subtitles, speaker lanes and search; photo editing and the beauty suite (iOS, Android; the Home on desktop too) | [Roadmap](docs/v1.2/V1_2_ROADMAP.md) · [Files & Media Home](docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) · [AI Studio](docs/v1.2/ai-studio/AI_STUDIO_PLAN.md) · [Photo & video editor](docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
+| **1.2** 🗓️ | Photos and files join videos | Files & Media Home for photos, videos and documents with PDF tools; AI Studio, rich subtitles, speaker lanes and search; photo editing and the beauty suite (iOS, Android; the Home on desktop too) | [Roadmap](docs/v1.2/V1_2_ROADMAP.md) · [Files & Media Home](docs/v1.2/files-media-home/FILES_MEDIA_HOME_PLAN.md) · [AI Studio](docs/v1.2/ai-studio/AI_STUDIO_PLAN.md) · [Photo & video editor](docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
 | **1.3** 🗓️ | Everywhere and at capture | The editor on macOS, Windows and Linux; Danaview Camera with document and QR scanning (mobile first, then desktop webcams) | [Roadmap](docs/v1.3/V1_3_ROADMAP.md) · [Desktop editor](docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md) · [Camera](docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md) |
 
 ---

@@ -1,7 +1,7 @@
 # Danaview 1.3.0: Desktop Photo & Video Editor (macOS, Windows, Linux)
 
 > **Release:** Danaview 1.3.0 (app version `1.3.0+N`), moved from 1.2.0 by the owner on 2026-10-15. **Date:** 2026-10-12, rewritten 2026-10-15 with the owner's decisions (§2). **Status:** plan, ready for the planning review that turns §9 into a BUILD_PLAN-style ticket file.
-> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` ("ARCH", decisions D-01 to D-45) and `docs/v1.1/editor/BUILD_PLAN.md` ("BP", 166 tickets), plus the 1.2.0 plans this release builds on: `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` ("AIS"), `docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md` ("VED") and `docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md` ("HOM").
+> **Baseline:** `docs/v1.1/editor/ARCHITECTURE.md` ("ARCH", decisions D-01 to D-45) and `docs/v1.1/editor/BUILD_PLAN.md` ("BP", 166 tickets), plus the 1.2.0 plans this release builds on: `docs/v1.2/ai-studio/AI_STUDIO_PLAN.md` ("AIS"), `docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md` ("VED") and `docs/v1.2/files-media-home/FILES_MEDIA_HOME_PLAN.md` ("HOM").
 > **Scope:** every editor feature the phones have in 1.1 and 1.2, on macOS, Windows and Linux, plus a small set of desktop-only features (§5). Work starts after 1.2.0 ships.
 > **Decisions:** D-71 to D-85 (this plan's range; the earlier draft's decisions are replaced). **[OWNER]** marks the few still open. **[VERIFY]** marks a claim a spike or ticket must prove; the closing ticket is named.
 > **Priorities set by the owner (2026-10-15):** production-ready, secure, no crashes, fast.

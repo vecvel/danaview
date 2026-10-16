@@ -41,7 +41,7 @@
 ```
 
 ### Pillar 1: Files & Media Home (photos, videos, documents, PDF tools)
-- **Document:** [`docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md`](home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) (HOM-01 to HOM-32, decisions D-86 to D-98 and D-98a to D-98k).
+- **Document:** [`docs/v1.2/files-media-home/FILES_MEDIA_HOME_PLAN.md`](files-media-home/FILES_MEDIA_HOME_PLAN.md) (HOM-01 to HOM-32, decisions D-86 to D-98 and D-98a to D-98k).
 - **Summary:** The Home screen becomes one place for photos, videos and documents. Filters All, Videos, Photos and Documents (PDF, Word, Excel, PowerPoint, text/CSV, other); app-private **Danaview folders** (nested, mixed types, included in app backups); favourites, recents, search and sort; import from Photos/Gallery, Files and "Open with Danaview" (originals never modified); file actions and a multi-select bar; Save to Files (iOS), Save to Downloads (Android) and share. Files open in **native viewers**: photos natively, videos in the existing player, PDF with PDFKit / `PdfRenderer`, Office and text files with Quick Look on iOS and macOS; on Android text and CSV get an in-app viewer and Office files a card with "Open in another app". **PDF tools:** merge, split, reorder, rotate and delete pages, annotate and highlight, sign, compress, on native PDF engines only. No Office editing. Every player, playlist, queue, Continue Watching and folder feature stays exactly as it is. Editor actions show where the editor runs (iOS and Android in 1.2.0).
 
 ### Pillar 2: AI Studio and advanced subtitles
@@ -89,7 +89,7 @@
 
 | Component | Location | Document |
 |---|---|---|
-| **Files & Media Home (1.2)** | `docs/v1.2/home-photo-video-view/` | [HOME_PHOTO_VIDEO_PLAN.md](home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) |
+| **Files & Media Home (1.2)** | `docs/v1.2/files-media-home/` | [FILES_MEDIA_HOME_PLAN.md](files-media-home/FILES_MEDIA_HOME_PLAN.md) |
 | **AI Studio, advanced subtitles, speaker lanes & AI search (1.2)** | `docs/v1.2/ai-studio/` | [AI_STUDIO_PLAN.md](ai-studio/AI_STUDIO_PLAN.md) |
 | **Unified Photo & Video Editor (1.2)** | `docs/v1.2/video-editor-update/` | [VIDEO_EDITOR_UPDATE_PLAN.md](video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
 | **Speed test provider fallback (1.2)** | `docs/v1.2/speed-test/` | [SPEED_TEST_FALLBACK_PLAN.md](speed-test/SPEED_TEST_FALLBACK_PLAN.md) |
