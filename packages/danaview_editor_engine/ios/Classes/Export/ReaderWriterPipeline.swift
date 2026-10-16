@@ -9,9 +9,9 @@
 // every segment re-creates its reader with that segment's `timeRange` (resume starts at the next
 // segment). Every reader range and writer session end is clamped to the grid end CMTime(K, gridFps)
 // (`ExportTime`, FIX-IOS-DURATION: the µs durUs = ceil(K·10⁶/fps) lies past it at 24/30/48/60 fps
-// and a reader past the last instruction fails with −11841), and the export composition's spacer
-// is split into an integral-ratio edit plus a remainder (`ExportTime.splitFractionalSpacer`; a
-// reader starting inside a fractionally scaled spacer edit hangs). Frames are BGRA IOSurface buffers; with the `.rotated` layout (ARCH §14.1) each frame
+// and a reader past the last instruction fails with −11841). IOS-08 lays the spacer without a
+// fractionally scaled edit (FIX-IOS-SPACER), so a segment reader may start anywhere. Frames are
+// BGRA IOSurface buffers; with the `.rotated` layout (ARCH §14.1) each frame
 // is turned 90° counter-clockwise into a landscape buffer and the final file gets a 90° clockwise
 // `preferredTransform`, set on the concat writer's video input (no extra remux copy).
 //
@@ -92,50 +92,6 @@ enum ExportTime {
         let end = gridEnd(plan)
         let start = CMTimeMinimum(FrameGrid.cmTime(us: startUs), end)
         return CMTimeRange(start: start, end: clamp(us: endUs, to: end))
-    }
-
-    /// Re-lays the spacer of an export composition as an integral-ratio edit plus a remainder
-    /// edit (FIX-IOS-DURATION).
-    ///
-    /// IOS-08 scales the one-frame spacer (1/30 s) across `CMTime(K, gridFps)` in ONE edit. When
-    /// that ratio is fractional (K·30/gridFps not whole: 60 fps with an odd K, 48 fps, 24 fps, …) an
-    /// `AVAssetReaderVideoCompositionOutput` whose time range starts inside the edit at some
-    /// times (e.g. 2.0 s of 179 frames at 60 fps, 0.5 s of 49 frames at 48 fps) never delivers a
-    /// sample: `copyNextSampleBuffer` blocks forever (iOS 26.5 simulator), which hangs every
-    /// segment after the first. Splitting the edit into `n` whole spacer durations (an integer
-    /// ratio) plus the remainder (shorter than one spacer duration, so no segment start, a
-    /// multiple of the spacer duration, ever falls strictly inside it) reads at every start.
-    /// No-op when the ratio is whole, the spacer is missing or already split. Returns whether the
-    /// track changed.
-    @discardableResult
-    static func splitFractionalSpacer(_ built: BuiltComposition) -> Bool {
-        guard let id = built.spacerTrackID, let track = built.composition.track(withTrackID: id),
-              let source = built.sources.spacerTrack, let range = built.sources.spacerRange,
-              track.segments.count == 1, range.duration.isNumeric, range.duration.value > 0
-        else { return false }
-        let end = gridEnd(built.plan)
-        let unit = range.duration
-        // n = floor(end / unit) on exact integers: end = K/fps, unit = v/ts.
-        let num = Int64(end.value) * Int64(unit.timescale)
-        let den = Int64(end.timescale) * unit.value
-        guard den > 0 else { return false }
-        let n = num / den
-        guard n >= 1, n <= Int64(Int32.max), num % den != 0 else { return false }
-        let whole = CMTimeMultiply(unit, multiplier: Int32(n))
-        do {
-            track.removeTimeRange(CMTimeRange(start: .zero, duration: track.timeRange.end))
-            try track.insertTimeRange(range, of: source, at: .zero)
-            track.scaleTimeRange(CMTimeRange(start: .zero, duration: unit), toDuration: whole)
-            try track.insertTimeRange(range, of: source, at: whole)
-            track.scaleTimeRange(CMTimeRange(start: whole, duration: unit), toDuration: CMTimeSubtract(end, whole))
-        } catch {
-            // Restore the single edit (the composition stays usable for starts that read).
-            track.removeTimeRange(CMTimeRange(start: .zero, duration: track.timeRange.end))
-            try? track.insertTimeRange(range, of: source, at: .zero)
-            track.scaleTimeRange(CMTimeRange(start: .zero, duration: unit), toDuration: end)
-            return false
-        }
-        return true
     }
 }
 

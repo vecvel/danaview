@@ -154,6 +154,75 @@ void main() {
     expect(again.assets.containsKey('md_a'), isTrue);
   });
 
+  group('FIX-INT-02-2: a derived still re-resolves when its job finishes', () {
+    const stillUri = 'file:///fake/support/danaview/editor/projects/pr_compiler01/assets/stills/md_still.png';
+
+    MediaAsset pendingStill() => MediaAsset(
+          id: const MediaId('md_still'),
+          kind: MediaKind.still,
+          displayName: 'Freeze frame',
+          locator: const AppRelativeLocator(AppRoot.support, 'danaview/editor/projects/pr_compiler01/assets/stills/md_still.png'),
+          ownership: MediaOwnership.projectOwned,
+          fingerprint: const MediaFingerprint(sizeBytes: 0, quickHash: 'pending'),
+          probe: MediaProbe(kind: MediaKind.still, hasVideo: true),
+          origin: MediaOrigin.derived,
+          derived: const StillSpec(MediaId('md_a'), 1000000, sourceQuickHash: 'qh_md_a'),
+          status: const PendingStatus('job_freeze'),
+          addedAt: _when,
+        );
+
+    EditProject withStill(MediaAsset still) => _project([_asset('md_a', MediaKind.video), still], [_clip('it_a', 'md_a'), _clip('it_still', 'md_still')]);
+
+    test('pending (no PNG yet) -> ready with the job result: the still is in the next plan', () async {
+      final pending = pendingStill();
+      final project = withStill(pending);
+      access.missing.add(stillUri);
+      final c = compilerFor(project);
+
+      final before = await c.compile(project);
+      expect(before.assets.containsKey('md_still'), isFalse, reason: 'its file does not exist while the job runs');
+      await c.compile(project);
+      final calls = c.assets.resolveCalls;
+
+      // TasksController._derivedDone: the PNG exists, status ready and a new fingerprint, same
+      // locator and no new availability report.
+      access.missing.remove(stillUri);
+      final ready = pending.copyWith(
+        status: AssetStatus.ready,
+        fingerprint: MediaFingerprint(sizeBytes: 2048, quickHash: pending.derived!.specHash),
+      );
+      final after = await c.compile(project.copyWith(pool: MediaPool({...project.pool.assets, ready.id: ready})));
+      expect(after.assets['md_still']?.uri, stillUri);
+      expect(after.req?.offline ?? const [], isNot(contains('md_still')));
+      expect(c.assets.resolveCalls, calls + 1, reason: 'only the still is resolved again');
+      expect(c.resolve(project, const MediaId('md_still'))?.uri, stillUri);
+    });
+
+    test('a status change alone (same fingerprint) also re-resolves', () async {
+      final pending = pendingStill();
+      final project = withStill(pending);
+      access.missing.add(stillUri);
+      final c = compilerFor(project);
+      await c.compile(project);
+
+      access.missing.remove(stillUri);
+      final ready = pending.copyWith(status: AssetStatus.ready);
+      final after = await c.compile(project.copyWith(pool: MediaPool({...project.pool.assets, ready.id: ready})));
+      expect(after.assets['md_still']?.uri, stillUri);
+    });
+
+    test('a ready still stays cached across commits', () async {
+      final ready = pendingStill().copyWith(status: AssetStatus.ready);
+      final project = withStill(ready);
+      final c = compilerFor(project);
+      await c.compile(project);
+      final calls = c.assets.resolveCalls;
+      await c.compile(project);
+      await c.compile(project);
+      expect(c.assets.resolveCalls, calls);
+    });
+  });
+
   test('missing, access-lost, changed and derived-missing media are offline in the plan', () async {
     for (final state in [
       MediaAvailability.missing,

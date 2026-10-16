@@ -16,10 +16,18 @@
 //      preflight (size + 64 MB) with its refusal copy, copy progress and Cancel, which deletes the
 //      created project and with it the partial copy.
 //   5. `PlayerHandoff.suspend` (release on `lowMemoryDevice`, else pause).
-//   6. Open the editor through the router's callback (INT-04 pushes `/editor/:id?t=<µs>`); when
+//   6. Open the editor through the router's callback (INT-04 pushes `/editor/:id?t=<µs>`) at the
+//      player's position mapped onto the project's frame grid (below); when
 //      that route pops, `PlayerHandoff.resume` restores the player paused at the original
 //      position. The orientation owner stack (ScreenOrientationPolicy) restores the player's
 //      orientation when the editor releases its `free` owner.
+//
+// The player's position is a platform time (D-35): AVPlayer/mpv/Media3 report frame k at the
+// rational `k/fps` or `round(k·10⁶/fps)`, often truncated to milliseconds (frame 160 at 30 fps
+// arrives as 5 333 333 µs or 5 333 000 µs, while its plan start is 5 333 334 µs). The editor
+// floors initial playheads onto the grid, so handing the raw value over opened one frame early
+// (FIX-UX-41-1). The launcher therefore reads the project's frame rate and hands over
+// `timeOfFrame(frameIndexNearest(position))`; if the rate can't be read, the raw value is passed.
 //
 // `danaview_features` never imports the editor, and the editor sees `danaview_features` only through
 // chrome/orientation/storage (ARCH §4.2 rule 7), so the request and the player are ports here:
@@ -34,7 +42,7 @@ import 'package:flutter/material.dart' show Icons, Theme;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_editor_core/model.dart'
-    show ContentUriLocator, FileLocator, FromPlayerOrigin, MediaAccessFailure, MediaAccessPort, MediaLocator, MediaOrigin, PickedMedia, ProjectId, ProjectOrigin, TimeUs;
+    show ContentUriLocator, FileLocator, FrameRate, FromPlayerOrigin, MediaAccessFailure, MediaAccessPort, MediaLocator, MediaOrigin, PickedMedia, ProjectId, ProjectOrigin, TimeUs;
 import 'package:danaview_editor_core/store.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -272,6 +280,7 @@ class EditorLauncher {
     if (!context.mounted) return EditorLaunchOutcome.cancelled;
 
     final ProjectId id;
+    TimeUs? gridAt;
     if (copies) {
       final reused = await repository.findUntouchedProjectFor(request.pathOrUri);
       if (reused != null) {
@@ -296,29 +305,53 @@ class EditorLauncher {
     } else {
       final prepared = await _withPreparing(context, () async {
         final reused = await repository.findUntouchedProjectFor(request.pathOrUri);
-        if (reused != null) return reused;
-        return repository.create(await _specFor(request, pick, at));
+        final made = reused ?? await repository.create(await _specFor(request, pick, at));
+        return (made, await _gridTimeOf(made, at));
       });
       switch (prepared) {
         case _Prepared(:final value):
-          id = value;
+          (id, gridAt) = value;
         case _PrepareFailed(:final error):
           if (context.mounted) await _explainFailure(context, _failureOf(error));
           return EditorLaunchOutcome.failed;
       }
     }
 
+    final openAt = gridAt ?? await _gridTimeOf(id, at);
+    if (!context.mounted) return EditorLaunchOutcome.cancelled;
+
     // 5. Hand the decoders over.
     await _quietly(() => player.suspend(release: caps!.lowMemoryDevice));
 
     // 6. Open the editor; restore the player when it closes.
     try {
-      await openEditor(id, at);
+      await openEditor(id, openAt);
     } finally {
       await _quietly(player.resume);
     }
     return EditorLaunchOutcome.opened;
   }
+
+  /// [position] (a platform time, µs) on the frame grid of project [id]: the start of the nearest
+  /// frame (D-35), or [position] unchanged when the project's rate can't be read.
+  Future<TimeUs> _gridTimeOf(ProjectId id, TimeUs position) async {
+    FrameRate? rate;
+    try {
+      final loaded = await repository.open(id);
+      rate = loaded.project.timeline.settings.frameRate;
+    } on Object catch (e) {
+      debugPrint('[EditorLauncher] Frame rate unavailable: ${e.runtimeType}');
+      return position;
+    } finally {
+      if (rate != null) await _quietly(() => repository.close(id));
+    }
+    return gridTimeFor(position, rate);
+  }
+
+  /// The plan-grid time the editor opens at for the player's [position] (a platform time, µs) in
+  /// a project at [rate]: `timeOfFrame(frameIndexNearest(position))` (D-35, FIX-UX-41-1).
+  static TimeUs gridTimeFor(TimeUs position, FrameRate rate) =>
+      position <= 0 ? 0 : rate.timeOfFrame(rate.frameIndexNearest(position));
 
   Future<FromMediaProjectSpec> _specFor(EditorLaunchRequest request, PickedMedia pick, TimeUs at) async {
     final origin = await _originOf(request.pathOrUri, pick.displayName);
@@ -388,7 +421,7 @@ class EditorLauncher {
 
   /// Runs [work]; when it takes longer than [preparingDelay], a non-dismissible "Preparing
   /// editor…" shows until it ends (and is closed before this returns).
-  Future<_PrepareResult> _withPreparing(BuildContext context, Future<ProjectId> Function() work) async {
+  Future<_PrepareResult> _withPreparing(BuildContext context, Future<(ProjectId, TimeUs)> Function() work) async {
     final done = ValueNotifier<bool>(false);
     Future<void>? shown;
     final timer = Timer(preparingDelay, () {
@@ -448,7 +481,7 @@ sealed class _PrepareResult {
 
 final class _Prepared extends _PrepareResult {
   const _Prepared(this.value);
-  final ProjectId value;
+  final (ProjectId, TimeUs) value;
 }
 
 final class _PrepareFailed extends _PrepareResult {

@@ -3,7 +3,8 @@
 // EditorScreen (ARCH §17.1, §17.2; ux.md §4.7, §6): the editor for one project.
 //
 // * Composition: EditorScope (the ProjectId for every region) -> EditorLifecycle (back order,
-//   app lifecycle saves, orientation, close flow) -> a solid Danaview surface whose body depends on
+//   app lifecycle saves, orientation, close flow) -> EditorShortcuts (UX-15, ARCH §17.6: the
+//   editor's keyboard shortcuts over everything below) -> a solid Danaview surface whose body depends on
 //   the open editor's phase: the EditorScaffold (layout planner + regions) while opening and when
 //   ready, or the "This project isn't available" / "Couldn't open this project" empty state.
 // * The open editor is an [EditorShellDelegate] from [editorShellProvider]: UX-08's
@@ -14,6 +15,9 @@
 //   -> saveNow(manual: true); the title button, long-press on undo and Export invoke the
 //   `projectSheet`, `history` and `export` action bindings (UX-29, UX-15/UX-08, UX-39) and are
 //   disabled while those are unbound.
+// * Health (FIX-UX-07, ux.md §13): UX-40's EditorHealthHost (missing media, read-only and
+//   restored-from-backup banners, the recovery prompt) sits under the top bar while the editor is
+//   opening or ready. A DetachedEditorShell has no session to check, so it shows none.
 // * Navigation callbacks come from the router (INT-02): `onClose` leaves the editor after the
 //   close flush, `onOpenProjects` is "Go to Projects" (null hides it).
 
@@ -28,9 +32,11 @@ import 'package:danaview_editor_core/store.dart' show ProjectRepository, Project
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../app/editor_providers.dart';
+import 'actions/editor_shortcuts.dart';
 import 'contracts/contracts.dart';
 import 'editor_lifecycle.dart';
 import 'editor_scope.dart';
+import 'flows/relink/editor_health_host.dart';
 import 'layout/editor_layout_scope.dart';
 import 'layout/editor_scaffold.dart';
 import 'layout/editor_shell_strings.dart';
@@ -187,20 +193,23 @@ class EditorScreen extends ConsumerWidget {
         delegate: shell,
         onExit: onClose,
         initialPlayhead: initialPlayhead,
-        child: Scaffold(
-          backgroundColor: DanaviewColors.background,
-          resizeToAvoidBottomInset: false,
-          body: _ShellStatusSelector<(EditorShellPhase, bool)>(
-            status: shell.shellStatus,
-            select: (s) => (s.phase, s.inspectorOpen),
-            builder: (context, selected) => switch (selected.$1) {
-              EditorShellPhase.opening || EditorShellPhase.ready => EditorScaffold(
-                  inspectorOpen: selected.$2,
-                  loading: selected.$1 == EditorShellPhase.opening,
-                  topBar: (context, transport) => _EditorTopBarHost(shell: shell, transport: transport),
-                ),
-              EditorShellPhase.notFound || EditorShellPhase.failed => _EditorUnavailable(shell: shell, onOpenProjects: onOpenProjects),
-            },
+        child: EditorShortcuts(
+          child: Scaffold(
+            backgroundColor: DanaviewColors.background,
+            resizeToAvoidBottomInset: false,
+            body: _ShellStatusSelector<(EditorShellPhase, bool)>(
+              status: shell.shellStatus,
+              select: (s) => (s.phase, s.inspectorOpen),
+              builder: (context, selected) => switch (selected.$1) {
+                EditorShellPhase.opening || EditorShellPhase.ready => EditorScaffold(
+                    inspectorOpen: selected.$2,
+                    loading: selected.$1 == EditorShellPhase.opening,
+                    topBar: (context, transport) => _EditorTopBarHost(shell: shell, transport: transport),
+                    banner: shell is DetachedEditorShell ? null : const EditorHealthHost(),
+                  ),
+                EditorShellPhase.notFound || EditorShellPhase.failed => _EditorUnavailable(shell: shell, onOpenProjects: onOpenProjects),
+              },
+            ),
           ),
         ),
       ),

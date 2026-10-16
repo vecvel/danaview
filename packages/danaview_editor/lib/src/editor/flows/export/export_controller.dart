@@ -11,7 +11,8 @@
 //    pre-pass (API-04, "Preparing"), `compileExport` (CORE-33; original media only), the engine's
 //    `preflight` (warnings the user confirms; with `layersVsResolution` the free-space check is
 //    repeated with the multi-pass precompose intermediates added, `max(2·I, I + output) − output`,
-//    D-45(B)) and `ExportService.start`.
+//    D-45(B)) and `ExportService.start` (with `ExportStrings.notificationTexts`, so the Android
+//    notification follows the app's copy, INT-07).
 // 3. Progress at <= 4 Hz with phase, ETA after three samples, backgrounded copy per
 //    `BackgroundExportKind`; cancel (the sheet confirms; the engine deletes the partial file);
 //    the screen stays awake while it runs.
@@ -39,6 +40,7 @@ import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' hide
 
 import '../../../app/editor_prefs.dart';
 import '../../../app/editor_providers.dart';
+import '../../../app/strings/export_strings.dart';
 import '../../state/editor_session.dart';
 import '../../state/editor_state.dart';
 import 'export_environment.dart';
@@ -631,6 +633,7 @@ class ExportController extends StateNotifier<ExportUiState> {
       outputPath: outputPath,
       title: title,
       whenDetached: draft.destination == ExportDestination.photos ? ExportDetachedHandoff.saveToGallery : ExportDetachedHandoff.keepForLater,
+      notificationTexts: ExportStrings.notificationTexts,
     );
     _ready = null;
     if (!_live(epoch)) {

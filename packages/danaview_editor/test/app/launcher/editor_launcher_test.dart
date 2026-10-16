@@ -7,6 +7,8 @@
 // deletes the half-made project and its partial copy; the free-space refusal shows its copy), and
 // the return: the player is suspended (release on low-memory devices), resumed paused when the
 // editor route pops, and the orientation owner stack gives the player its mode back.
+// FIX-UX-41-1: the player's position is a platform time, so the editor route gets the start of
+// the nearest frame of the project's grid (D-35), e.g. 5 333 333 µs and 5 333 000 µs → frame 160.
 
 import 'dart:async';
 
@@ -27,6 +29,8 @@ import '../../support/support.dart';
 
 const _mb = 1024 * 1024;
 const _path = '/storage/emulated/0/Movies/holiday.mp4';
+/// 12.345 s on the default 30 fps grid: frame 370 (370.35 rounds down), which starts at 12 333 334 µs.
+const _openAt = 12333334;
 const _iosPhone = EditorSurface(Size(390, 844), platform: TargetPlatform.iOS);
 
 /// The player side of the handoff, recording every call.
@@ -112,6 +116,7 @@ Future<_Run> _pump(
   ImportSpaceCheck? check,
   EditorSurface surface = SurfaceMatrix.phone,
   _GatedRepository? repository,
+  Duration position = const Duration(seconds: 12, milliseconds: 345),
 }) async {
   final repo = repository ?? _GatedRepository();
   final engine = FakeEditorEngine(caps: caps, compatibilityByPath: Map.of(compat));
@@ -135,7 +140,7 @@ Future<_Run> _pump(
           child: GestureDetector(
             onTap: () => launcher
                 .openFromPlayer(
-                  const EditorLaunchRequest(pathOrUri: _path, title: 'Holiday', position: Duration(seconds: 12, milliseconds: 345), wasPlaying: true),
+                  EditorLaunchRequest(pathOrUri: _path, title: 'Holiday', position: position, wasPlaying: true),
                   context,
                   player: run.player,
                   openEditor: run.route.open,
@@ -275,7 +280,7 @@ void main() {
       await _tapEdit(tester);
       expect(repo.createdSpecs, isEmpty);
       expect(run.route.opened.single.$1, existing);
-      expect(run.route.opened.single.$2, 12345000);
+      expect(run.route.opened.single.$2, _openAt);
     });
 
     testWidgets('a new project starts at the exact player position, named after the video', (tester) async {
@@ -289,7 +294,7 @@ void main() {
       expect(spec.picks.single.displayName, 'holiday.mp4');
       expect(spec.picks.single.sizeBytes, 120 * _mb);
       expect(spec.origin, const FromPlayerOrigin(quickHash: 'qh', sizeBytes: 120 * _mb, displayName: 'holiday.mp4'));
-      expect(run.route.opened.single.$2, 12345000);
+      expect(run.route.opened.single.$2, _openAt);
       expect(run.route.opened.single.$1, run.repository.projects.keys.single);
     });
 
@@ -369,8 +374,65 @@ void main() {
       final run = await _pump(tester, check: _check(copies: true, free: 10 * 1024 * _mb));
       await _tapEdit(tester);
       await _settle(tester);
-      expect(run.route.opened.single.$2, 12345000);
+      expect(run.route.opened.single.$2, _openAt);
       expect((run.repository.createdSpecs.single as FromMediaProjectSpec).initialPlayhead, 12345000);
+    });
+  });
+
+  group('player position on the frame grid (FIX-UX-41-1, D-35)', () {
+    test('platform times map to the start of the nearest frame', () {
+      // Frame 160 at 30 fps: plan start 5 333 334 µs; the player reports 5 333 333 µs (µs clock)
+      // or 5 333 000 µs (ms clock). Flooring either gives frame 159.
+      expect(EditorLauncher.gridTimeFor(5333333, FrameRate.fps30), 5333334);
+      expect(EditorLauncher.gridTimeFor(5333000, FrameRate.fps30), 5333334);
+      expect(EditorLauncher.gridTimeFor(5333334, FrameRate.fps30), 5333334);
+      expect(FrameRate.fps30.frameIndexOf(EditorLauncher.gridTimeFor(5333000, FrameRate.fps30)), 160);
+      // 24 fps: frame 7 starts at 291 667 µs; the player says 291 000 µs (ms) or 291 666 µs.
+      expect(EditorLauncher.gridTimeFor(291000, FrameRate.fps24), 291667);
+      expect(EditorLauncher.gridTimeFor(291666, FrameRate.fps24), 291667);
+      // 60 fps and 25 fps (exact ms grid).
+      expect(EditorLauncher.gridTimeFor(5333000, FrameRate.fps60), FrameRate.fps60.timeOfFrame(320));
+      expect(EditorLauncher.gridTimeFor(5320000, FrameRate.fps25), 5320000);
+      // Zero and negative stay at the start.
+      expect(EditorLauncher.gridTimeFor(0, FrameRate.fps30), 0);
+      expect(EditorLauncher.gridTimeFor(-5, FrameRate.fps30), 0);
+    });
+
+    for (final (label, us) in [('µs clock', 5333333), ('ms clock', 5333000)]) {
+      testWidgets('a new project opens on frame 160 when the player hands over $us µs ($label)', (tester) async {
+        final run = await _pump(tester, position: Duration(microseconds: us));
+        await _tapEdit(tester);
+        expect(run.route.opened.single.$2, 5333334);
+        expect(FrameRate.fps30.frameIndexOf(run.route.opened.single.$2), 160);
+        expect(run.repository.openProjects, isEmpty, reason: 'the rate read releases the project for the editor');
+      });
+
+      testWidgets('a copied project opens on frame 160 for $us µs ($label)', (tester) async {
+        final run = await _pump(tester, position: Duration(microseconds: us), check: _check(copies: true, free: 10 * 1024 * _mb));
+        await _tapEdit(tester);
+        await _settle(tester);
+        expect(run.route.opened.single.$2, 5333334);
+        expect(run.repository.openProjects, isEmpty);
+      });
+    }
+
+    testWidgets('a reused project uses its own frame rate (24 fps)', (tester) async {
+      final repo = _GatedRepository();
+      final existing = repo.seedEmpty('Holiday', settings: const ProjectSettings(frameRate: FrameRate.fps24)).id;
+      repo.untouchedByPath[_path] = existing;
+      final run = await _pump(tester, repository: repo, position: const Duration(microseconds: 291000));
+      await _tapEdit(tester);
+      expect(run.route.opened.single, (existing, 291667));
+      expect(repo.calls, containsAllInOrder(['open:$existing', 'close:$existing']));
+      expect(repo.openProjects, isEmpty);
+    });
+
+    testWidgets('when the rate cannot be read the raw position is handed over', (tester) async {
+      final repo = _GatedRepository()..failNext['open'] = const StoreFailure(StoreFailureKind.busy);
+      final run = await _pump(tester, repository: repo, position: const Duration(microseconds: 5333000));
+      await _tapEdit(tester);
+      expect(run.route.opened.single.$2, 5333000);
+      expect(run.outcome, isNull, reason: 'the editor is still open');
     });
   });
 

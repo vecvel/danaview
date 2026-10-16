@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:flutter/painting.dart' show Size;
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:danaview_editor/src/app/strings/export_strings.dart';
 import 'package:danaview_editor/src/editor/flows/export/export_controller.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
 import 'package:danaview_editor_core/formats.dart';
@@ -404,6 +405,21 @@ void main() {
       c.setDestination(ExportDestination.files);
       await _run(rig, c);
       expect(rig.exporter.lastWhenDetached, ExportDetachedHandoff.keepForLater);
+    });
+
+    test('every job carries the app copy of the Android notification texts (INT-07, FIX-UX-39-1)', () async {
+      final rig = ExportRig();
+      final c = await readyNoNotice(rig);
+      await _run(rig, c);
+      expect(rig.exporter.notificationTexts, [same(ExportStrings.notificationTexts)]);
+    });
+
+    test('the notification copy is complete and keeps the native placeholders', () {
+      const t = ExportStrings.notificationTexts;
+      expect(t.all, everyElement(isNotEmpty));
+      expect(t.exportingProgress, contains('{percent}'));
+      expect(t.workingProgress, contains('{percent}'));
+      expect(t.more, contains('{count}'));
     });
 
     test('preflight warnings (software encoder) ask before starting; Export anyway starts; Change settings returns', () async {

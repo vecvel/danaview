@@ -13,9 +13,12 @@
 // `scaleTimeRange` of that range to `CMTime(k1 − k0, gridFps)`. Grid times are never converted to µs
 // CMTimes (D-35); source ranges stay `CMTime(µs, 1_000_000)`. `hold` layers insert a 100 µs source
 // range at `map[0].s0 + ε` scaled across the whole layer (the compositor sees that one frame).
-// A runtime-generated 16×16 spacer (SpacerVideo) is scaled across `CMTime(0…K, gridFps)` so the
-// compositor runs for every output frame, gaps included. Images, solids and sprites are compositor
-// layers only.
+// A runtime-generated 16×16 spacer (SpacerVideo) covers `CMTime(0…K, gridFps)` so the compositor
+// runs for every output frame, gaps included. It is laid as n whole spacer durations (one edit at an
+// integral scale) plus an unscaled remainder edit shorter than one spacer duration, never as one
+// edit at a fractional scale: a reader or player item starting inside a fractionally scaled spacer
+// edit never gets a sample (`copyNextSampleBuffer` blocks; 60 fps × 179, 48 fps × 49 frames;
+// FIX-IOS-SPACER). Images, solids and sprites are compositor layers only.
 //
 // Audio. Segments are laid out by AudioMixLayout (interval colouring × pitch, ramp-seam pairs).
 // Audio is sample-accurate (no ε): a unity-rate piece inserts its source start with the GRID
@@ -414,8 +417,7 @@ enum CompositionBuilder {
                 throw EngineError(.internal, "cannot add the spacer track")
             }
             t.naturalTimeScale = compositionTimeScale
-            try t.insertTimeRange(spacerRange, of: spacerTrack, at: .zero)
-            t.scaleTimeRange(CMTimeRange(start: .zero, duration: spacerRange.duration), toDuration: grid.cmTime(frame: total))
+            try layoutSpacer(t, source: spacerTrack, range: spacerRange, end: grid.cmTime(frame: total))
             spacerTrackID = t.trackID
         }
 
@@ -484,6 +486,46 @@ enum CompositionBuilder {
             gainTaps: gainTaps, warnings: warnings, buildMs: (CFAbsoluteTimeGetCurrent() - startedAt) * 1000, sources: sources)
         if !warnings.isEmpty { Log.info(.preview, "composition rev \(plan.rev): \(warnings.count) warning(s)") }
         return built
+    }
+
+    /// The spacer edits covering [0, end) for a spacer source of duration `unit`
+    /// (FIX-IOS-SPACER): `whole` = n·unit with n = floor(end / unit) on exact integers (one edit
+    /// scaled by the integral ratio n; zero when end < unit), then the remainder end − whole
+    /// (< unit) as an unscaled insert of the spacer's first `remainder` (zero when end is a whole
+    /// multiple of unit).
+    static func spacerLayout(end: CMTime, unit: CMTime) -> (n: Int64, whole: CMTime, remainder: CMTime)? {
+        guard end.isNumeric, unit.isNumeric, end.value > 0, unit.value > 0, end.timescale > 0, unit.timescale > 0 else {
+            return nil
+        }
+        // end = a/b, unit = c/d: n = floor(a·d / (b·c)).
+        let (num, o1) = Int64(end.value).multipliedReportingOverflow(by: Int64(unit.timescale))
+        let (den, o2) = Int64(end.timescale).multipliedReportingOverflow(by: unit.value)
+        guard !o1, !o2, den > 0 else { return nil }
+        let n = num / den
+        guard n <= Int64(Int32.max) else { return nil }
+        let whole = n == 0 ? CMTime.zero : CMTimeMultiply(unit, multiplier: Int32(n))
+        return (n, whole, CMTimeSubtract(end, whole))
+    }
+
+    /// Lays the spacer across [0, end) on [track] (see `spacerLayout`). Every edit either has an
+    /// integral scale or none, so a reader or player starting anywhere gets samples.
+    static func layoutSpacer(_ track: AVMutableCompositionTrack, source: AVAssetTrack, range: CMTimeRange, end: CMTime) throws {
+        guard let layout = spacerLayout(end: end, unit: range.duration), false else {
+            // Unrepresentable ratio (not expected): the single scaled edit.
+            try track.insertTimeRange(range, of: source, at: .zero)
+            track.scaleTimeRange(CMTimeRange(start: .zero, duration: range.duration), toDuration: end)
+            return
+        }
+        if layout.n > 0 {
+            try track.insertTimeRange(range, of: source, at: .zero)
+            if layout.n > 1 {
+                track.scaleTimeRange(CMTimeRange(start: .zero, duration: range.duration), toDuration: layout.whole)
+            }
+        }
+        if layout.remainder > .zero {
+            try track.insertTimeRange(
+                CMTimeRange(start: range.start, duration: layout.remainder), of: source, at: layout.whole)
+        }
     }
 
     private static func insertVideo(

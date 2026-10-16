@@ -22,6 +22,9 @@
 //   open, the opening phase, the splitter); region widgets are keyed so they keep their state when
 //   the layout kind changes (rotation), and the TransportBar keeps its state when it moves into
 //   the top bar.
+// * Health banner (FIX-UX-07, ux.md §13.1): the screen's `banner` (EditorHealthHost) sits under the
+//   top bar, above the regions, sized by its content; it is placed before the dock so an open dock
+//   stays on top of it.
 
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter/widgets.dart';
@@ -51,7 +54,7 @@ typedef EditorTopBarBuilder = Widget Function(BuildContext context, Widget? tran
 /// Lays out the editor's regions for the current screen (ux.md §6).
 class EditorScaffold extends ConsumerStatefulWidget {
   /// Creates the scaffold.
-  const EditorScaffold({super.key, required this.inspectorOpen, required this.topBar, this.loading = false});
+  const EditorScaffold({super.key, required this.inspectorOpen, required this.topBar, this.loading = false, this.banner});
 
   /// Whether an inspector panel is open (docks it in compactPortrait, fills the side pane elsewhere).
   final bool inspectorOpen;
@@ -61,6 +64,12 @@ class EditorScaffold extends ConsumerStatefulWidget {
 
   /// The project is still opening: only the top bar and a progress indicator show.
   final bool loading;
+
+  /// The project's health banners (missing media, read-only, restored from backup; UX-40's
+  /// `EditorHealthHost`), placed right under the top bar over the regions below it. It sizes
+  /// itself (zero height when nothing needs saying) and stays mounted while opening, so its
+  /// controller and recovery prompt start with the project.
+  final Widget? banner;
 
   /// Extra touch area the splitter takes from each neighbour.
   static const double splitterTouchSlop = 6;
@@ -148,6 +157,20 @@ class _EditorScaffoldState extends ConsumerState<EditorScaffold> {
       ));
     }
 
+    void addBanner() {
+      final banner = widget.banner;
+      if (banner == null) return;
+      final left = topBar?.left ?? spec.padding.left;
+      final right = topBar != null ? spec.size.width - topBar.right : spec.padding.right;
+      children.add(Positioned(
+        key: const ValueKey<String>('banner'),
+        left: left,
+        right: right,
+        top: topBar?.bottom ?? spec.padding.top,
+        child: _plain(context, banner),
+      ));
+    }
+
     if (widget.loading) {
       final top = topBar?.bottom ?? spec.padding.top;
       final bottom = spec.size.height - spec.padding.bottom.clamp(spec.viewInsets.bottom, double.infinity);
@@ -159,6 +182,7 @@ class _EditorScaffoldState extends ConsumerState<EditorScaffold> {
         height: (bottom - top).clamp(0.0, double.infinity),
         child: const Center(child: DanaviewSpinner(semanticLabel: EditorShellStrings.opening)),
       ));
+      addBanner();
       return Stack(children: children);
     }
 
@@ -200,6 +224,7 @@ class _EditorScaffoldState extends ConsumerState<EditorScaffold> {
       ));
     }
 
+    addBanner();
     final dock = spec.rectOf(EditorRegion.dock);
     if (dock != null) {
       children.add(Positioned(

@@ -159,8 +159,8 @@ final class ExportConformanceTests: XCTestCase {
         XCTAssertEqual(CMTimeCompare(inner.end, CMTime(value: 1_000_000, timescale: 1_000_000)), 0, "inner ends stay µs")
         let past = ExportTime.readerRange(startUs: 10_000_000, endUs: 20_000_000, plan: plan)
         XCTAssertTrue(past.duration == .zero, "a range after the end is empty")
-        // The spacer of a fractional scale (179·30/60 = 89.5 spacer frames) is split into an
-        // integral edit and a remainder; a whole ratio (180 frames) stays one edit.
+        // IOS-08 lays a fractional spacer span (179·30/60 = 89.5 spacer frames) as an integral
+        // edit and an unscaled remainder; a whole ratio (180 frames) stays one edit (FIX-IOS-SPACER).
         for (k, edits) in [(Int64(179), 2), (180, 1)] {
             let d = FrameGrid(60).timeOfFrame(k)
             let p = try RenderPlanDecoder.decodePlan(ExportPlans.plan(
@@ -171,11 +171,9 @@ final class ExportConformanceTests: XCTestCase {
             let input = UncheckedSendable((p, options))
             let built = try MediaBlocking.await { try await CompositionBuilder.build(plan: input.value.0, options: input.value.1) }
             defer { built.releaseMedia() }
-            XCTAssertEqual(ExportTime.splitFractionalSpacer(built), edits == 2)
             let track = try XCTUnwrap(built.composition.track(withTrackID: try XCTUnwrap(built.spacerTrackID)))
             XCTAssertEqual(track.segments.count, edits, "\(k) frames")
             XCTAssertEqual(CMTimeCompare(track.timeRange.end, CMTime(value: k, timescale: 60)), 0, "\(k) frames: spacer end")
-            XCTAssertFalse(ExportTime.splitFractionalSpacer(built), "idempotent")
         }
         // Exact ends are untouched.
         let exact = try RenderPlanDecoder.decodePlan(ExportPlans.plan(w: 320, h: 180, fps: 25, durUs: 2_040_000, assets: [], layers: []))

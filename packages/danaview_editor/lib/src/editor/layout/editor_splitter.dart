@@ -3,8 +3,10 @@
 // EditorSplitter (ux.md §6.5): the preview/timeline splitter. A 12 px row (the scaffold extends its
 // hit area to 24 px on touch, into the neighbours) with a 36×4 grip. Dragging changes the split
 // ratio within the range the layout allows; double-tap resets it to the kind's default. Semantics:
-// an adjustable "Preview size, 50 percent" with increase/decrease (5% steps); Up/Down do the same
-// when it has keyboard focus. The scaffold persists the ratio per layout kind.
+// an adjustable "Preview size, 50 percent" with increase/decrease (5% steps); Page Down/Page Up do
+// the same when it has keyboard focus. Inside the editor the arrow keys belong to EditorShortcuts
+// (ARCH §17.6: ↑/↓ are edit points even over a focused control), so the splitter only falls back to
+// Down/Up where no editor scope takes them. The scaffold persists the ratio per layout kind.
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -95,11 +97,11 @@ class _EditorSplitterState extends State<EditorSplitter> {
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowDown) {
+    if (key == LogicalKeyboardKey.pageDown || key == LogicalKeyboardKey.arrowDown) {
       _step(EditorSplitter.step);
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.arrowUp) {
+    if (key == LogicalKeyboardKey.pageUp || key == LogicalKeyboardKey.arrowUp) {
       _step(-EditorSplitter.step);
       return KeyEventResult.handled;
     }

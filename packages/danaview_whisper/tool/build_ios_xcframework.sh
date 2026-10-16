@@ -90,9 +90,20 @@ version_ge "$IOS_MIN" "$FLOOR" || die "DV_IOS_MIN=$IOS_MIN is below the app's iO
 # --- Stamp ------------------------------------------------------------------------------------------
 
 # The tree digest is computed the way VENDORED.md defines it, so a changed vendored file (which AI-01
-# forbids) also invalidates the framework.
+# forbids) also invalidates the framework. Only files git does not ignore count: whisper.cpp's CMake
+# configure writes git-ignored files into the source tree (bindings/javascript/package.json), and
+# those must not make the vendored tree look edited (FIX-AI-05-1). Paths keep the "./" prefix so the
+# lines match VENDORED.md's `find .` definition. Outside a git checkout every file counts.
+tree_files() {
+  if git -C "$SRC" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "$SRC" ls-files -z --cached --others --exclude-standard -- . |
+      while IFS= read -r -d '' f; do [ -f "$SRC/$f" ] && printf './%s\0' "$f"; done
+  else
+    (cd "$SRC" && find . -type f -print0)
+  fi
+}
 tree_digest() {
-  (cd "$SRC" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{ print $1 }')
+  (cd "$SRC" && tree_files | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{ print $1 }')
 }
 
 vendored_digest() {
