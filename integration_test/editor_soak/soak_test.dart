@@ -32,6 +32,7 @@
 
 // ignore_for_file: implementation_imports, avoid_print
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -171,6 +172,9 @@ final class _Soak {
       },
     };
     soakWriteJson('summary', summary);
+    // The same summary (without the samples) in the log: a failing run is uninstalled by
+    // `flutter test` before the host can copy the JSON.
+    soakLog('summary', jsonEncode({...summary, 'memory': {...summary['memory']! as Map<String, Object?>, 'samples': memory.samples.length}}));
     soakLog('memory', verdict?.toString() ?? 'too few samples for a verdict');
     soakLog('end', 'ops $_op, failures ${failures.length}, framework errors ${errors.framework.length}, '
         'reopen problems ${reopenProblems.length}, unavailable ${unavailable.keys.toList()}');
@@ -597,33 +601,14 @@ final class _Soak {
     final mode = _pick(const ['cancel', 'cancel', 'complete', 'background']);
     var backgrounded = false;
     var paused = false;
-    await E2eApp.pumpUntil(
-      tester,
-      () {
-        final s = ed.exportState;
-        switch (s) {
-          case ExportUiNotice():
-            c.confirmNotice();
-          case ExportUiWarnings():
-            c.confirmWarnings();
-          case ExportUiRunning(:final fraction, :final pausedInBackground):
-            if (pausedInBackground) paused = true;
-            return mode == 'complete' ? false : fraction > 0.05;
-          case ExportUiFailed(:final failure):
-            if (_lowStorage) return true;
-            throw StateError('export failed: $failure');
-          case ExportUiCompleted():
-            return E2eApp.world.engine.files.records.length > handoffs;
-          case ExportUiSetup(:final issue) when issue != null && _lowStorage:
-            return true;
-          default:
-        }
-        return false;
-      },
-      what: 'the export to run',
-      timeout: const Duration(minutes: 6),
-      step: const Duration(milliseconds: 200),
-    );
+    final watch = _ExportWatch(this, handoffs);
+    await watch.until((s) => switch (s) {
+          ExportUiRunning(:final fraction) => mode != 'complete' && fraction > 0.05,
+          ExportUiCompleted() => watch.delivered,
+          ExportUiFailed() => _lowStorage,
+          ExportUiSetup(:final issue) => issue != null && _lowStorage,
+          _ => false,
+        }, what: 'the export to run');
     var outcome = '';
     final now = ed.exportState;
     if (now is ExportUiRunning) {
@@ -631,25 +616,15 @@ final class _Soak {
         final ack = await _host('background', args: {'seconds': 2 + rng.nextInt(4)});
         backgrounded = ack != null;
         if (!backgrounded) await _lifecycleBlip(const Duration(seconds: 2));
-        await E2eApp.pumpUntil(
-          tester,
-          () {
-            final s = ed.exportState;
-            if (s is ExportUiRunning && s.pausedInBackground) paused = true;
-            if (s is ExportUiNotice) c.confirmNotice();
-            if (s is ExportUiFailed) throw StateError('export failed after the interruption: ${s.failure}');
-            return s is ExportUiCompleted && E2eApp.world.engine.files.records.length > handoffs || s is ExportUiInterrupted;
-          },
-          what: 'the export to finish after the interruption',
-          timeout: const Duration(minutes: 8),
-          step: const Duration(milliseconds: 200),
-        );
+        await watch.until((s) => (s is ExportUiCompleted && watch.delivered) || s is ExportUiInterrupted,
+            what: 'the export to finish after the interruption');
+        paused = paused || watch.paused;
         if (ed.exportState is ExportUiInterrupted) {
           final st = ed.exportState as ExportUiInterrupted;
           outcome = 'interrupted (resumable ${st.canResume})';
           if (st.canResume) {
             await c.resume();
-            await E2eApp.pumpUntil(tester, () => ed.exportState is ExportUiCompleted, what: 'the resumed export', timeout: const Duration(minutes: 8));
+            await watch.until((s) => s is ExportUiCompleted && watch.delivered, what: 'the resumed export');
             outcome += ', resumed';
           }
         } else {
@@ -662,7 +637,7 @@ final class _Soak {
         outcome = 'cancelled';
       }
     } else if (now is ExportUiCompleted) {
-      outcome = 'completed';
+      outcome = 'completed${watch.paused ? ' (paused in background)' : ''}';
     } else {
       outcome = 'ended as ${now.runtimeType} (low storage)';
     }
@@ -704,7 +679,7 @@ final class _Soak {
       await E2eApp.pumpUntil(
         tester,
         () {
-          if (E2eApp.hasKey('captions-failed') && !noSpeech()) throw StateError('Auto captions failed');
+          if (E2eApp.hasKey('captions-failed') && !noSpeech()) throw TestFailure('Auto captions failed: ${E2eApp.describeScreen()}');
           return generated() ||
               noSpeech() ||
               (E2eApp.hasKey('captions-needs-language') && E2eApp.hasKey('captions-candidate-en')) ||
@@ -851,6 +826,61 @@ final class _Soak {
     reopenProblems.addAll(after.map((p) => 'after reopen: $p'));
     if (restored) reopenProblems.add('a clean close left a recovery journal');
     return problems.isEmpty && after.isEmpty ? 'valid' : 'problems: ${[...problems, ...after]}';
+  }
+}
+
+/// Drives the export sheet's states (notice, warnings) and waits for a condition with two bounds:
+/// no progress for 120 s is a stall (a hang, reported with the last fraction), and an
+/// unexpected failure ends the wait at once with the controller's details (copy-details text).
+final class _ExportWatch {
+  _ExportWatch(this.soak, this.handoffs);
+
+  final _Soak soak;
+  final int handoffs;
+  bool paused = false;
+
+  bool get delivered => E2eApp.world.engine.files.records.length > handoffs;
+
+  Future<void> until(bool Function(ExportUiState s) done, {required String what}) async {
+    final ed = soak.ed;
+    final c = ed.export;
+    var lastFraction = -1.0;
+    var lastChange = DateTime.now();
+    ExportUiFailed? failed;
+    String? stalled;
+    await E2eApp.pumpUntil(
+      soak.tester,
+      () {
+        final s = ed.exportState;
+        if (s is ExportUiNotice) c.confirmNotice();
+        if (s is ExportUiWarnings) c.confirmWarnings();
+        if (s is ExportUiRunning) {
+          if (s.pausedInBackground) paused = true;
+          if (s.fraction != lastFraction) {
+            lastFraction = s.fraction;
+            lastChange = DateTime.now();
+          } else if (!s.pausedInBackground && DateTime.now().difference(lastChange) > const Duration(seconds: 120)) {
+            stalled = 'no progress for 120 s at ${(s.fraction * 100).toStringAsFixed(1)} % (${s.framesDone}/${s.framesTotal} frames, '
+                'phase ${s.phase.name}, project ${ed.project.duration ~/ 1000} ms)';
+            return true;
+          }
+        } else {
+          lastChange = DateTime.now();
+        }
+        if (done(s)) return true;
+        if (s is ExportUiFailed) {
+          failed = s;
+          return true;
+        }
+        return false;
+      },
+      what: what,
+      timeout: const Duration(minutes: 15),
+      step: const Duration(milliseconds: 200),
+    );
+    if (stalled != null) throw TestFailure('$what: export stalled: $stalled');
+    final f = failed;
+    if (f != null && !done(f)) throw StateError('export failed: ${f.failure}; details: ${c.detailsOf(f.failure).replaceAll('\n', ' ')}');
   }
 }
 

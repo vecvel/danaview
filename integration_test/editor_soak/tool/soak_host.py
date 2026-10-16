@@ -374,6 +374,9 @@ class Host:
         except OSError:
             pass
         text = logf.read_text(errors="replace")
+        for line in text.splitlines():
+            if "DV_SOAK summary " in line:
+                (self.out / "files" / "soak-summary-log.json").write_text(line.split("DV_SOAK summary ", 1)[1])
         for marker in ("Lost connection to device", "Service protocol connection closed"):
             if marker in text and not self.died:
                 self.crashes.append(f"{phase}: '{marker}' in the log")

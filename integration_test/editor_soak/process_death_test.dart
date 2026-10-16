@@ -301,7 +301,7 @@ Future<String> _verify(WidgetTester tester, String job, ProjectId id, Map<String
         if (!ed.tasks.requestProxy(media)) throw StateError('the proxy cannot be requested again');
       }
       await _resumes(tester, ed, 'proxy', () {
-        if (ed.project.pool[media]!.proxy == ProxyState.failed) throw StateError('the proxy failed after the relaunch');
+        if (ed.project.pool[media]!.proxy == ProxyState.failed) throw TestFailure('the proxy failed after the relaunch');
         return ed.project.pool[media]!.proxy == ProxyState.ready;
       });
       await ed.close();
@@ -320,7 +320,7 @@ Future<String> _verify(WidgetTester tester, String job, ProjectId id, Map<String
       await _resumes(tester, ed, job, () {
         final now = ed.project.pool.assets.values.where(isTarget).toList();
         for (final a in now) {
-          if (a.status is FailedStatus) throw StateError('the $job asset failed: ${(a.status as FailedStatus).reason}');
+          if (a.status is FailedStatus) throw TestFailure('the $job asset failed: ${(a.status as FailedStatus).reason}');
         }
         return now.every((a) => a.status is ReadyStatus);
       });
@@ -346,7 +346,7 @@ Future<String> _verify(WidgetTester tester, String job, ProjectId id, Map<String
         await c.resume();
         await E2eApp.pumpUntil(tester, () {
           final st = E2eExport.state(ed);
-          if (st is ExportUiFailed) throw StateError('the resumed export failed: ${st.failure}');
+          if (st is ExportUiFailed) throw TestFailure('the resumed export failed: ${st.failure}');
           return st is ExportUiCompleted && world.engine.files.records.length > handoffs;
         }, what: 'the resumed export', timeout: const Duration(minutes: 8));
         how = 'resumed from ${(s.doneFraction * 100).round()} % and completed';
@@ -397,7 +397,8 @@ Future<void> _resumes(WidgetTester tester, E2eEditor ed, String job, bool Functi
   try {
     await E2eApp.pumpUntil(tester, ready, what: 'the pending $job to resume on open', timeout: const Duration(seconds: 90));
     return;
-  } on TestFailure {
+  } on TestFailure catch (e) {
+    if (!(e.message ?? '').startsWith('Timed out')) rethrow;
     soakLog('death', '$job: not resumed 90 s after open (tasks ${ed.state.tasks.length}); probing with the Tasks controller');
   }
   ed.tasks; // creates tasksControllerProvider(id), whose reconcile starts pending jobs
@@ -405,8 +406,8 @@ Future<void> _resumes(WidgetTester tester, E2eEditor ed, String job, bool Functi
   try {
     await E2eApp.pumpUntil(tester, ready, what: 'the pending $job after the probe', timeout: const Duration(minutes: 3));
     resumedAfterProbe = true;
-  } on TestFailure {
-    // Not even then.
+  } on TestFailure catch (e) {
+    if (!(e.message ?? '').startsWith('Timed out')) rethrow;
   }
   throw StateError('the pending $job job is not resumed when the editor opens; '
       '${resumedAfterProbe ? 'it resumes and completes only after tasksControllerProvider is first read (nothing reads it on open)' : 'it does not resume even after tasksControllerProvider is read'}');
