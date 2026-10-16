@@ -473,12 +473,23 @@ void main() {
     expect(a.hashCode, b.hashCode);
   });
 
-  test('placeholders throw UnimplementedError until their owners land (D-33)', () {
-    expect(() => PlanTransport.encodeTransient(PlanTransient(item: 'x', layers: const [])), throwsUnimplementedError);
-    expect(() => RenderMath.notImplemented, throwsUnimplementedError);
-    expect(() => const ReferenceRenderer().renderFrame(contractKitPlan(), 0), throwsUnimplementedError);
-    expect(() => const ReferenceAudioMixer().mix(contractKitPlan(), 0, 1), throwsUnimplementedError);
-    expect(() => TextLayoutEngine(fontResolver: (_) => 'Figtree').layout(const {}), throwsUnimplementedError);
-    expect(() => VspriteCodec.decode(Uint8List(0)), throwsUnimplementedError);
+  test('D-33 placeholders have all landed: none of the former stubs throws UnimplementedError', () {
+    // PlanTransport (API-02), RenderMath / ReferenceRenderer / ReferenceAudioMixer (API-03),
+    // TextLayoutEngine and VspriteCodec are implemented now. Each call may still reject its
+    // degenerate input with a domain error, but never with UnimplementedError.
+    final notUnimplemented = isNot(isA<UnimplementedError>());
+    void neverUnimplemented(Object? Function() call) {
+      try {
+        call();
+      } catch (e) {
+        expect(e, notUnimplemented);
+      }
+    }
+
+    neverUnimplemented(() => PlanTransport.encodeTransient(PlanTransient(item: 'x', layers: const [])));
+    neverUnimplemented(() => const ReferenceRenderer().renderFrame(contractKitPlan(), 0));
+    neverUnimplemented(() => const ReferenceAudioMixer().mix(contractKitPlan(), 0, 1));
+    neverUnimplemented(() => TextLayoutEngine(fontResolver: (_) => 'Figtree').layout(const {}));
+    neverUnimplemented(() => VspriteCodec.decode(Uint8List(0)));
   });
 }

@@ -414,9 +414,41 @@ final class TranscriptionServiceImpl implements TranscriptionService {
     final records = await this.records.list();
     for (final r in records) {
       if (r.project != project || r.jobId == _active?.id) continue;
-      return r.toResumable();
+      return ResumableTranscription(
+          jobId: r.jobId, project: r.project, doneFraction: await _resumableFraction(r), createdAt: r.startedAt);
     }
     return null;
+  }
+
+  /// Share of [record]'s audio already done (FIX-QA07-D5, QA-07 D5): finished units count whole and
+  /// the unit in progress counts the range its checkpoint covers, weighted by unit duration. A
+  /// single long unit killed after a chunk was checkpointed therefore reads, say, 46 %, not 0 %.
+  /// Falls back to the share of finished units when the units carry no duration.
+  Future<double> _resumableFraction(JobRecord record) async {
+    var total = 0;
+    var done = 0.0;
+    for (final u in record.units) {
+      final start = u.sourceRange.start;
+      final duration = u.sourceRange.end - start;
+      if (duration <= 0) continue;
+      total += duration;
+      if (u.state == JobUnitState.done) {
+        done += duration;
+        continue;
+      }
+      if (!TranscriptKey.isValid(u.transcriptKey)) continue;
+      CheckpointReplay? replay;
+      try {
+        replay = await checkpoints.replay(u.transcriptKey);
+      } on Object {
+        replay = null;
+      }
+      // A checkpoint of another range of the same media does not count (the job restarts it).
+      if (replay == null || replay.unitStartUs != start) continue;
+      done += (replay.resumeFromUs - start).clamp(0, duration);
+    }
+    if (total <= 0) return record.doneFraction;
+    return (done / total).clamp(0.0, 1.0).toDouble();
   }
 
   /// The request stored with a resumable job (JSON form), for the "Resume" action.

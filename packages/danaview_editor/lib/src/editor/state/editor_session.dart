@@ -8,7 +8,10 @@
 // * UX-13 calls `dryRun` per pointer move (drag ghosts, ARCH §17.4);
 // * UX-14 drives transport and seeks on `preview` and starts its playhead from `openedAt` /
 //   `initialSeek`;
-// * UX-18 calls `planSync.resync()` for "Restart preview".
+// * UX-18 calls `planSync.resync()` for "Restart preview";
+// * UX-35's Tasks controller waits for [EditorSession.mediaResolved] before it resolves sources
+//   (FIX-QA05-D5): the session compiler's media snapshot is only warm after its first resolve pass
+//   (INT-02 refreshes it before each plan compile), and before that every media reads offline.
 //
 // Mutations never go through here: every edit is `EditorController.apply` / `beginTransaction`.
 //
@@ -38,6 +41,7 @@ class EditorSession {
   static final Expando<EditorSession> _byEdit = Expando<EditorSession>('EditorSession');
 
   final ValueNotifier<bool> _attached = ValueNotifier<bool>(false);
+  final ValueNotifier<int> _mediaResolves = ValueNotifier<int>(0);
   EditSession? _edit;
   LoadedProject? _loaded;
   EditorEngine? _engine;
@@ -57,6 +61,22 @@ class EditorSession {
 
   /// Whether a project is attached.
   bool get isOpen => _edit != null;
+
+  /// Media-resolve passes of the session's compiler since the project attached (one per finished
+  /// plan compile, FIX-QA05-D5); 0 until the first one. Notifies on change.
+  ValueListenable<int> get mediaResolves => _mediaResolves;
+
+  /// Whether the compiler's media snapshot is warm: [SessionPlanCompiler.resolve] answers for the
+  /// attached project (before the first pass it may read every media as offline).
+  bool get mediaResolved => _mediaResolves.value > 0;
+
+  /// Records a finished media-resolve pass of [compiler] (called by `EditorController` when a plan
+  /// compile of the attached session's compiler completes, successfully or not). A pass of a
+  /// compiler that is no longer attached is ignored.
+  void markMediaResolved(SessionPlanCompiler compiler) {
+    if (_disposed || !isOpen || !identical(compiler, _compiler)) return;
+    _mediaResolves.value++;
+  }
 
   /// Core session (history, transactions). Throws [StateError] before open.
   EditSession get edit => _edit ?? (throw StateError('EditorSession $id is not open'));
@@ -125,7 +145,10 @@ class EditorSession {
     _preview = preview;
     _planSync = planSync;
     _byEdit[edit] = this;
-    if (!_disposed) _attached.value = true;
+    if (!_disposed) {
+      _mediaResolves.value = 0;
+      _attached.value = true;
+    }
   }
 
   /// Records where the editor opened (called by `EditorController.open` after the exact seek).
@@ -150,7 +173,10 @@ class EditorSession {
     _planSync = null;
     _compiler = null;
     _initialSeek = null;
-    if (!_disposed) _attached.value = false;
+    if (!_disposed) {
+      _mediaResolves.value = 0;
+      _attached.value = false;
+    }
   }
 
   /// Releases the notifier (provider disposal).
@@ -158,6 +184,7 @@ class EditorSession {
     if (_disposed) return;
     _disposed = true;
     _attached.dispose();
+    _mediaResolves.dispose();
   }
 
   @override

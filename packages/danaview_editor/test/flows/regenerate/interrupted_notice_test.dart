@@ -4,7 +4,8 @@
 // TranscriptionInterrupted and keeps a resumable record) the notice appears when the editor opens;
 // Resume re-runs the stored request through the Auto captions sheet and the job continues from the
 // record; without a stored request the sheet opens for the user to start; Discard drops the record;
-// records older than 7 days and running jobs show nothing; the stored request decodes.
+// records older than 7 days and running jobs show nothing; the stored request decodes; the message
+// copy shows the checkpointed share and says Resume starts over when nothing was kept (FIX-QA07-D5).
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -157,6 +158,23 @@ void main() {
       rig.transcription.resumable[id] = ResumableTranscription(jobId: 'old', project: id, doneFraction: 0.5, createdAt: DateTime.utc(2026, 10, 7));
       await rig.pump(tester);
       expect(find.byKey(const ValueKey('captions-interrupted')), findsNothing);
+    });
+  });
+  group('message copy (FIX-QA07-D5)', () {
+    test('a checkpointed share shows its percent; nothing done says Resume starts over', () {
+      expect(InterruptedCaptionsStrings.message(0.46), '46% was done. That part is kept, so it continues where it stopped.');
+      expect(InterruptedCaptionsStrings.message(0),
+          'It stopped before any part was finished. Resume starts it again with the same settings.');
+      expect(InterruptedCaptionsStrings.message(double.nan), InterruptedCaptionsStrings.message(0));
+      expect(InterruptedCaptionsStrings.message(-1), InterruptedCaptionsStrings.message(0));
+    });
+
+    test('small shares never read 0%, unfinished jobs never read 100%', () {
+      expect(InterruptedCaptionsStrings.message(0.004), startsWith('Less than 1% was done.'));
+      expect(InterruptedCaptionsStrings.message(0.006), startsWith('1% was done.'));
+      expect(InterruptedCaptionsStrings.message(0.998), startsWith('99% was done.'));
+      expect(InterruptedCaptionsStrings.message(1), startsWith('100% was done.'));
+      expect(InterruptedCaptionsStrings.message(3), startsWith('100% was done.'));
     });
   });
 }

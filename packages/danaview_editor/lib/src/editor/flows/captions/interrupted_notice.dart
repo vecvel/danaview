@@ -42,12 +42,15 @@ abstract final class InterruptedCaptionsStrings {
   /// Title.
   static const String title = 'Auto captions were interrupted. Resume?';
 
-  /// Explanation with the share already done.
+  /// Explanation with the share already done. [doneFraction] includes the checkpointed range of
+  /// the unit in progress (FIX-QA07-D5), so a value of 0 means nothing was kept and Resume starts
+  /// over. A small share never rounds to "0%" and an unfinished job never reads "100%".
   static String message(double doneFraction) {
-    final percent = (doneFraction.clamp(0, 1) * 100).round();
-    return percent <= 0
-        ? 'The work done so far is kept, so it continues where it stopped.'
-        : '$percent% was done. That part is kept, so it continues where it stopped.';
+    final f = doneFraction.isNaN ? 0.0 : doneFraction.clamp(0.0, 1.0).toDouble();
+    if (f <= 0) return 'It stopped before any part was finished. Resume starts it again with the same settings.';
+    if (f < 0.005) return 'Less than 1% was done. That part is kept, so it continues where it stopped.';
+    final percent = f < 1 ? (f * 100).round().clamp(1, 99) : 100;
+    return '$percent% was done. That part is kept, so it continues where it stopped.';
   }
 
   /// Resume.

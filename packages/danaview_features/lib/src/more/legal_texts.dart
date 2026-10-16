@@ -1,6 +1,9 @@
 /// The Privacy Policy and Terms of Use as structured data, rendered by the legal screen.
 library;
 
+/// Where the app shows the third-party licences (the Auto captions terms point here, ARCH §20.3).
+const String openSourceLicencesLocation = 'Settings › About › Open-source licences';
+
 const String danaviewCopyright = 'Copyright © 2026 vecvel. All rights reserved.';
 
 /// Bumped to the release date of the version that ships the video editor (INT-05).
@@ -255,6 +258,11 @@ const LegalDocumentText termsOfUseText = LegalDocumentText(
       LegalBlock.paragraph(
         'On iPhone, iPad and Android, automatically created captions may contain mistakes. Review them before you '
         'publish or share a video.',
+      ),
+      LegalBlock.paragraph(
+        'Danaview uses open-source software and fonts and, on iPhone, iPad and Android, open-source speech '
+        'recognition models for Auto captions, each under its own licence. You can read these licences in '
+        '$openSourceLicencesLocation.',
       ),
     ]),
     LegalSection('Trademarks', [

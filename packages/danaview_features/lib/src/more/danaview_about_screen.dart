@@ -1,3 +1,5 @@
+// OWNER: UX-42 (Open-source licences row: FIX-LICENSES)
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,13 +11,22 @@ import 'app_info.dart';
 import 'legal_texts.dart';
 import 'settings_widgets.dart';
 
-/// App identity, version, the legal pages and support.
+/// App identity, version, the legal pages, the open-source licences and support.
 class DanaviewAboutScreen extends ConsumerWidget {
-  const DanaviewAboutScreen({super.key, required this.onBack, required this.onOpenPrivacy, required this.onOpenTerms});
+  const DanaviewAboutScreen({
+    super.key,
+    required this.onBack,
+    required this.onOpenPrivacy,
+    required this.onOpenTerms,
+    this.onOpenLicenses,
+  });
 
   final VoidCallback onBack;
   final VoidCallback onOpenPrivacy;
   final VoidCallback onOpenTerms;
+
+  /// Opens Settings › About › Open-source licences (UX-42); null hides the row.
+  final VoidCallback? onOpenLicenses;
 
   /// There is no mail client hand-off in the app, so tapping the address copies it.
   Future<void> _copyEmail(BuildContext context, String email) async {
@@ -56,6 +67,14 @@ class DanaviewAboutScreen extends ConsumerWidget {
                       title: 'Terms of Use',
                       onTap: onOpenTerms,
                     ),
+                    if (onOpenLicenses case final open?)
+                      SettingsNavRow(
+                        icon: Icons.description_rounded,
+                        color: DanaviewColors.primaryLight,
+                        title: 'Open-source licences',
+                        subtitle: 'Software, fonts and models in Danaview',
+                        onTap: open,
+                      ),
                   ],
                 ),
                 if (email != null) ...[
