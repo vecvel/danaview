@@ -13,8 +13,9 @@
 //   with the defaults and the user starts it.
 // * **Discard** drops the record and its checkpoints; the notice does not come back.
 //
-// The notice is a plain widget (it renders nothing without a record), so the Captions tool or the
-// editor screen can host it. [InterruptedCaptionsStore] wraps the parts of the service the contract
+// The notice is a plain widget (it renders nothing without a record). The editor screen mounts it
+// through [InterruptedCaptionsBanner] under the top bar, next to the health banners, so it shows as
+// soon as the project opens (FIX-QA07, QA-07 D2). [InterruptedCaptionsStore] wraps the parts of the service the contract
 // does not name (reading the stored request, discarding a record).
 
 import 'dart:async';
@@ -27,6 +28,7 @@ import 'package:danaview_transcription/danaview_transcription.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../../../app/editor_providers.dart';
+import '../../editor_scope.dart';
 import 'auto_captions_controller.dart';
 import 'captions_progress_panel.dart' show CaptionsText;
 import 'regenerate_sheet.dart' show showAutoCaptionsWith;
@@ -404,6 +406,40 @@ class _InterruptedNoticeState extends ConsumerState<InterruptedNotice> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+// Editor screen host
+// -------------------------------------------------------------------------------------------------
+
+/// The editor screen's slot for [InterruptedNotice] (FIX-QA07): the notice for the project of the
+/// nearest `EditorScope` (or [projectId]), inset like the other banners under the top bar. Renders
+/// nothing when Auto captions are not wired (no transcription service) or no job was interrupted.
+class InterruptedCaptionsBanner extends ConsumerWidget {
+  /// Creates the host.
+  const InterruptedCaptionsBanner({super.key, this.projectId});
+
+  /// The project; defaults to the nearest `EditorScope`.
+  final ProjectId? projectId;
+
+  static bool _wired(WidgetRef ref) {
+    try {
+      ref.read(transcriptionServiceProvider);
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = projectId ?? EditorScope.maybeIdOf(context);
+    if (id == null || !_wired(ref)) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: DanaviewSpacing.xs),
+      child: InterruptedNotice(projectId: id),
     );
   }
 }

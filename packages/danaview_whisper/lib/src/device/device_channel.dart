@@ -10,7 +10,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 
 import 'device_events.dart';
@@ -64,6 +64,14 @@ class WhisperDeviceChannel {
       !kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android);
   Stream<WhisperDeviceEvent>? _stream;
 
+  // One Dart listener per event channel name for the whole process (QA-07 D1). Flutter keeps a
+  // single message handler per channel name: a second `receiveBroadcastStream().listen` on the
+  // same name replaces the first listener's handler and restarts the native stream, so whichever
+  // instance listened last (for example the whisper runtime's) would get every lifecycle, thermal
+  // and memory event and the governor none. Every [WhisperDeviceChannel] over the same name
+  // therefore shares one broadcast stream that subscribes natively once.
+  static final Map<String, Stream<WhisperDeviceEvent>> _shared = {};
+
   /// The device snapshot; [WhisperDeviceProfile.unknown] when the plugin is unavailable or the
   /// reply is malformed.
   Future<WhisperDeviceProfile> deviceProfile() async {
@@ -104,7 +112,14 @@ class WhisperDeviceChannel {
 
   /// Thermal, memory-warning, low-power, lifecycle and background-task events. Broadcast;
   /// malformed events and stream errors are dropped, never surfaced. Empty without the plugin.
-  Stream<WhisperDeviceEvent> get events => _stream ??= _enabled ? _buildStream() : const Stream<WhisperDeviceEvent>.empty();
+  /// Every channel instance over the same event channel name returns the same process-wide stream,
+  /// so all of them (the governor, the whisper runtime, the model store) see every event.
+  Stream<WhisperDeviceEvent> get events =>
+      _stream ??= _enabled ? (_shared[_events.name] ??= _buildStream()) : const Stream<WhisperDeviceEvent>.empty();
+
+  /// Forgets the process-wide event streams (tests that swap the native side between cases).
+  @visibleForTesting
+  static void debugResetSharedEvents() => _shared.clear();
 
   Stream<WhisperDeviceEvent> _buildStream() {
     late final StreamController<WhisperDeviceEvent> controller;

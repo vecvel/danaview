@@ -18,6 +18,9 @@
 // * Health (FIX-UX-07, ux.md §13): UX-40's EditorHealthHost (missing media, read-only and
 //   restored-from-backup banners, the recovery prompt) sits under the top bar while the editor is
 //   opening or ready. A DetachedEditorShell has no session to check, so it shows none.
+// * Interrupted captions (FIX-QA07, ai.md §8.6, UX-38): below the health banners the same slot
+//   holds InterruptedCaptionsBanner, "Auto captions were interrupted. Resume?" when the project
+//   opens with a resumable captions job (nothing when Auto captions are not wired).
 // * Navigation callbacks come from the router (INT-02): `onClose` leaves the editor after the
 //   close flush, `onOpenProjects` is "Go to Projects" (null hides it).
 
@@ -36,6 +39,7 @@ import 'actions/editor_shortcuts.dart';
 import 'contracts/contracts.dart';
 import 'editor_lifecycle.dart';
 import 'editor_scope.dart';
+import 'flows/captions/interrupted_notice.dart' show InterruptedCaptionsBanner;
 import 'flows/relink/editor_health_host.dart';
 import 'layout/editor_layout_scope.dart';
 import 'layout/editor_scaffold.dart';
@@ -205,7 +209,7 @@ class EditorScreen extends ConsumerWidget {
                     inspectorOpen: selected.$2,
                     loading: selected.$1 == EditorShellPhase.opening,
                     topBar: (context, transport) => _EditorTopBarHost(shell: shell, transport: transport),
-                    banner: shell is DetachedEditorShell ? null : const EditorHealthHost(),
+                    banner: shell is DetachedEditorShell ? null : const _EditorBanners(),
                   ),
                 EditorShellPhase.notFound || EditorShellPhase.failed => _EditorUnavailable(shell: shell, onOpenProjects: onOpenProjects),
               },
@@ -215,6 +219,18 @@ class EditorScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The banners under the top bar: project health (UX-40), then the interrupted captions notice.
+class _EditorBanners extends StatelessWidget {
+  const _EditorBanners();
+
+  @override
+  Widget build(BuildContext context) => const Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [EditorHealthHost(), InterruptedCaptionsBanner()],
+      );
 }
 
 /// Rebuilds [builder] only when [select] of the status changes (ux.md §16.6).
