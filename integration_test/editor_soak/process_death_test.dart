@@ -30,6 +30,7 @@
 
 // ignore_for_file: implementation_imports, avoid_print
 
+import 'package:danaview_editor/danaview_editor.dart' show EditorScreen;
 import 'package:danaview_editor/src/app/strings/captions_strings.dart';
 import 'package:danaview_editor/src/editor/contracts/action_binding.dart' show EditorActionSource;
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
@@ -73,7 +74,9 @@ void main() {
       final r = results[job] as Map<String, Object?>?;
       soakLog('death-result', '$job ${r == null ? 'NOT RUN' : '${r['ok'] == true ? 'PASS' : 'FAIL'}: ${r['detail']}'}');
     }
-    final missing = [for (final j in soakDeathJobs) if (!results.containsKey(j)) j];
+    const subset = String.fromEnvironment('DV_SOAK_JOBS');
+    final expected = subset.isEmpty ? soakDeathJobs : subset.split(',');
+    final missing = [for (final j in expected) if (!results.containsKey(j)) j];
     final failed = [for (final e in results.entries) if ((e.value as Map<String, Object?>)['ok'] != true) '${e.key}: ${(e.value as Map)['detail']}'];
     expect(missing, isEmpty, reason: 'every job type was killed and verified');
     expect(failed, isEmpty);
@@ -246,10 +249,14 @@ Future<void> _verifyPending(WidgetTester tester) async {
     ok = true;
   } on Object catch (e) {
     detail = '${e.runtimeType}: ${'$e'.split('\n').take(3).join(' ')}';
+    soakLog('death-result', '$job FAIL (before cleanup): $detail');
     await E2eApp.screenshot(tester, 'soak_death_${job}_failed').onError((_, __) {});
+    // Back to Projects for the next job: close the editor the failed check left open.
     await soakDismissAll(tester, null);
-    // Back to a clean app for the next job.
-    await E2eApp.launch(tester);
+    if (find.byType(EditorScreen).evaluate().isNotEmpty) {
+      await E2eApp.tap(tester, find.bySemanticsLabel('Close editor'), what: 'Close editor');
+      await E2eApp.pumpUntil(tester, () => find.byType(EditorScreen).evaluate().isEmpty, what: 'the editor to close');
+    }
   }
   results[job] = {'ok': ok, 'detail': detail, 'atKill': pending};
   E2eHandshake.saveState(_resultsKey, results);
@@ -272,6 +279,7 @@ Future<String> _verify(WidgetTester tester, String job, ProjectId id, Map<String
       _expectValid(ed);
       final media = MediaId(pending['media']! as String);
       final state = ed.project.pool[media]!.proxy;
+      soakLog('death', 'proxy on reopen: state ${state.name}, tasks ${[for (final t in ed.state.tasks) '${t.kind.name}:${t.progress}:${t.failed}']}');
       var how = 'resumed';
       if (state == ProxyState.none || state == ProxyState.failed) {
         how = 'state ${state.name} on reopen, requested again';
@@ -280,7 +288,7 @@ Future<String> _verify(WidgetTester tester, String job, ProjectId id, Map<String
       await E2eApp.pumpUntil(tester, () {
         if (ed.project.pool[media]!.proxy == ProxyState.failed) throw StateError('the proxy failed after the relaunch');
         return ed.project.pool[media]!.proxy == ProxyState.ready;
-      }, what: 'the proxy to finish after the relaunch', timeout: const Duration(minutes: 4));
+      }, what: 'the proxy to finish after the relaunch (state ${ed.project.pool[media]!.proxy.name}, tasks ${ed.state.tasks.length})', timeout: const Duration(minutes: 4));
       await ed.close();
       return 'proxy ready ($how${restored ? ', journal restored' : ''})';
     case 'reverse' || 'freeze':

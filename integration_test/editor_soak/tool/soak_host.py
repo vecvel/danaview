@@ -360,19 +360,33 @@ class Host:
         self.log(f"phase {phase}: {'PASS' if ok else 'FAIL'} (exit {proc.returncode}, see {logf.name})")
         return ok
 
-    def death(self) -> bool:
+    def death_lines(self) -> list:
+        lines = []
+        for job in [*DEATH_JOBS, "verify"]:
+            f = self.out / "logs" / f"process_death_test-{'verify' if job == 'verify' else 'die-' + job}.log"
+            if f.exists():
+                lines += [l.strip() for l in f.read_text(errors="replace").splitlines() if "DV_SOAK death" in l]
+        (self.out / "death-results.txt").write_text("\n".join(lines) + "\n")
+        return lines
+
+    def death(self, jobs=None) -> bool:
         if self.platform == "ios":
             self.sh("xcrun", "simctl", "uninstall", self.device, APP_ID)
         else:
             self.adb("uninstall", APP_ID)
         self.log("clean start: app uninstalled")
         results = {}
-        for job in DEATH_JOBS:
+        for log in (self.out / "logs").glob("process_death_test-*.log"):
+            log.unlink()
+        for job in jobs or DEATH_JOBS:
             ok = self.run_phase(DEATH_TEST, f"die-{job}", expect_death=True, timeout=1800)
             results[f"die-{job}"] = ok
             if not ok:
                 break
-        results["verify"] = self.run_phase(DEATH_TEST, "verify", expect_death=False, timeout=1800)
+        extra = [f"DV_SOAK_JOBS={','.join(jobs)}"] if jobs else []
+        results["verify"] = self.run_phase(DEATH_TEST, "verify", expect_death=False, extra=extra, timeout=1800)
+        for line in self.death_lines():
+            self.log(line)
         self.summary("death", results)
         return all(results.values())
 
@@ -414,7 +428,8 @@ def main() -> int:
     s.add_argument("--minutes", type=int, default=60)
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--no-captions", action="store_true")
-    sub.add_parser("death")
+    dp = sub.add_parser("death")
+    dp.add_argument("--jobs", default="", help="comma-separated subset of " + ",".join(DEATH_JOBS))
     a = sub.add_parser("all")
     a.add_argument("--minutes", type=int, default=60)
     a.add_argument("--seed", type=int, default=0)
@@ -423,7 +438,7 @@ def main() -> int:
     if args.cmd == "soak":
         return 0 if host.soak(args.minutes, args.seed, not args.no_captions) else 1
     if args.cmd == "death":
-        return 0 if host.death() else 1
+        return 0 if host.death([j for j in args.jobs.split(",") if j] or None) else 1
     ok = host.death()
     ok = host.soak(args.minutes, args.seed, True) and ok
     return 0 if ok else 1
