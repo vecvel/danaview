@@ -273,6 +273,8 @@ class PermissionsTest {
         val deny = arrayOf(SystemUi.byRes(".*permissioncontroller:id/permission_deny_button"), SystemUi.byText("(?i)don.t allow"))
         val allow = arrayOf(SystemUi.byRes(".*permissioncontroller:id/permission_allow_button"), SystemUi.byText("(?i)^allow$"))
 
+        dismissDialogs(deny) // a dialog left over from an earlier, interrupted run
+
         // 1. the activity is destroyed while the real dialog is up -> false at once
         val gone = FragmentRequests.launch()
         val p0 = onMainValue { Permissions(ctx).apply { requests = gone } }
@@ -281,7 +283,7 @@ class PermissionsTest {
         SystemUi.waitAny(15_000, *deny) ?: error("no dialog:\n" + SystemUi.dump())
         gone.finish()
         assertFalse("destroyed while the dialog is up", destroyed.await(15_000).getOrThrow())
-        if (SystemUi.waitAny(2_000, *deny) != null) SystemUi.device.pressBack()
+        dismissDialogs(deny) // the orphaned dialog of the destroyed activity
         Thread.sleep(1_000)
         assertEquals("completed exactly once", listOf(false), answers)
 
@@ -290,11 +292,12 @@ class PermissionsTest {
         try {
             val p = onMainValue { Permissions(ctx).apply { requests = relay } }
             val first = start(p)
-            (SystemUi.waitAny(15_000, *deny) ?: error("no dialog:\n" + SystemUi.dump())).click()
+            clickUntilDone(first, *deny)
             assertFalse("denied in the dialog", first.await().getOrThrow())
             assertEquals(PackageManager.PERMISSION_DENIED, ctx.appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
+            dismissDialogs(deny, allow)
             val second = start(p)
-            (SystemUi.waitAny(15_000, *allow) ?: error("no dialog:\n" + SystemUi.dump())).click()
+            clickUntilDone(second, *allow)
             assertTrue("allowed in the dialog", second.await().getOrThrow())
             assertEquals(PackageManager.PERMISSION_GRANTED, ctx.appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
             Log.i(
@@ -307,6 +310,34 @@ class PermissionsTest {
     }
 
     // ---- helpers ----
+
+    /** Presses Back until no permission dialog button matching [buttons] is left (at most 10 s). */
+    private fun dismissDialogs(vararg buttons: Array<() -> androidx.test.uiautomator.UiObject2?>) {
+        val selectors = buttons.flatMap { it.toList() }.toTypedArray()
+        val end = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < end && SystemUi.waitAny(1_000, *selectors) != null) {
+            SystemUi.device.pressBack()
+            Thread.sleep(500)
+        }
+    }
+
+    /**
+     * Clicks a button matching [button] until [request] completes (at most 20 s). A closing dialog's
+     * button can still be matched for a moment, so a single click may land on the old window.
+     */
+    private fun clickUntilDone(request: Pending<Boolean>, vararg button: () -> androidx.test.uiautomator.UiObject2?) {
+        val end = System.currentTimeMillis() + 20_000
+        while (!request.isDone && System.currentTimeMillis() < end) {
+            try {
+                SystemUi.waitAny(2_000, *button)?.click()
+            } catch (e: androidx.test.uiautomator.StaleObjectException) {
+                // the window went away between find and click: look again
+            }
+            val settle = System.currentTimeMillis() + 1_500
+            while (!request.isDone && System.currentTimeMillis() < settle) Thread.sleep(100)
+        }
+        if (!request.isDone) error("the dialog was not answered:\n" + SystemUi.dump())
+    }
 
     private fun onMain(block: () -> Unit) = InstrumentationRegistry.getInstrumentation().runOnMainSync(block)
 
