@@ -49,6 +49,7 @@ import shutil
 import subprocess
 import sys
 import time
+import wave
 from pathlib import Path
 
 APP_ID = "com.vecvel.danaview"
@@ -281,12 +282,36 @@ class Host:
 
     # ---- phases ---------------------------------------------------------------------------------
 
+    def speech_60s(self):
+        """A 60 s speech WAV (speech_10s.m4a six times) for the captions death phase, so the job
+        is still transcribing when the host kills it. macOS afconvert; None elsewhere."""
+        target = self.out / "soak_speech_60s.wav"
+        if target.exists():
+            return target
+        tmp = self.out / "soak_speech_10s.wav"
+        r = self.sh("afconvert", "-f", "WAVE", "-d", "LEI16", str(FIXTURES / "speech_10s.m4a"), str(tmp))
+        if r.returncode != 0:
+            self.log(f"afconvert failed ({r.stderr.strip()}); the captions phase falls back to duplicated clips")
+            return None
+        with wave.open(str(tmp)) as src:
+            params, frames = src.getparams(), src.readframes(src.getnframes())
+        with wave.open(str(target), "wb") as dst:
+            dst.setparams(params)
+            for _ in range(6):
+                dst.writeframes(frames)
+        tmp.unlink()
+        return target
+
     def defines(self, phase: str, extra: list) -> list:
         d = ["DANAVIEW_EDITOR=true", "DANAVIEW_AUTO_CAPTIONS=true", "DV_E2E_HOST=true", f"DV_E2E_PHASE={phase}", *extra]
         if self.platform == "ios":
             d.append(f"DV_E2E_FIXTURES={FIXTURES}")
             if self.models:
                 d.append(f"DV_E2E_MODELS={self.models}")
+            if phase == "die-captions":
+                speech = self.speech_60s()
+                if speech:
+                    d.append(f"DV_SOAK_SPEECH60={speech}")
         return [f"--dart-define={x}" for x in d]
 
     @staticmethod

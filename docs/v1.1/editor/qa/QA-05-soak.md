@@ -77,7 +77,7 @@ Every in-app event prints a `DV_SOAK <kind> …` line. The kinds are `op`, `fail
 | reverse | Reverse on the 8 s 1080p clip, a save, then the kill. | The pending reversed rendition resumes on open and becomes `ready`. If the job finished before the kill, that is recorded, and the project must still be valid. |
 | freeze | The freeze sheet's Confirm, a save, then the kill. | The pending still resumes and becomes `ready`, with the same caveat as reverse. |
 | export | 32 s at 1080p, killed past 10 %. | `activeJobs()` reports exactly one `ExportInterrupted` or `ExportResumable` record and nothing running. The editor shows it once: a resumable job resumes and completes, while an interrupted one is acknowledged. After that, the record is gone, and a reopened editor's `reattach()` finds nothing. |
-| captions | 60 s of speech (6 clips, "Selected clips", Fast tier), killed past 20 %. | `resumableFor(project)` keeps the record. The editor shows "Auto captions were interrupted" once. After Discard, a reopen shows no notice and the record is gone. |
+| captions | 60 s of speech (6 clips, "Selected clips", Fast tier), killed past 50 % (after the first checkpoint). | `resumableFor(project)` keeps the record. The editor shows "Auto captions were interrupted" once. After Discard, a reopen shows no notice and the record is gone. |
 
 For every job, the project is then opened straight from the store and validated.
 

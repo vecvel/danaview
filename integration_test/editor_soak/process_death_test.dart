@@ -30,6 +30,8 @@
 
 // ignore_for_file: implementation_imports, avoid_print
 
+import 'dart:io';
+
 import 'package:danaview_editor/danaview_editor.dart' show EditorScreen;
 import 'package:danaview_editor/src/app/strings/captions_strings.dart';
 import 'package:danaview_editor/src/editor/contracts/action_binding.dart' show EditorActionSource;
@@ -39,6 +41,7 @@ import 'package:danaview_editor/src/editor/state/editor_state.dart' show EditorT
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart' show SetText;
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
+import 'package:danaview_transcription/danaview_transcription.dart' show TranscriptionPhase;
 import 'package:flutter/widgets.dart' show ValueKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -169,14 +172,24 @@ Future<Never> _startAndDie(WidgetTester tester, String job) async {
     case 'captions':
       final staged = await E2eApp.stageSpeechModel();
       expect(staged, isTrue, reason: 'stage the tiny model in ${E2eConfig.modelsDir}');
-      // Six speech clips (60 s of audio) so transcription is still running when the host acts.
+      // 60 s of speech so transcription is still running when the host acts: the host's 60 s WAV
+      // (DV_SOAK_SPEECH60, iOS Simulator) or six copies of the 10 s clip on its lane (the import
+      // keeps one asset for identical files, so the clip is duplicated).
+      const speech60 = String.fromEnvironment('DV_SOAK_SPEECH60');
+      final long = speech60.isNotEmpty && File(speech60).existsSync();
       final ed = await E2eEditor.createProject(
         tester,
         name: 'Soak death captions ${_stamp()}',
-        media: [SoakMedia.copy(Fx.frameCounter, tag), for (var i = 0; i < 6; i++) SoakMedia.copy(Fx.speech, '$tag$i')],
+        media: [SoakMedia.copy(Fx.frameCounter, tag), if (long) speech60 else SoakMedia.copy(Fx.speech, tag)],
       );
-      final speech = [for (final c in ed.items<MediaClip>()) if (ed.assetOf(c).kind == MediaKind.audio) c];
-      expect(speech, hasLength(6));
+      List<MediaClip> speechClips() => [for (final c in ed.items<MediaClip>()) if (ed.assetOf(c).kind == MediaKind.audio) c];
+      for (var i = 1; i < (long ? 1 : 6); i++) {
+        await ed.select(speechClips().last.id);
+        await ed.invoke(EditorActionId.duplicate);
+        await ed.waitProject((p) => speechClips().length > i, what: 'speech clip ${i + 1}');
+      }
+      final speech = speechClips();
+      expect(speech, isNotEmpty);
       await ed.select(speech.first.id);
       for (final c in speech.skip(1)) {
         await ed.select(c.id, mode: SelectMode.extend);
@@ -201,12 +214,14 @@ Future<Never> _startAndDie(WidgetTester tester, String job) async {
           final active = service.activeJob;
           if (active != null && !subscribed) {
             subscribed = true;
-            active.progress.listen((p) => fraction = p.fraction, onError: (Object _) {});
+            active.progress.listen((p) {
+              if (p.phase == TranscriptionPhase.transcribing) fraction = p.fraction;
+            }, onError: (Object _) {});
           }
           if (active == null && subscribed) throw TestFailure('the captions job ended before the kill');
-          return fraction >= 0.2;
+          return fraction >= 0.3;
         },
-        what: 'Auto captions to pass 20 %',
+        what: 'Auto captions to pass 30 % while transcribing',
         timeout: const Duration(minutes: 5),
         step: const Duration(milliseconds: 100),
       );
