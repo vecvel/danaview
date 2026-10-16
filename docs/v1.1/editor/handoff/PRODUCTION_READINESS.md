@@ -6,9 +6,32 @@
 
 ---
 
+## 0. Live status (kept current; last update 2026-10-17 00:50 IST)
+
+| Ticket | State | What's left |
+|---|---|---|
+| **QA-01** iOS simulator E2E | **Nearly certified.** Full run 16/18; s07 and s13 pass when re-run alone. iPad s12 passes (V-U5 certified on the simulator). iOS 18.2 lane 3/3 | Fix **FIX-IOS-12-1**: the second back-to-back export stalls in "rendering" in the s07 full run (IOS-12 `ExportCoordinator.swift` and its writer; probably the same family as D7). The manual iPad Files/Photos drop and the physical-keyboard step need a person (screenshots in `build/e2e/ios/2C9213E9-.../manual/`). The iPhone 7/8 smoke needs devices |
+| **QA-05** soak and crash recovery | **Partial.** The process-death phases pass after FIX-QA05-D5. The seeded soak (5150) fails on **D7** | Fix **D7**: iOS export audio read hang, or SIGSEGV in `MixAudioSource.nextAudio()` `copyNextSampleBuffer` (§4.1), then re-run the soak |
+| **QA-02** Android emulator E2E | **Windows lane, in progress.** The Kotlin INT-07/ENG-06 fixes (M-11, M-12, M-16, M-17 native, M-18, M-19, M-20) are being made; review running (WIP up to `2171828`) | After the Mac merges round 7: one clean full QA-02 pass (§4.3) |
+| **INT-05** release | **Prepared, not applied** (release-checklist) | Owner "go" |
+| Round 7 (Mac Dart fixes M-1, M-2..M-7, M-9, M-10, M-13..M-15, M-17 Dart) | **All 6 tickets done**, review running in worktree `parallel-r7` | Commit the worktree, merge into `editor-wip`, re-run the iOS scenarios it touches (s02, s06, s09, s12, s13) |
+
+Other follow-ups found by QA-01 (not blocking):
+- The player library screens (`danaview_home_screen.dart`, `danaview_folder_screen.dart`, `library_storage.dart`) have a follow-up noted in `QA-01-ios-simulator.md`.
+- An empty new project shows a preview spinner that keeps spinning with no media; check whether that is intended (UX-18).
+
+**Next actions, in order:**
+1. Merge `parallel-r7` once both reviews finish.
+2. iOS round: fix D7 and FIX-IOS-12-1, re-run QA-05 and the affected QA-01 scenarios.
+3. Windows: merge `editor-wip`, then the full QA-02 pass.
+4. Close QA-01, QA-02 and QA-05.
+5. INT-05 on the owner's go.
+
+---
+
 ## 1. Where things stand
 
-- **Tickets:** 162 of 166 BUILD_PLAN tickets done. Left: **QA-01**, **QA-02**, **QA-05**, **INT-05**.
+- **Tickets:** 162 of 166 BUILD_PLAN tickets done (see §0 for live detail). Left: **QA-01**, **QA-02**, **QA-05**, **INT-05**.
 - **Platforms:** iOS and Android editor features are all built, and the Android lane (ENG-08, AI-04, AND-02 to AND-19) is complete. What remains is the QA certification and the fixes it finds.
 - **What's done, in short:** all of M0 to M5; QA-00 (E2E suite), QA-03 (parity), QA-04 (performance; UX-43 closed as not needed), QA-06 (AI eval host side), QA-07 (auto captions, re-run passes; the DANAVIEW_AUTO_CAPTIONS flag can ship), QA-08 (a11y), QA-09 (overflow), QA-10 (persistence), QA-11 (export conformance), and the idle benchmark (CORE-35 gate passes).
 - **Release prep:** INT-05 is drafted in `docs/v1.1/editor/release-checklist.md`, with nothing applied. It holds the version 1.1.0+3 diff, the release flag diff, casual store texts, privacy/App Privacy/Data safety texts, owner steps and the rollback plan.
