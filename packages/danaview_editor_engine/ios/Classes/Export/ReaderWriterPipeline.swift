@@ -815,6 +815,8 @@ final class MixAudioSource: SegmentAudioSource {
     var readGate: ((Int) -> Void)?
     /// Test hook: called on a session's queue once its reader is cancelled and released.
     var onTeardown: (() -> Void)?
+    /// Test hook: called when the watchdog gives up on a read (the pump queue).
+    var onHung: (() -> Void)?
     private var reads = 0
 
     /// Resumes done after hung reads.
@@ -929,6 +931,7 @@ final class MixAudioSource: SegmentAudioSource {
             case .hung:
                 hungReads += 1
                 hung.append(current)
+                onHung?()
                 // The watchdog only signals: the blocked call keeps its reader, and the reader is
                 // torn down on its own queue once (if ever) the call returns.
                 current.close()

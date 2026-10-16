@@ -190,11 +190,13 @@ struct ExportEnvironment {
     var segmentDurationUs: Int64
     /// Thermal state source of the pumps.
     var thermalState: () -> ProcessInfo.ThermalState
-    /// Seconds without progress before a job counts as stalled (FIX-IOS-EXPORT-STALL).
-    var stallTimeout: TimeInterval = 60
+    /// Seconds without progress before a job counts as stalled (FIX-IOS-EXPORT-STALL). 45 s since
+    /// FIX-IOS-12-1 (QA-01 asked for a stalled export to fail within about a minute); longer than
+    /// the audio read's own watchdog rounds (8 s per hung read, at most 3 resumes, FIX-IOS-D7).
+    var stallTimeout: TimeInterval = 45
     /// Extra seconds the coordinator's watchdog waits beyond `stallTimeout` (the writer's own
-    /// bounded waits fire first).
-    var watchdogSlack: TimeInterval = 15
+    /// bounded waits fire first): a stall anywhere ends the job within 55 s.
+    var watchdogSlack: TimeInterval = 10
     /// Seconds a stop request waits for a blocked writer pump.
     var stopGrace: TimeInterval = 2
     /// Seconds after a cancel before a pipeline that did not return is left behind.
