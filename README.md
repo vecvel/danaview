@@ -25,11 +25,11 @@
 |---|---|---|
 | 🎥 **Player** | Plays almost any video file or network stream, with a 10-band equalizer, 300% volume boost, subtitles, playlists, a queue, diagnostics and built-in network and media tools | ✅ **Available** (v1.0) |
 | ✂️ **Video editor** | Multi-track timeline, transitions, keyframes, chroma key, text, LUTs, speed ramps, hardware export and **on-device AI subtitles** on iPhone, iPad and Android | 🚧 **In development** (v1.1) |
-| 🗂️ **Photos & videos at Home** | Browse every photo and video on the device next to your playlists and folders, then edit or make a montage in one tap | 🗓️ Planned (v1.2) |
-| 🤖 **AI Studio & rich subtitles** | Styled and karaoke captions on device; optional bring-your-own-key AI for clean-up, emotion, emojis, speakers and translation | 🗓️ Planned (v1.2) |
+| 🗂️ **Files & Media Home** | Your photos, videos and documents in one place, in your own Danaview folders. Open PDFs, Office files and text right in the app, merge, sign or shrink PDFs, and still edit or make a montage in one tap | 🗓️ Planned (v1.2) |
+| 🤖 **AI Studio & rich subtitles** | Styled and karaoke captions on device, each speaker on their own caption line even when people talk over each other, and search that finds what's inside your photos and files. Optional bring-your-own-key AI for clean-up, emotion, emojis, translation and smarter search | 🗓️ Planned (v1.2) |
 | 🎨 **Photo editing & beauty** | The same editor edits photos (16-bit pipeline, HSL, curves, masks, keystone, batch export) and brings an 8-category beauty suite to photos and moving video | 🗓️ Planned (v1.2) |
 | 🖥️ **Desktop editor** | The full photo and video editor on macOS, Windows and Linux, with pro desktop tools | 🗓️ Planned (v1.3) |
-| 📷 **Danaview Camera** | A native camera with every control under your thumb, live beauty, pro modes and dual front+back capture | 🗓️ Planned (v1.3) |
+| 📷 **Danaview Camera** | A native camera with every control under your thumb, live beauty, pro modes and dual front+back capture. It also scans documents into searchable PDFs and reads QR codes and barcodes, showing you what a code does before anything opens | 🗓️ Planned (v1.3) |
 
 **Legend:** ✅ available · 🚧 in development · 🗓️ planned
 
@@ -41,8 +41,8 @@
 |---|---|---|---|
 | **1.0** ✅ | Player | Cross-platform player on libmpv, library, playlists, queue, tools | – |
 | **1.1** 🚧 | Video editor | Multi-track video editor with on-device AI subtitles on iOS, iPadOS and Android | [Architecture](docs/v1.1/editor/ARCHITECTURE.md) · [Build plan](docs/v1.1/editor/BUILD_PLAN.md) |
-| **1.2** 🗓️ | Photos join videos | Unified Home for photos and videos, AI Studio and rich subtitles, photo editing and the beauty suite (iOS, Android) | [Roadmap](docs/v1.2/V1_2_ROADMAP.md) · [Home](docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) · [AI Studio](docs/v1.2/ai-studio/AI_STUDIO_PLAN.md) · [Photo & video editor](docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
-| **1.3** 🗓️ | Everywhere and at capture | The editor on macOS, Windows and Linux; Danaview Camera (mobile first, then desktop webcams) | [Roadmap](docs/v1.3/V1_3_ROADMAP.md) · [Desktop editor](docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md) · [Camera](docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md) |
+| **1.2** 🗓️ | Photos and files join videos | Files & Media Home for photos, videos and documents with PDF tools; AI Studio, rich subtitles, speaker lanes and search; photo editing and the beauty suite (iOS, Android; the Home on desktop too) | [Roadmap](docs/v1.2/V1_2_ROADMAP.md) · [Files & Media Home](docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) · [AI Studio](docs/v1.2/ai-studio/AI_STUDIO_PLAN.md) · [Photo & video editor](docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
+| **1.3** 🗓️ | Everywhere and at capture | The editor on macOS, Windows and Linux; Danaview Camera with document and QR scanning (mobile first, then desktop webcams) | [Roadmap](docs/v1.3/V1_3_ROADMAP.md) · [Desktop editor](docs/v1.3/editor-desktop/DESKTOP_EDITOR_PLAN.md) · [Camera](docs/v1.3/camera-photo-video/NATIVE_CAMERA_PLAN.md) |
 
 ---
 
@@ -260,14 +260,19 @@ Built natively for **iPhone, iPad and Android** (iOS 15+, Android 10+). The iOS 
 
 ## 🔭 Coming next
 
-### 🗂️ Photos & videos at Home (v1.2)
-- Home gains **Videos, Photos, All Media, Playlists, Folders and Projects** tabs. The classic Home stays exactly as it is: Now Playing, Continue Watching, playlists, folders, queue and stream links all keep working.
-- System albums and device folders, a fast photo grid for libraries of 50,000+ items, a full-screen photo viewer, and badges for duration, 4K/60fps, RAW, HDR and Live Photos.
-- Select photos and videos and tap **Make Video Montage** to start a timeline.
+### 🗂️ Files & Media Home (v1.2)
+- One home for **photos, videos and documents**: filter by All, Videos, Photos or Documents, and narrow documents down to PDF, Word, Excel, PowerPoint or text/CSV. The classic Home stays exactly as it is: Now Playing, Continue Watching, playlists, folders, queue and stream links all keep working.
+- **Your own Danaview folders:** make, rename, move and nest folders and mix any kind of file in them. They live inside Danaview and come along in your phone's backups. Favourites, recents, search and sorting by name, date, size or type.
+- **Bring files in, get them out:** import from Photos or your Gallery, from Files, or "Open with Danaview" from another app. Your originals are never touched. Send things out with Save to Files (iPhone), Save to Downloads (Android) or the share sheet.
+- **Open things right here:** photos and videos as before, PDFs in a proper PDF viewer, and Word, Excel, PowerPoint and text files in a quick preview on iPhone, iPad and Mac. On Android, text and CSV open in the app and Office files hand off to the app you already use. Viewing only, no Office editing.
+- **PDF tools:** merge, split, reorder, rotate and delete pages, highlight and add notes, sign, and shrink big PDFs.
+- Albums and device folders, a fast grid for libraries of 50,000+ items, a full-screen photo viewer, and **Make Video Montage** from any mix of photos and videos.
 
 ### 🤖 AI Studio & rich subtitles (v1.2)
 - **On device:** style any word of a caption, place lines anywhere, word-by-word karaoke from the AI subtitle timings, a transcript view, timing tools, font import (`.ttf`/`.otf`), style presets, and support for Indic, Arabic, Hebrew and Thai scripts.
-- **AI Studio, off by default:** bring your own key for Google Gemini, OpenAI, Anthropic Claude, OpenRouter or xAI Grok to clean up transcripts, detect emotion and tone, add emojis, label speakers and translate subtitle tracks.
+- **Who said what:** Danaview can work out who is speaking, right on your phone, and give each person their own caption line with their own look. When two people talk at once, both get their own captions at the right time instead of one jumbled line. Rename speakers to real names in a tap.
+- **Search that looks inside:** find a photo by what's in it, a scan by the words on it, or a video by what was said. The search index stays on your device.
+- **AI Studio, off by default:** bring your own key for Google Gemini, OpenAI, Anthropic Claude, OpenRouter or xAI Grok to clean up transcripts, detect emotion and tone, add emojis, label speakers and translate subtitle tracks. It can also turn a plain question like "receipts from last March" into a search (only your question is sent), and, if you choose a folder, describe its photos and files so you can search them by meaning.
 - **Nothing is sent without your Send.** Every request shows exactly what goes where; every AI result is a suggestion you accept or reject, and accepting can be undone. Keys stay in the iOS Keychain or Android Keystore.
 
 ### 🎨 Photo editing & beauty suite (v1.2)
@@ -287,6 +292,10 @@ Built natively for **iPhone, iPad and Android** (iOS 15+, Android 10+). The iOS 
 - **Native pro features:** ProRAW, Apple Log and ProRes on supporting iPhones; RAW and 10-bit HLG on supporting Android phones; the phone's own Night, HDR and portrait modes where available; manual ISO, shutter, focus with peaking, zebra stripes and a histogram.
 - **Live beauty, filters, LUTs and overlays** with the same look as the editor; **dual front+back capture** with picture-in-picture shapes; audio routing (mic, device audio where the platform allows, or both on separate tracks).
 - **Keep editable:** save the clean original plus a recipe so the editor can change the beauty, filter or overlays later.
+- **Scan documents:** point at a page and it finds the edges, snaps it straight and cleans it up in colour, greyscale or black and white. Text is read on your phone, so the PDF is searchable and you can copy from it. Turn photos into a PDF too, then share it or save it to your Danaview folders, Files or Downloads.
+- **QR codes and barcodes:** scan live, in a dedicated mode, or from a screenshot. You always see what a code will do before anything happens: the real web address with a warning if it looks fishy, Wi-Fi to join, a contact or event to add, a product number to look up.
+- **Pay with your own UPI app:** payment QR codes show who you're paying and how much, then open GPay, PhonePe, Paytm, BHIM or whichever app you use. Danaview never touches your money or your payment details.
+- **Save codes for later:** keep a bill's QR with a name, a note and a reminder ("pay the electricity bill"), show it full screen for someone else to scan, or tap Pay when it's due.
 - iPhone and Android first, then macOS (webcams and iPhone as a webcam), then Windows and Linux webcams.
 
 ---
@@ -377,7 +386,7 @@ danaview/
 │   └── danaview_whisper/             whisper.cpp (vendored) FFI plugin
 ├── docs/
 │   ├── v1.1/editor/                  Video editor architecture, build plan, designs, spikes
-│   ├── v1.2/                         Home, AI Studio, photo & video editor update
+│   ├── v1.2/                         Files & Media Home, AI Studio, photo & video editor update
 │   └── v1.3/                         Desktop editor, Danaview Camera
 ├── scripts/ci/editor/                Editor CI scripts (core, Flutter packages, iOS, Android, whisper)
 └── test/                             App-level tests
