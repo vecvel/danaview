@@ -12,6 +12,7 @@ import 'package:danaview_editor/danaview_editor.dart';
 import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart';
 import 'package:danaview_editor/src/editor/contracts/action_binding.dart' show EditorActionContext, EditorActionSource;
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
+import 'package:danaview_editor/src/editor/flows/import_media_sheet.dart' show ImportMediaSheet;
 import 'package:danaview_editor/src/editor/state/editor_controller.dart';
 import 'package:danaview_editor/src/editor/state/editor_session.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
@@ -97,10 +98,26 @@ final class E2eEditor {
     await E2eApp.enterText(tester, 'new-project-name', name);
     await E2eApp.tapKey(tester, 'new-project-create');
     bool editorOpen() => find.byType(EditorScreen).evaluate().isNotEmpty;
+    // The sheet going away without the editor opening (QA-07 D3) fails at once with the screen,
+    // instead of after the two-minute wait.
+    var sheetGoneSince = 0;
+    bool sheetGone() {
+      if (E2eApp.hasKey('new-project-sheet') || find.byType(ImportMediaSheet).evaluate().isNotEmpty || editorOpen()) {
+        sheetGoneSince = 0;
+        return false;
+      }
+      return ++sheetGoneSince > 40;
+    }
+
     while (!editorOpen()) {
       await E2eApp.pumpUntil(
         tester,
-        () => editorOpen() || E2eApp.hasKey('import-finish'),
+        () {
+          if (sheetGone()) {
+            throw TestFailure('The New project sheet closed without opening the editor of "$name"\n${E2eApp.describeScreen()}');
+          }
+          return editorOpen() || E2eApp.hasKey('import-finish');
+        },
         what: 'the editor of the new project "$name"',
         timeout: const Duration(minutes: 2),
       );

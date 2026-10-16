@@ -27,6 +27,7 @@ import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_platform/danaview_platform.dart';
 import 'package:danaview_transcription/danaview_transcription.dart' show SpeechModelCatalog;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -107,11 +108,46 @@ abstract final class E2eApp {
   }
 
   /// Boots the wiring (once per process) and pumps the app at Home.
+  ///
+  /// A later `testWidgets` of the same process reuses the wiring, so the launch first waits until
+  /// the previous test's work on it is done (FIX-QA07, QA-07 D3): projects it left open are closed,
+  /// a captions job it left running ends, and the project list answers. A wiring still busy fails
+  /// here with the reason instead of as a New project that never opens two minutes later.
   static Future<E2eWorld> launch(WidgetTester tester) async {
+    final reused = _world != null;
     final world = _world ??= await _boot();
+    if (reused) await _settleWorld(world);
     await tester.pumpWidget(ProviderScope(overrides: world.overrides, child: const DanaviewApp()));
     await pumpUntil(tester, () => find.byType(DanaviewHomeScreen).evaluate().isNotEmpty, what: 'Home');
     return world;
+  }
+
+  /// Waits (bounded) until the shared wiring holds nothing of the previous test (see [launch]).
+  static Future<void> _settleWorld(E2eWorld world) async {
+    final repository = world.runtime.repository;
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    final job = world.captions?.service.activeJob;
+    if (job != null) {
+      job.cancel();
+      while (world.captions?.service.activeJob != null && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+    for (final id in repository.openIds) {
+      // The previous app was unmounted without the editor's close flow.
+      debugPrint('[E2E] closing project $id left open by the previous test');
+      try {
+        await repository.close(id).timeout(const Duration(seconds: 10));
+      } on Object catch (e) {
+        debugPrint('[E2E] could not close $id: ${e.runtimeType}');
+      }
+    }
+    try {
+      await repository.watchSummaries().first.timeout(deadline.difference(DateTime.now()));
+    } on TimeoutException {
+      throw TestFailure('The shared editor wiring is still busy with the previous test (the project list does not answer); '
+          'run this test in its own process');
+    }
   }
 
   /// The app's provider container.
@@ -200,6 +236,11 @@ abstract final class E2eApp {
       if (ifStillThere) return;
       throw TestFailure('${what ?? finder} disappeared before the tap\n${describeScreen()}');
     }
+    await _waitStill(tester, target);
+    if (finder.evaluate().isEmpty || (ifStillThere && finder.hitTestable().evaluate().isEmpty)) {
+      if (ifStillThere) return;
+      throw TestFailure('${what ?? finder} disappeared before the tap\n${describeScreen()}');
+    }
     final gesture = await tester.startGesture(tester.getCenter(target));
     await Future<void>.delayed(const Duration(milliseconds: 100));
     await tester.pump();
@@ -219,12 +260,44 @@ abstract final class E2eApp {
   static Future<void> waitKey(WidgetTester tester, String key, {Duration timeout = const Duration(seconds: 30)}) =>
       pumpUntil(tester, () => hasKey(key), what: 'key $key', timeout: timeout);
 
-  /// Types [text] into the text field keyed [key].
+  /// Types [text] into the text field keyed [key], then closes the keyboard and waits until the
+  /// layout is back (FIX-QA07, QA-07 D3): a keyboard still sliding away moves a sheet's buttons
+  /// between the hit test and the tap, which then lands on the barrier and dismisses the sheet.
   static Future<void> enterText(WidgetTester tester, String key, String text) async {
     await waitKey(tester, key);
     final field = find.descendant(of: find.byKey(ValueKey<String>(key)), matching: find.byType(EditableText));
     await tester.enterText(field.evaluate().isEmpty ? find.byKey(ValueKey<String>(key)) : field.first, text);
     await tester.pump();
+    await hideKeyboard(tester);
+  }
+
+  /// Unfocuses the text field and waits (bounded) until no keyboard inset is left.
+  static Future<void> hideKeyboard(WidgetTester tester) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    try {
+      await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    } on Object {
+      // No text input channel (host runs); nothing to hide.
+    }
+    final view = tester.view;
+    try {
+      await pumpUntil(tester, () => view.viewInsets.bottom == 0, what: 'the keyboard to close', timeout: const Duration(seconds: 5));
+    } on TestFailure {
+      // A hardware keyboard or a docked iPad keyboard keeps an inset; the tap waits for a still target.
+    }
+  }
+
+  /// Waits (bounded) until [target]'s centre stops moving (a sheet or keyboard still animating).
+  static Future<void> _waitStill(WidgetTester tester, Finder target) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 3));
+    Offset? last;
+    while (DateTime.now().isBefore(deadline)) {
+      if (target.evaluate().isEmpty) return;
+      final now = tester.getCenter(target);
+      if (last != null && (now - last).distance < 0.5) return;
+      last = now;
+      await tester.pump(const Duration(milliseconds: 100));
+    }
   }
 
   /// Opens Projects from Home through the edit button left of the gear (scenario 1).
