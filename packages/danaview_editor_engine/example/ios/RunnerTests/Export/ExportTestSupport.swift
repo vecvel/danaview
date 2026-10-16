@@ -67,6 +67,34 @@ enum ExportPlans {
             audio: withAudio ? [audioSeg("it_tone0000001#a", asset: "md_tone00000001", t0: 0, t1: durUs, gain: [(0, gain)])] : [])
     }
 
+    /// tone_1khz.wav (10 s, −12 dBFS) as one audio segment over [map] pieces (t0, t1, s0, s1) on a
+    /// grey backdrop: a speed ramp when the map has several pieces (QA-11 (d), FIX-IOS-MEDIA).
+    static func toneAudio(map: [(Int64, Int64, Int64, Int64)], pitch: Bool = true, w: Int = 320, h: Int = 180, fps: Int = 30) -> Data {
+        let durUs = map.map(\.1).max() ?? 0
+        let pieces = map.map { "[\($0.0),\($0.1),\($0.2),\($0.3)]" }.joined(separator: ",")
+        let pitchKey = pitch ? "" : ",\"pitch\":false"
+        let seg = "{\"id\":\"it_tonea000001#a\",\"asset\":\"md_tone1k00001\",\"t\":[\(map.first?.0 ?? 0),\(durUs)],"
+            + "\"map\":[\(pieces)],\"gain\":[[0,1]]\(pitchKey)}"
+        return plan(
+            w: w, h: h, fps: fps, durUs: durUs,
+            assets: [audio("md_tone1k00001", file: "tone_1khz.wav", durUs: 10_000_000)],
+            layers: [solid("it_backdrop0001", t0: 0, t1: durUs, color: "#202020FF", w: Double(w), h: Double(h), cx: Double(w) / 2, cy: Double(h) / 2)],
+            audio: [seg])
+    }
+
+    /// QA-11 (d)'s 7-point speed ramp (1, 1.25, 1.6, 2, 1.6, 1.25, 1×; 300 ms each; source from 0.5 s).
+    static let rampSpeeds: [Double] = [1, 1.25, 1.6, 2, 1.6, 1.25, 1]
+    static let rampPieceUs: Int64 = 300_000
+
+    static var rampMap: [(Int64, Int64, Int64, Int64)] {
+        var s0: Int64 = 500_000
+        return rampSpeeds.enumerated().map { k, speed in
+            let s1 = s0 + Int64((speed * Double(rampPieceUs)).rounded())
+            defer { s0 = s1 }
+            return (Int64(k) * rampPieceUs, Int64(k + 1) * rampPieceUs, s0, s1)
+        }
+    }
+
     /// A silent clip (frame_counter 720p25 has no audio) on its own.
     static func noAudioVideo(w: Int, h: Int, fps: Int, durUs: Int64) -> Data {
         plan(

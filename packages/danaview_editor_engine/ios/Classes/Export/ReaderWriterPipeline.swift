@@ -515,8 +515,9 @@ final class SilentAudioSource: SegmentAudioSource {
 /// - 5 %: one track of a ramp-seam pair drops out inside its 5 ms crossfade while the other
 ///   track still plays, a SEAM STEP (the mix level falls abruptly at the seam).
 /// A read is rejected (and redone, see the file comment) for either:
-/// - an exact-zero run (both channels) of at least `minRunFrames` with an abrupt edge (the frame
-///   next to it at or above `abruptEdge`) inside a watched span where the plan gain is audible.
+/// - an exact-zero run (both channels) of at least `minRunFrames` with an abrupt edge (a frame at
+///   or above `abruptEdge` within `edgeFrames` of the run) inside a watched span where the plan
+///   gain is audible.
 ///   `.timeDomain` overlap-add cannot give content that shape except from digitally gated
 ///   sources;
 /// - at an inner seam of a ramp (a change of rate between map pieces) with audible gain, a peak
@@ -542,6 +543,9 @@ struct TimePitchWatch: Equatable {
     static let minRunFrames = 96
     /// ≈ −50 dBFS.
     static let abruptEdge: Float = 0.003
+    /// 2 ms at 48 kHz: how close to a run the signal must reach `abruptEdge` (a dropout can end in
+    /// the other track's crossfade, a few ms of low level before the step back).
+    static let edgeFrames: Int64 = 96
     /// Segment edges (ramp-seam extensions, keep-pitch latency trims, fades) are not watched.
     static let edgeMarginUs: Int64 = 10_000
     /// Gain below which a span or a seam is treated as silent.
@@ -624,8 +628,10 @@ final class MixAudioSource: SegmentAudioSource {
     /// magnitude of the frame before it, the last two mono samples (second difference).
     private var scanNext: Int64?
     private var runStart: Int64?
-    private var runPreEdge: Float = 0
-    private var lastMagnitude: Float = 0
+    /// Last frame at or above `abruptEdge`.
+    private var lastLoud: Int64?
+    /// A finished run waiting for a loud frame after it (start, end).
+    private var pendingRun: (start: Int64, end: Int64)?
     private var mono1: Float?
     private var mono2: Float?
     private var seamStats: [SeamStats] = []
@@ -784,7 +790,8 @@ final class MixAudioSource: SegmentAudioSource {
         let first = Int64((pts.seconds * rate).rounded())
         if let expected = scanNext, abs(first - expected) > 1 {
             runStart = nil
-            lastMagnitude = 0
+            lastLoud = nil
+            pendingRun = nil
             mono1 = nil
             mono2 = nil
         }
@@ -809,18 +816,28 @@ final class MixAudioSource: SegmentAudioSource {
                 let index = first + Int64(f)
                 // Dropouts.
                 if !timePitchWatch.spans.isEmpty {
-                    if magnitude == 0 {
-                        if runStart == nil {
-                            runStart = index
-                            runPreEdge = lastMagnitude
+                    let loud = magnitude >= TimePitchWatch.abruptEdge
+                    if let pending = pendingRun {
+                        if index >= pending.end + TimePitchWatch.edgeFrames {
+                            pendingRun = nil
+                        } else if loud {
+                            flagDropout(start: pending.start, end: pending.end, rate: rate)
+                            pendingRun = nil
                         }
-                    } else {
-                        if let start = runStart {
-                            endRun(start: start, end: index, postEdge: magnitude, rate: rate)
-                            runStart = nil
-                        }
-                        lastMagnitude = magnitude
                     }
+                    if magnitude == 0 {
+                        if runStart == nil { runStart = index }
+                    } else if let start = runStart {
+                        runStart = nil
+                        if index - start >= Int64(TimePitchWatch.minRunFrames) {
+                            if loud || lastLoud.map({ start - $0 <= TimePitchWatch.edgeFrames }) == true {
+                                flagDropout(start: start, end: index, rate: rate)
+                            } else {
+                                pendingRun = (start, index)
+                            }
+                        }
+                    }
+                    if loud { lastLoud = index }
                 }
                 // Seam steps.
                 let mono = sum / Float(channels)
@@ -852,15 +869,13 @@ final class MixAudioSource: SegmentAudioSource {
         }
     }
 
-    private func endRun(start: Int64, end: Int64, postEdge: Float, rate: Double) {
-        guard end - start >= Int64(TimePitchWatch.minRunFrames),
-              runPreEdge >= TimePitchWatch.abruptEdge || postEdge >= TimePitchWatch.abruptEdge else { return }
+    private func flagDropout(start: Int64, end: Int64, rate: Double) {
         let startUs = Int64((Double(start) * 1_000_000 / rate).rounded(.down))
         let endUs = Int64((Double(end) * 1_000_000 / rate).rounded(.up))
         guard timePitchWatch.watches(startUs: startUs, endUs: endUs) else { return }
         dropouts += 1
         if firstTimePitchFault == nil {
-            firstTimePitchFault = "dropout of \(end - start) frames at \(startUs) µs, edges \(runPreEdge)/\(postEdge)"
+            firstTimePitchFault = "dropout of \(end - start) frames at \(startUs) µs"
         }
     }
 
