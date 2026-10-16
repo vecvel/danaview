@@ -54,6 +54,11 @@
 #                           and a phase's saved state survive into the next run)
 #   DANAVIEW_E2E_FRESH=1    uninstall the app before staging, so the run starts without the projects,
 #                           recovery records and media copies of earlier runs
+#   DANAVIEW_E2E_RESET=1    before every batch but the first, copy out e2e_out, clear the app's data
+#                           (`pm clear`: projects, recovery journal, settings, permissions, its
+#                           Android/data folder) and stage again, so no batch sees what an earlier
+#                           one left (default: on when DANAVIEW_E2E_FRESH=1; 0 turns it off). The
+#                           phases inside one batch (s09, the extra's pairs) still share state.
 #   DANAVIEW_E2E_KEEP_EMULATOR=1  leave an emulator this script booted running at the end
 #   DANAVIEW_E2E_EMULATOR_ARGS  extra emulator arguments when booting
 set -euo pipefail
@@ -68,6 +73,7 @@ MODELS_DIR="${DANAVIEW_E2E_MODELS:-${DANAVIEW_E2E_MODELS_DIR:-}}"
 BATCH_TIMEOUT="${DANAVIEW_E2E_BATCH_TIMEOUT:-2400}"
 PHASE_TIMEOUT="${DANAVIEW_E2E_PHASE_TIMEOUT:-1200}"
 KEEP_APP="${DANAVIEW_E2E_KEEP_APP:-1}"
+RESET="${DANAVIEW_E2E_RESET:-${DANAVIEW_E2E_FRESH:-}}"
 EXTRA_PAIRS="fgs cancel swipe death"
 
 GHA="${GITHUB_ACTIONS:-}"
@@ -266,6 +272,17 @@ prepare_shared() {
   echo "shared dir: $("$ADB" -s "$SERIAL" shell ls -lan "$base/files" | tr -d '\r' | awk 'NR > 1 { printf "%s %s %s; ", $1, $3, $NF }')"
 }
 
+# Between batches (DANAVIEW_E2E_RESET=1): exported files are copied out first, then the app's data
+# goes (pm clear also empties Android/data/<app>, and leftovers there are removed explicitly), and the
+# shared folders, fixtures and models are staged again.
+reset_app() {
+  local base="/sdcard/Android/data/com.vecvel.danaview/files"
+  run_with_timeout 300 bash "$HOST" -p android -d "$SERIAL" collect >/dev/null 2>&1 || true
+  run_with_timeout 60 "$ADB" -s "$SERIAL" shell pm clear com.vecvel.danaview 2>&1 | tr -d '\r' || true
+  run_with_timeout 60 "$ADB" -s "$SERIAL" shell "rm -rf $base/e2e_handshake $base/e2e_out" >/dev/null 2>&1 || true
+  setup_device
+}
+
 # ---- batches ------------------------------------------------------------------------------------
 
 API=""
@@ -435,6 +452,7 @@ if [ "$DRY_RUN" = 1 ]; then
   echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage"
   [ -z "$MODELS_DIR" ] || echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage-models <DANAVIEW_E2E_MODELS>"
   [ "$KEEP_APP" != 1 ] || echo "  (flutter test runs with --no-uninstall: DANAVIEW_E2E_KEEP_APP=1)"
+  [ "$RESET" != 1 ] || echo "  (before every batch but the first: collect, adb shell pm clear com.vecvel.danaview, stage again: DANAVIEW_E2E_RESET=1)"
   for b in ${BATCHES[@]+"${BATCHES[@]}"}; do echo "batch $b (timeout ${BATCH_TIMEOUT}s)"; print_cmd "$b"; done
   for b in ${PENDING[@]+"${PENDING[@]}"}; do echo "batch $b PENDING: speech models not staged (DANAVIEW_E2E_MODELS)"; done
   endgroup
@@ -468,10 +486,16 @@ endgroup
 
 declare -a SUMMARY=()
 FAILED=0
+FIRST_BATCH=1
 for b in ${BATCHES[@]+"${BATCHES[@]}"}; do
   label="$(echo "$b" | tr ':' '-')"
   blog="$OUT/logs/batch-$label.log"
   group "batch $b"
+  if [ "$RESET" = 1 ] && [ -z "$FIRST_BATCH" ] && device_ok; then
+    echo "reset before $b: app data cleared, staged again"
+    reset_app > "$OUT/logs/batch-$label.reset.log" 2>&1 || echo "warning: reset before $b failed (see logs/batch-$label.reset.log)"
+  fi
+  FIRST_BATCH=""
   if ! ensure_device; then
     FAILED=$((FAILED + 1))
     echo "error: batch $b not run: $SERIAL is gone and could not be booted again" >&2
