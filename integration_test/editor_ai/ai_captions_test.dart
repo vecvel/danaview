@@ -265,7 +265,8 @@ abstract final class Captions {
     for (final c in clips.skip(1)) {
       await ed.select(c, mode: SelectMode.extend);
     }
-    await ed.invoke(EditorActionId.autoCaptions, source: EditorActionSource.contextMenu);
+    // A clip's context menu captions that clip; the tool tile captions the selection.
+    await ed.invoke(EditorActionId.autoCaptions, source: clips.length == 1 ? EditorActionSource.contextMenu : EditorActionSource.toolTile);
     await E2eApp.waitKey(ed.tester, 'captions-sheet');
     await E2eApp.waitKey(ed.tester, 'captions-configure', timeout: const Duration(seconds: 30));
     await E2eApp.tap(
@@ -373,7 +374,8 @@ abstract final class Captions {
     final handoffs = E2eApp.world.engine.files.records.length;
     await ed.invoke(EditorActionId.exportSubtitles);
     await E2eApp.waitKey(t, 'subtitleIo.export');
-    await E2eApp.tapKey(t, 'subtitleIo.exportTrack.${track.id.value}');
+    // The track list shows only when the project has more than one subtitle track.
+    if (E2eApp.hasKey('subtitleIo.exportTrack.${track.id.value}')) await E2eApp.tapKey(t, 'subtitleIo.exportTrack.${track.id.value}');
     await E2eApp.tap(
       t,
       find.descendant(of: find.byKey(const ValueKey('subtitleIo.format')), matching: find.text(format == SubtitleFormat.srt ? SubtitleIoStrings.srt : SubtitleIoStrings.vtt)),
