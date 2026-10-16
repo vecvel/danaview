@@ -59,15 +59,18 @@ enum MediaJobTestSupport {
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
         reader.add(output)
         XCTAssertTrue(reader.startReading())
-        var pts: [Int64] = []
+        var mediaPts: [CMTime] = []
         var sync: [Bool] = []
         while let sample = output.copyNextSampleBuffer() {
             guard CMSampleBufferGetNumSamples(sample) > 0 else { continue }
-            let time = CMSampleBufferGetPresentationTimeStamp(sample)
-            pts.append(Int64((time.seconds * 1_000_000).rounded()))
+            mediaPts.append(CMSampleBufferGetPresentationTimeStamp(sample))
             let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[CFString: Any]]
             sync.append(!(attachments?.first?[kCMSampleAttachmentKey_NotSync] as? Bool ?? false))
         }
+        // Passthrough samples carry media times: presentation (track) times through the edit list.
+        let edits = try TrackEdits.load(track)
+        let pts = edits.trackTimes(ofMediaPts: mediaPts, mediaEnd: edits.mediaEnd ?? range.end)
+            .map { Int64(($0.seconds * 1_000_000).rounded()) }
         return TrackFacts(
             width: Int(size.width), height: Int(size.height), codec: CMFormatDescriptionGetMediaSubType(description),
             transfer: transfer, bitsPerComponent: bits, transform: transform, estimatedDataRate: rate,

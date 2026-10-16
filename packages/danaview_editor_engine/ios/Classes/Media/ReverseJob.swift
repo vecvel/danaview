@@ -4,7 +4,7 @@
 // Dart-supplied `derived/<specHash>.mp4`. Bounded memory and disk:
 //
 // 1. Timeline: one cheap passthrough read of the compressed video samples gives every frame's
-//    PTS (no decode). A source frame i covering [p_i, e_i) (e_i = next PTS, capped at the range
+//    PTS (no decode; media times mapped to track time through the edit list). A source frame i covering [p_i, e_i) (e_i = next PTS, capped at the range
 //    end E) is shown in the output at the MIRRORED time E − e_i, so the last source frame comes
 //    first and every frame keeps its own duration (VFR preserved).
 // 2. Chunks from the end: the output is written by the IOS-17 SegmentedWriter in segments of
@@ -297,7 +297,11 @@ struct ReverseTimeline {
             throw reader.error.map(EngineError.from) ?? EngineError(.decodeFailed, "timeline read failed")
         }
         let trackEnd = CMTime(value: info.endUs, timescale: 1_000_000)
-        return ReverseTimeline(pts: pts, trackEnd: trackEnd, startUs: startUs, endUs: endUs)
+        // Passthrough samples carry MEDIA times; every later step (chunk readers, output timing)
+        // works in TRACK time, so the edit list is applied here (B-frame sources start their media
+        // at the first composition offset, e.g. 0.08 s → 0; FIX-IOS-MEDIA).
+        let trackPts = info.edits.trackTimes(ofMediaPts: pts, mediaEnd: info.edits.mediaEnd ?? trackEnd)
+        return ReverseTimeline(pts: trackPts, trackEnd: trackEnd, startUs: startUs, endUs: endUs)
     }
 
     /// Frames shown in output [outputStartUs, outputEndUs), in source order.
