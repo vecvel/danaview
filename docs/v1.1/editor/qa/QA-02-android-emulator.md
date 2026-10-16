@@ -7,6 +7,27 @@ Emulators on the Windows laptop (BUILD_PLAN QA-02). It also holds the API 28 bel
 Android export extra on API 34 and API 35, the tablet run of scenario 12, and the manual tablet
 steps for the owner (hardware keyboard, mouse, drag from Files and Photos).
 
+**Status (2026-10-17, 02:05): not certified (API 35: 2 batch items left, neither an app defect).**
+
+- **API 35 phone, full pass on code D (3d38ef2 = editor-wip c336899 with every Mac fix for
+  M-1..M-17, 00:58–01:55, one emulator booted with audio, fresh install, models staged):**
+  **17 of 18 scenarios and 6 of 7 extra phases pass in the batch**, s08 included, with 0 emulator
+  restarts. s02, s06, s07, s09, s10, s12 and s18 pass in a batch for the first time on recent code.
+  - s13 fails in the batch only on "the voiceover must be audible" (-114.6 dBFS): the emulator's
+    audio HAL received no frames from the host microphone for the whole 7 s recording (437 ×
+    "inserting 16000 us of silence" in logcat). Rerun alone on a freshly booted emulator it passes
+    (-53.1 dBFS). Emulator reality, see "Emulator realities".
+  - swipe-check fails (`ExportReattach.none`) in the batch and alone: the host's
+    `swipeFromRecents` removed another app's task first (Photos in the batch, Settings alone), and
+    the app's own task went only after the export had finished attached (FIX M-21, Mac harness).
+  - **fgs-check passes**: the export finished in the foreground service with no activity
+    (`destroyActivity: no ActivityRecord left`) and the relaunch reattached as `finished`. This is
+    the first AND-12 detached-export proof on API 35.
+  - s09 close trace (owner's check): "leaving the editor" is followed by "exit callback" in s09
+    and in every scenario that closes the editor; no close step timed out. The Android preview
+    release does not block the main thread. See "s09 close trace (code D)".
+- Everything below this block that is labelled A, B, C or C+ is the history before code D.
+
 **Status (2026-10-16, 23:50): not certified.**
 
 - **API 35 phone, full pass on code C (0cfc691, 22:07–23:06, one emulator, fresh install,
@@ -188,6 +209,7 @@ notification request, and the s06/s08/s10/s12/s13 test fixes) reached this branc
 | **A** (before the fixes) | 542dcc6 + Android-lane backups up to 75b6a53, before e0fa7e8 | API 35 full pass 1 (13:12–14:38) and pass 2 (failed batches, 14:43–16:37); API 28 / 29 / 29 2 GB (14:23–16:06, from the `dv2` copy) |
 | **B** | d723c10 + merge 2be8a84 + the final AND-14 `Permissions.kt` (e6a9340) and its tests, up to 0ad2477 | API 35 reruns (19:27–21:44, main checkout); API 34 and tablet runs (19:33–21:10, `dv2` refreshed from the main checkout's tracked files) |
 | **C** (current) | 0cfc691: editor-wip c93ad22 merged (incl. the Mac's ebc2fb2: job resume after the first media resolve, preview restart, captions resume fraction) + AND-18's range-touch vectors | API 35 full pass (22:07–23:06) and the solo reruns of the failed batches (23:09–23:43), main checkout, `emulator-5554` only |
+| **D** (2026-10-17, current) | 3d38ef2 on `editor-android`: editor-wip c336899 (parallel-r7: the Mac fixes for M-1..M-17, incl. FIX-M15 close after recovery, the tier-aware close flush, the handoff playhead, the QA-00 suite and `e2e_host.sh` changes for M-6/M-7) merged with the Android-lane fixes (M-11, M-12, M-16..M-20, the capture fix ae6cda2). Clean tree, no uncommitted change; no Android-lane change during or after the runs | API 35 full pass (2026-10-17 00:58–01:55) and the solo reruns of s13 (01:54–01:58, freshly booted emulator) and the swipe pair (01:59–02:02), main checkout, `emulator-5554` |
 | **C+** | C + the `PreviewSession.debugCaptureFrame` fix (WIP 550b8ac) | the s09 recover phase run alone (23:14–23:16) and the solo reruns from s02 on (23:17–23:43: s02, s06, s07, s12, s13, the extra phases), the s18 rerun at 23:44–23:46 and the PreviewSessionTest run. The fix only changes `debugCaptureFrame` |
 
 Runs on A and on B differ only in the e0fa7e8 fixes, AND-14 and the runner changes. Every API 35
@@ -204,6 +226,74 @@ Windows-only path test (FIX M-11). `RangeTouchVectorTest` (new, FIX-AND-18-1) pa
 `RangeTouchTest` 3 of 3 (0cfc691's commit message).
 
 ## Results matrix
+
+### API 35 phone on code D (3d38ef2), 2026-10-17
+
+One command, one emulator (`emulator-5554`, booted by the runner with audio, `-no-snapshot-save`),
+fresh install, models from `C:/dev/models`, app data cleared before every batch:
+`DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=C:/dev/models scripts/ci/editor/e2e_android.sh`.
+22 batches, 0 emulator restarts. Evidence: `emulator-5554/full/` (`runner.log`, `summary.txt`,
+`logs/`, `screens/`, `files/`); solo reruns in `emulator-5554/solo/{s13,x_swipe}/`.
+
+| Batch | Batch result (time) | Solo rerun | Note |
+|---|---|---|---|
+| s01 | **pass** (131 s) | | |
+| s02 | **pass** (88 s) | | first batched pass on recent code |
+| s03 | **pass** (111 s) | | |
+| s04 | **pass** (98 s) | | |
+| s05 | **pass** (85 s) | | |
+| s06 | **pass** (119 s) | | no "Couldn't save" dialog (M-1 fixed) |
+| s07 | **pass** (255 s) | | both exports verified (M-2 fixed) |
+| s08 | **pass** (92 s) | | in the batch, with the models |
+| s09 | **pass** (147 s; edit + recover) | | the recover phase closes (M-15 fixed); close trace below |
+| s10 | **pass** (97 s) | | relink preview (M-8) confirmed on Android |
+| s11 | **pass** (87 s) | | |
+| s12 | **pass** (102 s) | | marquee (M-3) fixed on the phone |
+| s13 | **fail** (117 s) | **pass** (113 s, freshly booted emulator) | batch: clip 7.0 s recorded, export level -114.6 dBFS (> -60 needed): the host mic fed no frames (emulator reality). Alone: 6.35 s, -53.1 dBFS. The length check (M-5) passes both times |
+| s14 | **pass** (121 s) | | |
+| s15 | **pass** (104 s) | | |
+| s16 | **pass** (89 s) | | |
+| s17 | **pass** (82 s) | | |
+| s18 | **pass** (91 s) | | first batched pass with the capture fix (ae6cda2) |
+| x: fgs + fgs-check | **pass** + **pass** (231 s) | | `destroyActivity: no ActivityRecord left (attempt 1)`; FGS `types=0x00002000` (mediaProcessing); relaunch reattached `finished` (AND-12 detached proof on API 35) |
+| x: cancel | **pass** (89 s) | | the Cancel intent went in through `su 0` (`cancel sent for ex_…`) (M-7 fixed) |
+| x: swipe + swipe-check | **pass** + **fail** (287 s) | **pass** + **fail** (239 s) | `ExportReattach.none`, expected `finished`: the swipe removed another app's task first and the app's task only after the export had finished attached (FIX M-21) |
+| x: death + death-check | **pass** + **pass** (212 s) | | |
+
+#### s09 close trace (code D)
+
+The owner asked to check the new `[EditorClose]` / `[EditorLifecycle]` lines in s09's recover
+phase: "leaving the editor" without "exit callback" would mean the Android preview release blocks
+the main thread. It does not. From `emulator-5554/full/logs/s09_recovery_after_kill_test-recover.log`
+(also `emulator-5554/full/s09_close_trace.txt`):
+
+```
+[EditorLifecycle] close requested (shell: ready)
+[EditorLifecycle] flushBeforeClose: saved
+[EditorLifecycle] release: start
+[EditorClose] pr_TDkM3nD5MZtD: start (attached: true, open pending: false)
+[EditorClose] pr_TDkM3nD5MZtD: flushBeforeClose: saved
+[EditorClose] pr_TDkM3nD5MZtD: release: start
+[EditorClose] pr_TDkM3nD5MZtD: release: session detached (EditorSession closed)
+[EditorClose] pr_TDkM3nD5MZtD: release: plan sync dispose
+[EditorClose] pr_TDkM3nD5MZtD: release: preview dispose
+[EditorClose] pr_TDkM3nD5MZtD: release: repository close
+[EditorClose] pr_TDkM3nD5MZtD: release: end
+[EditorClose] pr_TDkM3nD5MZtD: done (CloseOutcome(saved: true))
+[EditorLifecycle] release: end
+[EditorLifecycle] leaving the editor
+[EditorLifecycle] exit callback
+```
+
+Across the whole pass, every scenario that closes the editor (s02–s12, s14–s18; s10 and s18 twice)
+logs "release: preview dispose", then "release: repository close", "leaving the editor" and
+"exit callback", with no "timed out" step. s09's logcat has no ANR; its two "Choreographer:
+Skipped 44/46 frames" lines are 4 s after each process start (app launch), not at the close. In the
+extra phases the test ends without closing the editor, so their trace stops at "preview dispose"
+when the test binding tears down; that is the test's end, not a hang. No Android-lane change was
+needed.
+
+### History (codes A, B, C, C+)
 
 Latest result per scenario and device. The cell gives the result, the time (all 2026-10-16) and
 the code label. "—" means the scenario is not in that device's QA-02 scope. "not run" means it is
@@ -325,6 +415,19 @@ The engine logs one capabilities line per process (`core/Capabilities.kt`).
   the RAM size alone, which is what D-40 needs here.
 
 ## Emulator realities (reported, not failed)
+
+- **The host microphone can feed the emulator nothing (s13, code D batch).** In the full pass
+  (emulator booted at 00:58 with audio and `hostmicon`, s13 at 01:27–01:29) the 7.0 s recording
+  was pure silence: logcat has 437 lines of `android.hardware.audio@7.1-impl.ranchu:
+  TinyalsaSource::read ... pcm_readi was late delivering frames, inserting 16000 us of silence`
+  from 01:28:40.2 to 01:28:46.9 (437 × 16 ms = 7.0 s, the whole clip), and the export measured
+  -114.6 dBFS. The emulator's audio HAL got no frames from the host, so the app recorded the
+  silence it was given. Alone on a freshly booted emulator (01:54) the same test measured
+  -53.1 dBFS and passed (that run still logged 375 such lines over its 6.35 s, so the host feed is
+  late most of the time even when it works). Why the feed stopped completely in the long run is
+  not proven (host side). Evidence:
+  `emulator-5554/full/logs/batch-s13.logcat.txt`, `s13_voiceover_test.log`;
+  `emulator-5554/solo/s13/`.
 
 - **Emulator process deaths during s07 (cause unproven).** The API 35 emulator died during s07
   three times:
@@ -709,6 +812,38 @@ could retry the player seek once.
 The code-review findings on the native glue (D2–D6 in the Android lane's Mac list: the copy on the
 io lane, the free-space check, error codes, notification-text validation, `file://` decoding) are
 review items, not QA-02 reproductions. They are tracked there, not here.
+
+**Status on code D (3d38ef2, API 35, 2026-10-17).** Confirmed fixed on API 35 in the batch: M-1
+(s06), M-2 (s07), M-3 (s12 phone), M-5 (s13 length), M-6 for `destroyActivity` (fgs-check
+`finished`), M-7 (cancel), M-8 (s10), M-14 (s08 ran in the batch; the extra runs after it), M-15
+(s09). Not rerun by this pass (other devices): M-4 (tablet), M-9 (API 29), M-10 (API 28). Still
+open: the swipe half of M-6, now M-21.
+
+**M-21. `swipeFromRecents` removes another app's task, not the app's** (QA-00 host harness,
+`integration_test/editor/tool/e2e_host.sh` `android_swipe_from_recents`, lines 199–216 on D).
+- **Where:** x_android_export_background swipe phase, request #2 `swipeFromRecents`; then
+  swipe-check fails at `ExportReattach.none`, expected `finished`.
+- **Symptom (2 of 2 on D, batch and alone):** `host-actions.log`: "task still in recents after
+  attempt 1", "attempt 2" (batch also 3, 4), then "task gone (attempt 3)" alone / "(attempt 5)"
+  batch. Logcat shows the first task the swipe removed was another app's: batch
+  `01:47:40 Killing 2207:com.google.android.apps.photos ... remove task` (taskId 767); alone
+  `02:00:29 TopTaskTracker: onTaskRemoved: taskId=592` (the Settings task, Recent #3). The export
+  then finished with the app's activity still alive in Overview (`Stop FGS timeout:
+  ServiceRecord{… ExportService}` at 01:47:42 / 02:00:36), and the app's own task went only after
+  (`01:48:22` / `02:00:45 Killing … com.vecvel.danaview (adj 905): remove task`). So the export
+  never ran detached. Each attempt takes 13–18 s under the export's load, and the test's export
+  takes about 30 s, so only the first one or two attempts can matter.
+- **Fix:** remove the app's own task by id instead of swiping at the screen centre: read its task
+  id from `dumpsys activity recents` (`Recent #n: Task{… #<id> type=standard
+  I=com.vecvel.danaview/…}`) and call `adb shell am stack remove <id>`, which goes through the same
+  `ActivityTaskManager.removeTask` path as the launcher's swipe (checked on this API 35 image:
+  `am stack remove 799` → `onTaskRemoved: taskId=799`). If the gesture itself must stay, check
+  after each swipe which task vanished (compare task ids) and abort with ok=false when it was not
+  the app's, instead of reporting "task gone" later. Either way, the removal must land within a few
+  seconds of the request: if needed, make the swipe phase's export longer (more frames) so it is
+  still running when the task goes.
+- **Evidence:** `emulator-5554/full/logs/{host-actions.log,batch-x_android_export_background-swipe.logcat.txt,x_android_export_background_test-swipe-check.log}`,
+  `emulator-5554/solo/x_swipe/logs/` (same files).
 
 ## Manual checklist (owner, Pixel_Tablet_API_35)
 
