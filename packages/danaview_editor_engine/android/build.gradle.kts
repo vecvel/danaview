@@ -167,6 +167,18 @@ if (project.hasProperty("danaviewLintNegativeFixture")) {
     android.lint.checkGeneratedSources = true
 }
 
+// M-12 (lead-approved 2026-10-17): the androidTest lint tasks (lintAnalyzeDebugAndroidTest,
+// generateDebugAndroidTestLintModel, and their other-variant twins) read the androidTest assets, which
+// include the fixture tree the example host's ENG-09 harness generates (syncDanaviewTestFixtures).
+// Without this ordering, `lintDebug` and `connectedDebugAndroidTest` in one Gradle invocation fail
+// task validation. The task only exists when the harness is applied, so the dependency matches by
+// name and is empty otherwise.
+tasks.configureEach {
+    if (name.contains("AndroidTest") && (name.startsWith("lint") || name.contains("LintModel"))) {
+        dependsOn(tasks.matching { it.name == "syncDanaviewTestFixtures" })
+    }
+}
+
 dependencies {
     // Media3 (ARCH §3.2, §13.3, §14.3, §15; AND-01 §6.3).
     implementation("androidx.media3:media3-common:$media3Version")
