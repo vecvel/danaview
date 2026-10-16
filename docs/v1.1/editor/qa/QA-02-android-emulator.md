@@ -188,11 +188,20 @@ notification request, and the s06/s08/s10/s12/s13 test fixes) reached this branc
 | **A** (before the fixes) | 542dcc6 + Android-lane backups up to 75b6a53, before e0fa7e8 | API 35 full pass 1 (13:12–14:38) and pass 2 (failed batches, 14:43–16:37); API 28 / 29 / 29 2 GB (14:23–16:06, from the `dv2` copy) |
 | **B** | d723c10 + merge 2be8a84 + the final AND-14 `Permissions.kt` (e6a9340) and its tests, up to 0ad2477 | API 35 reruns (19:27–21:44, main checkout); API 34 and tablet runs (19:33–21:10, `dv2` refreshed from the main checkout's tracked files) |
 | **C** (current) | 0cfc691: editor-wip c93ad22 merged (incl. the Mac's ebc2fb2: job resume after the first media resolve, preview restart, captions resume fraction) + AND-18's range-touch vectors | API 35 full pass (22:07–23:06) and the solo reruns of the failed batches (23:09–23:43), main checkout, `emulator-5554` only |
-| **C+** | C + the `PreviewSession.debugCaptureFrame` fix (WIP 550b8ac) | the s18 rerun at 23:44–23:46, the PreviewSessionTest run. The solo reruns from s02 on (23:17 onwards) were built with it too; it only changes `debugCaptureFrame` |
+| **C+** | C + the `PreviewSession.debugCaptureFrame` fix (WIP 550b8ac) | the s09 recover phase run alone (23:14–23:16) and the solo reruns from s02 on (23:17–23:43: s02, s06, s07, s12, s13, the extra phases), the s18 rerun at 23:44–23:46 and the PreviewSessionTest run. The fix only changes `debugCaptureFrame` |
 
 Runs on A and on B differ only in the e0fa7e8 fixes, AND-14 and the runner changes. Every API 35
 scenario that failed on A was rerun on B, except s16 and s18 (see the matrix). C has no QA-00 test
-or harness change since B: none of FIX M-1 to M-14 has landed yet.
+or harness change since B (`git diff 0ad2477 0cfc691 -- integration_test/` is empty): none of FIX
+M-1 to M-14 has landed yet. The API 28, API 29, API 29 2 GB results are from code A; the API 34 and
+tablet results are from code B. None of them was rerun on C.
+
+On C the JVM tests asked for with the merge ran on Windows (one Gradle worker,
+`testDebugUnitTest --tests '*Int07GlueTest*' --tests '*RangeTouchVectorTest*' --tests '*RangeTouchTest*'`):
+`Int07GlueTest` compiles with the Mac's `RecordingSignals.installOnce` keyed per `EngineContext`
+and passes 8 of 9, including `theBridgeEmitsOnceperChangeAndMutes`; the one failure is the known
+Windows-only path test (FIX M-11). `RangeTouchVectorTest` (new, FIX-AND-18-1) passes 1 of 1 and
+`RangeTouchTest` 3 of 3 (0cfc691's commit message).
 
 ## Results matrix
 
@@ -208,13 +217,13 @@ in scope but has not run yet.
 | s04 | **pass** 22:15 C | **pass** A | **pass** A | — | the e0fa7e8 seek fix works on API 35 |
 | s05 | **pass** 22:17 C | — | — | — | |
 | s06 | **pass** 23:21 C+ (alone, fresh install); **fail** 22:20 C (batch) | — | — | — | batch: close blocked by "Couldn't save your latest changes" (FIX M-1), as in 3 of 3 runs on B. Passed alone for the first time: timing-dependent |
-| s07 | **fail** 23:26 C (2 of 2 runs: batch and alone) | — | — | — | both exports complete; burned caption t1b 293 px (> 300 needed), the same count as on B (FIX M-2). No emulator death this time |
+| s07 | **fail** 22:24 C (batch) and 23:26 C+ (alone) | — | — | — | both exports complete; burned caption t1b 293 px (> 300 needed), the same count as on B (FIX M-2). No emulator death this time |
 | s08 | **pass** 22:26 C (in the batch, after a reset) | — | — | — | first batched pass: 3 cues, SRT round trip and undo. The earlier batched failures (B) came right after emulator reboots; there were none in this pass |
-| s09 | **fail** 23:16 C (2 of 2 runs: batch and alone) | — | — | — | edit phase ends with the host kill as designed; the recover phase restores the project and the text, then the editor does not close in 30 s, with no dialog on screen (FIX M-15). Passed on A |
+| s09 | **fail** 22:30 C (batch) and 23:16 C/C+ (alone: edit phase on C, recover phase on C+) | — | — | — | edit phase ends with the host kill as designed; the recover phase restores the project and the text, then the editor does not close in 30 s, with no dialog on screen (FIX M-15). Passed on A |
 | s10 | **fail** 23:09 C (2 of 2 runs) | — | — | — | relink works; after it the preview shows the plan's offline placeholder (solid 0x303030), so no barcode: decided, a Dart (INT-02 / PlanSync) cause, not AND-16/ENG-08 (FIX M-8) |
 | s11 | **pass** 22:34 C | — | — | — | |
-| s12 | **fail** 23:29 C (2 of 2 runs) | — | — | **fail** 20:31 B (2 of 2 runs) | phone: marquee (FIX M-3); tablet: `tile.tool.format` off the tool rail (FIX M-4), then the same marquee failure |
-| s13 | **fail** 23:31 C (2 of 2 runs) | — | — | — | recording works (host mic on); the clip is 10.63 s (batch) / 10.10 s (alone), 2.5–4 s expected (FIX M-5) |
+| s12 | **fail** 22:37 C (batch) and 23:29 C+ (alone) | — | — | **fail** 20:31 B (2 of 2 runs) | phone: marquee (FIX M-3); tablet: `tile.tool.format` off the tool rail (FIX M-4), then the same marquee failure |
+| s13 | **fail** 22:39 C (batch) and 23:31 C+ (alone) | — | — | — | recording works (host mic on); the clip is 10.63 s (batch) / 10.10 s (alone), 2.5–4 s expected (FIX M-5) |
 | s14 | **pass** 22:42 C | — | — | — | the export works with the `grantNotifications` host action |
 | s15 | **pass** 22:44 C | — | — | — | |
 | s16 | **pass** 22:46 C | — | — | — | first run on recent code; no close dialog |
@@ -226,7 +235,7 @@ s03 283 s / 507 s, s04 280 s / 242 s, s18 255 s on API 29).
 
 ### Android export extra (`x_android_export_background`)
 
-| Phase | API 35 (C: batch 22:51–23:06, alone 23:32–23:43) | API 34 (B, 19:33–20:21) | Note |
+| Phase | API 35 (batch 22:51–23:06 on C, alone 23:32–23:43 on C+) | API 34 (B, 19:33–20:21) | Note |
 |---|---|---|---|
 | fgs | **pass** (2 of 2) | **pass** (2 of 2) | the export keeps running as a foreground service after `destroyActivity`; the host ends the app |
 | fgs-check | **fail** (2 of 2): `ExportReattach.none`, expected `finished` | **fail** (2 of 2): same | harness: the activity is never destroyed, so the export finishes attached (FIX M-6) |
@@ -385,6 +394,16 @@ The engine logs one capabilities line per process (`core/Capabilities.kt`).
 
 ## Android-lane fixes this round
 
+Android-lane commits of this round, all on `editor-android` and all in code C or C+:
+
+| Commit | What |
+|---|---|
+| 0f15c97 | AND-14: the notification-permission request always returns (landing record) |
+| 9ef20b8 | AND-16: no crash when a recording mutes a preview that is still opening |
+| 696fe0b | AND-15: copied file names capped in UTF-8 bytes, not only characters |
+| 0cfc691 | AND-18: `RangeTouchVectorTest` replays the shared range-touch vectors (FIX-AND-18-1) |
+| 550b8ac (WIP) | `PreviewSession.debugCaptureFrame` waits for a seek in flight (s18, this pass); landing record still to come |
+
 ### `debugCaptureFrame` waits for a seek in flight (s18, code C+)
 
 **Defect.** s18 reopens a project and reads the frame barcode at once. On C it failed 2 of 2
@@ -511,7 +530,8 @@ host for `grantNotifications` and the export started. None waited at "Preparing�
 Each request below either reproduced on code B (d723c10 or later), or is about a file that is
 unchanged on B and has a deterministic cause (M-10). M-1, M-2, M-3, M-5, M-6, M-7 and M-8 were
 checked again on code C (0cfc691) on 2026-10-16 22:07–23:43: each still reproduces (M-1 only in the
-batch). M-15 is new on C. The fixes from e0fa7e8 are confirmed on
+batch); M-11 still fails on C. M-15 is new on C. M-4, M-9, M-10, M-12, M-13 and M-14 were not
+rerun on C; their files are unchanged since B. The fixes from e0fa7e8 are confirmed on
 API 35 and are closed: s04 seek, s06 transition handles, the s07/s14 notification dialog, the s08
 track row, the s10 extra step, the s12 phone `tapTile`, and the s13 `MediaKind`.
 
@@ -605,8 +625,9 @@ Android-lane defect).
   2 of 2 on C.
 - **Evidence (C, `solo/s10/`):** a host screenshot every 1–2 s during the run (`hostcaps/`). Before
   the relink the preview shows the Media missing card. After "Relink 3 files" ("Everything is
-  back", 23:09:14) and at the seek to 00:00:00:10 (23:09:16), the whole preview area is a flat
-  **(48, 48, 48)**, which is exactly `offlinePlaceholderColor` 0xFF303030
+  back", 23:09:14) the preview is a flat grey under the sheet's scrim (19, 19, 19). Once the sheet
+  is closed, at the seek to 00:00:00:10 (23:09:16, `hostcaps/230916.png`), the whole preview area
+  is a flat **(48, 48, 48)**, which is exactly `offlinePlaceholderColor` 0xFF303030
   (`danaview_editor_core/lib/src/plan/lowering_visual.dart:46`), and the timeline clips still have
   no thumbnails. The Android engine has no grey of its own: it clears to black, and 0x303030 can
   only come from a `solid` layer in the plan. So the engine holds a plan in which the clip is still
@@ -641,6 +662,8 @@ Android-lane defect).
 - **Test:** `Int07GlueTest.materializePickRunsOnIoWithTheNormalizedDirectory`.
 - **Symptom:** expected `/data/user/0/app/cache/danaview/editor/work/picks/u1/clip.mp4` but got
   backslashes. The fake records `File.path`. It passes on macOS and on the device.
+- **On C:** the same single failure (8 of 9 pass; the Mac's per-`EngineContext` `installOnce`
+  change compiles and its test passes). `Int07GlueTest.kt:38-39` is unchanged.
 - **Fix:** use `intoDir.invariantSeparatorsPath` in the test's fake (`Int07GlueTest.kt:39`).
 
 **M-12. `lintDebug` and `connectedDebugAndroidTest` in one Gradle invocation fail validation**
@@ -878,7 +901,8 @@ artifacts attached.
    marquee and tablet rail), M-5 (s13 recording length), M-6 (destroyActivity and
    swipeFromRecents), M-7 (notification Cancel), M-8 (INT-02/PlanSync: the relinked media never
    reaches the plan), M-9 (UX-41, s02 on API 29), M-10 (API 28 skip), M-14 (s08 close past the
-   "export interrupted" sheet), M-15 (s09 recover close).
+   "export interrupted" sheet), M-15 (s09 recover close), and the test/build items M-11 (INT-07
+   test path on Windows) and M-12 (`build.gradle.kts` lint input).
 2. **API 35 full pass on one code version** after those fixes, with only one emulator running:
    `DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=<models dir> scripts/ci/editor/e2e_android.sh`.
    All 18 scenarios and all 7 extra phases must pass in the batch. On code C, 11 scenarios and 4
@@ -897,7 +921,11 @@ artifacts attached.
 8. **README**: QA-00's README status line points here (M-13).
 9. **Artifacts**: list the final evidence folders here, and remove or mark the superseded ones.
 
-Android-lane items still open from this round: s18 inside a full batch with the
-`debugCaptureFrame` fix (and `lintDebug` on that change), the native side of M-15 if the Dart
-close reaches the preview release, and AND-12 if item 3 fails after M-6. M-8 is answered: not an
-Android-lane defect.
+Android-lane items still open from this round:
+
+- s18 inside a full batch with the `debugCaptureFrame` fix, `lintDebug` on that change, and its
+  landing record (it is only in WIP 550b8ac so far);
+- the native side of M-15, if the Dart close reaches the preview release and it does not return;
+- AND-12, if item 3 still fails after M-6.
+
+M-8 is answered: not an Android-lane defect.
