@@ -194,7 +194,7 @@ Generated 2026-10-15 20:40 IST on the Mac from the code and the build runs (stat
 |---|---|---|---|---|---|
 | 152 | CORE-35 | Core benchmarks, large-project fixture, README | CORE-26, CORE-32, CORE-34, CORE-33 | ✅ done | Mac |
 | 153 | QA-00 | Shared on-device E2E suite (integration_test/editor) | INT-04, ENG-05, UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, IOS-13, IOS-14, IOS-15, IOS-16, AND-12, AND-13, AND-14, AND-15 | 🔨 in progress (round 3) | Mac |
-| 154 | QA-01 | Run and certify the E2E suite on the iOS Simulator | QA-00, INT-03 | 🔨 in progress (round 3) | Mac |
+| 154 | QA-01 | Run and certify the E2E suite on the iOS Simulator | QA-00, INT-03 | 🟡 automated suite certified on simulator (re-run 3: iPhone 18/18 incl. solo re-runs, iPad s12, iOS 18.2 3/3); manual iPad Files/Photos drops and physical-keyboard step need a person; lab smoke deferred (no device); FIX-IOS-12-1 filed | Mac |
 | 155 | QA-02 | Run and certify the E2E suite on an Android Emulator | QA-00 | ⏳ not started | Windows |
 | 156 | QA-03 | Frame accuracy, grid-cut, A/V sync and render parity suite | IOS-11, AND-10, IOS-12, AND-11, API-03, ENG-05 | 🔨 in progress (round 3) | Mac |
 | 157 | QA-11 | Export conformance, preset matrix and audio measurement suite | IOS-13, AND-12, IOS-18, API-03, ENG-05, IOS-20, AND-19, CORE-38 | 🔨 in progress (round 3) | Mac |
