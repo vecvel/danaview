@@ -3,9 +3,11 @@
 // fsync probe for V-D1 (ARCH §8.3, §24 "does RandomAccessFile.flush() fsync on iOS?").
 //
 // A tiny dylib injected into the app on the iOS Simulator (SIMCTL_CHILD_DYLD_INSERT_LIBRARIES,
-// set by tool/qa10_host.py). It interposes fsync(2) and fcntl(2) through dyld's __interpose
-// section, so every call made by the Dart VM (Flutter.framework) or the engine is counted and the
-// path of the descriptor is remembered (fcntl F_GETPATH). The in-app test
+// set by tool/qa10_host.py). It interposes fsync(2) through dyld's __interpose section, so every
+// call made by the Dart VM (Flutter.framework) or the engine is counted and the path of the
+// descriptor is remembered (fcntl F_GETPATH). fcntl itself is not interposed: an interposed
+// variadic fcntl stopped `flutter test` from ever attaching on the simulator (2026-10-16), and
+// Dart has no F_FULLFSYNC call to observe anyway (the counter stays 0 and documents that). The in-app test
 // (support/qa10_fsync_probe.dart) reads the counters through dart:ffi and checks that
 // `LocalStoreFs.writeBytesSynced` and a real project save end in an fsync of the file they wrote.
 //
@@ -26,7 +28,7 @@
 #define DV_RING 128
 
 static atomic_long g_fsync_calls;
-static atomic_long g_fullfsync_calls;
+static atomic_long g_fullfsync_calls; // never incremented: see the header
 static pthread_mutex_t g_mu = PTHREAD_MUTEX_INITIALIZER;
 static char g_ring[DV_RING][MAXPATHLEN + 8];
 static long g_ring_next;
@@ -51,18 +53,6 @@ static int dv_fsync(int fd) {
   return r;
 }
 
-static int dv_fcntl(int fd, int cmd, ...) {
-  va_list ap;
-  va_start(ap, cmd);
-  void *arg = va_arg(ap, void *);
-  va_end(ap);
-  if (cmd == F_FULLFSYNC) {
-    atomic_fetch_add(&g_fullfsync_calls, 1);
-    dv_note(fd, "full");
-  }
-  return fcntl(fd, cmd, arg);
-}
-
 typedef struct {
   const void *replacement;
   const void *replacee;
@@ -70,7 +60,6 @@ typedef struct {
 
 __attribute__((used)) static const dv_interpose_t dv_interposers[] __attribute__((section("__DATA,__interpose"))) = {
     {(const void *)dv_fsync, (const void *)fsync},
-    {(const void *)dv_fcntl, (const void *)fcntl},
 };
 
 /// Number of fsync(2) calls since the process started.

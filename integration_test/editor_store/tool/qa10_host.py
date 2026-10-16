@@ -317,8 +317,10 @@ class Host:
 
     # ---- phases ---------------------------------------------------------------------------------
 
+    use_probe = True
+
     def build_probe(self):
-        if self.platform != "ios":
+        if self.platform != "ios" or not self.use_probe:
             return None
         dylib = self.out / "fsync_probe.dylib"
         src = ROOT / "integration_test/editor_store/tool/fsync_probe.c"
@@ -347,6 +349,15 @@ class Host:
             d += [f"DV_E2E_FIXTURES={FIXTURES}", f"DV_QA10_HOST_DIR={self.host_dir}"]
         return [f"--dart-define={x}" for x in d]
 
+    @staticmethod
+    def stop(proc: subprocess.Popen) -> None:
+        if proc.poll() is not None:
+            return
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except OSError:
+            proc.terminate()
+
     def run_phase(self, phase: str, expect_death: bool, probe) -> bool:
         logf = self.out / "logs" / f"qa10-{phase}.log"
         env = dict(os.environ)
@@ -372,10 +383,10 @@ class Host:
                         # The test that asked is gone; give flutter a moment, then stop it so it does
                         # not uninstall the app (and its container) on the way out.
                         time.sleep(3)
-                        os.killpg(proc.pid, signal.SIGTERM)
+                        self.stop(proc)
                 if time.time() > deadline:
                     self.log(f"TIMEOUT phase {phase} after {self.timeout}s")
-                    os.killpg(proc.pid, signal.SIGTERM)
+                    self.stop(proc)
                     break
                 time.sleep(0.3)
             proc.wait()
@@ -423,10 +434,12 @@ def main() -> int:
     ap.add_argument("-p", "--platform", choices=["ios", "android"], required=True)
     ap.add_argument("-d", "--device", required=True)
     ap.add_argument("--timeout", type=int, default=int(os.environ.get("DV_E2E_PHASE_TIMEOUT", "1200")))
+    ap.add_argument("--no-probe", action="store_true", help="do not inject the fsync probe (V-D1 then reports 'not run')")
     ap.add_argument("command", choices=["run", "compare"])
     ap.add_argument("phase", nargs="?", default="all", choices=["all", "seed", "edit", "verify"])
     a = ap.parse_args()
     host = Host(a.platform, a.device, a.timeout)
+    host.use_probe = not a.no_probe
     if a.command == "compare":
         print(json.dumps(host.compare([]), indent=1))
         return 0

@@ -373,19 +373,31 @@ void main() {
     await repo.close(bakOnly);
     qa10Report('corrupt main, .bak restore', 'ok', 'opened from .bak, the next save rewrote a valid main');
 
-    // Every copy corrupt, journal valid: corrupt + recovery offered; Restore promotes the journal.
+    // Every copy corrupt, journal valid. The Projects scan reads headers only (the bodies are
+    // verified on open), so the card shows the recovery flag; open fails with `corrupt`; the
+    // recovery banner offers "Restore last good version", which promotes the journal.
     final sJ = await Qa10Store.summaryOf(journalOnly);
-    expect(sJ?.health, ProjectHealth.corrupt);
-    expect(sJ?.hasRecovery, isTrue);
+    expect(sJ?.hasRecovery, isTrue, reason: 'the card shows the recovery flag');
+    qa10Report('corrupt summary', 'info', 'header-only scan health ${sJ?.health.name} (bodies are verified on open)');
     await expectLater(repo.open(journalOnly), throwsA(isA<StoreFailure>().having((f) => f.kind, 'kind', StoreFailureKind.corrupt)));
-    await E2eApp.openProjectsFromHome(tester);
-    await E2eApp.screenshot(tester, 'qa10_projects_corrupt_newer_blocked');
     final r = (await repo.recoverable()).where((r) => r.projectId == journalOnly).toList();
     expect(r, hasLength(1), reason: '"Restore last good version" is offered');
-    final restored = await repo.restore(r.single);
-    expect(restored.project.markers, hasLength(2), reason: 'the journal slot holds both markers');
+    await E2eApp.openProjectsFromHome(tester);
+    await E2eApp.waitKey(tester, 'recovery-$journalOnly');
+    await E2eApp.screenshot(tester, 'qa10_projects_corrupt_recovery');
+    await E2eApp.tapKey(tester, 'recovery-restore-$journalOnly');
+    if (find.byType(EditorScreen).evaluate().isEmpty) {
+      await E2eApp.pumpUntil(tester, () => !E2eApp.hasKey('recovery-$journalOnly'), what: 'the restore to finish');
+      await E2eApp.tapKey(tester, 'project-card-$journalOnly');
+    }
+    final ed = await E2eEditor.attach(tester, waitPreview: false);
+    expect(ed.id, journalOnly);
+    expect(ed.project.markers, hasLength(2), reason: 'the journal slot holds both markers');
+    await ed.close();
+    final reopened = await repo.open(journalOnly);
+    expect(reopened.project.markers, hasLength(2), reason: 'the promoted main document is valid on disk');
     await repo.close(journalOnly);
-    qa10Report('corrupt main and .bak, journal restore', 'ok', 'health corrupt + recovery; restore promoted the journal (2 markers)');
+    qa10Report('corrupt main and .bak, journal restore', 'ok', 'open fails corrupt; banner Restore promoted the journal (2 markers)');
   }, skip: phase != 'verify');
 
   testWidgets('QA-10 verify 5: newer schema read-only, newer minReader blocked (D-12)', (tester) async {
@@ -405,8 +417,12 @@ void main() {
     await repo.close(newer);
     expect(Qa10Store.fingerprint(Qa10Store.mainOf(newer)), before, reason: 'a read-only project is never written');
 
-    // The editor opens it read-only.
-    final ed = await E2eEditor.openFromProjects(tester, newer);
+    // The editor opens it read-only (an empty project: no preview to wait for).
+    await E2eApp.openProjectsFromHome(tester);
+    await E2eApp.screenshot(tester, 'qa10_projects_newer_blocked');
+    await E2eApp.tapKey(tester, 'project-card-$newer');
+    final ed = await E2eEditor.attach(tester, waitPreview: false);
+    await E2eApp.waitKey(tester, 'read-only-banner');
     await E2eApp.pumpUntil(tester, () => ed.state.save.phase == SavePhase.readOnly, what: 'the read-only save state');
     await E2eApp.screenshot(tester, 'qa10_read_only_newer');
     await ed.close();
