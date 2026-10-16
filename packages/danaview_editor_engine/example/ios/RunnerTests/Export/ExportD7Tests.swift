@@ -181,6 +181,30 @@ final class ExportD7Tests: XCTestCase {
         print("D7 load: hung \(hung) of 16")
     }
 
+    func testReproHungReadUseAfterFree() throws {
+        var options = ExportHarness.Options()
+        options.segmentDurationUs = 10_000_000
+        print("D7 repro: making harness")
+        let h = try ExportHarness(options)
+        print("D7 repro: harness made")
+        defer { h.remove() }
+        h.coordinator.environment.resolveURL = { _, asset in try ExportD7Tests.resolve(asset) }
+        h.coordinator.configurePipeline = { p in
+            p.audioWatchdog = 1
+            p.audioSourceHook = { source, attempt in
+                guard attempt == 1 else { return }
+                source.readGate = { n in if n == 3 { Thread.sleep(forTimeInterval: 8) } }
+            }
+        }
+        let s = ExportPlans.settings(320, 180, fps: 30)
+        let out = h.outputURL()
+        let id: String
+        do { id = try h.start(self, plan: D7Plans.soak800(w: 320, h: 180), settings: s, output: out) } catch { print("D7 repro: start failed \(error)"); throw error }
+        XCTAssertTrue(JobEventRecorder.spin(timeout: 120) { h.recorder.ended(id) })
+        print("D7 repro: done \(h.recorder.done(id) != nil) failure \(h.recorder.failure(id)?.message ?? "-")")
+        _ = JobEventRecorder.spin(timeout: 10) { false }
+    }
+
     func testProbeSoakMix() throws {
         let h = try ExportHarness()
         defer { h.remove() }

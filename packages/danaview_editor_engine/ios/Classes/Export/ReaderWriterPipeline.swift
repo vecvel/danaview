@@ -666,6 +666,10 @@ final class MixAudioSource: SegmentAudioSource {
     var watchdog: TimeInterval = 30
     /// Test hook: rewrites the floats of buffer n (0-based) before validation.
     var corrupt: ((Int, UnsafeMutableBufferPointer<Float>) -> Void)?
+    /// Test hook: runs on the read queue right before read n (0-based) calls copyNextSampleBuffer
+    /// (block it to simulate AVFoundation's hung read).
+    var readGate: ((Int) -> Void)?
+    private var reads = 0
 
     /// Why the read was rejected (nil = accepted or not finished).
     private(set) var rejection: String?
@@ -748,7 +752,11 @@ final class MixAudioSource: SegmentAudioSource {
         guard let output = output, let reader = reader else { return nil }
         let box = SampleBox()
         let done = DispatchSemaphore(value: 0)
+        let gate = readGate
+        let n = reads
+        reads += 1
         readQueue.async {
+            gate?(n)
             box.sample = output.copyNextSampleBuffer()
             done.signal()
         }
