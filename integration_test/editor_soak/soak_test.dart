@@ -42,7 +42,7 @@ import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart' 
 import 'package:danaview_editor/src/editor/contracts/action_binding.dart' show EditorActionSource;
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
 import 'package:danaview_editor/src/editor/flows/export/export_controller.dart';
-import 'package:danaview_editor/src/editor/state/editor_state.dart' show EditorTaskKind;
+import 'package:danaview_editor/src/editor/state/editor_state.dart' show EditorTaskKind, PreviewPhase;
 import 'package:danaview_editor/src/editor/state/tasks_controller.dart' show TasksController;
 import 'package:danaview_editor_core/codec.dart' show ProjectJsonCodec;
 import 'package:danaview_editor_core/model.dart';
@@ -210,7 +210,7 @@ final class _Soak {
     } on TestFailure catch (e) {
       // A bounded wait ran out: the app hung on this op.
       st.failed++;
-      final line = '#$n ${op.name}: stuck: ${e.message?.split('\n').first}';
+      final line = '#$n ${op.name}: stuck: ${e.message?.split('\n').first} [${_stateText()}]';
       failures.add(line);
       soakLog('fail', '$line\n${e.message}');
       await _recover();
@@ -230,7 +230,12 @@ final class _Soak {
     try {
       await soakDismissAll(tester, _ed);
       final e = _ed;
-      if (e != null && find.byType(EditorScreen).evaluate().isNotEmpty && e.state.isReady) return;
+      // Ready includes a live preview: a preview that did not come back is reopened, so one defect
+      // does not fail every later op that waits for the preview.
+      if (e != null && find.byType(EditorScreen).evaluate().isNotEmpty && e.state.isReady &&
+          e.state.preview.phase == PreviewPhase.ready && e.session.preview != null) {
+        return;
+      }
       soakLog('recover', 'reopening the project');
       if (find.byType(EditorScreen).evaluate().isNotEmpty) await e?.close();
       if (e != null) {
@@ -724,6 +729,10 @@ final class _Soak {
   }
 
   Future<String> _background() async {
+    // A reference frame before leaving: a black frame after the return only counts when the same
+    // frame was not black before (gaps, fades and dark stills are black on purpose).
+    final f0 = ed.playheadFrame;
+    final ref = (await ed.capture()).meanLuma;
     final playing = rng.nextBool() && ed.transport.canPlay;
     if (playing) {
       await ed.transport.play();
@@ -739,9 +748,41 @@ final class _Soak {
     await ed.waitReady();
     // The preview is live again after the return (scenario 11's check, without the barcode).
     await _hold(const Duration(seconds: 1));
-    final frame = await ed.capture();
-    if (frame.meanLuma < 2) throw StateError('black preview 1 s after the return');
-    return '$secs s${playing ? ' during playback' : ''}';
+    final luma = (await ed.capture()).meanLuma;
+    final how = '$secs s${playing ? ' during playback' : ''}';
+    if (luma >= 2) return how;
+    final f1 = ed.playheadFrame;
+    if (f1 == f0 && ref < 2) return '$how (frame $f1 is black content, also before leaving)';
+    // Black: does a fresh exact seek bring the picture back (a stale preview), and is the frame
+    // black content (the frame the playback stopped on)?
+    await ed.seekFrame(f1);
+    await _hold(const Duration(seconds: 1));
+    final reseek = (await ed.capture()).meanLuma;
+    var back = ref;
+    if (f1 != f0) {
+      await ed.seekFrame(f0);
+      await _hold(const Duration(milliseconds: 500));
+      back = (await ed.capture()).meanLuma;
+      if (reseek < 2 && back >= 2) return '$how (frame $f1 is black content)';
+    }
+    final detail = 'frame $f1 (left at $f0, luma ${ref.toStringAsFixed(1)} before), after a re-seek '
+        '${reseek.toStringAsFixed(1)}${f1 != f0 ? ', frame $f0 ${back.toStringAsFixed(1)}' : ''}, ${_stateText()}';
+    if (reseek >= 2) throw StateError('black preview 1 s after the return until the next seek: $detail');
+    throw StateError('black preview 1 s after the return, and a seek does not bring it back: $detail');
+  }
+
+  /// The editor and preview phases, for failure lines.
+  String _stateText() {
+    final e = _ed;
+    if (e == null) return 'no editor';
+    try {
+      final s = e.state;
+      final pv = s.preview;
+      return 'editor ${s.phase.name}, preview ${pv.phase.name}${pv.failure == null ? '' : ' (${pv.failure})'}, '
+          'preview session ${e.session.preview == null ? 'none' : 'open'}';
+    } on Object catch (err) {
+      return 'state unavailable (${err.runtimeType})';
+    }
   }
 
   Future<String> _call() async {
