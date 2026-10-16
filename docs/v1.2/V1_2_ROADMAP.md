@@ -1,11 +1,12 @@
-# Danaview 1.2.0 Release Roadmap: Photos, AI Studio and the Unified Editor
+# Danaview 1.2.0 Release Roadmap: Files & Media Home, AI Studio and the Unified Editor
 
 > **Release:** Danaview 1.2.0 (app version `1.2.0+N`). **Date:** 2026-10-15 (release contents set by the owner on this date). **Status:** Master roadmap and overview.
 > **Baseline releases:**
 > - Danaview 1.0: cross-platform media player (libmpv, equalizer, subtitles, hardware decode).
 > - Danaview 1.1: multi-track video editor on iOS and Android with on-device AI subtitles (`docs/v1.1/editor/ARCHITECTURE.md`, `BUILD_PLAN.md`).
 > **Next:** Danaview 1.3.0 brings the desktop editor and the in-house native camera (`docs/v1.3/V1_3_ROADMAP.md`).
-> **Core theme:** **Photos join videos.** The Home screen browses photos and videos together, the editor edits both, and subtitles get rich styling with optional bring-your-own-key AI.
+> **Core theme:** **Photos and documents join videos.** The Home screen becomes the Files & Media Home (photos, videos, documents, Danaview folders, PDF tools), the editor edits photos and videos, subtitles get rich styling and on-device speaker detection, and optional bring-your-own-key AI adds AI search.
+> **Widened on 2026-10-16 (owner):** Pillar 1 now covers documents and PDF tools; AI Studio adds multi-speaker diarization, AI search and a shared AI layer, with a Genkit spike as its first provider ticket.
 
 ---
 
@@ -14,7 +15,7 @@
 ```
                       +---------------------------------------------------------------+
                       |                        DANAVIEW 1.2.0                         |
-                      |              Photos, AI Studio and the Unified Editor         |
+                      |      Files & Media Home, AI Studio and the Unified Editor     |
                       +---------------------------------------------------------------+
                                                       |
                          +----------------------------+----------------------------+
@@ -22,26 +23,35 @@
                          v                            v                            v
               +--------------------+       +--------------------+       +--------------------+
               |      PILLAR 1      |       |      PILLAR 2      |       |      PILLAR 3      |
-              | Unified Home Media |       |     AI Studio      |       | Unified Editor     |
-              |  Photos & Videos   |       | & Rich Subtitles   |       | Photo & Video Edit |
+              | Files & Media Home |       |     AI Studio      |       | Unified Editor     |
+              | Photos, Videos,    |       | & Rich Subtitles   |       | Photo & Video Edit |
+              | Documents, PDF     |       |                    |       |                    |
               +--------------------+       +--------------------+       +--------------------+
-              | • All Media view   |       | • Rich-text cues   |       | • Still Photo Mode |
-              | • Folder browser   |       | • Karaoke captions |       | • 16-bit float tone|
-              | • Album explorer   |       | • Transcript view  |       | • HSL & RGB curves |
-              | • Fast thumbnails  |       | • Font import      |       | • Masks & keystone |
-              | • Montage maker    |       | • BYO-key AI       |       | • 8-Category Beauty|
-              | • Direct editor    |       | • Translation      |       | • One-Euro tracking|
-              | • Player preserved |       | • Off by default   |       | • Batch export     |
+              | • All/Videos/Photos|       | • Rich-text cues   |       | • Still Photo Mode |
+              |   /Documents       |       | • Karaoke captions |       | • 16-bit float tone|
+              | • Danaview folders |       | • Transcript view  |       | • HSL & RGB curves |
+              | • Import, share,   |       | • Speaker lanes    |       | • Masks & keystone |
+              |   Save to Files    |       |   (on-device       |       | • 8-Category Beauty|
+              | • Native viewers   |       |   diarization)     |       | • One-Euro tracking|
+              | • PDF tools        |       | • On-device search |       | • Batch export     |
+              | • Montage maker    |       | • BYO-key AI, AI   |       |                    |
+              | • Player preserved |       |   search, off by   |       |                    |
+              |                    |       |   default          |       |                    |
               +--------------------+       +--------------------+       +--------------------+
 ```
 
-### Pillar 1: Unified Media Home Screen
-- **Document:** [`docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md`](home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) (HOM-01 to HOM-15, decisions D-86 to D-98).
-- **Summary:** The Home screen becomes a browser for every photo and video on the device: system albums, physical folders, fast thumbnails, a full-screen photo viewer, and multi-select "Make Video Montage". Every player, playlist, queue, Continue Watching and folder feature stays exactly as it is. Editor actions show where the editor runs (iOS and Android in 1.2.0); desktop gets photo browsing now and the editor actions in 1.3.0.
+### Pillar 1: Files & Media Home (photos, videos, documents, PDF tools)
+- **Document:** [`docs/v1.2/home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md`](home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) (HOM-01 to HOM-32, decisions D-86 to D-98 and D-98a to D-98k).
+- **Summary:** The Home screen becomes one place for photos, videos and documents. Filters All, Videos, Photos and Documents (PDF, Word, Excel, PowerPoint, text/CSV, other); app-private **Danaview folders** (nested, mixed types, included in app backups); favourites, recents, search and sort; import from Photos/Gallery, Files and "Open with Danaview" (originals never modified); file actions and a multi-select bar; Save to Files (iOS), Save to Downloads (Android) and share. Files open in **native viewers**: photos natively, videos in the existing player, PDF with PDFKit / `PdfRenderer`, Office and text files with Quick Look on iOS and macOS; on Android text and CSV get an in-app viewer and Office files a card with "Open in another app". **PDF tools:** merge, split, reorder, rotate and delete pages, annotate and highlight, sign, compress, on native PDF engines only. No Office editing. Every player, playlist, queue, Continue Watching and folder feature stays exactly as it is. Editor actions show where the editor runs (iOS and Android in 1.2.0).
 
 ### Pillar 2: AI Studio and advanced subtitles
-- **Document:** [`docs/v1.2/ai-studio/AI_STUDIO_PLAN.md`](ai-studio/AI_STUDIO_PLAN.md) (AIS-01 to AIS-41, decisions D-45 to D-70; these numbers clash with v1.1's ARCH D-45 and are renumbered by AIS-01).
+- **Document:** [`docs/v1.2/ai-studio/AI_STUDIO_PLAN.md`](ai-studio/AI_STUDIO_PLAN.md) (AIS-01 to AIS-54, decisions D-45 to D-70 and D-70a to D-70i; D-45…D-70 clash with v1.1's ARCH D-45 and are renumbered by AIS-01).
 - **Summary:** On-device rich subtitles (styled spans, per-line placement, karaoke from whisper word timings, transcript view, timing tools, font import, style presets) plus an optional, off-by-default AI Studio where the user brings their own key for Gemini, OpenAI, Claude, OpenRouter or Grok to clean up transcripts, detect emotion, add emojis, label speakers and translate tracks. Nothing is sent without an explicit Send, and every AI result is a reviewable, undoable suggestion. iOS and Android only.
+- **Added 2026-10-16:**
+  - **Multi-speaker transcription:** on-device speaker diarization after whisper (sherpa-onnx, pyannote segmentation 3.0, a speaker-embedding model, downloaded once with consent); overlapping speech becomes separate cues on per-speaker subtitle lanes with exact timestamps; per-speaker styles and renamable speakers; optional cloud diarization behind Send.
+  - **AI search over the Files & Media Home:** an on-device index (image labels and text in photos, document text, captions, transcripts, metadata) by default; with AI Studio on, "query to filters" (only the typed question is sent) and per-folder deep indexing (behind Send with a token estimate).
+  - **Shared `danaview_ai` layer** for the editor, search and later the camera and documents, behind one AI Studio switch.
+  - **Genkit Dart spike** as the first provider ticket: Genkit is used behind our own interface only if our guarded transport stays in control; otherwise the custom adapters stay.
 
 ### Pillar 3: Unified Photo & Video Editor
 - **Document:** [`docs/v1.2/video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md`](video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) (VED-01 to VED-32, decisions D-116 to D-145).
@@ -58,10 +68,10 @@
 ## 2. Order and dependencies inside 1.2.0
 
 1. **Starts after v1.1 ships** (BUILD_PLAN INT-05).
-2. **Home (HOM)** has no dependency on the other two and is mostly Flutter work: the quickest pillar and a good first lane.
-3. **AI Studio (AIS)** is the most complete plan (full ticket specs); its core lane (AIS-01…07) and provider lane (AIS-08…10) run in parallel.
+2. **Home (HOM)** has no dependency on the other two. The media part (HOM-01…15) is mostly Flutter work; the documents part (HOM-16…32) adds the `danaview_pdf` plugin, where the Android PDF write path (HOM-27 spike) is the main unknown.
+3. **AI Studio (AIS)** is the most complete plan (full ticket specs); its core lane (AIS-01…07) and provider lane (AIS-42 Genkit spike, then AIS-08…10) run in parallel. The shared AI layer (AIS-43) lands before the Studio core. Diarization (AIS-44…49) follows the word-timing work (AIS-15); AI search (AIS-50…53) needs the Home's file model and folders (HOM-16, HOM-17, HOM-19).
 4. **Unified Editor (VED)**: photo mode (VED-01…14) can run alongside AIS. The beauty phase (VED-15…28) needs the face tracker (VED-16) first. `.dnproj` schema: AIS-04 moves projects to schema 2; VED-15's schema 3 builds on it (or both are merged into one migration before release).
-5. **Cross-pillar links:** HOM-11 and HOM-12 open photos and montages in the VED editor; AIS and VED both extend the v1.1 editor's inspector and action registry, so their UI tickets coordinate on shared files through [INTEGRATION] tickets.
+5. **Cross-pillar links:** HOM-11 and HOM-12 open photos and montages in the VED editor; HOM search uses the AI Studio index (AIS-50); AIS and VED both extend the v1.1 editor's inspector and action registry, so their UI tickets coordinate on shared files through [INTEGRATION] tickets. The 1.3.0 camera reuses `danaview_pdf` (HOM) and `danaview_media_analysis` (AIS) for document scanning.
 
 ---
 
@@ -69,7 +79,7 @@
 
 1. **Graceful degradation:** a capability the device lacks is hidden, not disabled.
 2. **Non-destructive:** originals are never modified; edits live in `.dnphoto` (photos) and `.dnproj` (timelines) recipes.
-3. **Privacy:** Home, photo editing, beauty and subtitles run fully on device. The only optional network use is AI Studio, off by default, with a per-request disclosure.
+3. **Privacy:** Home, documents, PDF tools, search indexing, speaker detection, photo editing, beauty and subtitles run fully on device (speaker detection after a one-time, consented model download). The only optional network use is AI Studio (including AI search), off by default, with a per-request disclosure.
 4. **Owner UI rules:** custom `danaview_ui_kit` components, Figtree, dark UI, computed contrast (≥ 4.5:1), touch targets ≥ 44 px, no overflow at 280–1280 px.
 5. **Player preserved:** Now Playing, Continue Watching, playlists, folders, queue and stream opening stay fully intact.
 
@@ -79,9 +89,9 @@
 
 | Component | Location | Document |
 |---|---|---|
-| **Unified Media Home (1.2)** | `docs/v1.2/home-photo-video-view/` | [HOME_PHOTO_VIDEO_PLAN.md](home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) |
-| **AI Studio & advanced subtitles (1.2)** | `docs/v1.2/ai-studio/` | [AI_STUDIO_PLAN.md](ai-studio/AI_STUDIO_PLAN.md) |
+| **Files & Media Home (1.2)** | `docs/v1.2/home-photo-video-view/` | [HOME_PHOTO_VIDEO_PLAN.md](home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) |
+| **AI Studio, advanced subtitles, speaker lanes & AI search (1.2)** | `docs/v1.2/ai-studio/` | [AI_STUDIO_PLAN.md](ai-studio/AI_STUDIO_PLAN.md) |
 | **Unified Photo & Video Editor (1.2)** | `docs/v1.2/video-editor-update/` | [VIDEO_EDITOR_UPDATE_PLAN.md](video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
 | **Speed test provider fallback (1.2)** | `docs/v1.2/speed-test/` | [SPEED_TEST_FALLBACK_PLAN.md](speed-test/SPEED_TEST_FALLBACK_PLAN.md) |
 | **1.2 roadmap** | `docs/v1.2/` | this file |
-| **1.3 roadmap (desktop editor, native camera)** | `docs/v1.3/` | [V1_3_ROADMAP.md](../v1.3/V1_3_ROADMAP.md) |
+| **1.3 roadmap (desktop editor, native camera with document and code scanning)** | `docs/v1.3/` | [V1_3_ROADMAP.md](../v1.3/V1_3_ROADMAP.md) |
