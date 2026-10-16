@@ -132,11 +132,26 @@ final class NetRecorder extends HttpOverrides {
 
 /// Listens to every job the service starts.
 final class JobWatch {
-  JobWatch(this.service) {
+  JobWatch(this.service, {ResourceGovernor? governor}) {
     _events = service.events.listen((e) {
       if (e is JobStarted) attach(e.job);
     });
+    if (governor != null) {
+      _governor = governor.changes.listen((_) {
+        final r = governor.pauseReason;
+        if (governorPauses.isEmpty || governorPauses.last != r) governorPauses.add(r);
+        if (governor.inBackground) sawBackground = true;
+      });
+    }
   }
+
+  StreamSubscription<void>? _governor;
+
+  /// The governor's pause reason after each of its changes (null = running).
+  final List<PauseReason?> governorPauses = [];
+
+  /// Whether the governor saw the app in the background.
+  bool sawBackground = false;
 
   final TranscriptionService service;
   late final StreamSubscription<TranscriptionEvent> _events;
@@ -177,6 +192,7 @@ final class JobWatch {
 
   Future<void> dispose() async {
     await _events.cancel();
+    await _governor?.cancel();
     for (final s in _subs) {
       await s.cancel();
     }
@@ -315,7 +331,7 @@ abstract final class Captions {
     bool pressCreate = true,
   }) async {
     final t = ed.tester;
-    final watch = JobWatch(service);
+    final watch = JobWatch(service, governor: runtime.governor);
     final tracksBefore = ed.tracksOf(TrackKind.subtitle).length;
     bool generated() => done != null ? done() : ed.tracksOf(TrackKind.subtitle).length > tracksBefore && ed.tracksOf(TrackKind.subtitle).last.items.isNotEmpty;
     bool asksLanguage() => E2eApp.hasKey('captions-needs-language') && E2eApp.hasKey('captions-candidate-en');
@@ -432,6 +448,39 @@ int changedIn(E2eFrame a, E2eFrame b, double y0, double y1) {
   return count;
 }
 
+/// A [testWidgets] that, when it fails, closes what it left open (sheets, the editor), so a failure
+/// does not leave an open editor session in the shared app wiring and break the next test.
+void qaTest(String name, Future<void> Function(WidgetTester tester) body, {bool skip = false}) {
+  testWidgets(name, (tester) async {
+    try {
+      await body(tester);
+    } catch (_) {
+      await cleanup(tester);
+      rethrow;
+    }
+  }, skip: skip);
+}
+
+Future<void> cleanup(WidgetTester tester) async {
+  try {
+    for (var i = 0; i < 6; i++) {
+      final open = [
+        for (final k in ['captions-sheet', 'regenerate-sheet', 'subtitleIo.export', 'subtitleIo.import', 'export-sheet', 'captions-language-picker'])
+          if (E2eApp.hasKey(k)) k,
+      ];
+      if (open.isEmpty) break;
+      await Navigator.of(tester.element(find.byKey(ValueKey<String>(open.first)).first)).maybePop();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+    if (find.byType(EditorScreen).evaluate().isNotEmpty) {
+      final ed = await E2eEditor.attach(tester, waitPreview: false);
+      await ed.close();
+    }
+  } on Object catch (e) {
+    print('DV_QA07_REPORT cleanup after a failure did not finish: $e');
+  }
+}
+
 /// State shared by the tests of one run (one process).
 abstract final class Shared {
   /// q05's project and its uninterrupted result.
@@ -453,7 +502,7 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------------------------
-  testWidgets('q01 consent is shown before any network access; "Not now" downloads nothing', (tester) async {
+  qaTest('q01 consent is shown before any network access; "Not now" downloads nothing', (tester) async {
     await E2eApp.launch(tester);
     // A fresh install: no model, no partial file.
     await Captions.service.deleteModel();
@@ -485,7 +534,7 @@ void main() {
   }, skip: !def);
 
   // ---------------------------------------------------------------------------------------------
-  testWidgets('q02 spoken language: explicit English, then "Detect automatically"', (tester) async {
+  qaTest('q02 spoken language: explicit English, then "Detect automatically"', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
     final ed = await E2eEditor.createProject(tester, name: 'QA07 language ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
@@ -515,7 +564,7 @@ void main() {
   }, skip: !def);
 
   // ---------------------------------------------------------------------------------------------
-  testWidgets('q03 generated captions: undo, SRT/VTT, regenerate, burn-in', (tester) async {
+  qaTest('q03 generated captions: undo, SRT/VTT, regenerate, burn-in', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
     final ed = await E2eEditor.createProject(tester, name: 'QA07 generated ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
@@ -622,7 +671,7 @@ void main() {
   }, skip: !def);
 
   // ---------------------------------------------------------------------------------------------
-  testWidgets('q04 split clip plus a 2x speed piece map to the timeline', (tester) async {
+  qaTest('q04 split clip plus a 2x speed piece map to the timeline', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
     final ed = await E2eEditor.createProject(tester, name: 'QA07 mapping ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
@@ -655,7 +704,7 @@ void main() {
   }, skip: !def);
 
   // ---------------------------------------------------------------------------------------------
-  testWidgets('q05 60 s English clip within the budget', (tester) async {
+  qaTest('q05 60 s English clip within the budget', (tester) async {
     await E2eApp.launch(tester);
     final tier = await Captions.stage(Qa07.requestedTier);
     final (clip, reference) = sixtySecondClip();
@@ -697,7 +746,7 @@ void main() {
   }
 
   // ---------------------------------------------------------------------------------------------
-  testWidgets('q06 thermal and export pausing observed; the result is unchanged', (tester) async {
+  qaTest('q06 thermal and export pausing observed; the result is unchanged', (tester) async {
     final (ed, item, tier) = await sixty(tester);
     final governor = Captions.runtime.governor;
     Captions.clearTranscripts();
@@ -739,7 +788,7 @@ void main() {
   }, skip: !def);
 
   // ---------------------------------------------------------------------------------------------
-  testWidgets('q07 background mid-job: iOS pauses and resumes, Android keeps running', (tester) async {
+  qaTest('q07 background mid-job: iOS pauses and resumes, Android keeps running', (tester) async {
     final (ed, item, tier) = await sixty(tester);
     Captions.clearTranscripts();
     await Captions.open(ed, [item.id]);
@@ -758,8 +807,12 @@ void main() {
       },
     );
     final reference = Shared.sixtyWords;
+    Qa07.report('q07', 'governor: background seen ${run.watch.sawBackground}, platform ${Captions.runtime.governor.platform.name}, '
+        'pause reasons ${run.watch.governorPauses.map((p) => p?.name ?? 'running').toList()}; job progress pauses ${run.watch.pauses.map((p) => p.name).toList()}');
     if (Platform.isIOS) {
-      expect(run.watch.pauses, contains(PauseReason.background), reason: 'iOS pauses the job in the background');
+      expect(run.watch.sawBackground, isTrue, reason: 'the governor received the background lifecycle event');
+      expect(run.watch.governorPauses, contains(PauseReason.background), reason: 'iOS pauses generation in the background');
+      expect(run.watch.governorPauses.last, isNull, reason: 'generation resumed in the foreground');
       if (reference != null) expect(run.words, reference, reason: 'identical result after background/resume');
     } else {
       expect(run.watch.pauses, isNot(contains(PauseReason.background)), reason: 'Android keeps running under the FGS lease');
@@ -773,7 +826,7 @@ void main() {
   }, skip: !def || !E2eHandshake.available);
 
   // ---------------------------------------------------------------------------------------------
-  testWidgets('q08 offline after the download: a job runs with every connection refused', (tester) async {
+  qaTest('q08 offline after the download: a job runs with every connection refused', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
     final net = NetRecorder(refuse: true).install();
@@ -789,7 +842,7 @@ void main() {
   }, skip: !def);
 
   // ---------------------------------------------------------------------------------------------
-  testWidgets('q09 deleting the model asks for consent again', (tester) async {
+  qaTest('q09 deleting the model asks for consent again', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
     final ed = await E2eEditor.createProject(tester, name: 'QA07 delete ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
@@ -819,7 +872,7 @@ void main() {
 
   // ---------------------------------------------------------------------------------------------
   // Job kill and resume (ai.md §16.4 #4; ARCH §16.5 checkpoints)
-  testWidgets('job-kill: the app is killed mid-transcription', (tester) async {
+  qaTest('job-kill: the app is killed mid-transcription', (tester) async {
     await E2eApp.launch(tester);
     await Captions.stage(SpeechModelTier.fast);
     final (clip, _) = sixtySecondClip();
@@ -838,7 +891,7 @@ void main() {
     fail('the host did not kill the app');
   }, skip: Qa07.phase != 'job-kill' || !E2eHandshake.available);
 
-  testWidgets('job-resume: the interrupted-job notice resumes from the checkpoint', (tester) async {
+  qaTest('job-resume: the interrupted-job notice resumes from the checkpoint', (tester) async {
     final saved = E2eHandshake.loadState('qa07-job');
     expect(saved, isNotNull, reason: 'run phase job-kill first');
     final id = ProjectId(saved!['project']! as String);
@@ -862,7 +915,7 @@ void main() {
 
   // ---------------------------------------------------------------------------------------------
   // Real download with resume after kill (one per platform on Wi-Fi; never in CI)
-  testWidgets('download: consent, then the app is killed mid-download', (tester) async {
+  qaTest('download: consent, then the app is killed mid-download', (tester) async {
     await E2eApp.launch(tester);
     await Captions.service.deleteModel();
     final ed = await E2eEditor.createProject(tester, name: 'QA07 download ${stamp()}', media: [E2eMedia.fixture(Fx.frameCounter), E2eMedia.fixture(Fx.speech)]);
@@ -883,7 +936,7 @@ void main() {
     await E2eHandshake.requestAndDie(tester, 'kill');
   }, skip: Qa07.phase != 'download' || !Qa07.network || !E2eHandshake.available);
 
-  testWidgets('download-resume: the download resumes from the partial file', (tester) async {
+  qaTest('download-resume: the download resumes from the partial file', (tester) async {
     final saved = E2eHandshake.loadState('qa07-download');
     expect(saved, isNotNull, reason: 'run phase download first');
     final id = ProjectId(saved!['project']! as String);
