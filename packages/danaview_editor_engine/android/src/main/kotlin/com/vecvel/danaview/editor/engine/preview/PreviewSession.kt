@@ -868,10 +868,23 @@ class PreviewSession internal constructor(
     fun debugCaptureFrame(done: Completion<ByteArray>) {
         if (disposed) return done.fail(cancelled())
         val reply: Completion<PausedFrameRenderer.Captured> = { r -> onLane { done(r.map { it.rgba }) } }
-        enqueue { next ->
-            if (owner == Owner.BACKEND) backend.capture(reply) else renderer.capture(reply)
-            next()
+        // An exact seek in flight is handing the Surface to the backend, which has composed nothing
+        // yet while the Surface still shows the earlier frame (QA-02 s18: a capture right after the
+        // editor's opening seek failed with "nothing composed"). Wait, bounded by the seek's own
+        // timeout, until that seek has put its frame on screen, then read the Surface's owner.
+        val deadline = scheduler.nowMs() + seeks.exactTimeoutMs + CAPTURE_SEEK_GRACE_MS
+        fun capture() {
+            if (disposed) return done.fail(cancelled())
+            if (seeks.isBusy && scheduler.nowMs() < deadline) {
+                scheduler.schedule(CAPTURE_POLL_MS) { capture() }
+                return
+            }
+            enqueue { next ->
+                if (owner == Owner.BACKEND) backend.capture(reply) else renderer.capture(reply)
+                next()
+            }
         }
+        onLane { capture() }
     }
 
     // ---- lifecycle ----
@@ -1295,6 +1308,10 @@ class PreviewSession internal constructor(
 
         /** Clock samples while playing (ARCH §12.2: 10 Hz). */
         const val CLOCK_INTERVAL_MS = 100L
+
+        /** debugCaptureFrame: poll interval and grace past the exact-seek timeout while a seek is in flight. */
+        private const val CAPTURE_POLL_MS = 20L
+        private const val CAPTURE_SEEK_GRACE_MS = 500L
 
         /** Thermal status is polled every this many clock ticks (1 s). */
         private const val THERMAL_POLL_TICKS = 10
