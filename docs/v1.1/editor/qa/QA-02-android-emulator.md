@@ -7,14 +7,18 @@ Emulators on the Windows laptop (BUILD_PLAN QA-02). It also holds the API 28 bel
 Android export extra on API 34 and API 35, the tablet run of scenario 12, and the manual tablet
 steps for the owner (hardware keyboard, mouse, drag from Files and Photos).
 
-**Status (2026-10-16, end of day): not certified.**
+**Status (2026-10-16, 23:50): not certified.**
 
-- **API 35 phone:** 11 of 18 scenarios pass. s16 and s18 last ran on code before e0fa7e8 and
-  failed there. The other 5 still fail on d723c10 code; every one of those 5 points at a test or
-  harness (Mac-owned) cause, except s10, which needs a diagnostic.
-- **Export extra:** 4 of 7 phases pass on both API 34 and API 35. The 3 that fail do so because
-  the host actions do not do what they claim on these images (the activity is not destroyed, the
-  task is not swiped away, Cancel cannot be found).
+- **API 35 phone, full pass on code C (0cfc691, 22:07–22:57, one emulator, fresh install,
+  audio):** 11 of 18 scenarios pass in the batch (s01, s03, s04, s05, s08, s11, s14–s17; s08 and
+  s16 for the first time on recent code). Rerun alone: s02 and s06 pass (flaky in the batch); s18
+  passes after an Android-lane fix to `debugCaptureFrame` (see "Android-lane fixes"). Still failing
+  alone: s07, s09, s10, s12, s13, all with Mac-owned causes. s10 is decided: the engine draws the
+  plan's offline placeholder after the relink (FIX M-8, now a Dart request). s09's recover phase is
+  a new failure on C (FIX M-15).
+- **Export extra:** 4 of 7 phases pass on API 34 (code B) and on API 35 (code C). The 3 that fail
+  do so because the host actions do not do what they claim on these images (the activity is not
+  destroyed, the task is not swiped away, Cancel cannot be found).
 - **Gate devices:** API 29 and API 29 2 GB pass s01, s03 and s04 (and s18 on API 29). s02 fails
   there (Mac, UX-41). The API 28 manual checks pass; the API 28 automated test skips itself (Mac).
 - **Tablet:** s12 fails. The manual checklist has not been run yet.
@@ -182,10 +186,14 @@ notification request, and the s06/s08/s10/s12/s13 test fixes) reached this branc
 | Label | Code | Used for |
 |---|---|---|
 | **A** (before the fixes) | 542dcc6 + Android-lane backups up to 75b6a53, before e0fa7e8 | API 35 full pass 1 (13:12–14:38) and pass 2 (failed batches, 14:43–16:37); API 28 / 29 / 29 2 GB (14:23–16:06, from the `dv2` copy) |
-| **B** (current) | d723c10 + merge 2be8a84 + the final AND-14 `Permissions.kt` (e6a9340) and its tests, up to 0ad2477 | API 35 reruns (19:27–21:44, main checkout); API 34 and tablet runs (19:33–21:10, `dv2` refreshed from the main checkout's tracked files) |
+| **B** | d723c10 + merge 2be8a84 + the final AND-14 `Permissions.kt` (e6a9340) and its tests, up to 0ad2477 | API 35 reruns (19:27–21:44, main checkout); API 34 and tablet runs (19:33–21:10, `dv2` refreshed from the main checkout's tracked files) |
+
+| **C** (current) | 0cfc691: editor-wip c93ad22 merged (incl. the Mac's ebc2fb2: job resume after the first media resolve, preview restart, captions resume fraction) + AND-18's range-touch vectors | API 35 full pass (22:07–22:57) and the solo reruns of the failed batches (23:09–23:43), main checkout, `emulator-5554` only |
+| **C+** | C + the `PreviewSession.debugCaptureFrame` fix (WIP 550b8ac) | the s18 rerun at 23:44–23:46, the PreviewSessionTest run. The solo reruns from s02 on (23:17 onwards) were built with it too; it only changes `debugCaptureFrame` |
 
 Runs on A and on B differ only in the e0fa7e8 fixes, AND-14 and the runner changes. Every API 35
-scenario that failed on A was rerun on B, except s16 and s18 (see the matrix).
+scenario that failed on A was rerun on B, except s16 and s18 (see the matrix). C has no QA-00 test
+or harness change since B: none of FIX M-1 to M-14 has landed yet.
 
 ## Results matrix
 
