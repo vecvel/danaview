@@ -21,16 +21,19 @@ final class ExportStallTests: XCTestCase {
     }
 
     /// The soak-stall-165 project, approximated.
-    static func soakPlan() -> Data {
+    static func soakPlan(images: Bool = true, audioOn: Bool = true, speeds: Bool = true, durUs: Int64 = 31_033_334) -> Data {
         let w = 1280.0, h = 720.0
         var layers: [String] = []
         var n = 0
-        func media(_ t0: Int64, _ dur: Int64, _ s0: Int64, _ rate: Double) {
+        func media(_ t0: Int64, _ dur: Int64, _ s0: Int64, _ rate0: Double) {
             n += 1
+            let rate = speeds ? rate0 : 1
+            let s0 = speeds ? s0 : min(s0, 5_000_000)
             layers.append(layer(String(format: "it_v%011d#v", n), asset: "md_fc0000000001", seq: 0, t0: t0, t1: t0 + dur, s0: s0, rate: rate, w: w, h: h))
         }
         func image(_ t0: Int64, _ dur: Int64) {
             n += 1
+            guard images else { return media(t0, dur, 1_000_000, 1) }
             layers.append(ExportPlans.imageLayer(String(format: "it_i%011d", n), asset: "md_still0000001", t0: t0, t1: t0 + dur, w: w, h: h))
         }
         media(0, 366_667, 6_849_999, 1.5)
@@ -50,12 +53,12 @@ final class ExportStallTests: XCTestCase {
         media(16_100_000, 633_334, 5_600_000, 0.5)
         image(16_733_334, 1_300_000)
         media(18_033_334, 2_000_000, 5_600_000, 0.5)
-        let audio = (0..<3).map { k -> String in
+        let audio = !audioOn ? [] : (0..<3).map { k -> String in
             let t0 = Int64(1_033_334 + k * 10_000_000)
             return ExportPlans.audioSeg(String(format: "it_a%011d#a", k), asset: "md_speech000001", t0: t0, t1: t0 + 10_000_000, s0: 0)
         }
         return ExportPlans.plan(
-            w: 1280, h: 720, fps: 30, gridFps: 30, durUs: 31_033_334,
+            w: 1280, h: 720, fps: 30, gridFps: 30, durUs: durUs,
             assets: [
                 ExportPlans.video("md_fc0000000001", file: "frame_counter_1080p30.mp4", w: 1920, h: 1080, durUs: 8_000_000, hasAudio: false),
                 ExportPlans.image("md_still0000001", file: "still_4k.jpg", w: 3840, h: 2160),
@@ -64,7 +67,29 @@ final class ExportStallTests: XCTestCase {
             layers: layers, audio: audio)
     }
 
-    func testSoakPlanExports() throws {
+    private func run(_ name: String, _ plan: Data, rounds: Int = 1) throws {
+        var options = ExportHarness.Options()
+        options.segmentDurationUs = 10_000_000
+        let h = try ExportHarness(options)
+        harnesses.append(h)
+        let settings = ExportPlans.settings(1280, 720, fps: 30, videoBitrate: 5_000_000, audioBitrate: 192_000)
+        for round in 0..<rounds {
+            let out = h.outputURL()
+            let id = try h.start(self, plan: plan, settings: settings, output: out)
+            let ended = JobEventRecorder.spin(timeout: 70) { h.recorder.ended(id) }
+            let last = h.progress(id).last
+            print("STALLTEST \(name) round \(round) ended=\(ended) last=\(String(describing: last?.framesDone))/\(String(describing: last?.framesTotal)) failure=\(String(describing: h.recorder.failure(id)?.message))")
+            if !ended { try? h.cancel(self, id); return }
+        }
+    }
+
+    func testV1NoAudio() throws { try run("noAudio", ExportStallTests.soakPlan(audioOn: false)) }
+    func testV2NoImages() throws { try run("noImages", ExportStallTests.soakPlan(images: false)) }
+    func testV3NoSpeeds() throws { try run("noSpeeds", ExportStallTests.soakPlan(speeds: false)) }
+    func testV4Plain() throws { try run("plain", ExportStallTests.soakPlan(images: false, speeds: false)) }
+    func testV5PlainNoAudio() throws { try run("plainNoAudio", ExportStallTests.soakPlan(images: false, audioOn: false, speeds: false)) }
+
+    func skip_testSoakPlanExports() throws {
         var options = ExportHarness.Options()
         options.segmentDurationUs = 10_000_000
         let h = try ExportHarness(options)

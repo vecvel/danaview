@@ -16,7 +16,8 @@
 //   clips forward again (one history entry "Cancel reverse"); cancelling a freeze removes the
 //   waiting still with ripple (one entry "Cancel freeze frame"). A failed job keeps a failed row with
 //   "Try again" (the asset goes back to pending-unstarted) and "Dismiss".
-// * **Proxies** (`requestProxy`) follow the asset's `ProxyState`; pending proxies are resumed too.
+// * **Proxies** (`requestProxy`) follow the asset's `ProxyState`; pending proxies are resumed too
+//   (one whose media is offline stays pending until the media is back).
 // * **Other producers** (waveforms, captions, model download) report through [TasksController.track]
 //   (a `MediaJob`) or [TasksController.begin] (a handle they drive).
 // * **Export gating.** [TasksController.exportBlockersOf] counts the clips that wait for a pending
@@ -429,7 +430,7 @@ class TasksController {
             break;
         }
       } else if (status is ReadyStatus && asset.proxy == ProxyState.pending) {
-        _startProxy(asset.id);
+        _startProxy(asset.id, resume: true);
       }
     }
   }
@@ -544,13 +545,15 @@ class TasksController {
     _editor.apply(CompositeCommand(label, commands));
   }
 
-  bool _startProxy(MediaId id) {
+  /// Starts the proxy job of [id]. A [resume]d pending proxy whose source is offline stays
+  /// pending (it starts once the media is back); a requested one goes back to none.
+  bool _startProxy(MediaId id, {bool resume = false}) {
     final project = _project;
     final asset = project?.pool[id];
     if (project == null || asset == null) return false;
     final source = _session.compiler?.resolve(project, id);
     if (source == null) {
-      _update(id, (a) => a.copyWith(proxy: ProxyState.none));
+      if (!resume) _update(id, (a) => a.copyWith(proxy: ProxyState.none));
       return false;
     }
     final MediaJob<GeneratedAsset> job;
