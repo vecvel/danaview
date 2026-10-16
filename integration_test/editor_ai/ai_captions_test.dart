@@ -48,6 +48,7 @@ import 'package:danaview_editor/src/editor/contracts/action_binding.dart';
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
 import 'package:danaview_editor/src/editor/flows/captions/auto_captions_controller.dart';
 import 'package:danaview_editor/src/editor/flows/captions/regenerate_sheet.dart' show RegenerateSheet;
+import 'package:danaview_editor/src/editor/flows/export/export_state.dart' show ExportUiNotice, ExportUiWarnings;
 import 'package:danaview_editor/src/editor/state/editor_state.dart' show SelectMode;
 import 'package:danaview_editor_core/formats.dart';
 import 'package:danaview_editor_core/model.dart';
@@ -636,12 +637,11 @@ Future<void> q03(WidgetTester tester, E2eEditor ed) async {
   await E2eExport.expectConformant(a.video, width: 1280, height: 720, duration: duration, rate: ed.rate);
   final burned = laneCues().take(3).toList();
   final mids = [for (final c in burned) (c.start + c.end) ~/ 2];
-  // A time no cue covers (± 2 frames), inside the video, for "identical between cues".
+  // A time no cue covers (± 2 frames), for "identical between cues".
   final frame = ed.rate.timeOfFrame(1);
   final all = laneCues();
-  final videoEnd = ed.mainTrack.items.last.end;
   TimeUs? between;
-  for (var t = frame * 6; t < videoEnd - frame * 6; t += frame) {
+  for (var t = frame * 6; t < duration - frame * 6; t += frame) {
     if (all.every((c) => t < c.start - 2 * frame || t > c.end + 2 * frame)) {
       between = t;
       break;
@@ -742,7 +742,6 @@ Future<void> q06(WidgetTester tester, E2eEditor ed) async {
   final item = clipNamed(ed, 'qa07-60s-en.m4a');
   final governor = Captions.runtime.governor;
   final reference = Shared.sixtyWords;
-  bool early(JobWatch w) => w.transcribing && (w.last?.fraction ?? 0) >= 0.05;
 
   // Thermal: critical pauses generation at the next chunk boundary; back to nominal resumes after the
   // governor's recovery delay (10 s). On a device the real thermal state is observed in the soak (§16.4 #2).
@@ -752,13 +751,25 @@ Future<void> q06(WidgetTester tester, E2eEditor ed) async {
   var thermalDone = false;
   final thermal = await Captions.create(
     ed,
-    trigger: early,
+    // Before generation starts (a 60 s unit is one chunk on a fast device, so a pause requested
+    // mid-chunk only takes effect after it).
+    trigger: (w) => w.last != null && w.last!.phase != TranscriptionPhase.transcribing && (w.last!.processed == 0),
     action: (w) async {
       governor.debugDeviceEvent(const whisper.ThermalChanged(whisper.ThermalLevel.critical));
       await E2eApp.pumpUntil(tester, () => w.pauses.contains(PauseReason.thermal), what: 'the thermal pause', timeout: const Duration(seconds: 30));
+      // Generation stops at the next chunk boundary (the chunk in flight may finish): the job
+      // stays paused and adds nothing until the device cools down.
+      final tracks = ed.tracksOf(TrackKind.subtitle).length;
       final at = w.last?.processed;
-      await tester.pump(const Duration(seconds: 2));
-      expect(w.last?.processed, at, reason: 'no progress while thermally paused');
+      final until = DateTime.now().add(const Duration(seconds: 3));
+      while (DateTime.now().isBefore(until)) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      Qa07.report('q06', 'thermal critical at ${at ?? 0} us processed; after 3 s: phase ${w.last?.phase.name}, paused ${w.last?.paused?.name}, '
+          'processed ${w.last?.processed} us, captions added ${ed.tracksOf(TrackKind.subtitle).length != tracks}');
+      expect(ed.tracksOf(TrackKind.subtitle).length, tracks, reason: 'no captions are added while thermally paused');
+      expect(w.last?.paused, PauseReason.thermal, reason: 'still paused while critical');
+      expect(w.last?.processed ?? 0, at ?? 0, reason: 'no audio is processed while thermally paused');
       await E2eApp.screenshot(tester, 'qa07_q06_thermal');
       governor.debugDeviceEvent(const whisper.ThermalChanged(whisper.ThermalLevel.nominal));
       thermalDone = true;
@@ -769,28 +780,35 @@ Future<void> q06(WidgetTester tester, E2eEditor ed) async {
   if (reference != null) expect(thermal.words, reference, reason: 'thermally paused run gives the uninterrupted result');
   await undoCaptions(ed);
 
-  // Export: the job pauses while an export runs, then continues.
+  // Export: a job started while an export runs waits for it (ai.md §6.3), then continues. The
+  // export is started first: a 60 s unit is one chunk here, so a job already transcribing would
+  // finish its chunk before an export could pause it.
+  final handoffs = E2eApp.world.engine.files.records.length;
+  final settings = await E2eExport.start(ed);
+  await E2eApp.pumpUntil(tester, () {
+    final st = E2eExport.state(ed);
+    if (st is ExportUiNotice) unawaited(E2eExport.controller(ed).confirmNotice());
+    if (st is ExportUiWarnings) unawaited(E2eExport.controller(ed).confirmWarnings());
+    return governor.exportActive;
+  }, what: 'the export to run', timeout: const Duration(seconds: 60));
   Captions.clearTranscripts();
   await Captions.open(ed, [item.id]);
   await Captions.configure(ed, tier: tier, language: const FixedLanguage('en'));
-  var exported = false;
+  var exportedWhileWaiting = false;
   final export = await Captions.create(
     ed,
-    trigger: early,
+    trigger: (w) => w.pauses.contains(PauseReason.waitingForExport) || w.pauses.contains(PauseReason.exportRunning),
     action: (w) async {
-      await E2eApp.tapKey(tester, 'captions-hide');
-      await E2eApp.pumpUntil(tester, () => !E2eApp.hasKey('captions-sheet'), what: 'the captions sheet to hide');
-      final handoffs = E2eApp.world.engine.files.records.length;
-      final settings = await E2eExport.start(ed);
-      await E2eApp.pumpUntil(tester, () => w.pauses.contains(PauseReason.exportRunning) || w.pauses.contains(PauseReason.waitingForExport),
-          what: 'the export pause', timeout: const Duration(seconds: 60));
-      await E2eExport.finish(ed, settings, handoffs: handoffs);
-      exported = true;
+      expect(w.last?.processed ?? 0, 0, reason: 'nothing transcribed while the export runs');
+      await E2eApp.screenshot(tester, 'qa07_q06_waiting_for_export');
+      await E2eApp.pumpUntil(tester, () => !governor.exportActive, what: 'the export to finish', timeout: const Duration(minutes: 6));
+      exportedWhileWaiting = true;
     },
   );
+  await E2eExport.finish(ed, settings, handoffs: handoffs);
   Qa07.report('q06', 'thermal run: job pauses ${thermal.watch.pauses.map((p) => p.name).toList()}; export run: job pauses ${export.watch.pauses.map((p) => p.name).toList()}; '
       'same words as q05: ${reference == null ? 'n/a' : '${thermal.words.join(' ') == reference.join(' ')}/${export.words.join(' ') == reference.join(' ')}'}');
-  expect(exported, isTrue, reason: 'an export ran while the job ran');
+  expect(exportedWhileWaiting, isTrue, reason: 'the job waited while the export ran');
   expect(export.watch.pauses.any((p) => p == PauseReason.exportRunning || p == PauseReason.waitingForExport), isTrue, reason: 'the job reported the export pause');
   if (reference != null) expect(export.words, reference, reason: 'export-paused run gives the uninterrupted result');
   await undoCaptions(ed);
@@ -806,7 +824,9 @@ Future<void> q07(WidgetTester tester, E2eEditor ed) async {
   TimeUs? processedAfter;
   final run = await Captions.create(
     ed,
-    trigger: (w) => w.transcribing && (w.last?.fraction ?? 0) >= 0.2,
+    // Before generation starts: a 60 s unit is one chunk on a fast device and would finish before
+    // the host could act; the background pause aborts the chunk in flight anyway (ai.md §6.3).
+    trigger: (w) => w.last != null && w.last!.phase != TranscriptionPhase.transcribing && w.last!.processed == 0,
     action: (w) async {
       processedBefore = w.last?.processed;
       final ack = await E2eHandshake.request(tester, 'background', args: {'seconds': 8}, timeout: const Duration(seconds: 60));
