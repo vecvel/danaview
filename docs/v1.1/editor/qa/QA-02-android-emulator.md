@@ -815,9 +815,10 @@ review items, not QA-02 reproductions. They are tracked there, not here.
 
 **Status on code D (3d38ef2, API 35, 2026-10-17).** Confirmed fixed on API 35 in the batch: M-1
 (s06), M-2 (s07), M-3 (s12 phone), M-5 (s13 length), M-6 for `destroyActivity` (fgs-check
-`finished`), M-7 (cancel), M-8 (s10), M-14 (s08 ran in the batch; the extra runs after it), M-15
-(s09). Not rerun by this pass (other devices): M-4 (tablet), M-9 (API 29), M-10 (API 28). Still
-open: the swipe half of M-6, now M-21.
+`finished`), M-7 (cancel), M-8 (s10), M-15 (s09). M-14 was not exercised (s08 runs before the
+death phase and every batch starts from cleared data); s08 passed in the batch. Not rerun by this
+pass (other devices): M-4 (tablet), M-9 (API 29), M-10 (API 28). Still open: the swipe half of
+M-6, now M-21.
 
 **M-21. `swipeFromRecents` removes another app's task, not the app's** (QA-00 host harness,
 `integration_test/editor/tool/e2e_host.sh` `android_swipe_from_recents`, lines 199–216 on D).
@@ -1005,11 +1006,17 @@ the code C pass, everything that was in `emulator-5554/` was moved to
 `_before_c93ad22/emulator-5554/`. Paths of code B runs cited elsewhere in this report as
 `emulator-5554/…` or `solo/…` (with "B") are now under that folder.
 
+Before the code D pass, everything that was in `emulator-5554/` (the code C and C+ evidence) was
+moved to `_before_3d38ef2/emulator-5554/`; the C/C+ rows below now live under that folder.
+
 | Folder | Device | Code | Content |
 |---|---|---|---|
-| `emulator-5554/full/` (`logs/`, `screens/`, `files/`, `summary.txt`, `runner.log`) | API 35 | C | the full pass, 22:07–23:06, fresh install, audio, models, one emulator |
-| `emulator-5554/solo/{s10,s18,s09,s02,s06,s07,s12,s13,x_fgs,x_cancel,x_swipe}/` | API 35 | C (s02 on: C+) | each failed batch rerun alone on a fresh install (23:07–23:43); `s10/hostcaps/` holds the host screenshots of the relink |
-| `emulator-5554/solo/s18_capturefix/` | API 35 | C+ | s18 alone after the capture fix (pass), `PreviewSessionTest_connected.log`, `preview_unit.log` |
+| `emulator-5554/full/` (`logs/`, `screens/`, `files/`, `summary.txt`, `runner.log`, `s09_close_trace.txt`) | API 35 | **D** | the full pass, 2026-10-17 00:58–01:55, fresh install, audio, models, one emulator |
+| `emulator-5554/solo/s13/` | API 35 | **D** | s13 alone on a freshly booted emulator (pass) |
+| `emulator-5554/solo/x_swipe/` | API 35 | **D** | the swipe pair alone (swipe pass, swipe-check fail, M-21) |
+| `_before_3d38ef2/emulator-5554/full/` (`logs/`, `screens/`, `files/`, `summary.txt`, `runner.log`) | API 35 | C | the full pass, 22:07–23:06, fresh install, audio, models, one emulator |
+| `_before_3d38ef2/emulator-5554/solo/{s10,s18,s09,s02,s06,s07,s12,s13,x_fgs,x_cancel,x_swipe}/` | API 35 | C (s02 on: C+) | each failed batch rerun alone on a fresh install (23:07–23:43); `s10/hostcaps/` holds the host screenshots of the relink |
+| `_before_3d38ef2/emulator-5554/solo/s18_capturefix/` | API 35 | C+ | s18 alone after the capture fix (pass), `PreviewSessionTest_connected.log`, `preview_unit.log` |
 | `_before_c93ad22/emulator-5554/` (`logs/`, `screens/`, `screens_run2/`, `files/`, `summary_run2.txt`) | API 35 | B | rerun run 1 (19:27–20:30) and run 2 (20:40–21:27). `logs/` holds only the latest log of each batch, so later runs overwrote run 1's logs of s06–s13. Run 1 wrote no `summary.txt`; its runner log was not kept under `build/`. `summary.txt` now holds only the solo s07 row. |
 | `_before_c93ad22/emulator-5554/solo/{s06,s07,s08,s10}/` | API 35 | B | single-batch reruns on a fresh install (21:33–21:44) |
 | `_before_c93ad22/emulator-5554/solo/s08_nofresh/` | API 35 | B | s08 alone at 21:30–21:32, no fresh install and no reset, right after the death phases |
@@ -1031,6 +1038,14 @@ Superseded and not used: `_run3_cert/`, `_rerun4_cert/`, `_stale_before_1145/`,
 BUILD_PLAN acceptance: every scenario passes on API 35, the gate/minimal/FGS checks pass on API 29
 and 34, the API 28 checks pass, and the tablet keyboard/mouse and drop evidence is recorded, with
 artifacts attached.
+
+**Update after the code D pass (2026-10-17, API 35):** items 1 and 2 below are done for API 35
+except two batch items: s13 (failed in the batch only because the host microphone fed the emulator
+silence; passes alone: emulator reality) and swipe-check (FIX M-21, Mac harness). fgs-check now
+proves the detached export on API 35 (item 3, fgs half); swipe-check still needs M-21. To finish
+API 35: after M-21, rerun the full command once more on one code version (or, if the owner accepts
+the s13 host-microphone reality, rerun s13 and the swipe pair in a batch on that code). Items 3–9
+for the other devices are unchanged by this pass.
 
 1. **Mac fixes** (QA-00 unless noted): M-1 (s06 close), M-2 (s07 threshold), M-3 and M-4 (s12
    marquee and tablet rail), M-5 (s13 recording length), M-6 (destroyActivity and
