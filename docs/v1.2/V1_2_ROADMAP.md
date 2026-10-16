@@ -49,6 +49,12 @@
 
 ---
 
+### Also in 1.2.0: speed test provider fallback
+- **Document:** [`docs/v1.2/speed-test/SPEED_TEST_FALLBACK_PLAN.md`](speed-test/SPEED_TEST_FALLBACK_PLAN.md) (ST-01 to ST-05).
+- **Summary:** keeps Cloudflare's public endpoint as the default ($0), adds M-Lab as a fallback only after a consent prompt (M-Lab publishes results publicly), shows no provider names in the speed-test UI, and names the providers in the privacy policy.
+
+---
+
 ## 2. Order and dependencies inside 1.2.0
 
 1. **Starts after v1.1 ships** (BUILD_PLAN INT-05).
@@ -76,5 +82,6 @@
 | **Unified Media Home (1.2)** | `docs/v1.2/home-photo-video-view/` | [HOME_PHOTO_VIDEO_PLAN.md](home-photo-video-view/HOME_PHOTO_VIDEO_PLAN.md) |
 | **AI Studio & advanced subtitles (1.2)** | `docs/v1.2/ai-studio/` | [AI_STUDIO_PLAN.md](ai-studio/AI_STUDIO_PLAN.md) |
 | **Unified Photo & Video Editor (1.2)** | `docs/v1.2/video-editor-update/` | [VIDEO_EDITOR_UPDATE_PLAN.md](video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
+| **Speed test provider fallback (1.2)** | `docs/v1.2/speed-test/` | [SPEED_TEST_FALLBACK_PLAN.md](speed-test/SPEED_TEST_FALLBACK_PLAN.md) |
 | **1.2 roadmap** | `docs/v1.2/` | this file |
 | **1.3 roadmap (desktop editor, native camera)** | `docs/v1.3/` | [V1_3_ROADMAP.md](../v1.3/V1_3_ROADMAP.md) |
