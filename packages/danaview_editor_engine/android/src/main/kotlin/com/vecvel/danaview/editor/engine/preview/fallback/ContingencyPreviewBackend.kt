@@ -32,6 +32,7 @@ import android.util.Log
 import android.view.Surface
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.OptIn
+import androidx.annotation.VisibleForTesting
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
@@ -157,6 +158,7 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
     private fun fallBack(host: PreviewBackendHost, done: Completion<Unit>, why: String) {
         Log.w(EngineContext.TAG, "contingency preview unavailable ($why); playing paused-exact stills")
         val d = StillFramesBackend()
+        if (muted) d.setMuted(true)
         delegate = d
         d.open(host, done)
     }
@@ -164,6 +166,13 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
     /** Whether the API 29 engine may run here (the editor gate; lint's NewApi check reads it). */
     @ChecksSdkIntAtLeast(api = HwbImport.MIN_API)
     private fun engineApi(): Boolean = Build.VERSION.SDK_INT >= HwbImport.MIN_API
+
+    /**
+     * Whether [open] has run (it sets [host]). The session manager can reach the fire-and-forget
+     * calls (mute, trim) while a session is still opening; before [open] they only store their
+     * state or do nothing, because [onEngine] needs [host] and nothing is built yet (INT-07 review D1).
+     */
+    private fun opened(): Boolean = this::host.isInitialized
 
     /** Runs [block] on danaview-gl with the engine; failures complete [done]. */
     private fun <T> onEngine(done: Completion<T>, block: (MultiPlayerEngine) -> T) {
@@ -227,25 +236,36 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
 
     override fun setRenderSize(width: Int, height: Int) {
         delegate?.let { return it.setRenderSize(width, height) }
-        if (!engineApi()) return
+        if (!engineApi() || !opened()) return
         onEngine { it.setRenderSize(width, height) }
     }
 
     override fun setUseProxies(on: Boolean) {
         delegate?.let { return it.setUseProxies(on) }
-        if (!engineApi()) return
+        if (!engineApi() || !opened()) return
         onEngine { it.setUseProxies(on) }
     }
 
-    /** Audio muted while a voice recording captures (INT-07); applied to the engine when it is created. */
+    /**
+     * Audio muted while a voice recording captures (INT-07); [open] applies it to the engine (on
+     * danaview-gl, before the engine is published) and to the stills delegate when it creates them.
+     */
     @Volatile
     private var muted = false
 
-    /** INT-07: mutes the audio decks while a voice recording captures. */
+    /** The stored mute flag that [open] applies to the engine it creates (tests). */
+    @get:VisibleForTesting
+    internal val mutedForNewEngine: Boolean get() = muted
+
+    /**
+     * INT-07: mutes the audio decks while a voice recording captures. Before [open] (the session is
+     * still opening) only the flag is stored; [open] applies it. After [open], the engine call is
+     * queued on danaview-gl behind the engine's creation, so it always finds the engine.
+     */
     override fun setMuted(muted: Boolean) {
         this.muted = muted
         delegate?.let { return it.setMuted(muted) }
-        if (!engineApi()) return
+        if (!engineApi() || !opened()) return
         onEngine { it.setMuted(muted) }
     }
 
@@ -257,7 +277,7 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
 
     override fun trim(level: CacheTrimLevelMsg) {
         delegate?.let { return it.trim(level) }
-        if (!engineApi()) return
+        if (!engineApi() || !opened()) return
         onEngine { it.trim(level) }
     }
 
