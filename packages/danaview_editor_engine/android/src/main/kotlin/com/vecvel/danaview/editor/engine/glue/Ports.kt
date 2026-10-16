@@ -79,7 +79,7 @@ interface EngineRootPort {
     /** Drops caches per level (fans out to the cache owners' lanes). */
     fun trimCaches(level: CacheTrimLevelMsg)
 
-    /** The localized export notification texts from `initialize` (INT-07; validated by the glue). */
+    /** The localized export notification texts from `initialize` (INT-07; the glue applied the M-19 per-string fallbacks). */
     fun setExportTexts(texts: ExportNotificationTextsMsg) = Unit
 }
 

@@ -1,5 +1,6 @@
 // OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: `powerState`, D-45, on main; by INT-07:
-// `materializePick` on danaview-io, intoDir inside `<cache>/work/` or `permissionDenied`)
+// `materializePick` on danaview-io, intoDir inside `<cache>/work/` or `permissionDenied`; M-16: the
+// port only hands the copy off to its own thread there, so danaview-io never waits for a copy)
 //
 // `PlatformHostApi` glue (ARCH §9, §12.4, §12.6, §15). UI flows (pick, saveToFiles, share,
 // notification permission, background leases, drop target) run on main; saveToPhotos, URI grants,

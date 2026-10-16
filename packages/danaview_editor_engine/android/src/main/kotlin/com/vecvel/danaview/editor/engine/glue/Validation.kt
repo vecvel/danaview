@@ -18,6 +18,7 @@ import com.vecvel.danaview.editor.engine.core.Paths
 import com.vecvel.danaview.editor.engine.pigeon.EditingModeKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.EditingModeMsg
 import com.vecvel.danaview.editor.engine.pigeon.EncodeSettingsMsg
+import com.vecvel.danaview.editor.engine.export.ExportNotificationTexts
 import com.vecvel.danaview.editor.engine.pigeon.ExportNotificationTextsMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobRequestMsg
@@ -125,20 +126,11 @@ object Check {
         return dir
     }
 
-    /** INT-07: every localized notification text non-empty and at most 256 chars. */
-    fun notificationTexts(t: ExportNotificationTextsMsg) {
-        val all = listOf(
-            "exportTitle" to t.exportTitle, "workTitle" to t.workTitle, "exporting" to t.exporting,
-            "exportingProgress" to t.exportingProgress, "working" to t.working, "workingProgress" to t.workingProgress,
-            "cancel" to t.cancel, "savedToGallery" to t.savedToGallery, "exportFinished" to t.exportFinished, "more" to t.more,
-            "progressChannelName" to t.progressChannelName, "progressChannelDescription" to t.progressChannelDescription,
-            "doneChannelName" to t.doneChannelName, "doneChannelDescription" to t.doneChannelDescription,
-        )
-        for ((name, value) in all) {
-            if (value.isBlank()) fail("texts.$name", "empty")
-            if (value.length > 256) fail("texts.$name", "too long")
-        }
-    }
+    /**
+     * INT-07 / M-19: the localized notification texts with every blank or over-256-char string
+     * replaced by its English default (never fails: the texts are cosmetic, ExportNotificationTexts).
+     */
+    fun notificationTexts(t: ExportNotificationTextsMsg): ExportNotificationTextsMsg = ExportNotificationTexts.withFallbacks(t)
 
     /** A free-text title (notification text): at most 1024 chars. */
     fun title(name: String, value: String) {

@@ -3,7 +3,8 @@
 // `ExportHostApi` glue (ARCH §12.4, §12.6, §14.3). Everything runs on danaview-export. Android exports
 // are not segment-resumable (D-22: the foreground service keeps them running), so `resume` answers
 // `notSupportedOnDevice` here without reaching the coordinator. INT-07: `start` may carry localized
-// notification texts (validated, then set before the job starts).
+// notification texts (set before the job starts; M-19: a blank or over-long string falls back to its
+// English default instead of failing the start).
 
 package com.vecvel.danaview.editor.engine.glue
 
@@ -39,15 +40,18 @@ class ExportHostApiImpl(
         whenDetached: DetachedHandoffMsg,
         texts: ExportNotificationTextsMsg?,
         callback: (Result<String>) -> Unit,
-    ) = dispatch.async(threads.export, callback, check = {
-        Check.planBytes("plan", plan)
-        Check.settings(settings)
-        Check.output("outputPath", outputPath, paths())
-        Check.title("title", title)
-        texts?.let { Check.notificationTexts(it) }
-    }) { done ->
-        texts?.let { port.setExportTexts(it) }
-        port.start(plan, settings, outputPath, title, whenDetached, done)
+    ) {
+        var clean: ExportNotificationTextsMsg? = null
+        dispatch.async(threads.export, callback, check = {
+            Check.planBytes("plan", plan)
+            Check.settings(settings)
+            Check.output("outputPath", outputPath, paths())
+            Check.title("title", title)
+            clean = texts?.let { Check.notificationTexts(it) }
+        }) { done ->
+            clean?.let { port.setExportTexts(it) }
+            port.start(plan, settings, outputPath, title, whenDetached, done)
+        }
     }
 
     override fun resume(jobId: String, callback: (Result<String>) -> Unit) =

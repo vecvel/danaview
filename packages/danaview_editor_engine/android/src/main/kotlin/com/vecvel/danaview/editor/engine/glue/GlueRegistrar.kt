@@ -1,5 +1,6 @@
 // OWNER: ENG-08 (frozen by ENG-06, D-42; amended by INT-06: the preview glue gets the roots; by
-// INT-07: the recording bridge, RecordingSignals, installed once per process)
+// INT-07: the recording bridge, RecordingSignals, installed once per process; M-16: detach cancels
+// this engine's pick copies)
 //
 // Installs the six Pigeon host APIs and the event stream handler of ARCH §12.6 on one Flutter
 // engine's messenger, and removes them when that engine detaches. Every Flutter engine shares the
@@ -26,6 +27,7 @@ class GlueRegistrar private constructor(
     private val ctx: EngineContext,
     private val messenger: BinaryMessenger,
     private val previewPort: PreviewPort,
+    private val platformPort: ContextPlatformPort,
     private val events: EngineEventsHandler,
 ) {
     /** Removes every handler from the messenger and releases this engine's preview sessions. */
@@ -38,6 +40,11 @@ class GlueRegistrar private constructor(
         PlatformHostApi.setUp(messenger, null)
         EventChannel(messenger, EVENTS_CHANNEL).setStreamHandler(null)
         events.detach()
+        try {
+            platformPort.cancelMaterializations()
+        } catch (t: Throwable) {
+            GlueLog.warn("pick copy cancel", t)
+        }
         // Nothing to release (and no lane to start) when this process never opened a preview.
         if (ctx.threads.started().none { it.spec == LaneSpec.PREVIEW }) return
         try {
@@ -70,14 +77,15 @@ class GlueRegistrar private constructor(
             JobsHostApi.setUp(messenger, JobsHostApiImpl(threads, ContextJobsPort(ctx), paths, dispatch))
             ExportHostApi.setUp(messenger, ExportHostApiImpl(threads, ContextExportPort(ctx), paths, dispatch))
             RecorderHostApi.setUp(messenger, RecorderHostApiImpl(threads, ContextRecorderPort(ctx), paths, dispatch))
-            PlatformHostApi.setUp(messenger, PlatformHostApiImpl(threads, ContextPlatformPort(ctx), paths, dispatch))
+            val platformPort = ContextPlatformPort(ctx)
+            PlatformHostApi.setUp(messenger, PlatformHostApiImpl(threads, platformPort, paths, dispatch))
 
             val events = EngineEventsHandler(ctx.events)
             EngineEventsStreamHandler.register(messenger, events)
 
             MemorySignals.installOnce(ctx.appContext, ctx.events, { ctx.pathsOrNull != null }) { level -> root.trimCaches(level) }
             RecordingSignals.installOnce(ctx)
-            return GlueRegistrar(ctx, messenger, previewPort, events)
+            return GlueRegistrar(ctx, messenger, previewPort, platformPort, events)
         }
     }
 }
