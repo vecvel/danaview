@@ -66,6 +66,15 @@ enum D7Plans {
 
 // MARK: - Tests
 
+final class Atomic {
+    private let lock = NSLock()
+    private var v = false
+    var value: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return v }
+        set { lock.lock(); v = newValue; lock.unlock() }
+    }
+}
+
 final class ExportD7Tests: XCTestCase {
     private static var reversedURL: URL?
     private static var reverseRoots: TempRoots?
@@ -135,6 +144,41 @@ final class ExportD7Tests: XCTestCase {
         lock.lock(); defer { lock.unlock() }
         print("D7 probe: read \(n) buffers, last \(last) s, status \(reader.status.rawValue) \(String(describing: reader.error))")
         return (n, last)
+    }
+
+    func testProbeSoakMixUnderLoad() throws {
+        let h = try ExportHarness()
+        defer { h.remove() }
+        let plan = try RenderPlanDecoder.decodePlan(D7Plans.soak800())
+        let stop = Atomic()
+        for i in 0..<6 {
+            Thread.detachNewThread {
+                Thread.current.qualityOfService = i % 2 == 0 ? .userInitiated : .utility
+                var x = 0.0
+                while !stop.value { for k in 0..<10_000 { x += sin(Double(k)) } }
+                _ = x
+            }
+        }
+        defer { stop.value = true }
+        var hung = 0
+        for round in 0..<4 {
+            let comps = try (0..<4).map { _ in try buildComposition(h.paths, plan) }
+            let group = DispatchGroup()
+            let lock = NSLock()
+            for (k, c) in comps.enumerated() {
+                group.enter()
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let r = try? self.readMix(c, timeout: 40)
+                    lock.lock()
+                    if r == nil { hung += 1 }
+                    lock.unlock()
+                    print("D7 load round \(round) reader \(k): \(String(describing: r))")
+                    group.leave()
+                }
+            }
+            group.wait()
+        }
+        print("D7 load: hung \(hung) of 16")
     }
 
     func testProbeSoakMix() throws {
