@@ -64,7 +64,7 @@ Lockup construction, for a tile of side t (t = 128 in the files):
 
 ## Store graphics
 
-`store/feature_graphic.svg` is the source of the Google Play feature graphic (`android/fastlane/metadata/android/en-US/images/featureGraphic.png`, 1024 × 500, RGB without alpha). It has the master tile on the right with a soft indigo glow, and on the left the eyebrow "VECVEL PRESENTS", the outlined wordmark, the tagline "Your photos, videos and docs. View, edit and create — all in one place." and three pills: "VIEW & PLAY", "EDIT & CREATE" and "PRIVATE BY DEFAULT". All text is outlined. Important content stays at least 64 px from the edges and out of the centre-bottom (x 352 to 672, y 380 and below).
+`store/feature_graphic.svg` is the source of the Google Play feature graphic (`android/fastlane/metadata/android/en-US/images/featureGraphic.png`, 1024 × 500, RGB without alpha). It has the master tile on the right with a soft indigo glow, and on the left the eyebrow "VECVEL PRESENTS", the outlined wordmark, the tagline "Your photos, videos and docs. View, edit and create. All in one place." (no em dash) and three borderless pills: "VIEW & PLAY", "EDIT & CREATE" and "PRIVATE BY DEFAULT". All text is outlined. Important content stays at least 64 px from the edges and out of the centre-bottom (x 352 to 672, y 380 and below).
 
 The store screenshots were removed because they showed the old name and play icon. Each screenshots folder has a README: regenerate them as real captures of the current app before the store launch. The iOS `metadata`, `screenshots` and `mac_screenshots` lanes refuse to run while their folder has no images, because they upload with `overwrite_screenshots`.
 
