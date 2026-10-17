@@ -6,13 +6,13 @@
 
 ---
 
-## 0. Live status (kept current; last update 2026-10-17 01:10 IST)
+## 0. Live status (kept current; last update 2026-10-17 10:30 IST)
 
 | Ticket | State | What's left |
 |---|---|---|
 | **QA-01** iOS simulator E2E | **Nearly certified.** Full run 16/18; s07 and s13 pass when re-run alone. iPad s12 passes (V-U5 certified on the simulator). iOS 18.2 lane 3/3 | Fix **FIX-IOS-12-1**: the second back-to-back export stalls in "rendering" in the s07 full run (IOS-12 `ExportCoordinator.swift` and its writer; probably the same family as D7). The manual iPad Files/Photos drop and the physical-keyboard step need a person (screenshots in `build/e2e/ios/2C9213E9-.../manual/`). The iPhone 7/8 smoke needs devices |
-| **QA-05** soak and crash recovery | **Partial.** The process-death phases pass after FIX-QA05-D5. The seeded soak (5150) fails on **D7** | Fix **D7**: iOS export audio read hang, or SIGSEGV in `MixAudioSource.nextAudio()` `copyNextSampleBuffer` (§4.1), then re-run the soak |
-| **QA-02** Android emulator E2E | **Windows lane.** The Kotlin INT-07/ENG-06 fixes are **done and merged** into `editor-wip` (00:47): M-11 `e5ba18d`, M-12 `583c693`, M-16 `e42522a`, M-18 with the native M-17 free-space preflight `7467769`, M-19 `19338db`, M-20 `ee908e4` | After the Mac merges round 7: one clean full QA-02 pass (§4.3) |
+| **QA-05** soak and crash recovery | **iOS side green.** **D7 fixed** (FIX-IOS-D7, §4.1) and verified 2026-10-17: seeded soak (5150) 965 ops, 0 failed ops, 14 exports, no crash, memory −15.9 %, 39/39 reopens valid; the process-death chain passes on the same code. `ExportD7Tests` 6/6. See `qa/QA-05-soak.md` §2 | Android soak/death on the Windows lane, and the device-only steps (§6 of the report) |
+| **QA-02** Android emulator E2E | **Windows lane, code D run done** (`ff95929`, merged): 17 of 18 scenarios and 6 of 7 extra phases, s08 in the batch, first AND-12 detached-export proof on API 35 | **FIX M-21**: the host's `swipeFromRecents` removes another app's task first, so `swipe-check` reports `ExportReattach.none` in the batch and alone. s13 fails in the batch only on emulator mic silence (passes alone). Then close the ticket |
 | **INT-05** release | **Prepared, not applied** (release-checklist) | Owner "go" |
 | Round 7 (Mac Dart fixes for QA-02: M-1, M-2..M-7, M-9, M-10, M-13..M-15, M-17 Dart) | **Done and merged** into `editor-wip` (`c336899`, 01:10). M-15: the Dart close no longer waits and releases the preview; whether the remaining 30 s on-screen delay is native shows in the new `[EditorClose]`/`[EditorLifecycle]` logs ("leaving the editor" with no "exit callback" means the Android native release blocks the main thread) | Windows: pull `editor-wip`, run the full QA-02 pass; on s09 check the M-15 logs |
 
@@ -20,13 +20,20 @@ Other follow-ups found by QA-01 (not blocking):
 - The player library screens (`danaview_home_screen.dart`, `danaview_folder_screen.dart`, `library_storage.dart`) have a follow-up noted in `QA-01-ios-simulator.md`.
 - An empty new project shows a preview spinner that keeps spinning with no media; check whether that is intended (UX-18).
 
-**Running (2026-10-17 ~00:55):** Mac round 8 (`editor-build-mac-r8.js`): FIX-IOS-D7 (D7 plus the back-to-back export stall), then the QA-05 re-run and the QA-01 re-check on the iOS simulator. Round 6 and round 7 reviews are finishing.
+**Stopped mid-round (2026-10-17 ~02:16):** round 8 (`editor-build-mac-r8.js`) hit the session's usage
+limit. Its code landed in the WIP backups (`0321dbf`/`3ce0b0d`/`e042792`): FIX-IOS-D7 in
+`ReaderWriterPipeline.swift` plus `RunnerTests/Export/ExportD7Tests.swift`. It did not get to the QA
+runs or the docs, so the D7 verification above was run afterwards (see `qa/QA-05-soak.md` §2). The
+QA-01 re-check was never run.
 
 **Next actions, in order:**
 1. ~~Merge `parallel-r7`~~ done (`c336899`).
-2. iOS round: fix D7 and FIX-IOS-12-1, re-run QA-05 and the affected QA-01 scenarios.
-3. Windows: merge `editor-wip`, then the full QA-02 pass.
-4. Close QA-01, QA-02 and QA-05.
+2. ~~Fix D7~~ done, ~~re-run QA-05~~ done (`qa/QA-05-soak.md` §2 is green). **Re-run the QA-01 scenarios
+the D7 fix touches** (s02, s06, s09, s12, s13 at least) and check FIX-IOS-12-1's back-to-back export
+in s07.
+3. Windows: pull `editor-wip` and fix **M-21** (swipe-from-recents), then close QA-02.
+4. Close QA-01, QA-02 and QA-05, and refresh the ticket totals in `BUILD_STATE.md` (its header still
+   reads 151 done / 13 in progress / 2 not started, against §1's 162 of 166).
 5. INT-05 on the owner's go.
 
 ---
@@ -62,12 +69,12 @@ If a session ended mid-run, the uncommitted work is safe on disk. The Mac's back
 
 ## 4. Remaining work, in order
 
-### 4.1 Mac, iOS lane (after round 6 finishes)
+### 4.1 Mac, iOS lane (D7 done; what is left is the QA-01 re-check)
 
-1. **D7 (new, from the QA-05 re-check), iOS export audio read.** Files: `packages/danaview_editor_engine/ios/Classes/Export/ReaderWriterPipeline.swift`, `MixAudioSource.nextAudio()` (IOS-12 / FIX-IOS-EXPORT-STALL follow-up).
+1. **D7 (new, from the QA-05 re-check), iOS export audio read — FIXED 2026-10-17, verified.** Files: `packages/danaview_editor_engine/ios/Classes/Export/ReaderWriterPipeline.swift`, `MixAudioSource.nextAudio()` (IOS-12 / FIX-IOS-EXPORT-STALL follow-up). FIX-IOS-D7 (round 8, in the WIP backups `3ce0b0d`/`e042792`): one serial queue per reader, closures that retain the reader/output/composition, a watchdog that only signals, and a resume on a fresh composition from the next frame. `RunnerTests/Export/ExportD7Tests.swift` covers it and passes 6/6; the seeded soak and the death chain are green in `qa/QA-05-soak.md` §2. What remains is the QA-01 re-check, not the fix.
    - Symptom: in the seeded soak (seed 5150), the same export op either fails with "audio read hung" (exportFailed.unknown) or crashes with SIGSEGV in `AVAssetReaderAudioMixOutput.copyNextSampleBuffer`.
    - Likely cause: the reader is used or cancelled from another thread while `copyNextSampleBuffer` runs (watchdog or cancel racing the pump). Make reader access single-threaded and serialized, never cancel a reader mid-call, and let the watchdog signal instead of touching the reader.
-   - Add a seeded RunnerTest, then re-run the QA-05 soak (seed 5150) and the process-death phases. Update `docs/v1.1/editor/qa/QA-05-soak.md`.
+   - ~~Add a seeded RunnerTest, then re-run the QA-05 soak (seed 5150) and the process-death phases. Update `docs/v1.1/editor/qa/QA-05-soak.md`.~~ Done: `ExportD7Tests` (6 tests), soak 965 ops / 0 failed, death chain 7/7, evidence in `qa/QA-05-soak.md` §2.
 2. **Review the QA-01 result** in `QA-01-ios-simulator.md`. Previously 14/18 (iPhone) plus the extras, iOS 18.2 3/3, iPad s12 nearly there. Round 6 fixed s10 (relink preview, FIX-UX-40-1), s18 (playhead on reopen, FIX-UX-14-1), the s12 marquee and the s13 timing (FIX-TESTS-R6), and play-during-record (FIX-IOS-AUDIOSESSION). Fix any new failures, then re-certify with `scripts/ci/editor/e2e_ios.sh` (iPhone lane full, iPad lane s12, iOS 18.2 lane), and record the manual iPad Files/Photos drop steps that the simulator allows.
 3. **Test-infra note from QA-05:** never run two host drivers (`e2e_host.sh` and `soak_host.py`) against the same simulator at once; they answer each other's handshakes.
 
