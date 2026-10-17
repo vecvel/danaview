@@ -503,7 +503,7 @@ def build_brand_sheet(tmp):
 # ---------------------------------------------------------------- store
 FEATURE_COPY = {
     "eyebrow": "VECVEL PRESENTS",
-    "tagline": ("Your photos, videos and docs.", "View, edit and create \u2014 all in one place."),
+    "tagline": ("Your photos, videos and docs.", "View, edit and create. All in one place."),
     "pills": ("VIEW &amp; PLAY", "EDIT &amp; CREATE", "PRIVATE BY DEFAULT"),
 }
 
@@ -544,8 +544,7 @@ def feature_graphic_svg():
     for label in FEATURE_COPY["pills"]:
         r = figtree(600).layout(label.replace("&amp;", "&"), size, 0.1)
         w = r.ink_width + 2 * pad
-        P.append(f'<rect x="{f(px)}" y="{top}" width="{f(w)}" height="{ph}" rx="{ph / 2}" fill="#5E60EE" fill-opacity="0.14" '
-                 f'stroke="#818CF8" stroke-opacity="0.38" stroke-width="1.2"/>')
+        P.append(f'<rect x="{f(px)}" y="{top}" width="{f(w)}" height="{ph}" rx="{ph / 2}" fill="#5E60EE" fill-opacity="0.14"/>')
         cap = 0.7 * size
         P.append(f'<path d="{r.path(px + pad, top + ph / 2 + cap / 2, ink_left=True)}" fill="#D6D8FF"/>')
         px += w + gap
