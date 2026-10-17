@@ -1,0 +1,116 @@
+== reverse a clip adds a pending rendition with 2 s handles
+-- command: Reverse | SetReversed(it_c, true)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000) rev
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- pool added: md_#1
+-- affected: it_c
+-- changed lanes: tr_main
+-- notices: reversePending x1 {it_c}
+
+== reverse a linked clip reverses the partner and shares one rendition
+-- command: Reverse | SetReversed(it_a, true)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) rev detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) rev audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- pool added: md_#1
+-- affected: it_a, it_a_au
+-- changed lanes: tr_main, tr_orig
+-- notices: reversePending x1 {it_a, it_a_au}; transitionsRemoved x1
+
+== reverse near the media start clamps the handles
+-- command: Reverse | SetReversed(it_s, true)
+-- before
+tr_main video main
+  it_s [0,30) md_short src[0,1000000)
+-- after
+tr_main video main
+  it_s [0,30) md_short src[0,1000000) rev
+-- pool added: md_#1
+-- affected: it_s
+-- changed lanes: tr_main
+-- notices: reversePending x1 {it_s}
+
+== reverse reuses a rendition that covers the range
+-- command: Reverse | SetReversed(it_c, true)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000) rev
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+
+== reverse a reversed clip again plays forward and keeps the pool
+-- command: Play forward | SetReversed(it_v, false)
+-- before
+tr_main video main
+  it_v [0,60) md_video src[0,2000000) rev
+-- after
+tr_main video main
+  it_v [0,60) md_video src[0,2000000)
+-- affected: it_v
+-- changed lanes: tr_main
+
+== reverse an already reversed clip is a no-op
+-- command: Reverse | SetReversed(it_v, true)
+-- before
+tr_main video main
+  it_v [0,60) md_video src[0,2000000) rev
+-- noop
+
+== reverse an image
+-- command: Reverse | SetReversed(it_p1, true)
+-- before: standard()
+-- rejected: UnsupportedForKind(image)
+
+== reverse text
+-- command: Reverse | SetReversed(it_t1, true)
+-- before: standard()
+-- rejected: UnsupportedForKind(text)
+
+== reverse on a locked lane
+-- command: Reverse | SetReversed(it_c, true)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)
+
+== reverse music
+-- command: Reverse | SetReversed(it_m, true)
+-- before: standard()
+-- after
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) rev audio
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_orig
+-- pool added: md_#1
+-- affected: it_m
+-- changed lanes: tr_music
+-- notices: reversePending x1 {it_m}

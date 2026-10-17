@@ -14,7 +14,7 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.vecvel.vwish"
+    namespace = "com.vecvel.danaview"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -24,7 +24,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.vecvel.vwish"
+        applicationId = "com.vecvel.danaview"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
         versionCode = flutter.versionCode

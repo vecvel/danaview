@@ -1,0 +1,340 @@
+{
+  "schema": 1,
+  "generatedBy": "packages/danaview_editor_engine_api/tool/regen_goldens.dart",
+  "spec": "ARCH §11.1 rule 2, §5, D-35",
+  "rule": "Plan channels are [[tUs, v], ...] in absolute µs, linear between keys, held outside. A platform time tau maps to k = frameIndexNearest(tau) = floor((tau·fps + 500000) / 10^6) and is evaluated at t = timeOfFrame(k) = ceil(k·10^6/fps). The same keys as item-local domain keyframes (local = abs − itemStartUs, property id) evaluate to v at t − itemStartUs.",
+  "cases": [
+    {
+      "name": "scale_linear_30fps",
+      "channel": "xf.s",
+      "property": "transform.scale",
+      "fps": 30,
+      "itemStartUs": 1000000,
+      "itemDurationUs": 3000000,
+      "keys": [
+        [1000000, 1.0],
+        [3000000, 2.0]
+      ],
+      "samples": [
+        {
+          "k": 30,
+          "tau": 1000000,
+          "t": 1000000,
+          "v": 1.0
+        },
+        {
+          "k": 31,
+          "tau": 1033333,
+          "t": 1033334,
+          "v": 1.016667
+        },
+        {
+          "k": 45,
+          "tau": 1500000,
+          "t": 1500000,
+          "v": 1.25
+        },
+        {
+          "k": 60,
+          "tau": 2000000,
+          "t": 2000000,
+          "v": 1.5
+        },
+        {
+          "k": 89,
+          "tau": 2966666,
+          "t": 2966667,
+          "v": 1.9833335
+        },
+        {
+          "k": 90,
+          "tau": 3000000,
+          "t": 3000000,
+          "v": 2.0
+        },
+        {
+          "k": 100,
+          "tau": 3333333,
+          "t": 3333334,
+          "v": 2.0
+        },
+        {
+          "k": 119,
+          "tau": 3966666,
+          "t": 3966667,
+          "v": 2.0
+        }
+      ]
+    },
+    {
+      "name": "opacity_three_keys_24fps",
+      "channel": "xf.op",
+      "property": "transform.opacity",
+      "fps": 24,
+      "itemStartUs": 0,
+      "itemDurationUs": 3000000,
+      "keys": [
+        [416667, 0.0],
+        [833334, 1.0],
+        [2083334, 0.25]
+      ],
+      "samples": [
+        {
+          "k": 0,
+          "tau": 0,
+          "t": 0,
+          "v": 0.0
+        },
+        {
+          "k": 5,
+          "tau": 208333,
+          "t": 208334,
+          "v": 0.0
+        },
+        {
+          "k": 10,
+          "tau": 416666,
+          "t": 416667,
+          "v": 0.0
+        },
+        {
+          "k": 11,
+          "tau": 458333,
+          "t": 458334,
+          "v": 0.10000072
+        },
+        {
+          "k": 15,
+          "tau": 625000,
+          "t": 625000,
+          "v": 0.4999988
+        },
+        {
+          "k": 20,
+          "tau": 833333,
+          "t": 833334,
+          "v": 1.0
+        },
+        {
+          "k": 35,
+          "tau": 1458333,
+          "t": 1458334,
+          "v": 0.625
+        },
+        {
+          "k": 50,
+          "tau": 2083333,
+          "t": 2083334,
+          "v": 0.25
+        },
+        {
+          "k": 71,
+          "tau": 2958333,
+          "t": 2958334,
+          "v": 0.25
+        }
+      ]
+    },
+    {
+      "name": "rotation_60fps",
+      "channel": "xf.r",
+      "property": "transform.rotation",
+      "fps": 60,
+      "itemStartUs": 1000000,
+      "itemDurationUs": 4000000,
+      "keys": [
+        [1000000, 0.0],
+        [3000000, 360.0],
+        [4000000, -45.0]
+      ],
+      "samples": [
+        {
+          "k": 60,
+          "tau": 1000000,
+          "t": 1000000,
+          "v": 0.0
+        },
+        {
+          "k": 61,
+          "tau": 1016666,
+          "t": 1016667,
+          "v": 3.00006
+        },
+        {
+          "k": 120,
+          "tau": 2000000,
+          "t": 2000000,
+          "v": 180.0
+        },
+        {
+          "k": 179,
+          "tau": 2983333,
+          "t": 2983334,
+          "v": 357.00012
+        },
+        {
+          "k": 180,
+          "tau": 3000000,
+          "t": 3000000,
+          "v": 360.0
+        },
+        {
+          "k": 200,
+          "tau": 3333333,
+          "t": 3333334,
+          "v": 224.99973
+        },
+        {
+          "k": 240,
+          "tau": 4000000,
+          "t": 4000000,
+          "v": -45.0
+        },
+        {
+          "k": 299,
+          "tau": 4983333,
+          "t": 4983334,
+          "v": -45.0
+        }
+      ]
+    },
+    {
+      "name": "exposure_25fps",
+      "channel": "adj.exposure",
+      "property": "adjust.exposure",
+      "fps": 25,
+      "itemStartUs": 1000000,
+      "itemDurationUs": 3000000,
+      "keys": [
+        [1000000, -1.0],
+        [3000000, 1.0]
+      ],
+      "samples": [
+        {
+          "k": 25,
+          "tau": 1000000,
+          "t": 1000000,
+          "v": -1.0
+        },
+        {
+          "k": 26,
+          "tau": 1040000,
+          "t": 1040000,
+          "v": -0.96
+        },
+        {
+          "k": 50,
+          "tau": 2000000,
+          "t": 2000000,
+          "v": 0.0
+        },
+        {
+          "k": 74,
+          "tau": 2960000,
+          "t": 2960000,
+          "v": 0.96
+        },
+        {
+          "k": 75,
+          "tau": 3000000,
+          "t": 3000000,
+          "v": 1.0
+        },
+        {
+          "k": 99,
+          "tau": 3960000,
+          "t": 3960000,
+          "v": 1.0
+        }
+      ]
+    },
+    {
+      "name": "single_key_48fps",
+      "channel": "adj.saturation",
+      "property": "adjust.saturation",
+      "fps": 48,
+      "itemStartUs": 0,
+      "itemDurationUs": 2000000,
+      "keys": [
+        [833334, 0.6]
+      ],
+      "samples": [
+        {
+          "k": 0,
+          "tau": 0,
+          "t": 0,
+          "v": 0.6
+        },
+        {
+          "k": 40,
+          "tau": 833333,
+          "t": 833334,
+          "v": 0.6
+        },
+        {
+          "k": 95,
+          "tau": 1979166,
+          "t": 1979167,
+          "v": 0.6
+        }
+      ]
+    },
+    {
+      "name": "off_grid_keys_30fps",
+      "channel": "xf.s",
+      "property": "transform.scale",
+      "fps": 30,
+      "itemStartUs": 0,
+      "itemDurationUs": 1000000,
+      "keys": [
+        [100000, 0.6],
+        [133333, 0.8],
+        [250001, 1.0]
+      ],
+      "samples": [
+        {
+          "k": 0,
+          "tau": 0,
+          "t": 0,
+          "v": 0.6
+        },
+        {
+          "k": 3,
+          "tau": 100000,
+          "t": 100000,
+          "v": 0.6
+        },
+        {
+          "k": 4,
+          "tau": 133333,
+          "t": 133334,
+          "v": 0.800001714
+        },
+        {
+          "k": 5,
+          "tau": 166666,
+          "t": 166667,
+          "v": 0.857143347
+        },
+        {
+          "k": 7,
+          "tau": 233333,
+          "t": 233334,
+          "v": 0.971428327
+        },
+        {
+          "k": 8,
+          "tau": 266666,
+          "t": 266667,
+          "v": 1.0
+        },
+        {
+          "k": 29,
+          "tau": 966666,
+          "t": 966667,
+          "v": 1.0
+        }
+      ]
+    }
+  ]
+}

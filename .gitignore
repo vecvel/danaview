@@ -68,3 +68,9 @@ app.*.map.json
 
 skills-lock.json
 brag-output/
+
+# Freebuff / local agent tooling (machine-specific, never committed)
+.freebuff/
+
+# Android NDK/CMake build staging
+**/.cxx/

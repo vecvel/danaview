@@ -1,0 +1,14 @@
+import 'package:flutter/material.dart';
+
+class Bad extends StatelessWidget {
+  const Bad({super.key});
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        const TextField(),
+        Slider(value: 0.5, onChanged: (_) {}),
+        IconButton(onPressed: () {}, icon: const Icon(Icons.add)),
+      ]);
+
+  void open(BuildContext context) => showDialog<void>(context: context, builder: (_) => const AlertDialog());
+}

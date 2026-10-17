@@ -1,6 +1,6 @@
-# Vwish — App Store Publishing Assets
+# Danaview — App Store Publishing Assets
 
-This directory contains the official App Store and Google Play marketing screenshots for **Vwish**, rendered in accordance with Apple's App Store Review Guidelines and the high-fidelity `midnight-glow-pro` visual design system.
+This directory contains the official App Store and Google Play marketing screenshots for **Danaview**, rendered in accordance with Apple's App Store Review Guidelines and the high-fidelity `midnight-glow-pro` visual design system.
 
 ---
 

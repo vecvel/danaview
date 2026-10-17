@@ -1,0 +1,15 @@
+// import 'dart:io'; (commented out: does not count)
+import 'dart:math' as math;
+
+import 'package:collection/collection.dart';
+import 'package:meta/meta.dart';
+import 'package:danaview_editor_core/src/store/atomic_file.dart' show AtomicFile;
+
+@immutable
+class Root {
+  const Root(this.ids);
+  final List<int> ids;
+  int get max => ids.isEmpty ? 0 : ids.reduce(math.max);
+  bool same(Root o) => const ListEquality<int>().equals(ids, o.ids) && AtomicFile.ok;
+  String get note => 'package:flutter/widgets.dart and dart:io inside a string';
+}

@@ -1,0 +1,4 @@
+name: danaview_transcription
+dependencies:
+  flutter:
+    sdk: flutter

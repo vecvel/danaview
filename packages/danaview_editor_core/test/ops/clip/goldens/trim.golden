@@ -1,0 +1,286 @@
+== trim end shorter leaves a gap
+-- command: Trim clip | TrimItem(it_c, end, 6000000, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,180) md_video2 src[0,1000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+
+== trim end longer into free space
+-- command: Trim clip | TrimItem(it_b, end, 4666667, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,140) md_video src[10000000,12666667)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b
+-- changed lanes: tr_main
+
+== trim end into the next clip
+-- command: Trim clip | TrimItem(it_b, end, 5333334, ripple: false, clamp: false)
+-- before: standard()
+-- rejected: WouldOverlap(tr_main, [150,210))
+
+== trim end into the next clip with clamp
+-- command: Trim clip | TrimItem(it_b, end, 5333334, ripple: false, clamp: true)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,150) md_video src[10000000,13000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b
+-- changed lanes: tr_main
+-- clamped to: [60,150)
+
+== trim end past the media
+-- command: Trim clip | TrimItem(it_c, end, 16666667, ripple: false, clamp: false)
+-- before: standard()
+-- rejected: OutOfSourceRange(450f)
+
+== trim end past the media with clamp
+-- command: Trim clip | TrimItem(it_c, end, 16666667, ripple: false, clamp: true)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,450) md_video2 src[0,10000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+-- clamped to: [150,450)
+
+== trim end below one frame
+-- command: Trim clip | TrimItem(it_c, end, 5000000, ripple: false, clamp: false)
+-- before: standard()
+-- rejected: BelowMinDuration()
+
+== trim end below one frame with clamp
+-- command: Trim clip | TrimItem(it_c, end, 4000000, ripple: false, clamp: true)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,151) md_video2 src[0,33334)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+-- clamped to: [150,151)
+
+== trim start later moves sourceIn
+-- command: Trim clip | TrimItem(it_c, start, 5333334, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [160,210) md_video2 src[333334,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+
+== trim start earlier than the media start
+-- command: Trim clip | TrimItem(it_c, start, 4666667, ripple: false, clamp: false)
+-- before: standard()
+-- rejected: OutOfSourceRange(150f)
+
+== trim start earlier into the previous clip
+-- command: Trim clip | TrimItem(it_b, start, 1666667, ripple: false, clamp: false)
+-- before: standard()
+-- rejected: WouldOverlap(tr_main, [0,60))
+
+== trim start earlier restores source (b has 10 s before it)
+-- command: Trim clip | TrimItem(it_b, start, 6666667, ripple: false, clamp: false)
+-- before
+tr_main video main
+  it_b [400,460) md_video src[10000000,12000000)
+-- after
+tr_main video main
+  it_b [200,460) md_video src[3333333,12000000)
+-- affected: it_b
+-- changed lanes: tr_main
+
+== trim start past the media head with clamp
+-- command: Trim clip | TrimItem(it_b, start, 0, ripple: false, clamp: true)
+-- before
+tr_main video main
+  it_b [400,460) md_video src[10000000,12000000)
+-- after
+tr_main video main
+  it_b [100,460) md_video src[0,12000000)
+-- affected: it_b
+-- changed lanes: tr_main
+-- clamped to: [100,460)
+
+== trim a linked clip trims its partner with the same edge
+-- command: Trim clip | TrimItem(it_a, end, 1666667, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,50) md_video src[0,1666667) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+tr_orig audio role=original
+  it_a_au [0,50) md_video src[0,1666667) audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au
+-- changed lanes: tr_main, tr_orig
+-- notices: transitionsRemoved x1
+
+== ripple trim end shifts the rest of the lane
+-- command: Trim clip | TrimItem(it_b, end, 3333334, ripple: true, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,100) md_video src[10000000,11333334)
+  it_c [130,190) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b, it_c
+-- changed lanes: tr_main
+
+== ripple trim end longer pushes the lane
+-- command: Trim clip | TrimItem(it_b, end, 4333334, ripple: true, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,130) md_video src[10000000,12333334)
+  it_c [160,220) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b, it_c
+-- changed lanes: tr_main
+
+== ripple trim end of a linked clip keeps partners in sync and the transition
+-- command: Trim clip | TrimItem(it_a, end, 1666667, ripple: true, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,50) md_video src[0,1666667) detached link=ln_a
+  it_b [50,110) md_video src[10000000,12000000)
+  it_c [140,200) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,50) md_video src[0,1666667) audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au, it_b, it_c
+-- changed lanes: tr_main, tr_orig
+
+== ripple trim shortens a transition to its new limit
+-- command: Trim clip | TrimItem(it_a, end, 333334, ripple: true, clamp: false)
+-- before
+tr_main video main
+  it_a [0,60) md_video src[0,2000000)
+  it_b [60,120) md_video src[10000000,12000000)
+  ~ tx_ab it_a|it_b crossDissolve 50f
+-- after
+tr_main video main
+  it_a [0,10) md_video src[0,333334)
+  it_b [10,70) md_video src[10000000,12000000)
+  ~ tx_ab it_a|it_b crossDissolve 20f
+-- affected: it_a, it_b
+-- changed lanes: tr_main
+-- notices: transitionsShortened x1
+
+== trim that breaks adjacency drops the transition
+-- command: Trim clip | TrimItem(it_a, end, 333334, ripple: false, clamp: false)
+-- before
+tr_main video main
+  it_a [0,60) md_video src[0,2000000)
+  it_b [60,120) md_video src[10000000,12000000)
+  ~ tx_ab it_a|it_b crossDissolve 50f
+-- after
+tr_main video main
+  it_a [0,10) md_video src[0,333334)
+  it_b [60,120) md_video src[10000000,12000000)
+-- affected: it_a
+-- changed lanes: tr_main
+-- notices: transitionsRemoved x1
+
+== ripple head trim keeps the start and pulls the lane
+-- command: Trim clip | TrimItem(it_b, start, 2333334, ripple: true, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,110) md_video src[10333333,12000000)
+  it_c [140,200) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b, it_c
+-- changed lanes: tr_main
+
+== ripple head extend restores content and pushes the lane
+-- command: Trim clip | TrimItem(it_b, start, 1666667, ripple: true, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,130) md_video src[9666666,12000000)
+  it_c [160,220) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b, it_c
+-- changed lanes: tr_main
+
+== trim an image end without a source limit
+-- command: Trim clip | TrimItem(it_p1, end, 30000000, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_ov1 overlay
+  it_p1 [30,900) md_image src[0,29000000)
+unchanged: tr_main, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_p1
+-- changed lanes: tr_ov1
+
+== trim text start
+-- command: Trim clip | TrimItem(it_t1, start, 500000, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_txt text
+  it_t1 [15,45) text "Title"
+unchanged: tr_main, tr_ov1, tr_sub, tr_orig, tr_music
+-- affected: it_t1
+-- changed lanes: tr_txt
+
+== trim on a locked lane
+-- command: Trim clip | TrimItem(it_c, end, 6000000, ripple: false, clamp: false)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)
+
+== trim to the same time is a no-op
+-- command: Trim clip | TrimItem(it_c, end, 7000000, ripple: false, clamp: false)
+-- before: standard()
+-- noop

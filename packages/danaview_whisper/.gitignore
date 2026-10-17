@@ -1,0 +1,7 @@
+# OWNER: AI-05
+#
+# Build outputs of the whisper native builds. WhisperCore.xcframework and its stamp are produced by
+# tool/build_ios_xcframework.sh (CI and dev setup), never committed.
+/ios/Frameworks/
+/build/
+/.dart_tool/

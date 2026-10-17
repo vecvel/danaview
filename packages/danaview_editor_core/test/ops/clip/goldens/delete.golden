@@ -1,0 +1,170 @@
+== delete leaves a gap and drops the transition
+-- command: Delete | DeleteItems({it_b}, ripple: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_c [150,210) md_video2 src[0,2000000)
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b
+-- changed lanes: tr_main
+-- notices: transitionsRemoved x1
+-- selection: {} primary -
+
+== ripple delete closes the gap
+-- command: Ripple delete | DeleteItems({it_b}, ripple: true)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_c [90,150) md_video2 src[0,2000000)
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b, it_c
+-- changed lanes: tr_main
+-- notices: transitionsRemoved x1
+-- selection: {} primary -
+
+== delete a linked clip deletes its partner
+-- command: Delete | DeleteItems({it_a}, ripple: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+tr_orig audio role=original
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au
+-- changed lanes: tr_main, tr_orig
+-- notices: transitionsRemoved x1
+-- selection: {} primary -
+
+== ripple delete a linked clip; music untouched
+-- command: Ripple delete | DeleteItems({it_a}, ripple: true)
+-- before: standard()
+-- after
+tr_main video main
+  it_b [0,60) md_video src[10000000,12000000)
+  it_c [90,150) md_video2 src[0,2000000)
+tr_orig audio role=original
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au, it_b, it_c
+-- changed lanes: tr_main, tr_orig
+-- notices: transitionsRemoved x1
+-- selection: {} primary -
+
+== ripple delete several clips on two lanes
+-- command: Ripple delete | DeleteItems({it_b, it_c, it_p1}, ripple: true)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+tr_ov1 overlay
+unchanged: tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b, it_c, it_p1
+-- changed lanes: tr_main, tr_ov1
+-- notices: transitionsRemoved x1
+-- selection: {} primary -
+
+== delete on a locked lane
+-- command: Delete | DeleteItems({it_c}, ripple: false)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)
+
+== delete an unknown item
+-- command: Delete | DeleteItems({it_nope}, ripple: false)
+-- before: standard()
+-- rejected: ItemNotFound(it_nope)
+
+== delete gap
+-- command: Delete gap | DeleteGap(GapRef(tr_main, TimeRange(4000000, 5000000)))
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [120,180) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+
+== delete part of a gap
+-- command: Delete gap | DeleteGap(GapRef(tr_main, TimeRange(4333334, 4666667)))
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [140,200) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+
+== delete gap moves linked partners
+-- command: Delete gap | DeleteGap(GapRef(tr_main, TimeRange(1000000, 2000000)))
+-- before
+tr_main video main
+  it_a [0,30) md_video src[0,1000000)
+  it_b [60,90) md_video src[0,1000000) link=ln_b
+tr_orig audio role=original
+  it_b_au [60,90) md_video src[0,1000000) audio link=ln_b
+-- after
+tr_main video main
+  it_a [0,30) md_video src[0,1000000)
+  it_b [30,60) md_video src[0,1000000) link=ln_b
+tr_orig audio role=original
+  it_b_au [30,60) md_video src[0,1000000) audio link=ln_b
+-- affected: it_b, it_b_au
+-- changed lanes: tr_main, tr_orig
+
+== delete gap blocked by a linked partner
+-- command: Delete gap | DeleteGap(GapRef(tr_main, TimeRange(1000000, 2000000)))
+-- before
+tr_main video main
+  it_a [0,30) md_video src[0,1000000)
+  it_b [60,90) md_video src[0,1000000) link=ln_b
+tr_orig audio role=original
+  it_x [20,50) md_music src[0,1000000) audio
+  it_b_au [60,90) md_video src[0,1000000) audio link=ln_b
+-- rejected: RippleBlockedByLinkedItem(it_b_au)
+
+== delete a gap that overlaps a clip
+-- command: Delete gap | DeleteGap(GapRef(tr_main, TimeRange(3333334, 5000000)))
+-- before: standard()
+-- rejected: InvalidValue(gap)
+
+== delete gap on a locked lane
+-- command: Delete gap | DeleteGap(GapRef(tr_main, TimeRange(4000000, 5000000)))
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)

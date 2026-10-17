@@ -1,2 +1,2 @@
-package_name("com.vecvel.vwish")
+package_name("com.vecvel.danaview")
 json_key_file(ENV["PLAY_JSON_KEY_PATH"])

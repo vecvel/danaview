@@ -1,0 +1,4 @@
+// Negative fixture: an indented import after a comment still counts.
+library x;
+
+  import  'package:flutter_test/flutter_test.dart' ;

@@ -8,11 +8,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
 
     <application
-        android:label="Vwish"
+        android:label="Danaview"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:hardwareAccelerated="true"
-        android:requestLegacyExternalStorage="true">
+        android:requestLegacyExternalStorage="true"
+        android:dataExtractionRules="@xml/danaview_data_extraction_rules"
+        android:fullBackupContent="@xml/danaview_backup_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -56,12 +58,12 @@
                 <data android:scheme="https" />
                 <data android:mimeType="audio/*" />
             </intent-filter>
-            <!-- Custom URI Scheme: vwish:// -->
+            <!-- Custom URI Scheme: danaview:// -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="vwish" />
+                <data android:scheme="danaview" />
             </intent-filter>
         </activity>
         <meta-data

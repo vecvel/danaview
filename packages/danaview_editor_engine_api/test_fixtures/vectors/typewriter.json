@@ -1,0 +1,203 @@
+{
+  "schema": 1,
+  "generatedBy": "packages/danaview_editor_engine_api/tool/regen_goldens.dart",
+  "spec": "ARCH §11.2 (reveal), §11.6 Sprite, §11.7, D-06",
+  "rule": "The compiler emits reveal = [[itemStartUs, 0], [itemStartUs + inDurationUs, graphemes]] (linear, held after); output frame k is evaluated at t = timeOfFrame(k); shown = floor(reveal(t)); a sprite texel of glyph g is drawn iff g < shown (0xFFFF never while reveal is animated). Core evaluateTextAnimation(...).revealCount equals `shown`.",
+  "cases": [
+    {
+      "name": "hello_world_30fps",
+      "text": "Hello, world",
+      "graphemes": 12,
+      "fps": 30,
+      "itemStartUs": 1000000,
+      "itemDurationUs": 3000000,
+      "inDurationUs": 1000000,
+      "channel": [
+        [1000000, 0.0],
+        [2000000, 12.0]
+      ],
+      "frames": [
+        {
+          "k": 30,
+          "t": 1000000,
+          "reveal": 0.0,
+          "shown": 0
+        },
+        {
+          "k": 31,
+          "t": 1033334,
+          "reveal": 0.400008,
+          "shown": 0
+        },
+        {
+          "k": 32,
+          "t": 1066667,
+          "reveal": 0.800004,
+          "shown": 0
+        },
+        {
+          "k": 33,
+          "t": 1100000,
+          "reveal": 1.2,
+          "shown": 1
+        },
+        {
+          "k": 45,
+          "t": 1500000,
+          "reveal": 6.0,
+          "shown": 6
+        },
+        {
+          "k": 59,
+          "t": 1966667,
+          "reveal": 11.600004,
+          "shown": 11
+        },
+        {
+          "k": 60,
+          "t": 2000000,
+          "reveal": 12.0,
+          "shown": 12
+        },
+        {
+          "k": 61,
+          "t": 2033334,
+          "reveal": 12.0,
+          "shown": 12
+        },
+        {
+          "k": 119,
+          "t": 3966667,
+          "reveal": 12.0,
+          "shown": 12
+        }
+      ]
+    },
+    {
+      "name": "graphemes_24fps",
+      "text": "héllo 👋🏽 世界!",
+      "graphemes": 11,
+      "fps": 24,
+      "itemStartUs": 0,
+      "itemDurationUs": 3000000,
+      "inDurationUs": 833334,
+      "channel": [
+        [0, 0.0],
+        [833334, 11.0]
+      ],
+      "frames": [
+        {
+          "k": 0,
+          "t": 0,
+          "reveal": 0.0,
+          "shown": 0
+        },
+        {
+          "k": 1,
+          "t": 41667,
+          "reveal": 0.55000396,
+          "shown": 0
+        },
+        {
+          "k": 2,
+          "t": 83334,
+          "reveal": 1.10000792,
+          "shown": 1
+        },
+        {
+          "k": 5,
+          "t": 208334,
+          "reveal": 2.7500066,
+          "shown": 2
+        },
+        {
+          "k": 10,
+          "t": 416667,
+          "reveal": 5.5,
+          "shown": 5
+        },
+        {
+          "k": 19,
+          "t": 791667,
+          "reveal": 10.44999604,
+          "shown": 10
+        },
+        {
+          "k": 20,
+          "t": 833334,
+          "reveal": 11.0,
+          "shown": 11
+        },
+        {
+          "k": 50,
+          "t": 2083334,
+          "reveal": 11.0,
+          "shown": 11
+        }
+      ]
+    },
+    {
+      "name": "long_60fps_short_in",
+      "text": "Typewriter at sixty frames",
+      "graphemes": 26,
+      "fps": 60,
+      "itemStartUs": 2000000,
+      "itemDurationUs": 4000000,
+      "inDurationUs": 750000,
+      "channel": [
+        [2000000, 0.0],
+        [2750000, 26.0]
+      ],
+      "frames": [
+        {
+          "k": 120,
+          "t": 2000000,
+          "reveal": 0.0,
+          "shown": 0
+        },
+        {
+          "k": 121,
+          "t": 2016667,
+          "reveal": 0.577789333,
+          "shown": 0
+        },
+        {
+          "k": 122,
+          "t": 2033334,
+          "reveal": 1.155578667,
+          "shown": 1
+        },
+        {
+          "k": 140,
+          "t": 2333334,
+          "reveal": 11.555578667,
+          "shown": 11
+        },
+        {
+          "k": 164,
+          "t": 2733334,
+          "reveal": 25.422245333,
+          "shown": 25
+        },
+        {
+          "k": 165,
+          "t": 2750000,
+          "reveal": 26.0,
+          "shown": 26
+        },
+        {
+          "k": 166,
+          "t": 2766667,
+          "reveal": 26.0,
+          "shown": 26
+        },
+        {
+          "k": 359,
+          "t": 5983334,
+          "reveal": 26.0,
+          "shown": 26
+        }
+      ]
+    }
+  ]
+}

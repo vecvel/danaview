@@ -1,0 +1,105 @@
+== duplicate a clip into free space
+-- command: Duplicate | DuplicateItems({it_c}, ripple: null)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  it_#1 [210,270) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== duplicate a linked clip with ripple opens space on both lanes
+-- command: Duplicate | DuplicateItems({it_a}, ripple: null)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_#1 [60,120) md_video src[0,2000000) detached link=ln_#1
+  it_b [120,180) md_video src[10000000,12000000)
+  it_c [210,270) md_video2 src[0,2000000)
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+  it_#2 [60,120) md_video src[0,2000000) audio link=ln_#1
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_#1, it_#2, it_b, it_c
+-- changed lanes: tr_main, tr_orig
+-- notices: transitionsRemoved x1
+-- selection: {it_#1} primary it_#1
+
+== duplicate without ripple goes to a free lane
+-- command: Duplicate | DuplicateItems({it_b}, ripple: false)
+-- before: standard()
+-- after
+tr_#1 video
+  it_#1 [120,180) md_video src[10000000,12000000)
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- notices: placedOnOtherLane {it_#1}
+-- selection: {it_#1} primary it_#1
+-- preview creates: video@1
+
+== duplicate two clips keeps their transition
+-- command: Duplicate | DuplicateItems({it_a, it_b}, ripple: false)
+-- before: standard()
+-- after
+tr_#1 video
+  it_#1 [120,180) md_video src[0,2000000) detached link=ln_#1
+  it_#2 [180,240) md_video src[10000000,12000000)
+  ~ tx_#1 it_#1|it_#2 crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+  it_#3 [120,180) md_video src[0,2000000) audio link=ln_#1
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_#1, it_#2, it_#3
+-- changed lanes: tr_#1, tr_orig
+-- created lanes: tr_#1
+-- notices: placedOnOtherLane {it_#1, it_#2}
+-- selection: {it_#1, it_#2} primary it_#1
+-- preview creates: video@1
+
+== duplicate text and a cue
+-- command: Duplicate | DuplicateItems({it_t1, it_s1}, ripple: null)
+-- before: standard()
+-- after
+tr_txt text
+  it_t1 [0,45) text "Title"
+  it_#1 [45,90) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+  it_#2 [45,75) cue "Hello"
+unchanged: tr_main, tr_ov1, tr_orig, tr_music
+-- affected: it_#1, it_#2
+-- changed lanes: tr_sub, tr_txt
+-- selection: {it_#1, it_#2} primary it_#1
+
+== duplicate on a locked lane
+-- command: Duplicate | DuplicateItems({it_c}, ripple: null)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)
+
+== duplicate into occupied space with policy reject
+-- command: Duplicate | DuplicateItems({it_b}, ripple: false)
+-- before: standard()
+-- rejected: NoRoom()

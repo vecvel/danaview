@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "generatedBy": "packages/danaview_editor_engine_api/tool/regen_goldens.dart",
+  "spec": "ARCH §10.3 (raster scale), §11.6 Sprite and Place, BUILD_PLAN API-03",
+  "rule": "A sprite rasterized at sscale = 8 (sw × sh = 8·base) is drawn with M at every scale up to 8×; the golden PNGs are the reference renderer at the listed size. texelsPerOutputPx = sw / (base.w·s·renderScale) (> 1: minified, box-filtered).",
+  "plan": "../images/plans/api03_text_scale_8x.json",
+  "layer": "it_title000001#v",
+  "sprite": {
+    "sw": 960,
+    "sh": 192,
+    "sscale": 8.0
+  },
+  "output": [192, 108],
+  "renderScale": 0.15,
+  "frames": [
+    {
+      "k": 0,
+      "t": 0,
+      "xf.s": 1.0,
+      "xf.r": 0.0,
+      "M": [1.0, 0.0, 0.0, 1.0, 580.0, 348.0],
+      "texelsPerOutputPx": 53.333333333,
+      "png": "../images/goldens/api03_text_scale_8x_f0000.png"
+    },
+    {
+      "k": 15,
+      "t": 500000,
+      "xf.s": 3.333333333,
+      "xf.r": 3.333333333,
+      "M": [3.327693861, 0.193816096, -0.193816096, 3.327693861, 442.664161502, 308.438707887],
+      "texelsPerOutputPx": 16.0,
+      "png": "../images/goldens/api03_text_scale_8x_f0015.png"
+    },
+    {
+      "k": 30,
+      "t": 1000000,
+      "xf.s": 5.666666667,
+      "xf.r": 6.666666667,
+      "M": [5.628350694, 0.657859847, -0.657859847, 5.628350694, 310.193276528, 252.988200871],
+      "texelsPerOutputPx": 9.411764706,
+      "png": "../images/goldens/api03_text_scale_8x_f0030.png"
+    },
+    {
+      "k": 45,
+      "t": 1500000,
+      "xf.s": 8.0,
+      "xf.r": 10.0,
+      "M": [7.878462024, 1.389185421, -1.389185421, 7.878462024, 183.96250361, 182.107330431],
+      "texelsPerOutputPx": 6.666666667,
+      "png": "../images/goldens/api03_text_scale_8x_f0045.png"
+    },
+    {
+      "k": 54,
+      "t": 1800000,
+      "xf.s": 8.0,
+      "xf.r": 10.0,
+      "M": [7.878462024, 1.389185421, -1.389185421, 7.878462024, 183.96250361, 182.107330431],
+      "texelsPerOutputPx": 6.666666667,
+      "png": "../images/goldens/api03_text_scale_8x_f0054.png"
+    }
+  ]
+}

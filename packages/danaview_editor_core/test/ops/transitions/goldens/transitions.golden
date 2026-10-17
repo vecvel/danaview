@@ -1,0 +1,1441 @@
+== set: fade
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(fade, 30f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b fade 30f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: cross dissolve
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(crossDissolve, 20f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b crossDissolve 20f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: dip to black, odd length
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(dipToBlack, 21f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b dipToBlack 21f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: dip to white
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(dipToWhite, 12f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b dipToWhite 12f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: slide defaults to left
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(slide, 15f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b slide 15f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: slide up
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(slide, 15f, up), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b slide 15f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: wipe down
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(wipe, 15f, down), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b wipe 15f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: zoom defaults to in
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(zoom, 15f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b zoom 15f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: zoom out
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(zoom, 15f, zoomOut), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b zoom 15f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: direction ignored for a kind without directions
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(fade, 15f, left), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b fade 15f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: on an overlay lane
+-- command: Set transition | SetTransition(tr_ov: o1|o2, TransitionSpec(crossDissolve, 20f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+  ~ tx_#1 o1|o2 crossDissolve 20f
+unchanged: tr_main, tr_lock, tr_txt, tr_mus
+-- affected: o1, o2
+-- changed lanes: tr_ov
+
+== set: between images
+-- command: Set transition | SetTransition(tr_main: d|e, TransitionSpec(crossDissolve, 60f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 d|e crossDissolve 60f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: d, e
+-- changed lanes: tr_main
+
+== set: replaces the transition of the cut and keeps its id
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(wipe, 10f, right), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_ab a|b fade 30f
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_ab a|b wipe 10f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: same spec is a no-op
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(fade, 30f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_ab a|b fade 30f
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- noop
+
+== set: remove
+-- command: Remove transition | SetTransition(tr_main: a|b, null, clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_ab a|b fade 30f
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: remove where there is none is a no-op
+-- command: Remove transition | SetTransition(tr_main: a|b, null, clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- noop
+
+== set: longest fade for 60-frame clips
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(fade, 120f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b fade 120f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== set: too long: clip lengths
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(fade, 121f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: TransitionTooLong(120)
+
+== set: too long: clamp shortens and notes it
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(fade, 500f), clamp: true)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b fade 120f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+-- notices: transitionsShortened x1
+
+== set: too long: no handle before c, cross dissolve
+-- command: Set transition | SetTransition(tr_main: b|c, TransitionSpec(crossDissolve, 10f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: TransitionTooLong(0)
+
+== set: too long: no handle, clamp still refuses (max 0)
+-- command: Set transition | SetTransition(tr_main: b|c, TransitionSpec(crossDissolve, 10f), clamp: true)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: TransitionTooLong(0)
+
+== set: no handle needed for a fade at b|c
+-- command: Set transition | SetTransition(tr_main: b|c, TransitionSpec(fade, 30f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 b|c fade 30f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: b, c
+-- changed lanes: tr_main
+
+== set: too long: images 61
+-- command: Set transition | SetTransition(tr_main: d|e, TransitionSpec(zoom, 61f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: TransitionTooLong(60)
+
+== set: not adjacent: gap
+-- command: Set transition | SetTransition(tr_main: c|d, TransitionSpec(fade, 10f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: NotAdjacent()
+
+== set: not adjacent: not neighbours
+-- command: Set transition | SetTransition(tr_main: a|c, TransitionSpec(fade, 10f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: NotAdjacent()
+
+== set: not adjacent: wrong order
+-- command: Set transition | SetTransition(tr_main: b|a, TransitionSpec(fade, 10f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: NotAdjacent()
+
+== set: missing left clip
+-- command: Set transition | SetTransition(tr_main: zz|b, TransitionSpec(fade, 10f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: ItemNotFound(zz)
+
+== set: missing right clip
+-- command: Set transition | SetTransition(tr_main: a|zz, TransitionSpec(fade, 10f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: ItemNotFound(zz)
+
+== set: missing lane
+-- command: Set transition | SetTransition(tr_zz: a|b, TransitionSpec(fade, 10f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: ItemNotFound(tr_zz)
+
+== set: locked lane
+-- command: Set transition | SetTransition(tr_lock: l1|l2, TransitionSpec(fade, 10f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: TrackLocked(tr_lock)
+
+== set: remove on a locked lane
+-- command: Remove transition | SetTransition(tr_lock: l1|l2, null, clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: TrackLocked(tr_lock)
+
+== set: audio lane
+-- command: Set transition | SetTransition(tr_mus: m1|m2, TransitionSpec(fade, 10f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: IncompatibleTrack(tr_mus)
+
+== set: text lane
+-- command: Set transition | SetTransition(tr_txt: x|x, TransitionSpec(fade, 10f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: IncompatibleTrack(tr_txt)
+
+== set: zero frames
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(fade, 0f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: InvalidValue(duration)
+
+== set: direction of the wrong family
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(slide, 10f, zoomIn), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: InvalidValue(direction)
+
+== set: zoom with a slide direction
+-- command: Set transition | SetTransition(tr_main: a|b, TransitionSpec(zoom, 10f, left), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: InvalidValue(direction)
+
+== set: too long: the neighbouring transition uses the room of b
+-- command: Set transition | SetTransition(tr_main: b|c, TransitionSpec(fade, 40f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_ab a|b fade 100f
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: TransitionTooLong(20)
+
+== set: fits next to the neighbouring transition
+-- command: Set transition | SetTransition(tr_main: b|c, TransitionSpec(fade, 20f), clamp: false)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_ab a|b fade 100f
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_ab a|b fade 100f
+  ~ tx_#1 b|c fade 20f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: b, c
+-- changed lanes: tr_main
+
+== all: all cuts of the main lane: fade 30
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(fade, 30f), track: null)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b fade 30f
+  ~ tx_#2 b|c fade 30f
+  ~ tx_#3 d|e fade 30f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b, c, d, e
+-- changed lanes: tr_main
+
+== all: all cuts, explicit lane
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(crossDissolve, 10f), track: tr_ov)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+  ~ tx_#1 o1|o2 crossDissolve 10f
+unchanged: tr_main, tr_lock, tr_txt, tr_mus
+-- affected: o1, o2
+-- changed lanes: tr_ov
+
+== all: all cuts clamp per cut (handles, images, clip lengths)
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(crossDissolve, 100f), track: null)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b crossDissolve 60f
+  ~ tx_#2 d|e crossDissolve 60f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b, d, e
+-- changed lanes: tr_main
+-- notices: transitionsShortened x2; itemsSkipped x1 {c}
+
+== all: all cuts with a directional kind
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(slide, 10f, right), track: null)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b slide 10f
+  ~ tx_#2 d|e slide 10f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b, d, e
+-- changed lanes: tr_main
+-- notices: itemsSkipped x1 {c}
+
+== all: all cuts replace existing transitions and keep their ids
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(dipToBlack, 20f), track: null)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_ab a|b fade 30f
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_ab a|b dipToBlack 20f
+  ~ tx_#1 b|c dipToBlack 20f
+  ~ tx_#2 d|e dipToBlack 20f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b, c, d, e
+-- changed lanes: tr_main
+
+== all: all cuts, a cut without room keeps what it has
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(crossDissolve, 20f), track: null)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_bc b|c fade 10f
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b crossDissolve 20f
+  ~ tx_bc b|c fade 10f
+  ~ tx_#2 d|e crossDissolve 20f
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b, d, e
+-- changed lanes: tr_main
+-- notices: itemsSkipped x1 {c}
+
+== all: remove all
+-- command: Remove all transitions | ApplyTransitionToAll(null, track: null)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_ab a|b fade 30f
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+unchanged: tr_ov, tr_lock, tr_txt, tr_mus
+-- affected: a, b
+-- changed lanes: tr_main
+
+== all: remove all where there are none is a no-op
+-- command: Remove all transitions | ApplyTransitionToAll(null, track: null)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- noop
+
+== all: same spec everywhere is a no-op
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(fade, 20f), track: null)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+  ~ tx_#1 a|b fade 20f
+  ~ tx_#2 b|c fade 20f
+  ~ tx_#3 d|e fade 20f
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- noop
+
+== all: lane without cuts is a no-op
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(fade, 10f), track: tr_ov0)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_ov0 overlay
+  q1 [0,20) md_image src[0,666667)
+  q2 [40,60) md_image src[0,666666)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- noop
+
+== all: locked lane
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(fade, 10f), track: tr_lock)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: TrackLocked(tr_lock)
+
+== all: audio lane
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(fade, 10f), track: tr_mus)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: IncompatibleTrack(tr_mus)
+
+== all: missing lane
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(fade, 10f), track: tr_zz)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: ItemNotFound(tr_zz)
+
+== all: zero frames
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(fade, 0f), track: null)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: InvalidValue(duration)
+
+== all: direction of the wrong family
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(wipe, 10f, zoomOut), track: null)
+-- before
+tr_main video main
+  a [0,60) md_video src[10000000,12000000)
+  b [60,120) md_video src[10000000,12000000)
+  c [120,150) md_video2 src[0,1000000)
+  d [200,230) md_image src[0,1000000)
+  e [230,260) md_image src[0,1000000)
+tr_ov overlay
+  o1 [0,20) md_image src[0,666667)
+  o2 [20,40) md_image src[0,666667)
+tr_lock overlay locked
+  l1 [0,20) md_image src[0,666667)
+  l2 [20,40) md_image src[0,666667)
+tr_txt text
+  x [0,30) text "Title"
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+  m2 [30,60) md_music src[0,1000000) audio
+-- rejected: InvalidValue(direction)
+
+== all: no video lane at all
+-- command: Apply transition to all cuts | ApplyTransitionToAll(TransitionSpec(fade, 10f), track: null)
+-- before
+tr_mus audio role=music
+  m1 [0,30) md_music src[0,1000000) audio
+-- rejected: ItemNotFound(track)

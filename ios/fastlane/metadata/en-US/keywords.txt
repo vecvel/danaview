@@ -1,1 +1,1 @@
-video player,media player,hd player,hdr,mkv,mp4,equalizer,hls,stream,vecvel,vwish
+video player,media player,hd player,hdr,mkv,mp4,equalizer,hls,stream,vecvel,danaview

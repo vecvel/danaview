@@ -1,0 +1,7 @@
+source: dv_spike_kernels.ci.metal
+source_sha256: 37e25c9635ec642ca05e84f5750942ca0d61ba3d977d30e6d0be3d6566a52234
+compiler: Apple metal version 32023.883 (metalfe-32023.883)
+flags: -fcikernel / metallib -cikernel
+min_ios: 15.0
+dv_spike_kernels.iphoneos.metallib: b041aea032dd924175cb25aee8bbf53eb44193e6fcc680e21c5087872132c9c8
+dv_spike_kernels.iphonesimulator.metallib: 4aebd4aa776d974e5e354599df9a3cba32eaa5050aa0ebe67f9e53dc99b4723b

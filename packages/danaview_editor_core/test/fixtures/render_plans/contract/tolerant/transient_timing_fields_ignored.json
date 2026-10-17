@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "item": "it_gridD0000001",
+  "future": true,
+  "layers": [
+    {
+      "id": "it_gridD0000001#v",
+      "xf": {
+        "cx": 1200,
+        "cy": 500,
+        "s": 1.1
+      },
+      "t": [
+        0,
+        99
+      ],
+      "z": 3,
+      "seq": 9,
+      "kind": "solid",
+      "map": [
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "asset": "ignored"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+# OWNER: AI-08
+name: danaview_transcription
+description: Auto captions logic for the Danaview editor - model catalog and consent, transcription service contract, pipeline, segmentation and timeline mapping. No widgets.
+version: 1.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: ">=3.22.0"
+
+# ARCH §4.2 rule 6: never the engine packages, danaview_editor or danaview_features; no widget code.
+dependencies:
+  flutter:
+    sdk: flutter
+  characters: ^1.3.0
+  collection: ^1.18.0
+  crypto: ^3.0.3
+  meta: ^1.11.0
+  path: ^1.9.0
+  danaview_data:
+    path: ../danaview_data
+  danaview_editor_core:
+    path: ../danaview_editor_core
+  danaview_whisper:
+    path: ../danaview_whisper
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

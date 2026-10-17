@@ -1,6 +1,6 @@
-app_identifier("com.vecvel.vwish")
+app_identifier("com.vecvel.danaview")
 app_version("1.0.0")
-copyright("2026 Vwish")
+copyright("2026 Danaview")
 primary_category("ENTERTAINMENT")
 secondary_category("UTILITIES")
 force(true)

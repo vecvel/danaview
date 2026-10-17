@@ -1,0 +1,587 @@
+{
+  "barcode" : {
+    "bandPercentOfHeight" : 10,
+    "cellCount" : 28,
+    "layout" : "cell0 white, cell1 black, 16 index bits MSB first, 8 CRC-8 bits (poly 0x07), cell26 white, cell27 black"
+  },
+  "files" : {
+    "alpha.png" : {
+      "bytes" : 114993,
+      "container" : "png",
+      "image" : {
+        "alpha" : true,
+        "height" : 512,
+        "width" : 512
+      },
+      "note" : "Transparent margin; opaque red square at (64,64) 160x160; 50% green rectangle at (64,300) 160x120; radial blue disc centred (340,340), alpha 1 -> 0 over radius 150."
+    },
+    "clap_flash_av.mp4" : {
+      "audio" : {
+        "aacWithPrimingEditList" : true,
+        "channelLayout" : "mono",
+        "channels" : 1,
+        "clickDurationMs" : 20,
+        "clickHz" : 2000,
+        "clickPeakDbfs" : -6,
+        "codec" : "aac",
+        "sampleRate" : 48000
+      },
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 179,
+        "step" : 1
+      },
+      "bytes" : 636693,
+      "clickTimesSeconds" : [
+        1,
+        2.5,
+        4
+      ],
+      "container" : "mp4",
+      "durationSeconds" : 6,
+      "flashFrames" : [
+        30,
+        75,
+        120
+      ],
+      "flashTimesSeconds" : [
+        1,
+        2.5,
+        4
+      ],
+      "note" : "Flash frames are all-white with black digits; the barcode band stays readable on them. Each click starts exactly at its flash frame's presentation time.",
+      "video" : {
+        "codec" : "h264",
+        "displayHeight" : 720,
+        "displayWidth" : 1280,
+        "fps" : 30,
+        "frameCount" : 180,
+        "height" : 720,
+        "rotationDegrees" : 0,
+        "variableFrameRate" : false,
+        "width" : 1280
+      }
+    },
+    "frame_counter_720p24.mp4" : {
+      "audio" : null,
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 191,
+        "step" : 1
+      },
+      "bytes" : 698419,
+      "container" : "mp4",
+      "durationSeconds" : 8,
+      "video" : {
+        "codec" : "h264",
+        "displayHeight" : 720,
+        "displayWidth" : 1280,
+        "fps" : 24,
+        "frameCount" : 192,
+        "height" : 720,
+        "rotationDegrees" : 0,
+        "variableFrameRate" : false,
+        "width" : 1280
+      }
+    },
+    "frame_counter_720p25.mp4" : {
+      "audio" : null,
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 199,
+        "step" : 1
+      },
+      "bytes" : 712136,
+      "container" : "mp4",
+      "durationSeconds" : 8,
+      "video" : {
+        "codec" : "h264",
+        "displayHeight" : 720,
+        "displayWidth" : 1280,
+        "fps" : 25,
+        "frameCount" : 200,
+        "height" : 720,
+        "rotationDegrees" : 0,
+        "variableFrameRate" : false,
+        "width" : 1280
+      }
+    },
+    "frame_counter_720p48.mp4" : {
+      "audio" : null,
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 383,
+        "step" : 1
+      },
+      "bytes" : 1400737,
+      "container" : "mp4",
+      "durationSeconds" : 8,
+      "video" : {
+        "codec" : "h264",
+        "displayHeight" : 720,
+        "displayWidth" : 1280,
+        "fps" : 48,
+        "frameCount" : 384,
+        "height" : 720,
+        "rotationDegrees" : 0,
+        "variableFrameRate" : false,
+        "width" : 1280
+      }
+    },
+    "frame_counter_720p60.mp4" : {
+      "audio" : null,
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 479,
+        "step" : 1
+      },
+      "bytes" : 1708010,
+      "container" : "mp4",
+      "durationSeconds" : 8,
+      "video" : {
+        "codec" : "h264",
+        "displayHeight" : 720,
+        "displayWidth" : 1280,
+        "fps" : 60,
+        "frameCount" : 480,
+        "height" : 720,
+        "rotationDegrees" : 0,
+        "variableFrameRate" : false,
+        "width" : 1280
+      }
+    },
+    "frame_counter_1080p30.mp4" : {
+      "audio" : null,
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 239,
+        "step" : 1
+      },
+      "bytes" : 1333431,
+      "container" : "mp4",
+      "durationSeconds" : 8,
+      "video" : {
+        "codec" : "h264",
+        "displayHeight" : 1080,
+        "displayWidth" : 1920,
+        "fps" : 30,
+        "frameCount" : 240,
+        "height" : 1080,
+        "rotationDegrees" : 0,
+        "variableFrameRate" : false,
+        "width" : 1920
+      }
+    },
+    "hlg_10bit_720p.mov" : {
+      "audio" : null,
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 89,
+        "step" : 1
+      },
+      "bytes" : 321060,
+      "container" : "mov",
+      "durationSeconds" : 3,
+      "video" : {
+        "bitDepth" : 10,
+        "codec" : "hevc",
+        "colorPrimaries" : "bt2020",
+        "displayHeight" : 720,
+        "displayWidth" : 1280,
+        "fps" : 30,
+        "frameCount" : 90,
+        "height" : 720,
+        "matrix" : "bt2020nc",
+        "profile" : "Main10",
+        "rotationDegrees" : 0,
+        "transfer" : "arib-std-b67",
+        "variableFrameRate" : false,
+        "width" : 1280
+      }
+    },
+    "rotated_90.mov" : {
+      "audio" : null,
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 89,
+        "step" : 1
+      },
+      "bytes" : 359303,
+      "container" : "mov",
+      "durationSeconds" : 3,
+      "note" : "Encoded landscape 1280x720 with a 90 degree preferred transform; the barcode is upright (top band) only after the rotation is applied.",
+      "video" : {
+        "codec" : "h264",
+        "displayHeight" : 1280,
+        "displayWidth" : 720,
+        "fps" : 30,
+        "frameCount" : 90,
+        "height" : 720,
+        "rotationDegrees" : 90,
+        "variableFrameRate" : false,
+        "width" : 1280
+      }
+    },
+    "sample_h264_aac.mkv" : {
+      "audio" : {
+        "channels" : 1,
+        "codec" : "aac",
+        "sampleRate" : 48000,
+        "toneHz" : 440
+      },
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 74,
+        "step" : 1
+      },
+      "bytes" : 93155,
+      "container" : "matroska",
+      "durationSeconds" : 3,
+      "iosRefusal" : true,
+      "video" : {
+        "codec" : "h264",
+        "fps" : 25,
+        "frameCount" : 75,
+        "height" : 360,
+        "rotationDegrees" : 0,
+        "width" : 640
+      }
+    },
+    "sample_vp9_opus.webm" : {
+      "audio" : {
+        "channels" : 1,
+        "codec" : "opus",
+        "sampleRate" : 48000,
+        "toneHz" : 440
+      },
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 74,
+        "step" : 1
+      },
+      "bytes" : 173775,
+      "container" : "webm",
+      "durationSeconds" : 3,
+      "iosRefusal" : true,
+      "video" : {
+        "codec" : "vp9",
+        "fps" : 25,
+        "frameCount" : 75,
+        "height" : 360,
+        "rotationDegrees" : 0,
+        "width" : 640
+      }
+    },
+    "speech_10s.m4a" : {
+      "audio" : {
+        "channelLayout" : "mono",
+        "channels" : 1,
+        "codec" : "aac",
+        "sampleRate" : 44100,
+        "speech" : true,
+        "spokenText" : "Welcome to the video editor test. The quick brown fox jumps over the lazy dog. Today we will trim a clip, add a title, and export the final movie. Please keep your eyes on the timeline while the captions appear.",
+        "voice" : "Samantha"
+      },
+      "bytes" : 81089,
+      "container" : "m4a",
+      "durationSeconds" : 10,
+      "video" : null
+    },
+    "stereo_440l_880r.wav" : {
+      "audio" : {
+        "channelLayout" : "stereo",
+        "channels" : 2,
+        "codec" : "pcm_s16le",
+        "peakDbfs" : -12,
+        "sampleRate" : 48000,
+        "toneHzLeft" : 440,
+        "toneHzRight" : 880
+      },
+      "bytes" : 960044,
+      "container" : "wav",
+      "durationSeconds" : 5,
+      "video" : null
+    },
+    "still_4k.jpg" : {
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 0,
+        "step" : 1
+      },
+      "bytes" : 212124,
+      "container" : "jpeg",
+      "image" : {
+        "alpha" : false,
+        "height" : 2160,
+        "width" : 3840
+      }
+    },
+    "surround_5_1.m4a" : {
+      "audio" : {
+        "channelLayout" : "5.1",
+        "channelOrder" : [
+          "C",
+          "L",
+          "R",
+          "Ls",
+          "Rs",
+          "LFE"
+        ],
+        "channels" : 6,
+        "codec" : "aac",
+        "otherChannelsSilent" : true,
+        "peakDbfs" : -12,
+        "sampleRate" : 48000,
+        "toneChannel" : "C",
+        "toneHz" : 500
+      },
+      "bytes" : 25122,
+      "container" : "m4a",
+      "durationSeconds" : 5,
+      "video" : null
+    },
+    "tone_1khz.wav" : {
+      "audio" : {
+        "channelLayout" : "mono",
+        "channels" : 1,
+        "codec" : "pcm_s16le",
+        "peakDbfs" : -12,
+        "sampleRate" : 48000,
+        "toneHz" : 1000
+      },
+      "bytes" : 960044,
+      "container" : "wav",
+      "durationSeconds" : 10,
+      "video" : null
+    },
+    "tone_440hz.wav" : {
+      "audio" : {
+        "channelLayout" : "mono",
+        "channels" : 1,
+        "codec" : "pcm_s16le",
+        "peakDbfs" : -12,
+        "sampleRate" : 48000,
+        "toneHz" : 440
+      },
+      "bytes" : 960044,
+      "container" : "wav",
+      "durationSeconds" : 10,
+      "video" : null
+    },
+    "tone_under_video.mp4" : {
+      "audio" : {
+        "aacWithPrimingEditList" : true,
+        "channelLayout" : "mono",
+        "channels" : 1,
+        "codec" : "aac",
+        "peakDbfs" : -12,
+        "sampleRate" : 48000,
+        "toneHz" : 1000
+      },
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 239,
+        "step" : 1
+      },
+      "bytes" : 914351,
+      "container" : "mp4",
+      "durationSeconds" : 8,
+      "video" : {
+        "codec" : "h264",
+        "displayHeight" : 720,
+        "displayWidth" : 1280,
+        "fps" : 30,
+        "frameCount" : 240,
+        "height" : 720,
+        "rotationDegrees" : 0,
+        "variableFrameRate" : false,
+        "width" : 1280
+      }
+    },
+    "vfr_720p.mp4" : {
+      "audio" : null,
+      "barcode" : {
+        "firstIndex" : 0,
+        "indexEqualsFrameNumber" : true,
+        "lastIndex" : 142,
+        "step" : 1
+      },
+      "bytes" : 490492,
+      "container" : "mp4",
+      "durationSeconds" : 6,
+      "note" : "Frame i shows barcode i and is presented at ptsTicks[i] \/ 600 s. Frame 60 is held for 0.5 s.",
+      "video" : {
+        "codec" : "h264",
+        "displayHeight" : 720,
+        "displayWidth" : 1280,
+        "endTick" : 3600,
+        "fps" : null,
+        "frameCount" : 143,
+        "height" : 720,
+        "ptsTicks" : [
+          0,
+          20,
+          40,
+          80,
+          105,
+          115,
+          145,
+          165,
+          185,
+          205,
+          225,
+          265,
+          290,
+          300,
+          330,
+          350,
+          370,
+          390,
+          410,
+          450,
+          475,
+          485,
+          515,
+          535,
+          555,
+          575,
+          595,
+          635,
+          660,
+          670,
+          700,
+          720,
+          740,
+          760,
+          780,
+          820,
+          845,
+          855,
+          885,
+          905,
+          925,
+          945,
+          965,
+          1005,
+          1030,
+          1040,
+          1070,
+          1090,
+          1110,
+          1130,
+          1150,
+          1190,
+          1215,
+          1225,
+          1255,
+          1275,
+          1295,
+          1315,
+          1335,
+          1375,
+          1400,
+          1700,
+          1730,
+          1750,
+          1770,
+          1790,
+          1810,
+          1850,
+          1875,
+          1885,
+          1915,
+          1935,
+          1955,
+          1975,
+          1995,
+          2035,
+          2060,
+          2070,
+          2100,
+          2120,
+          2140,
+          2160,
+          2180,
+          2220,
+          2245,
+          2255,
+          2285,
+          2305,
+          2325,
+          2345,
+          2365,
+          2405,
+          2430,
+          2440,
+          2470,
+          2490,
+          2510,
+          2530,
+          2550,
+          2590,
+          2615,
+          2625,
+          2655,
+          2675,
+          2695,
+          2715,
+          2735,
+          2775,
+          2800,
+          2810,
+          2840,
+          2860,
+          2880,
+          2900,
+          2920,
+          2960,
+          2985,
+          2995,
+          3025,
+          3045,
+          3065,
+          3085,
+          3105,
+          3145,
+          3170,
+          3180,
+          3210,
+          3230,
+          3250,
+          3270,
+          3290,
+          3330,
+          3355,
+          3365,
+          3395,
+          3415,
+          3435,
+          3455,
+          3475,
+          3515,
+          3540,
+          3550,
+          3580
+        ],
+        "ptsTimescale" : 600,
+        "rotationDegrees" : 0,
+        "variableFrameRate" : true,
+        "width" : 1280
+      }
+    }
+  },
+  "generator" : "tool\/make_fixtures.swift",
+  "schema" : 1
+}

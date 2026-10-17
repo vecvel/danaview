@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_domain/vwish_domain.dart';
+import 'package:danaview_domain/danaview_domain.dart';
 
 void main() {
   group('op_domain Model Tests', () {

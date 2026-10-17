@@ -125,23 +125,23 @@ jobs:
 
           # Copy and rename AAB if built
           if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
-            cp "build/app/outputs/bundle/release/app-release.aab" "release-artifacts/vwish-${VER}-bundle.aab"
+            cp "build/app/outputs/bundle/release/app-release.aab" "release-artifacts/danaview-${VER}-bundle.aab"
           fi
 
           # Copy and rename Universal APK if built
           if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
-            cp "build/app/outputs/flutter-apk/app-release.apk" "release-artifacts/vwish-${VER}-universal.apk"
+            cp "build/app/outputs/flutter-apk/app-release.apk" "release-artifacts/danaview-${VER}-universal.apk"
           fi
 
           # Copy and rename Split-ABI APKs if built
           if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
-            cp "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "release-artifacts/vwish-${VER}-arm64-v8a.apk"
+            cp "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "release-artifacts/danaview-${VER}-arm64-v8a.apk"
           fi
           if [ -f "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" ]; then
-            cp "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" "release-artifacts/vwish-${VER}-armeabi-v7a.apk"
+            cp "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" "release-artifacts/danaview-${VER}-armeabi-v7a.apk"
           fi
           if [ -f "build/app/outputs/flutter-apk/app-x86_64-release.apk" ]; then
-            cp "build/app/outputs/flutter-apk/app-x86_64-release.apk" "release-artifacts/vwish-${VER}-x86_64.apk"
+            cp "build/app/outputs/flutter-apk/app-x86_64-release.apk" "release-artifacts/danaview-${VER}-x86_64.apk"
           fi
 
           # Compute SHA-256 Checksums
@@ -157,19 +157,19 @@ jobs:
           APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
           {
-            echo "## Vwish Android Release (${APP_VERSION})"
+            echo "## Danaview Android Release (${APP_VERSION})"
             echo ""
             echo "Ultra-high performance HDR media player for Android with hardware-accelerated playback."
             echo ""
             echo "### 📦 Download Packages"
-            echo "* **Universal APK (\`vwish-${APP_VERSION}-universal.apk\`)**: Standalone installer compatible with all supported Android architectures."
-            echo "* **ARM64 APK (\`vwish-${APP_VERSION}-arm64-v8a.apk\`)**: Optimized for modern 64-bit ARM devices (most modern Android phones & tablets)."
-            echo "* **ARMv7 APK (\`vwish-${APP_VERSION}-armeabi-v7a.apk\`)**: Optimized for legacy 32-bit ARM devices."
-            echo "* **x86_64 APK (\`vwish-${APP_VERSION}-x86_64.apk\`)**: Optimized for Intel/AMD Chromebooks and Android emulators."
-            echo "* **App Bundle (\`vwish-${APP_VERSION}-bundle.aab\`)**: Official signed bundle for Google Play Store publishing."
+            echo "* **Universal APK (\`danaview-${APP_VERSION}-universal.apk\`)**: Standalone installer compatible with all supported Android architectures."
+            echo "* **ARM64 APK (\`danaview-${APP_VERSION}-arm64-v8a.apk\`)**: Optimized for modern 64-bit ARM devices (most modern Android phones & tablets)."
+            echo "* **ARMv7 APK (\`danaview-${APP_VERSION}-armeabi-v7a.apk\`)**: Optimized for legacy 32-bit ARM devices."
+            echo "* **x86_64 APK (\`danaview-${APP_VERSION}-x86_64.apk\`)**: Optimized for Intel/AMD Chromebooks and Android emulators."
+            echo "* **App Bundle (\`danaview-${APP_VERSION}-bundle.aab\`)**: Official signed bundle for Google Play Store publishing."
             echo ""
             echo "### 🔒 Integrity & Security"
-            echo "All binaries are signed with the official Vwish production release key. Checksums are listed in \`checksums-sha256.txt\`. Verify via:"
+            echo "All binaries are signed with the official Danaview production release key. Checksums are listed in \`checksums-sha256.txt\`. Verify via:"
             echo "\`\`\`bash"
             echo "sha256sum -c checksums-sha256.txt"
             echo "\`\`\`"
@@ -178,7 +178,7 @@ jobs:
       - name: Upload Artifacts to Actions Run
         uses: actions/upload-artifact@v4
         with:
-          name: vwish-android-${{ steps.version.outputs.version }}
+          name: danaview-android-${{ steps.version.outputs.version }}
           path: release-artifacts/*
 
       - name: Publish GitHub Release
@@ -186,7 +186,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: "Vwish Android ${{ steps.version.outputs.version }}"
+          name: "Danaview Android ${{ steps.version.outputs.version }}"
           body_path: release-notes.md
           files: release-artifacts/*
           draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}

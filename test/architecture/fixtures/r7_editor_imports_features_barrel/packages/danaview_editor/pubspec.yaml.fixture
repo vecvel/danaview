@@ -1,0 +1,4 @@
+name: danaview_editor
+dependencies:
+  danaview_features:
+    path: ../danaview_features

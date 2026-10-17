@@ -1,0 +1,4 @@
+import 'package:flutter/material.dart';
+
+// Code inside a string interpolation is still code.
+String describe(BuildContext context) => 'overlay: ${const Card().toString()}';

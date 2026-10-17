@@ -89,7 +89,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path release-artifacts | Out-Null
 
           # 1. Create portable ZIP package
-          $zipName = "vwish-$ver-windows-x64-portable.zip"
+          $zipName = "danaview-$ver-windows-x64-portable.zip"
           Write-Host "Compressing portable release to $zipName..."
           Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "release-artifacts\$zipName" -Force
 
@@ -101,7 +101,7 @@ jobs:
           }
           if (Test-Path $isccPath) {
             Write-Host "Compiling installer exe with Inno Setup..."
-            & $isccPath /DAppVersion="$verName" /DOutputDir="$PWD\release-artifacts" windows\packaging\vwish.iss
+            & $isccPath /DAppVersion="$verName" /DOutputDir="$PWD\release-artifacts" windows\packaging\danaview.iss
           } else {
             Write-Warning "Inno Setup compiler not available; installer creation skipped."
           }
@@ -122,13 +122,13 @@ jobs:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
         run: |
           $content = @"
-          ## Vwish Windows Release ($($env:APP_VERSION))
+          ## Danaview Windows Release ($($env:APP_VERSION))
 
           Ultra-high performance HDR media player for Windows 10 and Windows 11 with hardware acceleration.
 
           ### 📦 Download Packages
-          * **Setup Installer (\`vwish-$($env:VERSION_NAME)-windows-x64-setup.exe\`)**: Recommended installer with Start Menu integration, desktop shortcut, and clean uninstaller.
-          * **Portable ZIP (\`vwish-$($env:APP_VERSION)-windows-x64-portable.zip\`)**: Standalone archive; extract and run \`vwish.exe\` without installation.
+          * **Setup Installer (\`danaview-$($env:VERSION_NAME)-windows-x64-setup.exe\`)**: Recommended installer with Start Menu integration, desktop shortcut, and clean uninstaller.
+          * **Portable ZIP (\`danaview-$($env:APP_VERSION)-windows-x64-portable.zip\`)**: Standalone archive; extract and run \`danaview.exe\` without installation.
 
           ### 🚀 Features & Capabilities
           * **Universal Playback**: Hardware-accelerated decoding for HEVC, AV1, VP9, H.264, MKV, MP4, HLS, DASH, and audio streams.
@@ -140,7 +140,7 @@ jobs:
           ### 🔒 Integrity & Verification
           Checksums are listed in \`checksums-sha256.txt\`. Verify your download in PowerShell via:
           \`\`\`powershell
-          Get-FileHash vwish-$($env:VERSION_NAME)-windows-x64-setup.exe -Algorithm SHA256
+          Get-FileHash danaview-$($env:VERSION_NAME)-windows-x64-setup.exe -Algorithm SHA256
           \`\`\`
           "@
           Set-Content -Path release-notes.md -Value $content
@@ -148,7 +148,7 @@ jobs:
       - name: Upload Artifacts to Actions Run
         uses: actions/upload-artifact@v4
         with:
-          name: vwish-windows-${{ steps.version.outputs.version }}
+          name: danaview-windows-${{ steps.version.outputs.version }}
           path: release-artifacts/*
 
       - name: Publish GitHub Release
@@ -156,7 +156,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: "Vwish Windows ${{ steps.version.outputs.version }}"
+          name: "Danaview Windows ${{ steps.version.outputs.version }}"
           body_path: release-notes.md
           files: release-artifacts/*
           draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}

@@ -5,10 +5,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_domain/vwish_domain.dart';
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_features/danaview_features.dart';
+// The effective date's source of truth is the legal texts file, which the barrel does not export.
+// ignore: implementation_imports
+import 'package:danaview_features/src/more/legal_texts.dart' show legalEffectiveDate;
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import 'library_test_utils.dart';
 
@@ -55,16 +58,16 @@ Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
 }
 
 Future<void> _finish(WidgetTester tester, LibraryTestEnv env) async {
-  VwishToast.dismiss();
+  DanaviewToast.dismiss();
   await tester.pumpWidget(const SizedBox());
   await env.dispose();
 }
 
 /// Scrolls the page to the button first; list pages build lazily.
-Future<VwishButton> _button(WidgetTester tester, String label) async {
-  final finder = find.widgetWithText(VwishButton, label);
+Future<DanaviewButton> _button(WidgetTester tester, String label) async {
+  final finder = find.widgetWithText(DanaviewButton, label);
   await tester.scrollUntilVisible(finder, 200, scrollable: find.byType(Scrollable).first);
-  return tester.widget<VwishButton>(finder);
+  return tester.widget<DanaviewButton>(finder);
 }
 
 const _fieldLabels = ['Name', 'Email', 'Phone'];
@@ -72,7 +75,7 @@ const _fieldLabels = ['Name', 'Email', 'Phone'];
 /// The editable text of a profile field ([index] into [_fieldLabels]), scrolled into view.
 Future<Finder> _scrollToField(WidgetTester tester, int index) async {
   final field = find.descendant(
-    of: find.byWidgetPredicate((w) => w is VwishTextField && w.semanticLabel == _fieldLabels[index]),
+    of: find.byWidgetPredicate((w) => w is DanaviewTextField && w.semanticLabel == _fieldLabels[index]),
     matching: find.byType(EditableText),
   );
   await tester.scrollUntilVisible(field, 200, scrollable: find.byType(Scrollable).first);
@@ -236,9 +239,9 @@ void main() {
     });
 
     test('unreadable values load as empty', () async {
-      SharedPreferences.setMockInitialValues({'vwish_profile': '{not json'});
+      SharedPreferences.setMockInitialValues({'danaview_profile': '{not json'});
       expect(ProfileRepository(await SharedPreferences.getInstance()).load(), UserProfile.empty);
-      SharedPreferences.setMockInitialValues({'vwish_profile': '[1, 2]'});
+      SharedPreferences.setMockInitialValues({'danaview_profile': '[1, 2]'});
       expect(ProfileRepository(await SharedPreferences.getInstance()).load(), UserProfile.empty);
     });
   });
@@ -247,8 +250,8 @@ void main() {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     final match = RegExp(r'^version:\s*([\d.]+)\+(\d+)\s*$', multiLine: true).firstMatch(pubspec);
     expect(match, isNotNull);
-    expect(vwishAppVersion, match![1]);
-    expect(vwishBuildNumber, int.parse(match[2]!));
+    expect(danaviewAppVersion, match![1]);
+    expect(danaviewBuildNumber, int.parse(match[2]!));
   });
 
   group('Settings', () {
@@ -259,7 +262,7 @@ void main() {
       var backs = 0;
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishSettingsScreen(onBack: () => backs++, onNavigate: opened.add),
+        DanaviewSettingsScreen(onBack: () => backs++, onNavigate: opened.add),
       ));
       await pumpFrames(tester);
       expect(find.text('Set up your profile'), findsOneWidget);
@@ -271,7 +274,7 @@ void main() {
         'Media info': SettingsDestination.mediaInfo,
         'Data usage': SettingsDestination.dataUsage,
         'Storage & history': SettingsDestination.storage,
-        'About Vwish': SettingsDestination.about,
+        'About Danaview': SettingsDestination.about,
         'Privacy Policy': SettingsDestination.privacy,
         'Terms of Use': SettingsDestination.terms,
       };
@@ -281,7 +284,7 @@ void main() {
         expect(opened, [destination], reason: label);
       }
 
-      await tester.scrollUntilVisible(find.text('Vwish 1.0.0 (1)'), 200);
+      await tester.scrollUntilVisible(find.text('Danaview 1.0.0 (1)'), 200);
       await tester.tap(find.byTooltip('Back'));
       expect(backs, 1);
       expect(tester.takeException(), isNull);
@@ -292,7 +295,7 @@ void main() {
       useSurface(tester, librarySurfaces[2]);
       final env = await LibraryTestEnv.create();
       await ProfileRepository(env.prefs).save(const UserProfile(name: 'Ada Lovelace', email: 'ada@example.com'));
-      await tester.pumpWidget(libraryTestApp(env, VwishSettingsScreen(onBack: () {}, onNavigate: (_) {})));
+      await tester.pumpWidget(libraryTestApp(env, DanaviewSettingsScreen(onBack: () {}, onNavigate: (_) {})));
       await pumpFrames(tester);
       expect(find.text('Ada Lovelace'), findsOneWidget);
       expect(find.text('ada@example.com'), findsOneWidget);
@@ -307,7 +310,7 @@ void main() {
       await ProfileRepository(env.prefs).save(const UserProfile(name: 'Ada', email: _longEmail));
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishSettingsScreen(onBack: () {}, onNavigate: (_) {}),
+        DanaviewSettingsScreen(onBack: () {}, onNavigate: (_) {}),
         textScale: 1.35,
       ));
       await pumpFrames(tester);
@@ -324,13 +327,13 @@ void main() {
       final env = await LibraryTestEnv.create();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishSettingsScreen(onBack: () {}, onNavigate: (_) {}),
+        DanaviewSettingsScreen(onBack: () {}, onNavigate: (_) {}),
         platform: TargetPlatform.macOS,
       ));
       await pumpFrames(tester);
-      await tester.scrollUntilVisible(find.text('Vwish 1.0.0 (1)'), 200);
+      await tester.scrollUntilVisible(find.text('Danaview 1.0.0 (1)'), 200);
       expect(find.text('Playback'), findsNothing);
-      expect(find.byType(VwishSegmentedControl<int>), findsNothing);
+      expect(find.byType(DanaviewSegmentedControl<int>), findsNothing);
       expect(tester.takeException(), isNull);
       await _finish(tester, env);
     });
@@ -338,15 +341,15 @@ void main() {
     testWidgets('double-tap seek is chosen with a segmented control', (tester) async {
       useSurface(tester, librarySurfaces[2]);
       final env = await LibraryTestEnv.create();
-      await tester.pumpWidget(libraryTestApp(env, VwishSettingsScreen(onBack: () {}, onNavigate: (_) {})));
+      await tester.pumpWidget(libraryTestApp(env, DanaviewSettingsScreen(onBack: () {}, onNavigate: (_) {})));
       await pumpFrames(tester);
-      final control = find.byType(VwishSegmentedControl<int>);
-      expect(tester.widget<VwishSegmentedControl<int>>(control).value, SessionRepository.defaultDoubleTapSeekSeconds);
+      final control = find.byType(DanaviewSegmentedControl<int>);
+      expect(tester.widget<DanaviewSegmentedControl<int>>(control).value, SessionRepository.defaultDoubleTapSeekSeconds);
       expect(find.textContaining('by 10 seconds'), findsOneWidget);
 
       await _tapVisible(tester, find.descendant(of: control, matching: find.text('30s')));
       expect(env.session.getDoubleTapSeekSeconds(), 30);
-      expect(tester.widget<VwishSegmentedControl<int>>(control).value, 30);
+      expect(tester.widget<DanaviewSegmentedControl<int>>(control).value, 30);
       expect(find.textContaining('by 30 seconds'), findsOneWidget);
       final container = ProviderScope.containerOf(tester.element(control));
       expect(container.read(doubleTapSeekProvider), 30);
@@ -357,7 +360,7 @@ void main() {
   group('Profile', () {
     Future<int Function()> pumpProfile(WidgetTester tester, LibraryTestEnv env) async {
       var backs = 0;
-      await tester.pumpWidget(libraryTestApp(env, VwishProfileScreen(onBack: () => backs++)));
+      await tester.pumpWidget(libraryTestApp(env, DanaviewProfileScreen(onBack: () => backs++)));
       await pumpFrames(tester);
       return () => backs;
     }
@@ -390,7 +393,7 @@ void main() {
       await tester.pump();
       expect((await _button(tester, 'Save')).onPressed, isNotNull);
 
-      await _tapVisible(tester, find.widgetWithText(VwishButton, 'Save'));
+      await _tapVisible(tester, find.widgetWithText(DanaviewButton, 'Save'));
       expect(find.text('Profile saved'), findsOneWidget);
       expect(
         ProfileRepository(env.prefs).load(),
@@ -398,9 +401,9 @@ void main() {
       );
       expect((await _button(tester, 'Save')).onPressed, isNull, reason: 'saved, so unchanged');
 
-      await _tapVisible(tester, find.widgetWithText(VwishButton, 'Clear profile'));
-      expect(find.widgetWithText(VwishDialog, 'Clear profile'), findsOneWidget);
-      await tester.tap(find.widgetWithText(VwishButton, 'Clear'));
+      await _tapVisible(tester, find.widgetWithText(DanaviewButton, 'Clear profile'));
+      expect(find.widgetWithText(DanaviewDialog, 'Clear profile'), findsOneWidget);
+      await tester.tap(find.widgetWithText(DanaviewButton, 'Clear'));
       await pumpFrames(tester);
       expect(ProfileRepository(env.prefs).load(), UserProfile.empty);
       expect(find.text('Profile cleared'), findsOneWidget);
@@ -425,26 +428,26 @@ void main() {
       useSurface(tester, librarySurfaces[2]);
       final env = await LibraryTestEnv.create();
       await pumpProfile(tester, env);
-      expect(find.byType(VwishDateWheels), findsNothing);
+      expect(find.byType(DanaviewDateWheels), findsNothing);
 
       await _tapVisible(tester, find.text('Add date of birth'));
-      expect(find.byType(VwishDateWheels), findsOneWidget);
+      expect(find.byType(DanaviewDateWheels), findsOneWidget);
       expect(find.text('Date of birth'), findsWidgets);
       await tester.tap(find.text('Done'));
       await pumpFrames(tester);
 
       final now = DateTime.now();
       final expected = DateTime(now.year - 25);
-      expect(find.text(vwishFormatDate(expected)), findsOneWidget);
+      expect(find.text(danaviewFormatDate(expected)), findsOneWidget);
       expect(find.text('Age ${ProfileValidation.ageOn(expected, now)}'), findsOneWidget);
-      await _tapVisible(tester, find.widgetWithText(VwishButton, 'Save'));
+      await _tapVisible(tester, find.widgetWithText(DanaviewButton, 'Save'));
       expect(ProfileRepository(env.prefs).load().dateOfBirth, expected);
 
       await _tapVisible(tester, find.byTooltip('Clear date of birth'));
       expect(find.text('Add date of birth'), findsOneWidget);
       expect((await _button(tester, 'Save')).onPressed, isNotNull);
-      await _tapVisible(tester, find.widgetWithText(VwishButton, 'Undo changes'));
-      expect(find.text(vwishFormatDate(expected)), findsOneWidget);
+      await _tapVisible(tester, find.widgetWithText(DanaviewButton, 'Undo changes'));
+      expect(find.text(danaviewFormatDate(expected)), findsOneWidget);
       expect(tester.takeException(), isNull);
       await _finish(tester, env);
     });
@@ -462,7 +465,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.byTooltip('Back'));
       await pumpFrames(tester);
-      expect(find.widgetWithText(VwishDialog, 'Discard changes'), findsOneWidget);
+      expect(find.widgetWithText(DanaviewDialog, 'Discard changes'), findsOneWidget);
       await tester.tap(find.text('Keep editing'));
       await pumpFrames(tester);
       expect(backs(), 1);
@@ -470,7 +473,7 @@ void main() {
 
       await tester.tap(find.byTooltip('Back'));
       await pumpFrames(tester);
-      await tester.tap(find.widgetWithText(VwishButton, 'Discard'));
+      await tester.tap(find.widgetWithText(DanaviewButton, 'Discard'));
       await pumpFrames(tester);
       expect(backs(), 2);
       expect(ProfileRepository(env.prefs).load(), UserProfile.empty);
@@ -499,14 +502,14 @@ void main() {
       final opened = <String>[];
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishAboutScreen(
+        DanaviewAboutScreen(
           onBack: () {},
           onOpenPrivacy: () => opened.add('privacy'),
           onOpenTerms: () => opened.add('terms'),
         ),
       ));
       await pumpFrames(tester);
-      expect(find.text('Vwish'), findsOneWidget);
+      expect(find.text('Danaview'), findsOneWidget);
       expect(find.text('Version 1.0.0 (build 1)'), findsOneWidget);
       expect(find.text('Open-source licenses'), findsNothing);
       expect(find.textContaining('Flutter'), findsNothing);
@@ -528,7 +531,7 @@ void main() {
         return null;
       });
       addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
-      final about = VwishAboutScreen(onBack: () {}, onOpenPrivacy: () {}, onOpenTerms: () {});
+      final about = DanaviewAboutScreen(onBack: () {}, onOpenPrivacy: () {}, onOpenTerms: () {});
       await tester.pumpWidget(libraryTestApp(env, about, overrides: [supportEmailProvider.overrideWithValue(null)]));
       await pumpFrames(tester);
       await tester.scrollUntilVisible(find.text('Copyright © 2026 vecvel. All rights reserved.'), 200);
@@ -553,12 +556,12 @@ void main() {
       final noEmail = [supportEmailProvider.overrideWithValue(null)];
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishLegalScreen(document: LegalDocument.privacy, onBack: () {}),
+        DanaviewLegalScreen(document: LegalDocument.privacy, onBack: () {}),
         overrides: noEmail,
       ));
       await pumpFrames(tester);
       expect(find.text('Privacy Policy'), findsOneWidget);
-      expect(find.text('Effective 3 October 2026'), findsOneWidget);
+      expect(find.text('Effective $legalEffectiveDate'), findsOneWidget);
       expect(find.textContaining('keeps everything on your device'), findsOneWidget);
       await tester.scrollUntilVisible(find.textContaining('speed.cloudflare.com'), 300);
       expect(find.textContaining('speed.cloudflare.com'), findsOneWidget);
@@ -570,7 +573,7 @@ void main() {
 
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishLegalScreen(document: LegalDocument.privacy, onBack: () {}),
+        DanaviewLegalScreen(document: LegalDocument.privacy, onBack: () {}),
         overrides: [supportEmailProvider.overrideWithValue('help@example.com')],
       ));
       await pumpFrames(tester);
@@ -580,7 +583,7 @@ void main() {
 
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishLegalScreen(document: LegalDocument.terms, onBack: () {}),
+        DanaviewLegalScreen(document: LegalDocument.terms, onBack: () {}),
         overrides: noEmail,
       ));
       await pumpFrames(tester);
@@ -612,12 +615,12 @@ void main() {
           if (scroll) await _scrollThrough(tester);
         }
 
-        await show(VwishSettingsScreen(onBack: () {}, onNavigate: (_) {}), expectText: 'Set up your profile');
-        await show(VwishProfileScreen(onBack: () {}), expectText: 'Your profile');
+        await show(DanaviewSettingsScreen(onBack: () {}, onNavigate: (_) {}), expectText: 'Set up your profile');
+        await show(DanaviewProfileScreen(onBack: () {}), expectText: 'Your profile');
 
         await ProfileRepository(env.prefs).save(_longProfile);
-        await show(VwishSettingsScreen(onBack: () {}, onNavigate: (_) {}), expectText: _longName);
-        await show(VwishProfileScreen(onBack: () {}), expectText: _longName, scroll: false);
+        await show(DanaviewSettingsScreen(onBack: () {}, onNavigate: (_) {}), expectText: _longName);
+        await show(DanaviewProfileScreen(onBack: () {}), expectText: _longName, scroll: false);
         // Errors under long values.
         await _enter(tester, 1, '$_longEmail.');
         await _enter(tester, 2, '+44 (020) 7946-0958 1234');
@@ -625,23 +628,23 @@ void main() {
         expect(find.text('Enter an email like name@example.com'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await _scrollThrough(tester);
-        await _tapVisible(tester, find.widgetWithText(VwishButton, 'Clear profile'));
-        expect(find.widgetWithText(VwishDialog, 'Clear profile'), findsOneWidget);
+        await _tapVisible(tester, find.widgetWithText(DanaviewButton, 'Clear profile'));
+        expect(find.widgetWithText(DanaviewDialog, 'Clear profile'), findsOneWidget);
         expect(tester.takeException(), isNull);
-        await tester.tap(find.widgetWithText(VwishButton, 'Cancel'));
+        await tester.tap(find.widgetWithText(DanaviewButton, 'Cancel'));
         await pumpFrames(tester);
         await tester.scrollUntilVisible(find.text('14 March 1990'), -200, scrollable: find.byType(Scrollable).first);
         await _tapVisible(tester, find.text('14 March 1990'));
-        expect(find.byType(VwishDateWheels), findsOneWidget);
+        expect(find.byType(DanaviewDateWheels), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.tap(find.byTooltip('Close'));
         await pumpFrames(tester);
 
-        await show(VwishAboutScreen(onBack: () {}, onOpenPrivacy: () {}, onOpenTerms: () {}));
+        await show(DanaviewAboutScreen(onBack: () {}, onOpenPrivacy: () {}, onOpenTerms: () {}));
         await _scrollThrough(tester, scrollable: find.byType(Scrollable).first);
         expect(tester.takeException(), isNull);
-        await show(VwishLegalScreen(document: LegalDocument.privacy, onBack: () {}));
-        await show(VwishLegalScreen(document: LegalDocument.terms, onBack: () {}));
+        await show(DanaviewLegalScreen(document: LegalDocument.privacy, onBack: () {}));
+        await show(DanaviewLegalScreen(document: LegalDocument.terms, onBack: () {}));
         await _finish(tester, env);
       });
     }

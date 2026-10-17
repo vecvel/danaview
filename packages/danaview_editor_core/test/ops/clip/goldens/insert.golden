@@ -1,0 +1,242 @@
+== insert ripple at a cut (main lane)
+-- command: Add clip | InsertMedia([md_video2], at: 4000000, track: null, mode: auto)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_#1 [120,420) md_video2 src[0,10000000)
+  it_c [450,510) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1, it_c
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== insert ripple inside a clip snaps to the nearest cut
+-- command: Add clip | InsertMedia([md_video2], at: 3333334, track: null, mode: auto)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_#1 [120,420) md_video2 src[0,10000000)
+  it_c [450,510) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1, it_c
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== insert ripple at the a|b cut drops the transition
+-- command: Add clip | InsertMedia([md_image], at: 2000000, track: null, mode: auto)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_#1 [60,150) md_image src[0,3000000)
+  it_b [150,210) md_video src[10000000,12000000)
+  it_c [240,300) md_video2 src[0,2000000)
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1, it_b, it_c
+-- changed lanes: tr_main
+-- notices: transitionsRemoved x1
+-- selection: {it_#1} primary it_#1
+
+== insert ripple at 0 moves the linked partner, not the music
+-- command: Add clip | InsertMedia([md_image], at: 0, track: null, mode: auto)
+-- before: standard()
+-- after
+tr_main video main
+  it_#1 [0,90) md_image src[0,3000000)
+  it_a [90,150) md_video src[0,2000000) detached link=ln_a
+  it_b [150,210) md_video src[10000000,12000000)
+  it_c [240,300) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [90,150) md_video src[0,2000000) audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_#1, it_a, it_a_au, it_b, it_c
+-- changed lanes: tr_main, tr_orig
+-- selection: {it_#1} primary it_#1
+
+== insert ripple blocked by a linked partner
+-- command: Add clip | InsertMedia([md_image], at: 0, track: null, mode: auto)
+-- before
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+  it_x [100,130) md_music src[0,1000000) audio
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: RippleBlockedByLinkedItem(it_a_au)
+
+== insert two clips back to back (ripple)
+-- command: Add clips | InsertMedia([md_image, md_short], at: 7000000, track: null, mode: auto)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  it_#1 [210,300) md_image src[0,3000000)
+  it_#2 [300,330) md_short src[0,1000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1, it_#2
+-- changed lanes: tr_main
+-- selection: {it_#1, it_#2} primary it_#1
+
+== insert newLane into occupied main goes to a new video lane
+-- command: Add clip | InsertMedia([md_video2], at: 1000000, track: null, mode: newLane)
+-- before: standard()
+-- after
+tr_#1 video
+  it_#1 [30,330) md_video2 src[0,10000000)
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- notices: placedOnOtherLane {it_#1}
+-- selection: {it_#1} primary it_#1
+-- preview creates: video@1
+
+== insert newLane into a free gap stays on main
+-- command: Add clip | InsertMedia([md_short], at: 4000000, track: null, mode: newLane)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_#1 [120,150) md_short src[0,1000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== insert auto with ripple off behaves as newLane
+-- command: Add clip | InsertMedia([md_image], at: 3333334, track: null, mode: auto)
+-- before: standard()
+-- after
+tr_#1 video
+  it_#1 [100,190) md_image src[0,3000000)
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- notices: placedOnOtherLane {it_#1}
+-- selection: {it_#1} primary it_#1
+-- preview creates: video@1
+
+== insert overlay on an explicit overlay lane
+-- command: Add clip | InsertMedia([md_image], at: 3000000, track: tr_ov1, mode: newLane)
+-- before: standard()
+-- after
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+  it_#1 [90,180) md_image src[0,3000000)
+unchanged: tr_main, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_ov1
+-- selection: {it_#1} primary it_#1
+
+== insert music with no lane uses the music lane, occupied -> new music lane
+-- command: Add clip | InsertMedia([md_music], at: 0, track: null, mode: newLane)
+-- before: standard()
+-- after
+tr_#1 audio role=music
+  it_#1 [0,3600) md_music src[0,120000000) audio
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- notices: placedOnOtherLane {it_#1}
+-- selection: {it_#1} primary it_#1
+-- preview creates: audio@6
+
+== insert a recording creates a voice lane
+-- command: Add clip | InsertMedia([md_rec], at: 500000, track: null, mode: newLane)
+-- before: standard()
+-- after
+tr_#1 audio role=voice
+  it_#1 [15,915) md_rec src[0,30000000) audio
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {it_#1} primary it_#1
+-- preview creates: audio@6
+
+== insert video audio onto the original lane
+-- command: Add clip | InsertMedia([md_video2], at: 2000000, track: tr_orig, mode: newLane)
+-- before: standard()
+-- after
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+  it_#1 [60,360) md_video2 src[0,10000000) audio
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_#1
+-- changed lanes: tr_orig
+-- selection: {it_#1} primary it_#1
+
+== insert with policy reject into occupied space
+-- command: Add clip | InsertMedia([md_video2], at: 1000000, track: null, mode: newLane)
+-- before: standard()
+-- rejected: WouldOverlap(tr_main, [30,60))
+
+== insert into a locked lane
+-- command: Add clip | InsertMedia([md_image], at: 10000000, track: null, mode: auto)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)
+
+== insert a LUT
+-- command: Add clip | InsertMedia([md_lut], at: 0, track: null, mode: auto)
+-- before: standard()
+-- rejected: UnsupportedForKind(lut)
+
+== insert missing media
+-- command: Add clip | InsertMedia([md_missing], at: 0, track: null, mode: auto)
+-- before: standard()
+-- rejected: MediaUnavailable(md_missing)
+
+== insert media on a text lane
+-- command: Add clip | InsertMedia([md_image], at: 0, track: tr_txt, mode: auto)
+-- before: standard()
+-- rejected: IncompatibleTrack(tr_txt)
+
+== insert audio media on a video lane
+-- command: Add clip | InsertMedia([md_music], at: 0, track: tr_main, mode: auto)
+-- before: standard()
+-- rejected: IncompatibleTrack(tr_main)
+
+== insert mixed visual and audio media
+-- command: Add clips | InsertMedia([md_image, md_music], at: 0, track: null, mode: auto)
+-- before: standard()
+-- rejected: IncompatibleTrack(-)

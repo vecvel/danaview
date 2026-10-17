@@ -1,0 +1,6 @@
+name: danaview_editor_engine_example
+dependencies:
+  danaview_editor:
+    path: ../../danaview_editor
+  danaview_features:
+    path: ../../danaview_features

@@ -1,0 +1,2 @@
+// Negative fixture: dart:io is allowed only under lib/src/store/.
+import 'dart:io';

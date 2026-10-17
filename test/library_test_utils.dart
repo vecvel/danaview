@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_domain/vwish_domain.dart';
-import 'package:vwish_engine/vwish_engine.dart';
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_engine/danaview_engine.dart';
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 const String longTitle =
     'An Extraordinarily Long Episode Title That Keeps Going Well Past Any Reasonable Width '
@@ -96,7 +96,7 @@ Widget libraryTestApp(
     overrides: [...env.overrides, ...overrides],
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: VwishTheme.darkTheme.copyWith(platform: platform),
+      theme: DanaviewTheme.darkTheme.copyWith(platform: platform),
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
         child: child!,
@@ -149,7 +149,7 @@ Future<void> seedLibrary(LibraryTestEnv env, {required String existingDir}) asyn
 
 /// A folder tree with nested folders and long-named videos.
 Directory createMediaTree() {
-  final root = Directory.systemTemp.createTempSync('vwish_library_test_');
+  final root = Directory.systemTemp.createTempSync('danaview_library_test_');
   final season = Directory(joinPath([root.path, 'Season 1']))..createSync();
   Directory(joinPath([root.path, 'Extras With A Folder Name That Is Far Too Long To Fit On Any Phone Screen']))
       .createSync();

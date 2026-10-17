@@ -1,0 +1,104 @@
+{
+  "futureTopLevel": {
+    "x": 1
+  },
+  "v": 1,
+  "rev": 1,
+  "target": "preview",
+  "canvas": {
+    "w": 1920,
+    "h": 1080,
+    "fps": 30,
+    "gridFps": 30,
+    "bg": "#000000",
+    "colorSpace": "bt709"
+  },
+  "durUs": 3000000.0,
+  "assets": {
+    "md_clipA00000001": {
+      "kind": "video",
+      "uri": "file:///fixtures/frame_counter_1080p30.mp4",
+      "fp": "a1b2",
+      "w": 1920,
+      "h": 1080,
+      "rot": 0,
+      "durUs": 8000000,
+      "hasAudio": true,
+      "transfer": "sdr",
+      "codec": "h264"
+    }
+  },
+  "layers": [
+    {
+      "id": "it_clip00000001#v",
+      "z": 10,
+      "seq": 0,
+      "t": [
+        0,
+        3000000
+      ],
+      "kind": "media",
+      "asset": "md_clipA00000001",
+      "map": [
+        [
+          0,
+          3000000,
+          0,
+          3000000
+        ]
+      ],
+      "hold": false,
+      "base": [
+        1920.0,
+        1080.0
+      ],
+      "crop": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "xf": {
+        "s": 1,
+        "r": 0,
+        "fx": false,
+        "fy": false,
+        "op": 1.0,
+        "skew": 0
+      },
+      "fx": {
+        "mystery": true
+      },
+      "anim": {},
+      "cmasks": [],
+      "label": "Clip A"
+    }
+  ],
+  "audio": [
+    {
+      "id": "it_clip00000001#a",
+      "asset": "md_clipA00000001",
+      "stream": 0,
+      "t": [
+        0,
+        3000000
+      ],
+      "map": [
+        [
+          0,
+          3000000,
+          0,
+          3000000
+        ]
+      ],
+      "gain": [
+        [
+          0,
+          1.0
+        ]
+      ],
+      "pitch": true,
+      "eq": []
+    }
+  ]
+}

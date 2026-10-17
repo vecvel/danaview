@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Danaview
+Comment=Ultra-high performance HDR media player
+Exec=danaview %U
+Icon=danaview
+Terminal=false
+Type=Application
+Categories=AudioVideo;Player;Video;Audio;
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;application/x-mpegurl;application/dash+xml;
+StartupWMClass=com.vecvel.danaview
+Keywords=Video;Audio;Player;HDR;Streaming;HLS;DASH;MKV;MP4;

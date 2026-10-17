@@ -1,0 +1,221 @@
+// OWNER: API-01
+//
+// Pickers, file handoff, media access, background leases and external drops (ARCH §12.4, §9,
+// §15, D-13, D-18, D-44). The power state (`BackgroundWorkGuard.powerState` and
+// `powerStateChanged`, the D-45 `PlatformServices.powerState` idle-and-charging signal) was added
+// by INT-06; `MediaAccess.materializePick` (the core `PickMaterializer`) by INT-07.
+
+import 'dart:ui' show Offset;
+
+import 'package:meta/meta.dart';
+import 'package:danaview_editor_core/model.dart';
+
+/// Where to pick from.
+///
+/// See ARCH §12.4.
+enum MediaPickSource {
+  /// iOS PHPicker / Android Photo Picker (no library permission).
+  photos,
+
+  /// iOS document picker / Android SAF.
+  files,
+}
+
+/// What may be picked.
+///
+/// See ARCH §12.4.
+enum MediaPickKind {
+  /// Videos.
+  video,
+
+  /// Audio files.
+  audio,
+
+  /// Images.
+  image,
+
+  /// `.cube` LUTs.
+  lut,
+
+  /// SRT / VTT files.
+  subtitle,
+}
+
+/// A picker request.
+///
+/// See ARCH §12.4.
+@immutable
+final class MediaPickRequest {
+  /// Creates a request.
+  const MediaPickRequest({required this.source, required this.kinds, this.multiple = true});
+
+  /// Source.
+  final MediaPickSource source;
+
+  /// Allowed kinds.
+  final Set<MediaPickKind> kinds;
+
+  /// Multi-select.
+  final bool multiple;
+}
+
+/// The system pickers. iOS Photos picks are cloned natively into `work/picks/` before the
+/// completion handler returns (`PickedMedia.isTemporaryCopy`, ARCH §9.1).
+abstract interface class MediaPicker {
+  /// Shows the picker; an empty list means cancelled.
+  Future<List<PickedMedia>> pick(MediaPickRequest request);
+}
+
+/// Outcome of a file handoff.
+///
+/// See ARCH §12.4.
+enum FileHandoffOutcome {
+  /// Saved / shared.
+  done,
+
+  /// The user cancelled the system sheet.
+  cancelled,
+
+  /// Permission denied (Photos add).
+  denied,
+
+  /// Failed.
+  failed,
+}
+
+/// Result of a file handoff.
+///
+/// See ARCH §12.4.
+@immutable
+final class FileHandoffResult {
+  /// Creates a result.
+  const FileHandoffResult(this.outcome, {this.savedUri});
+
+  /// Outcome.
+  final FileHandoffOutcome outcome;
+
+  /// Gallery local identifier / content URI, when saved.
+  final String? savedUri;
+}
+
+/// Delivers an export to the user (Photos add-only, Files/SAF, share sheet).
+///
+/// See ARCH §12.4.
+abstract interface class FileHandoff {
+  /// Adds the video to Photos / Gallery (`Movies/Danaview`).
+  Future<FileHandoffResult> saveToPhotos(String path);
+
+  /// Lets the user choose a location (document picker for export / `ACTION_CREATE_DOCUMENT`).
+  Future<FileHandoffResult> saveToFiles(String path, String suggestedName);
+
+  /// System share sheet.
+  Future<FileHandoffResult> share(String path);
+}
+
+/// The engine's media access: core [MediaAccessPort] (bookmarks, URI grants, stat, hash,
+/// `excludeFromBackup` refusing paths outside the editor roots, D-44) plus the notification
+/// permission prompt used by background export on Android.
+///
+/// See ARCH §12.4, §9, D-44.
+abstract interface class MediaAccess implements MediaAccessPort {
+  /// Asks for `POST_NOTIFICATIONS` (Android 13+); true elsewhere.
+  Future<bool> requestNotificationPermission();
+
+  /// Copies [picked] into a new file `<intoDir>/<unique>/<display name>` ([intoDir] lies under
+  /// `<cache>/danaview/editor/work/`, e.g. `StoreRoots.picksDir`) and returns its absolute path
+  /// (INT-07). Used for picks that cannot be kept by reference (an Android `content://` URI
+  /// without a persistable grant); the media pool then moves the copy into `media/`. Matches core
+  /// `PickMaterializer`, so `engine.access.materializePick` can be passed as one. An item that is
+  /// already an app-owned temporary copy under `work/` comes back as is. Failures follow the
+  /// port: `MediaAccessFailure` (`outsideEditorRoots` for [intoDir] outside `work/`, a caller
+  /// bug; `notFound` when the item is gone; `accessLost` when it cannot be read; `io` otherwise,
+  /// including a URI scheme the platform cannot copy) and `StoreFailure(diskFull)`.
+  ///
+  /// See ARCH §9.1, §12.4.
+  Future<String> materializePick(PickedMedia picked, String intoDir);
+}
+
+/// A background-work lease (iOS `beginBackgroundTask`, Android FGS-hosted lease).
+///
+/// See ARCH §12.4.
+abstract interface class BackgroundLease {
+  /// Lease id.
+  String get id;
+
+  /// Fires when the OS is about to expire the lease (iOS).
+  Stream<void> get expiring;
+
+  /// Releases the lease.
+  Future<void> release();
+}
+
+/// Charging and low-power state of the device (ARCH §12.4, D-45).
+///
+/// The render-preview controller (UX-44) combines it with its own editor-idle timer: the
+/// automatic background render runs on minimal/low only while [charging] and not
+/// [lowPowerMode].
+///
+/// See ARCH §12.4, D-45.
+@immutable
+final class PowerState {
+  /// Creates a power state.
+  const PowerState({required this.charging, required this.lowPowerMode});
+
+  /// Plugged in (charging or full).
+  final bool charging;
+
+  /// iOS Low Power Mode / Android battery saver.
+  final bool lowPowerMode;
+
+  @override
+  bool operator ==(Object other) => other is PowerState && other.charging == charging && other.lowPowerMode == lowPowerMode;
+
+  @override
+  int get hashCode => Object.hash(charging, lowPowerMode);
+
+  @override
+  String toString() => 'PowerState(charging: $charging, lowPowerMode: $lowPowerMode)';
+}
+
+/// Keeps work alive while the app is in the background, and reports the power state that
+/// background work (the D-45 automatic render preview) waits for.
+///
+/// See ARCH §12.4, D-45.
+abstract interface class BackgroundWorkGuard {
+  /// Acquires a lease showing [title] and [progress]; null when not available.
+  Future<BackgroundLease?> acquire({required String title, required Stream<double> progress});
+
+  /// The current power state (the D-45 `PlatformServices.powerState`). Throws
+  /// `EngineFailure(notSupportedOnDevice)` on the mobile engine until IOS-19 / AND-18 land.
+  Future<PowerState> powerState();
+
+  /// Every power state change (the engine's `powerStateChanged` signal), as a broadcast stream.
+  Stream<PowerState> get powerStateChanged;
+}
+
+/// Items dropped onto the app from another app (D-18). Items are already app-owned temporary
+/// copies (`work/drops/`), imported as managed copies.
+///
+/// See ARCH §12.4, D-18.
+@immutable
+final class ExternalDrop {
+  /// Creates a drop.
+  const ExternalDrop({required this.items, required this.position});
+
+  /// Dropped items.
+  final List<PickedMedia> items;
+
+  /// Drop position in logical px relative to the Flutter view.
+  final Offset position;
+}
+
+/// External drag-and-drop target (iPad/iPhone `UIDropInteraction`, Android `OnDragListener`).
+///
+/// See ARCH §12.4, D-18.
+abstract interface class ExternalDropTarget {
+  /// Enables or disables accepting drops (enabled only while the editor is visible).
+  Future<void> setEnabled(bool on);
+
+  /// Drops.
+  Stream<ExternalDrop> get drops;
+}

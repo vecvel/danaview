@@ -1,0 +1,58 @@
+# OWNER: UX-01
+#
+# The Danaview video editor UI (ARCH §4.6, §17). Screens take navigation callbacks from the app
+# router, so there is no go_router dependency. This manifest declares every dependency the package
+# needs in this release (BUILD_PLAN §2); adding one needs a lead-approved integration change.
+#
+# ARCH §4.2 rule 7: the engine API only (never the danaview_editor_engine plugin); danaview_features only
+# through package:danaview_features/{chrome,orientation,storage}.dart (architecture tests in
+# test/architecture/ and the root test/architecture/dependency_rules_test.dart).
+name: danaview_editor
+description: Danaview video editor UI - projects, editor screen, timeline, preview, inspector panels, export and auto captions flows.
+version: 1.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  characters: ^1.3.0
+  collection: ^1.18.0
+  flutter_riverpod: ^2.5.1
+  meta: ^1.11.0
+  path: ^1.9.0
+  shared_preferences: ^2.2.3
+  danaview_data:
+    path: ../danaview_data
+  danaview_domain:
+    path: ../danaview_domain
+  danaview_editor_core:
+    path: ../danaview_editor_core
+  danaview_editor_engine_api:
+    path: ../danaview_editor_engine_api
+  danaview_editor_fonts:
+    path: ../danaview_editor_fonts
+  danaview_features:
+    path: ../danaview_features
+  danaview_platform:
+    path: ../danaview_platform
+  danaview_transcription:
+    path: ../danaview_transcription
+  danaview_ui_kit:
+    path: ../danaview_ui_kit
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  fake_async: ^1.3.1
+  flutter_lints: ^6.0.0
+
+flutter:
+  # Built-in looks (UX-24 generates the 12 .vlut files with tool/gen_looks.dart).
+  assets:
+    - assets/looks/

@@ -1,0 +1,18 @@
+# OWNER: UX-01
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  exclude:
+    # Negative fixtures for the architecture tests are data, not sources.
+    - test/architecture/fixtures/**
+
+linter:
+  rules:
+    - always_declare_return_types
+    - prefer_final_locals
+    - unawaited_futures
+    - public_member_api_docs

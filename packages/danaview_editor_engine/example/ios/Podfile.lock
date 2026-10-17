@@ -1,0 +1,22 @@
+PODS:
+  - danaview_editor_engine (1.1.0):
+    - Flutter
+  - Flutter (1.0.0)
+
+DEPENDENCIES:
+  - danaview_editor_engine (from `.symlinks/plugins/danaview_editor_engine/ios`)
+  - Flutter (from `Flutter`)
+
+EXTERNAL SOURCES:
+  danaview_editor_engine:
+    :path: ".symlinks/plugins/danaview_editor_engine/ios"
+  Flutter:
+    :path: Flutter
+
+SPEC CHECKSUMS:
+  danaview_editor_engine: 1ad18f0cc056003d20e5a6f67ee29aa80009d5de
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+
+PODFILE CHECKSUM: 686a5aa6ce2a7ac826b850ab0ac1fe7aaccea838
+
+COCOAPODS: 1.16.2

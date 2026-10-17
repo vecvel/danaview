@@ -1,0 +1,8 @@
+name: danaview_transcription
+dependencies:
+  flutter:
+    sdk: flutter
+  danaview_editor_core:
+    path: ../danaview_editor_core
+  danaview_editor_engine_api:
+    path: ../danaview_editor_engine_api

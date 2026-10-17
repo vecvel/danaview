@@ -1,0 +1,77 @@
+== extract audio onto the free original lane
+-- command: Extract audio | ExtractAudio(it_b)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000) detached link=ln_#1
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+  it_#1 [60,120) md_video src[10000000,12000000) audio link=ln_#1
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_#1, it_b
+-- changed lanes: tr_main, tr_orig
+-- selection: {it_#1} primary it_#1
+
+== extract moves the volume keys and creates a lane when busy
+-- command: Extract audio | ExtractAudio(it_v)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) fade 5f/0f keys{transform.opacity@0f=0.2,30f=1.0; audio.volume@0f=1.0,60f=0.5}
+tr_orig audio role=original
+  it_busy [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) detached fade 5f/0f keys{transform.opacity@0f=0.2,30f=1.0} link=ln_#1
+tr_#1 audio role=original
+  it_#1 [0,90) md_video src[0,3000000) audio fade 5f/0f keys{audio.volume@0f=1.0,60f=0.5} link=ln_#1
+unchanged: tr_orig
+-- affected: it_#1, it_v
+-- changed lanes: tr_#1, tr_main
+-- created lanes: tr_#1
+-- selection: {it_#1} primary it_#1
+-- preview creates: audio@2
+
+== extract twice
+-- command: Extract audio | ExtractAudio(it_a)
+-- before: standard()
+-- rejected: UnsupportedForKind(detachedAudio)
+
+== extract from a video without audio
+-- command: Extract audio | ExtractAudio(it_v)
+-- before
+tr_main video main
+  it_v [0,60) md_noaudio src[0,2000000)
+-- rejected: UnsupportedForKind(noAudio)
+
+== extract from an image
+-- command: Extract audio | ExtractAudio(it_p1)
+-- before: standard()
+-- rejected: UnsupportedForKind(noAudio)
+
+== extract from an audio clip
+-- command: Extract audio | ExtractAudio(it_m)
+-- before: standard()
+-- rejected: UnsupportedForKind(audio)
+
+== extract on a locked lane
+-- command: Extract audio | ExtractAudio(it_b)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)

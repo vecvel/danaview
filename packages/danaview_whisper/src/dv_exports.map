@@ -1,0 +1,14 @@
+/* OWNER: AI-04
+ *
+ * Linker version script for the Android shims libdanaview_whisper.so and libdanaview_whisper_v82.so
+ * (ai.md §4.3). Only the C ABI of dv_whisper.h (every symbol starts with dv_) is exported; whisper,
+ * ggml and the statically linked libc++ (c++_static) stay local. Anonymous version node: the
+ * exported names carry no symbol version, so Dart's DynamicLibrary.lookup finds them by plain name.
+ * scripts/ci/editor/check_native_libs.sh checks the result against the DV_API list in dv_whisper.h.
+ */
+{
+  global:
+    dv_*;
+  local:
+    *;
+};

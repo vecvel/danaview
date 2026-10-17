@@ -1,1 +1,1 @@
-Initial release of Vwish for macOS. Ultra-high performance HDR media player with studio audio controls, hardware color grading, and real-time stream diagnostics.
+Initial release of Danaview for macOS. Ultra-high performance HDR media player with studio audio controls, hardware color grading, and real-time stream diagnostics.

@@ -9,7 +9,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Vwish</string>
+	<string>Danaview</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -17,7 +17,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>vwish</string>
+	<string>danaview</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -32,6 +32,14 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.vecvel.danaview.export.*</string>
+	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Danaview uses the microphone only while you record a voiceover in the video editor.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Danaview saves the videos you export to your photo library.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
@@ -44,10 +52,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>CFBundleURLName</key>
-			<string>com.vecvel.vwish</string>
+			<string>com.vecvel.danaview</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>vwish</string>
+				<string>danaview</string>
 			</array>
 		</dict>
 	</array>

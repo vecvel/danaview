@@ -1,0 +1,10 @@
+name: danaview_features
+dependencies:
+  flutter:
+    sdk: flutter
+dev_dependencies:
+  danaview_editor_engine_api:
+    path: ../danaview_editor_engine_api
+dependency_overrides:
+  danaview_whisper:
+    path: ../danaview_whisper

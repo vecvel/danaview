@@ -1,0 +1,109 @@
+== split the main lane under the time (ids empty) splits linked partners
+-- command: Split | SplitItems({}, 1000000)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,30) md_video src[0,1000000) detached link=ln_a
+  it_#1 [30,60) md_video src[1000000,2000000) detached link=ln_#1
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_#1|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,30) md_video src[0,1000000) audio link=ln_a
+  it_#2 [30,60) md_video src[1000000,2000000) audio link=ln_#1
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_#1, it_#2, it_a, it_a_au
+-- changed lanes: tr_main, tr_orig
+
+== split selected clips; the outgoing transition follows the right half
+-- command: Split | SplitItems({it_a}, 1500000)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,45) md_video src[0,1500000) detached link=ln_a
+  it_#1 [45,60) md_video src[1500000,2000000) detached link=ln_#1
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_#1|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,45) md_video src[0,1500000) audio link=ln_a
+  it_#2 [45,60) md_video src[1500000,2000000) audio link=ln_#1
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_#1, it_#2, it_a, it_a_au
+-- changed lanes: tr_main, tr_orig
+
+== split text keeps in/out animations on the halves
+-- command: Split | SplitItems({it_t}, 1333334)
+-- before
+tr_main video main
+  it_v [0,300) md_video src[0,10000000)
+tr_txt text
+  it_t [0,90) text "Title" anim fade:10f/scale:15f
+-- after
+tr_txt text
+  it_t [0,40) text "Title" anim fade:10f/none:0f
+  it_#1 [40,90) text "Title" anim none:0f/scale:15f
+unchanged: tr_main
+-- affected: it_#1, it_t
+-- changed lanes: tr_txt
+
+== split clamps fades to the halves
+-- command: Split | SplitItems({it_v}, 1000000)
+-- before
+tr_main video main
+  it_v [0,100) md_video src[0,3333334) fade 40f/40f
+-- after
+tr_main video main
+  it_v [0,30) md_video src[0,1000000) fade 15f/0f
+  it_#1 [30,100) md_video src[1000000,3333334) fade 0f/35f
+-- affected: it_#1, it_v
+-- changed lanes: tr_main
+
+== split at a cut finds nothing
+-- command: Split | SplitItems({}, 2000000)
+-- before: standard()
+-- rejected: NothingAtTime(60f)
+
+== split in a gap finds nothing
+-- command: Split | SplitItems({}, 4333334)
+-- before: standard()
+-- rejected: NothingAtTime(130f)
+
+== split on a locked lane
+-- command: Split | SplitItems({}, 1000000)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)
+
+== split a cue is SplitCue's job
+-- command: Split | SplitItems({it_s1}, 333334)
+-- before: standard()
+-- rejected: UnsupportedForKind(subtitle)
+
+== split floors a mid-frame time
+-- command: Split | SplitItems({it_c}, 5667667)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,170) md_video2 src[0,666667)
+  it_#1 [170,210) md_video2 src[666667,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1, it_c
+-- changed lanes: tr_main

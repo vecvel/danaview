@@ -1,0 +1,152 @@
+== paste in the same project into free space
+-- command: Paste | PasteItems(1 items, at: 10000000, preferTrack: null, ripple: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  it_#1 [300,360) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== paste with ripple on the main lane snaps to a cut and opens space
+-- command: Paste | PasteItems(1 items, at: 3333334, preferTrack: null, ripple: true)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_#1 [120,180) md_video2 src[0,2000000)
+  it_c [210,270) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1, it_c
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== paste without ripple into occupied space goes to a free lane
+-- command: Paste | PasteItems(1 items, at: 3333334, preferTrack: null, ripple: false)
+-- before: standard()
+-- after
+tr_#1 video
+  it_#1 [100,160) md_video2 src[0,2000000)
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {it_#1} primary it_#1
+-- preview creates: video@1
+
+== paste a linked pair keeps them linked under a new link
+-- command: Paste | PasteItems(2 items, at: 10000000, preferTrack: null, ripple: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  it_#1 [300,360) md_video src[0,2000000) detached link=ln_#1
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+  it_#2 [300,360) md_video src[0,2000000) audio link=ln_#1
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_#1, it_#2
+-- changed lanes: tr_main, tr_orig
+-- selection: {it_#1, it_#2} primary it_#1
+
+== paste prefers the selected compatible lane
+-- command: Paste | PasteItems(1 items, at: 3000000, preferTrack: tr_ov1, ripple: false)
+-- before: standard()
+-- after
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+  it_#1 [90,150) md_video2 src[0,2000000)
+unchanged: tr_main, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_ov1
+-- selection: {it_#1} primary it_#1
+
+== paste ignores an incompatible selected lane
+-- command: Paste | PasteItems(1 items, at: 10000000, preferTrack: tr_music, ripple: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  it_#1 [300,360) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== paste text goes to the text lane
+-- command: Paste | PasteItems(1 items, at: 2000000, preferTrack: null, ripple: false)
+-- before: standard()
+-- after
+tr_txt text
+  it_t1 [0,45) text "Title"
+  it_#1 [60,105) text "Title"
+unchanged: tr_main, tr_ov1, tr_sub, tr_orig, tr_music
+-- affected: it_#1
+-- changed lanes: tr_txt
+-- selection: {it_#1} primary it_#1
+
+== cross-project paste imports, reuses and re-mints media
+-- command: Paste | PasteItems(5 items, at: 10000000, preferTrack: null, ripple: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  it_#1 [300,348) md_other src[0,1600000) fade 12f/0f keys{transform.opacity@0f=0.0,7f=1.0} link=ln_#1
+  it_#2 [348,372) md_video2 src[0,800000)
+  it_#3 [372,396) md_#1 src[5000000,5800000)
+  it_#4 [396,420) md_other src[0,800000) rev
+  ~ tx_ab it_a|it_b crossDissolve 10f
+  ~ tx_#1 it_#1|it_#2 fade 6f
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+  it_#5 [300,348) md_other src[0,1600000) audio link=ln_#1
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- pool added: md_other, md_#1, md_rev
+-- affected: it_#1, it_#2, it_#3, it_#4, it_#5
+-- changed lanes: tr_main, tr_orig
+-- notices: mediaImported x3
+-- selection: {it_#1, it_#2, it_#3, it_#4, it_#5} primary it_#1
+
+== cross-project paste from 24 fps re-quantizes onto 30 fps
+-- command: Paste | PasteItems(5 items, at: 10000000, preferTrack: null, ripple: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  it_#1 [300,360) md_other src[0,2000000) fade 15f/0f keys{transform.opacity@0f=0.0,9f=1.0} link=ln_#1
+  it_#2 [360,390) md_video2 src[0,1000000)
+  it_#3 [390,420) md_#1 src[5000000,6000000)
+  it_#4 [420,450) md_other src[0,1000000) rev
+  ~ tx_ab it_a|it_b crossDissolve 10f
+  ~ tx_#1 it_#1|it_#2 fade 8f
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+  it_#5 [300,360) md_other src[0,2000000) audio link=ln_#1
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- pool added: md_other, md_#1, md_rev
+-- affected: it_#1, it_#2, it_#3, it_#4, it_#5
+-- changed lanes: tr_main, tr_orig
+-- notices: mediaImported x3
+-- selection: {it_#1, it_#2, it_#3, it_#4, it_#5} primary it_#1
+
+== paste an empty payload
+-- command: Paste | PasteItems(0 items, at: 0, preferTrack: null, ripple: null)
+-- before: standard()
+-- rejected: InvalidValue(payload)

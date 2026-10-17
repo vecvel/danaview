@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vwish_data/vwish_data.dart';
-import 'package:vwish_features/vwish_features.dart';
-import 'package:vwish_ui_kit/vwish_ui_kit.dart';
+import 'package:danaview_data/danaview_data.dart';
+import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import 'library_test_utils.dart';
 
@@ -53,7 +53,7 @@ Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
 }
 
 Future<void> _finish(WidgetTester tester, LibraryTestEnv env) async {
-  VwishToast.dismiss();
+  DanaviewToast.dismiss();
   await tester.pumpWidget(const SizedBox());
   await env.dispose();
 }
@@ -196,7 +196,7 @@ void main() {
         final inspector = _FakeInspector((_) => pending.future);
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishMediaInfoScreen(onBack: () {}),
+          DanaviewMediaInfoScreen(onBack: () {}),
           textScale: surface.textScale,
           platform: _platformFor(surface),
           overrides: [
@@ -237,10 +237,10 @@ void main() {
       final videoPath = joinPath([media.path, 'Movie 1 - $longTitle.mp4']);
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishMediaInfoScreen(onBack: () {}),
+        DanaviewMediaInfoScreen(onBack: () {}),
         overrides: [mediaInspectorProvider.overrideWithValue(inspector)],
       ));
-      final container = ProviderScope.containerOf(tester.element(find.byType(VwishMediaInfoScreen)));
+      final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewMediaInfoScreen)));
       await container.read(playerControllerProvider.notifier).openMedia(localRef(videoPath));
       await pumpFrames(tester);
       expect(find.text('Now in the player'), findsOneWidget);
@@ -283,7 +283,7 @@ void main() {
       final env = await LibraryTestEnv.create();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishMediaInfoScreen(onBack: () {}),
+        DanaviewMediaInfoScreen(onBack: () {}),
         platform: TargetPlatform.macOS,
         overrides: [
           mediaInspectorProvider.overrideWithValue(_FakeInspector((_) async => _richInfo)),
@@ -339,7 +339,7 @@ void main() {
         final env = await LibraryTestEnv.create();
         await tester.pumpWidget(libraryTestApp(
           env,
-          VwishDataUsageScreen(onBack: () {}),
+          DanaviewDataUsageScreen(onBack: () {}),
           textScale: surface.textScale,
           platform: _platformFor(surface),
         ));
@@ -381,7 +381,7 @@ void main() {
           await seedLibrary(env, existingDir: media.path);
           await tester.pumpWidget(libraryTestApp(
             env,
-            VwishStorageScreen(onBack: () {}),
+            DanaviewStorageScreen(onBack: () {}),
             textScale: surface.textScale,
             platform: _platformFor(surface),
             overrides: [storageUsageServiceProvider.overrideWithValue(_FakeStorage(usage))],
@@ -393,7 +393,7 @@ void main() {
             await _scrollTo(
               tester,
               find.textContaining(
-                _platformFor(surface) == TargetPlatform.iOS ? 'On My iPhone › Vwish' : 'never deletes videos',
+                _platformFor(surface) == TargetPlatform.iOS ? 'On My iPhone › Danaview' : 'never deletes videos',
               ),
             );
           } else {
@@ -414,7 +414,7 @@ void main() {
       final playlists = env.library.getSavedPlaylistNames();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishStorageScreen(onBack: () {}),
+        DanaviewStorageScreen(onBack: () {}),
         overrides: [storageUsageServiceProvider.overrideWithValue(_FakeStorage(_mobileUsage))],
       ));
       await pumpFrames(tester);
@@ -447,7 +447,7 @@ void main() {
       final history = env.library.getRecentlyPlayed();
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishStorageScreen(onBack: () {}),
+        DanaviewStorageScreen(onBack: () {}),
         textScale: 1.35,
         overrides: [storageUsageServiceProvider.overrideWithValue(_FakeStorage(_desktopUsage))],
       ));
@@ -473,10 +473,10 @@ void main() {
       final storage = _FakeStorage(_mobileUsage);
       await tester.pumpWidget(libraryTestApp(
         env,
-        VwishStorageScreen(onBack: () {}),
+        DanaviewStorageScreen(onBack: () {}),
         overrides: [storageUsageServiceProvider.overrideWithValue(storage)],
       ));
-      final container = ProviderScope.containerOf(tester.element(find.byType(VwishStorageScreen)));
+      final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewStorageScreen)));
       final playing = joinPath([media.path, 'Movie 2 - $longTitle.mp4']);
       await container.read(playerControllerProvider.notifier).openMedia(localRef(playing));
       await pumpFrames(tester);
@@ -510,7 +510,7 @@ void main() {
     late Directory cache;
 
     setUp(() {
-      root = Directory.systemTemp.createTempSync('vwish_storage_test_');
+      root = Directory.systemTemp.createTempSync('danaview_storage_test_');
       documents = Directory(joinPath([root.path, 'Documents']))..createSync();
       cache = Directory(joinPath([root.path, 'tmp']))..createSync();
     });
@@ -571,8 +571,8 @@ void main() {
       // iOS: Library/Caches from path_provider, and tmp, where the document picker puts its copies.
       final caches = Directory(joinPath([root.path, 'Library', 'Caches']))..createSync(recursive: true);
       write([caches.path, 'thumbs', 'a.jpg'], 100);
-      final picked = write([cache.path, 'com.example.vwish-Inbox', 'Holiday.mov'], 5000);
-      final inUse = write([cache.path, 'com.example.vwish-Inbox', 'Playing.mp4'], 70);
+      final picked = write([cache.path, 'com.example.danaview-Inbox', 'Holiday.mov'], 5000);
+      final inUse = write([cache.path, 'com.example.danaview-Inbox', 'Playing.mp4'], 70);
       final missing = Directory(joinPath([root.path, 'gone']));
       // Listed twice and through a nested folder: still counted once.
       final service = StorageUsageService(

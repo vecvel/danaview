@@ -1,0 +1,7 @@
+import 'dart:io';
+import 'dart:isolate';
+
+class AtomicFile {
+  static const ok = true;
+  static Future<void> write(File f) => Isolate.run(() => f.writeAsStringSync(''));
+}

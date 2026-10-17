@@ -1,0 +1,710 @@
+== add: a new lane on top of the subtitle lanes
+-- command: Auto captions | AddGeneratedCaptionTrack(Captions (English), en, 2 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_#1 subtitle
+  it_#1 [0,30) cue "Hello there"
+  it_#2 [30,70) cue "General Kenobi"
+unchanged: tr_main, tr_txt, tr_s1, tr_s2, tr_sl
+-- affected: it_#1, it_#2
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {} primary -
+-- preview creates: subtitle@5
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+lane new3 "Captions (English)" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Hello there"
+  [30,70) generated "General Kenobi"
+
+== add: first subtitle lane of the project
+-- command: Auto captions | AddGeneratedCaptionTrack(Captions (日本語), ja, 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+-- after
+tr_#1 subtitle
+  it_#1 [5,35) cue "Only cue"
+unchanged: tr_main
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {} primary -
+-- preview creates: subtitle@1
+-- cues
+lane new0 "Captions (日本語)" lang=ja burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [5,35) generated "Only cue"
+
+== add: off-grid drafts are put on the grid, one frame at least
+-- command: Auto captions | AddGeneratedCaptionTrack(Captions (English), en, 2 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_#1 subtitle
+  it_#1 [30,60) cue "Rounded"
+  it_#2 [75,76) cue "Tiny"
+unchanged: tr_main, tr_txt, tr_s1, tr_s2, tr_sl
+-- affected: it_#1, it_#2
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {} primary -
+-- preview creates: subtitle@5
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+lane new3 "Captions (English)" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [30,60) generated "Rounded"
+  [75,76) generated "Tiny"
+
+== add: overlapping drafts: the later one starts where the earlier ends
+-- command: Auto captions | AddGeneratedCaptionTrack(Captions (English), en, 2 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_#1 subtitle
+  it_#1 [0,60) cue "Long"
+  it_#2 [60,90) cue "Overlaps"
+unchanged: tr_main, tr_txt, tr_s1, tr_s2, tr_sl
+-- affected: it_#1, it_#2
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {} primary -
+-- preview creates: subtitle@5
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+lane new3 "Captions (English)" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,60) generated "Long"
+  [60,90) generated "Overlaps"
+
+== add: a draft inside the previous one is dropped
+-- command: Auto captions | AddGeneratedCaptionTrack(Captions (English), en, 3 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_#1 subtitle
+  it_#1 [0,90) cue "Long"
+  it_#2 [90,120) cue "After"
+unchanged: tr_main, tr_txt, tr_s1, tr_s2, tr_sl
+-- affected: it_#1, it_#2
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- notices: cuesSkipped x1
+-- selection: {} primary -
+-- preview creates: subtitle@5
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+lane new3 "Captions (English)" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,90) generated "Long"
+  [90,120) generated "After"
+
+== add: unsorted drafts are sorted
+-- command: Auto captions | AddGeneratedCaptionTrack(Captions (English), en, 2 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_#1 subtitle
+  it_#1 [0,30) cue "A"
+  it_#2 [60,90) cue "B"
+unchanged: tr_main, tr_txt, tr_s1, tr_s2, tr_sl
+-- affected: it_#1, it_#2
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {} primary -
+-- preview creates: subtitle@5
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+lane new3 "Captions (English)" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "A"
+  [60,90) generated "B"
+
+== add: blank drafts are dropped
+-- command: Auto captions | AddGeneratedCaptionTrack(Captions (English), en, 3 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_#1 subtitle
+  it_#1 [0,30) cue "A"
+  it_#2 [60,90) cue "C"
+unchanged: tr_main, tr_txt, tr_s1, tr_s2, tr_sl
+-- affected: it_#1, it_#2
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- notices: cuesSkipped x1
+-- selection: {} primary -
+-- preview creates: subtitle@5
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+lane new3 "Captions (English)" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "A"
+  [60,90) generated "C"
+
+== add: line breaks and markup
+-- command: Auto captions | AddGeneratedCaptionTrack(Captions (English), en, 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- after
+tr_#1 subtitle
+  it_#1 [0,60) cue "<i>first</i>
+second"
+unchanged: tr_main, tr_txt, tr_s1, tr_s2, tr_sl
+-- affected: it_#1
+-- changed lanes: tr_#1
+-- created lanes: tr_#1
+-- selection: {} primary -
+-- preview creates: subtitle@5
+-- cues
+lane tr_s1 "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "Hello world"
+  [30,60) manual "Second one"
+  [90,120) manual "Third"
+lane tr_s2 "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "Generated one"
+  [45,75) generated edited "Generated two"
+lane tr_sl "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null locked
+  [0,30) manual "Locked"
+lane new3 "Captions (English)" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,60) generated "<i>first</i>\nsecond"
+
+== add: no drafts
+-- command: Auto captions | AddGeneratedCaptionTrack(Captions (English), en, 0 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(cues)
+
+== add: only blank drafts: no empty lane is created
+-- command: Auto captions | AddGeneratedCaptionTrack(Captions (English), en, 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_txt text
+  x [0,30) text "Title"
+tr_s1 subtitle
+  c1 [0,30) cue "Hello world"
+  c2 [30,60) cue "Second one"
+  c3 [90,120) cue "Third"
+tr_s2 subtitle
+  g1 [0,30) cue "Generated one"
+  g2 [45,75) cue "Generated two"
+tr_sl subtitle locked
+  l1 [0,30) cue "Locked"
+-- rejected: InvalidValue(cues)
+
+== replace: whole lane
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: null, 2 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- after
+tr_g subtitle
+  it_#1 [0,40) cue "New one"
+  it_#2 [50,100) cue "New two"
+unchanged: tr_main, tr_m
+-- affected: g1, g2, g3, g4, it_#1, it_#2
+-- changed lanes: tr_g
+-- selection: {} primary -
+-- cues
+lane tr_g "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-small-q5_1
+  [0,40) generated "New one"
+  [50,100) generated "New two"
+lane tr_m "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "manual"
+
+== replace: whole lane: edited cues are replaced too
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: null, 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- after
+tr_g subtitle
+  it_#1 [10,20) cue "Only"
+unchanged: tr_main, tr_m
+-- affected: g1, g2, g3, g4, it_#1
+-- changed lanes: tr_g
+-- selection: {} primary -
+-- cues
+lane tr_g "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-small-q5_1
+  [10,20) generated "Only"
+lane tr_m "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "manual"
+
+== replace: in range: only overlapping cues are replaced
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: TimeRange(1500000, 3333334), 2 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- after
+tr_g subtitle
+  g1 [0,30) cue "one"
+  it_#1 [45,65) cue "Fresh"
+  it_#2 [85,100) cue "Fresher"
+  g4 [120,150) cue "four"
+unchanged: tr_main, tr_m
+-- affected: g2, g3, it_#1, it_#2
+-- changed lanes: tr_g
+-- selection: {} primary -
+-- cues
+lane tr_g "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-small-q5_1
+  [0,30) generated "one"
+  [45,65) generated "Fresh"
+  [85,100) generated "Fresher"
+  [120,150) generated "four"
+lane tr_m "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "manual"
+
+== replace: in range: a cue straddling the start is replaced
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: TimeRange(2000000, 2500000), 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- after
+tr_g subtitle
+  g1 [0,30) cue "one"
+  it_#1 [50,75) cue "Fresh"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+unchanged: tr_main, tr_m
+-- affected: g2, it_#1
+-- changed lanes: tr_g
+-- selection: {} primary -
+-- cues
+lane tr_g "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-small-q5_1
+  [0,30) generated "one"
+  [50,75) generated "Fresh"
+  [80,110) generated "three"
+  [120,150) generated "four"
+lane tr_m "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "manual"
+
+== replace: in range: a cue ending exactly at the range start stays
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: TimeRange(2333334, 2600000), 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- after
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  it_#1 [70,78) cue "Fresh"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+unchanged: tr_main, tr_m
+-- affected: it_#1
+-- changed lanes: tr_g
+-- selection: {} primary -
+-- cues
+lane tr_g "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-small-q5_1
+  [0,30) generated "one"
+  [40,70) generated edited "two"
+  [70,78) generated "Fresh"
+  [80,110) generated "three"
+  [120,150) generated "four"
+lane tr_m "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "manual"
+
+== replace: in range: a cue starting exactly at the range end stays
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: TimeRange(2333334, 2666667), 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- after
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  it_#1 [70,78) cue "Fresh"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+unchanged: tr_main, tr_m
+-- affected: it_#1
+-- changed lanes: tr_g
+-- selection: {} primary -
+-- cues
+lane tr_g "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-small-q5_1
+  [0,30) generated "one"
+  [40,70) generated edited "two"
+  [70,78) generated "Fresh"
+  [80,110) generated "three"
+  [120,150) generated "four"
+lane tr_m "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "manual"
+
+== replace: in range: new cues stop at the cues that stay
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: TimeRange(2333334, 2666667), 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- after
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  it_#1 [70,80) cue "Too long"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+unchanged: tr_main, tr_m
+-- affected: it_#1
+-- changed lanes: tr_g
+-- selection: {} primary -
+-- cues
+lane tr_g "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-small-q5_1
+  [0,30) generated "one"
+  [40,70) generated edited "two"
+  [70,80) generated "Too long"
+  [80,110) generated "three"
+  [120,150) generated "four"
+lane tr_m "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "manual"
+
+== replace: in range: a draft with no free frame is dropped
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: TimeRange(2500000, 2666667), 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- after
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+unchanged: tr_main, tr_m
+-- affected: 
+-- changed lanes: tr_g
+-- notices: cuesSkipped x1
+-- selection: {} primary -
+-- cues
+lane tr_g "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-small-q5_1
+  [0,30) generated "one"
+  [40,70) generated edited "two"
+  [80,110) generated "three"
+  [120,150) generated "four"
+lane tr_m "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "manual"
+
+== replace: in range: nothing overlaps, drafts are just added
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: TimeRange(3666667, 4000000), 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- after
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  it_#1 [112,118) cue "Gap"
+  g4 [120,150) cue "four"
+unchanged: tr_main, tr_m
+-- affected: it_#1
+-- changed lanes: tr_g
+-- selection: {} primary -
+-- cues
+lane tr_g "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-small-q5_1
+  [0,30) generated "one"
+  [40,70) generated edited "two"
+  [80,110) generated "three"
+  [112,118) generated "Gap"
+  [120,150) generated "four"
+lane tr_m "" lang=null burn=true pos=bottom lines=2 size=42.0 prov=null
+  [0,30) manual "manual"
+
+== replace: empty range
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: TimeRange(333334, 333334), 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- rejected: InvalidValue(range)
+
+== replace: reversed range is impossible; empty drafts
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: null, 0 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- rejected: InvalidValue(cues)
+
+== replace: locked lane
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_g, range: null, 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle locked
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- rejected: TrackLocked(tr_g)
+
+== replace: a lane without provenance
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_m, range: TimeRange(166667, 833334), 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- after
+tr_m subtitle
+  it_#1 [10,20) cue "x"
+unchanged: tr_main, tr_g
+-- affected: it_#1, m1
+-- changed lanes: tr_m
+-- selection: {} primary -
+-- cues
+lane tr_g "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-base-q5_1
+  [0,30) generated "one"
+  [40,70) generated edited "two"
+  [80,110) generated "three"
+  [120,150) generated "four"
+lane tr_m "" lang=en burn=true pos=bottom lines=2 size=42.0 prov=whisper-small-q5_1
+  [10,20) generated "x"
+
+== replace: not a subtitle lane
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_main, range: null, 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- rejected: IncompatibleTrack(tr_main)
+
+== replace: missing lane
+-- command: Regenerate captions | ReplaceGeneratedCaptions(tr_zz, range: null, 1 cues)
+-- before
+tr_main video main
+  v [0,300) md_video src[0,10000000)
+tr_g subtitle
+  g1 [0,30) cue "one"
+  g2 [40,70) cue "two"
+  g3 [80,110) cue "three"
+  g4 [120,150) cue "four"
+tr_m subtitle
+  m1 [0,30) cue "manual"
+-- rejected: ItemNotFound(tr_zz)

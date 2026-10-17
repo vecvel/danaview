@@ -1,0 +1,111 @@
+== link a clip and music
+-- command: Link | LinkItems({it_c, it_m})
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000) link=ln_#1
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio link=ln_#1
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig
+-- affected: it_c, it_m
+-- changed lanes: tr_main, tr_music
+-- selection: {it_c, it_m} primary it_c
+
+== link merges existing groups
+-- command: Link | LinkItems({it_a, it_t1})
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_#1
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_txt text
+  it_t1 [0,45) text "Title" link=ln_#1
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_#1
+unchanged: tr_ov1, tr_sub, tr_music
+-- affected: it_a, it_a_au, it_t1
+-- changed lanes: tr_main, tr_orig, tr_txt
+-- selection: {it_a, it_a_au, it_t1} primary it_a
+
+== link two items on one lane
+-- command: Link | LinkItems({it_b, it_c})
+-- before: standard()
+-- rejected: IncompatibleTrack(tr_main)
+
+== link a single item
+-- command: Link | LinkItems({it_b})
+-- before: standard()
+-- rejected: InvalidValue(ids)
+
+== link an already linked group
+-- command: Link | LinkItems({it_a, it_a_au})
+-- before: standard()
+-- noop
+
+== unlink a pair dissolves it
+-- command: Unlink | UnlinkItems({it_a})
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au
+-- changed lanes: tr_main, tr_orig
+
+== unlink one of three keeps the others linked
+-- command: Unlink | UnlinkItems({it_t})
+-- before
+tr_main video main
+  it_v [0,60) md_video src[0,2000000) link=ln_3
+tr_ov1 overlay
+  it_o [0,60) md_image src[0,2000000) link=ln_3
+tr_txt text
+  it_t [0,60) text "Title" link=ln_3
+-- after
+tr_txt text
+  it_t [0,60) text "Title"
+unchanged: tr_main, tr_ov1
+-- affected: it_t
+-- changed lanes: tr_txt
+
+== unlink an unlinked item
+-- command: Unlink | UnlinkItems({it_b})
+-- before: standard()
+-- noop
+
+== cut is copy plus delete in one command
+-- command: Cut | CompositeCommand(Cut, [DeleteItems({it_b}, ripple: false)])
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_c [150,210) md_video2 src[0,2000000)
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b
+-- changed lanes: tr_main
+-- notices: transitionsRemoved x1
+-- selection: {} primary -
+
+== cut with ripple
+-- command: Cut | CompositeCommand(Cut, [DeleteItems({it_a, it_a_au}, ripple: true)])
+-- before: standard()
+-- after
+tr_main video main
+  it_b [0,60) md_video src[10000000,12000000)
+  it_c [90,150) md_video2 src[0,2000000)
+tr_orig audio role=original
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au, it_b, it_c
+-- changed lanes: tr_main, tr_orig
+-- notices: transitionsRemoved x1
+-- selection: {} primary -

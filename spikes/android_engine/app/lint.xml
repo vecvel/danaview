@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Media3 1.11.1: UnstableApi and ExperimentalApi usages are errors unless opted in (ARCH §3.2). -->
+<lint>
+    <issue id="UnsafeOptInUsageError" severity="error">
+        <option name="opt-in" value="androidx.media3.common.util.UnstableApi,androidx.media3.common.util.ExperimentalApi" />
+    </issue>
+</lint>

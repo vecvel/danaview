@@ -1,0 +1,4 @@
+// Only the consent view calls UserConsent.accepted( (ARCH §4.2 rule 8).
+/// See `UserConsent.accepted(disclosure, acceptedAt: …)`.
+const note = 'UserConsent.accepted(';
+final other = MyUserConsent.accepted;

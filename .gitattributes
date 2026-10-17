@@ -1,0 +1,48 @@
+# Keep the repository byte-identical on macOS, Linux and Windows.
+# Text files are stored and checked out with LF, so shell scripts run in Git Bash
+# and generated sources match on every machine.
+* text=auto eol=lf
+
+# Windows-only files keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Test fixtures, goldens and vectors are compared byte for byte, and some
+# subtitle/LUT fixtures contain CR or CRLF on purpose. Never convert them.
+**/test/fixtures/** -text
+**/test_fixtures/** -text
+test/architecture/fixtures/** -text
+*.golden -text
+*.fixture -text
+*.srt -text
+*.vtt -text
+*.cube -text
+
+# Binary assets.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.mp4 binary
+*.mov binary
+*.mkv binary
+*.webm binary
+*.m4a binary
+*.wav binary
+*.mp3 binary
+*.aac binary
+*.metallib binary
+*.jar binary
+*.jks binary
+*.keystore binary
+*.so binary
+*.a binary
+*.vlut binary
+*.vsprite binary
+*.bin binary
+*.gguf binary

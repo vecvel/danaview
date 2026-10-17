@@ -1,0 +1,67 @@
+{
+  "host": {
+    "os": "macos Version 26.6.2 (Build 25G83)",
+    "cpus": 8,
+    "dart": "3.12.2"
+  },
+  "mode": "aot",
+  "metrics": {
+    "apply_1000": {
+      "label": "apply one lane at 1,000 items",
+      "p50Us": 843,
+      "p90Us": 916,
+      "maxUs": 1119,
+      "n": 400,
+      "budgetUs": 2000
+    },
+    "dry_run_1000": {
+      "label": "dryRun at 1,000 items",
+      "p50Us": 841,
+      "p90Us": 925,
+      "maxUs": 1142,
+      "n": 400,
+      "budgetUs": 1000
+    },
+    "incremental_compile_2000": {
+      "label": "incremental compile + diff at 2,000 items",
+      "p50Us": 2420,
+      "p90Us": 2716,
+      "maxUs": 3501,
+      "n": 100,
+      "budgetUs": 3000
+    },
+    "full_compile_2000": {
+      "label": "full compile at 2,000 items",
+      "p50Us": 7562,
+      "p90Us": 8577,
+      "maxUs": 8938,
+      "n": 40,
+      "budgetUs": 60000
+    },
+    "plan_encode_2000": {
+      "label": "plan JSON encode at 2,000 items",
+      "p50Us": 9897,
+      "p90Us": 11437,
+      "maxUs": 12230,
+      "n": 40,
+      "budgetUs": 25000
+    },
+    "autosave_block_2000": {
+      "label": "autosave block on the main isolate",
+      "p50Us": 2243,
+      "p90Us": 2601,
+      "maxUs": 9066,
+      "n": 200,
+      "budgetUs": 2000,
+      "budgetGated": false
+    },
+    "open_2000": {
+      "label": "project open at 2,000 items (core)",
+      "p50Us": 21265,
+      "p90Us": 22406,
+      "maxUs": 22743,
+      "n": 24,
+      "budgetUs": 150000
+    }
+  }
+}

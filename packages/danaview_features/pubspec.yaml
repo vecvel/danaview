@@ -1,0 +1,30 @@
+name: danaview_features
+description: UI feature controllers, player screens, overlays, settings menus, and diagnostics HUD.
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  desktop_drop: ^0.4.4
+  media_kit: ^1.1.10
+  media_kit_video: ^1.2.4
+  danaview_domain:
+    path: ../danaview_domain
+  danaview_engine:
+    path: ../danaview_engine
+  danaview_data:
+    path: ../danaview_data
+  danaview_ui_kit:
+    path: ../danaview_ui_kit
+  danaview_platform:
+    path: ../danaview_platform
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

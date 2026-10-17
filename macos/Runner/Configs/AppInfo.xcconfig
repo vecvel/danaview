@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = vwish
+PRODUCT_NAME = danaview
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.vecvel.vwish
+PRODUCT_BUNDLE_IDENTIFIER = com.vecvel.danaview
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 Vwish. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 Danaview. All rights reserved.

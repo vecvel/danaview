@@ -1,0 +1,12 @@
+import 'package:flutter/material.dart';
+
+class DanaviewSettingsScreen extends StatelessWidget {
+  const DanaviewSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        Switch(value: true, onChanged: (_) {}),
+        Slider(value: 0.5, onChanged: (_) {}),
+        TextButton(onPressed: () => showDialog<void>(context: context, builder: (_) => const AlertDialog()), child: const Text('Edit')),
+      ]);
+}

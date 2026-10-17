@@ -15,6 +15,18 @@ platform :ios do
     )
   end
 
+  # Lanes that upload screenshots run with overwrite_screenshots: true, which deletes every
+  # screenshot in App Store Connect before uploading the local ones. With an empty folder that
+  # would leave the listing without screenshots, so refuse to run until they are regenerated.
+  def require_screenshots!(relative_dir)
+    dir = File.join(ROOT, "ios", relative_dir)
+    shots = Dir.glob(File.join(dir, "**", "*.{png,jpg,jpeg}"), File::FNM_CASEFOLD)
+    return unless shots.empty?
+
+    UI.user_error!("No screenshots in ios/#{relative_dir}: this lane uploads with overwrite_screenshots " \
+                   "and would delete the store screenshots. Regenerate them first (see ios/#{relative_dir}/README.md).")
+  end
+
   def next_build_number
     latest_testflight_build_number(api_key: api_key, initial_build_number: 0) + 1
   rescue StandardError => e
@@ -28,7 +40,7 @@ platform :ios do
          "--export-options-plist=ios/ExportOptions.plist",
          "--build-number=#{build_number}")
     end
-    Dir[File.join(IPA_DIR, "*.ipa")].max_by { |f| File.mtime(f) } || File.join(IPA_DIR, "vwish.ipa")
+    Dir[File.join(IPA_DIR, "*.ipa")].max_by { |f| File.mtime(f) } || File.join(IPA_DIR, "danaview.ipa")
   end
 
   desc "Build a signed App Store IPA locally (build number from BUILD_NUMBER or 1)"
@@ -38,6 +50,7 @@ platform :ios do
 
   desc "Sync metadata, screenshots, and age rating to App Store Connect without binary"
   lane :metadata do
+    require_screenshots!("fastlane/screenshots")
     upload_to_app_store(
       api_key: api_key,
       skip_binary_upload: true,
@@ -54,6 +67,7 @@ platform :ios do
 
   desc "Upload screenshots only to App Store Connect"
   lane :screenshots do
+    require_screenshots!("fastlane/screenshots")
     upload_to_app_store(
       api_key: api_key,
       skip_binary_upload: true,
@@ -70,6 +84,7 @@ platform :ios do
 
   desc "Upload Mac screenshots to App Store Connect"
   lane :mac_screenshots do
+    require_screenshots!("fastlane/screenshots_mac")
     upload_to_app_store(
       api_key: api_key,
       platform: "osx",
@@ -108,7 +123,7 @@ platform :ios do
   desc "Verify Mac metadata in App Store Connect"
   lane :verify_mac_metadata do
     Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(**api_key)
-    app = Spaceship::ConnectAPI::App.find("com.vecvel.vwish")
+    app = Spaceship::ConnectAPI::App.find("com.vecvel.danaview")
     mac_version = app.get_app_store_versions(filter: { platform: "MAC_OS" }).first
     loc = mac_version.get_app_store_version_localizations.first
     UI.header("App Store Connect macOS Metadata")
@@ -193,7 +208,7 @@ platform :ios do
         "-authenticationKeyIssuerID", ENV.fetch("ASC_ISSUER_ID")
       )
     end
-    File.join(ROOT, "build/macos/export/vwish.pkg")
+    File.join(ROOT, "build/macos/export/danaview.pkg")
   end
 
   desc "Build signed PKG and upload binary to App Store Connect for macOS"

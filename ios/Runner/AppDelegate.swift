@@ -40,12 +40,12 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "VwishDeviceOrientation") {
-      FlutterEventChannel(name: "vwish/device_orientation", binaryMessenger: registrar.messenger())
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "DanaviewDeviceOrientation") {
+      FlutterEventChannel(name: "danaview/device_orientation", binaryMessenger: registrar.messenger())
         .setStreamHandler(deviceOrientationHandler)
     }
-    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "VwishMediaIntent") {
-      let channel = FlutterMethodChannel(name: "vwish/media_intent", binaryMessenger: registrar.messenger())
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "DanaviewMediaIntent") {
+      let channel = FlutterMethodChannel(name: "danaview/media_intent", binaryMessenger: registrar.messenger())
       AppDelegate.mediaChannel = channel
       channel.setMethodCallHandler { (call, result) in
         if call.method == "getInitialMedia" {

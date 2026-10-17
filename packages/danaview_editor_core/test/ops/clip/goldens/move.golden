@@ -1,0 +1,283 @@
+== move later into free space
+-- command: Move clip | MoveItems({it_c}, 1000000, toTrack: null, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [180,240) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+-- selection: {it_c} primary it_c
+
+== move earlier to touch the previous clip
+-- command: Move clip | MoveItems({it_c}, -1000000, toTrack: null, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [120,180) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+-- selection: {it_c} primary it_c
+
+== move into an occupied range -> new video lane
+-- command: Move clip | MoveItems({it_c}, -1333334, toTrack: null, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_#1 video
+  it_c [110,170) md_video2 src[0,2000000)
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_#1, tr_main
+-- created lanes: tr_#1
+-- notices: placedOnOtherLane {it_c}
+-- selection: {it_c} primary it_c
+-- preview creates: video@1
+
+== move a linked clip moves its partner; transition dropped
+-- command: Move clip | MoveItems({it_a}, 333334, toTrack: null, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+tr_#1 video
+  it_a [10,70) md_video src[0,2000000) detached link=ln_a
+tr_orig audio role=original
+  it_a_au [10,70) md_video src[0,2000000) audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au
+-- changed lanes: tr_#1, tr_main, tr_orig
+-- created lanes: tr_#1
+-- notices: placedOnOtherLane {it_a}; transitionsRemoved x1
+-- selection: {it_a} primary it_a
+-- preview creates: video@1
+
+== move a linked partner moves the clip
+-- command: Move clip | MoveItems({it_a_au}, 13333334, toTrack: null, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  it_a [400,460) md_video src[0,2000000) detached link=ln_a
+tr_orig audio role=original
+  it_a_au [400,460) md_video src[0,2000000) audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au
+-- changed lanes: tr_main, tr_orig
+-- notices: transitionsRemoved x1
+-- selection: {it_a_au} primary it_a_au
+
+== move vertically to an overlay lane
+-- command: Move clip | MoveItems({it_c}, 0, toTrack: tr_ov1, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+  it_c [150,210) md_video2 src[0,2000000)
+unchanged: tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main, tr_ov1
+-- selection: {it_c} primary it_c
+
+== move vertically into an occupied lane -> nearest free lane
+-- command: Move clip | MoveItems({it_p1}, 0, toTrack: tr_main, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_#1 video
+  it_p1 [30,60) md_image src[0,1000000)
+tr_ov1 overlay
+unchanged: tr_main, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_p1
+-- changed lanes: tr_#1, tr_ov1
+-- created lanes: tr_#1
+-- notices: placedOnOtherLane {it_p1}
+-- selection: {it_p1} primary it_p1
+-- preview creates: video@1
+
+== move audio onto a video lane
+-- command: Move clip | MoveItems({it_m}, 0, toTrack: tr_main, ripple: false, clamp: false)
+-- before: standard()
+-- rejected: IncompatibleTrack(tr_main)
+
+== move a multi-lane selection vertically
+-- command: Move clips | MoveItems({it_c, it_p1}, 0, toTrack: tr_ov1, ripple: false, clamp: false)
+-- before: standard()
+-- rejected: IncompatibleTrack(tr_ov1)
+
+== move before 0 without clamp
+-- command: Move clip | MoveItems({it_p1}, -1333334, toTrack: null, ripple: false, clamp: false)
+-- before: standard()
+-- rejected: InvalidValue(delta)
+
+== move before 0 with clamp
+-- command: Move clip | MoveItems({it_p1}, -1333334, toTrack: null, ripple: false, clamp: true)
+-- before: standard()
+-- after
+tr_ov1 overlay
+  it_p1 [0,30) md_image src[0,1000000)
+unchanged: tr_main, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_p1
+-- changed lanes: tr_ov1
+-- selection: {it_p1} primary it_p1
+-- clamped to: [0,30)
+
+== move a locked clip
+-- command: Move clip | MoveItems({it_c}, 333334, toTrack: null, ripple: false, clamp: false)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)
+
+== move with policy reject into occupied space
+-- command: Move clip | MoveItems({it_c}, -1333334, toTrack: null, ripple: false, clamp: false)
+-- before: standard()
+-- rejected: WouldOverlap(tr_main, [110,120))
+
+== move with policy reject and clamp stops at the neighbour
+-- command: Move clip | MoveItems({it_c}, -1333334, toTrack: null, ripple: false, clamp: true)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [120,180) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c
+-- changed lanes: tr_main
+-- selection: {it_c} primary it_c
+-- clamped to: [120,180)
+
+== move two clips keeps their offsets and their transition
+-- command: Move clips | MoveItems({it_a, it_b}, 13333334, toTrack: null, ripple: false, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_c [150,210) md_video2 src[0,2000000)
+  it_a [400,460) md_video src[0,2000000) detached link=ln_a
+  it_b [460,520) md_video src[10000000,12000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [400,460) md_video src[0,2000000) audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au, it_b
+-- changed lanes: tr_main, tr_orig
+-- selection: {it_a, it_b} primary it_a
+
+== ripple move left onto the main lane snaps to a cut
+-- command: Move clip | MoveItems({it_c}, -2000000, toTrack: null, ripple: true, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_c [60,120) md_video2 src[0,2000000)
+  it_b [120,180) md_video src[10000000,12000000)
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b, it_c
+-- changed lanes: tr_main
+-- notices: transitionsRemoved x1
+-- selection: {it_c} primary it_c
+
+== ripple move a linked clip right: close at source, insert at target
+-- command: Move clip | MoveItems({it_a}, 4000000, toTrack: null, ripple: true, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_b [0,60) md_video src[10000000,12000000)
+  it_a [60,120) md_video src[0,2000000) detached link=ln_a
+  it_c [150,210) md_video2 src[0,2000000)
+tr_orig audio role=original
+  it_a_au [60,120) md_video src[0,2000000) audio link=ln_a
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_a, it_a_au, it_b, it_c
+-- changed lanes: tr_main, tr_orig
+-- notices: transitionsRemoved x1
+-- selection: {it_a} primary it_a
+
+== ripple move to the end of the main lane
+-- command: Move clip | MoveItems({it_b}, 10000000, toTrack: null, ripple: true, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_c [90,150) md_video2 src[0,2000000)
+  it_b [150,210) md_video src[10000000,12000000)
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b, it_c
+-- changed lanes: tr_main
+-- notices: transitionsRemoved x1
+-- selection: {it_b} primary it_b
+
+== ripple move on an overlay lane inside a clip snaps out of it
+-- command: Move clip | MoveItems({it_o1}, 1666667, toTrack: null, ripple: true, clamp: false)
+-- before
+tr_main video main
+  it_v [0,300) md_video src[0,10000000)
+tr_ov1 overlay
+  it_o1 [0,30) md_image src[0,1000000)
+  it_o2 [30,60) md_image src[0,1000000)
+  it_o3 [60,90) md_image src[0,1000000)
+-- after
+tr_ov1 overlay
+  it_o2 [0,30) md_image src[0,1000000)
+  it_o1 [30,60) md_image src[0,1000000)
+  it_o3 [60,90) md_image src[0,1000000)
+unchanged: tr_main
+-- affected: it_o1, it_o2, it_o3
+-- changed lanes: tr_ov1
+-- selection: {it_o1} primary it_o1
+
+== ripple move vertically to another lane
+-- command: Move clip | MoveItems({it_c}, -5000000, toTrack: tr_ov1, ripple: true, clamp: false)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_c [0,60) md_video2 src[0,2000000)
+  it_p1 [90,120) md_image src[0,1000000)
+unchanged: tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_c, it_p1
+-- changed lanes: tr_main, tr_ov1
+-- selection: {it_c} primary it_c
+
+== move by zero is a no-op
+-- command: Move clip | MoveItems({it_c}, 0, toTrack: null, ripple: false, clamp: false)
+-- before: standard()
+-- noop
+
+== move an unknown item
+-- command: Move clip | MoveItems({it_nope}, 33334, toTrack: null, ripple: false, clamp: false)
+-- before: standard()
+-- rejected: ItemNotFound(it_nope)

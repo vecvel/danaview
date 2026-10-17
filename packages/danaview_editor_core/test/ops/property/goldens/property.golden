@@ -1,0 +1,562 @@
+== set property on a keyed channel writes a key
+-- command: Change scale | SetProperty(transform.scale, [it_v], 5.0, at: 333334)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,10f=5.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+unchanged: tr_ov, tr_ovl, tr_txt, tr_sub, tr_music
+-- affected: it_v
+-- changed lanes: tr_main
+
+== set property replaces the key at that frame
+-- command: Change scale | SetProperty(transform.scale, [it_v], 4.0, at: 1000000)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=4.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+unchanged: tr_ov, tr_ovl, tr_txt, tr_sub, tr_music
+-- affected: it_v
+-- changed lanes: tr_main
+
+== set position keys both channels
+-- command: Change position | SetProperty(transform.position, [it_v], Vec2(0.5, -0.25), at: 666667)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,20f=0.5,60f=1.0; transform.position.y@0f=0.0,20f=-0.25,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+unchanged: tr_ov, tr_ovl, tr_txt, tr_sub, tr_music
+-- affected: it_v
+-- changed lanes: tr_main
+
+== set property on a mix of keyed and static items is one outcome
+-- command: Change scale | SetProperty(transform.scale, [it_v, it_p, it_t], 2.0, at: 1333334)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,40f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0,40f=2.0}
+  it_t2 [60,120) text "Second"
+unchanged: tr_ovl, tr_sub, tr_music
+-- affected: it_p, it_t, it_v
+-- changed lanes: tr_main, tr_ov, tr_txt
+
+== set property outside a keyed item
+-- command: Change scale | SetProperty(transform.scale, [it_v], 2.0, at: 3166667)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- rejected: NothingAtTime(95f)
+
+== set property without a time on a keyed item
+-- command: Change scale | SetProperty(transform.scale, [it_v], 2.0, at: null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- rejected: InvalidValue(at)
+
+== set volume on every audio clip
+-- command: Change volume | SetProperty(audio.volume, [it_a, it_a2, it_v], 0.5, at: 333334)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,10f=0.5,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,10f=0.5,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+unchanged: tr_ov, tr_ovl, tr_txt, tr_sub
+-- affected: it_a, it_a2, it_v
+-- changed lanes: tr_main, tr_music
+
+== set a fade
+-- command: Change fade in | SetProperty(audio.fadeIn, [it_a2], 1000000, at: null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio fade 30f/0f
+unchanged: tr_main, tr_ov, tr_ovl, tr_txt, tr_sub
+-- affected: it_a2
+-- changed lanes: tr_music
+
+== set an out-of-range value
+-- command: Change opacity | SetProperty(transform.opacity, [it_p], 1.5, at: null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- rejected: InvalidValue(transform.opacity)
+
+== set a visual property on an audio clip
+-- command: Change opacity | SetProperty(transform.opacity, [it_a2], 0.5, at: null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- rejected: UnsupportedForKind(audioClip)
+
+== set on a locked lane
+-- command: Change opacity | SetProperty(transform.opacity, [it_l], 0.5, at: null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- rejected: TrackLocked(tr_ovl)
+
+== reset transform clears the transform keys and keeps the others
+-- command: Reset transform | ResetTransform([it_v, it_t])
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title"
+  it_t2 [60,120) text "Second"
+unchanged: tr_ov, tr_ovl, tr_sub, tr_music
+-- affected: it_t, it_v
+-- changed lanes: tr_main, tr_txt
+
+== add keyframe with the current value
+-- command: Add keyframe | AddKeyframe(it_v, transform.scale, 500000, null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,15f=1.5,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+unchanged: tr_ov, tr_ovl, tr_txt, tr_sub, tr_music
+-- affected: it_v
+-- changed lanes: tr_main
+
+== add keyframe on a static property
+-- command: Add keyframe | AddKeyframe(it_p, transform.opacity, 666667, null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000) keys{transform.opacity@20f=1.0}
+unchanged: tr_main, tr_ovl, tr_txt, tr_sub, tr_music
+-- affected: it_p
+-- changed lanes: tr_ov
+
+== add keyframe at an existing key
+-- command: Add keyframe | AddKeyframe(it_v, transform.scale, 1000000, null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- rejected: KeyframeExists(1000000)
+
+== add keyframe on a non-keyframable property
+-- command: Add keyframe | AddKeyframe(it_p, visual.crop, 333334, null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- rejected: UnsupportedForKind(notKeyframable)
+
+== remove keyframe
+-- command: Remove keyframe | RemoveKeyframe(it_v, transform.scale, 1000000)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+unchanged: tr_ov, tr_ovl, tr_txt, tr_sub, tr_music
+-- affected: it_v
+-- changed lanes: tr_main
+
+== remove the last keyframe leaves the value static
+-- command: Remove keyframe | RemoveKeyframe(it_t, transform.scale, 1000000)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_txt text
+  it_t [0,60) text "Title"
+  it_t2 [60,120) text "Second"
+unchanged: tr_main, tr_ov, tr_ovl, tr_sub, tr_music
+-- affected: it_t
+-- changed lanes: tr_txt
+
+== move keyframe
+-- command: Move keyframe | MoveKeyframe(it_v, transform.position, 2000000 -> 666667)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,20f=1.0; transform.position.y@0f=0.0,20f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+unchanged: tr_ov, tr_ovl, tr_txt, tr_sub, tr_music
+-- affected: it_v
+-- changed lanes: tr_main
+
+== move keyframe onto another key
+-- command: Move keyframe | MoveKeyframe(it_v, transform.scale, 1000000 -> 2000000)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- rejected: KeyframeExists(2000000)
+
+== set keyframe value
+-- command: Change keyframe | SetKeyframeValue(it_v, transform.scale, 1000000, 5.0)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=5.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+unchanged: tr_ov, tr_ovl, tr_txt, tr_sub, tr_music
+-- affected: it_v
+-- changed lanes: tr_main
+
+== clear keyframes of one property
+-- command: Clear keyframes | ClearKeyframes([it_v], property: transform.scale, at: null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+unchanged: tr_ov, tr_ovl, tr_txt, tr_sub, tr_music
+-- affected: it_v
+-- changed lanes: tr_main
+
+== clear all keyframes of two items
+-- command: Clear keyframes | ClearKeyframes([it_v, it_a], property: null, at: null)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) keys{transform.scale@0f=1.0,30f=2.0,60f=3.0; transform.position.x@0f=0.0,60f=1.0; transform.position.y@0f=0.0,60f=-1.0; audio.volume@0f=1.0,60f=0.5}
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_ov overlay
+  it_p [0,60) md_image src[0,2000000)
+tr_ovl overlay locked
+  it_l [0,60) md_image src[0,2000000)
+tr_txt text
+  it_t [0,60) text "Title" keys{transform.scale@0f=1.0,30f=2.0}
+  it_t2 [60,120) text "Second"
+tr_sub subtitle
+  it_c [0,30) cue "Hello"
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio keys{audio.volume@0f=0.2,30f=1.2}
+  it_a2 [90,150) md_music src[0,2000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video src[0,3000000)
+  it_s [90,150) md_noaudio src[0,2000000)
+tr_music audio role=music
+  it_a [0,90) md_music src[0,3000000) audio
+  it_a2 [90,150) md_music src[0,2000000) audio
+unchanged: tr_ov, tr_ovl, tr_txt, tr_sub
+-- affected: it_a, it_v
+-- changed lanes: tr_main, tr_music

@@ -1,0 +1,4 @@
+import 'package:flutter/foundation.dart' as f;
+
+// Widget base classes reached through a re-export still count as widget code.
+class CaptionsState extends State<f.Object> {}

@@ -1,1 +1,1 @@
-Initial release of Vwish 1.0.0. Ultra-high performance cross-platform HDR media player with studio audio controls and real-time stream diagnostics.
+Initial release of Danaview 1.0.0. Ultra-high performance cross-platform HDR media player with studio audio controls and real-time stream diagnostics.

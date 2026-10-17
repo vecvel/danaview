@@ -1,0 +1,7 @@
+source: dv_spike_stitchable.metal
+source_sha256: d544f6b50671afcfe21387c15a3aece6a6f387e81c3fee2a1b4ba44d05bd14bc
+compiler: Apple metal version 32023.883 (metalfe-32023.883)
+flags: [[stitchable]]: metal -c / metal -framework CoreImage
+min_ios: 15.0
+dv_spike_stitchable.iphoneos.metallib: 9a4e3c044153eeaa7ddb0e030ec7dddfd642ae207bfcf64e40c88ba98ee82d53
+dv_spike_stitchable.iphonesimulator.metallib: 609e39d780ccb5a9a626de160503a7244b0bf337028687b0b5eddc0d53711538

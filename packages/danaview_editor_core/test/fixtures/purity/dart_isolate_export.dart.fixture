@@ -1,0 +1,2 @@
+// Negative fixture: dart:isolate is allowed only under lib/src/store/.
+export "dart:isolate";

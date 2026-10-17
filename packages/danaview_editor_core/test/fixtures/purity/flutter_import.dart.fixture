@@ -1,0 +1,2 @@
+// Negative fixture: lib/ code must not import Flutter.
+import 'package:flutter/widgets.dart';

@@ -1,0 +1,34 @@
+# IOS-01 spike host. Local :path pods only (no network beyond normal CocoaPods resolution).
+#
+# Default linkage: static libraries (no use_frameworks!), the "CocoaPods-style static library"
+# case of V-N9. DV_SPIKE_LINKAGE=dynamic|static switches to use_frameworks! (dynamic frameworks are
+# what the Flutter app's Podfile uses today); see tools/verify_pod_linkage.sh.
+platform :ios, '15.0'
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+project 'DVSpikeHost.xcodeproj'
+
+linkage = ENV.fetch('DV_SPIKE_LINKAGE', 'library')
+
+target 'DVSpikeHost' do
+  case linkage
+  when 'dynamic' then use_frameworks!
+  when 'static' then use_frameworks! :linkage => :static
+  end
+  pod 'DVSpikeKernels', :path => 'DVSpikeKernels'
+  pod 'DVSpikeStitchable', :path => 'DVSpikeStitchable'
+
+  target 'DVSpikeTests' do
+    inherit! :search_paths
+  end
+end
+
+target 'DVSpikeUITests' do
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+    end
+  end
+end

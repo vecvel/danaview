@@ -1,0 +1,107 @@
+== replace keeps range, effects and keys
+-- command: Replace clip | ReplaceMedia(it_v, md_video2)
+-- before
+tr_main video main
+  it_v [0,90) md_video src[0,3000000) fade 5f/0f keys{transform.opacity@0f=0.2,30f=1.0; audio.volume@0f=1.0,60f=0.5}
+tr_orig audio role=original
+  it_busy [30,60) md_music src[0,1000000) audio
+-- after
+tr_main video main
+  it_v [0,90) md_video2 src[0,3000000) fade 5f/0f keys{transform.opacity@0f=0.2,30f=1.0; audio.volume@0f=1.0,60f=0.5}
+unchanged: tr_orig
+-- affected: it_v
+-- changed lanes: tr_main
+-- selection: {it_v} primary it_v
+
+== replace with shorter media shortens with a notice
+-- command: Replace clip | ReplaceMedia(it_b, md_short)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,90) md_short src[0,1000000)
+  it_c [150,210) md_video2 src[0,2000000)
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b
+-- changed lanes: tr_main
+-- notices: trimmedToFit {it_b}; transitionsRemoved x1
+-- selection: {it_b} primary it_b
+
+== replace resets sourceIn when the new media does not cover it
+-- command: Replace clip | ReplaceMedia(it_b, md_video2)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video2 src[0,2000000)
+  it_c [150,210) md_video2 src[0,2000000)
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b
+-- changed lanes: tr_main
+-- notices: transitionsRemoved x1
+-- selection: {it_b} primary it_b
+
+== replace a clip with an image
+-- command: Replace clip | ReplaceMedia(it_b, md_image)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_image src[0,2000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_b
+-- changed lanes: tr_main
+-- selection: {it_b} primary it_b
+
+== replace music with the audio of a video
+-- command: Replace clip | ReplaceMedia(it_m, md_video)
+-- before: standard()
+-- after
+tr_music audio role=music
+  it_m [0,300) md_video src[0,10000000) audio
+unchanged: tr_main, tr_ov1, tr_txt, tr_sub, tr_orig
+-- affected: it_m
+-- changed lanes: tr_music
+-- selection: {it_m} primary it_m
+
+== replace with a LUT
+-- command: Replace clip | ReplaceMedia(it_b, md_lut)
+-- before: standard()
+-- rejected: UnsupportedForKind(lut)
+
+== replace a video clip with music
+-- command: Replace clip | ReplaceMedia(it_b, md_music)
+-- before: standard()
+-- rejected: UnsupportedForKind(audio)
+
+== replace a text item
+-- command: Replace clip | ReplaceMedia(it_t1, md_image)
+-- before: standard()
+-- rejected: UnsupportedForKind(text)
+
+== replace on a locked lane
+-- command: Replace clip | ReplaceMedia(it_b, md_video2)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)
+
+== replace with missing media
+-- command: Replace clip | ReplaceMedia(it_b, md_missing)
+-- before: standard()
+-- rejected: MediaUnavailable(md_missing)

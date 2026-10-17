@@ -1,6 +1,0 @@
-<!-- OWNER: ENG-08 (minimal placeholder created by ENG-01's scaffold). ENG-08 adds the ARCH §20.4
-     declarations: RECORD_AUDIO, POST_NOTIFICATIONS, FOREGROUND_SERVICE_MEDIA_PROCESSING,
-     FOREGROUND_SERVICE_DATA_SYNC, WRITE_EXTERNAL_STORAGE (maxSdk 28), ExportService,
-     FileProvider ${applicationId}.vwish.editor.files and the Photo Picker ModuleDependencies. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-</manifest>

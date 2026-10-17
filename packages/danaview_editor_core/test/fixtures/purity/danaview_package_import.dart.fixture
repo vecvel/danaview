@@ -1,0 +1,2 @@
+// Negative fixture: lib/ code must not depend on another danaview package.
+import 'package:danaview_data/danaview_data.dart';

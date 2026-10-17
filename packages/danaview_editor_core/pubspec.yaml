@@ -1,0 +1,22 @@
+# OWNER: CORE-01 (scaffold landed by the lead architect; see docs/editor/BUILD_PLAN.md §2)
+name: danaview_editor_core
+description: Pure-Dart editing core for the Danaview video editor - time model, domain model, commands, persistence contracts and the RenderPlan contract.
+version: 1.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+# ARCH §4.2 rule 2: exactly these runtime dependencies. No package:flutter, no danaview_* packages.
+dependencies:
+  characters: ^1.3.0
+  collection: ^1.18.0
+  crypto: ^3.0.3
+  meta: ^1.11.0
+  path: ^1.9.0
+
+dev_dependencies:
+  checks: ^0.3.0
+  json_schema: ^5.2.0
+  lints: ^5.0.0
+  test: ^1.25.0

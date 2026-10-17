@@ -1,0 +1,179 @@
+== freeze inside a linked clip: split, still inserted with ripple, partner follows
+-- command: Freeze frame | FreezeFrame(it_a, 1000000, 1000000, md_still)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,30) md_video src[0,1000000) detached link=ln_a
+  it_#1 [30,60) md_still src[0,1000000)
+  it_#2 [60,90) md_video src[1000000,2000000) detached link=ln_#1
+  it_b [90,150) md_video src[10000000,12000000)
+  it_c [180,240) md_video2 src[0,2000000)
+  ~ tx_ab it_#2|it_b crossDissolve 10f
+tr_orig audio role=original
+  it_a_au [0,30) md_video src[0,1000000) audio link=ln_a
+  it_#3 [60,90) md_video src[1000000,2000000) audio link=ln_#1
+unchanged: tr_ov1, tr_txt, tr_sub, tr_music
+-- affected: it_#1, it_#2, it_#3, it_a, it_a_au, it_b, it_c
+-- changed lanes: tr_main, tr_orig
+-- selection: {it_#1} primary it_#1
+
+== freeze at the first frame inserts before the clip
+-- command: Freeze frame | FreezeFrame(it_c, 5000000, 2000000, md_still)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_#1 [150,210) md_still src[0,2000000)
+  it_c [210,270) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1, it_c
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== freeze with a mid-frame time floors it to the frame start
+-- command: Freeze frame | FreezeFrame(it_c, 6001000, 1000000, md_still)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,180) md_video2 src[0,1000000)
+  it_#1 [180,210) md_still src[0,1000000)
+  it_#2 [210,240) md_video2 src[1000000,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1, it_#2, it_c
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== freeze duration is quantized to whole frames
+-- command: Freeze frame | FreezeFrame(it_c, 6000000, 100000, md_still)
+-- before: standard()
+-- after
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,180) md_video2 src[0,1000000)
+  it_#1 [180,183) md_still src[0,100000)
+  it_#2 [183,213) md_video2 src[1000000,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+unchanged: tr_ov1, tr_txt, tr_sub, tr_orig, tr_music
+-- affected: it_#1, it_#2, it_c
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== freeze at the clip end finds nothing
+-- command: Freeze frame | FreezeFrame(it_c, 7000000, 1000000, md_still)
+-- before: standard()
+-- rejected: NothingAtTime(210f)
+
+== freeze outside every clip finds nothing
+-- command: Freeze frame | FreezeFrame(it_c, 4333334, 1000000, md_still)
+-- before: standard()
+-- rejected: NothingAtTime(130f)
+
+== freeze zero duration
+-- command: Freeze frame | FreezeFrame(it_c, 6000000, 0, md_still)
+-- before: standard()
+-- rejected: InvalidValue(duration)
+
+== freeze with a missing still asset
+-- command: Freeze frame | FreezeFrame(it_c, 6000000, 1000000, md_still)
+-- before: standard()
+-- rejected: MediaUnavailable(md_still)
+
+== freeze with a failed still asset
+-- command: Freeze frame | FreezeFrame(it_c, 6000000, 1000000, md_still)
+-- before: standard()
+-- rejected: MediaUnavailable(md_still)
+
+== freeze with a still of other media
+-- command: Freeze frame | FreezeFrame(it_a, 1000000, 1000000, md_still)
+-- before: standard()
+-- rejected: InvalidValue(stillMedia)
+
+== freeze a non-still asset
+-- command: Freeze frame | FreezeFrame(it_c, 6000000, 1000000, md_image)
+-- before: standard()
+-- rejected: MediaUnavailable(md_image)
+
+== freeze an image clip
+-- command: Freeze frame | FreezeFrame(it_p1, 1333334, 1000000, md_still)
+-- before: standard()
+-- rejected: UnsupportedForKind(image)
+
+== freeze an audio clip
+-- command: Freeze frame | FreezeFrame(it_m, 1333334, 1000000, md_still)
+-- before: standard()
+-- rejected: UnsupportedForKind(audio)
+
+== freeze on a locked lane
+-- command: Freeze frame | FreezeFrame(it_c, 6000000, 1000000, md_still)
+-- before
+tr_main video main locked
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: TrackLocked(tr_main)
+
+== freeze ripple blocked by a linked partner
+-- command: Freeze frame | FreezeFrame(it_a, 1000000, 1000000, md_still)
+-- before
+tr_main video main
+  it_a [0,60) md_video src[0,2000000) detached link=ln_a
+  it_b [60,120) md_video src[10000000,12000000)
+  it_c [150,210) md_video2 src[0,2000000)
+  ~ tx_ab it_a|it_b crossDissolve 10f
+tr_ov1 overlay
+  it_p1 [30,60) md_image src[0,1000000)
+tr_txt text
+  it_t1 [0,45) text "Title"
+tr_sub subtitle
+  it_s1 [0,30) cue "Hello"
+tr_orig audio role=original
+  it_a_au [0,60) md_video src[0,2000000) audio link=ln_a
+  it_x [60,90) md_music src[0,1000000) audio
+tr_music audio role=music
+  it_m [0,300) md_music src[0,10000000) audio
+-- rejected: RippleBlockedByLinkedItem(it_#1)
+
+== freeze bakes keyframed visuals into the still
+-- command: Freeze frame | FreezeFrame(it_c, 1000000, 1000000, md_still)
+-- before
+tr_main video main
+  it_c [0,60) md_video2 src[0,2000000) keys{transform.scale@0f=1.0,50f=2.0}
+-- after
+tr_main video main
+  it_c [0,30) md_video2 src[0,1000000) keys{transform.scale@0f=1.0,29f=1.580000083999983}
+  it_#1 [30,60) md_still src[0,1000000)
+  it_#2 [60,90) md_video2 src[1000000,2000000) keys{transform.scale@0f=1.599999880000024,20f=2.0}
+-- affected: it_#1, it_#2, it_c
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1
+
+== freeze a ramped clip splits it through the time map
+-- command: Freeze frame | FreezeFrame(it_c, 666667, 1000000, md_still)
+-- before
+tr_main video main
+  it_c [0,60) md_video2 src[0,2885390) ramp(0.000:1.0 0.500:2.0 1.000:1.0)
+-- after
+tr_main video main
+  it_c [0,20) md_video2 src[0,847441) ramp(0.000:1.0 1.000:1.587401418735763)
+  it_#1 [20,50) md_still src[0,1000000)
+  it_#2 [50,90) md_video2 src[847441,2885390) ramp(0.000:1.587401418735763 0.292:2.0 1.000:1.0)
+-- affected: it_#1, it_#2, it_c
+-- changed lanes: tr_main
+-- selection: {it_#1} primary it_#1

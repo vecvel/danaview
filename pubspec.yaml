@@ -1,8 +1,8 @@
-name: vwish
-description: "Vwish - Ultra-high performance cross-platform media player."
+name: danaview
+description: "Danaview - All-in-one cross-platform media player, native camera, and unified photo & video editor."
 publish_to: 'none'
 
-version: 1.0.0+2
+version: 1.0.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -16,18 +16,30 @@ dependencies:
   shared_preferences: ^2.2.3
 
   # Internal Modular Packages
-  vwish_domain:
-    path: packages/vwish_domain
-  vwish_engine:
-    path: packages/vwish_engine
-  vwish_data:
-    path: packages/vwish_data
-  vwish_ui_kit:
-    path: packages/vwish_ui_kit
-  vwish_platform:
-    path: packages/vwish_platform
-  vwish_features:
-    path: packages/vwish_features
+  danaview_domain:
+    path: packages/danaview_domain
+  danaview_engine:
+    path: packages/danaview_engine
+  danaview_data:
+    path: packages/danaview_data
+  danaview_ui_kit:
+    path: packages/danaview_ui_kit
+  danaview_platform:
+    path: packages/danaview_platform
+  danaview_features:
+    path: packages/danaview_features
+  danaview_editor:
+    path: packages/danaview_editor
+  danaview_editor_engine:
+    path: packages/danaview_editor_engine
+  danaview_editor_engine_api:
+    path: packages/danaview_editor_engine_api
+  # Auto captions (ARCH §16): the app root builds TranscriptionServiceImpl and feeds its governor
+  # from the danaview_whisper device channel (INT-04).
+  danaview_transcription:
+    path: packages/danaview_transcription
+  danaview_whisper:
+    path: packages/danaview_whisper
 
   # Native Playback Engine Bindings
   media_kit: ^1.1.10
@@ -46,6 +58,11 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
+  # Test fakes of the editor (FakeEditorEngine, MemoryStoreFs) for the route tests.
+  danaview_editor_core:
+    path: packages/danaview_editor_core
   flutter_lints: ^3.0.0
 
 flutter:

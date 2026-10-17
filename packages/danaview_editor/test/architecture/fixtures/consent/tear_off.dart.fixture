@@ -1,0 +1,3 @@
+import 'package:danaview_transcription/danaview_transcription.dart';
+
+final make = UserConsent . accepted;
