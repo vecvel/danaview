@@ -18,7 +18,7 @@
 
 [Features](#-at-a-glance) · [Roadmap](#%EF%B8%8F-roadmap) · [Player](#-player-available-now) · [Editor](#%EF%B8%8F-video-editor-v11-in-development) · [Platforms](#-platforms) · [Privacy](#-privacy) · [Build](#-getting-started)
 
-<img src="assets/branding/store/feature_graphic.svg" alt="Danaview feature graphic: view and play, edit and create, private by default" width="500">
+<img src="assets/branding/store/feature_graphic.svg" alt="Danaview feature graphic: view and play, edit and create, private by default" width="100%">
 
 </div>
 
