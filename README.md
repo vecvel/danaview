@@ -1,6 +1,9 @@
 <div align="center">
 
-# 🎬 Danaview
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/wordmark/danaview_lockup_stacked.svg">
+  <img src="assets/branding/wordmark/danaview_lockup_stacked_light.svg" alt="Danaview" width="240">
+</picture>
 
 **Play anything. Edit photos and videos. Capture with your own camera. All on your device.**
 
