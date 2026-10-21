@@ -27,7 +27,7 @@ func image(_ w: Int, _ h: Int, _ r: CGFloat) -> CGImage {
 func write(_ url: URL, _ type: String, _ img: CGImage, _ props: [String: Any]) {
   let dest = CGImageDestinationCreateWithURL(url as CFURL, type as CFString, 1, nil)!
   CGImageDestinationAddImage(dest, img, props as CFDictionary)
-  precondition(CGImageDestinationFinalize(dest), "could not write \(url.lastPathComponent)")
+  precondition(CGImageDestinationFinalize(dest), "could not write a seed image")
 }
 
 func movie(_ url: URL) {
@@ -83,4 +83,4 @@ write(out.appendingPathComponent("dv_seed_plain.jpg"), "public.jpeg", image(480,
 write(out.appendingPathComponent("dv_seed_heic.heic"), "public.heic", image(800, 600, 0.7), [:])
 write(out.appendingPathComponent("dv_seed_png.png"), "public.png", image(300, 300, 0.9), [:])
 movie(out.appendingPathComponent("dv_seed_movie.mov"))
-print("seeded \(out.path)")
+print("seeded test media")

@@ -315,14 +315,13 @@ final class PhotoLibraryService: NSObject, PHPhotoLibraryChangeObserver {
         options.deliveryMode = .highQualityFormat
         PHImageManager.default().requestImageDataAndOrientation(for: asset, options: options) { data, _, _, info in
           self.queue.async {
-            if let error = info?[PHImageErrorKey] as? NSError, (info?[PHImageCancelledKey] as? Bool) == true || error.code == NSUserCancelledError {
+            if (info?[PHImageCancelledKey] as? Bool) == true {
               return completion(.failure(PhotoLibraryFailure(.cancelled, "detail cancelled")))
             }
             guard let data = data else {
+              // No local data: the original is only in iCloud (never downloaded), or unreadable.
               var offline = base
-              offline.locallyAvailable = false
-              let inCloud = (info?[PHImageResultIsInCloudKey] as? Bool) ?? true
-              offline.locallyAvailable = !inCloud
+              offline.locallyAvailable = !((info?[PHImageResultIsInCloudKey] as? Bool) ?? true)
               return completion(.success(offline))
             }
             var d = base

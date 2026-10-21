@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
 # OWNER: HOM-02
 #
-# XCTests of danaview_library_native's PhotoLibrary and Glue (BUILD_PLAN HOM-02) without an app
-# host: builds a throwaway Swift package in a temporary directory whose targets symlink the pod
-# sources, then runs
+# XCTests of danaview_library_native's PhotoLibrary and Glue (BUILD_PLAN HOM-02) without the
+# Danaview app: everything is assembled in a temporary directory from the pod sources.
 #
-#   macos                 swift test on this Mac: the pure helpers, the Glue (linked against the
-#                         Flutter SDK's FlutterMacOS.framework: every placeholder answers
-#                         notSupportedOnDevice, backup flag, conversions). PhotoKit tests skip
-#                         (TCC can't be granted to a command-line test runner).
-#   ios <simulator-udid>  xcodebuild test of the Flutter-free PhotoLibrary core on an already
-#                         booted iOS Simulator, after seeding its library with `xcrun simctl
-#                         addmedia` (seed_media.swift; local media only) and granting photo access
-#                         to the test runner: paging, change events on add and delete, limited and
-#                         denied access, EXIF, create-new copies.
+#   macos                 a throwaway Swift package (`swift test`) on this Mac: the pure helpers
+#                         and the Glue linked against the Flutter SDK's FlutterMacOS.framework
+#                         (every placeholder answers notSupportedOnDevice, backup flag,
+#                         conversions). PhotoKit tests skip: TCC can't be granted to a
+#                         command-line test runner.
+#   ios <simulator-udid>  a hosted XCTest bundle (Host/: an empty app with the photo usage
+#                         strings, bundle id com.vecvel.danaview.librarytests) on an already booted
+#                         iOS Simulator, after seeding its library with `xcrun simctl addmedia`
+#                         (seed_media.swift; locally generated media only) and granting the host
+#                         photo access: paging, change events on add and delete, limited and
+#                         denied access, EXIF, create-new copies, plus the pure helpers.
 #
-# The temporary package is deleted on exit. Usage:
+# The temporary directory (and the installed host app) are removed on exit. Usage:
 #   packages/danaview_library_native/darwin/Tests/PhotoLibrary/run_xctests.sh macos
 #   packages/danaview_library_native/darwin/Tests/PhotoLibrary/run_xctests.sh ios <udid> [--no-seed]
 set -euo pipefail
