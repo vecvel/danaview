@@ -7,6 +7,7 @@
 > **Next:** Danaview 1.3.0 brings the desktop editor and the in-house native camera (`docs/v1.3/V1_3_ROADMAP.md`).
 > **Core theme:** **Photos and documents join videos.** The Home screen becomes the Files & Media Home (photos, videos, documents, Danaview folders, PDF tools), the editor edits photos and videos, subtitles get rich styling and on-device speaker detection, and optional bring-your-own-key AI adds AI search.
 > **Widened on 2026-10-16 (owner):** Pillar 1 now covers documents and PDF tools; AI Studio adds multi-speaker diarization, AI search and a shared AI layer, with a Genkit spike as its first provider ticket.
+> **Build entry point (2026-10-21):** start with [`ARCHITECTURE.md`](ARCHITECTURE.md) (the single source of truth for 1.2.0: scope, package graph, data models, native work, privacy and network rules, budgets, the V2 decision log with the mapping from every plan's decision ids, and the open [OWNER] questions) and [`BUILD_PLAN.md`](BUILD_PLAN.md) (builder rules, milestones N0–N6, the dependency-ordered index of all 166 tickets, ticket specs, the shared-file register and feature coverage). Both win over the four plans below where they differ.
 
 ---
 
@@ -93,5 +94,7 @@
 | **AI Studio, advanced subtitles, speaker lanes & AI search (1.2)** | `docs/v1.2/ai-studio/` | [AI_STUDIO_PLAN.md](ai-studio/AI_STUDIO_PLAN.md) |
 | **Unified Photo & Video Editor (1.2)** | `docs/v1.2/video-editor-update/` | [VIDEO_EDITOR_UPDATE_PLAN.md](video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md) |
 | **Speed test provider fallback (1.2)** | `docs/v1.2/speed-test/` | [SPEED_TEST_FALLBACK_PLAN.md](speed-test/SPEED_TEST_FALLBACK_PLAN.md) |
+| **1.2 architecture (source of truth)** | `docs/v1.2/` | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| **1.2 build plan (tickets)** | `docs/v1.2/` | [BUILD_PLAN.md](BUILD_PLAN.md) |
 | **1.2 roadmap** | `docs/v1.2/` | this file |
 | **1.3 roadmap (desktop editor, native camera with document and code scanning)** | `docs/v1.3/` | [V1_3_ROADMAP.md](../v1.3/V1_3_ROADMAP.md) |
