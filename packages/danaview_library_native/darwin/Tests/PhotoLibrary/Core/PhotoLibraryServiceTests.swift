@@ -38,8 +38,11 @@ final class RecordingSink: PhotoLibraryEventSink {
 final class PhotoLibraryServiceTests: XCTestCase {
   private var systemCanRead: Bool { SystemPhotoAuthorizing().status().canRead }
 
+  /// A service over the real library with the real (`.readWrite`) authorization.
+  private func liveService() -> PhotoLibraryService { PhotoLibraryService() }
+
   private func requireLibrary() throws {
-    try XCTSkipUnless(systemCanRead, "no photo library access in this process (grant it with simctl privacy; see run_xctests.sh)")
+    try XCTSkipUnless(systemCanRead, "no photo library access in this process (status \(SystemPhotoAuthorizing().status()); grant it with simctl privacy, see run_xctests.sh)")
   }
 
   private func page(_ service: PhotoLibraryService, _ key: PhotoFetchKey = .baseline, offset: Int, limit: Int, token: String? = nil) throws -> PhotoPageRecord {
@@ -89,7 +92,7 @@ final class PhotoLibraryServiceTests: XCTestCase {
 
   func testPagingCoversTheSeededLibraryOnce() throws {
     try requireLibrary()
-    let service = PhotoLibraryService()
+    let service = liveService()
     let expected = PHAsset.fetchAssets(with: PhotoLibraryService.options(for: .baseline)).count
     XCTAssertGreaterThanOrEqual(expected, 4, "run_xctests.sh seeds at least four items")
     var ids: [String] = []
@@ -115,7 +118,7 @@ final class PhotoLibraryServiceTests: XCTestCase {
 
   func testFiltersAndMetadata() throws {
     try requireLibrary()
-    let service = PhotoLibraryService()
+    let service = liveService()
     let photos = try page(service, PhotoFetchKey(filter: .photos, sort: .creationNewestFirst, albumId: nil), offset: 0, limit: 500)
     let videos = try page(service, PhotoFetchKey(filter: .videos, sort: .creationNewestFirst, albumId: nil), offset: 0, limit: 500)
     XCTAssertTrue(photos.assets.allSatisfy { $0.kind == .photo && $0.durationMs == 0 })
@@ -133,7 +136,7 @@ final class PhotoLibraryServiceTests: XCTestCase {
 
   func testDetailOfTheSeededJpeg() throws {
     try requireLibrary()
-    let service = PhotoLibraryService()
+    let service = liveService()
     let photos = try page(service, PhotoFetchKey(filter: .photos, sort: .creationNewestFirst, albumId: nil), offset: 0, limit: 500)
     let seeded = try XCTUnwrap(photos.assets.first { $0.originalFilename?.hasPrefix("dv_seed_exif") == true }, "seeded EXIF JPEG")
     let d = try resultOf { service.assetDetail(seeded.localIdentifier, completion: $0) }
@@ -151,7 +154,7 @@ final class PhotoLibraryServiceTests: XCTestCase {
 
   func testCopyIsCreateNewAndLeavesTheOriginal() throws {
     try requireLibrary()
-    let service = PhotoLibraryService()
+    let service = liveService()
     let photos = try page(service, PhotoFetchKey(filter: .photos, sort: .creationNewestFirst, albumId: nil), offset: 0, limit: 500)
     let asset = try XCTUnwrap(photos.assets.first { $0.originalFilename?.hasPrefix("dv_seed_exif") == true })
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("dv_copy_\(UUID().uuidString)")
@@ -178,7 +181,7 @@ final class PhotoLibraryServiceTests: XCTestCase {
   /// the old token is then stale.
   func testChangeEventOnAdd() throws {
     try requireLibrary()
-    let service = PhotoLibraryService()
+    let service = liveService()
     let sink = RecordingSink()
     service.sink = sink
     let before = try page(service, offset: 0, limit: 1)
@@ -239,7 +242,7 @@ final class PhotoLibraryServiceTests: XCTestCase {
   /// between two real snapshots, so no confirmation alert is needed).
   func testChangeEventOnDelete() throws {
     try requireLibrary()
-    let service = PhotoLibraryService()
+    let service = liveService()
     let full = try page(service, offset: 0, limit: 500)
     let victim = try XCTUnwrap(full.assets.first)
     let options = PhotoLibraryService.options(for: .baseline)
@@ -266,7 +269,7 @@ final class PhotoLibraryServiceTests: XCTestCase {
   /// An in-place change keeps the token (cells refresh without restarting paging).
   func testInPlaceChangeKeepsTheToken() throws {
     try requireLibrary()
-    let service = PhotoLibraryService()
+    let service = liveService()
     let full = try page(service, offset: 0, limit: 500)
     let all = PHAsset.fetchAssets(with: PhotoLibraryService.options(for: .baseline))
     let first = try XCTUnwrap(all.firstObject)

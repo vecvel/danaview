@@ -1,9 +1,15 @@
 // OWNER: HOM-19
 //
-// Placeholder (D-33) created by INT-101. HOM-19 replaces this file:
-// the public entry of lib/src/organise/, favourites, recents, name search and sort. The package barrel exports it; HOM-19 re-exports
-// the public files of its directory from here (barrels never change after INT-101).
-// Until then it declares no public names.
+// The public entry of lib/src/organise/ (HOM plan §8.1, D-98f / V2-119): favourites, recents,
+// natural name order, sort remembered per folder, and the name search with its SearchBackend hook
+// (AIS-51 swaps in the on-device index). The package barrel exports this file.
 
 /// The public entry of lib/src/organise/: favourites, recents, name search and sort.
 library;
+
+export 'library_organiser.dart';
+export 'library_search_source.dart';
+export 'library_sort.dart';
+export 'name_search.dart';
+export 'natural_order.dart';
+export 'sort_memory.dart';

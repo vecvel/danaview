@@ -10,8 +10,7 @@
 // previous hits.
 //
 // Matching: the query splits on white space; every word must match the name, the folder name or a
-// type term (kind, plural, sub-kind, extension) as a substring (type terms by prefix, from two
-// characters). Ranks: name starts with the first word, a name word starts with it, the name
+// type term (kind, plural, sub-kind, extension) as a substring (type terms by prefix). Ranks: name starts with the first word, a name word starts with it, the name
 // contains every word, a folder name matches, only the type matches. Folders rank with files.
 //
 // [SearchBackend] is the hook AIS-51 replaces with the on-device index (AIS-50) when it is enabled;
@@ -203,12 +202,14 @@ final class _Prepared {
   final SearchItem item;
   final String name;
   final String? folder;
-  final List<String> types;
+
+  /// Every type term, each after a `\u0001`, so "a term starts with w" is one `contains('\u0001w')`.
+  final String types;
 }
 
-List<String> _typeTerms(SearchItem item) {
+String _typeTerms(SearchItem item) {
   final kind = item.kind;
-  if (kind == null) return const ['folder', 'folders'];
+  if (kind == null) return '\u0001folder\u0001folders';
   final terms = <String>{kind.code, '${kind.code}s'};
   if (kind == FileKind.document) {
     final doc = DocumentKind.decode(item.subKind);
@@ -221,7 +222,7 @@ List<String> _typeTerms(SearchItem item) {
   }
   final dot = item.name.lastIndexOf('.');
   if (dot > 0 && dot < item.name.length - 1) terms.add(item.name.substring(dot + 1).toLowerCase());
-  return terms.toList(growable: false);
+  return [for (final t in terms) '\u0001$t'].join();
 }
 
 bool _isWordChar(int c) =>
@@ -297,18 +298,19 @@ final class NameIndex {
     return _prepared = [for (final k in keyed) k.$2];
   }
 
-  SearchMatch? _match(_Prepared p, List<String> words) {
+  SearchMatch? _match(_Prepared p, List<String> words, List<String> typeWords) {
     final first = words.first;
     var allInName = true;
     var anyFolder = false;
-    for (final w in words) {
+    for (var i = 0; i < words.length; i++) {
+      final w = words[i];
       if (p.name.contains(w)) continue;
       allInName = false;
       if (p.folder?.contains(w) ?? false) {
         anyFolder = true;
         continue;
       }
-      if (w.length >= 2 && p.types.any((t) => t.startsWith(w))) continue;
+      if (p.types.contains(typeWords[i])) continue;
       return null;
     }
     if (allInName) {
@@ -324,18 +326,18 @@ final class NameIndex {
     final words = searchWords(query.text);
     if (words.isEmpty || query.limit <= 0) return SearchResults.empty(query);
     final all = _ensure();
+    final typeWords = [for (final w in words) '\u0001$w'];
 
     // Refine the previous hit set when every previous word is a prefix of the new word in the same
     // position (typing on) and nothing changed since.
-    Iterable<int> candidates = Iterable<int>.generate(all.length);
+    List<int>? candidates;
     final prevWords = _cacheWords;
     final prevHits = _cacheHits;
     if (_cacheVersion == _version && prevWords != null && prevHits != null && prevWords.length <= words.length) {
       var refines = true;
       for (var i = 0; i < prevWords.length; i++) {
-        final prev = prevWords[i];
-        // A longer word can only drop hits, except that type terms start matching at two letters.
-        if (!words[i].startsWith(prev) || (prev.length < 2 && words[i].length >= 2)) {
+        // A longer word can only drop hits (substrings and term prefixes shrink).
+        if (!words[i].startsWith(prevWords[i])) {
           refines = false;
           break;
         }
@@ -347,9 +349,11 @@ final class NameIndex {
     final hits = <int>[];
     final kinds = query.kinds;
     var total = 0;
-    for (final i in candidates) {
+    final n = candidates?.length ?? all.length;
+    for (var c = 0; c < n; c++) {
+      final i = candidates == null ? c : candidates[c];
       final p = all[i];
-      final m = _match(p, words);
+      final m = _match(p, words, typeWords);
       if (m == null) continue;
       hits.add(i);
       final kind = p.item.kind;
