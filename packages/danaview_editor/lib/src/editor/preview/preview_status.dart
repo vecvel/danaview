@@ -5,6 +5,8 @@
 // every other touch.
 //
 // * starting: `DanaviewSpinner` until the first frame.
+// * empty timeline (a "Start empty" project, or every item deleted): a calm "Add media to start"
+//   hint instead of the spinner, since an empty plan never draws a first frame (FIX-UX-18-1).
 // * failed: "Preview stopped" with "Restart preview" (`EditorController.restartPreview`: resends the
 //   full plan and redraws, or re-creates the session when it never started).
 // * offline media at the playhead: a hatched "Media missing" card with "Relink…" (the registry's
@@ -43,6 +45,9 @@ import 'text_overlay_painter.dart' show activeItemOf;
 abstract final class PreviewStrings {
   /// Spinner label while the preview starts.
   static const String starting = 'Starting preview';
+
+  /// Hint shown while the timeline is empty (FIX-UX-18-1).
+  static const String empty = 'Add media to start';
 
   /// Title of the failed card.
   static const String stopped = 'Preview stopped';
@@ -141,7 +146,14 @@ List<DanaviewMenuEntry> previewQualityEntries(EditorController editor, PreviewSt
 /// The slice of EditorState the status overlay depends on.
 @immutable
 final class _StatusView {
-  const _StatusView({required this.ready, required this.preview, required this.missing, required this.tasks, required this.project});
+  const _StatusView({
+    required this.ready,
+    required this.preview,
+    required this.missing,
+    required this.tasks,
+    required this.project,
+    required this.empty,
+  });
 
   static _StatusView of(EditorState s) {
     final missing = s.media.missing;
@@ -152,6 +164,7 @@ final class _StatusView {
       tasks: s.tasks.where((t) => !t.failed).length,
       // The project matters only for the offline check.
       project: missing.isEmpty ? null : s.project,
+      empty: s.project?.duration == 0,
     );
   }
 
@@ -161,6 +174,9 @@ final class _StatusView {
   final int tasks;
   final EditProject? project;
 
+  /// Whether the timeline has no item (FIX-UX-18-1).
+  final bool empty;
+
   @override
   bool operator ==(Object other) =>
       other is _StatusView &&
@@ -168,10 +184,11 @@ final class _StatusView {
       other.preview == preview &&
       setEquals(other.missing, missing) &&
       other.tasks == tasks &&
-      identical(other.project, project);
+      identical(other.project, project) &&
+      other.empty == empty;
 
   @override
-  int get hashCode => Object.hash(ready, preview, Object.hashAllUnordered(missing), tasks, identityHashCode(project));
+  int get hashCode => Object.hash(ready, preview, Object.hashAllUnordered(missing), tasks, identityHashCode(project), empty);
 }
 
 /// Starting, failed, offline and degraded overlays (ARCH §17.5).
@@ -190,25 +207,30 @@ class PreviewStatusOverlay extends ConsumerWidget {
     final preview = view.preview;
     final children = <Widget>[];
 
-    switch (preview.phase) {
-      case PreviewPhase.starting:
-        children.add(const IgnorePointer(
-          child: Center(child: DanaviewSpinner(semanticLabel: PreviewStrings.starting)),
-        ));
-      case PreviewPhase.failed:
-        children.add(Center(child: _FittedCard(child: _FailedCard(projectId: id))));
-      case PreviewPhase.ready:
-      case PreviewPhase.degraded:
-        final project = view.project;
-        if (project != null) {
-          final playhead = ref.watch(playheadProvider(id));
-          children.add(ValueListenableBuilder<TimeUs>(
-            valueListenable: playhead,
-            builder: (context, t, _) => offlineMediaAt(project, view.missing, t)
-                ? Center(child: _FittedCard(child: _OfflineCard(projectId: id)))
-                : const SizedBox.shrink(),
+    if (view.empty && preview.phase != PreviewPhase.failed) {
+      // Nothing to draw: an empty plan never sends a first frame, so no spinner (FIX-UX-18-1).
+      children.add(const IgnorePointer(child: Center(child: _FittedCard(child: _EmptyHint()))));
+    } else {
+      switch (preview.phase) {
+        case PreviewPhase.starting:
+          children.add(const IgnorePointer(
+            child: Center(child: DanaviewSpinner(semanticLabel: PreviewStrings.starting)),
           ));
-        }
+        case PreviewPhase.failed:
+          children.add(Center(child: _FittedCard(child: _FailedCard(projectId: id))));
+        case PreviewPhase.ready:
+        case PreviewPhase.degraded:
+          final project = view.project;
+          if (project != null) {
+            final playhead = ref.watch(playheadProvider(id));
+            children.add(ValueListenableBuilder<TimeUs>(
+              valueListenable: playhead,
+              builder: (context, t, _) => offlineMediaAt(project, view.missing, t)
+                  ? Center(child: _FittedCard(child: _OfflineCard(projectId: id)))
+                  : const SizedBox.shrink(),
+            ));
+          }
+      }
     }
 
     if (preview.phase == PreviewPhase.degraded) {
@@ -254,6 +276,31 @@ class _FittedCard extends StatelessWidget {
       );
 }
 
+/// The calm hint over an empty timeline (FIX-UX-18-1).
+class _EmptyHint extends StatelessWidget {
+  const _EmptyHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: PreviewStrings.empty,
+      excludeSemantics: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.video_library_outlined, color: DanaviewColors.textSecondary, size: 28),
+          const SizedBox(height: DanaviewSpacing.sm),
+          Text(
+            PreviewStrings.empty,
+            textAlign: TextAlign.center,
+            style: DanaviewTextStyles.bodySecondary.copyWith(fontFamily: DanaviewFonts.family),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _FailedCard extends ConsumerWidget {
   const _FailedCard({required this.projectId});
 
@@ -270,7 +317,8 @@ class _FailedCard extends ConsumerWidget {
         children: [
           const Icon(Icons.error_outline_rounded, color: DanaviewColors.errorLight, size: 28),
           const SizedBox(height: DanaviewSpacing.sm),
-          Text(PreviewStrings.stopped, textAlign: TextAlign.center, style: DanaviewTextStyles.headline.copyWith(fontFamily: DanaviewFonts.family)),
+          Text(PreviewStrings.stopped,
+              textAlign: TextAlign.center, style: DanaviewTextStyles.headline.copyWith(fontFamily: DanaviewFonts.family)),
           const SizedBox(height: DanaviewSpacing.xs),
           Text(
             PreviewStrings.stoppedMessage,
@@ -316,7 +364,8 @@ class _OfflineCard extends ConsumerWidget {
             children: [
               const Icon(Icons.link_off_rounded, color: DanaviewColors.warning, size: 28),
               const SizedBox(height: DanaviewSpacing.sm),
-              Text(PreviewStrings.mediaMissing, textAlign: TextAlign.center, style: DanaviewTextStyles.headline.copyWith(fontFamily: DanaviewFonts.family)),
+              Text(PreviewStrings.mediaMissing,
+                  textAlign: TextAlign.center, style: DanaviewTextStyles.headline.copyWith(fontFamily: DanaviewFonts.family)),
               const SizedBox(height: DanaviewSpacing.md),
               DanaviewButton.secondary(
                 label: PreviewStrings.relink,

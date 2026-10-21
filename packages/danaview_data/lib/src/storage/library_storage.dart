@@ -20,6 +20,14 @@ class LibraryStorage {
 
   static const importFolderName = 'Imported';
 
+  /// Where [deviceDirectory] shows in the iOS Files app: "On My iPad › Danaview" on an iPad
+  /// ([tablet]), "On My iPhone › Danaview" otherwise.
+  static String iosFilesLocation({required bool tablet}) => 'On My ${tablet ? 'iPad' : 'iPhone'} › Danaview';
+
+  /// Whether a screen whose shortest side is [shortestSide] logical pixels is an iPad's, by the
+  /// same 600 pt rule as the Storage screen.
+  static bool isTabletWidth(double shortestSide) => shortestSide >= 600;
+
   final bool isMobile;
   final Future<Directory> Function() _documentsDirectory;
   final String? _containerOverride;
@@ -31,7 +39,8 @@ class LibraryStorage {
 
   /// The app's Documents folder (created if missing) on iOS/Android; null on desktop.
   ///
-  /// On iOS this is visible in the Files app under "On My iPhone › Danaview".
+  /// On iOS this is visible in the Files app under "On My iPhone › Danaview" ("On My iPad" on an
+  /// iPad, see [iosFilesLocation]).
   Future<Directory?> deviceDirectory() async {
     if (!isMobile) return null;
     final dir = await _documentsDirectory();

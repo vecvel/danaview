@@ -546,6 +546,43 @@ void main() {
       await _finish(tester, env);
     });
 
+    testWidgets('on an iPad the device folder hints say On My iPad (QA-01 follow-up)', (tester) async {
+      useSurface(tester, const TestSurface(Size(1024, 1366), 1.0, padding: EdgeInsets.only(top: 24)));
+      final documents = Directory.systemTemp.createTempSync('danaview_documents_');
+      addTearDown(() => documents.deleteSync(recursive: true));
+      final env = await LibraryTestEnv.create(
+        storage: LibraryStorage(isMobile: true, documentsDirectory: () async => documents),
+      );
+      await tester.runAsync(() async {
+        await tester.pumpWidget(libraryTestApp(
+          env,
+          DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+        ));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await pumpFrames(tester);
+      await _scrollThrough(tester);
+      expect(find.text('Files app › On My iPad › Danaview'), findsOneWidget);
+      expect(find.textContaining('On My iPhone'), findsNothing);
+      await _finish(tester, env);
+
+      final folderEnv = await LibraryTestEnv.create(
+        storage: LibraryStorage(isMobile: true, documentsDirectory: () async => documents),
+      );
+      await tester.runAsync(() async {
+        await tester.pumpWidget(libraryTestApp(
+          folderEnv,
+          DanaviewFolderScreen(path: documents.path, onBack: () {}, onOpenFolder: (_) {}, onOpenPlayer: () {}),
+        ));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await pumpFrames(tester);
+      expect(find.text('No videos on this device yet'), findsOneWidget);
+      expect(find.textContaining('On My iPad › Danaview'), findsOneWidget);
+      expect(find.textContaining('On My iPhone'), findsNothing);
+      await _finish(tester, folderEnv);
+    });
+
     testWidgets('an empty device folder explains how to add videos', (tester) async {
       useSurface(tester, librarySurfaces[2]);
       final documents = Directory.systemTemp.createTempSync('danaview_documents_');

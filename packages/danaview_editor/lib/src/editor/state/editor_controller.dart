@@ -722,7 +722,11 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
       _setPreview(state.preview.copyWith(phase: PreviewPhase.starting));
       ps.schedule(edit.committedProject);
       await ps.flush();
-      await s.seek(edit.committedProject.view.playhead);
+      final t = edit.committedProject.view.playhead;
+      final ack = await s.seek(t);
+      // A playhead created from now on starts from this preview's seek, not the open's
+      // (FIX-UX-08-1).
+      if (identical(_session.preview, s)) _session.markOpenedAt(t, ack);
     } catch (e) {
       _setPreviewFailed(_previewFailureOf(e));
     }

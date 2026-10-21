@@ -155,6 +155,41 @@ void main() {
     expect(reports.last.byMedia[a.id], MediaAvailability.available);
     await sub.cancel();
   });
+
+  test('FIX-CORE-28-1: a relink on a scratch copy re-checks the open session\'s monitor', () async {
+    final bytes = bytesOf(10, 2000);
+    final f = w.externalFile('o.mp4', bytes);
+    final a = fileAsset('md_o', f, bytes);
+    final open = EditSession(project(
+      [lane('tr_main', TrackKind.video, const [], main: true)],
+      pool: MediaPool({a.id: a}),
+      id: 'pr_media00001',
+    ));
+    final service = MediaRelinkService(access: w.port, probe: fakeProbe, roots: w.roots, fs: w.fs, platform: ImportPlatform.desktop);
+    final reports = <MediaAvailabilityReport>[];
+    final sub = service.watchAvailability(open).listen(reports.add);
+    await settleIo();
+    File(f).deleteSync();
+    await service.resumed();
+    await settleIo();
+    expect(reports.last.byMedia[a.id], MediaAvailability.missing);
+    final count = reports.length;
+
+    // UX-40: relink on a scratch copy, then replay the result on the open session right away.
+    final scratch = EditSession(open.committedProject, editPolicy: open.editPolicy);
+    final again = w.externalFile('o2.mp4', bytes);
+    final out = await service.relink(scratch, {a.id: PickedMedia(uri: again, displayName: 'o2.mp4')});
+    expect(out.rejection, isNull);
+    open.applyPoolEdit(RelinkAssets({a.id: scratch.committedProject.pool[a.id]!}));
+    await settleIo();
+
+    // The open session's watcher gets a fresh report without subscribing again, and the monitor
+    // the plan compiler reads (`last`) says the file is back.
+    expect(reports.length, greaterThan(count));
+    expect(reports.last.byMedia[a.id], MediaAvailability.available);
+    expect(service.monitorOf(open).last!.byMedia[a.id], MediaAvailability.available);
+    await sub.cancel();
+  });
 }
 
 /// Lets async file I/O finish.
