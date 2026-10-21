@@ -595,3 +595,361 @@ engine: per frame, interpolate smoothed landmarks at the source PTS ─► build
 
 As the AIS plan §3.4 and §7.4: rich text and karaoke render through Flutter's `TextLayoutEngine` for preview and sprites, with no plan or engine change (V2-224). Lanes are one subtitle track per speaker in a group; concurrent lanes stack by line height (or fixed slots, AIS-47 decides). They are independent of RenderPlan v2.
 
+---
+
+## 7. AI layer
+
+### 7.1 Roles
+
+| Package | Role | Platforms |
+|---|---|---|
+| `danaview_ai_providers` | `LlmProvider` contracts, `PreparedRequest` (bytes + SHA-256), consent tickets, `HttpTransport` (allow-list, no redirects, header keys, retries, rate limits, cancel), five adapters, token estimator, JSON extraction, loopback fake | pure Dart |
+| `danaview_ai` | `AiStudioSwitch` (`ai.enabled`, off by default), `AiFeature` registry (`editor`, `search`; later `camera`, `documents`), `AiClient` (`plan → disclose → send`, `embed`, image parts), shared usage ledger, `AiKeyStore` port | pure Dart |
+| `danaview_ai_ui` | the **one** send view and the AI Studio settings (switch, providers, keys, model picker, Test key, usage) | Flutter |
+| `danaview_ai_studio` | the editor's feature module: planning, batching, job runner, suggestions sidecar, audio clips, contracts `dv.cleanup/emotion/emoji/speakers/ask/translate/diarize.v1` | Dart |
+| `danaview_search` | on-device index, query engine, `dv.search.filters.v1`, deep indexing | pure Dart |
+| `danaview_ai_genkit` | only if AIS-42 passes **every** criterion for **every** provider (owner 2026-10-16: all or nothing): Genkit-backed `LlmProvider`s behind the same transport | Dart |
+| `danaview_secure_keys` | Keychain / Keystore-wrapped key store | iOS, Android |
+
+### 7.2 Send model (normative)
+
+1. **Off means off.** While `AiStudioSwitch` is off, `aiClientProvider` returns `AiOff`; no feature can build a provider or transport (rule 16), no AI entry point is shown, and the network guard sees zero AI requests (AIS-37, QA-103).
+2. **Per-provider opt-in.** A provider is usable only after its key is entered in its sheet, which names the provider, the host and that the provider's terms apply.
+3. **Plan, then disclose, then send.** Every send is planned locally into an immutable plan of prepared request bodies. The disclosure (`AiSendDisclosure`) is built **from those bytes**: provider, host, model, item counts, characters, estimated tokens (range) and output cap, audio clip count/length/bytes, image count and bytes (deep indexing), what is never sent. Only **Send** in `ai_send_view.dart` creates an `AiSendConsent` (rule 17).
+4. **Hash tickets.** The consent carries the SHA-256 of every body; `HttpTransport` refuses any body whose hash isn't in the ticket, and any host outside the five-host allow-list (V2-222).
+5. **Nothing automatic.** No import, open, resume, indexing or captioning starts a send. A job interrupted by an app kill resumes only after a new disclosure and Send. In-job retries resend identical bytes only.
+6. **Suggestions, never edits.** Editor results are reviewable suggestions (V2-220); search results are local filter chips; deep-index results are local descriptions and vectors. The only path into a project is accepting a suggestion, which runs normal undoable commands.
+7. **Per-feature payload rules:** editor actions send caption text and, for voice actions, per-cue WAV clips (V2-206); cloud diarization sends ~2 min audio windows plus word ids (V2-233); AI search (a) sends only the typed question, the fixed filter schema and today's date, **with Send on every question** (owner 2026-10-16, V2-234); deep indexing sends 512 px JPEG thumbnails without EXIF and ≤ 4,000 characters of document text per item, **never video keyframes, file names, folder names or locations** (owner 2026-10-16, V2-235).
+8. **Keys** are read only by the transport at send time, sent only to their own provider in a header, never logged, never in URLs, backups or project files (V2-202, V2-203).
+9. **Probe consent.** Test key and Load models send no content and use `ProviderProbeConsent` with a one-line disclosure.
+
+### 7.3 Contracts
+
+| Contract | Feature | Sends | Ticket |
+|---|---|---|---|
+| `dv.cleanup.v1`, `dv.emotion.v1`, `dv.emoji.v1`, `dv.speakers.v1` | editor | caption text (+ audio clips for voice variants) | AIS-29 |
+| `dv.ask.v1`, `dv.translate.v1` | editor | selected caption text / sentence groups | AIS-30 |
+| `dv.diarize.v1` | editor | audio windows + whisper word ids | AIS-49 |
+| `dv.search.filters.v1` | search | the typed question | AIS-52 |
+| deep-index describe + embed | search | thumbnails, document text; the question for query embedding | AIS-53 |
+
+Every contract: fixed system prompt in code, input JSON with data in fields and short ids, strict JSON Schema, local validator, mapper; invalid items dropped and counted; no repair round trips (V2-207).
+
+### 7.4 Key store
+
+V2-202 (AIS D-46): iOS `kSecClassGenericPassword`, service `com.vecvel.danaview.ai`, `WhenUnlockedThisDeviceOnly`, not synchronizable; Android AES-256-GCM key in `AndroidKeyStore` wrapping each key, ciphertext in `noBackupFilesDir/danaview_ai_keys.bin`; `keysLost` on invalidation. The port is `AiKeyStore` in `danaview_ai`; the adapter is `lib/adapters/secure_key_store_adapter.dart` (V2-24).
+
+### 7.5 Diarization
+
+AIS plan §7.3: on the v1.1 16 kHz mono speech WAV, whisper words (source µs) plus sherpa-onnx segmentation (pyannote segmentation 3.0, overlap-aware) and speaker embeddings → clustering (≤ 8) → speaker timeline with overlaps kept → word assignment (single-speaker region; overlap → highest frame activity) → **one cue per active speaker per overlap, never merged; a voice whisper missed gets an empty cue marked "needs text"** (owner 2026-10-16) → per-speaker segmentation (AI-11) → lanes. Models download on demand after consent from a pinned Hugging Face revision; **install size doesn't grow** (owner 2026-10-16); AIS-44 must show a per-platform runtime path that keeps it so, or report before AIS-45 starts. Speed target ≤ 0.3× real time on the mid tier; tiers that miss it hide "Detect speakers".
+
+**Shared inference runtime.** If AIS-44 and VED-33 both pick ONNX Runtime, it is linked once (in `danaview_diarization`) and `danaview_face_tracking` declares the same version; VED-33 records the decision and its size effect. They never ship two copies of one runtime (**[VERIFY: AIS-44, VED-33]**).
+
+### 7.6 Search
+
+- **On-device index** (V2-230): names, folders, type, dates, sizes, dimensions, durations (all platforms); image labels and OCR (Vision on iOS/macOS, ML Kit bundled models on Android); document text (PDFKit; `PdfRenderer` text where available; plain text and CSV everywhere); captions from projects and the transcript cache; EXIF dates, camera and existing place names (no geocoding, V2-22). Runs in the background in small batches while idle or charging, pauses during playback and export, never sends anything. ML Kit must make no request of its own (**[VERIFY: AIS-50]**, device network spy; else its logging is disabled or another on-device path is used, RS18).
+- **Query engine** (AIS-51): as-you-type FTS5 over the columns of §5.10 with prefix matching, filter chips (kind, date, folder), result snippets; ≤ 100 ms for 10,000 items on the mid tier.
+- **Level (a)** query to filters and **level (b)** deep indexing per folder as §7.2 item 7; deep indexing is explicit per folder, never automatic, resumable, removable ("Remove deep index").
+- **Home integration:** HOM-19's name search is the fallback and the default when the index is off or still building; AIS-51 extends the same search field (BP §5).
+
+---
+
+## 8. Native work per platform
+
+Lane: **M** = Mac (iOS, macOS, Dart), **A** = Windows laptop (Android), per V2-27.
+
+| Component | iOS / iPadOS | macOS | Android | Lane / tickets |
+|---|---|---|---|---|
+| Photo library | PhotoKit: `PHFetchResult` paging, `PHPhotoLibraryChangeObserver`, limited-library picker, `PHCachingImageManager` thumbnails | same (PhotoKit) | MediaStore `query` with paging, `ContentObserver`, `READ_MEDIA_IMAGES/VIDEO` + `READ_MEDIA_VISUAL_USER_SELECTED` (14+), `loadThumbnail` | M HOM-02, HOM-04; A HOM-02A, HOM-04A |
+| Pickers | `PHPickerViewController` (no full access), `UIDocumentPickerViewController` (import mode, multiple) | `PHPicker`, `NSOpenPanel` | Photo Picker `ACTION_PICK_IMAGES` (back-ported via Play services), SAF `ACTION_OPEN_DOCUMENT` multiple | M HOM-20; A HOM-20A |
+| Open with / share target | `CFBundleDocumentTypes` (documents and images rank **Alternate**; video types keep Owner), **Share Extension** + App Group | Finder Open With, drop | `VIEW`/`SEND`/`SEND_MULTIPLE` intent filters (app manifest, INT-104), handled in the plugin through `ActivityAware` + `onNewIntent` (no `MainActivity` edit) | M INT-104, HOM-21; A HOM-21A |
+| Getting files out | `UIDocumentPickerViewController(forExporting:)`, `UIActivityViewController`, `UIDocumentInteractionController`, `PHAssetCreationRequest` (add-only) | save panel, `NSSharingServicePicker`, `NSWorkspace.open` | `MediaStore.Downloads` (10+) / `ACTION_CREATE_DOCUMENT`, `ACTION_SEND(_MULTIPLE)` and `ACTION_VIEW` through the plugin's own `FileProvider` (read-only grants), MediaStore `Pictures`/`Movies` | M HOM-22; A HOM-22A |
+| PDF viewer | PDFKit `PDFView` in a platform view: zoom, thumbnails, search, selection, outline, password prompt | PDFKit | `PdfRenderer` tiles in a `TextureRegistry` surface; search and selection where the platform offers them (`PdfRenderer` text APIs on newer versions, `androidx.pdf` **[VERIFY: HOM-25]**); password files → file card on versions that can't open them | M HOM-24; A HOM-25 |
+| PDF tools | `PDFDocument` insert/exchange/remove, `PDFPage.rotation`, `PDFAnnotation` (highlight, underline, strikeOut, ink, freeText, stamp), PencilKit ink on iPad, burn-in on save, `write(to:withOptions:)` compression (iOS 16+) **[VERIFY: HOM-30, HOM-31]** | same | route chosen by the HOM-27 spike: (a) platform + Jetpack (`PdfRenderer` editing on 15+, `androidx.pdf`) with page images as the fallback on older versions, else (b) PdfBox-Android or (c) PDFium, decided at the spike (owner 2026-10-16) | M HOM-28…HOM-31; A HOM-27, HOM-28A…HOM-31A |
+| PDF text (search) | `PDFPage.string` | same | per HOM-25 | M HOM-24; A HOM-25 |
+| Quick Look | `QLPreviewController` (editing `.disabled`), `QLThumbnailGenerator` | `QLPreviewView`, `QLThumbnailGenerator` | – (file card) | M HOM-26 |
+| Thumbnails | V2-28 | V2-28 | V2-28 | M HOM-04; A HOM-04A |
+| Image labels, OCR | Vision `VNClassifyImageRequest`, `VNRecognizeTextRequest` | same | ML Kit image labeling + text recognition v2, bundled models | M+A AIS-50 |
+| Diarization | sherpa-onnx + ONNX Runtime via FFI | – | same, per ABI (arm64-v8a, x86_64) | M+A AIS-44, AIS-45 |
+| Key store | Keychain | – | Keystore | M+A AIS-11 |
+| Font pick | document picker for `.ttf`/`.otf` | – | SAF font MIME types | M+A AIS-24 |
+| Face / pose / segmentation | runtime and models per VED-33 (V2-13); `AVAssetReader` frame sampling at analysis size | – | same models; `MediaCodec`/`MediaMetadataRetriever` frame sampling | M VED-33, VED-16, VED-17; A VED-33A, VED-16A, VED-17A |
+| Still render | Core Image on Metal, working format `RGBAh`, tiled `CIRenderDestination`, new `CIKernel`s (tone v2, local adjustments, grain, homography) | – | GLES 3 `RGBA16F` FBOs (`EXT_color_buffer_half_float`, fallback per V2-19), GLSL ES 3.00 passes | M VED-03…VED-10; A VED-03A…VED-10A |
+| Beauty passes | Metal kernels: mesh warp (vertex displacement), frequency-separation skin, makeup blends, segmentation masks | – | GLSL ES 3.00 equivalents | M VED-20…VED-25, VED-34; A VED-20A…VED-25A, VED-34A |
+| Still export | ImageIO `CGImageDestination` (JPEG, HEIC, PNG; **WebP encode unsupported on Apple [VERIFY: VED-29]** → WebP hidden on iOS unless verified), metadata copy/strip via `CGImageDestinationAddImageFromSource` options | – | `Bitmap.compress` (JPEG, PNG, WEBP_LOSSY/LOSSLESS), `androidx.heifwriter` for HEIC on capable devices **[VERIFY: VED-29A]**, `ExifInterface` copy/strip | M VED-29, VED-13; A VED-29A, VED-13A |
+| Speed test | pure Dart (`dart:io` HTTP and WebSocket) | same | same | M ST-01…ST-04 |
+
+**Pigeon surfaces** (V2-25): `danaview_library_native` (HOM-02), `danaview_pdf` (HOM-24), `danaview_face_tracking` (VED-16), `danaview_media_analysis` (AIS-50), `danaview_secure_keys` (AIS-11), `danaview_editor_engine` v2 amendment (INT-102). `danaview_diarization` is FFI (AIS-45). Generated files are committed; Windows never runs `pigeon` (v1.1 handoff rule).
+
+**Platform declarations** (INT-104): iOS — Share Extension target `DanaviewShare` (bundle id `com.vecvel.danaview.share`), App Group `group.com.vecvel.danaview` on both targets, `CFBundleDocumentTypes` additions (PDF, Office, text, images at rank Alternate), `UTImportedTypeDeclarations` where needed, `NSPhotoLibraryUsageDescription` (Photos tab full view), privacy manifests (`PrivacyInfo.xcprivacy`) for the app and the extension (file timestamp and disk space reasons). Android — intent filters on the main activity for `application/pdf`, Office MIME types, `text/*`, `image/*`; `READ_MEDIA_*` permissions for the Photos tab only; backup rules include `library/` and exclude `library/imports/`, `search/`, `signatures/`. macOS — document types, `com.apple.security.files.user-selected.read-write`, photo library entitlement.
+
+---
+
+## 9. Privacy and network rules
+
+### 9.1 Network inventory (closed list, V2-22)
+
+| # | Path | Host(s) | Starts when | Gate | Sends | Ticket |
+|---|---|---|---|---|---|---|
+| N-1 | Network playback (player) | user's URL | user opens a link or stream | user action | the request the stream needs | v1.0 (unchanged) |
+| N-2 | Speech model download | `huggingface.co`, `hf.co` (pinned revision) | user enables Auto captions | v1.1 model consent | the file name | v1.1 AI-09 |
+| N-3 | Speaker model download | same hosts | user enables "Detect speakers" | v1.1 model consent | the file name | AIS-45 |
+| N-4 | Beauty pack download (if Q-N1 = download) | same hosts | user opens Beauty first time | v1.1 model consent | the file name | VED-16 |
+| N-5 | CJK font packs (only if AIS-27 is scheduled) | pinned host per AIS-27 | user picks a pack | model-style consent | the file name | AIS-27 |
+| N-6 | Speed test, default | `speed.cloudflare.com` | user taps Start | user action | connection only (IP) | ST-01 (v1.0 behaviour) |
+| N-7 | Speed test fallback | `locate.measurementlab.net`, the returned `*.measurement-lab.org` NDT7 server | default provider unavailable | **one-time consent** (V2-402), remembered, revocable | IP; results published publicly by M-Lab | ST-02, ST-03 |
+| N-8 | AI Studio actions, key tests, model lists | the five allow-listed hosts (V2-222) | user taps Send / Test key / Load models | switch + key + Send (§7.2) | exactly the disclosed bytes | AIS-08…AIS-53 |
+
+Nothing else opens a socket: Home, library, import, viewers, PDF tools, thumbnails, indexing (Vision, ML Kit), diarization, photo editing, beauty and export are offline (rules 18, 21; QA-103 device spy). OS-level services the app doesn't call (iCloud backup, Play services updates) are outside the app's control and named as such in the policy.
+
+### 9.2 Rules
+
+1. **No silent network.** Every row of §9.1 starts from a user action; downloads and M-Lab additionally need consent; AI additionally needs Send.
+2. **No connectivity pre-checks** (a DNS lookup is network use); failures are mapped after the attempt (AIS §3.9; ST health check is part of the user-started test).
+3. **Spy tests.** `HttpOverrides` spies at the root (v1.1 INT-04, AIS-37, AIS-54) plus a device-level spy (proxy or `NetworkStatsManager` on the emulator, Instruments network on the simulator) in QA-103 cover every new feature with AI Studio off and on.
+4. **Hosts in one place.** Every host in §9.1 appears in `legal_texts.dart`, checked by `test/privacy_policy_host_test.dart` (v1.1) extended by AIS-37 and QA-103.
+
+### 9.3 Originals and files
+
+v1.1 ARCH §20.1 extended: sources are opened read-only (rule 27); imports copy; PDF tools save new files, or "Replace" only inside a Danaview folder after the new file is fully written (rename over); linked-folder files are never changed; Quick Look editing is disabled; the Share Extension copies into the App Group only; `.dnphoto` lives in the editor store (V2-10); exports never overwrite (exclusive create, v1.1 D-44 naming). QA-106 checks bytes and timestamps of every source after every flow.
+
+### 9.4 Permissions and metadata
+
+- **Photos:** pickers need no library permission; the Photos tab's full system-library view asks for access the first time it is opened and honours limited/partial access (V2-103 **[OWNER]** Q-H1).
+- **EXIF on export** (V2-314): default **keep**, with "Strip metadata on export" and a separate "Remove location" switch (**[OWNER]** Q-V3); deep indexing never sends EXIF; batch export applies the setting to every item.
+- **Signatures and keys** never leave the device and are excluded from backups (V2-29, V2-202).
+
+### 9.5 Privacy policy, terms and store declarations
+
+`packages/danaview_features/lib/src/more/legal_texts.dart` is edited in order **ST-05 → AIS-36 → INT-106** (BP §5). ST-05 names Cloudflare and M-Lab (V2-406); AIS-36 writes the AIS plan §6.4 AI text; INT-106 adds the Files & Media Home (Danaview folders, backups, Recently deleted, Share Extension, signatures), the search index, the speaker and Beauty pack downloads, photo export metadata, the AIS §6.4 "Added 2026-10-16" bullets, licences (sherpa-onnx, ONNX Runtime, speaker and face models, the HOM-27 library if any, Genkit if adopted), and sets `legalEffectiveDate`. App Privacy and Data safety answers: AIS D-63 (**[OWNER]** Q-A9), plus M-Lab (IP shared with a third party only after consent) and photo library access. AIS-41 ships them.
+
+---
+
+## 10. Performance budgets, threading and size
+
+### 10.1 Budgets (p90; tiers as v1.1 ARCH §18.2: low = 4 GB Android / iPhone SE 2, mid = Pixel 7a / iPhone 12)
+
+| Area | Budget | Tier | Measured by |
+|---|---|---|---|
+| Home grid scroll, 50,000 mixed items | ≤ 8 ms build+raster per frame at 60 Hz (≤ 4 ms at 120 Hz on ProMotion), no jank > 2 frames per 10 s fling | mid (low: 60 Hz) | HOM-14, QA-104 |
+| Home cold open with 50,000 items | first frame of tabs ≤ 400 ms after the 1.1 Home's first frame | mid | HOM-14 |
+| Library page query (200 rows) | ≤ 2 ms on the UI isolate | mid | HOM-17 |
+| Thumbnails | memory LRU ≤ 64 MB; visible-cell thumbnail ≤ 120 ms from cache miss | mid | HOM-04 |
+| Name search, 50,000 items | first results ≤ 50 ms per keystroke | mid | HOM-19 |
+| Index search, 10,000 items | ≤ 100 ms | mid | AIS-51 |
+| Background indexing | 0 dropped frames attributable to it in the Home grid; pauses during playback/export | low | AIS-50 |
+| Import copy | ≥ 70 % of a plain `cp` of the same file; 2 GB video share completes without the extension exceeding its memory limit | low | HOM-20, HOM-21 |
+| Text viewer | 50 MB log scrolls at the grid budget; first screen ≤ 300 ms | low | HOM-23 |
+| PDF open | first page ≤ 500 ms for a 200-page file | mid | HOM-24, HOM-25 |
+| PDF page tools | merge/split/reorder 200 pages ≤ 10 s with progress; cancellable | mid | HOM-28/28A |
+| Still viewport | slider drag → updated visible tiles ≤ 16 ms (60 fps) on a 24 MP photo | mid (low ≤ 33 ms) | VED-05/05A |
+| Still export | 24 MP ≤ 3 s, 48 MP ≤ 8 s, 100 MP ≤ 20 s (high tier); peak extra memory ≤ 600 MB | mid/high | VED-29/29A, VED-31 |
+| Batch export | 50 × 12 MP photos ≤ 90 s, cancellable, app responsive | mid | VED-12 |
+| Beauty preview | ≥ 30 fps 1080p with face, eyes, skin and makeup on one subject; half-res proxies on low tier | mid | VED-20…VED-25, QA-104 |
+| Face pre-tracking | ≤ 0.5× real time for 1080p video, background isolate, ≤ 1 subject per 4 ms native | mid | VED-17/17A |
+| Beauty export | 4K30 export with full beauty ≤ 3× real time; 4K60 where the v1.1 exporter supports it | high | VED-30 |
+| Diarization | ≤ 0.3× real time | mid | AIS-44 |
+| Rich subtitles | AIS-39's budgets (sprite pre-pass, transcript scroll, overlay, review accept, s1→s2 migration, heap) | per AIS-39 | AIS-39 |
+| Speed test | unchanged test duration ± 1.5 s health check folded into latency | all | ST-03 |
+
+### 10.2 Where work runs
+
+| Work | Where |
+|---|---|
+| Library writes, import copies, sweeps, hashing | `danaview_library` writer isolate |
+| Paged library reads, classifier | UI isolate (bounded per frame) |
+| Thumbnail decode | native thumbnailers off the main thread; Flutter image decode on the raster thread |
+| PDF render and tools | native background queues/executors; tools report progress and cancel |
+| Indexing | native Vision/ML Kit on background queues; FTS writes on a `danaview_search` isolate |
+| Recipe LUT baking, brush mask raster, beauty lowering, One-Euro smoothing | `Isolate.run` (LUT ≤ 40 ms for 33³, ≤ 300 ms for 65³ on mid) |
+| Still render, beauty passes | native GPU (Metal / GLES), as v1.1 preview and export |
+| Face pre-tracking | native analysis thread per job; Dart job orchestration on a background isolate; job queue priority below export |
+| AI sends | as AIS §3.8 |
+
+### 10.3 Install size
+
+| Addition | Budget | Measured by |
+|---|---|---|
+| Noto fonts | ≤ 8 MB compressed (V2-216) | AIS-22 |
+| Diarization runtime | **0** install growth (owner 2026-10-16) | AIS-44 |
+| Face/pose/segmentation runtime code | recorded; models not bundled if Q-N1 = download | VED-33 |
+| PDF library (only if HOM-27 picks b or c) | recorded per ABI | HOM-27 |
+| SQLite (`sqlite3` native libs where the OS one lacks FTS5) | recorded | HOM-17, AIS-50 |
+| Share Extension | ≤ 1 MB | HOM-21 |
+
+AIS-41's release checklist records IPA and AAB sizes against 1.1.0.
+
+---
+
+## 11. Error handling
+
+- **Typed failures** at every port: `LibraryFailure` (`notFound`, `noSpace`, `sourceUnreadable`, `permissionDenied`, `duplicate`, `dbCorrupt`, `newerSchema`), `PdfFailure` (`passwordRequired`, `unsupported`, `damaged`, `cancelled`, `noSpace`), `TrackingFailure` (`modelMissing`, `unsupportedDevice`, `decodeFailed`, `cancelled`), `StillFailure` (`tooLarge`, `encoderUnavailable`, `noSpace`), `SpeedFailure` per ST plan, `AiFailure` per AIS §3.5. UI copy maps each one to a calm sentence and one action, as v1.1 ARCH §19.
+- **Crash safety.** Library transactions (WAL), import `.part` files, PDF "Replace" by rename, `.dnphoto` atomic writes through `StoreFs` (v1.1 CORE-24), inbox batches with manifests last. A corrupt `library.db` is copied to `library.db.corrupt-<date>` and rebuilt from `files/` with every file in `Recovered` (no data loss; QA-106 fault injection).
+- **No editor or Home action can crash the app** (v1.1 G3 extended): native exceptions map to typed failures in the glue (v1.1 error mapper pattern).
+
+---
+
+## 12. Testing and QA strategy
+
+### 12.1 Layers
+
+| Layer | What | Tickets |
+|---|---|---|
+| Pure Dart unit and property | classifier rows; `library.db` invariants under 1,000 seeded random operations (create, move, nest, rename, delete, restore, expire, purge); import resume; duplicate rules; `.dnphoto` round trip and repair; recipe LUT vs reference per-pixel functions; curve spline monotonicity; keystone homography; One-Euro vectors; easing lowering (frame-exact); beauty lowering goldens; schema 2 fixtures incl. `ph`/`bt`/`e`; speed-test coordinator failover matrix | HOM-01…HOM-19, VED-02…VED-19, ST-01…ST-03 |
+| AI | AIS plan §3.10 (no-network bootstrap, hand-written provider fixtures, disclosure = payload, contract validators, network guard) | AIS-01…AIS-54 |
+| Reference renders | Dart CPU reference renderer extended with every new pass (v1.1 API-03 method); goldens per pass | VED-03…VED-34 |
+| Native unit | Swift `XCTest` and Kotlin JVM/instrumented tests per plugin and pass (v1.1 per-ticket test directories) | every M/A native ticket |
+| Parity | device output vs Dart reference within v1.1 ARCH §11.6 tolerance; iOS vs Android; photo mode vs timeline for the same recipe (VED-32); segmentation passes with their own recorded tolerance (V2-17) | VED-32, AIS-39 |
+| Widget and matrix | every new surface and state at 280–1280 px and text scale 0.85–1.35, `expectOwnerUiRules`, semantics | every UI ticket, QA-105 |
+| Architecture | dependency rules 1–31, consent call sites, socket bans, read-only source opens, logging bans, Material ban | AIS-01, AIS-43, INT-101 |
+| Preservation | the 1.1 Home, player, playlist, queue and folder suites unchanged, plus HOM-06…HOM-08 goldens | HOM-15 (merge gate), QA-107 |
+| On-device E2E | iOS Simulator (Mac, one at a time) and Android Emulator (Windows) per plan suite, then the cross-plan suites | HOM-32, AIS-38, AIS-54, VED-30, QA-101, QA-102 |
+| Network | root `HttpOverrides` spy + device spy, AI Studio off/on | AIS-37, AIS-54, QA-103 |
+| Performance and memory | §10 budgets on the device lab | HOM-14, VED-31, AIS-39, QA-104 |
+| Persistence and backup | migration, crash and fault injection, Recently deleted with a fake clock, backup/restore and device transfer | QA-106 |
+| Eval sets | diarization (AIS-44), search (AIS-51), face fixtures (V2-31, VED-33) | AIS-44, AIS-51, VED-33 |
+
+### 12.2 Devices and machines
+
+- **Mac:** iOS Simulator (iPhone 17 Pro, iPad Pro with keyboard), **one simulator at a time**; macOS desktop runs; the lab iPhone 7 (iOS 15.8), iPhone 8 (iOS 16.7) and iPhone SE 2 for launch, low tier and RAW/HEIC checks (v1.1 D-41).
+- **Windows laptop:** Android Emulator API 35 (Pixel 9 Pro XL), API 29 and 34 AVDs, a tablet AVD; real Android devices when available (otherwise criteria are recorded `deferred: no device available`, never faked, as v1.1 ANDROID_LANE.md §3).
+- **Never** run the Android emulator on the Mac.
+
+### 12.3 Fixtures
+
+Test media are generated locally (ffmpeg, code) or come from v1.1 ENG-05; PDFs are generated by the tests (PDFKit / a Dart PDF writer in test code) plus a small committed set with recorded licences; face fixtures per V2-31; no downloads in tests except pub, Gradle and Maven resolution.
+
+---
+
+## 13. 1.3.0 hand-offs (designed now, built later)
+
+| 1.3.0 need | What 1.2.0 provides |
+|---|---|
+| Camera scan-to-PDF, image-to-PDF, merge | `danaview_pdf` (HOM-24, HOM-28) |
+| Camera document OCR | `danaview_media_analysis` (AIS-50) |
+| Camera real-time beauty | `danaview_face_tracking` (topology, models, VED-16), One-Euro vectors (V2-15), beauty pass math in `docs`-level form in VED-20…VED-25 reports and the Dart reference passes |
+| Saved codes in the library | `FileKind` append rule and classifier row (§5.1) |
+| Desktop editor | photo pipeline expressed in RenderPlan v2; desktop engines implement the same passes against the Dart reference |
+| Desktop PDF viewing and tools | `danaview_pdf` surface (Windows/Linux implementations in 1.3.0) |
+
+---
+
+## 14. Contradictions found and how they were resolved
+
+| # | Contradiction | Where | Resolution |
+|---|---|---|---|
+| C-1 | AIS plan D-45…D-70 clash with v1.1 ARCH D-45 | AIS header, roadmap | V2 id blocks with a fixed mapping (§2.1) |
+| C-2 | Schema bumps: AIS-04 moves projects to schema 2 (`minReader` 1); VED-15 adds schema 3 with `minReader` 3; AIS-47 puts lanes in schema 2 | AIS D-53, VED §3.2/VED-15, AIS §7.4 | One schema 2, `minReader` 1, one migration; VED-15 extends AIS-04's schema additively; no schema 3 (V2-03) |
+| C-3 | AIS-01/AIS-41 record decisions and status in v1.1 ARCH | AIS-01, AIS-41 Owns | Recorded here; one pointer line in v1.1 ARCH at release (V2-33) |
+| C-4 | AIS §3.2 puts the send view and AI settings in `danaview_editor`; AIS-43 moves them to `danaview_ai_ui`; pref migration from a key that never shipped; two settings routes (`/settings/editor/ai` vs "Settings › AI Studio") | AIS §3.2, §7.1, AIS-37 | Paths, route `/settings/ai` and `ai.enabled` fixed in V2-20; AIS-31/32/37 Owns amended (BP §8) |
+| C-5 | Search index "in the library database" but "excluded from backups", while the library is included in backups | AIS §7.6, HOM D-98b | Separate `search.db` (V2-07) |
+| C-6 | Roadmap principle 3 ("the only optional network use is AI Studio") ignores the speed test, M-Lab, model downloads and reverse geocoding | roadmap §3, ST, AIS §7.6 | Closed network inventory (§9.1); geocoding deferred (V2-22, Q-N4) |
+| C-7 | "Apple Vision … 468 points" — Vision returns ~76 face points | VED §7, VED-16 | One MediaPipe-compatible topology on both platforms, runtime by VED-33 spike (V2-13) |
+| C-8 | `.dnphoto` "saved alongside the original image"; `source.uri` is a `DCIM` file path | VED §3.2 | App-private editor store and typed source references (V2-10, V2-34) |
+| C-9 | VED-14 (photo → timeline with its recipe) in phase 1 needs the project schema VED-15 only adds in phase 2 | VED §8 | VED-15 moves to N3 and carries the photo recipe as well as beauty (BP §1) |
+| C-10 | HOM-11/HOM-12 ("Edit in Editor", "Make video montage") would depend on editor tickets that land later | HOM §7 | Optional callbacks in `danaview_features` (v1.1 pattern), wired by INT-105 |
+| C-11 | HOM-27 (spike) depends on HOM-24 (plugin skeleton), so the largest unknown starts late | HOM §9 | HOM-27 runs on day 1 in `spikes/android_pdf/` (v1.1 D-42 pattern) |
+| C-12 | `legal_texts.dart` is edited by AIS-36, AIS-54 (coordinates), ST-05 and needs Home/VED text nobody owns | AIS §6.4, ST-05 | Order ST-05 → AIS-36 → INT-106; INT-106 owns all remaining text (§9.5) |
+| C-13 | Editor registry files (`action_ids`, `inspector_routes`, `tool_ids`, `action_bindings`, `edit_command.dart` parts) need VED additions after AIS-01 | AIS-01, VED | INT-101 extends them after AIS-01 (BP §5) |
+| C-14 | `dependency_rules_test.dart` edited by AIS-01 and AIS-43 and needs rules 20–31 | AIS-01, AIS-43 | Order INT-01 → AIS-01 → INT-101 → AIS-43 (AIS-43 gains a dependency on INT-101) |
+| C-15 | Root `pubspec.yaml`, `main.dart`, router edited by AIS-37 and AIS-41 and needed by Home/editor wiring | AIS §5.6 | Order AIS-37 → INT-103 → INT-105 → AIS-41 (version only) |
+| C-16 | VED effect order (crop → chroma → beauty → tone → HSL → LUT → blur → transform) vs v1.1 D-08 (grade → LUT → blur → sharpen → vignette → mask → place) | VED §3.3, D-131 | Merged normative order §6.2 |
+| C-17 | VED D-134 bezier easing vs v1.1 non-goal "linear keyframes only" and RenderPlan linear keys | VED D-134, v1.1 §1.2 | Easing in the model, lowered to frame-grid linear keys (V2-16) |
+| C-18 | AIS G-S8 "no engine change" holds for subtitles, but beauty and stills need plan and Pigeon changes after v1.1's ENG-06 freeze | AIS §1.2, v1.1 BP §2 | RenderPlan v2 + one lead-approved amendment INT-102/102A (V2-12) |
+| C-19 | VED D-143 "zero external calls" vs models that must come from somewhere | VED D-143 | Consented one-time Beauty pack download, the whisper pattern (V2-14, Q-N1) |
+| C-20 | Desktop scope differs per plan (VED desktop columns, HOM macOS PDF tools, AIS index on macOS) | VED §7, HOM §6, AIS §1.3 | One matrix (§3, V2-30) |
+| C-21 | HOM D-89: `QLThumbnailGenerator` for photos and a WebP disk cache; ImageIO can't encode WebP and PhotoKit assets need `PHImageManager` | HOM §3 | V2-28 |
+| C-22 | ST-01 says `network_test.dart` stays green; the suite is `test/network_tools_test.dart` | ST §4 | ST-01 cites the real file (BP) |
+| C-23 | HOM-12 "Play in Player" as a mixed photo/video slideshow assumes the player shows photos | HOM §5.3 | libmpv shows images with `image-display-duration` **[VERIFY: HOM-12]**; if not, photos are skipped with a notice |
+| C-24 | Recently deleted vs files referenced by editor projects; id stability under moves | HOM D-98b, VED | `danaview-library://` ids and the delete warning (V2-08, V2-09) |
+| C-25 | VED-12 batch export depends only on VED-06 but needs the exporter (VED-29) | VED §8 | Dependency added (BP §8) |
+| C-26 | Body slimming, bokeh and hair colour need pose and segmentation models the VED plan never names | VED §5.5–§5.7 | VED-33 spike scope and the Beauty pack (V2-13, V2-14) |
+| C-27 | HOM-19's search field and AIS-51's search UI edit the same file | HOM-19, AIS-51 | Order HOM-19 → AIS-51 (BP §5) |
+| C-28 | AIS milestones S1–S6 vs one release ordering | AIS §5.2 | Mapped into N0–N6 (BP §1) |
+| C-29 | VED says the tracker is shared with the 1.3.0 camera, but places it in the editor | VED-16 | Separate `danaview_face_tracking` plugin (V2-05) |
+| C-30 | AIS-42 and AIS-43 are numbered last but run early | AIS §5.4 | Placed by dependency in the BP index |
+| C-31 | VED D-118 P3 vs v1.1 D-23 SDR BT.709 | VED D-118 | Stills P3 when the source is; video unchanged (V2-19) |
+| C-32 | AIS-37 puts plugin adapters (key store) inside `danaview_editor`, against AIS rule 12 | AIS-37 | Adapters at the app root (V2-24) |
+
+---
+
+## 15. Risks and [VERIFY] register
+
+### 15.1 Top risks
+
+| # | Risk | Mitigation |
+|---|---|---|
+| R2-1 | Android PDF writing turns text into pictures or needs a large library | HOM-27 spike on day 1; platform route first, open-source library only on evidence (V2-123) |
+| R2-2 | Face mesh runtime on iOS adds a large binary or needs a different model than Android | VED-33 spike on both platforms with size and parity numbers before INT-102 freezes the beauty contract |
+| R2-3 | Beauty video preview too slow on low tiers | half-res proxies, render-preview cache "heavy" ranges, tier hiding (§6.4) |
+| R2-4 | 100 MP stills OOM | tiled render and encode, tier caps (V2-18), VED-31 stress |
+| R2-5 | Library database corruption or a crash mid-move loses files | DB-only moves, WAL, rebuild-from-files recovery (§11), QA-106 fault injection |
+| R2-6 | The Share Extension exceeds its memory limit on large videos | streamed copies, no thumbnails in the extension, 2 GB test (HOM-21) |
+| R2-7 | Android Auto Backup's 25 MB cap surprises users | plain Settings copy; device transfer verified (HOM-17, QA-106) |
+| R2-8 | ML Kit or a model runtime makes its own network calls | device spy (AIS-50, QA-103); disable or replace (RS18) |
+| R2-9 | App Store review of body/face modification features | factual copy, no "ideal beauty" claims, owner review of store text (Q-V5) |
+| R2-10 | Three plans touching the same editor and app files cause merge conflicts between lanes | BP §5 register order, skeleton tickets, per-feature files |
+| R2-11 | AIS plan risks RS1–RS20 | as the AIS plan §6.1 |
+
+### 15.2 [VERIFY] items (each closed by the named ticket)
+
+| ID | Claim | Ticket |
+|---|---|---|
+| V2-V1 | Android cloud Auto Backup and device-to-device transfer include `filesDir/library/` with the planned rules; 25 MB cloud cap behaviour | HOM-17, QA-106 |
+| V2-V2 | Decode support per platform for HEIC, AVIF, RAW (DNG, CR2, NEF, ARW), Live Photos | HOM-02, HOM-02A |
+| V2-V3 | ImageIO has no WebP encoder on iOS/macOS; HEIC thumbnails on iOS 17+ | HOM-04, VED-29 |
+| V2-V4 | libmpv displays images in a playlist with `image-display-duration` on every platform | HOM-12 |
+| V2-V5 | `PdfRenderer` text search/selection and password support per Android version; `androidx.pdf` availability | HOM-25 |
+| V2-V6 | Android PDF write route (a/b/c), text preservation, size, min API, 200-page timings, licence | HOM-27 |
+| V2-V7 | PDFKit stamp burn-in and compression write options (iOS 16+, macOS 13+) | HOM-30, HOM-31 |
+| V2-V8 | Share Extension memory limit with streamed copies of a 2 GB video | HOM-21 |
+| V2-V9 | SQLite FTS5 availability per platform with `sqlite3` (system vs bundled), CJK tokenization | HOM-17, AIS-50 |
+| V2-V10 | Face Landmarker topology and model on iOS and Android through one runtime; binary size; parity of landmarks on fixtures | VED-33, VED-33A |
+| V2-V11 | Pose and person/hair segmentation models: size, licence, speed | VED-33, VED-33A |
+| V2-V12 | `RGBA16F` render targets on GLES 3 devices of the tier set; fallback quality | VED-04A |
+| V2-V13 | Core Image working format and tiled render destination for 100 MP | VED-04, VED-31 |
+| V2-V14 | HEIC encode on Android via `androidx.heifwriter`; WebP on Apple | VED-29, VED-29A |
+| V2-V15 | One-Euro parameter sets meet the jitter metric on the face fixtures without visible lag | VED-16 |
+| V2-V16 | Recipe LUT 33³ vs 65³ error for steep curves within 1/255 | VED-08 |
+| V2-V17 | 1.1.x decoders keep unknown keys `ph`, `bt`, `e` and open schema 2 read-only | AIS-04, VED-15, QA-106 |
+| V2-V18 | One shared ONNX Runtime between diarization and face tracking (if both use it) | AIS-44, VED-33 |
+| V2-V19 | M-Lab locate API and NDT7 protocol details; terms on informing users | ST-02 |
+| V2-V20 | AIS plan V-S1…V-S22 | as AIS plan §6.3 |
+
+---
+
+## 16. [OWNER] questions (still open)
+
+Owner decisions of 2026-10-15/16 are applied and not repeated here. Each open question has a working default (the recommendation).
+
+| # | Question | Recommendation (working default) | Decision ids |
+|---|---|---|---|
+| **Q-N1** | How do the face, pose and segmentation models reach the device: bundled (offline from install, larger app) or the consented Beauty pack download like whisper? | **Download on demand with consent** from a pinned Hugging Face revision; runtime code bundled and measured | V2-14 |
+| **Q-N2** | Is MediaPipe (or the runtime VED-33 picks) acceptable on iOS if it adds a few MB of native code? | Yes if VED-33 records ≤ 8 MB IPA growth; else revisit | V2-13 |
+| **Q-N3** | Still export caps on weak devices (minimal ≤ 24 MP, low ≤ 48 MP)? | Yes, with a plain notice in the export sheet | V2-18 |
+| **Q-N4** | "Search by place" (reverse geocoding, a network call) in 1.2.0? | **Defer**; index only place names already in files | V2-22 |
+| **Q-N5** | Development flags `DANAVIEW_FILES_HOME`, `DANAVIEW_PHOTO_EDITOR`, `DANAVIEW_BEAUTY` until their QA passes? | Yes | V2-04 |
+| **Q-N6** | Face test data: synthetic and licensed only, or may the owner record consented clips? | Synthetic + licensed; owner clips only with written consent on file | V2-31 |
+| **Q-N7** | Saved signatures excluded from backups (lost on a new phone)? | Yes, excluded | V2-29 |
+| **Q-N8** | Photos tab: show the system photo library by default (asks for access) or only Danaview folders until the user opts in? | Danaview folders by default; "Show my photo library" opt-in row | V2-103 |
+| **Q-N9** | Should the Windows laptop also smoke-test the Windows desktop build, or is CI enough? | CI is enough | V2-27 |
+| Q-H1 | D-88 permissions model (limited/partial access honoured, full access only for the system-library view) | as stated | V2-103 |
+| Q-H2 | D-92 multi-select creation bar contents | Make video montage, Batch edit photos, Add to playlist, Play all (+ file actions) | V2-107 |
+| Q-A1 | D-45 one Send per action (no session-wide skip) | yes | V2-201 |
+| Q-A2 | D-49 usage: estimates and recorded tokens, no prices | yes | V2-205 |
+| Q-A3 | D-50 sending voice clips after disclosure | yes, audio models only | V2-206 |
+| Q-A4 | D-55 system emoji; AI emoji ≤ Emoji 12.0 | yes | V2-211 |
+| Q-A5 | D-58 emotion labels, emoji pools, colours | as the AIS plan | V2-214 |
+| Q-A6 | D-59 AI speaker labels guessed from text on Claude/Grok | ship, labelled "guessed from the text" | V2-215 |
+| Q-A7 | D-60 bundled Noto ≤ 8 MB; system CJK; no packs | yes | V2-216 |
+| Q-A8 | D-61 font rights reminder wording; warn on restricted `fsType` | warn, don't block | V2-217 |
+| Q-A9 | D-63 privacy labels, Data safety, demo key for review, "Report a problem" | conservative labels; owner and legal decide | V2-219 |
+| Q-A10 | D-66 no custom endpoints | yes | V2-222 |
+| Q-A11 | AIS Q9: accepted clean-up keeps `CueOrigin.generated` | yes | — |
+| Q-A12 | AIS Q10: keep v1's cue list next to the transcript view | yes, both in 1.2.0 | — |
+| Q-V1 | D-123 full beauty parity in Still Photo Mode | yes | V2-308 |
+| Q-V2 | D-125 batch export formats and quality sliders (WebP hidden on iOS unless V2-V14 passes) | yes | V2-310 |
+| Q-V3 | D-129 EXIF default keep, with "Strip metadata" and "Remove location" switches | keep by default | V2-314 |
+| Q-V4 | D-133 up to 4 subjects | yes | V2-318 |
+| Q-V5 | D-138 body slimming ships, with neutral store copy | yes, with owner-reviewed copy | V2-323 |
+| Q-S1 | ST-05 privacy wording for Cloudflare and M-Lab | as ST plan D-ST6 | V2-406 |
