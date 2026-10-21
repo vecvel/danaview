@@ -1,0 +1,17 @@
+name: ais42_genkit_spike
+description: AIS-42 throwaway spike host (Genkit Dart 1.0 behind LlmProvider). Not part of any product build.
+publish_to: none
+environment:
+  sdk: ^3.12.0
+dependencies:
+  genkit: 1.0.1
+  genkit_openai: 1.0.1
+  genkit_google_genai: 1.0.1
+  genkit_anthropic: 1.0.1
+  http: ^1.6.0
+  crypto: ^3.0.6
+  schemantic: ^1.0.0
+  logging: ^1.3.0
+dev_dependencies:
+  test: ^1.26.0
+  lints: ^6.0.0

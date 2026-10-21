@@ -1,0 +1,43 @@
+# OWNER: INT-101
+#
+# Native side of the Files & Media Home (ARCH v1.2 §4.1, §4.3, §8): photo library (PhotoKit,
+# MediaStore), pickers, Save to Files / Downloads, share, open-in, Quick Look, thumbnails, the App
+# Group inbox and Android incoming intents. Flutter plugin for iOS and macOS (shared `darwin/`
+# sources) and Android. The Pigeon surface is HOM-02's (frozen after it, V2-25); the native stubs
+# in darwin/ and android/ are placeholders for HOM-02 and HOM-02A.
+#
+# Rule 21 (test/architecture/dependency_rules_test.dart): no danaview_* package, no sockets.
+# Rule 26: only the Inbox class touches the App Group container; save-out is create-new only.
+# Rule 27: external sources are opened read-only.
+name: danaview_library_native
+description: Danaview library native - photo library, pickers, save out, share, open in, Quick Look, thumbnails, Share Extension inbox and incoming intents for iOS, macOS and Android.
+version: 1.2.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  # Generates lib/src/pigeon/ from pigeons/library_api.dart (HOM-02, Mac only).
+  pigeon: ^29.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.vecvel.danaview.library
+        pluginClass: DanaviewLibraryNativePlugin
+      ios:
+        pluginClass: DanaviewLibraryNativePlugin
+        sharedDarwinSource: true
+      macos:
+        pluginClass: DanaviewLibraryNativePlugin
+        sharedDarwinSource: true

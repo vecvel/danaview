@@ -1,0 +1,5 @@
+# Regenerate with tool/make_clips.py; raw runs with tool/run_grid.sh
+data/*.wav
+results/
+build/
+.dart_tool/
