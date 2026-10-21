@@ -175,8 +175,8 @@ way.
 
 ## Device matrix
 
-All AVDs: x86_64, `google_apis` (no Play Store), GPU `auto` (SwiftShader, GLES 3.0), audio input
-on, 16 GB data. The RAM column is the effective `hw.ramSize` from `hardware-qemu.ini`. On the
+All AVDs: x86_64, `google_apis` (no Play Store), GPU `auto` (SwiftShader, GLES 3.0; the tablet is
+booted with `-gpu host`), audio input on, 16 GB data. The RAM column is the effective `hw.ramSize` from `hardware-qemu.ini`. On the
 API 35 images the emulator raises the 3072 MB of `config.ini` to 4096 MB, which matches the
 `ram=4110…` value the app logs.
 
@@ -224,8 +224,10 @@ the tablet run adds `DANAVIEW_E2E_ONLY=s12`:
 
 `DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=C:/dev/models scripts/ci/editor/e2e_android.sh [serial]`
 
-Only one emulator ran per serial, and no emulator restarted in any run. A failed batch was rerun
-alone once on a fresh install (s13 three times). The "Batch" column is the clean-pass result; the
+The two serials ran at the same time, from separate checkouts: `emulator-5554` ran from 18:31 to
+22:15, and `emulator-5556` ran one AVD at a time from 18:52 to 22:40. No emulator restarted in any
+run. Each failed batch was rerun alone on a fresh install: s07 and the API 34 fgs pair once, s18
+on the 2 GB AVD twice, and s13 three times. The "Batch" column is the clean-pass result; the
 "Alone" column is the rerun on the same code.
 
 ### Overview
@@ -549,7 +551,8 @@ code E.
   result as the default. `-gpu swiftshader_indirect` survived 1 of 2 runs. `-gpu host` survived 3
   of 4 (`gpu_host/run1`, `gpu_host_patched` run1 and run2; it died in `gpu_host/run2`, together
   with `emulator-5554`). **Recommended tablet boot flag: `-gpu host`.** Evidence:
-  `emulator-5556_Pixel_Tablet_API_35/gpu_*` and `gpu_trials_README.txt`.
+  `_before_3d38ef2/emulator-5556_Pixel_Tablet_API_35/gpu_*` and `gpu_trials_README.txt`. The code E
+  tablet run used `-gpu host` and passed s12 on the first attempt.
 
 ## Android-lane fixes this round
 
