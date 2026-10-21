@@ -51,7 +51,7 @@ in s07.
 
 | Item | Where | What to do |
 |---|---|---|
-| **Round 6** Mac build (QA-01 re-certification on the iOS simulator) | main checkout `/Users/besaoct/Desktop/danaview` | Let it finish. Its results go into `docs/v1.1/editor/qa/QA-01-ios-simulator.md` |
+| **Round 6** Mac build (QA-01 re-certification on the iOS simulator) | main checkout `/Users/besaoct/Desktop/vecvel/vecvel-cross-platform/danaview` | Let it finish. Its results go into `docs/v1.1/editor/qa/QA-01-ios-simulator.md` |
 | **Round 7 parallel** Dart fixes for the Windows QA-02 requests | git worktree `.claude/worktrees/parallel-r7`, branch `parallel-r7` | When finished, `git add -A && git commit` in the worktree, then from the main checkout `git merge --no-edit parallel-r7 && git push origin editor-wip`, then `git worktree remove .claude/worktrees/parallel-r7`. **Merge only after QA-01 has finished**, because QA-01 rebuilds the app from the main checkout's files |
 | Windows lane | `C:\dev\danaview`, branch `editor-android` | Kotlin INT-07 fixes (§4.3), then a full QA-02 pass |
 
@@ -190,7 +190,7 @@ Paste the block below to any capable coding agent (Claude Code, or another agent
 
 ```text
 You are the lead engineer for Danaview, a private, all-in-one media app (Flutter; native engines in Swift for
-iOS/macOS and Kotlin for Android; whisper.cpp on-device captions). Repo: /Users/besaoct/Desktop/danaview, branch
+iOS/macOS and Kotlin for Android; whisper.cpp on-device captions). Repo: /Users/besaoct/Desktop/vecvel/vecvel-cross-platform/danaview, branch
 editor-wip, remote github.com/vecvel/danaview. A second machine (Windows laptop, branch editor-android) builds and
 tests the Android lane.
 
