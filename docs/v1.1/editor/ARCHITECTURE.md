@@ -551,7 +551,7 @@ Body conventions: integer µs times; colours `"#RRGGBBAA"`; shortest round-trip 
 |---|---|
 | Commit, pool change, view change | Autosave to the next journal slot (a/b), debounced 2 s idle, forced at 10 s; skipped while a transaction is open |
 | ⌘/Ctrl+S, Project › Save | Main + meta + refs; journal truncated; clears "Recovered" |
-| App hidden/paused, editor close (waits ≤ 3 s) | Main + meta + refs + poster |
+| App hidden/paused, editor close (waits by device tier: 4 s high, 6 s mid, 8 s low, 10 s minimal; on timeout the save keeps running and "Still saving" is shown, FIX-M1 2026-10-17) | Main + meta + refs + poster |
 
 Recovery: at app start, `recoverable()` lists projects whose newest valid journal slot has `docRevision > main.docRevision` and `baseSaveId == main.saveId` (only after a crash, kill or failed background save). `restore` promotes the journal atomically; `discard` deletes it; opening with a pending recovery returns `LoadedProject.pendingRecovery`; "Open last saved" keeps the journal as `recovered-<ts>` until the next successful save. Save failures surface as `SaveStatus.failed(StoreFailure)`; edits stay in memory and the next trigger retries.
 

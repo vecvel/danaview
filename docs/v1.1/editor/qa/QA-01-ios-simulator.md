@@ -4,7 +4,7 @@
 
 This report covers QA-00's app-level suite (`integration_test/editor`, ARCH §21.2) run on the iOS Simulator with the release dart-defines `DANAVIEW_EDITOR=true` and `DANAVIEW_AUTO_CAPTIONS=true` (BUILD_PLAN QA-01).
 
-**Status: automated suite certified on the iOS Simulator (re-run 3, 2026-10-16 23:25 to 2026-10-17 00:34).** Every scenario passes on the iPhone 16 (iOS 26.5): 16 of 18 in the full run, and the other two (s07, s13) pass on their solo re-runs. Both iOS-relevant extras pass. s12 passes on the iPad Pro 13-inch, and the iOS 18.2 lane passes 3 of 3. FIX-UX-40-1 (s10), FIX-UX-14-1 (s18) and FIX-QA-00-2 (s12 marquee) are confirmed fixed. The suite's s13 timing fix (FIX-QA-00-3, landed as FIX-TESTS-R6) holds on the solo run.
+**Status: automated suite certified on the iOS Simulator (re-run 3, 2026-10-16 23:25 to 2026-10-17 00:34).** Every scenario passes on the iPhone 16 (iOS 26.5): 16 of 18 in the full run, and the other two (s07, s13) pass on their solo re-runs. Both iOS-relevant extras pass. s12 passes on the iPad Pro 13-inch, and the iOS 18.2 lane passes 3 of 3. FIX-UX-40-1 (s10), FIX-UX-14-3 (s18) and FIX-QA-00-2 (s12 marquee) are confirmed fixed. The suite's s13 timing fix (FIX-QA-00-3, landed as FIX-TESTS-R6) holds on the solo run.
 
 Still open, none of them automated:
 
@@ -42,7 +42,9 @@ Evidence goes to `build/e2e/ios/<udid>/`: `logs/`, `screens/`, `files/` (exporte
 | legacy | iPhone 16, **iOS 18.2** (`7DF46AEE-…`) | s01, s02, s03 |
 | lab | iPhone 7 (iOS 15.8), iPhone 8 (iOS 16.7), set with `DV_E2E_LAB_UDIDS` | s01–s04 smoke |
 
-## Run of 2026-10-16/17 (re-run 3, after FIX-UX-40-1, FIX-UX-14-1, FIX-QA-00-2 and FIX-QA-00-3)
+> **ID note (2026-10-21):** the playhead-restore defect is renamed **FIX-UX-14-3** in this report, because FIX-UX-14-1 already names the transport time-readout a11y defect (QA-08). Code and test headers (`playhead_reopen_test.dart`) still say FIX-UX-14-1 for this fix.
+
+## Run of 2026-10-16/17 (re-run 3, after FIX-UX-40-1, FIX-UX-14-3, FIX-QA-00-2 and FIX-QA-00-3)
 
 Environment: Xcode 26.6 (17F113) and Flutter 3.44.2, debug builds. `WhisperCore.xcframework` was already `up-to-date`. The models `ggml-tiny-q5_1.bin` and `ggml-silero-v6.2.0.bin` were staged in place from `/Users/besaoct/danaview-models` (owner-approved, SHA-256 verified); nothing was downloaded or copied into the repo. About 40 to 53% of system memory was free.
 
@@ -68,7 +70,7 @@ DV_E2E_IPHONE="iPhone 16" DV_E2E_MODELS=/Users/besaoct/danaview-models scripts/c
 | s12 | pass | | FIX-QA-00-2 confirmed: marquee `Offset(306.1, 549.0) -> Offset(78.6, 553.0)`, visible 6.49 to 22.78 s, end 14.67 s |
 | s13 | **fail (simulator)** | **pass** | Full run: the clip started 1 433 333 µs after the playhead when recording appeared (simulator budget 750 ms). Solo: seek 2.0 s, playhead at recording 2.2 s, clip 2.80 s + 3.67 s, window 3.08 s. This is the virtual mic's start latency under load; the device budget is 100 ms (`DV_E2E_DEVICE=true`). |
 | s14–s17 | pass | | s15 `head -14.6 dBFS, body -9.0 dBFS` |
-| s18 | pass | | FIX-UX-14-1 confirmed: the playhead is restored on reopen |
+| s18 | pass | | FIX-UX-14-3 confirmed: the playhead is restored on reopen |
 | x_ios_background_export | pass | | `pausedInBackground observed: false` (simulator reality) |
 | x_android_api28 | pass (trivial on iOS) | | |
 | x_android_export_background | skipped on iOS | | |
@@ -142,7 +144,7 @@ DV_E2E_IPHONE="iPhone 16" scripts/ci/editor/e2e_ios.sh ipad legacy lab
 | s15 | pass | `head -14.6 dBFS, body -9.0 dBFS` (fade-in quieter). |
 | s16 | pass | |
 | s17 | pass | |
-| s18 | **fail** | **FIX-UX-14-1.** Reproduced 2 of 2. After close and reopen, the timeline JSON is equal, but `playhead.value` is `0` (expected 2 566 667 µs, frame 77). Zoom is not reached. |
+| s18 | **fail** | **FIX-UX-14-3.** Reproduced 2 of 2. After close and reopen, the timeline JSON is equal, but `playhead.value` is `0` (expected 2 566 667 µs, frame 77). Zoom is not reached. |
 | x_ios_background_export | pass | Simulator reality: `pausedInBackground observed: false`, reported. |
 | x_android_api28 | pass (trivial on iOS) | |
 | x_android_export_background | skipped on iOS | |
@@ -201,7 +203,7 @@ Rows from the earlier runs (all fixed or resolved now):
 | Id | Owner | File | What | Fix |
 |---|---|---|---|---|
 | FIX-UX-40-1 (needs triage, maybe INT-02) | UX-40 | `packages/danaview_editor/lib/src/editor/flows/relink/` (relink apply → preview) | After "Relink 3 files", every asset is relinked and the banner is gone. But after `waitReady` and a seek, the preview frame has no barcode (`null`, expected 10): the preview does not render the relinked media. | On relink apply, re-resolve the media paths in the compiled plan and push a new plan, or restart the preview, so it reads the new files. |
-| FIX-UX-14-1 (needs triage, maybe UX-08) | UX-14 | `packages/danaview_editor/lib/src/editor/state/playhead_controller.dart` / `editor_controller.dart` | Close and reopen restores the timeline but not the playhead: it is 0 instead of the saved view playhead (2 566 667 µs). Reproduced 2 of 2 on the iOS 26.5 simulator. Either the settled seek's `updateView` does not reach disk before close, or the reopened playhead does not `reset` to `view.playhead`. | Make sure close flushes the last settled view state, and that the reopened `PlayheadController` starts at `committed.view.playhead`. Add a unit test: seek, close, reopen, playhead equal. |
+| FIX-UX-14-3 (needs triage, maybe UX-08) | UX-14 | `packages/danaview_editor/lib/src/editor/state/playhead_controller.dart` / `editor_controller.dart` | Close and reopen restores the timeline but not the playhead: it is 0 instead of the saved view playhead (2 566 667 µs). Reproduced 2 of 2 on the iOS 26.5 simulator. Either the settled seek's `updateView` does not reach disk before close, or the reopened playhead does not `reset` to `view.playhead`. | Make sure close flushes the last settled view state, and that the reopened `PlayheadController` starts at `committed.view.playhead`. Add a unit test: seek, close, reopen, playhead equal. |
 | FIX-QA-00-2 | QA-00 | `integration_test/editor/s12_keyboard_pointer_test.dart` (marquee step) | The marquee starts at `project.duration + 0.5 s`. With the iOS default centre-locked timeline, zoom-to-fit keeps the playhead centred, so that point is past the right edge and the drag starts outside the canvas. The selection stays empty on the iPhone and the iPad. | Start the marquee at a visible point: clamp `from.dx` to the canvas's right edge minus a few px, over empty lane space, or switch the viewport to free mode / seek near the end before fitting. |
 | FIX-QA-00-3 (optional) | QA-00 | `integration_test/editor/s13_voiceover_test.dart` | The latency (< 500 ms) and duration (2.5–4 s) bounds miss on the simulator's virtual mic: 533 ms and 4.97 s on two runs. | Keep the bounds for devices, and on the simulator report the numbers (DV_E2E_REPORT) instead of failing, or measure the duration against the wall time up to the stop tap. |
 
