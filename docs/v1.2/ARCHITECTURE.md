@@ -300,7 +300,7 @@ app root (lib/: main.dart, app.dart, router/, **adapters/**)
  └─ **danaview_face_tracking** (plugin iOS/Android: face mesh, pose, segmentation runtime; video frame sampling) ──► no danaview_*
 ```
 
-Only the app root constructs plugin-backed implementations and adapts them to ports (V2-24): `lib/adapters/{secure_key_store_adapter, face_tracking_adapter, media_analysis_adapter, document_text_adapter, library_media_access_adapter, speaker_model_adapter}.dart`.
+Only the app root constructs plugin-backed implementations and adapts them to ports (V2-24): `lib/adapters/{secure_key_store_adapter, face_tracking_adapter, media_analysis_adapter, document_text_adapter, library_media_access_adapter}.dart` (owners: AIS-37, VED-16, INT-103, INT-105).
 
 ### 4.2 Dependency rules (enforced by `test/architecture/dependency_rules_test.dart` and per-package architecture tests)
 
