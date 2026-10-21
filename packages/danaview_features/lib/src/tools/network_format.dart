@@ -1,3 +1,7 @@
+// EXTENDED: ST-04 (neutral server wording and the details-row notes; V2-404, V2-405)
+
+import 'network_tool_providers.dart' show SpeedResultNote;
+
 /// `0.85`, `12.4`, `250`: two significant-ish digits at low speeds, whole numbers once they're big.
 String formatMbps(double mbps) {
   if (mbps >= 100) return mbps.toStringAsFixed(0);
@@ -27,3 +31,17 @@ String formatStreamDuration(Duration d) {
   if (m > 0) return '$m\u00A0min ${s.toString().padLeft(2, '0')}\u00A0s';
   return '${d.inMilliseconds < 1000 && d > Duration.zero ? 1 : s}\u00A0s';
 }
+
+/// The neutral server line under the dial (D-ST5): never a provider name. [server] is the place the
+/// server reports (`Frankfurt (FRA)`), when known.
+String speedServerLine({required bool running, String? server}) {
+  final lead = running ? 'Testing against a nearby server' : 'Tested against a nearby server';
+  return server == null ? lead : '$lead\u00A0· $server';
+}
+
+/// A result's details-row note (D-ST4), worded for the screen.
+String speedResultNoteText(SpeedResultNote note) => switch (note) {
+      SpeedResultNote.measuredOnTwoServers => 'Measured on two servers: download and upload ran on different ones.',
+      SpeedResultNote.openNetwork =>
+        'Open network: measured over a single connection, so speeds can read a little lower.',
+    };

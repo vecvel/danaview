@@ -1,4 +1,6 @@
 /// The Privacy Policy and Terms of Use as structured data, rendered by the legal screen.
+///
+/// Edited in order UX-42 (v1.1) → ST-05 (speed-test providers, V2-406) → AIS-36 → INT-106 (ARCH §9.5).
 library;
 
 /// Where the app shows the third-party licences (the Auto captions terms point here, ARCH §20.3).
@@ -108,7 +110,10 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
         LegalBullet('No accounts or sign-in.'),
         LegalBullet('No analytics, telemetry or crash reporting.'),
         LegalBullet('No advertising and no advertising identifiers.'),
-        LegalBullet('No tracking across apps or websites, and no selling or sharing of personal data.'),
+        LegalBullet(
+          'No tracking across apps or websites, and no selling or sharing of personal data. The one exception '
+          'is a speed test you agree to run on the open measurement network, described below.',
+        ),
       ]),
     ]),
     LegalSection('When Danaview uses the internet', [
@@ -122,10 +127,20 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
         ),
         LegalBullet(
           lead: 'Speed test',
-          "The test exchanges test data directly with Cloudflare's public speed test servers "
+          "By default, the test exchanges test data directly with Cloudflare's public speed test servers "
           '(speed.cloudflare.com) to measure latency, download and upload speed. It sends no personal data, '
           'profile details or viewing history. Cloudflare sees the usual details of the connection, such as '
-          'your IP address.',
+          'your IP address, and handles them under its own policies.',
+        ),
+        LegalBullet(
+          lead: 'Speed test on the open measurement network',
+          'Only if the usual test servers are busy or unreachable, and only if you agree when asked, the test '
+          'runs on Measurement Lab (M-Lab), an open network that measures internet performance for research. '
+          'Danaview asks locate.measurementlab.net for a nearby test server and then exchanges test data with '
+          'that server (an address on measurement-lab.org). It sends no personal data, profile details or '
+          'viewing history. M-Lab publishes the results of every test publicly, including your IP address. '
+          'Your answer is remembered, and you can change it at any time in Settings › Privacy. If you say no, '
+          'the test never uses M-Lab.',
         ),
         LegalBullet(
           lead: 'Stream check',
@@ -174,6 +189,7 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
     LegalSection('Your choices', [
       LegalBlock.bullets([
         LegalBullet('Edit or clear your profile at any time in Settings › Profile.'),
+        LegalBullet('Allow or stop speed tests on the open measurement network at any time in Settings › Privacy.'),
         LegalBullet(
           'Clear your watch history and resume points from Continue watching on Home, or manage saved data in '
           'Settings › Storage & history.',
