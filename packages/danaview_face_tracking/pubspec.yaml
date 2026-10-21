@@ -32,7 +32,7 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.vecvel.danaview.face
+        package: com.vecvel.danaview.face.glue
         pluginClass: DanaviewFaceTrackingPlugin
       ios:
         pluginClass: DanaviewFaceTrackingPlugin

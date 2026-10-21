@@ -75,6 +75,12 @@ final class GuardedClient extends http.BaseClient {
   /// Requests that actually went to a socket, after the rewrite.
   final List<SeenRequest> sent = [];
 
+  /// Responses as received (status, body), for typed AiFailure mapping by the
+  /// transport: Genkit itself folds HTTP errors into `finishReason: failed`
+  /// with a message string.
+  final List<({int status, Map<String, String> headers, Uint8List body})>
+  responses = [];
+
   /// Refusals, in order.
   final List<TransportRefused> refusals = [];
 
@@ -139,7 +145,17 @@ final class GuardedClient extends http.BaseClient {
         ..connectionTimeout = const Duration(seconds: 15)
         ..userAgent = null,
     );
-    return _io!.send(out);
+    final res = await _io!.send(out);
+    final body = await res.stream.toBytes();
+    responses.add((status: res.statusCode, headers: res.headers, body: body));
+    return http.StreamedResponse(
+      http.ByteStream.fromBytes(body),
+      res.statusCode,
+      contentLength: body.length,
+      request: res.request,
+      headers: res.headers,
+      reasonPhrase: res.reasonPhrase,
+    );
   }
 
   void _refuseUnless(bool ok, String reason, Uri url) {

@@ -1,6 +1,7 @@
 // OWNER: UX-01
 // EXTENDED: AIS-01 (merges the 1.2.0 binding files; hides the AI Studio actions while
 // DANAVIEW_AI_STUDIO is off, AI_STUDIO_PLAN §4.2, D-65)
+// EXTENDED: INT-101 (merges the Still Photo Mode and Beauty binding files, VED-01 and VED-26)
 //
 // Merges the per-feature binding files (ARCH §17.6, BUILD_PLAN §2): each feature ticket owns
 // `actions/bindings/<feature>_bindings.dart` and exposes `List<EditorActionBinding> get
@@ -9,7 +10,7 @@
 // (test/architecture/) checks that every file in `actions/bindings/` is listed here.
 //
 // 1.2.0 (AIS-01): the seven AI Studio and rich-subtitle binding files are listed after the 1.1
-// ones. While `DANAVIEW_AI_STUDIO` is off, [mergeEditorActionBindings] binds every
+// ones; INT-101 adds the Still Photo Mode (VED-01) and Beauty (VED-26) files after them. While `DANAVIEW_AI_STUDIO` is off, [mergeEditorActionBindings] binds every
 // `EditorActionId.aiStudioActions` id as hidden and disabled (whatever ai_bindings.dart or
 // review_bindings.dart provide), so no AI action shows in a tool set, menu, semantics action or
 // shortcut and none can run.
@@ -20,6 +21,7 @@ import '../../app/editor_availability.dart';
 import '../actions/bindings/ai_bindings.dart';
 import '../actions/bindings/audio_bindings.dart';
 import '../actions/bindings/auto_captions_bindings.dart';
+import '../actions/bindings/beauty_bindings.dart';
 import '../actions/bindings/caption_bindings.dart';
 import '../actions/bindings/clip_bindings.dart';
 import '../actions/bindings/color_bindings.dart';
@@ -30,6 +32,7 @@ import '../actions/bindings/keyframe_bindings.dart';
 import '../actions/bindings/marker_bindings.dart';
 import '../actions/bindings/media_bindings.dart';
 import '../actions/bindings/overlay_bindings.dart';
+import '../actions/bindings/photo_bindings.dart';
 import '../actions/bindings/playback_bindings.dart';
 import '../actions/bindings/presets_bindings.dart';
 import '../actions/bindings/project_bindings.dart';
@@ -102,6 +105,9 @@ final List<EditorBindingSource> editorBindingSources = List.unmodifiable(<Editor
   EditorBindingSource('presets_bindings', 'AIS-26', () => presetsBindings),
   EditorBindingSource('ai_bindings', 'AIS-32', () => aiBindings),
   EditorBindingSource('review_bindings', 'AIS-33', () => reviewBindings),
+  // 1.2.0 Unified Photo & Video Editor (BUILD_PLAN v1.2 VED-01, VED-26; merged by INT-101).
+  EditorBindingSource('photo_bindings', 'VED-01', () => photoBindings),
+  EditorBindingSource('beauty_bindings', 'VED-26', () => beautyBindings),
 ]);
 
 /// Thrown when two binding files bind the same [EditorActionId].

@@ -91,8 +91,16 @@ final class AiSendTicket {
 }
 
 final class LlmResponse {
-  const LlmResponse({required this.json, this.inputTokens, this.outputTokens});
+  const LlmResponse({
+    required this.json,
+    this.inputTokens,
+    this.outputTokens,
+    this.finish,
+    this.finishMessage,
+  });
   final String json;
+  final String? finish;
+  final String? finishMessage;
   final int? inputTokens;
   final int? outputTokens;
 }

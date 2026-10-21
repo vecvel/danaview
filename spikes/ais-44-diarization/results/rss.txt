@@ -47,3 +47,8 @@ nemo_en_titanet_small.model.int8.k2 243613696
 nemo_en_titanet_small.model.int8.k3 273547264
 nemo_en_titanet_small.model.int8.th0.3 248528896
 nemo_en_titanet_small.model.int8.th0.4 246972416
+nemo_en_titanet_small.model.int8.th0.5 292552704
+nemo_en_titanet_small.model.int8.th0.6 236486656
+nemo_en_titanet_small.model.int8.th0.7 306610176
+nemo_en_titanet_small.model.int8.th0.8 305545216
+nemo_en_titanet_small.model.int8.th0.9 305201152

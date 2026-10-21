@@ -83,6 +83,8 @@ final class GenkitLlmProvider {
         json: jsonEncode(res.output),
         inputTokens: res.usage?.inputTokens?.toInt(),
         outputTokens: res.usage?.outputTokens?.toInt(),
+        finish: res.finishReason.value,
+        finishMessage: res.finishMessage,
       );
     } finally {
       c.close();

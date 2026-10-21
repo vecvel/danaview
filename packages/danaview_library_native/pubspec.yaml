@@ -33,7 +33,7 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.vecvel.danaview.library
+        package: com.vecvel.danaview.library.glue
         pluginClass: DanaviewLibraryNativePlugin
       ios:
         pluginClass: DanaviewLibraryNativePlugin

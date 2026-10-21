@@ -31,7 +31,7 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.vecvel.danaview.pdf
+        package: com.vecvel.danaview.pdf.glue
         pluginClass: DanaviewPdfPlugin
       ios:
         pluginClass: DanaviewPdfPlugin

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OWNER: HOM-02A
+     Placeholder (D-33) created by INT-101. HOM-02A replaces this file: the plugin manifest of
+     danaview_library_native. It declares no permission, provider or component yet. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

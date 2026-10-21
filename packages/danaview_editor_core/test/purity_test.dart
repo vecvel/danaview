@@ -1,4 +1,5 @@
 // OWNER: CORE-01
+// EXTENDED: INT-101 (the 1.2.0 barrels photo.dart and beauty.dart, BUILD_PLAN v1.2 INT-101)
 //
 // ARCH §4.2 rule 2: danaview_editor_core depends on no Flutter or danaview_* package, and uses dart:io /
 // dart:isolate only under lib/src/store/. Also guards the package contract of CORE-01: exact
@@ -84,7 +85,8 @@ void main() {
       // `testing.dart` is the CORE-25 in-memory fake barrel (ARCH §4.6 `FakeProjectRepository`);
       // `render_cache.dart` is the CORE-37 render-preview cache barrel (ARCH §4.3, D-45).
       expect(barrels, containsAll(['model.dart', 'ops.dart', 'eval.dart', 'formats.dart', 'plan.dart', 'codec.dart', 'store.dart']));
-      expect(barrels.difference({'model.dart', 'ops.dart', 'eval.dart', 'formats.dart', 'plan.dart', 'codec.dart', 'store.dart', 'testing.dart', 'render_cache.dart'}), isEmpty);
+      // `photo.dart` and `beauty.dart` are the 1.2.0 Still Photo Mode and beauty barrels (INT-101).
+      expect(barrels.difference({'model.dart', 'ops.dart', 'eval.dart', 'formats.dart', 'plan.dart', 'codec.dart', 'store.dart', 'testing.dart', 'render_cache.dart', 'photo.dart', 'beauty.dart'}), isEmpty);
     });
 
     test('every file under lib/src is reachable from a barrel (export or part)', () {
@@ -99,7 +101,7 @@ void main() {
         }
       }
 
-      for (final b in ['model', 'ops', 'eval', 'formats', 'plan', 'codec', 'store', 'render_cache']) {
+      for (final b in ['model', 'ops', 'eval', 'formats', 'plan', 'codec', 'store', 'render_cache', 'photo', 'beauty']) {
         walk('lib/$b.dart');
       }
       final all = _dartFiles('lib/src').map(_rel).toSet();

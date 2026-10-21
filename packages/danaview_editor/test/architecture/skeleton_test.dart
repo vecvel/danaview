@@ -1,5 +1,6 @@
 // OWNER: UX-01
 // EXTENDED: AIS-01 (the 1.2.0 binding files of AI_STUDIO_PLAN §5.5 are merged too)
+// EXTENDED: INT-101 (and the Still Photo Mode and Beauty binding files of the v1.2 BUILD_PLAN)
 //
 // D-33 skeleton coverage (BUILD_PLAN §2, UX-01): every danaview_editor path a ticket owns in
 // BUILD_PLAN §6 exists from M0 (a placeholder until the owner lands), headers name the owning
@@ -40,6 +41,22 @@ Map<String, String> _ownedEditorPaths(String plan) {
       if (RegExp('^$_package/(lib|tool|assets)/').hasMatch(path) && !path.contains('/lib/src/app/strings/')) {
         out[path] = ticket;
       }
+    }
+  }
+  return out;
+}
+
+/// The binding files of the v1.2 BUILD_PLAN (owns lines use the `ED/` abbreviation), file -> owner,
+/// plus `photo_bindings` (VED-01): INT-101 creates and merges it, the plan names no path for it.
+Map<String, String> _v12BindingFiles(String plan) {
+  final out = <String, String>{'photo_bindings': 'VED-01'};
+  String? ticket;
+  for (final line in plan.split('\n')) {
+    final heading = RegExp(r'^#### ([A-Z]+-\d+A?) ').firstMatch(line);
+    if (heading != null) ticket = heading[1];
+    if (ticket == null || !line.startsWith('- **Owns')) continue;
+    for (final m in RegExp(r'`ED/editor/actions/bindings/(\w+)\.dart`').allMatches(line)) {
+      out[m[1]!] = ticket;
     }
   }
   return out;
@@ -116,6 +133,8 @@ void main() {
     final planned = {
       for (final e in [...owned.entries, ...aisOwned.entries])
         if (e.key.contains('/actions/bindings/')) e.key.split('/').last.replaceAll('.dart', ''): e.value,
+      // 1.2.0 VED binding files (v1.2 BUILD_PLAN; INT-101 merges them).
+      ..._v12BindingFiles(File('${root.path}/docs/v1.2/BUILD_PLAN.md').readAsStringSync()),
     };
     final onDisk = Directory('${root.path}/$_package/lib/src/editor/actions/bindings')
         .listSync()
@@ -123,7 +142,7 @@ void main() {
         .map((f) => f.uri.pathSegments.last.replaceAll('.dart', ''))
         .toSet();
     final wired = {for (final s in editorBindingSources) s.file: s.owner};
-    expect(planned, hasLength(22 + 7));
+    expect(planned, hasLength(22 + 7 + 2));
     expect(onDisk, planned.keys.toSet());
     expect(wired, planned);
   });

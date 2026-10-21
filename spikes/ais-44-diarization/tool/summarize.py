@@ -8,6 +8,7 @@ the overlap clips, mean RTF and peak RSS.
 import glob
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -29,8 +30,9 @@ def main():
         if name.startswith("emb.") or name == "try" or name.startswith("rtf."):
             continue
         run = json.load(open(f))
-        emb, seg, mode = name.rsplit(".", 2) if ".int8." not in name else (
-            name.split(".model.int8.")[0], "int8", name.split(".model.int8.")[1])
+        m = re.match(r"(.+)\.(model|model\.int8)\.(k2|k3|th[0-9.]+)$", name)
+        emb, seg, mode = m.group(1), m.group(2), m.group(3)
+        seg = "int8" if seg.endswith("int8") else seg
         if seg == "model":
             seg = "fp32"
         key = (emb, seg, "oracle" if mode in ("k2", "k3") else mode)

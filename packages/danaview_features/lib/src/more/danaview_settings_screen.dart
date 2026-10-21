@@ -1,3 +1,5 @@
+// EXTENDED: INT-101 (settings section slots: privacy, library storage, search index; BUILD_PLAN §5)
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_data/danaview_data.dart';
@@ -9,7 +11,10 @@ import '../library/library_widgets.dart';
 import 'app_info.dart';
 import 'profile_controller.dart';
 import 'settings_destination.dart';
+import 'settings_sections/settings_sections.dart';
 import 'settings_widgets.dart';
+
+export 'settings_sections/settings_sections.dart';
 
 /// Settings hub: the profile card, built-in tools, playback preferences (touch screens only) and
 /// the about pages. Each row is named like the page it opens.
@@ -19,6 +24,7 @@ class DanaviewSettingsScreen extends StatelessWidget {
     required this.onBack,
     required this.onNavigate,
     this.onOpenEditorSettings,
+    this.sections = const SettingsSections(),
   });
 
   final VoidCallback onBack;
@@ -28,6 +34,11 @@ class DanaviewSettingsScreen extends StatelessWidget {
   /// editor is available (ARCH §17.1, D-17); null hides the "Video editor" row. Routes stay
   /// explicit, so [SettingsDestination] has no editor value.
   final VoidCallback? onOpenEditorSettings;
+
+  /// The 1.2.0 sections (privacy, library storage, search index), built by their owners and passed
+  /// by the app root (INT-103). Each set builder adds its section after the Tools group; the
+  /// default (none) is the 1.1 screen.
+  final SettingsSections sections;
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +105,8 @@ class DanaviewSettingsScreen extends StatelessWidget {
                       ),
                   ],
                 ),
+                for (final (slot, build) in sections.ordered)
+                  KeyedSubtree(key: ValueKey('settings-section-${slot.name}'), child: Builder(builder: build)),
                 // Desktops have no double-tap: a double-click there toggles fullscreen.
                 if (context.isTouchPlatform) ...[
                   const DanaviewLibrarySectionHeader('Playback'),

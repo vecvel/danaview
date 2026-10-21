@@ -1,5 +1,6 @@
 // OWNER: UX-01
 // EXTENDED: AIS-01 (SubtitlesPanelSection.transcript, review, cue; AI_STUDIO_PLAN §4.4)
+// EXTENDED: INT-101 (BeautyCategory and PhotoToolRoute, the Still Photo Mode panel routes)
 //
 // What the inspector shows (ARCH §17.7, ux.md §9.3). `InspectorHost` (UX-16) maps each route to
 // its panel; panel constructors take their route (`TransformPanel(route: TransformInspector(…))`).
@@ -7,6 +8,8 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:danaview_editor_core/model.dart';
+
+import 'tool_ids.dart';
 
 /// Which tab the text panel opens on (UX-30).
 ///
@@ -374,4 +377,71 @@ final class TransitionInspector extends InspectorRoute {
 
   @override
   String toString() => 'TransitionInspector(${cut.track}: ${cut.left}|${cut.right})';
+}
+
+// -------------------------------------------------------------------------------------------------
+// 1.2.0 (INT-101): Still Photo Mode routes (VED plan §6.1, §6.2; BUILD_PLAN VED-01, VED-26).
+// -------------------------------------------------------------------------------------------------
+
+/// A category tab of the Beauty & Retouching inspector (VED plan §6.2, BUILD_PLAN VED-26), shared
+/// by the clip inspector and the photo tool tray.
+///
+/// See VED plan §6.2.
+enum BeautyCategory {
+  /// Face shape and slimming (VED-20).
+  faceShape,
+
+  /// Eyes and eyebrows (VED-21).
+  eyesBrows,
+
+  /// Nose and lips (VED-22).
+  noseLips,
+
+  /// Skin retouching and teeth (VED-23).
+  skin,
+
+  /// Virtual makeup and appearance (VED-24).
+  makeup,
+
+  /// Body reshaping (VED-25).
+  body,
+
+  /// Filters, portrait bokeh and stickers (VED-34).
+  filters,
+
+  /// Beauty presets and automatic enhancement (VED-28).
+  presets,
+}
+
+/// The panel of the Still Photo Mode screen: one tray tool of the open photo (VED-01). Stills have
+/// no timeline item, so these routes are separate from [InspectorRoute] and the photo screen hosts
+/// them itself.
+///
+/// See VED plan §6.1, ARCH v1.2 §6.1.
+@immutable
+final class PhotoToolRoute {
+  /// Creates the route; [beautyCategory] is the open tab of the [PhotoToolId.beauty] tool.
+  const PhotoToolRoute(this.tool, {this.beautyCategory = BeautyCategory.faceShape});
+
+  /// The tray tool.
+  final PhotoToolId tool;
+
+  /// The open beauty tab (meaningful for [PhotoToolId.beauty] only).
+  final BeautyCategory beautyCategory;
+
+  /// This route with the beauty tab [category].
+  PhotoToolRoute withBeautyCategory(BeautyCategory category) => PhotoToolRoute(tool, beautyCategory: category);
+
+  @override
+  bool operator ==(Object other) =>
+      other is PhotoToolRoute &&
+      other.tool == tool &&
+      (tool != PhotoToolId.beauty || other.beautyCategory == beautyCategory);
+
+  @override
+  int get hashCode => tool == PhotoToolId.beauty ? Object.hash(tool, beautyCategory) : tool.hashCode;
+
+  @override
+  String toString() =>
+      tool == PhotoToolId.beauty ? 'PhotoToolRoute(${tool.name}, ${beautyCategory.name})' : 'PhotoToolRoute(${tool.name})';
 }
