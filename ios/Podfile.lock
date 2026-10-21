@@ -1,6 +1,12 @@
 PODS:
   - danaview_editor_engine (1.1.0):
     - Flutter
+  - danaview_library_native (1.2.0):
+    - Flutter
+    - FlutterMacOS
+  - danaview_pdf (1.2.0):
+    - Flutter
+    - FlutterMacOS
   - danaview_whisper (1.1.0):
     - Flutter
   - Flutter (1.0.0)
@@ -11,6 +17,8 @@ PODS:
 
 DEPENDENCIES:
   - danaview_editor_engine (from `.symlinks/plugins/danaview_editor_engine/ios`)
+  - danaview_library_native (from `.symlinks/plugins/danaview_library_native/darwin`)
+  - danaview_pdf (from `.symlinks/plugins/danaview_pdf/darwin`)
   - danaview_whisper (from `.symlinks/plugins/danaview_whisper/ios`)
   - Flutter (from `Flutter`)
   - media_kit_libs_ios_video (from `.symlinks/plugins/media_kit_libs_ios_video/ios`)
@@ -19,6 +27,10 @@ DEPENDENCIES:
 EXTERNAL SOURCES:
   danaview_editor_engine:
     :path: ".symlinks/plugins/danaview_editor_engine/ios"
+  danaview_library_native:
+    :path: ".symlinks/plugins/danaview_library_native/darwin"
+  danaview_pdf:
+    :path: ".symlinks/plugins/danaview_pdf/darwin"
   danaview_whisper:
     :path: ".symlinks/plugins/danaview_whisper/ios"
   Flutter:
@@ -30,6 +42,8 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   danaview_editor_engine: 1ad18f0cc056003d20e5a6f67ee29aa80009d5de
+  danaview_library_native: f38c92ddb1d6dc617c2f4e06466909d4e5fd9ca2
+  danaview_pdf: 1e9ee66aeeabf35c87ba7aade9cdfb2a5bf5b3a1
   danaview_whisper: bf70bbab49c665b622873ed0c1cd8f8c83fe8c1a
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   media_kit_libs_ios_video: 5a18affdb97d1f5d466dc79988b13eff6c5e2854
