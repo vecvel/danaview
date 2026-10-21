@@ -2,15 +2,20 @@
 //
 // BUILD_PLAN v1.2 INT-101 acceptance: with all four 1.2.0 flags false (ARCH v1.2 V2-04, the default
 // of every build that passes no `--dart-define`) the Home is the 1.1 Home, there is no photo-editor
-// entry and no beauty tab. The 1.1 Home suite (test/home_screen_test.dart) pins the Home layout;
+// entry and no beauty tab (and the editor shows no photo, beauty, compare, To video or batch-edit
+// action). The 1.1 Home suite (test/home_screen_test.dart) pins the Home layout;
 // this test pins the flag defaults and the gates the 1.2.0 tickets build on.
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/app/editor_availability.dart';
 import 'package:danaview_editor/src/app/flags_v12.dart';
+import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart';
 import 'package:danaview_editor/src/editor/contracts/contracts.dart';
+import 'package:danaview_editor/src/editor/toolbar/tool_sets.dart';
 import 'package:danaview_editor/src/editor/wiring/action_bindings.dart';
+import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/flags.dart';
 
@@ -30,6 +35,53 @@ const _v12HomeLabels = <String>[
   'Beauty',
   'Search with AI',
 ];
+
+/// The photo and beauty actions (INT-101), hidden while their flags are off.
+const _ved = <EditorActionId>{
+  ...EditorActionId.photoEditorActions,
+  ...EditorActionId.beautyActions,
+  ...EditorActionId.compareActions,
+};
+
+/// An action context for predicates that read nothing (the hidden flagged-off bindings).
+final class _BareContext implements EditorActionContext {
+  const _BareContext();
+
+  @override
+  BuildContext get context => throw UnimplementedError();
+
+  @override
+  ProjectId get projectId => const ProjectId('pj_flags_off');
+
+  @override
+  T read<T>(ProviderListenable<T> provider) => throw UnimplementedError();
+
+  @override
+  EditorActionSource get source => EditorActionSource.button;
+}
+
+/// Every action id a static tool set, tool tab or strip tile names (UX-16).
+Set<EditorActionId> _toolSetActions() {
+  const a = ItemId('it_a'), b = ItemId('it_b');
+  final lists = <List<ToolEntry>>[
+    ToolSets.video,
+    ToolSets.image,
+    ToolSets.audio,
+    ToolSets.multi,
+    ToolSets.gap,
+    ToolSets.marker,
+    ToolSets.text(a),
+    ToolSets.subtitleCue(const TrackId('tr_sub'), a),
+    ToolSets.transition(const TransitionRef(TrackId('tr_main'), a, b)),
+  ];
+  return {
+    for (final list in lists)
+      for (final e in list)
+        if (e is ActionToolEntry) e.action,
+    for (final ids in ToolSets.toolTabs.values) ...ids,
+    for (final t in ToolId.values) t.primaryAction,
+  };
+}
 
 void main() {
   tearDown(() {
@@ -125,6 +177,63 @@ void main() {
       // The timeline tool strip is the 1.1 strip.
       expect(ToolId.stripOrder.map((t) => t.name),
           ['media', 'audio', 'text', 'captions', 'overlay', 'effects', 'filters', 'transitions', 'format']);
+    });
+
+    test('no photo, beauty, compare, To video or batch-edit action shows, runs or has a shortcut', () {
+      expect(_ved, EditorActionId.vedAdditions.toSet());
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final registry = c.read(editorActionRegistryProvider);
+      const ctx = _BareContext();
+      for (final id in _ved) {
+        final spec = registry.spec(id);
+        expect(spec.isVisible(ctx), isFalse, reason: id.name);
+        expect(spec.isEnabled(ctx), isFalse, reason: id.name);
+        expect(spec.combos, isEmpty, reason: id.name);
+        expect(registry.invoke(id, ctx), EditorActionResult.hidden, reason: id.name);
+        expect(editorActionMeta(id).combos, isEmpty, reason: id.name);
+        expect(editorActionMeta(id).label, isNotEmpty, reason: id.name);
+      }
+      expect(registry.shortcutSpecs.map((s) => s.id).toSet().intersection(_ved), isEmpty);
+      final intents = registry.activators.values.whereType<EditorActionIntent>().map((i) => i.id).toSet();
+      expect(intents.intersection(_ved), isEmpty);
+      expect(_toolSetActions().intersection(_ved), isEmpty);
+      // The rich-subtitle actions are not flagged and stay visible.
+      expect(registry.spec(EditorActionId.transcriptView).isVisible(ctx), isTrue);
+    });
+
+    test('the photo and beauty gate follows each flag; compare needs either', () {
+      EditorActionBinding bind(EditorActionId id) => EditorActionBinding(id: id, handler: (_) {});
+      final real = {for (final id in _ved) id: bind(id)};
+      bool visible(Map<EditorActionId, EditorActionBinding> m, EditorActionId id) => m[id]!.isVisible?.call(const _BareContext()) ?? true;
+      final off = gateV12EditorActions(real, photoEditor: false, beauty: false);
+      expect([for (final id in _ved) visible(off, id)], everyElement(isFalse));
+      final photoOnly = gateV12EditorActions(real, photoEditor: true, beauty: false);
+      expect(visible(photoOnly, EditorActionId.editPhoto), isTrue);
+      expect(visible(photoOnly, EditorActionId.compareBeforeAfter), isTrue);
+      expect(visible(photoOnly, EditorActionId.beauty), isFalse);
+      final beautyOnly = gateV12EditorActions(real, photoEditor: false, beauty: true);
+      expect(visible(beautyOnly, EditorActionId.beauty), isTrue);
+      expect(visible(beautyOnly, EditorActionId.compareBeforeAfter), isTrue);
+      expect(visible(beautyOnly, EditorActionId.photoToVideo), isFalse);
+      expect(visible(beautyOnly, EditorActionId.batchEditPhotos), isFalse);
+      expect(gateV12EditorActions(real, photoEditor: true, beauty: true), same(real));
+      expect(mergeEditorActionBindings(), mergeEditorActionBindings());
+      expect(mergeEditorActionBindings(null, false, true, true).keys.toSet().intersection(_ved), isEmpty,
+          reason: 'with the flags on, the photo and beauty ids are unbound until VED-01…VED-27 bind them');
+    });
+
+    test('the Beauty inspector route re-targets and compares by clip and tab', () {
+      const a = ItemId('it_a'), b = ItemId('it_b');
+      expect(const BeautyInspector(a), const BeautyInspector(a, category: BeautyCategory.faceShape));
+      expect(const BeautyInspector(a), isNot(const BeautyInspector(a, category: BeautyCategory.skin)));
+      expect(const BeautyInspector(a, category: BeautyCategory.body).retarget(b), const BeautyInspector(b, category: BeautyCategory.body));
+      const same0 = BeautyInspector(a);
+      expect(same0.retarget(a), same(same0));
+      expect(const BeautyInspector(a).withCategory(BeautyCategory.makeup).category, BeautyCategory.makeup);
+      expect(const BeautyInspector(a).target, a);
+      expect(const BeautyInspector(a).hashCode, const BeautyInspector(a).hashCode);
+      expect(const BeautyInspector(a, category: BeautyCategory.eyesBrows).toString(), 'BeautyInspector(it_a, eyesBrows)');
     });
 
     test('photo tool routes compare by tool and, for Beauty, by tab', () {
