@@ -78,8 +78,8 @@ Ticket **S1-Q**, Mac half, on `v1.2-wip`, 2026-10-22 (tree at `b111fcc`, plus th
 changed no product code; every defect below is a FIX ticket that blocks the gate. The Android
 Emulator half runs on the Windows laptop.
 
-**Gate verdict (Mac half): red** until FIX-S1Q-1 and FIX-S1Q-2 land. The v1.1 suite, the S1
-packages and the speed-test QA are green.
+**Gate verdict (Mac half): red** until FIX-S1Q-1 and FIX-S1Q-2 land. The full v1.1 suite (both
+batches), the S1 packages (except rule 28) and the speed-test QA are green.
 
 ### 1. S1 packages
 
@@ -185,7 +185,7 @@ the real `DanaviewSpeedTestScreen`: 8 of 8 pass.
 | Batch | 1.2.0 defines | Started / ended | Result |
 |---|---|---|---|
 | 1 · every 1.2.0 flag off | none (defaults, all false) | 03:04 / 03:31 | **20 of 20 files pass** (s01–s18, `x_android_api28`, `x_ios_background_export`; `x_android_export_background` skipped on iOS as designed), no harness retry |
-BATCH2_ROW
+| 2 · S1 flag set (the S1-R build) | `DANAVIEW_FILES_HOME=false DANAVIEW_PHOTO_EDITOR=false DANAVIEW_BEAUTY=false DANAVIEW_AI_STUDIO=false` (via `DV_E2E_EXTRA_DEFINES`, confirmed on the `flutter test` command lines) | 03:32 / 03:59 | **20 of 20 files pass**, no harness retry (s13 start latency 133 ms, simulator reality) |
 
 Simulator realities reported, not failed (batch 1, same as QA-01 re-run 4): HEVC/MOV not offered
 (`hevcEncode false`); `pausedInBackground observed: false`; s13 start latency 200 ms (simulator
