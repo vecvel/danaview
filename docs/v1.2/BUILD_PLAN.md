@@ -613,3 +613,437 @@ The 54 AIS tickets keep the specs of AIS plan §5.5 and §7.9. Their milestones 
 - **Owns (Mac):** `integration_test/v12/documents/`, `scripts/ci/v12/documents_e2e.sh`, `docs/v1.2/files-media-home/qa/HOM-32-documents.md`
 - **Spec:** HOM-32 of the plan: originals never modified across import, viewers and every PDF tool (bytes and timestamps); backup and restore of Danaview folders on a test device (iOS device backup; Android device-to-device transfer); 10,000-file library scroll and search timings; a11y labels and text scale 0.85–1.35 on every new screen; a full re-run of HOM-15.
 - **Acceptance criteria and tests:** every scenario passes on the iOS Simulator and the Android Emulator with evidence; backup results recorded per platform (closes V2-V1 with QA-106).
+
+### 4.3 Unified Photo & Video Editor (VED)
+
+#### VED-33A · Spike (Android half): face mesh, pose and segmentation runtime and models
+
+- **Milestone:** N0 · **Lane:** Android · **Area:** Beauty (native)
+- **Depends on:** INT-101
+- **Owns (Android):** `spikes/face_android/` (including `REPORT.md`)
+- **Spec:** ARCH V2-13, V2-14. On Android, run the candidate runtimes (MediaPipe Tasks Vision, LiteRT/TFLite with the same `.task`/`.tflite` models, ONNX Runtime with converted models) for the face landmarker (478 points), pose landmarker (33 points), person and hair segmentation on the V2-31 face fixtures: AAB size per ABI, model sizes and licences, latency per frame at 720p and 1080p on the emulator and any available device, landmark output dumps for parity with iOS.
+- **Acceptance criteria and tests:** report with numbers per candidate and the landmark dumps committed under the spike; no product code.
+
+#### VED-33 · Spike: face mesh, pose and segmentation runtime and models (iOS half and report)
+
+- **Milestone:** N0 · **Lane:** Mac · **Area:** Beauty (native)
+- **Depends on:** INT-101, VED-33A
+- **Owns (Mac):** `spikes/face_ios/`, `docs/v1.2/video-editor-update/spikes/VED-33-face-runtime.md`, `docs/v1.2/video-editor-update/qa/face_fixtures.md`, `CORE/test/fixtures/faces/`
+- **Spec:** the iOS half of VED-33A's comparison (MediaPipe Tasks iOS, Core ML conversion, ONNX Runtime; Apple Vision for rectangles), IPA size growth, the shared-runtime question with AIS-44 (V2-V18), cross-platform landmark difference on the fixtures, the Beauty pack contents, revision and SHA-256 per file, and the face fixture set (synthetic or licensed, V2-31). Recommends one runtime and model set for both platforms; feeds ARCH §16 Q-N1/Q-N2.
+- **Acceptance criteria and tests:** report with go/no-go per candidate; mean landmark difference iOS vs Android ≤ 1.5 px at 1080p on the fixtures for the chosen candidate (or the measured value recorded); the owner's answers to Q-N1 and Q-N2 recorded in ARCH (via INT-102, which depends on this ticket). Closes V2-V10, V2-V11.
+
+#### INT-102 · [INTEGRATION] RenderPlan v2 and engine interface amendment (Dart, Pigeon, iOS glue)
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Integration
+- **Depends on:** INT-101, VED-33, ENG-06, INT-06, CORE-29
+- **Owns (Mac):** `CORE/lib/src/plan/{render_plan,plan_json,plan_validator}.dart` (extends CORE-29), `CORE/schema/render_plan.v2.schema.json`, `CORE/test/fixtures/render_plans/contract/v2/`, `CORE/test/plan/v2/`, `API/lib/src/still/`, `API/lib/src/face_tracking.dart`, `API/lib/src/capabilities.dart` (extends API-01), `API/lib/src/fake/` (extends API-01), `API/lib/src/reference/passes/registry.dart`, `API/lib/src/reference/reference_renderer.dart` (extends API-03: calls the registry), `API/test/contract/` (extends API-01), `ENGP/pigeons/engine_api.dart`, `ENGP/lib/src/pigeon/`, `ENGP/ios/Classes/Pigeon/`, `ENGP/android/src/main/kotlin/com/vecvel/danaview/editor/engine/pigeon/` (generated only), `ENGP/lib/src/mobile_editor_engine.dart` (extends ENG-01), `ENGP/ios/Classes/Glue/` (extends ENG-07), `ENGP/ios/Classes/Plan/` (extends: v2 decode), `ENGP/ios/Classes/Render/LayerRenderer.swift` (extends IOS-10: registry hook), `ENGP/ios/Classes/{Photo,Beauty}/Registry.swift`, `ENGP/test/glue/` (extends ENG-01), `docs/v1.2/ARCHITECTURE.md` (§6.3 final field names; Q-N1/Q-N2 answers)
+- **Spec:** ARCH V2-12, §6.3. RenderPlan `v = 2` with the additive fields and asset kinds of §6.3; validators accept v1 and v2; a v1-shaped plan encodes identically except `v` (fixture). Engine API: `StillPreviewSession`, `StillExportService`, `StillEncodeSettings`, `FaceTrackingPort` (`trackImage`, `trackVideo`, `cancel`, progress), capabilities `stillMaxPixels`, `halfFloatTargets`, `beautyTier`, `segmentationAvailable`; fake engine implementations; reference renderer pass registry (passes added by VED tickets). Pigeon amendment (`StillHostApi`, `JobKindMsg.exportStill`, capability fields, landmark/mask asset messages), regenerated; iOS glue and v2 plan decode; the pass registries and the `LayerRenderer` hook calling registered passes in the §6.2 order; placeholders returning pass-through for every VED pass. A lead-approved amendment exactly like v1.1 INT-06.
+- **Acceptance criteria and tests:** contract fixtures decode identically in Dart and Swift; the v1.1 contract and engine suites unchanged; with no passes registered a v2 plan renders pixel-equal to v1; the fake engine passes the extended contract kit.
+
+#### INT-102A · [INTEGRATION] RenderPlan v2 Android decode and glue
+
+- **Milestone:** N3 · **Lane:** Android · **Area:** Integration
+- **Depends on:** INT-102
+- **Owns (Android):** `ENGK/glue/` (extends ENG-08), `ENGK/plan/` (extends: v2 decode), `ENGK/effects/LayerEffectChainFactory.kt` (extends: registry hook), `ENGK/{photo,beauty}/Registry.kt`, `ENGP/android/src/test/kotlin/com/vecvel/danaview/editor/engine/planv2/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/planv2/`
+- **Spec:** the Android side of INT-102: glue for the new host API and job kind, v2 decode with the Kotlin validator, the effect-chain hook and pass registries with pass-through placeholders.
+- **Acceptance criteria and tests:** Kotlin decodes every v2 contract fixture identically; the v1.1 Android suites unchanged; a v2 plan with no passes renders pixel-equal to v1 on the emulator.
+
+#### VED-01 · Intent routing: Still Photo Mode vs timeline
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** UI/UX
+- **Depends on:** INT-101, UX-07, UX-41
+- **Owns (Mac):** `ED/app/editor_launcher.dart` (extends UX-41), `ED/editor/photo/photo_editor_screen.dart`, `ED/editor/photo/photo_tool_tray.dart`, `packages/danaview_editor/test/photo/routing/`
+- **Spec:** ARCH §6.1, V2-315. Typed intents `openPhoto`, `openPhotoBatch`, `newMontage` beside the v1.1 intents; `openPhoto` opens the Still Photo screen (top bar: Back, name and size, Compare, To video, Export; bottom tool tray: Crop, Tone, HSL, Curves, Beauty, Masks, Text, Presets with slots filled by later tickets; tools gated by capabilities and `DANAVIEW_BEAUTY`); the v1.1 timeline is unchanged for every other intent. With `DANAVIEW_PHOTO_EDITOR=false` the photo intents fall back to "Add to new project" (v1.1 behaviour).
+- **Acceptance criteria and tests:** widget tests per intent; unsupported tools hidden, not disabled; v1.1 launcher tests unchanged; matrix.
+
+#### VED-02 · .dnphoto model, codec, repository and migrations
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Core (pure Dart)
+- **Depends on:** VED-01, CORE-22, CORE-24
+- **Owns (Mac):** `CORE/lib/src/photo/model/`, `CORE/lib/src/photo/codec/`, `CORE/lib/src/store/photo_store.dart`, `CORE/schema/photo.v1.schema.json`, `CORE/test/photo/{model,codec}/`, `CORE/test/store/photo_store_test.dart`, `CORE/test/fixtures/photos/`
+- **Spec:** ARCH V2-10, V2-34, §5.7. `PhotoRecipe` immutable model (tone, color, hsl, curves, geom, masks, lut, fx, overlays, beauty slot typed by VED-15, export defaults, presetRef), `PhotoSource` references (`library`, `media`), two-line codec with header classification and the v1.1 D-12 rules, repair on decode, atomic writes through `StoreFs`, an empty `Migrations` chain, `PhotoStore` (create, open, save, duplicate, delete through `OwnedFileDeleter`, list). Undo history is the v1.1 snapshot model over the recipe (in memory).
+- **Acceptance criteria and tests:** round trip of every fixture; unknown keys preserved; a newer `minReader` refused, a newer schema with old `minReader` read-only; random recipes (seeded) survive encode → decode; the store never writes outside `<support>/danaview/editor/photos/`.
+
+#### VED-03 · Still plans: lowering, still service, iOS still renderer
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Engine (Dart + iOS)
+- **Depends on:** VED-02, INT-102, API-03
+- **Owns (Mac):** `CORE/lib/src/photo/lowering/{still_compiler,stages}.dart`, `CORE/test/photo/lowering/`, `API/lib/src/reference/passes/still_source.dart`, `ENGP/lib/src/mobile_still.dart`, `ENGP/ios/Classes/Still/Render/`, `ENGP/example/ios/RunnerTests/StillRender/`, `ED/editor/photo/state/`, `packages/danaview_editor/test/photo/state/`
+- **Spec:** ARCH V2-11, §6.2. `StillCompiler` builds a one-frame v2 plan (one image layer, canvas = cropped output size) and runs the photo lowering stages in the §6.2 order (`stages.dart` lists them; each stage file is a placeholder owned by its VED ticket until filled). Mobile Dart implementation of `StillPreviewSession`/`StillExportService` over the Pigeon amendment; iOS still renderer (Core Image on Metal, source decode through ImageIO with orientation, the v1.1 look/place kernels, registry passes); `PhotoEditorController` (recipe state, undo/redo, debounced compile, patch sending, autosave of the recipe).
+- **Acceptance criteria and tests:** an identity recipe renders pixel-equal to the source (within 1/255) in the reference and on the simulator; patches update without re-decoding; undo/redo restores recipes exactly; controller tests with the fake engine.
+
+#### VED-03A · Android still renderer
+
+- **Milestone:** N3 · **Lane:** Android · **Area:** Engine (Android)
+- **Depends on:** VED-03, INT-102A
+- **Owns (Android):** `ENGK/still/render/`, `ENGP/android/src/test/kotlin/com/vecvel/danaview/editor/engine/still/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/still/`
+- **Spec:** GLES 3 still renderer: decode (`ImageDecoder` with orientation, HEIC/AVIF where the device supports them), the v1.1 look/place shaders, registry passes, offscreen FBO.
+- **Acceptance criteria and tests:** identity recipe within 1/255 of the source on the emulator; matches the Dart reference within the v1.1 parity tolerance.
+
+#### VED-04 · Half-float and wide-gamut still pipeline (iOS)
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Engine (iOS)
+- **Depends on:** VED-03
+- **Owns (Mac):** `ENGP/ios/Classes/Still/Color/`, `ENGP/example/ios/RunnerTests/StillColor/`, `CORE/lib/src/photo/color_space.dart`, `CORE/test/photo/color_space_test.dart`
+- **Spec:** ARCH V2-19. Core Image working format `RGBAh`, linear-light working space in the source gamut (P3 or sRGB), output colour tagging; 10-bit and HDR (gain-map) sources tone-mapped to SDR P3 for display; closes V2-V13's working-format half.
+- **Acceptance criteria and tests:** a 16-bit gradient fixture pushed +3 EV and back shows no banding beyond 1 code value (measured); P3 sources keep P3 in output metadata.
+
+#### VED-04A · Half-float still pipeline (Android)
+
+- **Milestone:** N3 · **Lane:** Android · **Area:** Engine (Android)
+- **Depends on:** VED-04, VED-03A
+- **Owns (Android):** `ENGK/still/color/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/stillcolor/`
+- **Spec:** `RGBA16F` FBOs where `EXT_color_buffer_half_float` (or GLES 3.2) allows, else `RGB10A2`, else `RGBA8` with ordered dithering (minimal tier); Display P3 output where the device supports wide-gamut bitmaps; the choice reported in `halfFloatTargets`. Closes V2-V12.
+- **Acceptance criteria and tests:** the banding test of VED-04 on the emulator per fallback; capability reported correctly.
+
+#### VED-05 · Still viewport: tiles, zoom, pan (Dart UI, iOS tiles)
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** UI/UX + iOS
+- **Depends on:** VED-03
+- **Owns (Mac):** `ED/editor/photo/viewport/`, `ENGP/ios/Classes/Still/Tiles/`, `ENGP/example/ios/RunnerTests/StillTiles/`, `packages/danaview_editor/test/photo/viewport/`
+- **Spec:** V2-304. Viewport widget (pinch, double-tap 1:1, pan with inertia) requesting tiles at the zoom's mip level through `StillPreviewSession.renderTiles`; native tile cache, re-render only visible tiles on patches; press-and-hold shows the original (bypass all).
+- **Acceptance criteria and tests:** slider drag on a 24 MP photo updates visible tiles ≤ 16 ms p90 on the mid tier (≤ 33 ms low), recorded; no seams between tiles (golden); memory bounded by the tile cache size.
+
+#### VED-05A · Android tile rendering for the still viewport
+
+- **Milestone:** N3 · **Lane:** Android · **Area:** Engine (Android)
+- **Depends on:** VED-05, VED-03A
+- **Owns (Android):** `ENGK/still/tiles/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/stilltiles/`
+- **Spec:** tile rendering and cache into the Flutter texture.
+- **Acceptance criteria and tests:** as VED-05 on the emulator; no seams.
+
+#### VED-06 · Pro tone: tone v2, grain, vignette (core, reference, iOS, panel)
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Core + iOS + UI
+- **Depends on:** VED-03
+- **Owns (Mac):** `CORE/lib/src/photo/tone/`, `CORE/lib/src/color/recipe_lut.dart`, `CORE/test/photo/tone/`, `CORE/test/color/recipe_lut_test.dart`, `API/lib/src/reference/passes/{tone2,grain}.dart`, `ENGP/ios/Classes/Photo/Tone/`, `ENGP/example/ios/RunnerTests/PhotoTone/`, `ED/editor/photo/tools/tone_panel.dart`, `ED/editor/photo/overlays/clipping_overlay.dart`, `packages/danaview_editor/test/photo/tone/`
+- **Spec:** V2-305, ARCH §6.2 steps 6, 7, 10. Exposure ±5 EV (0.01 steps), contrast 0.5–2.0 (v1.1 grade), local highlights/shadows recovery, clarity, texture, dehaze (tone v2 from a ¼-res low-pass base), whites and blacks, temperature 2,000–12,000 K and tint, vibrance and saturation, vignette and seeded grain. `recipe_lut.dart` bakes whites, blacks, extended temperature/tint and vibrance, then calls the HSL and curve stages (placeholder files owned by VED-07 and VED-08, identity until filled), 33³ float16 `.vlut` through CORE-21's writer in an isolate. Clipping warnings (blue/red) from a downsampled histogram. Tone panel with kit sliders and numeric fields.
+- **Acceptance criteria and tests:** recipe LUT equals the per-pixel reference functions within 1/1023 on a probe grid; tone v2 and grain reference goldens; iOS output within the v1.1 parity tolerance of the reference; LUT bake ≤ 40 ms (mid); matrix for the panel.
+
+#### VED-06A · Android tone v2 and grain passes
+
+- **Milestone:** N3 · **Lane:** Android · **Area:** Engine (Android)
+- **Depends on:** VED-06, VED-03A
+- **Owns (Android):** `ENGK/photo/tone/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/phototone/`
+- **Spec:** GLSL ES 3.00 tone v2 (low-pass base, recovery, clarity, texture, dehaze) and grain passes registered in the photo registry.
+- **Acceptance criteria and tests:** within the v1.1 parity tolerance of the Dart reference on the emulator.
+
+#### VED-07 · 8-band HSL mixer and Target Adjustment Tool (recipe LUT)
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Core + UI
+- **Depends on:** VED-06
+- **Owns (Mac):** `CORE/lib/src/color/hsl/`, `CORE/test/color/hsl/`, `ED/editor/photo/tools/hsl_panel.dart`, `ED/editor/photo/overlays/target_adjust_overlay.dart`, `packages/danaview_editor/test/photo/hsl/`
+- **Spec:** V2-306. Bands Red, Orange, Yellow, Green, Aqua, Blue, Purple, Magenta with smooth hue-weight windows; hue ±100°, saturation and luminance −100…+100; luminance preserved in a perceptual space (OkLCh) so shifts don't clip; baked into the recipe LUT (no native code). TAT: tap and drag on the photo samples the pre-HSL colour (from a downsampled preview buffer) and moves the matching bands.
+- **Acceptance criteria and tests:** band weights sum to 1 around the hue circle; neutral greys unaffected by hue/saturation; TAT drag maps to the expected band in tests; panel matrix.
+
+#### VED-08 · Spline RGB and channel curves (recipe LUT)
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Core + UI
+- **Depends on:** VED-06
+- **Owns (Mac):** `CORE/lib/src/color/curves/`, `CORE/test/color/curves/`, `ED/editor/photo/tools/curves_panel.dart`, `packages/danaview_editor/test/photo/curves/`
+- **Spec:** V2-307. Monotone cubic (Fritsch–Carlson) splines through ≤ 8 points for RGB, R, G, B; histogram underlay; baked into the recipe LUT, 65³ when any slope > 8. Closes V2-V16.
+- **Acceptance criteria and tests:** monotonic for monotonic points; identity curve = identity LUT; 33³ vs 65³ error recorded and within 1/255 after the switch rule.
+
+#### VED-09 · Crop, straighten, horizon, keystone (core, iOS homography, panel)
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Core + iOS + UI
+- **Depends on:** VED-05
+- **Owns (Mac):** `CORE/lib/src/photo/geometry/`, `CORE/test/photo/geometry/`, `API/lib/src/reference/passes/homography.dart`, `ENGP/ios/Classes/Photo/Keystone/`, `ENGP/example/ios/RunnerTests/PhotoKeystone/`, `ED/editor/photo/tools/crop_panel.dart`, `ED/editor/photo/overlays/crop_keystone_overlay.dart`, `packages/danaview_editor/test/photo/crop/`
+- **Spec:** V2-309. Aspect ratios (Original, Free, 1:1, 4:5, 9:16, 16:9, 3:2, 4:3, 2.39:1), 90° rotation, flips, straighten ±45° with auto-crop, auto-straighten from line detection on a downsampled image (and gyro metadata when present), H/V keystone as a source-space homography (`layer.src.homography`), crop rect kept inside the warped source.
+- **Acceptance criteria and tests:** homography goldens; auto-straighten within 0.5° on fixture horizons; crop never samples outside the source (property test).
+
+#### VED-09A · Android keystone homography sampling
+
+- **Milestone:** N3 · **Lane:** Android · **Area:** Engine (Android)
+- **Depends on:** VED-09, VED-05A
+- **Owns (Android):** `ENGK/photo/keystone/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/photokeystone/`
+- **Spec:** homography source sampling in GLSL.
+- **Acceptance criteria and tests:** matches the reference within tolerance.
+
+#### VED-10 · Selective masks and local adjustments (core, iOS, panel)
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Core + iOS + UI
+- **Depends on:** VED-06
+- **Owns (Mac):** `CORE/lib/src/photo/masks/`, `CORE/test/photo/masks/`, `API/lib/src/photo_prep/`, `API/test/photo_prep/`, `API/lib/src/reference/passes/local_adjust.dart`, `ENGP/ios/Classes/Photo/LocalAdjust/`, `ENGP/example/ios/RunnerTests/PhotoLocal/`, `ED/editor/photo/tools/masks_panel.dart`, `ED/editor/photo/overlays/mask_edit_overlay.dart`, `packages/danaview_editor/test/photo/masks/`
+- **Spec:** V2-311. Linear, radial and luminance masks (analytic, in the plan) and brush masks (vector strokes rasterized deterministically by `photo_prep/mask_rasterizer.dart` into an alpha `.vsprite` mask asset keyed by content hash); feather, invert, add/subtract; per-mask exposure, contrast, warmth, saturation, sharpness (ARCH §6.2 step 9); up to 8 masks; mask overlay shows the selection tint.
+- **Acceptance criteria and tests:** brush raster deterministic (same strokes → same bytes); local-adjust reference goldens; iOS within tolerance; panel matrix.
+
+#### VED-10A · Android local-adjustment passes
+
+- **Milestone:** N3 · **Lane:** Android · **Area:** Engine (Android)
+- **Depends on:** VED-10, VED-06A
+- **Owns (Android):** `ENGK/photo/localadjust/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/photolocal/`
+- **Spec:** the local-adjustment pass and mask asset upload in GLSL.
+- **Acceptance criteria and tests:** within tolerance of the reference.
+
+#### VED-11 · Text, stickers, borders in Still Photo Mode
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** UI/UX
+- **Depends on:** VED-05
+- **Owns (Mac):** `CORE/lib/src/photo/overlays/`, `CORE/test/photo/overlays/`, `ED/editor/photo/tools/{text_tool,stickers_tool,borders_tool}.dart`, `packages/danaview_editor/assets/stickers/`, `packages/danaview_editor/test/photo/overlays/`
+- **Spec:** V2-312. Text overlays reuse the v1.1 text model, `FontCatalog` and `TextLayoutEngine` (sprite layers in the still plan); vector stickers (bundled SVG-derived sprites with recorded licences), date stamps, borders and film frames as sprite or solid layers; drag, pinch and rotate on the viewport.
+- **Acceptance criteria and tests:** preview text equals export sprite within 1 px (v1.1 UX-19 rule); imported fonts work (AIS-25 after it lands; bundled fonts before); matrix.
+
+#### VED-29 · High-resolution still export (iOS)
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Engine (Dart + iOS)
+- **Depends on:** VED-04
+- **Owns (Mac):** `CORE/lib/src/photo/export/`, `CORE/test/photo/export/`, `ENGP/lib/src/mobile_still_export.dart`, `ENGP/ios/Classes/StillExport/Encode/`, `ENGP/example/ios/RunnerTests/StillExport/`, `ED/editor/photo/export/`, `packages/danaview_editor/test/photo/export/`
+- **Spec:** ARCH V2-18, §6.2. Tiled render (≤ 4096 px tiles with apron) and encode from tiles via `CGImageDestination` (JPEG, HEIC, PNG 8/16-bit; WebP only if V2-V14 proves an encoder, else hidden on iOS), quality slider, max long side, tier caps with the export-sheet notice; destinations: library (new entry), Photos (add-only), both; exclusive create, never overwrite. Closes V2-V3/V2-V14 Apple halves.
+- **Acceptance criteria and tests:** 24 MP ≤ 3 s and 48 MP ≤ 8 s on the mid tier (device lab), output pixel-equal to a single-pass render of a small fixture; peak memory recorded; the source is unchanged.
+
+#### VED-29A · High-resolution still export (Android)
+
+- **Milestone:** N3 · **Lane:** Android · **Area:** Engine (Android)
+- **Depends on:** VED-29, VED-04A
+- **Owns (Android):** `ENGK/stillexport/encode/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/stillexport/`
+- **Spec:** tiled render and encode: `Bitmap.compress` JPEG/PNG/WebP (lossy and lossless), HEIC through `androidx.heifwriter` where the device has a HEVC encoder (else hidden), streaming row bands to bound memory.
+- **Acceptance criteria and tests:** as VED-29 on the emulator; HEIC availability per device recorded (V2-V14).
+
+#### VED-12 · Photo presets, copy/paste, batch export
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Core + UI
+- **Depends on:** VED-06, VED-29
+- **Owns (Mac):** `CORE/lib/src/photo/{presets,batch}/`, `CORE/lib/src/store/photo_preset_store.dart`, `CORE/test/photo/{presets,batch}/`, `ED/editor/photo/{presets,batch}/`, `packages/danaview_editor/test/photo/{presets,batch}/`
+- **Spec:** V2-310, ARCH §5.5. Presets (any subset of tone, color, HSL, curves, LUT, fx; built-ins in code; user presets in `photo_presets.json`), copy and paste with a field picker, apply to many recipes, batch export job (queue, progress, cancel, per-item failure report, format/quality/size/metadata settings) through `StillExportService`; entry from the Home multi-select (wired by INT-105).
+- **Acceptance criteria and tests:** applying a preset copies values and records `presetRef`; deleting a preset never changes a recipe; batch of 50 × 12 MP ≤ 90 s (mid) with the app responsive; cancel stops within one item.
+
+#### VED-13 · EXIF/IPTC keep and strip (iOS)
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Engine (Dart + iOS)
+- **Depends on:** VED-02, VED-29
+- **Owns (Mac):** `CORE/lib/src/photo/metadata_policy.dart`, `CORE/test/photo/metadata_policy_test.dart`, `ENGP/ios/Classes/StillExport/Metadata/`, `ENGP/example/ios/RunnerTests/StillMetadata/`, `ED/editor/photo/export/photo_export_sheet.dart` (extends VED-29)
+- **Spec:** V2-314 (Q-V3 default). Keep EXIF/IPTC/XMP by default with orientation reset to 1 and dimensions updated; "Strip metadata on export" and "Remove location" switches; batch applies the setting.
+- **Acceptance criteria and tests:** fixtures with GPS, camera and IPTC: keep, strip and remove-location outputs verified field by field.
+
+#### VED-13A · EXIF keep and strip (Android)
+
+- **Milestone:** N3 · **Lane:** Android · **Area:** Engine (Android)
+- **Depends on:** VED-13, VED-29A
+- **Owns (Android):** `ENGK/stillexport/metadata/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/stillmetadata/`
+- **Spec:** `ExifInterface` copy, strip and GPS removal for JPEG, WebP and HEIC.
+- **Acceptance criteria and tests:** as VED-13.
+
+#### VED-15 · Schema 2 additions: photo recipe on image clips, BeautyEffectSpec, easing key
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Core (pure Dart)
+- **Depends on:** CORE-03, VED-02, AIS-04, INT-102
+- **Owns (Mac):** `CORE/lib/src/model/{beauty,photo_clip}.dart`, `CORE/lib/src/model/items.dart` (extends AIS-02), `CORE/lib/src/validate/` (extends AIS-02: invariant I12), `CORE/lib/src/codec/project_json.dart` (extends AIS-04), `CORE/schema/project.v2.schema.json` (extends AIS-04), `CORE/lib/src/plan/{lowering_beauty,lowering_photo_clip}.dart`, `CORE/lib/src/plan/lowering_visual.dart` (extends CORE-30), `CORE/lib/src/plan/render_ranges.dart` (extends CORE-37: beauty is heavy), `CORE/test/model/beauty/`, `CORE/test/plan/beauty/`, `CORE/test/fixtures/projects/s2/photo_beauty/`
+- **Spec:** ARCH V2-03, §5.8. `MediaClip` gains optional `ph` (photo recipe for image clips) and `bt` (`BeautyEffectSpec` with the full `BeautyParamId` enum, categories, ranges, bypass, ≤ 4 subjects); keyframe key `e` reserved (semantics VED-19); invariant I12 (subjects unique, params in range, ≤ 4 subjects, masks valid); codec and JSON Schema additions with defaults omitted; lowering: image clips with `ph` run the photo stages (the same `stages.dart` as stills), clips with `bt` emit `layer.beauty` (faces asset resolved through an `AssetResolver` hook VED-17 fills); render-range cost counts beauty as heavy (v1.1 D-45).
+- **Acceptance criteria and tests:** s1 fixtures still migrate exactly as AIS-04 specifies; s2 fixtures with `ph`/`bt` round trip; a 1.1.x decoder fixture test opens them read-only without loss (V2-V17); lowering goldens; random project fuzzer (CORE-34) extended with `ph`/`bt` generators stays green.
+
+#### VED-14 · Add to Video Project, montage sequence, Ken Burns
+
+- **Milestone:** N3 · **Lane:** Mac · **Area:** Core + UI
+- **Depends on:** VED-02, VED-15, CORE-13
+- **Owns (Mac):** `CORE/lib/src/ops/commands/photo_bridge_commands.dart`, `CORE/lib/src/photo/ken_burns.dart`, `CORE/test/ops/photo_bridge/`, `ED/editor/photo/bridge/`, `ED/editor/flows/montage/`, `packages/danaview_editor/test/photo/bridge/`
+- **Spec:** V2-313, ARCH §6.1. `AddPhotoAsClip(recipe, project?, at)` (3.0 s on the grid, recipe and beauty carried, not baked), `AddMediaSequence(items)` for montages (photos 3 s, videos chronological, V1), Ken Burns presets (pan left/right, zoom in/out) as two eased transform keys; the "To video" sheet (new project or recent project); montage builder used by `EditorLauncher.newMontage`.
+- **Acceptance criteria and tests:** one history entry per command; the clip's preview equals the still render of the same recipe at frame 0 (parity test with VED-32 later); montage order matches input.
+
+#### VED-16 · danaview_face_tracking surface, iOS trackers, One-Euro, Beauty pack
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Beauty (native)
+- **Depends on:** VED-33, INT-101
+- **Owns (Mac):** `FACE/pigeons/face_api.dart`, `FACE/lib/src/pigeon/`, `FACE/lib/src/{face_tracker,models}.dart`, `FACE/ios/danaview_face_tracking.podspec`, `FACE/ios/Classes/{Glue,Face,Pose,Segmentation}/`, `FACE/example/ios/RunnerTests/Trackers/`, `FACE/android/src/main/kotlin/com/vecvel/danaview/face/pigeon/` (generated only), `CORE/lib/src/beauty/one_euro.dart`, `CORE/test/beauty/one_euro_test.dart`, `CORE/test/fixtures/vectors/one_euro.json`, `packages/danaview_transcription/lib/src/catalog/beauty_pack.dart`, `packages/danaview_transcription/test/catalog/beauty_pack_test.dart`, `lib/adapters/face_tracking_adapter.dart`
+- **Spec:** ARCH V2-13…V2-15, V2-25. The whole plugin surface, frozen after this ticket (`trackImage`, `trackVideoFrames` streaming batches, `segment(frame)`, `loadModels(paths)`, capabilities, cancel); iOS implementation with the VED-33 runtime (face 478, pose 33, person and hair segmentation), loading models only from given paths; One-Euro filter with the parameter sets of ARCH §6.4 and committed vectors; the Beauty pack `ModelSpec` (pinned revision, files, SHA-256, sizes) for v1.1's downloader and consent view (V2-23); the app-root adapter to `FaceTrackingPort`. Closes V2-V15.
+- **Acceptance criteria and tests:** tracker output on the face fixtures within the VED-33 tolerance; One-Euro vectors reproduce bit-exactly; jitter metric (mean frame-to-frame landmark motion on a still head) reduced ≥ 80 % at medium with lag ≤ 2 frames on the fast-turn fixture; zero network before consent (spy); rule 21 grep green.
+
+#### VED-16A · Android trackers and glue
+
+- **Milestone:** N4 · **Lane:** Android · **Area:** Beauty (native)
+- **Depends on:** VED-16
+- **Owns (Android):** `FACE/android/build.gradle.kts`, `FACE/android/src/main/AndroidManifest.xml`, `FACEK/{glue,face,pose,segmentation}/`, `FACE/android/src/test/kotlin/com/vecvel/danaview/face/trackers/`, `FACE/android/src/androidTest/kotlin/com/vecvel/danaview/face/trackers/`
+- **Spec:** the Android implementation with the same runtime and models (GPU delegate where available, CPU fallback).
+- **Acceptance criteria and tests:** fixture landmarks within the VED-33 tolerance of iOS; emulator latency recorded.
+
+#### VED-17 · Background pre-tracking and .dnface cache (iOS sampling)
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Beauty (Dart + iOS)
+- **Depends on:** VED-16, VED-15
+- **Owns (Mac):** `FACE/lib/src/video_sampler.dart`, `FACE/ios/Classes/VideoSampler/`, `FACE/example/ios/RunnerTests/VideoSampler/`, `CORE/lib/src/formats/dnface.dart`, `CORE/lib/src/beauty/track_smoothing.dart`, `CORE/test/beauty/{dnface,track_smoothing}/`, `ED/editor/beauty/{face_track_service,face_cache_store}.dart`, `packages/danaview_editor/test/beauty/tracking/`
+- **Spec:** V2-320, ARCH §5.9, §6.4. Native frame sampling (`AVAssetReader` at analysis size ≤ 720p, every source frame of the clip's used range); `.dnface` codec; job service (background, cancellable, progress, below export priority, resumes per range); cache store (content-addressed, backup-excluded, LRU 512 MB); smoothing with occlusion fade (3 frames) into the smoothed plan asset; the `AssetResolver` hook VED-15 reserved.
+- **Acceptance criteria and tests:** a 1080p clip pre-tracks ≤ 0.5× real time on the mid tier; `.dnface` round trip; smoothing deterministic (same input → same bytes); cache hit after reopen; cancel leaves no partial cache file.
+
+#### VED-17A · Android video sampling for pre-tracking
+
+- **Milestone:** N4 · **Lane:** Android · **Area:** Beauty (native)
+- **Depends on:** VED-17, VED-16A
+- **Owns (Android):** `FACEK/videosampler/`, `FACE/android/src/androidTest/kotlin/com/vecvel/danaview/face/videosampler/`
+- **Spec:** `MediaCodec` (surface → `ImageReader`) sampling at analysis size with source PTS, falling back to `MediaMetadataRetriever` for exotic codecs.
+- **Acceptance criteria and tests:** sample PTS match the source frame grid on fixtures; speed recorded.
+
+#### VED-18 · Multi-subject detection and Face IDs
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Core (pure Dart)
+- **Depends on:** VED-17
+- **Owns (Mac):** `CORE/lib/src/beauty/subjects/`, `CORE/lib/src/ops/commands/beauty_commands.dart`, `CORE/test/beauty/subjects/`, `CORE/test/ops/beauty/`
+- **Spec:** V2-318 (Q-V4 default 4). `FaceSignature` from landmark geometry ratios (no identity model, nothing leaves the device), Hungarian matching across frames with gap tolerance, stable `subjectId` 0..3 per clip, re-identification after occlusion; commands `SetBeautyParam`, `SetBeautyParams`, `AddBeautySubject`, `RemoveBeautySubject`, `SetBeautyBypass`, `ResetBeauty`, each one history entry with coalescing for slider drags.
+- **Acceptance criteria and tests:** on a two-face fixture with crossing paths the ids never swap; a face leaving and returning keeps its id; commands round-trip through undo.
+
+#### VED-19 · Keyframes and easing for beauty and all properties
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Core (pure Dart)
+- **Depends on:** VED-15, CORE-19
+- **Owns (Mac):** `CORE/lib/src/model/keyframes/keyframe_data.dart` (extends CORE-03), `CORE/lib/src/model/keyframes/property_keys.dart` (extends CORE-05: `beauty.*` keys), `CORE/lib/src/eval/easing.dart`, `CORE/lib/src/ops/commands/keyframe_easing_commands.dart`, `CORE/lib/src/plan/lowering_visual.dart` (extends VED-15: eased keys lowered to frame-grid linear keys), `CORE/test/eval/easing/`, `ED/editor/panels/keyframes_panel.dart` (extends v1.1: easing control)
+- **Spec:** ARCH V2-16, V2-319. Per-key easing `linear` or cubic bezier (presets ease-in, ease-out, ease-in-out, custom handles); evaluation in core; lowering to one linear key per frame across eased spans with collinear merge (1e-4); every numeric beauty parameter and every v1.1 keyframable property can ease.
+- **Acceptance criteria and tests:** lowered keys reproduce the eased curve at every frame exactly (frame-grid property test); linear projects lower byte-identically to 1.1; undo of easing changes.
+
+#### VED-20 · Face shape and slimming
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Beauty (core + iOS)
+- **Depends on:** VED-17, INT-102
+- **Owns (Mac):** `CORE/lib/src/beauty/params/face_shape.dart`, `CORE/lib/src/beauty/mesh/`, `CORE/test/beauty/face_shape/`, `API/lib/src/reference/passes/beauty/{mesh_warp,face_shape}.dart`, `ENGP/ios/Classes/Beauty/{Mesh,FaceShape}/`, `ENGP/example/ios/RunnerTests/BeautyFaceShape/`
+- **Spec:** VED §5.1: face slimming, V-shape, jawline sharpening, chin width/length/apex, forehead width/height, lower-face slimming, cheekbones, symmetry correction, overall reshape. Shared mesh-warp infrastructure: canonical triangulation of the 478-point topology, displacement fields per parameter normalized to inter-ocular distance, no-flip clamp, background pinning outside the face hull, Metal vertex warp of the source texture before the surface passes (§6.2 step 3).
+- **Acceptance criteria and tests:** reference goldens per parameter at 0.5 and 1.0 on the fixtures; no triangle flips over the parameter grid (property test); iOS within the v1.1 parity tolerance of the reference; preview ≥ 30 fps at 1080p mid tier with all face-shape parameters on.
+
+#### VED-20A · Face shape and slimming (Android)
+
+- **Milestone:** N4 · **Lane:** Android · **Area:** Beauty (Android)
+- **Depends on:** VED-20, VED-17A, INT-102A
+- **Owns (Android):** `ENGK/beauty/{mesh,faceshape}/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/beautyfaceshape/`
+- **Spec:** GLES mesh warp and face-shape passes.
+- **Acceptance criteria and tests:** within tolerance of the reference; fps recorded.
+
+#### VED-21 · Eyes and eyebrows
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Beauty (core + iOS)
+- **Depends on:** VED-20
+- **Owns (Mac):** `CORE/lib/src/beauty/params/eyes_brows.dart`, `CORE/test/beauty/eyes_brows/`, `API/lib/src/reference/passes/beauty/eyes_brows.dart`, `ENGP/ios/Classes/Beauty/EyesBrows/`, `ENGP/example/ios/RunnerTests/BeautyEyes/`
+- **Spec:** VED §5.2: eye enlargement (iris-centred), shape and canthus angle, spacing and height, brightening (sclera and catchlights), dark circles and eye bags, eyebrow thickness/shape/position, eyelash enhancement (procedural lash strokes along the lid contour).
+- **Acceptance criteria and tests:** as VED-20 per parameter.
+
+#### VED-21A · Eyes and eyebrows (Android)
+
+- **Milestone:** N4 · **Lane:** Android · **Area:** Beauty (Android)
+- **Depends on:** VED-21, VED-20A
+- **Owns (Android):** `ENGK/beauty/eyesbrows/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/beautyeyes/`
+- **Spec:** GLSL equivalents.
+- **Acceptance criteria and tests:** within tolerance.
+
+#### VED-22 · Nose and lips
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Beauty (core + iOS)
+- **Depends on:** VED-20
+- **Owns (Mac):** `CORE/lib/src/beauty/params/nose_lips.dart`, `CORE/test/beauty/nose_lips/`, `API/lib/src/reference/passes/beauty/nose_lips.dart`, `ENGP/ios/Classes/Beauty/NoseLips/`, `ENGP/example/ios/RunnerTests/BeautyNoseLips/`
+- **Spec:** VED §5.3: nose slimming and alar width, length and bridge, tip; lip size, shape and thickness, Cupid's bow, corners, smile lift.
+- **Acceptance criteria and tests:** as VED-20.
+
+#### VED-22A · Nose and lips (Android)
+
+- **Milestone:** N4 · **Lane:** Android · **Area:** Beauty (Android)
+- **Depends on:** VED-22, VED-20A
+- **Owns (Android):** `ENGK/beauty/noselips/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/beautynoselips/`
+- **Spec:** GLSL equivalents.
+- **Acceptance criteria and tests:** within tolerance.
+
+#### VED-23 · Skin retouching and teeth
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Beauty (core + iOS)
+- **Depends on:** VED-17, INT-102
+- **Owns (Mac):** `CORE/lib/src/beauty/params/skin.dart`, `CORE/test/beauty/skin/`, `API/lib/src/reference/passes/beauty/skin.dart`, `ENGP/ios/Classes/Beauty/Skin/`, `ENGP/example/ios/RunnerTests/BeautySkin/`, `ED/editor/beauty/heal_brush_overlay.dart`
+- **Spec:** VED §5.4: skin smoothing (frequency separation inside a landmark skin mask that excludes eyes, brows, lips and hair), acne and blemish removal (automatic spot detection plus manual heal spots stored as normalized face-space points so they track on video), dark-spot fading, skin tone shift (palette presets), anti-shine, wrinkle softening, natural glow, teeth whitening (mouth-region mask from lip landmarks).
+- **Acceptance criteria and tests:** reference goldens; texture preserved (high-frequency energy outside blemishes ≥ 70 % at default smoothing, measured); heal spots stay on the face across the moving fixture; iOS within tolerance.
+
+#### VED-23A · Skin retouching and teeth (Android)
+
+- **Milestone:** N4 · **Lane:** Android · **Area:** Beauty (Android)
+- **Depends on:** VED-23, VED-17A, INT-102A
+- **Owns (Android):** `ENGK/beauty/skin/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/beautyskin/`
+- **Spec:** GLSL equivalents.
+- **Acceptance criteria and tests:** within tolerance.
+
+#### VED-24 · Virtual makeup and appearance (incl. hair colour)
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Beauty (core + iOS)
+- **Depends on:** VED-23
+- **Owns (Mac):** `CORE/lib/src/beauty/params/makeup.dart`, `CORE/test/beauty/makeup/`, `API/lib/src/reference/passes/beauty/makeup.dart`, `ENGP/ios/Classes/Beauty/{Makeup,Hair}/`, `ENGP/example/ios/RunnerTests/BeautyMakeup/`, `packages/danaview_editor/assets/makeup/`
+- **Spec:** VED §5.5: foundation and concealer (coverage, finish), lipstick (matte, gloss, velvet, ombré; curated shade palettes; feathering), blush and contour, eyeliner (winged, tightline, smokey) and eyeshadow gradients, coloured contact lenses (iris mask from iris landmarks), hair colour (segmentation, V2-17), freckles and beauty marks (face-space placement).
+- **Acceptance criteria and tests:** reference goldens for landmark-driven makeup; hair colour preview equals export on the simulator (segmentation exemption recorded); shade palettes load from assets.
+
+#### VED-24A · Virtual makeup and appearance (Android)
+
+- **Milestone:** N4 · **Lane:** Android · **Area:** Beauty (Android)
+- **Depends on:** VED-24, VED-23A
+- **Owns (Android):** `ENGK/beauty/{makeup,hair}/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/beautymakeup/`
+- **Spec:** GLSL equivalents with on-device segmentation for hair.
+- **Acceptance criteria and tests:** landmark-driven passes within tolerance; hair colour preview = export on the emulator.
+
+#### VED-25 · Body reshaping
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Beauty (core + iOS)
+- **Depends on:** VED-17, INT-102
+- **Owns (Mac):** `CORE/lib/src/beauty/params/body.dart`, `CORE/test/beauty/body/`, `API/lib/src/reference/passes/beauty/body.dart`, `ENGP/ios/Classes/Beauty/Body/`, `ENGP/example/ios/RunnerTests/BeautyBody/`
+- **Spec:** VED §5.6, V2-323 (Q-V5): body reshape, waist, arms and legs, hips and shoulders, leg length anchored to the floor line, height and proportion; a pose-driven coarse mesh with the background pinned outside a dilated body hull (no straight background line bends more than 1 px, D-138); pose track stored in `.dnface` topology 2.
+- **Acceptance criteria and tests:** background straight-line fixture stays within 1 px; reference goldens; iOS within tolerance.
+
+#### VED-25A · Body reshaping (Android)
+
+- **Milestone:** N4 · **Lane:** Android · **Area:** Beauty (Android)
+- **Depends on:** VED-25, VED-17A, INT-102A
+- **Owns (Android):** `ENGK/beauty/body/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/beautybody/`
+- **Spec:** GLSL equivalent.
+- **Acceptance criteria and tests:** as VED-25.
+
+#### VED-34 · Beauty filters, portrait bokeh, face-anchored stickers
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Beauty (core + iOS)
+- **Depends on:** VED-17, VED-11, INT-102
+- **Owns (Mac):** `CORE/lib/src/beauty/{params/portrait,filters,anchors}.dart`, `CORE/test/beauty/{portrait,filters,anchors}/`, `API/lib/src/reference/passes/beauty/bokeh.dart`, `ENGP/ios/Classes/Beauty/Portrait/`, `ENGP/example/ios/RunnerTests/BeautyPortrait/`, `packages/danaview_editor/assets/{beauty_looks,face_stickers}/`
+- **Spec:** VED §5.7 (added by this plan, ARCH V2-02): beauty filters Natural, Soft, Glam, Vintage 35mm, Pastel, Cinematic as bundled `.vlut` looks plus tone presets; portrait bokeh f/1.4–f/16 with blade count (person segmentation + depth-from-segmentation blur, V2-17); face-anchored stickers, glasses, headbands and frames placed by lowering from the smoothed landmark track (sprite layers, rotation and scale from the face pose).
+- **Acceptance criteria and tests:** stickers follow the moving fixture within 2 px of the landmark anchor; bokeh preview equals export on the simulator; filter LUT licences recorded.
+
+#### VED-34A · Portrait bokeh (Android)
+
+- **Milestone:** N4 · **Lane:** Android · **Area:** Beauty (Android)
+- **Depends on:** VED-34, VED-17A, INT-102A
+- **Owns (Android):** `ENGK/beauty/portrait/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/beautyportrait/`
+- **Spec:** the bokeh pass with on-device segmentation (filters and stickers need no Android code).
+- **Acceptance criteria and tests:** preview equals export on the emulator.
+
+#### VED-26 · Beauty & Retouching inspector, bypass, tier defaults
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** UI/UX
+- **Depends on:** VED-15, VED-18, VED-19, UX-16
+- **Owns (Mac):** `ED/editor/panels/beauty/`, `ED/editor/actions/bindings/beauty_bindings.dart`, `ED/app/strings/beauty_strings.dart`, `ED/editor/beauty/beauty_tier_policy.dart`, `ED/editor/photo/tools/beauty_tool.dart`, `packages/danaview_editor/test/beauty/panel/`
+- **Spec:** V2-324, V2-327, V2-329. Inspector tab in the clip inspector and the photo tool tray: master on/off and intensity, temporal smoothing, subject chips (Face 1–4, "+ Track face"), category tabs (Face shape, Eyes/Brows, Nose/Lips, Skin, Makeup, Body, Filters, Presets) with keyframe toggles per slider, per-category bypass, Reset; the Beauty pack download entry (v1.1 consent view, V2-23) and the "pack missing" state; tier policy (half-res proxies on low tier, video beauty hidden on minimal, ARCH §6.4); tracking progress and failure states.
+- **Acceptance criteria and tests:** widget tests for pack missing, downloading, tracking, ready, failed; matrix 280–1280 px × 0.85–1.35; semantics on every slider; flag off hides the tab.
+
+#### VED-27 · Split before/after comparator
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** UI/UX
+- **Depends on:** VED-26, CORE-32
+- **Owns (Mac):** `CORE/lib/src/beauty/compare_transient.dart`, `CORE/test/beauty/compare_transient_test.dart`, `ED/editor/preview/compare_overlay.dart`, `ED/editor/photo/overlays/compare_split_overlay.dart`, `packages/danaview_editor/test/beauty/compare/`
+- **Spec:** V2-325, ARCH §6.4: a preview transient duplicating the layer without beauty and photo passes under a canvas mask at the divider (video and stills), draggable divider, press-and-hold for the original; no project change and no history entry.
+- **Acceptance criteria and tests:** left of the divider equals the bypassed render and right equals the processed render (pixel tests on the reference); export unaffected.
+
+#### VED-28 · Beauty presets, copy/paste attributes, automatic enhancement
+
+- **Milestone:** N4 · **Lane:** Mac · **Area:** Core + UI
+- **Depends on:** VED-26
+- **Owns (Mac):** `CORE/lib/src/beauty/{presets,auto_enhance}.dart`, `CORE/lib/src/store/beauty_preset_store.dart`, `CORE/test/beauty/{presets,auto_enhance}/`, `ED/editor/panels/beauty_presets/`, `packages/danaview_editor/test/beauty/presets/`
+- **Spec:** V2-326, VED §5.8: built-in styles (Natural Glow, Editorial Chic, Sunset Warmth, Clean Beauty), user presets in `beauty_presets.json` (copy values + `presetRef`), copy beauty attributes from a clip or photo and paste onto many clips/photos, one-tap automatic enhancement (local analysis of skin tone variance and facial balance from landmarks → conservative parameter set, never above 40 % per parameter).
+- **Acceptance criteria and tests:** presets apply identically to stills and clips; paste to 20 clips is one history entry; auto-enhance is deterministic for a given frame.
+
+#### VED-30 · 4K export with full beauty (iOS, Android)
+
+- **Milestone:** N5 · **Lane:** Mac + Android · **Area:** QA
+- **Depends on:** VED-15, VED-21A, VED-22A, VED-24A, VED-25A, VED-34A, VED-28, INT-105, IOS-12, AND-11
+- **Owns (Mac):** `integration_test/v12/beauty_export/`, `docs/v1.2/video-editor-update/qa/VED-30-export.md`
+- **Spec:** exports of 1080p and 4K projects with every beauty category on one and two subjects through the v1.1 exporters (IOS-12, AND-11) on the simulator, the emulator and the device lab; export conformance per v1.1 ARCH §14.4; render-preview cache behaviour with beauty ranges.
+- **Acceptance criteria and tests:** conformance passes; beauty export throughput per ARCH §10.1 recorded; exported frames equal preview frames at sampled times within tolerance.
+
+#### VED-31 · Memory stress: 48 MP and 100 MP stills on low-RAM devices
+
+- **Milestone:** N5 · **Lane:** Mac + Android · **Area:** QA
+- **Depends on:** VED-05A, VED-29A, VED-12, VED-13A
+- **Owns (Mac):** `integration_test/v12/still_memory/`, `docs/v1.2/video-editor-update/qa/VED-31-memory.md`
+- **Spec:** open, edit (every photo tool), compare, export and batch-export 48 MP and 100 MP fixtures on the minimal, low and mid tiers (lab iPhone 7/8/SE 2 and the emulator with low-RAM settings), with Instruments / `dumpsys meminfo` traces.
+- **Acceptance criteria and tests:** no OOM or crash; peak extra memory ≤ ARCH §10.1; tier caps applied with the notice (V2-18).
+
+#### VED-32 · Golden parity: Still Photo Mode vs timeline, iOS vs Android
+
+- **Milestone:** N5 · **Lane:** Mac + Android · **Area:** QA
+- **Depends on:** VED-29A, VED-30, VED-14, VED-27
+- **Owns (Mac):** `packages/danaview_editor/test/parity/photo_vs_timeline/`, `integration_test/v12/photo_parity/`, `docs/v1.2/video-editor-update/qa/VED-32-parity.md`
+- **Spec:** V2-322. The same recipe and beauty spec rendered as a still and as frame 0 of an image clip (VED-14) on both platforms and in the Dart reference; landmark-driven passes inside the v1.1 parity tolerance; segmentation passes with their recorded tolerance (V2-17).
+- **Acceptance criteria and tests:** parity numbers per pass and platform in the report; failures become FIX tickets.
