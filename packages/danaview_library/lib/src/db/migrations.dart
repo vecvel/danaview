@@ -42,7 +42,7 @@ enum MigrationOutcome {
 }
 
 /// The `meta.schema_version` of [db], or null for an empty database (no `meta` table).
-int? schemaVersionOf(CommonDatabase db) {
+int? schemaVersionOf(Database db) {
   final hasMeta = db.select("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").isNotEmpty;
   if (!hasMeta) return null;
   final rows = db.select("SELECT value FROM meta WHERE key = 'schema_version'");
@@ -55,7 +55,7 @@ int? schemaVersionOf(CommonDatabase db) {
 /// Brings [db] to [librarySchemaVersion] with [migrations]. Never runs a step on a database newer
 /// than this build. Throws [FormatException] for a malformed `meta` and lets SQLite errors through
 /// (the store treats both as corruption).
-MigrationOutcome migrateLibrary(CommonDatabase db, {List<LibraryMigration> migrations = libraryMigrations}) {
+MigrationOutcome migrateLibrary(Database db, {List<LibraryMigration> migrations = libraryMigrations}) {
   final target = migrations.isEmpty ? 0 : migrations.last.toVersion;
   final current = schemaVersionOf(db);
   if (current != null && current > target) return MigrationOutcome.newerReadOnly;

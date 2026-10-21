@@ -3,7 +3,8 @@
 // Test file systems for desktop discovery: an in-memory tree in any path style (so Windows and
 // Linux rules run on the Mac) and a wrapper that counts the calls of another DesktopFs.
 
-import 'package:danaview_library/danaview_library.dart';
+// Direct imports keep this suite independent of the other directories behind the package barrel.
+import 'package:danaview_library/src/desktop/desktop.dart';
 import 'package:path/path.dart' as p;
 
 /// An in-memory [DesktopFs]: directories, files and links in [style].

@@ -1,9 +1,15 @@
 // OWNER: HOM-17
 //
-// Placeholder (D-33) created by INT-101. HOM-17 replaces this file:
-// the public entry of lib/src/db/, library.db (ARCH v1.2 §5.3). The package barrel exports it; HOM-17 re-exports
-// the public files of its directory from here (barrels never change after INT-101).
-// Until then it declares no public names.
+// The public entry of lib/src/db/: `library.db` (ARCH v1.2 §5.3): schema v1, the migrations
+// framework, connections, row mapping, the folder and meta models and the read-only queries. The
+// one writer is in lib/src/store/.
 
 /// The public entry of lib/src/db/: library.db (ARCH v1.2 §5.3).
 library;
+
+export 'library_connection.dart';
+export 'library_folder.dart';
+export 'library_reader.dart';
+export 'library_schema.dart';
+export 'migrations.dart';
+export 'row_codec.dart';

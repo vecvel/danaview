@@ -211,3 +211,113 @@ pending: Windows
 Not defects, carried from §Wiring for S1-R: `legalEffectiveDate`, the owner's Q-S1 wording review,
 the hosted privacy page, and the install-and-smoke of the prompt and toggle on the simulator
 (S1-R's install-and-smoke step).
+
+## Release candidate
+
+Ticket **S1-R**, Mac half, on `v1.2-wip`, 2026-10-22. Build tree: `4499909` plus the working tree of
+04:20 (the version bump below and other builders' S2 work in progress behind `DANAVIEW_FILES_HOME`,
+off; captured by backup `f865874`). Nothing was signed, uploaded or changed in the signing settings.
+
+### Version
+
+| File | Before | After |
+|---|---|---|
+| `pubspec.yaml` | `1.0.0+1` | **`1.2.0+4`** |
+| `packages/danaview_features/lib/src/more/app_info.dart` (must match, `settings_account_test`) | `1.0.0` / `1` | `1.2.0` / `4` |
+| `test/settings_account_test.dart` | literals `Danaview 1.0.0 (1)`, `Version 1.0.0 (build 1)` | read from `danaviewAppVersion` / `danaviewBuildNumber` (no literal to bump next time) |
+
+Build 4 is above build 3, which the 1.1.0 checklist (`docs/v1.1/editor/release-checklist.md` §3.1)
+reserves for 1.1.0 and never applied (1.0.0 was build 1). If App Store Connect or Play already holds
+a build ≥ 4, the owner uses the next free number on both stores; the iOS `beta` lane takes the next
+TestFlight number by itself, `release` needs `BUILD_NUMBER=4`.
+
+### iOS release build
+
+```text
+flutter build ipa --release --no-codesign --build-number=4 \
+  --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true \
+  --dart-define=DANAVIEW_FILES_HOME=false --dart-define=DANAVIEW_PHOTO_EDITOR=false \
+  --dart-define=DANAVIEW_BEAUTY=false --dart-define=DANAVIEW_AI_STUDIO=false
+```
+
+The v1.1 release defines (editor, Auto captions) as in the 1.1 checklist §3.2; every 1.2.0 flag
+false (S1 adds none). `WhisperCore.xcframework` was present (vendored build, nothing downloaded).
+
+| Check | Result |
+|---|---|
+| Build | **pass**, 2 min (warm cache): `build/ios/archive/Runner.xcarchive` (247.6 MB with dSYMs); `--no-codesign` skips the IPA export |
+| Info.plist | `CFBundleShortVersionString 1.2.0`, `CFBundleVersion 4`, `MinimumOSVersion 15.0`, `com.vecvel.danaview`, display name Danaview |
+| `check_ios_min_os.sh --min 15.0` on the archived `Runner.app` | **OK**: 28 binaries, 1414 symbols probed, weak allowlist BackgroundTasks |
+| `nm -um` `NEWLAPACK` on `Runner.app/Frameworks/*` | none |
+| Flutter warning | launch image is the default placeholder (same as 1.1; owner asset, not a blocker) |
+
+**Size** (unsigned, measured on the archive's `Runner.app`):
+
+| Measure | S1 candidate 1.2.0+4 |
+|---|---|
+| `Runner.app` on disk | 61.5 MB (62 956 KB) |
+| `Payload/Runner.app` zipped (`zip -9`, an unsigned stand-in for the IPA) | 24.2 MB (24 237 779 B) |
+| Largest frameworks | App 21.8 MB, Flutter 9.8 MB, Harfbuzz 6.4 MB, danaview_editor_engine 5.0 MB, danaview_whisper 3.5 MB, Avcodec 3.4 MB |
+
+**No 1.1.0 release build is recorded** (the 1.1 checklist leaves "IPA growth" open and compares App
+Store Connect file-size reports, which only exist after an upload). The only older IPA on this Mac is a
+signed 1.0-era export (`build/ios/ipa/vwish.ipa`, 2026-10-04, 28.8 MB) from before the rename and the
+editor; it is not comparable (different export, no editor). The owner records the App Store Connect
+"App Store file sizes" for this candidate and for 1.1.0 once both are uploaded; ARCH §10.3 asks AIS-41
+for the 1.2.0-vs-1.1.0 delta.
+
+### Install and smoke on the iOS Simulator (iPhone 16, iOS 26.5)
+
+Release and profile builds cannot run on a simulator (`flutter build ios --simulator --release`:
+"Release mode is not supported for simulators"; `--profile`: "Profile mode is not supported for
+simulators"). The smoke therefore ran a **debug** simulator build of the same tree, version and
+defines; the release binary itself is checked statically above and on a device only (see open items).
+
+1. `flutter build ios --simulator --debug --build-number=4` with the defines above, `simctl install`,
+   `simctl launch`: the app launches to the **1.1 Home** (Open file / Open folder / Open link,
+   Playlists, Folders, editor button left of the gear), no Files Home tabs.
+2. A scripted run through the E2E harness (`scripts/ci/editor/e2e_ios.sh --target <scratch smoke>
+   iphone`, S1 flag set via `DV_E2E_EXTRA_DEFINES`; the scratch file was deleted afterwards), on the
+   real app wiring, **pass** in 2 min:
+
+| Step | Result |
+|---|---|
+| Launch, Home | pass: 1.1 Home |
+| Player | pass: `frame_counter_1080p30.mp4` (local fixture) opens, duration 8 s, playback advances |
+| Editor open | pass: player › Edit opens the editor with one clip; closed and saved |
+| Settings › Privacy toggle | pass: section shown with the "You'll be asked the first time" note; toggled on (note goes, answer stored) and back off; About shows "Version 1.2.0", footer "Danaview 1.2.0 (4)" |
+| Speed test, default servers healthy | pass: no consent prompt, result over the real network (download 59.8 Mbps, upload 65.6 Mbps, ping 25 ms, jitter 18 ms, 87.9 MB in 15 s); result names only "Tested against a nearby server · <city>", no provider name |
+
+The simulator was booted for this step and shut down after it.
+
+Device smoke of the signed release build (iPhone 12 mid tier, iPhone 7 iOS 15.8, iPhone 8 iOS 16.7):
+deferred: no device available.
+
+### Android candidate
+
+pending: Windows (`flutter build appbundle --release` with the same defines and `1.2.0+4`,
+`check_native_libs.sh`, install and smoke on the API 35 emulator).
+
+### Release checklist (S1)
+
+| # | Item | Owner | Status |
+|---|---|---|---|
+| 1 | Gate: S1-W done; S1-Q Mac half green once FIX-S1Q-1 and FIX-S1Q-2 have landed (§7); Android half of S1-Q | INT-101 / AIS-43, Windows | open (see BUILD_STATE) |
+| 2 | Version `1.2.0+4` in `pubspec.yaml` and `app_info.dart` | S1-R | **done** |
+| 3 | iOS release build with the S1 flag set, min-OS check, `NEWLAPACK` check | S1-R | **done** (above) |
+| 4 | Simulator install and smoke | S1-R | **done** (debug build, release impossible on simulator) |
+| 5 | Device smoke of the signed build | owner / lab | deferred: no device available |
+| 6 | Android release build, native-lib check, emulator smoke | Windows lane | pending: Windows |
+| 7 | **Signing**: archive with the distribution certificate and profile (`fastlane ios build` / `beta` with the release `.env`), Android upload key | **owner** | open |
+| 8 | **Upload** to TestFlight / Play internal testing (candidates stay internal until the owner's go; v1.1 goes live after v1.3) | **owner** | open |
+| 9 | **`legalEffectiveDate`** (`legal_texts.dart`, still `11 October 2026`) to the candidate's release date, then regenerate the hosted privacy page from `privacyPolicyText` | **owner** (date), then the release integration ticket | open |
+| 10 | **Owner policy review Q-S1**: the Cloudflare and M-Lab wording in "When Danaview uses the internet" (ST-05, V2-406) | **owner** | open |
+| 11 | **M-Lab store answers**: App Privacy reading A or B, Data safety shared/exempt (`docs/v1.2/speed-test/store_answers.md` §3–§4, with Q-A9) and the optional App Review note (§5) | **owner** (with legal) | open |
+| 12 | IPA/AAB size vs 1.1.0 from the store reports after upload (ARCH §10.3) | owner, AIS-41 | open (S1 numbers above) |
+| 13 | Privacy manifest report from the signed archive (Organizer › Generate Privacy Report): unchanged from 1.1 (S1 adds no SDK) | owner | open |
+| 14 | Launch image placeholder (Flutter validation warning, as in 1.1) | owner | open, not a blocker |
+
+**S1-R Mac verdict:** the iOS candidate `1.2.0+4` builds in release with only the S1 flags, passes the
+15.0 floor and `NEWLAPACK` checks, and smokes green on the iPhone 16 / iOS 26.5 simulator (debug build
+of the same tree). Signing, upload, the effective date, Q-S1 and the M-Lab store answers are the
+owner's and stay open; the Android candidate is pending on Windows.

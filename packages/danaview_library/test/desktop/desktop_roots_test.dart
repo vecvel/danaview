@@ -3,7 +3,9 @@
 // Desktop root discovery (V2-109): Pictures folders and external volumes on macOS, Windows and
 // Linux, run on any host over an in-memory tree in each platform's path style.
 
-import 'package:danaview_library/danaview_library.dart';
+// Direct imports keep this suite independent of the other directories behind the package barrel.
+import 'package:danaview_library/src/desktop/desktop.dart';
+import 'package:danaview_library/src/model/ids.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
