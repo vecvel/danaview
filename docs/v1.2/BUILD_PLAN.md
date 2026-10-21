@@ -257,3 +257,359 @@ Any prefix of this list has all its dependencies satisfied. v1.1 ticket ids (INT
 | 164 | **QA-106** | N5 | Mac + Android | QA | Persistence, migration, originals and backup survival | INT-105, INT-104, VED-15, VED-19, AIS-47, HOM-17 |
 | 165 | **QA-107** | N6 | Mac + Android | QA | Release-candidate regression on lab devices (player preservation, 1.1 and 1.2 smoke) | QA-101, QA-102, QA-103, QA-104, QA-105, QA-106, AIS-40 |
 | 166 | **AIS-41** | N6 | Mac | Integration | [INTEGRATION] Release 1.2.0 (AIS spec, widened: every flag, every plan) | AIS-38, AIS-39, AIS-40, AIS-36, AIS-37, AIS-54, QA-107, INT-106 |
+
+---
+
+## 4. Tickets
+
+Conventions: **Owns (Mac)** and **Owns (Android)** split the paths by machine. Package paths are relative to the repo root; `lib/` inside a ticket's package means that package's `lib/`. `LN/` abbreviates `packages/danaview_library_native/`, `PDF/` abbreviates `packages/danaview_pdf/`, `DOC/` abbreviates `packages/danaview_documents/`, `FEAT/` abbreviates `packages/danaview_features/lib/src/`, `CORE/` abbreviates `packages/danaview_editor_core/`, `API/` abbreviates `packages/danaview_editor_engine_api/`, `ENGP/` abbreviates `packages/danaview_editor_engine/`, `ED/` abbreviates `packages/danaview_editor/lib/src/`, `FACE/` abbreviates `packages/danaview_face_tracking/`. Android Kotlin roots: `LN/android/src/main/kotlin/com/vecvel/danaview/library/` = `LNK/`, `PDF/android/src/main/kotlin/com/vecvel/danaview/pdf/` = `PDFK/`, `ENGP/android/src/main/kotlin/com/vecvel/danaview/editor/engine/` = `ENGK/`, `FACE/android/src/main/kotlin/com/vecvel/danaview/face/` = `FACEK/`.
+
+### 4.1 AIS tickets: placement and amendments
+
+The 54 AIS tickets keep the specs of AIS plan §5.5 and §7.9. Their milestones in this plan: AIS-01, AIS-42, AIS-44 → N0; AIS-02…AIS-35, AIS-43, AIS-45…AIS-53 → N2; AIS-36…AIS-40, AIS-54 → N5; AIS-41 → N6. These amendments apply (ARCH §14 gives the reasons):
+
+| Ticket | Amendment |
+|---|---|
+| AIS-01 | Records decisions and status in `docs/v1.2/ARCHITECTURE.md` (V2-33), not v1.1 ARCH. Otherwise unchanged; INT-101 extends its registry, barrel-part and CI edits afterwards (§5). |
+| AIS-04 | Schema 2 is the **only** 1.2.0 schema (V2-03): pin the lane keys (AIS-47) and reserve `ph`, `bt` and keyframe `e` for VED-15; add 1.1.x-decoder fixtures proving unknown keys survive read-only open (V2-V17). |
+| AIS-11 | Mac + Android: the Android Keystore half is committed by the Windows lane under `packages/danaview_secure_keys/android/`. |
+| AIS-24 | Mac + Android: the Android picker half (`ENGP/android/.../MediaPicker.kt`) by the Windows lane; Pigeon regeneration on the Mac only. |
+| AIS-31, AIS-32 | Own the moved paths (V2-20): `packages/danaview_ai_ui/lib/src/settings/` (AIS-31) and `packages/danaview_ai_ui/lib/src/{ai_send_view,ai_progress_panel,ai_failure_copy}.dart` (AIS-32); the editor-side files `ED/editor/flows/ai/{ai_studio_sheet,ai_studio_controller}.dart` stay with AIS-32; the route is `/settings/ai` (wired by AIS-37). |
+| AIS-36 | Depends on ST-05 (legal text order ST-05 → AIS-36 → INT-106); AIS §6.4's "Added 2026-10-16" bullets move to INT-106. |
+| AIS-37 | Adapters live at the app root (V2-24): `lib/adapters/{secure_key_store_adapter,engine_ai_audio_extractor,prefs_usage_ledger}.dart` replace the `ED/app/adapters/` paths; `editor_bootstrap.dart` stays (extends INT-02). Route `/settings/ai` with a row in Settings › Video editor. |
+| AIS-38, AIS-39, AIS-40, AIS-54 | Mac + Android: Android Emulator runs belong to the Windows lane; the report is one file with two sections. |
+| AIS-41 | Widened to the whole 1.2.0 release: passes every flag of ARCH V2-04, depends on QA-107 and INT-106, records install sizes (ARCH §10.3) and status in `docs/v1.2/ARCHITECTURE.md`; adds one pointer line to v1.1 ARCH's header. |
+| AIS-43 | Depends on INT-101 (rules 16–19 go into the test after rules 20–31 exist); extends `packages/danaview_editor/pubspec.yaml` (after AIS-01) to add `danaview_ai`, `danaview_ai_ui`; no `editor.ai.enabled` migration (V2-20). |
+| AIS-44, AIS-45, AIS-50 | Mac + Android as the AIS plan's lane notes say; AIS-50's index lives in `search.db` (V2-07), and `packages/danaview_search/` is created by INT-101 (skeleton) so AIS-50 owns `lib/src/index/` only, as written. |
+| AIS-51 | Extends `FEAT/library/search/library_search_field.dart` (after HOM-19); the "Search with AI" entry calls an `onSearchWithAi` callback that INT-103 wires (ARCH rule 23). |
+| AIS-52 | Extends `packages/danaview_search/pubspec.yaml` (after INT-101) to add `danaview_ai`; the chip in `FEAT/library/search/ai_search_chip.dart`, the flow at the app root through INT-103. |
+
+### 4.2 Files & Media Home (HOM)
+
+#### HOM-01 · MediaItem, VideoMediaItem, PhotoMediaItem; MediaRef interop
+
+- **Milestone:** N0 · **Lane:** Mac · **Area:** Library (Dart)
+- **Depends on:** INT-101
+- **Owns (Mac):** `packages/danaview_library/lib/src/model/{media_item,media_ref_bridge,ids}.dart`, `packages/danaview_library/test/model/`
+- **Spec:** ARCH §5.1 and V2-09. Sealed `MediaItem` with `VideoMediaItem`, `PhotoMediaItem` (and the `DocumentItem` slot HOM-16 fills); id namespaces `fe_`, `fd_`, `lk:`, `ph:`, `ms:` as extension types with parsing and validation; `VideoMediaItem.toMediaRef()` and `MediaRefBridge.fromMediaRef()` so `danaviewPlayItems(ref, items)`, `LibraryController` and the player keep receiving `MediaRef` unchanged (HOM §4.1). Equality and hashing by id.
+- **Acceptance criteria and tests:** round trip `MediaRef → VideoMediaItem → MediaRef` equal for every field `MediaRef` has; id parsing rejects malformed ids; package purity (rule 20) green; no `danaview_domain` file changes.
+
+#### HOM-16 · File model and classifier
+
+- **Milestone:** N0 · **Lane:** Mac · **Area:** Library (Dart)
+- **Depends on:** HOM-01
+- **Owns (Mac):** `packages/danaview_library/lib/src/model/{file_entry,file_kind,document_item,source_hint}.dart`, `packages/danaview_library/lib/src/classify/`, `packages/danaview_library/test/classify/`
+- **Spec:** ARCH §5.1, V2-114. `FileEntry`, `FileKind` (open, append-only; unknown → `other`), `DocumentItem`, `SourceHint`. `classify/type_table.dart` is the single table of HOM §8.1 rows; `classify(uti?, mime?, fileName)` applies UTType → MIME → extension, deferring on generic types (`public.data`, `application/octet-stream`).
+- **Acceptance criteria and tests:** one test per table row and per sub-filter; conflicting inputs resolved as specified; a `savedCode` kind string decodes to `other` without loss of the raw string.
+
+#### HOM-17 · Library database, Danaview folder store, Recently deleted, backup classes
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Library (Dart)
+- **Depends on:** HOM-16
+- **Owns (Mac):** `packages/danaview_library/lib/src/{db,store,refs}/`, `packages/danaview_library/test/{db,store,refs}/`, `FEAT/library/files/library_store_providers.dart`, `FEAT/more/settings_sections/library_storage_section.dart`, `test/v12/library_storage/`
+- **Spec:** ARCH V2-06, V2-08, §5.2–§5.4. `library.db` schema v1 and migrations framework; one writer isolate (WAL, transactions per multi-row change); paged read-only queries; `LibraryFs` (the only writer under the root: id directories, atomic renames, `imports/` part files); folder tree (create, rename, move, nest any depth, cycle check), entries, favourites, recents (50, trigger), `refs` for editor holders; Recently deleted (`trashed_at`, `expires_at`, subtree delete in one transaction, restore to the original folder or `Imported`, Empty now, sweep on launch and daily); invariants check on open and rebuild-from-files recovery (`library.db.corrupt-<date>`, `Recovered` folder); backup classes: Apple `isExcludedFromBackup` on `imports/` only via the port the native plugin provides (`BackupFlagPort`, stub until HOM-02), Android rules are INT-104's. The settings section shows library size, Recently deleted size and, on Android, the plain Auto Backup note (V2-V1).
+- **Acceptance criteria and tests:** 1,000 seeded random operation sequences keep every invariant and match an in-memory model; a deleted file restores to its folder; a deleted folder restores its subtree; restore into a vanished folder lands in `Imported`; with a fake clock an item older than 30 days is purged and a clock set backwards doesn't change `expires_at`; Empty now removes everything; a crash injected at every step of move, delete and import leaves the database and files consistent; 200-row page query ≤ 2 ms on the mid tier (benchmark recorded).
+
+#### HOM-02 · danaview_library_native surface and PhotoKit library (iOS, macOS)
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Library (native)
+- **Depends on:** HOM-01
+- **Owns (Mac):** `LN/pigeons/library_api.dart`, `LN/lib/src/pigeon/`, `LN/lib/src/native_photo_library.dart`, `LN/darwin/danaview_library_native.podspec`, `LN/darwin/Classes/{Glue,PhotoLibrary}/`, `LN/darwin/Tests/PhotoLibrary/`, `LN/android/src/main/kotlin/com/vecvel/danaview/library/pigeon/` (generated only), `FEAT/library/sources/system_photos_source.dart`
+- **Spec:** ARCH V2-25, §8. The **whole** Pigeon surface of the plugin, frozen after this ticket: `PhotoLibraryApi` (authorization state, request, limited-library picker, paged fetch with change tokens, asset metadata, change events), `PickerApi`, `ThumbnailApi` (`mediaThumbnail`, `documentThumbnail`), `ExportOutApi`, `ShareApi`, `OpenInApi`, `QuickLookApi`, `InboxApi`, `IncomingApi`, `BackupFlagApi`; generated Dart, Swift and Kotlin; darwin glue routing each API to a class; stubs returning `notSupportedOnDevice` for every class owned by later tickets (placeholders with `// OWNER:`). PhotoKit implementation: `PHFetchResult` paging, `PHPhotoLibraryChangeObserver` → change events (V2-111), limited access honoured, metadata (RAW/HDR/Live flags, EXIF basics). `system_photos_source.dart` maps assets to `PhotoMediaItem`/`VideoMediaItem` with `ph:` ids. Closes the Apple half of V2-V2 (HEIC, AVIF, RAW, Live).
+- **Acceptance criteria and tests:** XCTest on the simulator with a seeded photo library (`xcrun simctl addmedia`): paging, change events on add/delete, limited access; macOS build and test; generated files committed; every stub returns `notSupportedOnDevice`; no socket API in the plugin (rule 21 grep).
+
+#### HOM-02A · Android glue and MediaStore library
+
+- **Milestone:** N1 · **Lane:** Android · **Area:** Library (native)
+- **Depends on:** HOM-02
+- **Owns (Android):** `LN/android/build.gradle.kts`, `LN/android/src/main/AndroidManifest.xml`, `LNK/{glue,photolibrary}/`, stubs in `LNK/{pickers,thumbnails,exportout,share,openin,incoming}/` (placeholders for their owners), `LN/android/src/test/kotlin/com/vecvel/danaview/library/photolibrary/`, `LN/android/src/androidTest/kotlin/com/vecvel/danaview/library/photolibrary/`
+- **Spec:** Kotlin glue for the frozen surface; MediaStore paging (`query` with `LIMIT/OFFSET` bundles on 11+), `ContentObserver` change events, `READ_MEDIA_IMAGES`/`READ_MEDIA_VIDEO` and `READ_MEDIA_VISUAL_USER_SELECTED` (14+) partial access, legacy `READ_EXTERNAL_STORAGE` on API ≤ 32 declared with `maxSdkVersion`; `ms:` ids. Closes the Android half of V2-V2.
+- **Acceptance criteria and tests:** JVM tests for cursor mapping; emulator tests on API 35 and 29 with seeded media: paging, change events, partial access; Gradle builds the example; lint clean.
+
+#### HOM-03 · Desktop photo directory discovery
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Library (Dart)
+- **Depends on:** HOM-01
+- **Owns (Mac):** `packages/danaview_library/lib/src/desktop/`, `packages/danaview_library/test/desktop/`, `FEAT/library/sources/desktop_photos_source.dart`, `FEAT/library/desktop/`
+- **Spec:** V2-109. Pictures folders (macOS `~/Pictures` outside the Photos library package, Windows Known Folder Pictures via environment, XDG `PICTURES`), external volumes (`/Volumes`, mounted drives, `/media`, `/run/media`), incremental rescan by modification time, read-only (rule 27); sidebar shortcuts and drag-and-drop targets (P-8 unchanged). macOS PhotoKit comes from HOM-02. ARCH rule 20 allows `dart:io` in `lib/src/desktop/` (INT-101 records it).
+- **Acceptance criteria and tests:** fixture directory trees scanned with correct kinds; symlink loops ignored; a removed drive disappears without errors; Windows and Linux compile in CI; no write call on any scanned path (test with a read-only temp tree).
+
+#### HOM-04 · Thumbnail cache and Apple thumbnailers
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-02
+- **Owns (Mac):** `FEAT/library/thumbs/`, `LN/lib/src/native_thumbnails.dart`, `LN/darwin/Classes/Thumbnails/`, `LN/darwin/Tests/Thumbnails/`, `test/v12/thumbs/`
+- **Spec:** V2-28, V2-104. Memory LRU 64 MB (byte-accounted), disk cache under `<cache>/danaview/library/thumbs/` keyed by item id + modification time + size class (S/M/L), backup-excluded; request coalescing and cancellation when cells leave the viewport; Apple: `PHCachingImageManager` for `ph:` assets, `QLThumbnailGenerator` for files (photos and videos; documents come from HOM-26), JPEG (HEIC on iOS 17+) encode; closes V2-V3 (no WebP encoder).
+- **Acceptance criteria and tests:** memory never exceeds 64 MB under a 10,000-cell fling (test with fake decoder); cache survives restart and is invalidated by modification time; visible-cell miss ≤ 120 ms on the mid tier for a 12 MP HEIC (recorded); XCTests for both thumbnail paths.
+
+#### HOM-04A · Android thumbnailers
+
+- **Milestone:** N1 · **Lane:** Android · **Area:** Library (native)
+- **Depends on:** HOM-04, HOM-02A
+- **Owns (Android):** `LNK/thumbnails/`, `LN/android/src/test/kotlin/com/vecvel/danaview/library/thumbnails/`, `LN/android/src/androidTest/kotlin/com/vecvel/danaview/library/thumbnails/`
+- **Spec:** `ContentResolver.loadThumbnail` (29+), `ThumbnailUtils` and `MediaMetadataRetriever` for files, `PdfRenderer` first page for PDFs in `documentThumbnail`, WebP lossy encode at the requested size class.
+- **Acceptance criteria and tests:** emulator tests for images, videos and PDFs on API 35 and 29; a corrupt file yields a typed failure, not a crash.
+
+#### HOM-05 · Home shell: filter tabs with the 1.1 layout preserved
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-04
+- **Owns (Mac):** `FEAT/library/danaview_home_screen.dart` (extends v1.0), `FEAT/library/home/`, `test/v12/home_shell/`
+- **Spec:** V2-101, V2-32. With `DANAVIEW_FILES_HOME=false` the file renders exactly the 1.1 tree. With it on: a kit tab strip (`Home`, `All`, `Videos`, `Photos`, `Documents`, `Playlists`, `Folders`, plus `Projects` where the editor runs) over a tab host; the `Home` tab hosts the 1.1 sections unchanged (Now Playing, quick actions, Continue watching, playlists, folders) plus slots for the Recent photos tray (HOM-09) and favourites row (HOM-19). `home/home_callbacks.dart` declares every optional callback later wiring needs (`onEditPhoto`, `onBatchEditPhotos`, `onMakeMontage`, `onOpenProjects`, `onSearchWithAi`, `onOpenAiSettings`), all nullable so the app compiles before INT-103/INT-105. Creates placeholders (owned elsewhere) for `FEAT/library/tabs/*.dart`, `home/recent_photos_tray.dart`, `selection/selection_bar.dart`.
+- **Acceptance criteria and tests:** flag off: the 1.1 `test/home_screen_test.dart` and HOM-06…HOM-08 goldens unchanged; flag on: every tab reachable by tap and keyboard; matrix 280–1280 px × 0.85–1.35 with no overflow; semantics labels on tabs; desktop builds show no editor tab.
+
+#### HOM-06 · Preserve Now Playing, Continue watching, quick actions
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-05
+- **Owns (Mac):** `test/home_screen_test.dart` (extends v1.0), `test/v12/preservation/hub/`
+- **Spec:** P-1, P-2, P-3. Behaviour and golden tests with the flag off and on: Now Playing card return-to-player, Continue watching progress, episode badges, Clear history, Show all N, the item menu (Play, Add to playlist…, Remove from history), Open file / Open folder / Open link (all protocols of P-7 in the link dialog).
+- **Acceptance criteria and tests:** goldens identical between flag off and the `Home` tab with flag on (pixel-equal at three widths); every callback receives the same `MediaRef` as in 1.1.
+
+#### HOM-07 · Preserve Playlists
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-05
+- **Owns (Mac):** `test/v12/preservation/playlists/`
+- **Spec:** P-4, P-6: New playlist, rename, delete, drag-reorder, shuffle, Play all, add-to-playlist sheets, queue integration and repeat modes, flag off and on.
+- **Acceptance criteria and tests:** behaviour tests and goldens as HOM-06.
+
+#### HOM-08 · Preserve Folders
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-05
+- **Owns (Mac):** `test/v12/preservation/folders/`
+- **Spec:** P-5, P-8: device storage root, user-added folders, breadcrumbs, natural sort, Play all, Shuffle, Add to queue, desktop drop and `danaview://` links, flag off and on; the Folders tab shows them under "Linked folders" unchanged.
+- **Acceptance criteria and tests:** behaviour tests and goldens as HOM-06.
+
+#### HOM-15 · Player and library regression suite (merge gate)
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** QA
+- **Depends on:** HOM-06, HOM-07, HOM-08
+- **Owns (Mac):** `test/v12/preservation/suite_test.dart`, `scripts/ci/v12/home_preservation.sh`
+- **Spec:** V2-32. One entry point running the 1.1 Home, player, playlist, queue, library and incoming-media tests plus HOM-06…HOM-08 with the flag off and on; INT-101's CI job calls the script on every PR touching `FEAT/library/**`, `packages/danaview_platform/**` or `packages/danaview_library*/**`.
+- **Acceptance criteria and tests:** suite green on `editor-wip`; a planted regression (a changed Continue watching label) fails it.
+
+#### HOM-09 · Recent photos tray on Overview
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-04, HOM-05
+- **Owns (Mac):** `FEAT/library/home/recent_photos_tray.dart`, `test/v12/recent_photos/`
+- **Spec:** HOM §2 item 6: horizontal carousel of the latest photos from Danaview folders and (if allowed, Q-N8) the system library; See all opens the Photos tab; tap opens the viewer (HOM-11); hidden when there are none.
+- **Acceptance criteria and tests:** widget tests for empty, few, many; matrix; tray absent when the flag is off.
+
+#### HOM-10 · Photos tab and masonry grid
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-04
+- **Owns (Mac):** `FEAT/library/tabs/photos_tab.dart`, `FEAT/library/photos/`, `test/v12/photos_tab/`
+- **Spec:** V2-102, V2-108. Virtualized masonry grid (fixed-aspect buckets so layout is O(visible)), date grouping (Today, Yesterday, This month, months), album chips (Danaview folders, Favourites, and system albums when the system library is shown), "Show my photo library" opt-in row (Q-N8 default), pinch to change density.
+- **Acceptance criteria and tests:** layout of 50,000 synthetic items computes visible ranges in ≤ 1 ms; scroll position restored across tab switches; matrix.
+
+#### HOM-11 · Fullscreen photo viewer and EXIF sheet
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-10
+- **Owns (Mac):** `FEAT/library/photo_viewer/`, `test/v12/photo_viewer/`
+- **Spec:** V2-106. Pinch and double-tap zoom, swipe between items, info sheet (EXIF date, camera, lens, exposure, dimensions, size, source), Live Photo indicator; toolbar: Share, Favourite, Delete, File info, and **Edit** that calls `onEditPhoto` (shown only when the callback is set and the editor runs, ARCH §3).
+- **Acceptance criteria and tests:** gestures and toolbar in widget tests; Edit hidden with a null callback and on desktop; RAW and HEIC display on the simulator.
+
+#### HOM-12 · Multi-select bar: Make video montage, Play in Player, Add to playlist
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-05
+- **Owns (Mac):** `FEAT/library/selection/` (except `file_actions.dart`), `test/v12/selection/`
+- **Spec:** V2-107 (Q-H2 default). Selection model across tabs (tap to toggle, drag-select, select all in group); the bar takes **action groups** from providers so HOM-22 adds file actions without editing this ticket's files; media group: Make video montage (calls `onMakeMontage`), Batch edit photos (calls `onBatchEditPhotos`), Play in Player (queues `MediaRef`s; photos per V2-V4: shown with libmpv `image-display-duration` if verified, else skipped with a notice), Add to playlist (videos).
+- **Acceptance criteria and tests:** bar shows the right groups for photos-only, videos-only, mixed and documents selections; callbacks receive items in selection order; closes V2-V4 on iOS and records the Android result.
+
+#### HOM-13 · Media badges
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-10
+- **Owns (Mac):** `FEAT/library/badges/`, `test/v12/badges/`
+- **Spec:** V2-110: duration pill, 4K/1080p, frame rate (≥ 50), RAW, HDR, Live; computed contrast on thumbnails (scrim).
+- **Acceptance criteria and tests:** goldens per badge combination; contrast ≥ 4.5:1 computed over light and dark thumbnails.
+
+#### HOM-18 · Filters All/Videos/Photos/Documents and the Folders tab
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Home UI
+- **Depends on:** HOM-05, HOM-16, HOM-17
+- **Owns (Mac):** `FEAT/library/tabs/{all_tab,videos_tab,documents_tab,folders_tab}.dart`, `FEAT/library/filters/`, `FEAT/library/folders/`, `test/v12/filters/`, `test/v12/folders_tab/`
+- **Spec:** V2-114, V2-115, HOM §5.2. `All` (chronological, every kind), `Videos` (Now Playing, Continue watching, playlists, video folders, grid with badges), `Documents` with sub-filter chips and rows (type icon or first-page thumbnail, name, size, date, page count), `Folders` with two groups: **Danaview folders** (browse, create, rename, move, nest, Recently deleted view with days left, Restore, Empty now) and **Linked folders** (the 1.1 browser unchanged, read-only for documents).
+- **Acceptance criteria and tests:** each filter shows exactly the classifier's kinds over a fixture library; folder operations call HOM-17 and update in one frame; Recently deleted rows show correct days left with a fake clock; linked-folder files offer no rename/move/delete; HOM-15 green.
+
+#### HOM-19 · Favourites, recents, name search, sort
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Library (Dart) + UI
+- **Depends on:** HOM-17
+- **Owns (Mac):** `packages/danaview_library/lib/src/organise/`, `packages/danaview_library/test/organise/`, `FEAT/library/organise/`, `FEAT/library/search/{library_search_field,name_search_controller}.dart`, `test/v12/organise/`
+- **Spec:** V2-119. Favourites (files and folders; Overview row; chip), recents (last 50 opened in any viewer; Clear; never synced), as-you-type name search over names, folder names and types across Danaview folders, linked folders and (if shown) the system library, with a hook (`SearchBackend`) that AIS-51 replaces by the index when enabled; sort by name (natural, the 1.1 `natural_sort.dart`), date added, date modified, size, type, ascending or descending, remembered per folder.
+- **Acceptance criteria and tests:** first results ≤ 50 ms per keystroke over 50,000 names on the mid tier (benchmark); sort stable and remembered; recents capped at 50; trashed items never appear.
+
+#### HOM-20 · Import pipeline and Apple pickers
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Library (Dart + Apple)
+- **Depends on:** HOM-17
+- **Owns (Mac):** `packages/danaview_library/lib/src/import/`, `packages/danaview_library/test/import/`, `LN/lib/src/native_pickers.dart`, `LN/darwin/Classes/Pickers/`, `LN/darwin/Tests/Pickers/`, `FEAT/library/import/`, `test/v12/import/`
+- **Spec:** V2-116, ARCH §5.6. `ImportService` (queue, read-only source open, streamed copy into `imports/<job>.part`, progress, resume after kill while the source is readable, duplicate rules, fsync + rename + one transaction, `sourceHint`), Apple pickers (`PHPickerViewController` with `.current` representation and no library permission, `UIDocumentPickerViewController` import mode multiple, macOS `NSOpenPanel`), desktop `file_selector`; import sheet with folder choice (default `Imported`) and progress rows.
+- **Acceptance criteria and tests:** the source file's bytes and timestamps are unchanged after import (test); kill at 50 % and relaunch resumes from `bytes_done`; duplicates suffixed or skipped as chosen; a 2 GB import keeps memory flat; XCTests for picker result mapping.
+
+#### HOM-20A · Android pickers
+
+- **Milestone:** N1 · **Lane:** Android · **Area:** Library (native)
+- **Depends on:** HOM-20, HOM-02A
+- **Owns (Android):** `LNK/pickers/`, `LN/android/src/test/kotlin/com/vecvel/danaview/library/pickers/`, `LN/android/src/androidTest/kotlin/com/vecvel/danaview/library/pickers/`
+- **Spec:** Photo Picker `ACTION_PICK_IMAGES` (multiple, back-ported through Play services where available, `ACTION_OPEN_DOCUMENT` image/video fallback), SAF `ACTION_OPEN_DOCUMENT` multiple with read-only `openFileDescriptor(uri, "r")`; no persisted grants needed (imports copy).
+- **Acceptance criteria and tests:** emulator tests on API 35 and 29 importing an image, a PDF and a video; the source URI is never opened for writing (instrumented check).
+
+#### HOM-21 · Open with Danaview and the iOS Share Extension
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Library (Dart + Apple)
+- **Depends on:** HOM-20, INT-104
+- **Owns (Mac):** `packages/danaview_library/lib/src/inbox/`, `packages/danaview_library/test/inbox/`, `LN/lib/src/native_inbox.dart`, `LN/darwin/Classes/Inbox/`, `LN/darwin/Tests/Inbox/`, `ios/DanaviewShare/` (extension sources: `ShareViewController.swift`, `FolderPickerView.swift`, `InboxWriter.swift`, `Info.plist`), `packages/danaview_platform/lib/src/incoming_media_bridge.dart` (extends v1.0), `FEAT/player/danaview_player_actions.dart` (extends v1.0), `test/v12/incoming/`
+- **Spec:** V2-116, ARCH §5.6 (owner 2026-10-16). Incoming documents and photos (Open with, `danaview://` unchanged) are imported into `Imported` and opened in their viewer; incoming videos still play at once (P-7, P-8); player menu "Save to Danaview folder". Share Extension: folder picker (reads a folder list snapshot the app writes into the App Group, never `library.db`), streamed copy into `Inbox/<batchId>/` with `manifest.json` written last, close; `InboxImporter` on launch and foreground; stale incomplete batches deleted after 24 h. Closes V2-V8.
+- **Acceptance criteria and tests:** sharing a photo, a PDF and a 2 GB video from Photos and Files on the simulator lands each in the chosen folder; the extension stays under its memory limit (Instruments recorded); an interrupted share leaves no half-imported entry; a video opened from another app plays at once as in 1.1.
+
+#### HOM-21A · Android incoming intents
+
+- **Milestone:** N1 · **Lane:** Android · **Area:** Library (native)
+- **Depends on:** HOM-21, HOM-20A
+- **Owns (Android):** `LNK/incoming/`, `LN/lib/src/native_incoming.dart`, `LN/android/src/test/kotlin/com/vecvel/danaview/library/incoming/`, `LN/android/src/androidTest/kotlin/com/vecvel/danaview/library/incoming/`
+- **Spec:** `ACTION_VIEW`, `ACTION_SEND`, `ACTION_SEND_MULTIPLE` handled in the plugin through `ActivityAware` and `addOnNewIntentListener` (no `MainActivity` edit); the manifest filters are INT-104's; video intents keep the 1.1 path (handed to `incoming_media_bridge` unchanged).
+- **Acceptance criteria and tests:** emulator: share a PDF and two images from Files, open a PDF with Danaview, open a video (plays at once); cold-start and warm-start intents both handled once.
+
+#### HOM-22 · File actions, multi-select file actions, getting files out (Apple)
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Library + UI
+- **Depends on:** HOM-17, HOM-12
+- **Owns (Mac):** `packages/danaview_library/lib/src/actions/`, `packages/danaview_library/test/actions/`, `LN/lib/src/native_{export_out,share,open_in}.dart`, `LN/darwin/Classes/{ExportOut,Share,OpenIn}/`, `LN/darwin/Tests/{ExportOut,Share,OpenIn}/`, `FEAT/library/file_actions/`, `FEAT/library/selection/file_actions.dart`, `test/v12/file_actions/`
+- **Spec:** V2-117, V2-118. Single-file menu (Share, Copy to…, Move to…, Rename, File info, Open in another app, Favourite, Delete with the "Used in N projects" warning, V2-08); multi-select file group (Share, Move, Copy, Favourite, Delete, Save out; "Merge into PDF" when only PDFs/images, routed to HOM-28); Save to Files (`forExporting:`), share sheet (`UIActivityViewController`, `NSSharingServicePicker`), Open in (`UIDocumentInteractionController`, `NSWorkspace`), Save to Photos (add-only) for media; desktop save dialogs. Shared copies are temporary read-only copies.
+- **Acceptance criteria and tests:** every action updates the database and UI; Save to Files writes a copy and never moves the library file; share hands a temporary copy that is cleaned up; the delete warning shows for a referenced entry; XCTests for each native path.
+
+#### HOM-22A · Android Save to Downloads, share, open with
+
+- **Milestone:** N1 · **Lane:** Android · **Area:** Library (native)
+- **Depends on:** HOM-22, HOM-02A
+- **Owns (Android):** `LNK/{exportout,share,openin}/`, `LN/android/src/main/res/xml/library_file_paths.xml`, `LN/android/src/main/AndroidManifest.xml` (extends HOM-02A: the plugin's `FileProvider`), `LN/android/src/test/kotlin/com/vecvel/danaview/library/{exportout,share,openin}/`, `LN/android/src/androidTest/kotlin/com/vecvel/danaview/library/{exportout,share,openin}/`
+- **Spec:** `MediaStore.Downloads` with `IS_PENDING` (29+; the editor floor), `ACTION_CREATE_DOCUMENT` below that for the Home on API 24–28, MediaStore `Pictures`/`Movies` for media, `ACTION_SEND(_MULTIPLE)` and `ACTION_VIEW` with read-only `FileProvider` grants on temporary copies.
+- **Acceptance criteria and tests:** emulator API 35, 29 and an API 28 AVD for the Home-only path: each action works with no storage permission; grants are read-only.
+
+#### HOM-23 · Viewer router, text/CSV viewer, file card
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Documents UI
+- **Depends on:** HOM-16
+- **Owns (Mac):** `DOC/lib/src/{router,text,card}/`, `DOC/test/{router,text,card}/`
+- **Spec:** V2-120, V2-121, HOM §8.4. Router by kind and platform (ARCH §3 table) with capability probes; in-app text viewer (UTF-8, UTF-16 by BOM, Latin-1 fallback with a change-encoding menu, virtualized lines, 50 MB cap with "Open in another app"); CSV/TSV read-only grid (delimiter sniffing, fixed header); file card (icon, name, size, dates, Open in another app, Share). Recents updated on open.
+- **Acceptance criteria and tests:** a 50 MB log scrolls at the grid budget; encoding fixtures decode; CSV with `,`, `;` and tab; router picks the right viewer per platform in tests; matrix.
+
+#### HOM-24 · danaview_pdf surface and the PDFKit viewer (iOS, macOS)
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Documents (native)
+- **Depends on:** HOM-23
+- **Owns (Mac):** `PDF/pigeons/pdf_api.dart`, `PDF/lib/src/pigeon/`, `PDF/lib/src/{pdf_document,pdf_view,pdf_text}.dart`, `PDF/darwin/danaview_pdf.podspec`, `PDF/darwin/Classes/{Glue,Viewer,Text}/`, `PDF/darwin/Tests/Viewer/`, `PDF/android/src/main/kotlin/com/vecvel/danaview/pdf/pigeon/` (generated only), `DOC/lib/src/pdf/viewer/`, `DOC/test/pdf/viewer/`
+- **Spec:** V2-120, V2-123, ARCH V2-25. The whole plugin surface, frozen after this ticket: `PdfDocumentApi` (open with optional password, page count, page sizes, outline, close), `PdfViewApi` (platform view: zoom, page thumbnails, search, selection, go to page), `PdfTextApi` (`extractText(range)` for the search index), `PdfToolsApi` (merge, split, reorder, rotate, delete, annotate, sign, compress, all writing new files with progress and cancel), stubs for tool classes. PDFKit viewer: `PDFView` in a `UiKitView`/`AppKitView`, password prompt (kit sheet), outline, search with result list, text selection and copy; read-only open (rule 27).
+- **Acceptance criteria and tests:** first page ≤ 500 ms for a 200-page fixture on the mid tier; search finds fixture strings; password PDF opens after the prompt; XCTests; macOS build.
+
+#### HOM-25 · Android PdfRenderer viewer and text
+
+- **Milestone:** N1 · **Lane:** Android · **Area:** Documents (native)
+- **Depends on:** HOM-24
+- **Owns (Android):** `PDF/android/build.gradle.kts`, `PDF/android/src/main/AndroidManifest.xml`, `PDFK/{glue,viewer,text}/`, stubs in `PDFK/{tools,annotate,sign,compress}/`, `PDF/android/src/test/kotlin/com/vecvel/danaview/pdf/viewer/`, `PDF/android/src/androidTest/kotlin/com/vecvel/danaview/pdf/viewer/`
+- **Spec:** `PdfRenderer` tiled rendering into a `TextureRegistry` surface, zoom and page thumbnails; text search and selection where the platform offers them (newer `PdfRenderer` APIs, `androidx.pdf`), else hidden; password files → file card where unsupported; `extractText` where available. Closes V2-V5.
+- **Acceptance criteria and tests:** emulator API 35 and 29: render, zoom, thumbnails; a support table per API level for search, selection and passwords in the PR; no crash on damaged fixtures.
+
+#### HOM-26 · Quick Look and document thumbnails (iOS, macOS)
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Documents (native)
+- **Depends on:** HOM-23, HOM-04
+- **Owns (Mac):** `LN/lib/src/native_quick_look.dart`, `LN/darwin/Classes/QuickLook/`, `LN/darwin/Tests/QuickLook/`, `DOC/lib/src/quicklook/`, `DOC/test/quicklook/`
+- **Spec:** V2-120: `QLPreviewController` (iOS) / `QLPreviewView` (macOS) for Office, text, CSV and other types, **editing disabled** (`previewController(_:editingModeFor:)` → `.disabled`); `documentThumbnail` through `QLThumbnailGenerator` into the HOM-04 cache; falls back to the file card when Quick Look can't preview.
+- **Acceptance criteria and tests:** docx, xlsx, pptx, txt, csv and an unknown type previewed or carded; a Markup attempt cannot change the stored file (bytes compared); thumbnails cached.
+
+#### HOM-27 · Spike: Android PDF write path
+
+- **Milestone:** N0 · **Lane:** Android · **Area:** Documents (native)
+- **Depends on:** INT-101
+- **Owns (Android):** `spikes/android_pdf/` (including `spikes/android_pdf/REPORT.md`)
+- **Spec:** V2-123 (owner 2026-10-16). Compare (a) platform + Jetpack (`PdfRenderer` editing additions on 15+, `androidx.pdf`, page images as the fallback on older versions), (b) PdfBox-Android, (c) PDFium for merge, split, reorder, rotate, delete, annotate, stamp and compress, on generated fixtures. Criteria: text stays selectable, AAB size per ABI, minimum API, timings on a 200-page file, licence. Route (a) is the default; (b) or (c) only if the report shows (a) turns text into pictures on supported versions. Runs on day 1; no product dependency. HOM-28 (Mac) copies the report and the decision into `docs/v1.2/files-media-home/spikes/HOM-27-android-pdf-write.md` (the Windows lane doesn't edit `docs/`).
+- **Acceptance criteria and tests:** a report with pass/fail per criterion and route, numbers, and a recommendation; closes V2-V6 once HOM-28 records it.
+
+#### HOM-28 · PDF page tools: shared organiser UI and PDFKit
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Documents
+- **Depends on:** HOM-24, HOM-27
+- **Owns (Mac):** `PDF/lib/src/pdf_tools.dart`, `PDF/darwin/Classes/Tools/`, `PDF/darwin/Tests/Tools/`, `DOC/lib/src/pdf/organiser/`, `DOC/test/pdf/organiser/`, `docs/v1.2/files-media-home/spikes/HOM-27-android-pdf-write.md`
+- **Spec:** V2-123, HOM §8.5. Page organiser (drag thumbnails, select, rotate 90°, delete, extract), merge (2+ PDFs and images, ordered), split (ranges, every N pages, extract selected), all off the UI thread with progress and cancel; results saved as new files next to the original (`Report (edited).pdf`) or **Replace** inside a Danaview folder only (write new, then rename over); PDFKit `insert`, `exchangePage`, `removePage`, `rotation`, `write(to:)`. Records HOM-27's decision.
+- **Acceptance criteria and tests:** text stays selectable after every operation (PDFKit text extraction compared); 200-page merge ≤ 10 s on the mid tier; cancel leaves no partial file; the original is unchanged (bytes).
+
+#### HOM-28A · Android PDF page tools
+
+- **Milestone:** N1 · **Lane:** Android · **Area:** Documents (native)
+- **Depends on:** HOM-28, HOM-25
+- **Owns (Android):** `PDFK/tools/`, `PDF/android/build.gradle.kts` (extends HOM-25: the HOM-27 library only if chosen), `PDF/android/LICENSE-THIRD-PARTY.md` (only if a library is chosen), `PDF/android/src/test/kotlin/com/vecvel/danaview/pdf/tools/`, `PDF/android/src/androidTest/kotlin/com/vecvel/danaview/pdf/tools/`
+- **Spec:** the HOM-27 route for merge, split, reorder, rotate, delete; same new-file and Replace rules; progress and cancel.
+- **Acceptance criteria and tests:** as HOM-28 on the emulator (API 35 and 29), with the text-preservation result per API level in the PR.
+
+#### HOM-29 · Annotate and highlight (PDFKit)
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Documents
+- **Depends on:** HOM-28
+- **Owns (Mac):** `PDF/darwin/Classes/Annotate/`, `PDF/darwin/Tests/Annotate/`, `DOC/lib/src/pdf/annotate/`, `DOC/test/pdf/annotate/`
+- **Spec:** highlight, underline, strike-through on selected text, freehand ink (PencilKit on iPad, kit drawing elsewhere), text notes; colour and width; undo/redo in the tool; saved into a new file (or Replace in a Danaview folder).
+- **Acceptance criteria and tests:** annotations survive reopen in PDFKit and in a second reader (fixture check of annotation dictionaries); undo/redo; matrix.
+
+#### HOM-29A · Android annotate and highlight
+
+- **Milestone:** N1 · **Lane:** Android · **Area:** Documents (native)
+- **Depends on:** HOM-29, HOM-28A
+- **Owns (Android):** `PDFK/annotate/`, `PDF/android/src/test/kotlin/com/vecvel/danaview/pdf/annotate/`, `PDF/android/src/androidTest/kotlin/com/vecvel/danaview/pdf/annotate/`
+- **Spec:** the same tool set on the HOM-27 route.
+- **Acceptance criteria and tests:** as HOM-29 on the emulator.
+
+#### HOM-30 · Sign and saved signatures (PDFKit)
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Documents
+- **Depends on:** HOM-29
+- **Owns (Mac):** `PDF/darwin/Classes/Sign/`, `PDF/darwin/Tests/Sign/`, `DOC/lib/src/{pdf/sign,signatures}/`, `DOC/test/{pdf/sign,signatures}/`
+- **Spec:** V2-29. Draw, type (content font) or import a signature; saved signatures in the backup-excluded store (ARCH §5.2), deletable; place, resize, rotate on a page; burned into the page content on save (visual signature, not a certificate). Closes the Apple half of V2-V7.
+- **Acceptance criteria and tests:** the burned signature renders in a second reader and is not an editable annotation; saved signatures are excluded from backup (flag checked); deleting removes the file.
+
+#### HOM-30A · Android sign
+
+- **Milestone:** N1 · **Lane:** Android · **Area:** Documents (native)
+- **Depends on:** HOM-30, HOM-29A
+- **Owns (Android):** `PDFK/sign/`, `PDF/android/src/test/kotlin/com/vecvel/danaview/pdf/sign/`, `PDF/android/src/androidTest/kotlin/com/vecvel/danaview/pdf/sign/`
+- **Spec:** burn-in on the HOM-27 route; signatures in `noBackupFilesDir/signatures/` (path supplied by Dart).
+- **Acceptance criteria and tests:** as HOM-30 on the emulator.
+
+#### HOM-31 · Compress (PDFKit)
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Documents
+- **Depends on:** HOM-28
+- **Owns (Mac):** `PDF/darwin/Classes/Compress/`, `PDF/darwin/Tests/Compress/`, `DOC/lib/src/pdf/compress/`, `DOC/test/pdf/compress/`
+- **Spec:** presets High / Medium / Small (image downsampling and JPEG quality through `write(to:withOptions:)` on iOS 16+ / macOS 13+, page re-render fallback below), before/after size, cancellable progress, new file. Closes V2-V7's compression half.
+- **Acceptance criteria and tests:** each preset shrinks an image-heavy fixture and keeps text selectable; sizes shown match the written file.
+
+#### HOM-31A · Android compress
+
+- **Milestone:** N1 · **Lane:** Android · **Area:** Documents (native)
+- **Depends on:** HOM-31, HOM-28A
+- **Owns (Android):** `PDFK/compress/`, `PDF/android/src/test/kotlin/com/vecvel/danaview/pdf/compress/`, `PDF/android/src/androidTest/kotlin/com/vecvel/danaview/pdf/compress/`
+- **Spec:** the same presets on the HOM-27 route.
+- **Acceptance criteria and tests:** as HOM-31 on the emulator.
+
+#### HOM-14 · Stress: 50,000-item Home scroll
+
+- **Milestone:** N5 · **Lane:** Mac + Android · **Area:** QA
+- **Depends on:** HOM-10, HOM-18, HOM-04A
+- **Owns (Mac):** `integration_test/v12/home_stress/`, `tool/v12/make_library_fixture.dart`, `docs/v1.2/files-media-home/qa/HOM-14-stress.md`; **(Android):** the Android section's run (no files beyond the report section the Mac merges from the lane's notes)
+- **Spec:** G-H2, ARCH §10.1. A generated library of 50,000 mixed items (Danaview folders) and a 10,000-document set; fling and drag scripts on every tab; frame timings, memory and thumbnail cache behaviour recorded on the simulator, the emulator and the device lab.
+- **Acceptance criteria and tests:** the §10.1 Home budgets met (or renegotiated in writing) on the mid tier; no frame > 2× budget in a 10 s fling more than twice.
+
+#### HOM-32 · Documents test pass
+
+- **Milestone:** N5 · **Lane:** Mac + Android · **Area:** QA
+- **Depends on:** HOM-18, HOM-19, HOM-20A, HOM-21A, HOM-22A, HOM-25, HOM-26, HOM-29A, HOM-30A, HOM-31A, HOM-15, INT-104
+- **Owns (Mac):** `integration_test/v12/documents/`, `scripts/ci/v12/documents_e2e.sh`, `docs/v1.2/files-media-home/qa/HOM-32-documents.md`
+- **Spec:** HOM-32 of the plan: originals never modified across import, viewers and every PDF tool (bytes and timestamps); backup and restore of Danaview folders on a test device (iOS device backup; Android device-to-device transfer); 10,000-file library scroll and search timings; a11y labels and text scale 0.85–1.35 on every new screen; a full re-run of HOM-15.
+- **Acceptance criteria and tests:** every scenario passes on the iOS Simulator and the Android Emulator with evidence; backup results recorded per platform (closes V2-V1 with QA-106).
