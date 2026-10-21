@@ -1,0 +1,16 @@
+import 'dart:math' as math;
+
+import 'package:collection/collection.dart';
+
+// An HttpClient( mentioned in a comment, a string or as a type is not a construction (rule 14).
+const doc = 'uses HttpClient( through the transport';
+HttpClient? notConstructed;
+
+// The key goes in the x-goog-api-key header (rule 15); literal logs are fine.
+void ready(Ledger ledger) {
+  print('provider ready');
+  print('a' 'b');
+  stderr.writeln(r'raw literal');
+  ledger.log(entry);
+  final x = math.log(2);
+}

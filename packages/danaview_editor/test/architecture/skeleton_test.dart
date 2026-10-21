@@ -1,4 +1,5 @@
 // OWNER: UX-01
+// EXTENDED: AIS-01 (the 1.2.0 binding files of AI_STUDIO_PLAN §5.5 are merged too)
 //
 // D-33 skeleton coverage (BUILD_PLAN §2, UX-01): every danaview_editor path a ticket owns in
 // BUILD_PLAN §6 exists from M0 (a placeholder until the owner lands), headers name the owning
@@ -111,8 +112,9 @@ void main() {
   });
 
   test('every per-feature binding file is merged by wiring/action_bindings.dart', () {
+    final aisOwned = _ownedEditorPaths(File('${root.path}/docs/v1.2/ai-studio/AI_STUDIO_PLAN.md').readAsStringSync());
     final planned = {
-      for (final e in owned.entries)
+      for (final e in [...owned.entries, ...aisOwned.entries])
         if (e.key.contains('/actions/bindings/')) e.key.split('/').last.replaceAll('.dart', ''): e.value,
     };
     final onDisk = Directory('${root.path}/$_package/lib/src/editor/actions/bindings')
@@ -121,7 +123,7 @@ void main() {
         .map((f) => f.uri.pathSegments.last.replaceAll('.dart', ''))
         .toSet();
     final wired = {for (final s in editorBindingSources) s.file: s.owner};
-    expect(planned, hasLength(22));
+    expect(planned, hasLength(22 + 7));
     expect(onDisk, planned.keys.toSet());
     expect(wired, planned);
   });

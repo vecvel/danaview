@@ -1,7 +1,12 @@
 // OWNER: UX-01
+// EXTENDED: AIS-01 (1.2.0: no new top-level tool, see below)
 //
 // Top-level tools shown when nothing is selected (ARCH §17.7, ux.md §9.1). Context tools for a
 // selection are `EditorActionId`s chosen by `ToolSets.forSelection` (UX-16).
+//
+// 1.2.0 (AI_STUDIO_PLAN §4.2, §4.4): the strip is unchanged. The rich-subtitle and AI Studio entry
+// points (Transcript, AI Studio, Translate, presets, fonts) live in the Captions tool's panel
+// header ([ToolId.captions]) and the cue selection tools; AI ones only with `DANAVIEW_AI_STUDIO`.
 
 import 'action_ids.dart';
 

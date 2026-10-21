@@ -1,4 +1,5 @@
 // OWNER: UX-01
+// EXTENDED: AIS-01 (EditorActionId = the ARCH §17.6 list plus the AI_STUDIO_PLAN §4.4 additions)
 //
 // The editor contracts match ARCH: EditorActionId is the complete ARCH §17.6 list with its groups,
 // ToolId is the ux.md §9.1 strip, InspectorRoute equality and re-targeting, and the binding merge
@@ -16,21 +17,37 @@ import 'arch_scan.dart';
 
 void main() {
   group('EditorActionId', () {
-    test('is exactly the ARCH §17.6 list, in order and by group', () {
+    test('is exactly the ARCH §17.6 list plus AI_STUDIO_PLAN §4.4, in order and by group', () {
       final arch = File('${findRepoRoot().path}/docs/v1.1/editor/ARCHITECTURE.md').readAsStringSync();
+      final aisPlan = File('${findRepoRoot().path}/docs/v1.2/ai-studio/AI_STUDIO_PLAN.md').readAsStringSync();
+      final aisHeading = aisPlan.indexOf('### 4.4 Action registry additions');
+      final aisLine = aisPlan.substring(aisHeading).split('\n').firstWhere((l) => l.startsWith('`aiStudio,'));
+      final aisNames = aisLine.substring(1, aisLine.indexOf('`', 1)).split(',').map((s) => s.trim()).toList();
+      expect(aisNames, hasLength(20));
+      expect(EditorActionId.v12Additions.map((a) => a.name).toSet(), aisNames.toSet());
       final line = arch.split('\n').firstWhere((l) => l.startsWith('`EditorActionId` (complete list, UX-01)'));
       final groups = {
         for (final m in RegExp(r'(playback|editing|timeline|markers|tools) `([^`]+)`').allMatches(line))
           m[1]!: m[2]!.split(',').map((s) => s.trim()).toList(),
       };
       expect(groups.keys, ['playback', 'editing', 'timeline', 'markers', 'tools']);
+      // 1.2.0 ids follow each group's 1.1 ids (AIS-01: editing and tools).
+      final added = {for (final a in EditorActionId.v12Additions) a.group.name: <String>[]};
+      for (final a in EditorActionId.v12Additions) {
+        added[a.group.name]!.add(a.name);
+      }
+      expect(added.keys.toSet(), {'editing', 'tools'});
       final expected = [
-        for (final g in groups.entries)
-          for (final name in g.value) (g.key, name)
+        for (final g in groups.entries) ...[
+          for (final name in g.value) (g.key, name),
+          for (final name in added[g.key] ?? const <String>[]) (g.key, name),
+        ]
       ];
       final actual = [for (final a in EditorActionId.values) (a.group.name, a.name)];
       expect(actual, expected);
-      expect(EditorActionId.values, hasLength(76));
+      expect(EditorActionId.values, hasLength(76 + 20));
+      expect(EditorActionId.aiStudioActions,
+          {EditorActionId.aiStudio, EditorActionId.askAi, EditorActionId.translateTrack, EditorActionId.reviewAiChanges});
     });
 
     test('byName and inGroup', () {
@@ -122,7 +139,7 @@ void main() {
       );
     });
 
-    test('the provider exposes the merged real bindings', () {
+    test('the provider exposes the merged real bindings (gated by DANAVIEW_AI_STUDIO)', () {
       final c = ProviderContainer();
       addTearDown(c.dispose);
       final merged = c.read(editorActionBindingsProvider);

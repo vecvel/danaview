@@ -1,0 +1,7 @@
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
+import 'package:meta/meta.dart';
+
+// The one allowed HttpClient construction site (rule 14).
+final client = HttpClient();

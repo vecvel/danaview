@@ -1,0 +1,4 @@
+// A tear-off of the constructor is a call site too (rule 13/17).
+import 'package:danaview_ai_providers/danaview_ai_providers.dart';
+
+final accept = AiSendConsent.accepted;

@@ -1,0 +1,3 @@
+name: danaview_ai_providers
+dependencies:
+  meta: ^1.11.0

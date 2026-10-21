@@ -1,4 +1,5 @@
 // OWNER: UX-01
+// EXTENDED: AIS-01 (the DANAVIEW_AI_STUDIO build flag, AI_STUDIO_PLAN D-65; ARCH v1.2 V2-04)
 //
 // Editor availability (ARCH §3.3, §17.1, D-17, D-31).
 //
@@ -15,6 +16,12 @@ import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 
 import 'editor_providers.dart';
 
+/// `DANAVIEW_AI_STUDIO` (AI_STUDIO_PLAN D-65, ARCH v1.2 V2-04): the AI Studio build flag. Default
+/// false; AIS-41 passes it in release builds. Off: no AI action, tool, settings row or Ask AI is
+/// shown and nothing can build a provider. Rich subtitles, fonts and presets are not flagged.
+/// Read it through [EditorFlags.aiStudioEnabled] so tests can override it.
+const bool aiStudioFlag = bool.fromEnvironment('DANAVIEW_AI_STUDIO');
+
 /// Compile-time feature flags of the editor (D-31). Both default to false; release builds pass
 /// `--dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true` (INT-05).
 ///
@@ -25,6 +32,16 @@ abstract final class EditorFlags {
 
   /// `DANAVIEW_AUTO_CAPTIONS`: the Auto captions UI (UX-37 also requires a non-empty `offers()`).
   static const bool autoCaptions = bool.fromEnvironment('DANAVIEW_AUTO_CAPTIONS');
+
+  /// `DANAVIEW_AI_STUDIO`: AI Studio entry points (AI_STUDIO_PLAN D-65; [aiStudioFlag]).
+  static const bool aiStudio = aiStudioFlag;
+
+  /// Test-only override of [aiStudio]; null uses the compile-time value.
+  @visibleForTesting
+  static bool? debugAiStudioOverride;
+
+  /// The effective `DANAVIEW_AI_STUDIO` value.
+  static bool get aiStudioEnabled => debugAiStudioOverride ?? aiStudio;
 
   /// Test-only override of [editor]; null uses the compile-time value.
   @visibleForTesting

@@ -1,0 +1,16 @@
+import 'dart:developer' as developer;
+import 'dart:io';
+import 'dart:math' as math;
+
+void send(String body, Object response, Cue caption, String prompt, Ledger ledger) {
+  print('body: $body');
+  debugPrint(response.toString());
+  developer.log('cue ${caption.text}');
+  stderr.writeln(prompt);
+  // Allowed: literals, adjacent literals, and method calls named log.
+  print('sending');
+  print('a'
+      'b');
+  ledger.log(caption);
+  final y = math.log(10);
+}

@@ -153,6 +153,8 @@ Status: **final** (no owner input needed), **owner 2026-10-15/16** (decided), **
 
 #### AI Studio and rich subtitles (AIS plan §2, §7)
 
+**Recorded by AIS-01 (2026-10-22, V2-33).** D-45…D-70 and D-70a…D-70i are recorded here as V2-201…V2-235; v1.1 ARCH is not edited (its own D-45 stays the render-preview cache). The rows marked **[OWNER]** have no owner answer yet: Q-A1…Q-A10 (§16) list the recommendation, which is the working default until the owner decides; AIS-41 closes them. The AIS-01 skeleton is in place: `danaview_ai_providers` and `danaview_ai_studio` (placeholders, analyzed and tested by the `ai-dart` CI job, `scripts/ci/editor/ai.sh`), the 20 `EditorActionId`s of AIS §4.4, `SubtitlesPanelSection.{transcript, review, cue}`, the `DANAVIEW_AI_STUDIO` flag (`aiStudioFlag` / `EditorFlags.aiStudioEnabled`; off hides the four AI actions), the root providers `aiStudioServiceProvider` (default `AiStudioOff`), `fontLibraryProvider`, `subtitlePresetStoreProvider`, and rules 9–12, 14, 15 in `test/architecture/dependency_rules_test.dart`. Rule 13 is checked with the rule 17 paths (V2-20) by `packages/danaview_editor/test/architecture/ai_call_sites_test.dart` until AIS-43 moves it.
+
 | V2 | Plan | Decision (short) | Status | Here |
 |---|---|---|---|---|
 | V2-201 | D-45 | Privacy model: master switch off, per-provider opt-in, disclosure + Send per action, nothing automatic | **[OWNER]** Q-A1 (recommended a) | §7.2 |
@@ -339,7 +341,7 @@ Rules 1–8 are v1.1 ARCH §4.2 and stay as they are. Rules 9–19 are the AIS p
 | `danaview_pdf` | Flutter plugin (iOS, macOS via `darwin/`, Android) | INT-101; surface HOM-24 | `pigeons/pdf_api.dart`, `lib/src/{pdf_document,pdf_view,pdf_tools,pdf_text}.dart`, `darwin/Classes/{Glue,Viewer,Text,Tools,Annotate,Sign,Compress}/`, `android/src/main/kotlin/com/vecvel/danaview/pdf/{glue,viewer,text,tools,annotate,sign,compress}/` |
 | `danaview_documents` | Flutter UI | INT-101 | `lib/src/{router,text,card,pdf/{viewer,organiser,annotate,sign,compress},quicklook,signatures}/` |
 | `danaview_face_tracking` | Flutter plugin (iOS, Android) | INT-101; surface VED-16 | `pigeons/face_api.dart`, `lib/src/{face_tracker,video_sampler,models}.dart`, `ios/Classes/{Glue,Face,Pose,Segmentation,VideoSampler}/`, `android/src/main/kotlin/com/vecvel/danaview/face/{glue,face,pose,segmentation,videosampler}/` |
-| AI packages | per AIS plan §3.1 | AIS-01, AIS-11, AIS-43, AIS-45, AIS-50; `danaview_search` skeleton by INT-101 | per AIS plan §3.2 as amended by V2-20, V2-24 |
+| AI packages | per AIS plan §3.1 | AIS-01, AIS-11, AIS-43, AIS-45, AIS-50; `danaview_search` skeleton by INT-101 | per AIS plan §3.2 as amended by V2-20, V2-24. **Status (AIS-01, 2026-10-22):** `danaview_ai_providers` and `danaview_ai_studio` exist with D-33 placeholders; the moved paths (`danaview_ai_ui`, V2-20; `lib/adapters/`, V2-24) are left to AIS-43 and AIS-37 |
 
 ### 4.4 Changed existing packages (who extends what)
 

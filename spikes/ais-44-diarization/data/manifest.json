@@ -1,0 +1,69 @@
+[
+ {
+  "clip": "c1_2spk_turns",
+  "duration": 31.15,
+  "speakers": [
+   "Daniel",
+   "Samantha"
+  ],
+  "overlap_seconds": 0.0
+ },
+ {
+  "clip": "c2_2spk_overlap",
+  "duration": 24.75,
+  "speakers": [
+   "Daniel",
+   "Samantha"
+  ],
+  "overlap_seconds": 4.7
+ },
+ {
+  "clip": "c3_3spk_turns",
+  "duration": 34.33,
+  "speakers": [
+   "Daniel",
+   "Karen",
+   "Samantha"
+  ],
+  "overlap_seconds": 0.0
+ },
+ {
+  "clip": "c4_3spk_overlap",
+  "duration": 27.33,
+  "speakers": [
+   "Daniel",
+   "Karen",
+   "Samantha"
+  ],
+  "overlap_seconds": 4.8
+ },
+ {
+  "clip": "c5_2spk_similar",
+  "duration": 27.72,
+  "speakers": [
+   "Karen",
+   "Samantha"
+  ],
+  "overlap_seconds": 1.01
+ },
+ {
+  "clip": "c6_2spk_male",
+  "duration": 32.45,
+  "speakers": [
+   "Daniel",
+   "Ralph"
+  ],
+  "overlap_seconds": 0.8
+ },
+ {
+  "clip": "l1_4spk_long",
+  "duration": 553.657,
+  "speakers": [
+   "Daniel",
+   "Karen",
+   "Ralph",
+   "Samantha"
+  ],
+  "overlap_seconds": 23.25
+ }
+]

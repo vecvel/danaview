@@ -1,0 +1,51 @@
+{
+ "clip": "c2_2spk_overlap",
+ "duration": 24.75,
+ "speakers": [
+  "Daniel",
+  "Samantha"
+ ],
+ "overlap_seconds": 4.7,
+ "segments": [
+  {
+   "speaker": "Samantha",
+   "start": 0.5,
+   "end": 3.7
+  },
+  {
+   "speaker": "Daniel",
+   "start": 2.5,
+   "end": 5.69
+  },
+  {
+   "speaker": "Samantha",
+   "start": 6.19,
+   "end": 8.93
+  },
+  {
+   "speaker": "Daniel",
+   "start": 7.43,
+   "end": 11.63
+  },
+  {
+   "speaker": "Samantha",
+   "start": 12.23,
+   "end": 15.5
+  },
+  {
+   "speaker": "Daniel",
+   "start": 13.5,
+   "end": 16.59
+  },
+  {
+   "speaker": "Samantha",
+   "start": 17.09,
+   "end": 20.29
+  },
+  {
+   "speaker": "Daniel",
+   "start": 20.79,
+   "end": 23.95
+  }
+ ]
+}

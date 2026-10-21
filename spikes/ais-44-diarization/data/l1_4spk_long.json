@@ -1,0 +1,778 @@
+{
+ "clip": "l1_4spk_long",
+ "duration": 553.657,
+ "speakers": [
+  "Daniel",
+  "Karen",
+  "Ralph",
+  "Samantha"
+ ],
+ "overlap_seconds": 23.25,
+ "segments": [
+  {
+   "speaker": "Samantha",
+   "start": 0.781,
+   "end": 3.661
+  },
+  {
+   "speaker": "Daniel",
+   "start": 4.02,
+   "end": 6.55
+  },
+  {
+   "speaker": "Karen",
+   "start": 7.315,
+   "end": 10.255
+  },
+  {
+   "speaker": "Ralph",
+   "start": 9.218,
+   "end": 13.448
+  },
+  {
+   "speaker": "Samantha",
+   "start": 13.995,
+   "end": 17.195
+  },
+  {
+   "speaker": "Daniel",
+   "start": 17.615,
+   "end": 21.815
+  },
+  {
+   "speaker": "Ralph",
+   "start": 22.383,
+   "end": 25.833
+  },
+  {
+   "speaker": "Samantha",
+   "start": 26.292,
+   "end": 29.342
+  },
+  {
+   "speaker": "Daniel",
+   "start": 29.993,
+   "end": 33.493
+  },
+  {
+   "speaker": "Samantha",
+   "start": 34.297,
+   "end": 37.577
+  },
+  {
+   "speaker": "Ralph",
+   "start": 38.208,
+   "end": 42.128
+  },
+  {
+   "speaker": "Samantha",
+   "start": 42.92,
+   "end": 46.69
+  },
+  {
+   "speaker": "Daniel",
+   "start": 47.283,
+   "end": 50.373
+  },
+  {
+   "speaker": "Karen",
+   "start": 50.873,
+   "end": 54.843
+  },
+  {
+   "speaker": "Samantha",
+   "start": 55.315,
+   "end": 58.425
+  },
+  {
+   "speaker": "Daniel",
+   "start": 58.846,
+   "end": 62.006
+  },
+  {
+   "speaker": "Ralph",
+   "start": 62.773,
+   "end": 66.543
+  },
+  {
+   "speaker": "Daniel",
+   "start": 67.413,
+   "end": 71.203
+  },
+  {
+   "speaker": "Karen",
+   "start": 71.846,
+   "end": 74.406
+  },
+  {
+   "speaker": "Ralph",
+   "start": 74.708,
+   "end": 77.848
+  },
+  {
+   "speaker": "Samantha",
+   "start": 78.478,
+   "end": 81.758
+  },
+  {
+   "speaker": "Daniel",
+   "start": 82.108,
+   "end": 85.658
+  },
+  {
+   "speaker": "Karen",
+   "start": 85.98,
+   "end": 88.35
+  },
+  {
+   "speaker": "Ralph",
+   "start": 88.879,
+   "end": 92.709
+  },
+  {
+   "speaker": "Karen",
+   "start": 92.106,
+   "end": 95.056
+  },
+  {
+   "speaker": "Daniel",
+   "start": 95.56,
+   "end": 98.72
+  },
+  {
+   "speaker": "Karen",
+   "start": 99.24,
+   "end": 102.51
+  },
+  {
+   "speaker": "Ralph",
+   "start": 103.133,
+   "end": 106.843
+  },
+  {
+   "speaker": "Samantha",
+   "start": 106.164,
+   "end": 109.834
+  },
+  {
+   "speaker": "Daniel",
+   "start": 110.456,
+   "end": 113.646
+  },
+  {
+   "speaker": "Karen",
+   "start": 114.376,
+   "end": 117.646
+  },
+  {
+   "speaker": "Ralph",
+   "start": 116.158,
+   "end": 119.088
+  },
+  {
+   "speaker": "Daniel",
+   "start": 117.704,
+   "end": 120.574
+  },
+  {
+   "speaker": "Samantha",
+   "start": 121.152,
+   "end": 124.352
+  },
+  {
+   "speaker": "Karen",
+   "start": 124.686,
+   "end": 127.626
+  },
+  {
+   "speaker": "Ralph",
+   "start": 128.495,
+   "end": 131.796
+  },
+  {
+   "speaker": "Karen",
+   "start": 130.4,
+   "end": 133.77
+  },
+  {
+   "speaker": "Daniel",
+   "start": 134.157,
+   "end": 137.827
+  },
+  {
+   "speaker": "Ralph",
+   "start": 138.433,
+   "end": 141.363
+  },
+  {
+   "speaker": "Samantha",
+   "start": 141.879,
+   "end": 145.079
+  },
+  {
+   "speaker": "Daniel",
+   "start": 145.388,
+   "end": 148.868
+  },
+  {
+   "speaker": "Karen",
+   "start": 149.687,
+   "end": 153.657
+  },
+  {
+   "speaker": "Ralph",
+   "start": 154.277,
+   "end": 158.197
+  },
+  {
+   "speaker": "Samantha",
+   "start": 157.401,
+   "end": 160.451
+  },
+  {
+   "speaker": "Daniel",
+   "start": 161.328,
+   "end": 164.108
+  },
+  {
+   "speaker": "Karen",
+   "start": 164.907,
+   "end": 167.857
+  },
+  {
+   "speaker": "Ralph",
+   "start": 167.231,
+   "end": 171.731
+  },
+  {
+   "speaker": "Samantha",
+   "start": 172.142,
+   "end": 175.812
+  },
+  {
+   "speaker": "Daniel",
+   "start": 176.334,
+   "end": 179.524
+  },
+  {
+   "speaker": "Karen",
+   "start": 179.841,
+   "end": 182.621
+  },
+  {
+   "speaker": "Samantha",
+   "start": 181.789,
+   "end": 184.839
+  },
+  {
+   "speaker": "Daniel",
+   "start": 185.261,
+   "end": 188.761
+  },
+  {
+   "speaker": "Samantha",
+   "start": 189.123,
+   "end": 192.393
+  },
+  {
+   "speaker": "Daniel",
+   "start": 191.018,
+   "end": 193.798
+  },
+  {
+   "speaker": "Karen",
+   "start": 194.59,
+   "end": 197.96
+  },
+  {
+   "speaker": "Daniel",
+   "start": 198.292,
+   "end": 201.952
+  },
+  {
+   "speaker": "Samantha",
+   "start": 202.377,
+   "end": 206.047
+  },
+  {
+   "speaker": "Daniel",
+   "start": 206.548,
+   "end": 209.288
+  },
+  {
+   "speaker": "Karen",
+   "start": 209.95,
+   "end": 212.799
+  },
+  {
+   "speaker": "Ralph",
+   "start": 211.403,
+   "end": 214.643
+  },
+  {
+   "speaker": "Samantha",
+   "start": 214.948,
+   "end": 217.408
+  },
+  {
+   "speaker": "Daniel",
+   "start": 216.581,
+   "end": 220.081
+  },
+  {
+   "speaker": "Ralph",
+   "start": 220.617,
+   "end": 223.917
+  },
+  {
+   "speaker": "Samantha",
+   "start": 224.691,
+   "end": 226.911
+  },
+  {
+   "speaker": "Daniel",
+   "start": 227.701,
+   "end": 230.481
+  },
+  {
+   "speaker": "Karen",
+   "start": 231.021,
+   "end": 234.291
+  },
+  {
+   "speaker": "Ralph",
+   "start": 234.916,
+   "end": 239.146
+  },
+  {
+   "speaker": "Samantha",
+   "start": 239.459,
+   "end": 242.509
+  },
+  {
+   "speaker": "Daniel",
+   "start": 243.287,
+   "end": 246.157
+  },
+  {
+   "speaker": "Karen",
+   "start": 246.897,
+   "end": 249.747
+  },
+  {
+   "speaker": "Ralph",
+   "start": 250.113,
+   "end": 254.033
+  },
+  {
+   "speaker": "Samantha",
+   "start": 254.696,
+   "end": 257.807
+  },
+  {
+   "speaker": "Ralph",
+   "start": 258.391,
+   "end": 262.501
+  },
+  {
+   "speaker": "Daniel",
+   "start": 263.301,
+   "end": 265.931
+  },
+  {
+   "speaker": "Samantha",
+   "start": 266.539,
+   "end": 269.589
+  },
+  {
+   "speaker": "Ralph",
+   "start": 270.263,
+   "end": 274.533
+  },
+  {
+   "speaker": "Samantha",
+   "start": 273.879,
+   "end": 276.389
+  },
+  {
+   "speaker": "Daniel",
+   "start": 277.034,
+   "end": 280.584
+  },
+  {
+   "speaker": "Karen",
+   "start": 281.17,
+   "end": 283.95
+  },
+  {
+   "speaker": "Ralph",
+   "start": 284.464,
+   "end": 289.154
+  },
+  {
+   "speaker": "Karen",
+   "start": 289.999,
+   "end": 292.549
+  },
+  {
+   "speaker": "Daniel",
+   "start": 291.682,
+   "end": 294.542
+  },
+  {
+   "speaker": "Karen",
+   "start": 295.126,
+   "end": 298.566
+  },
+  {
+   "speaker": "Ralph",
+   "start": 299.288,
+   "end": 303.978
+  },
+  {
+   "speaker": "Samantha",
+   "start": 304.752,
+   "end": 307.262
+  },
+  {
+   "speaker": "Daniel",
+   "start": 307.856,
+   "end": 310.896
+  },
+  {
+   "speaker": "Samantha",
+   "start": 311.741,
+   "end": 315.411
+  },
+  {
+   "speaker": "Ralph",
+   "start": 314.121,
+   "end": 317.011
+  },
+  {
+   "speaker": "Samantha",
+   "start": 317.336,
+   "end": 320.076
+  },
+  {
+   "speaker": "Daniel",
+   "start": 320.568,
+   "end": 324.048
+  },
+  {
+   "speaker": "Karen",
+   "start": 324.429,
+   "end": 328.329
+  },
+  {
+   "speaker": "Ralph",
+   "start": 329.127,
+   "end": 332.837
+  },
+  {
+   "speaker": "Samantha",
+   "start": 333.671,
+   "end": 337.081
+  },
+  {
+   "speaker": "Daniel",
+   "start": 337.961,
+   "end": 340.741
+  },
+  {
+   "speaker": "Karen",
+   "start": 340.117,
+   "end": 343.247
+  },
+  {
+   "speaker": "Ralph",
+   "start": 343.636,
+   "end": 346.526
+  },
+  {
+   "speaker": "Samantha",
+   "start": 346.979,
+   "end": 350.029
+  },
+  {
+   "speaker": "Daniel",
+   "start": 350.44,
+   "end": 353.07
+  },
+  {
+   "speaker": "Karen",
+   "start": 353.846,
+   "end": 356.626
+  },
+  {
+   "speaker": "Ralph",
+   "start": 357.281,
+   "end": 360.211
+  },
+  {
+   "speaker": "Samantha",
+   "start": 360.994,
+   "end": 364.664
+  },
+  {
+   "speaker": "Karen",
+   "start": 365.347,
+   "end": 368.347
+  },
+  {
+   "speaker": "Ralph",
+   "start": 368.834,
+   "end": 372.754
+  },
+  {
+   "speaker": "Samantha",
+   "start": 373.457,
+   "end": 376.657
+  },
+  {
+   "speaker": "Karen",
+   "start": 377.267,
+   "end": 381.237
+  },
+  {
+   "speaker": "Daniel",
+   "start": 380.632,
+   "end": 383.372
+  },
+  {
+   "speaker": "Ralph",
+   "start": 383.672,
+   "end": 387.592
+  },
+  {
+   "speaker": "Samantha",
+   "start": 388.221,
+   "end": 391.421
+  },
+  {
+   "speaker": "Daniel",
+   "start": 391.98,
+   "end": 395.77
+  },
+  {
+   "speaker": "Karen",
+   "start": 396.153,
+   "end": 399.153
+  },
+  {
+   "speaker": "Ralph",
+   "start": 399.462,
+   "end": 402.912
+  },
+  {
+   "speaker": "Samantha",
+   "start": 403.705,
+   "end": 406.405
+  },
+  {
+   "speaker": "Daniel",
+   "start": 407.252,
+   "end": 410.732
+  },
+  {
+   "speaker": "Karen",
+   "start": 410.137,
+   "end": 412.987
+  },
+  {
+   "speaker": "Samantha",
+   "start": 411.654,
+   "end": 414.534
+  },
+  {
+   "speaker": "Daniel",
+   "start": 415.018,
+   "end": 418.518
+  },
+  {
+   "speaker": "Samantha",
+   "start": 419.127,
+   "end": 422.397
+  },
+  {
+   "speaker": "Daniel",
+   "start": 422.857,
+   "end": 426.527
+  },
+  {
+   "speaker": "Karen",
+   "start": 427.369,
+   "end": 430.319
+  },
+  {
+   "speaker": "Ralph",
+   "start": 430.933,
+   "end": 433.823
+  },
+  {
+   "speaker": "Samantha",
+   "start": 434.57,
+   "end": 437.45
+  },
+  {
+   "speaker": "Daniel",
+   "start": 438.011,
+   "end": 440.641
+  },
+  {
+   "speaker": "Karen",
+   "start": 441.208,
+   "end": 443.758
+  },
+  {
+   "speaker": "Ralph",
+   "start": 444.206,
+   "end": 447.506
+  },
+  {
+   "speaker": "Samantha",
+   "start": 448.333,
+   "end": 452.003
+  },
+  {
+   "speaker": "Daniel",
+   "start": 452.445,
+   "end": 455.695
+  },
+  {
+   "speaker": "Karen",
+   "start": 456.348,
+   "end": 458.898
+  },
+  {
+   "speaker": "Samantha",
+   "start": 458.355,
+   "end": 461.765
+  },
+  {
+   "speaker": "Daniel",
+   "start": 462.175,
+   "end": 465.675
+  },
+  {
+   "speaker": "Karen",
+   "start": 465.079,
+   "end": 468.979
+  },
+  {
+   "speaker": "Ralph",
+   "start": 469.418,
+   "end": 473.528
+  },
+  {
+   "speaker": "Samantha",
+   "start": 474.152,
+   "end": 476.892
+  },
+  {
+   "speaker": "Daniel",
+   "start": 477.543,
+   "end": 481.213
+  },
+  {
+   "speaker": "Karen",
+   "start": 481.521,
+   "end": 485.491
+  },
+  {
+   "speaker": "Ralph",
+   "start": 486.039,
+   "end": 490.149
+  },
+  {
+   "speaker": "Samantha",
+   "start": 490.635,
+   "end": 493.975
+  },
+  {
+   "speaker": "Daniel",
+   "start": 492.699,
+   "end": 496.899
+  },
+  {
+   "speaker": "Ralph",
+   "start": 497.566,
+   "end": 500.686
+  },
+  {
+   "speaker": "Karen",
+   "start": 501.449,
+   "end": 504.299
+  },
+  {
+   "speaker": "Ralph",
+   "start": 504.726,
+   "end": 508.546
+  },
+  {
+   "speaker": "Samantha",
+   "start": 508.864,
+   "end": 512.134
+  },
+  {
+   "speaker": "Daniel",
+   "start": 511.31,
+   "end": 514.5
+  },
+  {
+   "speaker": "Karen",
+   "start": 514.901,
+   "end": 518.161
+  },
+  {
+   "speaker": "Samantha",
+   "start": 518.663,
+   "end": 522.433
+  },
+  {
+   "speaker": "Daniel",
+   "start": 521.789,
+   "end": 525.269
+  },
+  {
+   "speaker": "Karen",
+   "start": 525.692,
+   "end": 528.242
+  },
+  {
+   "speaker": "Ralph",
+   "start": 528.7,
+   "end": 531.84
+  },
+  {
+   "speaker": "Daniel",
+   "start": 532.391,
+   "end": 535.581
+  },
+  {
+   "speaker": "Samantha",
+   "start": 536.322,
+   "end": 539.652
+  },
+  {
+   "speaker": "Daniel",
+   "start": 540.252,
+   "end": 543.732
+  },
+  {
+   "speaker": "Ralph",
+   "start": 544.133,
+   "end": 547.433
+  },
+  {
+   "speaker": "Samantha",
+   "start": 548.33,
+   "end": 550.79
+  },
+  {
+   "speaker": "Daniel",
+   "start": 549.817,
+   "end": 552.857
+  }
+ ]
+}

@@ -1,4 +1,5 @@
 // OWNER: UX-01
+// EXTENDED: AIS-01 (SubtitlesPanelSection.transcript, review, cue; AI_STUDIO_PLAN §4.4)
 //
 // What the inspector shows (ARCH §17.7, ux.md §9.3). `InspectorHost` (UX-16) maps each route to
 // its panel; panel constructors take their route (`TransformPanel(route: TransformInspector(…))`).
@@ -56,6 +57,20 @@ enum SubtitlesPanelSection {
 
   /// Track position.
   position,
+
+  /// Transcript view and the rich cue editor (AIS-17; AI_STUDIO_PLAN §4.3 U4).
+  transcript,
+
+  /// Review of AI suggestions (AIS-33; AI_STUDIO_PLAN §4.3).
+  review,
+
+  /// The focused cue: placement, overrides, speaker, emotion (AIS-18; AI_STUDIO_PLAN §4.3).
+  cue;
+
+  /// The 1.1 sections (UX-31's Captions / Style / Position switcher). The 1.2.0 sections are added
+  /// to the panel by their owners (AIS-17, AIS-18, AIS-33); until then the panel shows the cue
+  /// list for them.
+  static const List<SubtitlesPanelSection> v11 = [cues, style, position];
 }
 
 /// A panel of the inspector and what it targets.

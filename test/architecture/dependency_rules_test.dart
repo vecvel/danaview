@@ -1,7 +1,13 @@
 // OWNER: INT-01
+// EXTENDED: AIS-01 (1.2.0 rules 9–12, 14 and 15 of AI_STUDIO_PLAN §3.1 / ARCH v1.2 §4.2)
 //
 // Architecture rules for the editor packages (ARCH §4.2 rules 1–7) and the owner's "no Material
 // chrome" rule (ARCH §1.3) for the danaview_features files that editor tickets touch.
+//
+// 1.2.0 (AIS-01): the AI rules 9–12 (per package) and 14–15 (over every AI package) of
+// AI_STUDIO_PLAN §3.1, in their ARCH v1.2 §4.2 wording (which wins). Rule 13's consent call sites
+// are checked by packages/danaview_editor/test/architecture/ai_call_sites_test.dart (rule 17 paths,
+// V2-20). AIS-43 adds rules 16–19 and INT-101 rules 20–31.
 //
 // * Every `packages/*/pubspec.yaml` is parsed (dependencies, dev_dependencies,
 //   dependency_overrides) and every Dart file of the package (excluding build output, hidden
@@ -27,6 +33,17 @@ void main() {
   final repo = RepoTree(root);
 
   group('ARCH §4.2 dependency rules hold on this tree', () {
+    for (final rule in repoRules) {
+      final present = rule.packages.any(repo.hasPackage);
+      test(
+        'rule ${rule.id}: ${rule.summary}',
+        () {
+          final violations = rule.check(repo);
+          expect(violations, isEmpty, reason: _describe(violations));
+        },
+        skip: present ? false : 'none of ${rule.packages.join(', ')} exists yet; rule ${rule.id} skipped',
+      );
+    }
     for (final rule in dependencyRules) {
       final present = repo.hasPackage(rule.package);
       test(
@@ -74,9 +91,19 @@ void main() {
       expect(onDisk.toSet(), fixtureExpectations.keys.toSet());
     });
 
-    test('every rule (1–7 and M) has at least one negative fixture', () {
+    test('every rule (1–12, 14, 15 and M) has at least one negative fixture', () {
       final covered = fixtureExpectations.values.expand((ids) => ids).toSet();
-      expect(covered, containsAll(<String>[...dependencyRules.map((r) => r.id), materialRule.id]));
+      expect(covered, containsAll(<String>[...dependencyRules.map((r) => r.id), ...repoRules.map((r) => r.id), materialRule.id]));
+    });
+
+    test('the AI rules are ARCH v1.2 §4.2 rules 9–12, 14 and 15', () {
+      expect(<String>[...dependencyRules.map((r) => r.id), ...repoRules.map((r) => r.id)],
+          containsAll(<String>['9', '10', '11', '12', '14', '15']));
+      final arch = repo.readFile('docs/v1.2/ARCHITECTURE.md');
+      expect(arch, isNotNull, reason: 'docs/v1.2/ARCHITECTURE.md is missing');
+      for (final id in ['9', '10', '11', '12', '14', '15']) {
+        expect(arch, contains('\n$id. '), reason: 'ARCH v1.2 §4.2 has no rule $id');
+      }
     });
 
     for (final entry in fixtureExpectations.entries) {
@@ -242,6 +269,18 @@ const fixtureExpectations = <String, Set<String>>{
   'r7_editor_imports_features_barrel': {'7'},
   'm_features_material_chrome': {'M'},
   'm_features_material_in_interpolation': {'M'},
+  // 1.2.0 (AIS-01).
+  'ok_ai_packages_clean': <String>{},
+  'r9_providers_depends_on_flutter': {'9'},
+  'r9_providers_imports_flutter_and_danaview': {'9'},
+  'r10_studio_depends_on_editor_and_keys': {'10'},
+  'r10_studio_widget_code': {'10'},
+  'r11_secure_keys_depends_on_danaview': {'11'},
+  'r11_features_imports_secure_keys': {'11'},
+  'r12_editor_imports_native_plugins': {'12'},
+  'r14_http_client_outside_transport': {'14'},
+  'r15_key_in_url': {'15'},
+  'r15_logs_content': {'15'},
 };
 
 /// Exact violation counts for fixtures where the count itself proves something (every offending
@@ -252,6 +291,16 @@ const fixtureViolationCounts = <String, int>{
   'r2_core_dart_io_outside_store': 1,
   'r2_core_imports_dart_ui_and_third_party': 2,
   'm_features_material_chrome': 5,
+  'r9_providers_depends_on_flutter': 3,
+  'r9_providers_imports_flutter_and_danaview': 3,
+  'r10_studio_depends_on_editor_and_keys': 3,
+  'r10_studio_widget_code': 2,
+  'r11_secure_keys_depends_on_danaview': 2,
+  'r11_features_imports_secure_keys': 2,
+  'r12_editor_imports_native_plugins': 3,
+  'r14_http_client_outside_transport': 3,
+  'r15_key_in_url': 2,
+  'r15_logs_content': 4,
 };
 
 /// One rule violation: which rule, where, and what.
@@ -394,22 +443,7 @@ final dependencyRules = <DependencyRule>[
     (repo, pkg, report) {
       const forbidden = {'danaview_editor_engine', 'danaview_editor_engine_api', 'danaview_editor', 'danaview_features'};
       _forbidPackages(pkg, forbidden, report, why: 'transcription is independent of the engine and the UI');
-      const widgetLibraries = {
-        'package:flutter/widgets.dart',
-        'package:flutter/material.dart',
-        'package:flutter/cupertino.dart',
-      };
-      final widgetClass = RegExp(
-        r'\b(?:extends|with|implements)\s+(?:StatelessWidget|StatefulWidget|InheritedWidget|RenderObjectWidget|State\s*<)',
-      );
-      for (final file in pkg.dartFiles.where((f) => f.packagePath.startsWith('lib/'))) {
-        for (final uri in file.uris.where(widgetLibraries.contains)) {
-          report(file.repoPath, 'imports `$uri`: no widget code in danaview_transcription');
-        }
-        if (widgetClass.hasMatch(blankNonCode(file.source, blankStrings: true))) {
-          report(file.repoPath, 'declares a widget: no widget code in danaview_transcription');
-        }
-      }
+      _forbidWidgetCode(pkg, report);
     },
   ),
   DependencyRule(
@@ -432,13 +466,248 @@ final dependencyRules = <DependencyRule>[
       }
     },
   ),
+  // 1.2.0 (AIS-01; AI_STUDIO_PLAN §3.1, ARCH v1.2 §4.2).
+  DependencyRule(
+    '9',
+    'danaview_ai_providers',
+    'danaview_ai_providers depends only on meta, collection, crypto and the SDK (no Flutter, no danaview_*)',
+    (repo, pkg, report) {
+      const allowed = {'meta', 'collection', 'crypto'};
+      for (final dep in pkg.pubspec.dependencies) {
+        if (!allowed.contains(dep)) report(pkg.pubspecPath, 'dependency `$dep` is not one of ${allowed.join(', ')}');
+      }
+      for (final dep in {...pkg.pubspec.devDependencies, ...pkg.pubspec.overrides}) {
+        if (dep == 'flutter' || dep == 'flutter_test' || (dep.startsWith('danaview_') && dep != pkg.name)) {
+          report(pkg.pubspecPath, 'dev dependency `$dep` is not allowed in danaview_ai_providers');
+        }
+      }
+      for (final file in pkg.dartFiles) {
+        final shipped = file.packagePath.startsWith('lib/') || file.packagePath.startsWith('tool/');
+        for (final uri in file.uris) {
+          final p = packageOf(uri);
+          if (uri == 'dart:ui' || p == 'flutter' || p == 'flutter_test' || p == 'sky_engine') {
+            report(file.repoPath, 'imports `$uri`: no Flutter in danaview_ai_providers');
+          } else if (p != null && p.startsWith('danaview_') && p != pkg.name) {
+            report(file.repoPath, 'imports `$uri`: no danaview_* package in danaview_ai_providers');
+          } else if (shipped && p != null && p != pkg.name && !allowed.contains(p)) {
+            report(file.repoPath, 'imports `$uri`: lib/ and tool/ may import only ${allowed.join(', ')} and the SDK');
+          }
+        }
+      }
+    },
+  ),
+  DependencyRule(
+    '10',
+    'danaview_ai_studio',
+    'danaview_ai_studio depends on the AI layer, core, transcription, characters, collection, meta, path only; no widgets',
+    (repo, pkg, report) {
+      const allowed = {
+        'flutter', // only because danaview_transcription needs it; no widget code (below)
+        'characters',
+        'collection',
+        'meta',
+        'path',
+        'danaview_ai',
+        'danaview_ai_providers',
+        'danaview_editor_core',
+        'danaview_transcription',
+      };
+      const forbidden = {
+        'danaview_editor_engine',
+        'danaview_editor_engine_api',
+        'danaview_editor',
+        'danaview_features',
+        'danaview_secure_keys',
+      };
+      for (final dep in pkg.pubspec.dependencies) {
+        if (!forbidden.contains(dep) && !allowed.contains(dep)) {
+          report(pkg.pubspecPath, 'dependency `$dep` is not one of ${allowed.join(', ')}');
+        }
+      }
+      _forbidPackages(pkg, forbidden, report, why: 'AI Studio never reaches the engine, the editor UI, features or the key store');
+      for (final file in pkg.dartFiles.where((f) => f.packagePath.startsWith('lib/'))) {
+        for (final uri in file.uris) {
+          final p = packageOf(uri);
+          if (p != null && p != pkg.name && !allowed.contains(p) && !forbidden.contains(p)) {
+            report(file.repoPath, 'imports `$uri`: lib/ may import only ${allowed.join(', ')}');
+          }
+        }
+      }
+      _forbidWidgetCode(pkg, report);
+    },
+  ),
+  DependencyRule(
+    '11',
+    'danaview_secure_keys',
+    'danaview_secure_keys depends on no danaview_* package and only the app root imports it',
+    (repo, pkg, report) {
+      _forbidPackages(pkg, null, report, allowDanaview: const {}, why: 'the key store plugin is standalone');
+      for (final name in repo.packageNames) {
+        if (name == pkg.name) continue;
+        final other = repo.package(name)!;
+        _forbidPackages(other, {pkg.name}, report, why: 'only the app root imports danaview_secure_keys');
+      }
+    },
+  ),
+  DependencyRule(
+    '12',
+    'danaview_editor',
+    'danaview_editor never depends on the key store or the 1.2.0 native plugins (AI packages as types only)',
+    (repo, pkg, report) {
+      _forbidPackages(
+        pkg,
+        const {
+          'danaview_secure_keys',
+          'danaview_face_tracking',
+          'danaview_diarization',
+          'danaview_media_analysis',
+          'danaview_pdf',
+          'danaview_library_native',
+        },
+        report,
+        why: 'danaview_editor reaches native plugins only through ports adapted at the app root',
+      );
+    },
+  ),
 ];
 
-/// Runs every rule (1–7 and M) against [repo].
+/// The 1.2.0 AI packages (AI_STUDIO_PLAN §3.1, ARCH v1.2 §4.1); rules 14 and 15 scan their lib/ and
+/// tool/ code. `danaview_ai`, `danaview_ai_ui` and `danaview_ai_genkit` arrive with AIS-43/AIS-42.
+const aiPackages = <String>{
+  'danaview_ai_providers',
+  'danaview_ai_studio',
+  'danaview_ai',
+  'danaview_ai_ui',
+  'danaview_ai_genkit',
+};
+
+/// The only file of the AI packages that may construct an `HttpClient` (rule 14).
+const httpClientSite = 'packages/danaview_ai_providers/lib/src/transport/http_transport.dart';
+
+/// Logging-call arguments (exact source text, trimmed) that rule 15 accepts although they are not
+/// plain string literals. Each entry must interpolate nothing but counts, ids, status codes or
+/// durations; add one only with a comment naming the call site. Empty: every log is a literal.
+const aiLogFormatAllowList = <String>{};
+
+/// A rule over several packages (rules 14 and 15); it runs while any of [packages] exists.
+class RepoRule {
+  const RepoRule(this.id, this.packages, this.summary, this._check);
+
+  final String id;
+  final Set<String> packages;
+  final String summary;
+  final void Function(RepoTree repo, void Function(String location, String message) report) _check;
+
+  List<Violation> check(RepoTree repo) {
+    if (!packages.any(repo.hasPackage)) return const [];
+    final out = <Violation>[];
+    _check(repo, (location, message) => out.add(Violation(id, location, message)));
+    return out;
+  }
+}
+
+/// The lib/ and tool/ Dart files of every AI package in [repo].
+Iterable<DartFileView> _aiShippedFiles(RepoTree repo) sync* {
+  for (final name in aiPackages) {
+    final pkg = repo.package(name);
+    if (pkg == null) continue;
+    yield* pkg.dartFiles.where((f) => f.packagePath.startsWith('lib/') || f.packagePath.startsWith('tool/'));
+  }
+}
+
+int _lineAt(String text, int offset) => '\n'.allMatches(text.substring(0, offset)).length + 1;
+
+/// The offset of the `)` closing the `(` at [open] in [code] (strings already blanked), or -1.
+int _closingParen(String code, int open) {
+  var depth = 0;
+  for (var i = open; i < code.length; i++) {
+    if (code[i] == '(') depth++;
+    if (code[i] == ')') {
+      depth--;
+      if (depth == 0) return i;
+    }
+  }
+  return -1;
+}
+
+/// Rule 15's logging calls: `print`, `debugPrint`, a bare `log`, `developer.log` and
+/// `stdout`/`stderr` writes. Method calls such as `math.log(` or `ledger.log(` are not logging.
+final _logCall = RegExp(
+  r'(?<![A-Za-z0-9_$.])(?:print|debugPrint|log)\s*\(|(?<![A-Za-z0-9_$.])developer\s*\.\s*log\s*\(|(?<![A-Za-z0-9_$.])(?:stdout|stderr)\s*\.\s*(?:write|writeln|writeAll)\s*\(',
+);
+
+/// AI_STUDIO_PLAN §3.1 rules 14 and 15.
+final repoRules = <RepoRule>[
+  RepoRule(
+    '14',
+    aiPackages,
+    'HttpClient( is constructed in the AI packages only in danaview_ai_providers/lib/src/transport/http_transport.dart',
+    (repo, report) {
+      final construct = RegExp(r'(?<![A-Za-z0-9_$])HttpClient\s*(?:\(|\.\s*new\b)');
+      for (final file in _aiShippedFiles(repo)) {
+        if (file.repoPath == httpClientSite) continue;
+        final code = blankNonCode(file.source, blankStrings: true);
+        for (final m in construct.allMatches(code)) {
+          report('${file.repoPath}:${_lineAt(code, m.start)}', 'constructs an HttpClient: only $httpClientSite may (rule 14)');
+        }
+      }
+    },
+  ),
+  RepoRule(
+    '15',
+    aiPackages,
+    'no `?key=` in AI package sources; no AI package log call takes a body, response, key or caption',
+    (repo, report) {
+      for (final file in _aiShippedFiles(repo)) {
+        for (final m in '?key='.allMatches(file.source)) {
+          report('${file.repoPath}:${_lineAt(file.source, m.start)}', 'contains `?key=`: keys go in a header, never in a URL (rule 15)');
+        }
+        final code = blankNonCode(file.source, blankStrings: true);
+        final withStrings = blankNonCode(file.source, blankStrings: false);
+        for (final m in _logCall.allMatches(code)) {
+          final open = m.end - 1;
+          final close = _closingParen(code, open);
+          if (close < 0) continue;
+          final raw = withStrings.substring(open + 1, close).trim();
+          if (aiLogFormatAllowList.contains(raw)) continue;
+          final leftover = code.substring(open + 1, close).replaceAll(RegExp(r'''\br(?=['"])|['"\s,]'''), '');
+          final interpolates = RegExp(r'\$[A-Za-z_{]').hasMatch(raw);
+          if (leftover.isNotEmpty || interpolates) {
+            report('${file.repoPath}:${_lineAt(code, m.start)}',
+                'logs `${raw.length > 40 ? '${raw.substring(0, 40)}…' : raw}`: AI packages log only string literals (rule 15)');
+          }
+        }
+      }
+    },
+  ),
+];
+
+/// Runs every rule (1–12, 14, 15 and M) against [repo].
 List<Violation> checkAll(RepoTree repo) => <Violation>[
       for (final rule in dependencyRules) ...rule.check(repo),
+      for (final rule in repoRules) ...rule.check(repo),
       ...materialRule.check(repo),
     ];
+
+/// Reports widget library imports and widget classes in the package's lib/ (rules 6 and 10).
+void _forbidWidgetCode(PackageView pkg, void Function(String location, String message) report) {
+  const widgetLibraries = {
+    'package:flutter/widgets.dart',
+    'package:flutter/material.dart',
+    'package:flutter/cupertino.dart',
+  };
+  final widgetClass = RegExp(
+    r'\b(?:extends|with|implements)\s+(?:StatelessWidget|StatefulWidget|InheritedWidget|RenderObjectWidget|State\s*<)',
+  );
+  for (final file in pkg.dartFiles.where((f) => f.packagePath.startsWith('lib/'))) {
+    for (final uri in file.uris.where(widgetLibraries.contains)) {
+      report(file.repoPath, 'imports `$uri`: no widget code in ${pkg.name}');
+    }
+    if (widgetClass.hasMatch(blankNonCode(file.source, blankStrings: true))) {
+      report(file.repoPath, 'declares a widget: no widget code in ${pkg.name}');
+    }
+  }
+}
 
 /// Reports manifest entries and imports naming a package in [forbidden], or (when [allowDanaview] is
 /// given) any `danaview_*` package outside [allowDanaview] and the package itself.
@@ -521,6 +790,16 @@ class RepoTree {
   final Map<String, PackageView?> _packages = {};
 
   bool hasPackage(String name) => package(name) != null;
+
+  /// The names of every `packages/<name>/` that has a manifest, sorted.
+  List<String> get packageNames {
+    final dir = Directory('${root.path}/packages');
+    if (!dir.existsSync()) return const [];
+    return [
+      for (final d in dir.listSync().whereType<Directory>())
+        if (hasPackage(_baseName(d.path))) _baseName(d.path),
+    ]..sort();
+  }
 
   /// The package at `packages/<name>/` when it has a manifest, else null.
   PackageView? package(String name) => _packages.putIfAbsent(name, () {

@@ -1,0 +1,51 @@
+{
+ "clip": "c6_2spk_male",
+ "duration": 32.45,
+ "speakers": [
+  "Daniel",
+  "Ralph"
+ ],
+ "overlap_seconds": 0.8,
+ "segments": [
+  {
+   "speaker": "Daniel",
+   "start": 0.4,
+   "end": 3.88
+  },
+  {
+   "speaker": "Ralph",
+   "start": 4.28,
+   "end": 8.51
+  },
+  {
+   "speaker": "Daniel",
+   "start": 8.91,
+   "end": 11.95
+  },
+  {
+   "speaker": "Ralph",
+   "start": 11.15,
+   "end": 14.39
+  },
+  {
+   "speaker": "Daniel",
+   "start": 14.79,
+   "end": 18.45
+  },
+  {
+   "speaker": "Ralph",
+   "start": 18.85,
+   "end": 23.12
+  },
+  {
+   "speaker": "Daniel",
+   "start": 23.52,
+   "end": 26.56
+  },
+  {
+   "speaker": "Ralph",
+   "start": 26.96,
+   "end": 31.65
+  }
+ ]
+}

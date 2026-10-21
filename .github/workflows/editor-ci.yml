@@ -1,4 +1,5 @@
 # OWNER: INT-01
+# EXTENDED: AIS-01 (ai-dart job and the AI package paths)
 #
 # Editor CI (ARCH §22). Every job checks out the repo, then runs its script under
 # scripts/ci/editor/ when that script exists and prints a skip notice otherwise (the owning ticket
@@ -20,6 +21,9 @@ on:
       # Material scan) and reads the BUILD_PLAN owns lists, so changes there run it too.
       - 'packages/danaview_features/**'
       - 'docs/v1.1/editor/BUILD_PLAN.md'
+      # 1.2.0 AI packages (AIS-01): danaview_ai_providers, danaview_ai_studio, later danaview_ai,
+      # danaview_ai_ui, danaview_ai_genkit.
+      - 'packages/danaview_ai*/**'
   push:
     branches: [main]
     # Same list as pull_request above.
@@ -32,6 +36,7 @@ on:
       - '.github/workflows/editor-ci.yml'
       - 'packages/danaview_features/**'
       - 'docs/v1.1/editor/BUILD_PLAN.md'
+      - 'packages/danaview_ai*/**'
   schedule:
     # Nightly suites (fuzz, full overflow matrix, AI eval): 02:30 UTC.
     - cron: '30 2 * * *'
@@ -125,6 +130,33 @@ jobs:
       - name: Run flutter_packages.sh
         if: steps.script.outputs.present == 'true'
         run: bash scripts/ci/editor/flutter_packages.sh
+
+  ai-dart:
+    name: ai-dart
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Look for scripts/ci/editor/ai.sh
+        id: script
+        run: |
+          if [ -f scripts/ci/editor/ai.sh ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=ai-dart skipped::scripts/ci/editor/ai.sh does not exist yet (owner: AIS-01)"
+          fi
+      - name: Set up Flutter (Dart SDK)
+        if: steps.script.outputs.present == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run ai.sh (analyze and test the AI packages)
+        if: steps.script.outputs.present == 'true'
+        run: bash scripts/ci/editor/ai.sh
 
   whisper-host:
     name: whisper-host (${{ matrix.name }})

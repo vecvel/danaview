@@ -1,0 +1,10 @@
+name: danaview_editor
+dependencies:
+  flutter:
+    sdk: flutter
+  danaview_ai_providers:
+    path: ../danaview_ai_providers
+  danaview_ai_studio:
+    path: ../danaview_ai_studio
+  danaview_editor_core:
+    path: ../danaview_editor_core

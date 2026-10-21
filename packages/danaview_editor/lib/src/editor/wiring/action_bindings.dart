@@ -1,32 +1,48 @@
 // OWNER: UX-01
+// EXTENDED: AIS-01 (merges the 1.2.0 binding files; hides the AI Studio actions while
+// DANAVIEW_AI_STUDIO is off, AI_STUDIO_PLAN §4.2, D-65)
 //
 // Merges the per-feature binding files (ARCH §17.6, BUILD_PLAN §2): each feature ticket owns
 // `actions/bindings/<feature>_bindings.dart` and exposes `List<EditorActionBinding> get
 // <feature>Bindings`; this file lists every one of them so no feature edits a shared file. An id
 // bound by two features is a wiring error ([DuplicateActionBindingError]). An architecture test
 // (test/architecture/) checks that every file in `actions/bindings/` is listed here.
+//
+// 1.2.0 (AIS-01): the seven AI Studio and rich-subtitle binding files are listed after the 1.1
+// ones. While `DANAVIEW_AI_STUDIO` is off, [mergeEditorActionBindings] binds every
+// `EditorActionId.aiStudioActions` id as hidden and disabled (whatever ai_bindings.dart or
+// review_bindings.dart provide), so no AI action shows in a tool set, menu, semantics action or
+// shortcut and none can run.
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/editor_availability.dart';
+import '../actions/bindings/ai_bindings.dart';
 import '../actions/bindings/audio_bindings.dart';
 import '../actions/bindings/auto_captions_bindings.dart';
 import '../actions/bindings/caption_bindings.dart';
 import '../actions/bindings/clip_bindings.dart';
 import '../actions/bindings/color_bindings.dart';
 import '../actions/bindings/edit_bindings.dart';
+import '../actions/bindings/emoji_bindings.dart';
 import '../actions/bindings/export_bindings.dart';
 import '../actions/bindings/keyframe_bindings.dart';
 import '../actions/bindings/marker_bindings.dart';
 import '../actions/bindings/media_bindings.dart';
 import '../actions/bindings/overlay_bindings.dart';
 import '../actions/bindings/playback_bindings.dart';
+import '../actions/bindings/presets_bindings.dart';
 import '../actions/bindings/project_bindings.dart';
 import '../actions/bindings/relink_bindings.dart';
 import '../actions/bindings/render_preview_bindings.dart';
+import '../actions/bindings/review_bindings.dart';
+import '../actions/bindings/rich_text_bindings.dart';
 import '../actions/bindings/speed_bindings.dart';
 import '../actions/bindings/subtitle_io_bindings.dart';
 import '../actions/bindings/text_bindings.dart';
+import '../actions/bindings/timing_bindings.dart';
 import '../actions/bindings/track_bindings.dart';
+import '../actions/bindings/transcript_bindings.dart';
 import '../actions/bindings/transform_bindings.dart';
 import '../actions/bindings/transition_bindings.dart';
 import '../actions/bindings/voiceover_bindings.dart';
@@ -78,6 +94,14 @@ final List<EditorBindingSource> editorBindingSources = List.unmodifiable(<Editor
   EditorBindingSource('export_bindings', 'UX-39', () => exportBindings),
   EditorBindingSource('relink_bindings', 'UX-40', () => relinkBindings),
   EditorBindingSource('render_preview_bindings', 'UX-44', () => renderPreviewBindings),
+  // 1.2.0 (AI_STUDIO_PLAN §4.4, merged by AIS-01).
+  EditorBindingSource('transcript_bindings', 'AIS-17', () => transcriptBindings),
+  EditorBindingSource('rich_text_bindings', 'AIS-18', () => richTextBindings),
+  EditorBindingSource('timing_bindings', 'AIS-19', () => timingBindings),
+  EditorBindingSource('emoji_bindings', 'AIS-20', () => emojiBindings),
+  EditorBindingSource('presets_bindings', 'AIS-26', () => presetsBindings),
+  EditorBindingSource('ai_bindings', 'AIS-32', () => aiBindings),
+  EditorBindingSource('review_bindings', 'AIS-33', () => reviewBindings),
 ]);
 
 /// Thrown when two binding files bind the same [EditorActionId].
@@ -101,11 +125,44 @@ final class DuplicateActionBindingError extends StateError {
 /// Merges [sources] (default: [editorBindingSources]) into one binding per action id. Unbound ids
 /// are absent (the registry shows them disabled or hides them).
 ///
-/// See ARCH §17.6.
-Map<EditorActionId, EditorActionBinding> mergeEditorActionBindings([Iterable<EditorBindingSource>? sources]) {
+/// With the default sources the result is also passed through [gateAiStudioActions] with
+/// [aiStudio] (default: [EditorFlags.aiStudioEnabled]); explicit [sources] are merged as given.
+///
+/// See ARCH §17.6, AI_STUDIO_PLAN §4.2.
+Map<EditorActionId, EditorActionBinding> mergeEditorActionBindings([Iterable<EditorBindingSource>? sources, bool? aiStudio]) {
+  final merged = _merge(sources ?? editorBindingSources);
+  if (sources != null) return merged;
+  return gateAiStudioActions(merged, aiStudio: aiStudio ?? EditorFlags.aiStudioEnabled);
+}
+
+/// [bindings] unchanged while [aiStudio] is on; otherwise with every
+/// `EditorActionId.aiStudioActions` id bound as hidden and disabled (AI_STUDIO_PLAN §4.2, D-65:
+/// with `DANAVIEW_AI_STUDIO=false` there is no AI Studio button, Translate or Ask AI). The hidden
+/// bindings are the same instances on every call, so two gated merges compare equal.
+///
+/// See AI_STUDIO_PLAN §4.2.
+Map<EditorActionId, EditorActionBinding> gateAiStudioActions(Map<EditorActionId, EditorActionBinding> bindings, {required bool aiStudio}) {
+  if (aiStudio) return bindings;
+  return Map.unmodifiable(<EditorActionId, EditorActionBinding>{...bindings, ..._aiStudioOffBindings});
+}
+
+void _aiStudioOff(EditorActionContext ctx) {}
+
+bool _never(EditorActionContext ctx) => false;
+
+const Map<EditorActionId, EditorActionBinding> _aiStudioOffBindings = {
+  EditorActionId.aiStudio: EditorActionBinding(id: EditorActionId.aiStudio, handler: _aiStudioOff, isEnabled: _never, isVisible: _never),
+  EditorActionId.askAi: EditorActionBinding(id: EditorActionId.askAi, handler: _aiStudioOff, isEnabled: _never, isVisible: _never),
+  EditorActionId.translateTrack:
+      EditorActionBinding(id: EditorActionId.translateTrack, handler: _aiStudioOff, isEnabled: _never, isVisible: _never),
+  EditorActionId.reviewAiChanges:
+      EditorActionBinding(id: EditorActionId.reviewAiChanges, handler: _aiStudioOff, isEnabled: _never, isVisible: _never),
+};
+
+Map<EditorActionId, EditorActionBinding> _merge(Iterable<EditorBindingSource> sources) {
   final out = <EditorActionId, EditorActionBinding>{};
   final from = <EditorActionId, EditorBindingSource>{};
-  for (final source in sources ?? editorBindingSources) {
+  for (final source in sources) {
     for (final binding in source.bindings()) {
       final previous = from[binding.id];
       if (previous != null) throw DuplicateActionBindingError(binding.id, previous, source);

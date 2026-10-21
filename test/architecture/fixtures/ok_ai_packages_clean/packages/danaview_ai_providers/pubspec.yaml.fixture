@@ -1,0 +1,8 @@
+name: danaview_ai_providers
+dependencies:
+  collection: ^1.18.0
+  crypto: ^3.0.3
+  meta: ^1.11.0
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0
