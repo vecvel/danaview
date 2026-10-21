@@ -1,9 +1,13 @@
 // OWNER: HOM-03
 //
-// Placeholder (D-33) created by INT-101. HOM-03 replaces this file:
-// the public entry of lib/src/desktop/, desktop photo directory discovery (ARCH v1.2 V2-109). The package barrel exports it; HOM-03 re-exports
-// the public files of its directory from here (barrels never change after INT-101).
-// Until then it declares no public names.
+// The public entry of lib/src/desktop/: desktop photo directory discovery (ARCH v1.2 V2-109,
+// HOM plan D-94). The package barrel exports this file; it re-exports the directory's public
+// files: the read-only file-system surface, the Pictures-folder and volume roots of macOS,
+// Windows and Linux, and the incremental read-only scanner.
 
-/// The public entry of lib/src/desktop/: desktop photo directory discovery (ARCH v1.2 V2-109).
+/// Desktop photo directory discovery: roots (Pictures folders, external volumes) and the scanner.
 library;
+
+export 'desktop_fs.dart';
+export 'desktop_roots.dart';
+export 'desktop_scanner.dart';
