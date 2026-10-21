@@ -1,8 +1,8 @@
 # Danaview 1.2.0: Build Plan
 
-> **Release:** Danaview 1.2.0 (app version `1.2.0+N`). **Date:** 2026-10-21. **Baseline:** `editor-wip` @ `c2ee137` (v1.1: 162 of 166 tickets done; 1.2.0 work starts after v1.1 INT-05).
+> **Release:** Danaview 1.2.0 (app version `1.2.0+N`). **Date:** 2026-10-21. **Baseline:** `editor-wip` @ `c2ee137` (v1.1: 162 of 166 tickets done; 1.2.0 work starts once v1.1 is code-complete; INT-05 itself stays waiting for the owner's go, and AIS-01's INT-05 dependency means "v1.1 code-complete").
 > **Authority:** [`ARCHITECTURE.md`](ARCHITECTURE.md) (this folder, "ARCH") wins over this plan; this plan wins over the four feature plans: the HOM plan ([`files-media-home/FILES_MEDIA_HOME_PLAN.md`](files-media-home/FILES_MEDIA_HOME_PLAN.md)), the AIS plan ([`ai-studio/AI_STUDIO_PLAN.md`](ai-studio/AI_STUDIO_PLAN.md)), the VED plan ([`video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md`](video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md)) and the ST plan ([`speed-test/SPEED_TEST_FALLBACK_PLAN.md`](speed-test/SPEED_TEST_FALLBACK_PLAN.md)). "v1.1 ARCH" and "v1.1 BP" are [`../v1.1/editor/ARCHITECTURE.md`](../v1.1/editor/ARCHITECTURE.md) and [`../v1.1/editor/BUILD_PLAN.md`](../v1.1/editor/BUILD_PLAN.md).
-> **Size:** **166 tickets** in 7 milestones (N0–N6): 41 HOM, 54 AIS (one conditional: AIS-27), 52 VED, 5 ST, 7 INT-1xx, 7 QA-1xx. 116 run on the Mac, 31 on the Windows laptop (Android lane), 19 need both (a report with one section per platform). Everything ships together; milestones only order the work.
+> **Size:** **166 tickets** in 7 milestones (N0–N6): 41 HOM, 54 AIS (one conditional: AIS-27), 52 VED, 5 ST, 7 INT-1xx, 7 QA-1xx. 116 run on the Mac, 31 on the Windows laptop (Android lane), 19 need both (a report with one section per platform). **Delivery is by release slice (§1A, owner decision 2026-10-22):** nine slices S1–S9, each ending in a production-ready release-candidate build; the N milestones below only describe the content.
 > **AIS tickets** keep their full specs in the AIS plan §5.5 and §7.9; this plan indexes them, places them in the N milestones and lists the amendments the cross-plan resolutions need (§4.1, §8). **HOM, VED, ST, INT-1xx and QA-1xx** tickets are specified in full in §4.
 > **Validation:** the ticket graph was checked by script: every dependency exists (v1.1 ticket ids count as done), the graph is acyclic, every prefix of §3 is dependency-complete, no ticket depends on a later milestone, every HOM, AIS, VED and ST id of the plans is present, and no two tickets own the same path except the register in §5.
 
@@ -50,7 +50,9 @@ v1.1 BP §1 applies, with these 1.2.0 additions:
 
 ### 0.4 Git
 
-- Mac work lands on `editor-wip`. The Android lane exists as the remote branch `origin/editor-android`; the Mac brings it in with `git merge --no-ff origin/editor-android` and the message `Merge remote-tracking branch 'origin/editor-android' into editor-wip`. Expect merges, not fast-forwards.
+- 1.2.0 Mac work lands on **`v1.2-wip`** (cut from `editor-wip` @ `d680bd3`), so v1.1's QA re-runs keep testing a frozen `editor-wip`. Late v1.1 fixes land on `editor-wip` and are merged forward into `v1.2-wip` (`git merge --no-ff editor-wip`), never the other way until 1.1 ships.
+- The 1.2.0 Android lane works on the remote branch **`origin/v1.2-android`** (cut from `origin/v1.2-wip`); the Mac brings it in with `git merge --no-ff origin/v1.2-android` and the message `Merge remote-tracking branch 'origin/v1.2-android' into v1.2-wip`. `editor-android` stays the v1.1 lane. Expect merges, not fast-forwards.
+- Where this plan says `editor-wip` for 1.2.0 work, read `v1.2-wip`.
 - One commit per ticket (or per ticket half on Windows), pushed when done; no AI attribution lines in commit messages (repo rule).
 - `.freebuff/` and scratch files never go into commits.
 
@@ -67,6 +69,34 @@ v1.1 BP §1 applies, with these 1.2.0 additions:
 | **N4** | Beauty & Retouching Suite | Face tracking plugin and Beauty pack, pre-tracking and `.dnface`, subjects, easing keyframes, the eight categories (face, eyes/brows, nose/lips, skin, makeup, body, filters/bokeh/stickers, tracking/automation), inspector, comparator, presets and auto-enhance | Every beauty parameter renders in Still Photo Mode and on a moving video on both platforms with smoothed landmarks, up to 4 subjects, keyframes, bypass and compare; Dart reference goldens for the landmark-driven passes | 23 |
 | **N5** | Integration and QA | AI legal text and app wiring v3 (AIS-36, AIS-37), app wiring v4 (INT-103), editor wiring v4 (INT-105), legal consolidation (INT-106); plan QA (HOM-14, HOM-32, AIS-38, AIS-39, AIS-40, AIS-54, VED-30, VED-31, VED-32) and cross-plan QA (QA-101…QA-106) | Complete feature set wired in the app behind the flags; every plan QA report green; cross-plan E2E green on the iOS Simulator and Android Emulator; network guard and privacy hosts green; §10 budgets met or renegotiated in writing; persistence and backup survival proven | 20 |
 | **N6** | Release | Release-candidate regression on lab devices (QA-107); release (AIS-41, widened to all of 1.2.0) | ARCH §1.2 goals evidenced; release checklist complete; release builds pass every flag `=true` | 2 |
+
+## 1A. Release slices (delivery order)
+
+Owner decision 2026-10-22: 1.2.0 is built and certified **slice by slice**, so a complete, production-ready build appears often instead of once at the end. The N milestones of §1 describe the content; **this section decides the order and the release gates**, and wins over §1 where they differ.
+
+**Every slice ends with three gate tickets** (lane Mac + Android), and a slice is done only when all three are green:
+
+- **S<n>-W · Wiring and legal for the slice.** Wire exactly the slice's features into the app behind their flag (the slice's share of INT-103, INT-105 and AIS-37), add its privacy, terms and licence text (its share of AIS-36 and INT-106), store-answer deltas, and the flag set of the slice's release build. No feature work.
+- **S<n>-Q · Slice QA.** Plan QA for the slice's features (its share of HOM-14, HOM-32, AIS-38…40, AIS-54, VED-30…32), the iOS Simulator E2E (Mac) and Android Emulator E2E (Windows) for the new scenarios, **the full v1.1 suite (QA-01/QA-02 scenarios) re-run with the slice's flags on and off**, the network guard (QA-103 scope for the slice), the overflow and accessibility matrix for its new surfaces (QA-105 scope), and persistence of anything it stores (QA-106 scope). Report in `docs/v1.2/qa/S<n>-QA.md`. QA changes no product code; defects become FIX tickets that block the gate.
+- **S<n>-R · Release candidate.** Signed release builds of iOS and Android (`1.2.0+N`, build number bumped) with **only the flags of S1…S<n> on**, the release checklist for the slice, and an install-and-smoke on the iOS Simulator and Android Emulator (lab devices when available, recorded as `deferred: no device available` otherwise). The owner decides whether a candidate goes to TestFlight / Play internal testing or to the stores; by default candidates stay internal until the owner's go (v1.1 goes live after v1.3).
+
+Flags of later slices stay off in every candidate, so each candidate is the previous one plus one finished slice. A slice may start building while the previous slice is in its gate, but it lands on `v1.2-wip` only behind its own flag (off).
+
+| Slice | Name | User-visible result | Feature tickets | Flag(s) on at S<n>-R |
+|---|---|---|---|---|
+| **S1** | Foundations + speed test | The app is identical to 1.1 except that the speed test fails over to M-Lab (after consent) when Cloudflare is unavailable, with the Settings › Privacy toggle | AIS-01, INT-101, HOM-01, HOM-16, ST-01…ST-05. **In parallel, not gating S1:** spikes AIS-42, AIS-44, HOM-27, VED-33A, VED-33 (reports with go/no-go and sizes; they gate the slices that need them) | none new (ST is consent-gated, no flag) |
+| **S2** | Photos & Files Home | Home with All/Videos/Photos tabs and the 1.1 layout preserved, photo grid and viewer with EXIF, badges, selection bar, favourites/recents/search/sort, import, Danaview folders and Recently deleted, file actions and saving out | HOM-17, HOM-02, HOM-02A, HOM-03, HOM-04, HOM-04A, HOM-05…HOM-13, HOM-15, HOM-18 (Documents tab hidden until S3), HOM-19, HOM-20, HOM-20A, HOM-22, HOM-22A | `DANAVIEW_FILES_HOME` |
+| **S3** | Documents: view and share-in | Documents tab, viewer router, text/CSV, PDF viewers (PDFKit, `PdfRenderer`), Quick Look and document thumbnails, Open with Danaview and the iOS Share Extension, Android incoming intents | HOM-23, HOM-24, HOM-25, HOM-26, INT-104, HOM-21, HOM-21A | `DANAVIEW_FILES_HOME` (Documents tab shown) |
+| **S4** | Documents: PDF tools | Merge and organise pages, annotate and highlight, sign with saved signatures, compress, each into a new file | HOM-28, HOM-28A, HOM-29, HOM-29A, HOM-30, HOM-30A, HOM-31, HOM-31A (needs the HOM-27 spike) | same |
+| **S5** | Rich subtitles (on-device) | Styled captions with spans, word timings, karaoke, timing tools, emoji, fonts and presets, SRT/VTT v2; no cloud | AIS-02…AIS-07, AIS-12…AIS-27 except the cloud-only parts; AIS-11 if S6 is next | `DANAVIEW_AUTO_CAPTIONS` extended (rich subtitles), `DANAVIEW_AI_STUDIO` off |
+| **S6** | AI Studio + speakers | Bring-your-own-key providers, AI Studio sheet, review, Ask AI on selection, translation, on-device and cloud multi-speaker transcripts with speaker lanes | AIS-08, AIS-09, AIS-10, AIS-11, AIS-43, AIS-28…AIS-35, AIS-45…AIS-49 (needs AIS-42 and AIS-44); AIS-40 live validation in its gate | `DANAVIEW_AI_STUDIO` |
+| **S7** | Search | On-device index, Home search UI, AI search (query to filters, deep indexing) | AIS-50, AIS-51, AIS-52, AIS-53 | same flags as S6 |
+| **S8** | Still Photo Mode | Photo editor: tone, HSL, curves, crop/keystone, masks, text and stickers, high-resolution export, presets and batch, EXIF keep/strip, Add to Video Project | INT-102, INT-102A, VED-01…VED-15, VED-29, VED-29A (needs VED-33) | `DANAVIEW_PHOTO_EDITOR` |
+| **S9** | Beauty & Retouching | Face tracking and the eight beauty categories on stills and video, inspector, comparator, presets, auto-enhance | VED-16…VED-28, VED-34 with their `A` halves | `DANAVIEW_BEAUTY` |
+
+**After S9:** the cross-plan tickets shrink to a final consolidation: QA-101/QA-102 (the whole-app E2E with every flag on), QA-104 (device-lab budgets), QA-107 (release-candidate regression on lab devices) and AIS-41 (release 1.2.0 with every flag). The rest of N5 is consumed by the slice gates.
+
+**S1 exit criteria:** flags off (and S1's build) leave the app identical to 1.1, proven by the full v1.1 suite on the iOS Simulator and the Android Emulator; architecture tests catch a planted violation of every rule 9–31; `SpeedTestProvider` moved Cloudflare with no behaviour change; failover to M-Lab only after consent, with the toggle off meaning Cloudflare only; neutral copy with no provider names in the result screen beyond the attribution ST-03 requires; privacy text and store answers updated; signed iOS and Android candidates installed and smoked.
 
 ## 2. Critical path and lanes
 
