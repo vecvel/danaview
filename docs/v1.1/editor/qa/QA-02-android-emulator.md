@@ -951,8 +951,11 @@ Screenshots go to `build/e2e/android/manual/` (`build/` is not committed). Name 
 2. **Start the tablet** with a window and with audio (no `-no-window`, no `-no-audio`):
 
    ```bash
-   "$ANDROID_HOME/emulator/emulator.exe" -avd Pixel_Tablet_API_35 -no-snapshot-save
+   "$ANDROID_HOME/emulator/emulator.exe" -avd Pixel_Tablet_API_35 -gpu host -no-snapshot-save
    ```
+
+   `-gpu host` is the recommended tablet GPU mode (see "GPU modes (tablet)" under Emulator
+   realities); without it the tablet dies more often when the preview starts.
 
    Leave that window open and wait for the home screen. In a second Git Bash window, run
    `adb devices -l`. The tablet is `emulator-5554` when it is the only emulator, and usually
