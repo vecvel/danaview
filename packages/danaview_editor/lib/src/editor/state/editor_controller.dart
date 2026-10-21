@@ -191,6 +191,10 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
   _ControllerTransaction? _tx;
   bool _txEmitScheduled = false;
   EditorPerfSpan? _openSpan;
+  // `ready` waits for both the first frame and the opening seek, so a ready preview already shows
+  // the saved position, not frame 0 (FIX M-22).
+  bool _firstFrameSeen = false;
+  bool _awaitingOpenSeek = false;
   bool _released = false;
   int _openGen = 0;
   final List<VoidCallback> _viewFlushers = [];
@@ -331,6 +335,8 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
     }
 
     _session.attach(edit: edit, loaded: loaded, engine: _engine, capabilities: caps, compiler: compiler, preview: preview, planSync: sync);
+    _firstFrameSeen = false;
+    _awaitingOpenSeek = true;
     _listenPreview(preview, sync);
     // Without a preview nothing compiles, so warm the compiler's media snapshot once: background
     // jobs and posters resolve through it (FIX-QA05-D5).
@@ -378,6 +384,7 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
     }
     if (!identical(_session.editOrNull, edit)) return;
     _session.markOpenedAt(t, ack);
+    _openSeekDone();
   }
 
   /// [compiler]'s compile that records each finished pass on the session (FIX-QA05-D5): INT-02's
@@ -657,7 +664,8 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
       case PreviewFirstFrame():
         _openSpan?.end();
         _openSpan = null;
-        if (state.preview.phase == PreviewPhase.starting) _setPreview(state.preview.copyWith(phase: PreviewPhase.ready));
+        _firstFrameSeen = true;
+        _maybeReady();
       case PreviewDegraded(:final quality):
         // A quality step never hides a stopped preview ("Restart preview" stays; QA-05 D6).
         if (state.preview.phase == PreviewPhase.failed) break;
@@ -681,6 +689,17 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
     final already = state.preview.phase == PreviewPhase.failed;
     _setPreview(state.preview.copyWith(phase: PreviewPhase.failed, failure: failure));
     if (!already) _emit(const EditorAnnouncement('Preview stopped'));
+  }
+
+  void _openSeekDone() {
+    _awaitingOpenSeek = false;
+    _maybeReady();
+  }
+
+  void _maybeReady() {
+    if (_firstFrameSeen && !_awaitingOpenSeek && state.preview.phase == PreviewPhase.starting) {
+      _setPreview(state.preview.copyWith(phase: PreviewPhase.ready));
+    }
   }
 
   void _setPreview(PreviewStatus preview) {
@@ -718,6 +737,8 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
       }
       final ps = _planSyncFactory(s, _resolvingCompile(compiler));
       _session.replacePreview(s, ps);
+      _firstFrameSeen = false;
+      _awaitingOpenSeek = true;
       _listenPreview(s, ps);
       _setPreview(state.preview.copyWith(phase: PreviewPhase.starting));
       ps.schedule(edit.committedProject);
@@ -726,7 +747,10 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
       final ack = await s.seek(t);
       // A playhead created from now on starts from this preview's seek, not the open's
       // (FIX-UX-08-1).
-      if (identical(_session.preview, s)) _session.markOpenedAt(t, ack);
+      if (identical(_session.preview, s)) {
+        _session.markOpenedAt(t, ack);
+        _openSeekDone();
+      }
     } catch (e) {
       _setPreviewFailed(_previewFailureOf(e));
     }
