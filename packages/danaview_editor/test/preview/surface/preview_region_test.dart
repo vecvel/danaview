@@ -19,7 +19,7 @@ import 'package:danaview_editor/src/editor/preview/preview_status.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
 import 'package:danaview_editor/src/editor/transport/transport_strings.dart';
 import 'package:danaview_editor_core/model.dart';
-import 'package:danaview_editor_core/ops.dart' show AddText;
+import 'package:danaview_editor_core/ops.dart' show AddText, EditSession;
 import 'package:danaview_editor_engine_api/testing.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -75,6 +75,36 @@ void main() {
       rig.forcible.force(rig.state.copyWith(preview: rig.state.preview.copyWith(phase: PreviewPhase.ready)));
       await tester.pump();
       expect(find.byType(DanaviewSpinner), findsNothing);
+    });
+
+    testWidgets('FIX-UX-18-1: an empty timeline shows "Add media to start", not a spinner', (tester) async {
+      final rig = await PreviewRig.pump(tester, forcible: true, project: (repo) => repo.seedEmpty('Empty'));
+      // An empty plan never draws a first frame, so the phase can stay `starting`.
+      rig.forcible.force(rig.state.copyWith(preview: rig.state.preview.copyWith(phase: PreviewPhase.starting)));
+      await tester.pump();
+      expect(find.byType(DanaviewSpinner), findsNothing);
+      expect(find.text(PreviewStrings.empty), findsOneWidget);
+      rig.forcible.force(rig.state.copyWith(preview: rig.state.preview.copyWith(phase: PreviewPhase.ready)));
+      await tester.pump();
+      expect(find.text(PreviewStrings.empty), findsOneWidget);
+      // A stopped preview still offers "Restart preview".
+      rig.forcible.force(rig.state.copyWith(preview: rig.state.preview.copyWith(phase: PreviewPhase.failed)));
+      await tester.pump();
+      expect(find.text(PreviewStrings.empty), findsNothing);
+      expect(find.text(PreviewStrings.restart), findsOneWidget);
+      // With an item on the timeline the hint goes away and the spinner waits for the first frame.
+      final project = rig.state.project!;
+      final edit = EditSession(project, ids: SeededIdGenerator(3));
+      final added = edit.apply(const AddText(0, text: 'Hi', duration: 2 * s));
+      expect(added.changed, isTrue);
+      rig.forcible.force(rig.state.copyWith(
+        project: edit.committedProject,
+        preview: rig.state.preview.copyWith(phase: PreviewPhase.starting),
+      ));
+      await tester.pump();
+      expect(find.text(PreviewStrings.empty), findsNothing);
+      expect(find.byType(DanaviewSpinner), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('failed: "Preview stopped" and Restart preview resends the plan', (tester) async {

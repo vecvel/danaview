@@ -435,7 +435,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
         leading: const DanaviewTileIcon.glyph(DanaviewGlyphKind.device, color: DanaviewColors.cyan, size: 40),
         title: folder.label,
         subtitle: Theme.of(context).platform == TargetPlatform.iOS
-            ? 'Files app › On My iPhone › Danaview'
+            ? 'Files app › ${LibraryStorage.iosFilesLocation(tablet: LibraryStorage.isTabletWidth(MediaQuery.sizeOf(context).shortestSide))}'
             : 'Device storage',
         subtitleMaxLines: 2,
         onTap: () => widget.onOpenFolder(folder.path),
