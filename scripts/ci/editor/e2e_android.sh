@@ -252,11 +252,8 @@ ensure_device() {
   if [ -z "$EMU_AVD" ] || [ -z "$EMULATOR" ] || [ "$RESTARTS" -ge 3 ]; then return 1; fi
   RESTARTS=$((RESTARTS + 1))
   run_with_timeout 30 "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
-  # Restart the adb server only when no other device is attached: another run (a second emulator in
-  # parallel) would lose its connection.
-  if [ -z "$(device_serials | grep -vx "$SERIAL" || true)" ]; then
-    run_with_timeout 30 "$ADB" kill-server >/dev/null 2>&1 || true
-  fi
+  # The adb server is never restarted here: a second emulator that is still booting (not yet listed
+  # as a device) would lose its connection, and its run with it.
   # A restarted emulator is left running at the end exactly when the original one would have been.
   boot_avd "$EMU_AVD"
   setup_device
