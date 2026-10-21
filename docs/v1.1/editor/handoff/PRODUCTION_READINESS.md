@@ -6,11 +6,11 @@
 
 ---
 
-## 0. Live status (kept current; last update 2026-10-17 10:30 IST)
+## 0. Live status (kept current; last update 2026-10-21 18:00 IST)
 
 | Ticket | State | What's left |
 |---|---|---|
-| **QA-01** iOS simulator E2E | **Nearly certified.** Full run 16/18; s07 and s13 pass when re-run alone. iPad s12 passes (V-U5 certified on the simulator). iOS 18.2 lane 3/3 | Fix **FIX-IOS-12-1**: the second back-to-back export stalls in "rendering" in the s07 full run (IOS-12 `ExportCoordinator.swift` and its writer; probably the same family as D7). The manual iPad Files/Photos drop and the physical-keyboard step need a person (screenshots in `build/e2e/ios/2C9213E9-.../manual/`). The iPhone 7/8 smoke needs devices |
+| **QA-01** iOS simulator E2E | **Automated suite certified** (re-run 4, 2026-10-21): s01–s18 plus the iOS extras pass in one batch on iPhone 16 / iOS 26.5, including s07's back-to-back exports (FIX-IOS-12-1 confirmed fixed); iPad s12 passes; iOS 18.2 lane 3/3 | A person must do the manual iPad-simulator steps (Files/Photos drop, physical keyboard, hover pill) and record screenshots; iPhone 7/8 smoke needs devices. Optional harness speed-up FIX-QA-00-4 |
 | **QA-05** soak and crash recovery | **iOS side green.** **D7 fixed** (FIX-IOS-D7, §4.1) and verified 2026-10-17: seeded soak (5150) 965 ops, 0 failed ops, 14 exports, no crash, memory −15.9 %, 39/39 reopens valid; the process-death chain passes on the same code. `ExportD7Tests` 6/6. See `qa/QA-05-soak.md` §2 | Android soak/death on the Windows lane, and the device-only steps (§6 of the report) |
 | **QA-02** Android emulator E2E | **Windows lane, code D run done** (`ff95929`, merged): 17 of 18 scenarios and 6 of 7 extra phases, s08 in the batch, first AND-12 detached-export proof on API 35 | **FIX M-21**: the host's `swipeFromRecents` removes another app's task first, so `swipe-check` reports `ExportReattach.none` in the batch and alone. s13 fails in the batch only on emulator mic silence (passes alone). Then close the ticket |
 | **INT-05** release | **Prepared, not applied** (release-checklist) | Owner "go" |
@@ -28,9 +28,7 @@ QA-01 re-check was never run.
 
 **Next actions, in order:**
 1. ~~Merge `parallel-r7`~~ done (`c336899`).
-2. ~~Fix D7~~ done, ~~re-run QA-05~~ done (`qa/QA-05-soak.md` §2 is green). **Re-run the QA-01 scenarios
-the D7 fix touches** (s02, s06, s09, s12, s13 at least) and check FIX-IOS-12-1's back-to-back export
-in s07.
+2. ~~Fix D7~~ done, ~~re-run QA-05~~ done, ~~QA-01 re-check~~ done (2026-10-21, automated suite certified). Round 9 small fixes merged (`256243f`: empty-project hint, Restart-preview seek ack, relink monitor, iPad device-folder hints).
 3. Windows: pull `editor-wip` and fix **M-21** (swipe-from-recents), then close QA-02.
 4. Close QA-01, QA-02 and QA-05, and refresh the ticket totals in `BUILD_STATE.md` (its header still
    reads 151 done / 13 in progress / 2 not started, against §1's 162 of 166).
