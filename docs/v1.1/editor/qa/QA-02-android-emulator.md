@@ -377,8 +377,14 @@ restarts. Evidence is in `emulator-5554/full/`, and the solo reruns are in `emul
 The batch's own s07 logs were overwritten by the solo rerun, because a move of `logs/` was refused
 first. The excerpts are kept in `full/s07_batch_note.txt`.
 
+**Re-run on mains power (d680bd3, 2026-10-22):** s07 passed in the batch in 808 s, with both
+exports verified and 0 emulator restarts (see "Re-run of 2026-10-22").
+
 **s13: the host microphone.**
 
+- **Owner's decision (2026-10-22):** the low voice level on the emulator is accepted as an emulator
+  limitation. Real-mic levels are a device check (QA-04, device lab). The levels below stay on
+  record; the test and its -60 dBFS bar are unchanged.
 - **What passes:** every take recorded, and the clip reached the voice lane. In the batch, the
   length check passed: the length was within the Record-to-Stop window, 0 µs outside it.
 - **What fails:** the export level is -66 to -76 dBFS, against a bar of -60 dBFS.
@@ -446,6 +452,10 @@ limit counts wall-clock time, so it ran out while the laptop was asleep. The run
 which blamed a silent Gradle build, is superseded by this timeline. The pair rerun alone passed:
 its build took 87 s.
 
+**Re-run on mains power (d680bd3, 2026-10-22):** the fgs pair passed (fgs + fgs-check, 472 s,
+`detached=true`, `completed while detached; savedToGallery=true notified=true`; see "Re-run of
+2026-10-22").
+
 ### API 29 and API 29 2 GB (`emulator-5556`, from `dv2`, `-feature GLESDynamicVersion`)
 
 | Scenario | API 29 (20:47–21:12) | API 29 2 GB (21:44–22:08) |
@@ -474,6 +484,8 @@ The tier is LOW on API 29 and MINIMAL on the 2 GB AVD; both have GLES 3 (see "GL
   4. The native `debugCaptureFrame` waits only for a seek that is already in flight (the capture
      fix ae6cda2), so it reads frame 0.
 - On the slower MINIMAL-tier device the window is wide enough to hit 2 of 3 times.
+- **Fixed by FIX M-22 (07485cf):** on d680bd3, s18 passes in the 2 GB batch, on API 29 and on
+  API 35.
 
 ### API 28 (Pixel_API_28, `emulator-5556`, from `dv2`)
 
@@ -512,8 +524,10 @@ The tier is LOW on API 29 and MINIMAL on the 2 GB AVD; both have GLES 3 (see "GL
 
 All values come from emulators with software codecs and SwiftShader GL, except the tablet, which
 was booted with `-gpu host`. They are **not** performance numbers; QA-04 measures on devices. All
-values are from code E (88469c0). The paths are under `build/e2e/android/emulator-5554/` unless
-another device is named.
+values are from code E (88469c0). The paths are under `build/e2e/android/_before_d680bd3/emulator-5554/`
+(moved there before the d680bd3 re-run) unless another device is named; other devices' code E folders
+moved to `_before_d680bd3/` in the same way. The d680bd3 re-run's values (s07 exports and cues, the
+API 34 detached export, the tiers) are in "Re-run of 2026-10-22" and match the code E values.
 
 | What | Value | Where |
 |---|---|---|
@@ -568,8 +582,10 @@ code E.
   - the API 34 fgs pair (fgs-check's build). Its 1200 s phase limit runs on wall-clock time, so it
     expired during the sleep.
 
-  Both passed alone on the same code. Run certifying passes on mains power.
-- **The host microphone feeds the emulator (near) silence (s13).** On code E the export level was
+  Both passed alone on the same code. Run certifying passes on mains power. **Both were re-run on
+  mains power on d680bd3 (2026-10-22) and passed in their batches**, with no host power event.
+- **The host microphone feeds the emulator (near) silence (s13). Accepted by the owner as an
+  emulator limitation (2026-10-22);** real-mic levels are a device check (QA-04, device lab). On code E the export level was
   -66.3 dBFS in the batch, and -76.2 and -69.4 dBFS in two solo runs, against a bar of -60 dBFS.
   The last run had a tone playing on the laptop speakers. On code D the batch had pure silence
   (-114.6 dBFS: 437 × "inserting 16000 us of silence" from the ranchu audio HAL over the 7 s
@@ -620,6 +636,11 @@ code E.
   shared-storage service crashed (SIGABRT `Check failed: active_nodes_.find(node)`). Then
   `/sdcard/Android` gave "Permission denied" or "Transport endpoint is not connected" and staging
   failed. Fix: reboot that emulator and stage again without uninstalling.
+- **API 34 shared storage not ready right after boot (d680bd3, 2026-10-22).** The first fgs
+  attempt stopped in staging with `chmod …/files/e2e_handshake: Transport endpoint is not
+  connected` right after boot, before any test ran. The folder was fine moments later, and the
+  rerun from a fresh install passed. Evidence:
+  `emulator-5556_Pixel_API_34/d680bd3/fgs_attempt1_STAGE_FUSE_ERROR/`.
 - **Software codecs.** Exports use `c2.android.avc.encoder` and `c2.android.aac.encoder`. There is
   no hardware HEVC encoder. Export speed means nothing here.
 - **Software decoder stale frames (3ef16a0, AND-18).** The emulator's software H.264 decoder,
@@ -648,7 +669,7 @@ code E.
 ## Android-lane fixes this round
 
 Android-lane commits of the 2026-10-16/17 rounds, all on `editor-android` and all contained in code
-E. No Android-lane code changed during the code E pass.
+E. No Android-lane code changed during the code E pass, nor between E and F (d680bd3).
 
 | Commit | What |
 |---|---|
@@ -684,7 +705,8 @@ assertion or test changed. Landed in WIP backup 550b8ac.
   (`solo/s18_capturefix/preview_unit.log`).
 - Since then: the fix landed as ae6cda2. On code E, s18 passes inside the full batch on API 35 and
   on API 29. The 2 GB failure is a different, Dart-side race (FIX M-22): the capture correctly
-  returns frame 0, because the opening seek has not been sent yet.
+  returns frame 0, because the opening seek has not been sent yet. With M-22 on d680bd3, s18 passes
+  in the 2 GB batch too.
 
 ### AND-14: the notification-permission request always returns
 
@@ -798,17 +820,48 @@ host for `grantNotifications` and the export started. None waited at "Preparing�
 | M-6, destroyActivity | fgs-check returns `finished` with `detached=true` on API 35 and API 34 |
 | M-7, notification Cancel | API 34 and API 35 |
 | M-8, s10 relink | s10 passes |
-| M-9, s02 on API 29 | API 29 and the 2 GB AVD |
+| M-9, s02 on API 29 | API 29 and the 2 GB AVD on 88469c0. The symptom came back once on the 2 GB AVD on d680bd3: FIX M-23 |
 | M-10, API 28 test runs | no longer skips |
 | M-15, s09 recover close | s09 passes |
 | M-21, swipe by task id | swipe-check passes on API 34 and API 35 |
 | M-11, M-12 (Android lane) and M-13 (README) | done before this pass |
 
+**Closed by the d680bd3 re-run (2026-10-22):**
+
+| Request | Proof |
+|---|---|
+| M-22, s18 frame 0 after the reopen | s18 passes in the API 29 2 GB batch (191 s), on API 29 (212 s) and on API 35 (402 s), all on d680bd3 |
+
 **M-14 (s08 close past "export interrupted")** is fixed in `E2eEditor.close` (FIX-QA00-R7). The
 clean pass did not exercise it, because every batch starts from cleared data.
 
-**M-22. s18 on the 2 GB AVD reads frame 0 after the reopen** (new; QA-00 harness with the UX-08
-open sequence).
+**M-23. s02 on the 2 GB AVD: the player-to-editor handoff carries position 0** (new, 2026-10-22;
+the M-9 symptom again, intermittent).
+
+- **Where:** `s02_player_to_editor_test.dart:62`, the playhead frame after the handoff:
+  `Expected: <160> Actual: <0>`.
+- **Seen on:** Pixel_API_29_2GB (tier MINIMAL), code d680bd3, in the batch, after the runner's
+  `pm clear`. It failed once in 2 runs: the alone rerun on a fresh install passed (155 s).
+- **What the logs show:**
+  - the test read the player at 5,333,333 µs right before it tapped Edit;
+  - batch: `[EditorLauncher] Handoff: creating a project, at 0 us`, then "at 0 us -> frame 0",
+    then "opening the editor at 0 us";
+  - alone: "Handoff: creating a project, at 5333333 us", then "at 5333333 us -> frame 160
+    (5333334 us)".
+  So the Edit request itself carried position 0. The Android engine is not involved in that value.
+- **Likely cause (not proven):** `DanaviewPlayerScreen._editVideo`
+  (`packages/danaview_features/lib/src/player/danaview_player_screen.dart`, around line 211) builds
+  `PlayerEditRequest.position` from a snapshot of the player state, and that position can briefly
+  read 0 between the seek landing and the Edit tap (for example a late player position event
+  after pause or seek, or a state reset).
+- **Fix:** take the Edit position from the last landed seek or position rather than a snapshot that
+  can drop to 0, and log `state.position` in `_editVideo` so the next failure shows where 0 came
+  from. Do not loosen s02.
+- **Evidence:** `emulator-5556_Pixel_API_29_2GB/d680bd3/batch_s01-s04_s18/logs/`
+  (`s02_player_to_editor_test.log`, `batch-s02.logcat.txt`) and `s02_alone_rerun_PASS/`.
+
+**M-22. s18 on the 2 GB AVD reads frame 0 after the reopen** (fixed by 07485cf; kept for the
+record; QA-00 harness with the UX-08 open sequence).
 
 - **Where:** `s18_close_reopen_test.dart:55`, `expect((await ed.barcode()).index, 77)`, right after
   `E2eEditor.openFromProjects`.
@@ -837,7 +890,7 @@ open sequence).
     devices flash frame 0.
 - Do not loosen s18.
 - **Evidence:**
-  - `build/e2e/android/emulator-5556_Pixel_API_29_2GB/` (`batch_s01-s04_s18/`,
+  - `build/e2e/android/_before_d680bd3/emulator-5556_Pixel_API_29_2GB/` (`batch_s01-s04_s18/`,
     `s18_alone_rerun1_FAIL/`, `s18_alone_rerun2_PASS/`, and the diagnostic
     `s18_diag_instrumented_NOT_A_RESULT/`).
   - `CODE_VERSION.txt`.
@@ -1012,12 +1065,26 @@ rows passed or failed (one line each is enough). This report then links the scre
 Paths are relative to `build/e2e/android/`. They are local to the Windows laptop and not
 committed.
 
+**Before the d680bd3 re-run,** the code E evidence of both serials was moved to `_before_d680bd3/`
+(`emulator-5554/{full,solo}/` and `emulator-5556_<AVD>/`), keeping the relative paths. The code E
+table below names the folders as they were; prefix each with `_before_d680bd3/`. The `dv2`
+working copies of the d680bd3 runs remain in `C:/dev/dv2/build/e2e/android/{api29_2gb,api29,api34}_d680bd3/`.
+
+**Code F (d680bd3), 2026-10-22: the re-run items**
+
+| Folder | Device | Content |
+|---|---|---|
+| `emulator-5554/` (`summary.txt`, `runner.log`, `logs/`, `screens/`, `files/`) | API 35 | s07 and s18, one runner call |
+| `emulator-5556_Pixel_API_29_2GB/d680bd3/` (`batch_s01-s04_s18/`, `s02_alone_rerun_PASS/`, `CODE_VERSION.txt`) | API 29 2 GB | s01–s04 and s18; s02 alone |
+| `emulator-5556_Pixel_API_29/d680bd3/` (`s18/`, `CODE_VERSION.txt`) | API 29 | s18 |
+| `emulator-5556_Pixel_API_34/d680bd3/` (`fgs_pair_PASS/`, `fgs_attempt1_STAGE_FUSE_ERROR/`, `CODE_VERSION.txt`) | API 34 | the fgs pair, and the attempt that stopped in staging |
+
 **Before the code E pass,** the code D evidence that was in `emulator-5554/` was moved to
 `_before_88469c0/emulator-5554/`. No older `emulator-5556` evidence was in the main checkout, so
 nothing was moved for that serial. The `dv2` copies of the gate runs remain in
 `C:/dev/dv2/build/e2e/android/` (`*_88469c0_*`).
 
-**Code E (88469c0), 2026-10-21: the certifying evidence**
+**Code E (88469c0), 2026-10-21: the rest of the clean pass (now under `_before_d680bd3/`)**
 
 | Folder | Device | Content |
 |---|---|---|
@@ -1059,46 +1126,46 @@ version:
 - the API 28 automated check;
 - tablet s12, plus the owner's M1–M4.
 
-**Verdict on code E (88469c0): QA-02 is NOT certified.**
+The owner's rule for this round (2026-10-22): the re-run items run on d680bd3 and the rest of the
+clean pass stands on 88469c0. If every re-run item passes and nothing else is open except the
+manual M1–M4, QA-02 is certified with that exception.
 
-**Done on 88469c0:**
+**Verdict (2026-10-22): QA-02 is NOT certified.** One re-run item failed: s02 in the API 29 2 GB
+batch (FIX M-23). It passed alone, but a batch failure is not a clean pass.
 
-- **API 35:** 16 of 18 scenarios and 7 of 7 extra phases pass in the batch.
-- **AND-12** is proven on API 35 (fgs and swipe) and on API 34 (swipe in the batch, fgs alone).
-- **API 34:** Cancel passes.
-- **API 29:** s01–s04 and s18 pass.
-- **API 29 2 GB:** s01–s04 pass.
-- **API 28:** the automated check passes.
-- **Tablet:** s12 passes.
-- **s09 close trace:** the trace is clean.
-- **Android lane:** no defect found and no fix needed.
+**Done:**
+
+- **On d680bd3 (mains power):**
+  - API 29 2 GB: s01, s03, s04 and s18 pass in the batch (M-22 fixed);
+  - s18 passes on API 29 and API 35;
+  - API 35 s07 passes in the batch;
+  - the API 34 fgs pair passes (AND-12 detached export).
+- **On 88469c0:**
+  - API 35: every other scenario and all 7 extra phases pass in the batch;
+  - AND-12 on API 35 (fgs and swipe) and API 34 swipe;
+  - API 34 Cancel;
+  - API 29 s01–s04;
+  - API 28 automated check;
+  - tablet s12;
+  - the s09 close trace is clean.
+- **s13:** the owner accepts the low voice level on the emulator as an emulator limitation. Real-mic
+  levels are a device check (QA-04, device lab). Every other s13 check passes.
+- **Android lane:** no defect found in QA-02 and no fix needed.
 
 **Still open, by owner:**
 
-1. **Mac (Dart / QA-00): FIX M-22.** s18 fails on the 2 GB AVD from the open-sequence race. After
-   the fix, rerun s01–s04 and s18 on Pixel_API_29_2GB (fresh install, `-feature
-   GLESDynamicVersion`). For the gate, rerun s18 on API 29 and API 35 too.
-2. **Owner decision or environment (API 35 s13):** the laptop microphone feeds the emulator
-   near-silence, so the export level stays below -60 dBFS. There are two ways to close it:
-   - the owner accepts s13's level check as an emulator reality on this laptop (every other s13
-     check passes); or
-   - s13 is rerun in the batch with a voice or tone the laptop microphone actually picks up (an
-     external mic or a headset).
-3. **Environment (host power), API 35 s07 and the API 34 fgs pair:** both passed alone on 88469c0,
-   but the clean batch was cut by the laptop hibernating on critical battery (19:08–20:10).
-   - Either the owner accepts the solo passes,
-   - or the API 35 command and the API 34 extra are rerun **on mains power**, together with item 1's
-     reruns on the code that carries M-22.
-4. **Owner (manual): M1–M4 on the tablet** (keyboard, mouse, drag from Files, drag from Photos),
-   using the checklist below. This report then records each row with its screenshot.
+1. **Mac (Dart, player screen): FIX M-23.** s02 on the 2 GB AVD opened the editor at frame 0,
+   because the Edit request carried position 0 (1 failure in 2 runs). After the fix, rerun s01–s04
+   and s18 on Pixel_API_29_2GB in one batch (fresh install, `-feature GLESDynamicVersion`), and s02
+   on API 29 for the gate.
+2. **Owner (manual): M1–M4 on the tablet** (keyboard, mouse, drag from Files, drag from Photos),
+   using the checklist above. This report then records each row with its screenshot.
 
-If M-22 changes Dart code, the final certifying run is one more full pass on that code version:
+When M-23 lands and its rerun passes in the batch, with nothing else open, the status becomes
+"QA-02 certified, except the owner's manual tablet checklist M1–M4", naming the code version of
+each part. If M-23 changes code that other scenarios use, the lead decides whether a wider rerun is
+needed.
 
-- API 35 full command;
-- API 34 extra;
-- API 29 and API 29 2 GB: s01–s04 and s18;
-- API 28;
-- tablet s12.
-
-**Android-lane items open:** none. The `debugCaptureFrame` fix (ae6cda2) passed s18 inside the
-batch on API 35 and API 29.
+**Android-lane items open in QA-02:** none. The `debugCaptureFrame` fix (ae6cda2) passed s18 in the
+batch on API 35 and API 29 (88469c0 and d680bd3) and on the 2 GB AVD (d680bd3). The QA-05 Android
+findings of this round (an export deadlock candidate in the engine) are tracked in `QA-05-soak.md`.
