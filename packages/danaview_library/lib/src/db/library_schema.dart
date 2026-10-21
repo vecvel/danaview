@@ -1,8 +1,8 @@
 // OWNER: HOM-17
 //
 // `library.db` schema v1 (ARCH v1.2 §5.3). Times are INT milliseconds since the epoch (UTC); bools
-// are 0/1. The recents cap of 50 is a trigger. Two extra indexes beyond §5.3's list back the paged
-// Home queries (`entries(trashed_at, added_at)`) and the Recently deleted view
+// are 0/1. The recents cap of 50 is a trigger. Extra indexes beyond §5.3's list back the paged
+// Home queries (newest first over All, one kind and Favourites) and the Recently deleted view
 // (`folders(trashed_at)`); they change no column.
 
 /// The `library.db` schema version this build writes (`meta.schema_version`).
@@ -33,6 +33,8 @@ const List<String> librarySchemaV1 = [
   'CREATE INDEX entries_added ON entries(added_at)',
   'CREATE INDEX entries_name ON entries(display_name COLLATE NOCASE)',
   'CREATE INDEX entries_live_added ON entries(trashed_at, added_at)',
+  'CREATE INDEX entries_kind_added ON entries(kind, trashed_at, added_at)',
+  'CREATE INDEX entries_favourite_added ON entries(is_favourite, trashed_at, added_at)',
   'CREATE INDEX folders_parent ON folders(parent_id)',
   'CREATE INDEX folders_trashed ON folders(trashed_at)',
   'CREATE INDEX recents_opened ON recents(opened_at)',
