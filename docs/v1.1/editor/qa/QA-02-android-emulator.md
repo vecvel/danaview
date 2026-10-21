@@ -19,8 +19,8 @@ still open: two are environment items, one is a Mac fix, and one is an owner ste
   task by id.
   - **s07** timed out in the batch because the host laptop hibernated on critical battery
     (19:08:29–20:10:21) mid-export. It **passes alone** on the same code.
-  - **s13** fails on the export level in the batch and in 3 solo runs (-66.3, -76.2 and
-    -69.4 dBFS; it needs > -60). The cause is the laptop microphone, which feeds the emulator
+  - **s13** fails on the export level in the batch (-66.3 dBFS) and in 2 of 3 solo runs (-76.2 and
+    -69.4 dBFS; it needs > -60); the third solo run failed differently (Stop not applied, flaky). The cause is the laptop microphone, which feeds the emulator
     near-silence. This is an emulator reality.
 - **API 34 (`emulator-5556`, from `dv2`):** **all 7 extra phases pass**. Notification Cancel
   passes, so M-7 is fixed. The fgs pair was in the batch when the same host hibernation hit, and
@@ -200,7 +200,7 @@ contains every earlier Android-lane fix (M-11, M-12, M-16..M-20, and the capture
 | Where | Code as run |
 |---|---|
 | API 35 phone, main checkout `C:/dev/danaview`, `emulator-5554`, 18:31–22:15 | 88469c0, plus one uncommitted runner change: `e2e_android.sh` never restarts the adb server (later committed unchanged by the backup loop as 8e6a403). That change touches neither the app nor the tests. |
-| API 34, API 29, API 29 2 GB and API 28, copy `C:/dev/dv2`, `emulator-5556`, 18:52–22:33 | 88469c0. `dv2` was refreshed from the main checkout's tracked files at 18:29:42, and `git diff` against 88469c0 was empty. |
+| API 34, API 29, API 29 2 GB and API 28, copy `C:/dev/dv2`, `emulator-5556`, 18:52–22:33 | 88469c0 app and tests, plus the same runner-only change as the API 35 run (`e2e_android.sh` no longer runs `adb kill-server`; later committed as 8e6a403). `dv2` (a plain copy, not a git repository) was refreshed from the main checkout's tracked files at 18:29:42. |
 | Tablet, copy `C:/dev/dv2`, `emulator-5556`, 22:37–22:40 | 88469c0 app and tests. `dv2` matched HEAD 70a855a, which differs from 88469c0 only in this report and in the runner change above. |
 
 **No Android-lane code change** was made during or after the pass, so no scenario needed a rerun
@@ -363,7 +363,7 @@ its build took 87 s.
 | s02 | **pass** (220 s) (M-9 fixed) | **pass** (201 s) |
 | s03 | **pass** (222 s) | **pass** (204 s) |
 | s04 | **pass** (217 s) | **pass** (237 s) |
-| s18 | **pass** (225 s) | **fail** (269 s): `s18_close_reopen_test.dart:55`, barcode `Expected: <77> Actual: <0>` after the reopen. Alone, rerun 1 (22:18–22:20): **fail**, same. Alone, rerun 2 (unchanged test): **pass** (146 s) |
+| s18 | **pass** (225 s) | **fail** (269 s): `s18_close_reopen_test.dart:55`, barcode `Expected: <77> Actual: <0>` after the reopen. Alone, rerun 1 (22:18–22:20): **fail**, same. Alone, rerun 2 (unchanged test, 22:28–22:30): **pass** (137 s) |
 
 The tier is LOW on API 29 and MINIMAL on the 2 GB AVD; both have GLES 3 (see "GLES 3 and tier").
 
