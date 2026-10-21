@@ -1,5 +1,10 @@
-# Regenerate with tool/make_clips.py; raw runs with tool/run_grid.sh
+# Regenerate clips with tool/make_clips.py (macOS `say`); raw runs with tool/run_grid.sh.
+# Clips over 1 MB stay out of git; the four under 1 MB are tracked for the Android lane.
 data/*.wav
+!data/c1_2spk_turns.wav
+!data/c2_2spk_overlap.wav
+!data/c4_3spk_overlap.wav
+!data/c5_2spk_similar.wav
 results/
 build/
 .dart_tool/
