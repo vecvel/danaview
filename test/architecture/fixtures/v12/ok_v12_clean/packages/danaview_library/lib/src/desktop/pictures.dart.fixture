@@ -1,0 +1,4 @@
+import 'dart:io';
+
+// Desktop discovery reads only (dart:io allowed in desktop/, rule 20).
+bool exists(String path) => Directory(path).existsSync();

@@ -1,0 +1,16 @@
+name: danaview_library
+dependencies:
+  flutter:
+    sdk: flutter
+  danaview_ui_kit:
+    path: ../danaview_ui_kit
+  collection: ^1.18.0
+  crypto: ^3.0.3
+  meta: ^1.11.0
+  path: ^1.9.0
+  sqlite3: ^2.9.4
+  danaview_domain:
+    path: ../danaview_domain
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0

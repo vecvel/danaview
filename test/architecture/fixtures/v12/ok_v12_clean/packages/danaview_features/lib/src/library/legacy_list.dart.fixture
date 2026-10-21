@@ -1,0 +1,2 @@
+// v1.0 library files outside the new directories are not part of rule 31's scan.
+Widget legacy() => const Card();

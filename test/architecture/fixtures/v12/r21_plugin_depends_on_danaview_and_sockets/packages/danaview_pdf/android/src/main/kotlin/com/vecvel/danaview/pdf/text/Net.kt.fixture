@@ -1,0 +1,2 @@
+package com.vecvel.danaview.pdf.text
+fun open(u: java.net.URL) = u.openConnection() as java.net.HttpURLConnection

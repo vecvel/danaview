@@ -1,0 +1,9 @@
+import Foundation
+
+// The Inbox is the only App Group reader (rule 26).
+final class Inbox {
+  func root() -> URL? {
+    FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.vecvel.danaview")
+  }
+  func log() { print("inbox: emptied") }
+}

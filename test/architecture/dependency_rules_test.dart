@@ -898,7 +898,8 @@ final v12DependencyRules = <DependencyRule>[
         final ioAllowed = ioDirs.any((d) => file.packagePath.startsWith('lib/src/$d/'));
         for (final uri in file.uris) {
           final p = packageOf(uri);
-          if (p == 'flutter' || p == 'flutter_test' || p == 'sky_engine') {
+          if (!inLib && (p == 'flutter' || p == 'flutter_test' || p == 'sky_engine')) {
+            // lib/ imports are checked against the allowed set above.
             report(file.repoPath, 'imports `$uri`: no Flutter in danaview_library (rule 20)');
           } else if (inLib && !ioAllowed && (uri == 'dart:io' || uri == 'dart:isolate')) {
             report(file.repoPath, 'imports `$uri` outside lib/src/{${ioDirs.join(',')}}/ (rule 20)');
@@ -949,7 +950,7 @@ final v12DependencyRules = <DependencyRule>[
       const allowed = {'danaview_library', 'danaview_ai', 'sqlite3', 'meta', 'collection', 'characters'};
       _onlyAllowed(pkg, allowed, report, 'rule 24');
       _pureDevDependencies(pkg, const {'danaview_library', 'danaview_ai'}, report, 'rule 24');
-      for (final file in pkg.dartFiles) {
+      for (final file in pkg.dartFiles.where((f) => !f.packagePath.startsWith('lib/'))) {
         for (final uri in file.uris) {
           final p = packageOf(uri);
           if (p == 'flutter' || p == 'flutter_test' || p == 'sky_engine') {
@@ -1065,8 +1066,10 @@ final v12RepoRules = <RepoRule>[
         for (final file in _shippedSources(pkg, {'.dart', ...nativeExtensions})) {
           if (file.repoPath.startsWith(inboxDir)) continue;
           final code = blankNonCode(file.source, blankStrings: false);
+          final lines = <int>{};
           for (final m in appGroup.allMatches(code)) {
-            report('${file.repoPath}:${_lineAt(code, m.start)}', 'touches the App Group container: only the Inbox class may (rule 26)');
+            final line = _lineAt(code, m.start);
+            if (lines.add(line)) report('${file.repoPath}:$line', 'touches the App Group container: only the Inbox class may (rule 26)');
           }
         }
       }
@@ -1093,8 +1096,9 @@ final v12RepoRules = <RepoRule>[
     (repo, report) {
       final descriptorMode = RegExp(r'openFileDescriptor\s*\([^,()]+,\s*"([^"]*)"');
       final writable = RegExp(
-        r'ParcelFileDescriptor\s*\.\s*MODE_(?:READ_WRITE|WRITE_ONLY|TRUNCATE|APPEND|CREATE)\b|(?<![A-Za-z0-9_])O_(?:RDWR|WRONLY|TRUNC|APPEND)\b|FileHandle\s*\(\s*(?:forUpdating|forWritingTo|forWritingAtPath|forUpdatingAtPath)\b|RandomAccessFile\s*\([^)]*"rw',
+        r'ParcelFileDescriptor\s*\.\s*MODE_(?:READ_WRITE|WRITE_ONLY|TRUNCATE|APPEND|CREATE)\b|(?<![A-Za-z0-9_])O_(?:RDWR|WRONLY|TRUNC|APPEND)\b|FileHandle\s*\(\s*(?:forUpdating|forWritingTo|forWritingAtPath|forUpdatingAtPath)\b',
       );
+      final randomAccessWrite = RegExp(r'RandomAccessFile\s*\([^)]*"rw');
       final pdfWrite = RegExp(r'\.\s*write\s*\(\s*(?:to|toFile)\s*:|\.\s*writeTo\s*\(|dataRepresentation\s*\(');
       const pdfToolDirs = [
         'packages/danaview_pdf/darwin/Classes/Tools/',
@@ -1116,6 +1120,9 @@ final v12RepoRules = <RepoRule>[
             if (m[1] != 'r') {
               report('${file.repoPath}:${_lineAt(withStrings, m.start)}', 'opens a source with mode "${m[1]}": sources are read-only (rule 27)');
             }
+          }
+          for (final m in randomAccessWrite.allMatches(withStrings)) {
+            report('${file.repoPath}:${_lineAt(withStrings, m.start)}', 'opens a RandomAccessFile for writing: sources are read-only (rule 27)');
           }
           final code = blankNonCode(file.source, blankStrings: true);
           if (!file.repoPath.startsWith(exportOutDir)) {
@@ -1416,7 +1423,7 @@ class RepoTree {
     final dir = Directory('${root.path}/lib');
     if (!dir.existsSync()) return const [];
     return [
-      for (final f in dir.listSync(recursive: true).whereType<File>()..sort((a, b) => a.path.compareTo(b.path)))
+      for (final f in dir.listSync(recursive: true).whereType<File>().toList()..sort((a, b) => a.path.compareTo(b.path)))
         if (f.path.endsWith('.dart$suffix'))
           () {
             final rel = f.path.substring(root.path.length + 1).replaceAll(Platform.pathSeparator, '/');

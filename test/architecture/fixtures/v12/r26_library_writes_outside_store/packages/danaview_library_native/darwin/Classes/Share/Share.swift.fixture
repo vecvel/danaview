@@ -1,0 +1,2 @@
+import Foundation
+let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.vecvel.danaview")

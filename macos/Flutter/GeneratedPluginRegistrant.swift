@@ -5,6 +5,8 @@
 import FlutterMacOS
 import Foundation
 
+import danaview_library_native
+import danaview_pdf
 import desktop_drop
 import file_selector_macos
 import media_kit_libs_macos_video
@@ -17,6 +19,8 @@ import wakelock_plus
 import window_manager
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+  DanaviewLibraryNativePlugin.register(with: registry.registrar(forPlugin: "DanaviewLibraryNativePlugin"))
+  DanaviewPdfPlugin.register(with: registry.registrar(forPlugin: "DanaviewPdfPlugin"))
   DesktopDropPlugin.register(with: registry.registrar(forPlugin: "DesktopDropPlugin"))
   FileSelectorPlugin.register(with: registry.registrar(forPlugin: "FileSelectorPlugin"))
   MediaKitLibsMacosVideoPlugin.register(with: registry.registrar(forPlugin: "MediaKitLibsMacosVideoPlugin"))

@@ -1,0 +1,16 @@
+name: danaview_features
+dependencies:
+  flutter:
+    sdk: flutter
+  danaview_ui_kit:
+    path: ../danaview_ui_kit
+  danaview_library:
+    path: ../danaview_library
+  danaview_library_native:
+    path: ../danaview_library_native
+  danaview_documents:
+    path: ../danaview_documents
+  danaview_search:
+    path: ../danaview_search
+  danaview_pdf:
+    path: ../danaview_pdf

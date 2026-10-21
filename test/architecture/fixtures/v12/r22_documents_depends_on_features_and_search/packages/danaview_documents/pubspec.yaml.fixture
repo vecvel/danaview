@@ -1,0 +1,23 @@
+name: danaview_documents
+dependencies:
+  danaview_features:
+    path: ../danaview_features
+  danaview_search:
+    path: ../danaview_search
+  flutter:
+    sdk: flutter
+  characters: ^1.3.0
+  flutter_riverpod: ^2.5.1
+  danaview_library:
+    path: ../danaview_library
+  danaview_library_native:
+    path: ../danaview_library_native
+  danaview_pdf:
+    path: ../danaview_pdf
+  danaview_ui_kit:
+    path: ../danaview_ui_kit
+dev_dependencies:
+  danaview_editor:
+    path: ../danaview_editor
+  flutter_test:
+    sdk: flutter

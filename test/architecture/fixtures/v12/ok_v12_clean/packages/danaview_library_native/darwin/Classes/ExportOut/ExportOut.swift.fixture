@@ -1,0 +1,7 @@
+import Foundation
+
+// Save-out writes the new file it creates (rule 26 allows FileHandle(forWritingTo:) here).
+func write(_ data: Data, to url: URL) throws {
+  let handle = try FileHandle(forWritingTo: url)
+  handle.write(data)
+}

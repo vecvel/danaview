@@ -1,0 +1,2 @@
+import 'dart:io';
+// The photo store lives in lib/src/store/, where dart:io is allowed (rules 2 and 25).

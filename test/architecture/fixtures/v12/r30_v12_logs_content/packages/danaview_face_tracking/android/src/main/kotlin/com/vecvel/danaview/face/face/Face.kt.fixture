@@ -1,0 +1,2 @@
+package com.vecvel.danaview.face.face
+fun landmarks(label: String) { android.util.Log.d(TAG, "label $label") }

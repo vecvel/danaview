@@ -1,0 +1,3 @@
+import Foundation
+// A URLSession in a comment is not a violation; the code below is.
+let task = URLSession.shared.dataTask(with: URL(string: "x")!)

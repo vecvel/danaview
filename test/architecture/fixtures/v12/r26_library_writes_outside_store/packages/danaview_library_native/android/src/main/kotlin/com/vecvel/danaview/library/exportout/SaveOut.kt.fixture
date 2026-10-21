@@ -1,0 +1,2 @@
+package com.vecvel.danaview.library.exportout
+fun save(r: android.content.ContentResolver, uri: android.net.Uri) { r.openOutputStream(uri, "wt") }

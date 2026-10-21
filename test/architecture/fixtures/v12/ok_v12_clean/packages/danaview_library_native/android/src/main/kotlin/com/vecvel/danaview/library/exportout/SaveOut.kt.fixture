@@ -1,0 +1,6 @@
+package com.vecvel.danaview.library.exportout
+
+// Writes to the URI it just inserted, with the default mode.
+fun save(resolver: android.content.ContentResolver, uri: android.net.Uri, bytes: ByteArray) {
+    resolver.openOutputStream(uri)?.use { it.write(bytes) }
+}

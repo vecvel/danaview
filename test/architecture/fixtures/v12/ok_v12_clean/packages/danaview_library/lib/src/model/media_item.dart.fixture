@@ -1,0 +1,5 @@
+import 'package:danaview_domain/danaview_domain.dart';
+import 'package:meta/meta.dart';
+
+@immutable
+final class MediaItem { const MediaItem(this.ref); final MediaRef ref; }

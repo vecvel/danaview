@@ -1,0 +1,17 @@
+name: danaview_documents
+dependencies:
+  flutter:
+    sdk: flutter
+  characters: ^1.3.0
+  flutter_riverpod: ^2.5.1
+  danaview_library:
+    path: ../danaview_library
+  danaview_library_native:
+    path: ../danaview_library_native
+  danaview_pdf:
+    path: ../danaview_pdf
+  danaview_ui_kit:
+    path: ../danaview_ui_kit
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

@@ -1,0 +1,2 @@
+// The one call site (rule 28).
+Object accept() => OpenNetworkConsent.accepted(provider: 'fallback');

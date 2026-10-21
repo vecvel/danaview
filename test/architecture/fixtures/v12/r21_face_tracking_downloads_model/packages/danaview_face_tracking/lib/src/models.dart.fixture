@@ -1,0 +1,2 @@
+// The model comes from the caller, never a URL.
+const landmarker = 'https://huggingface.co/x/face_landmarker.task';
