@@ -8,10 +8,17 @@ Android export extra on API 34 and API 35, the tablet run of scenario 12, and th
 steps for the owner (hardware keyboard, mouse, drag from Files and Photos).
 
 **Status (2026-10-22, 03:00 IST): not certified.** The owner's re-run on code F (`editor-android`
-**d680bd3**, which carries FIX M-22, 07485cf) ran on mains power on 2026-10-22. Every re-run item
-passes except one: **s02 failed in the API 29 2 GB batch** (the player-to-editor handoff opened at
-frame 0, the M-9 symptom; FIX M-23, Mac). The same s02 passed alone on a fresh install, but a batch
-failure is not a clean pass. Still open: FIX M-23 and the owner's manual tablet M1–M4. The owner
+**d680bd3**, which carries FIX M-22, 07485cf) ran on mains power on 2026-10-22. The owner set four
+re-run items and asked to certify only if everything passes. **Two of the four failed:**
+(1) **s02 failed in the API 29 2 GB batch** (the player-to-editor handoff opened at frame 0, the M-9
+symptom; FIX M-23, Mac). It passed alone on a fresh install, but a batch failure is not a clean pass.
+(2) **The QA-05 Android half is not green** (see `QA-05-soak.md`): the process-death chain passes
+(7/7), but the seeded soak (seed 5150) fails: D8 (the editor cache root is purged by the system under
+low storage during an export; Mac product, plus a soak gap), D9 (an export deadlocks creating its audio
+encoder, with preview players stuck in the same codec reclaim; Android lane) and D10 (stale preview
+frames after seeks; Android lane). The soak only runs on Windows through a scratch wrapper, so the
+host fixes W1–W7 in `soak_host.py` are Mac requests. The other re-run items pass. Still open: FIX M-23,
+D8 (Mac), D9 and D10 (Android lane), W1–W7 (Mac), and the owner's manual tablet M1–M4. The owner
 accepts s13's low voice level on the emulator as an emulator limitation.
 
 - **Re-run on d680bd3, mains power, fresh install on every device** ("Re-run of 2026-10-22" below):
@@ -1130,8 +1137,10 @@ The owner's rule for this round (2026-10-22): the re-run items run on d680bd3 an
 clean pass stands on 88469c0. If every re-run item passes and nothing else is open except the
 manual M1–M4, QA-02 is certified with that exception.
 
-**Verdict (2026-10-22): QA-02 is NOT certified.** One re-run item failed: s02 in the API 29 2 GB
-batch (FIX M-23). It passed alone, but a batch failure is not a clean pass.
+**Verdict (2026-10-22): QA-02 is NOT certified.** Two of the owner's four re-run items failed:
+s02 in the API 29 2 GB batch (FIX M-23; it passed alone, but a batch failure is not a clean pass),
+and the QA-05 Android half (death chain 7/7, but the seeded soak is not green: D8, D9, D10; see
+`QA-05-soak.md`). The owner's rule certifies only if everything passes.
 
 **Done:**
 
@@ -1160,12 +1169,18 @@ batch (FIX M-23). It passed alone, but a batch failure is not a clean pass.
    on API 29 for the gate.
 2. **Owner (manual): M1–M4 on the tablet** (keyboard, mouse, drag from Files, drag from Photos),
    using the checklist above. This report then records each row with its screenshot.
+3. **QA-05 Android half (owner's re-run item 4), see `QA-05-soak.md`:** D8 (editor cache root purged
+   under low storage during an export; Mac product, plus the soak's low-storage gap), W1–W7
+   (`soak_host.py` on Windows/Android; Mac), and **D9 and D10 for the Android lane** (an export
+   deadlock creating the audio encoder with preview players stuck in the same codec reclaim; stale
+   preview frames after seeks). After the fixes, rerun the seeded soak (seed 5150) and the death chain.
 
-When M-23 lands and its rerun passes in the batch, with nothing else open, the status becomes
+When M-23 lands and its rerun passes in the batch, and the QA-05 Android half is green, with nothing
+else open, the status becomes
 "QA-02 certified, except the owner's manual tablet checklist M1–M4", naming the code version of
 each part. If M-23 changes code that other scenarios use, the lead decides whether a wider rerun is
 needed.
 
-**Android-lane items open in QA-02:** none. The `debugCaptureFrame` fix (ae6cda2) passed s18 in the
+**Android-lane items open in QA-02's own scenarios:** none (D9 and D10 come from the QA-05 soak). The `debugCaptureFrame` fix (ae6cda2) passed s18 in the
 batch on API 35 and API 29 (88469c0 and d680bd3) and on the 2 GB AVD (d680bd3). The QA-05 Android
 findings of this round (an export deadlock candidate in the engine) are tracked in `QA-05-soak.md`.
