@@ -1047,3 +1047,162 @@ The 54 AIS tickets keep the specs of AIS plan §5.5 and §7.9. Their milestones 
 - **Owns (Mac):** `packages/danaview_editor/test/parity/photo_vs_timeline/`, `integration_test/v12/photo_parity/`, `docs/v1.2/video-editor-update/qa/VED-32-parity.md`
 - **Spec:** V2-322. The same recipe and beauty spec rendered as a still and as frame 0 of an image clip (VED-14) on both platforms and in the Dart reference; landmark-driven passes inside the v1.1 parity tolerance; segmentation passes with their recorded tolerance (V2-17).
 - **Acceptance criteria and tests:** parity numbers per pass and platform in the report; failures become FIX tickets.
+
+### 4.4 Speed-test fallback (ST)
+
+#### ST-01 · SpeedTestProvider interface and CloudflareSpeedProvider
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Speed test
+- **Depends on:** INT-101
+- **Owns (Mac):** `packages/danaview_data/lib/src/network/speed_test.dart` (extends v1.0: becomes a facade), `packages/danaview_data/lib/src/network/speed/{speed_test_provider,cloudflare_speed_provider,phase_result}.dart`, `packages/danaview_data/test/network/speed/cloudflare_test.dart`
+- **Spec:** V2-401. `SpeedTestProvider` (`latency(health)`, `download`, `upload`, cancel, typed failures `rateLimited`, `forbidden`, `unreachable`, `stalled`); the existing Cloudflare code moved behind it with **no behaviour change** (same endpoints, sizes, stall timeout, parallelism); the public facade API of `speed_test.dart` unchanged.
+- **Acceptance criteria and tests:** the existing root suite `test/network_tools_test.dart` stays green unchanged (the ST plan's "network_test.dart" is this file); provider tests against a loopback fake.
+
+#### ST-02 · MLabNdt7Provider
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Speed test
+- **Depends on:** ST-01
+- **Owns (Mac):** `packages/danaview_data/lib/src/network/speed/{mlab_ndt7_provider,mlab_locate}.dart`, `packages/danaview_data/test/network/speed/{mlab_test,fake_ndt7_server}.dart`
+- **Spec:** V2-401. M-Lab locate API (`locate.measurementlab.net/v2/nearest/ndt/ndt7`) then NDT7 download and upload over WebSocket (`dart:io`, subprotocol `net.measurementlab.ndt.v7`), measurement messages parsed, single-stream results; no third-party dependency. Runs only with an `OpenNetworkConsent` ticket (ARCH rule 28). Closes V2-V19.
+- **Acceptance criteria and tests:** unit tests against a local fake locate + NDT7 server (download, upload, malformed messages, early close); refuses to run without a ticket; no request to M-Lab hosts in any test (no-network bootstrap).
+
+#### ST-03 · SpeedTestCoordinator: health check, failover, skip memory, attribution
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Speed test
+- **Depends on:** ST-01, ST-02
+- **Owns (Mac):** `packages/danaview_data/lib/src/network/speed/{speed_test_coordinator,provider_health_store}.dart`, `packages/danaview_data/test/network/speed/coordinator_test.dart`
+- **Spec:** V2-403, V2-404. Zero-byte health request (≈ 1.5 s timeout) folded into the latency phase; on 429, 403, connection failure or stall only the failing phase restarts on the next provider; a failed provider is skipped for 10 minutes (memory and prefs); per-phase provider attribution kept internally; result notes "measured on two servers" and "open network".
+- **Acceptance criteria and tests:** injected 429, 403, stalls and connection errors at every phase; phases never mix providers; skip expiry with a fake clock; consent declined → calm failure result.
+
+#### ST-04 · Consent prompt, Settings › Privacy toggle, neutral copy
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Speed test
+- **Depends on:** ST-03
+- **Owns (Mac):** `FEAT/tools/speed_consent_sheet.dart`, `FEAT/tools/danaview_speed_test_screen.dart` (extends v1.0), `FEAT/tools/network_tool_providers.dart` (extends v1.0), `FEAT/tools/network_format.dart` (extends v1.0), `FEAT/more/settings_sections/privacy_section.dart`, `test/v12/speed_test/`
+- **Spec:** V2-402, V2-405, V2-23. The one-time prompt (D-ST2 wording; Run on open network / Not now), remembered and changeable in Settings › Privacy; "Testing against a nearby server" and no provider names anywhere in the speed-test UI; details-row notes; `OpenNetworkConsent.accepted(` only in `speed_consent_sheet.dart` (architecture test).
+- **Acceptance criteria and tests:** widget tests for first run, accepted, declined, revoked; no provider brand string in any speed-test widget (string scan); matrix 280–1280 px × 0.85–1.35.
+
+#### ST-05 · Privacy text and store answers for the speed test
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Speed test
+- **Depends on:** ST-04
+- **Owns (Mac):** `FEAT/more/legal_texts.dart` (extends v1.1 UX-42; first in the 1.2.0 chain), `test/v12/legal/speed_test_text_test.dart`, `docs/v1.2/speed-test/store_answers.md`
+- **Spec:** V2-406: Cloudflare (default; sees connection details such as the IP) and M-Lab (only if you agree; results including the IP are published publicly) named in "When Danaview uses the internet"; store privacy answer notes for AIS-41. The owner reviews the wording (Q-S1).
+- **Acceptance criteria and tests:** the text names both hosts; the root privacy-host test (v1.1) passes with the new hosts.
+
+### 4.5 Cross-plan integration (INT-1xx)
+
+#### INT-101 · [INTEGRATION] Cross-plan foundations
+
+- **Milestone:** N0 · **Lane:** Mac · **Area:** Integration
+- **Depends on:** AIS-01
+- **Owns (Mac):**
+  - `packages/danaview_library/{pubspec.yaml, analysis_options.yaml, lib/danaview_library.dart, lib/testing.dart}`
+  - `packages/danaview_library_native/{pubspec.yaml, analysis_options.yaml, lib/danaview_library_native.dart}`
+  - `packages/danaview_pdf/{pubspec.yaml, analysis_options.yaml, lib/danaview_pdf.dart}`
+  - `packages/danaview_documents/{pubspec.yaml, analysis_options.yaml, lib/danaview_documents.dart}`
+  - `packages/danaview_face_tracking/{pubspec.yaml, analysis_options.yaml, lib/danaview_face_tracking.dart}`
+  - `packages/danaview_search/{pubspec.yaml, analysis_options.yaml, lib/danaview_search.dart, lib/testing.dart}`
+  - `CORE/lib/{photo,beauty}.dart` (new barrels)
+  - `CORE/lib/src/ops/edit_command.dart` (extends AIS-01: `part` directives for `photo_bridge_commands.dart`, `beauty_commands.dart`, `keyframe_easing_commands.dart`)
+  - `ED/editor/contracts/{action_ids,inspector_routes,tool_ids}.dart`, `ED/editor/wiring/action_bindings.dart` (extend AIS-01: photo tools, beauty, compare, To video, batch edit; `BeautyInspector`, photo tool routes; merge `photo_bindings.dart` and `beauty_bindings.dart`)
+  - `ED/app/flags_v12.dart`, `FEAT/flags.dart`
+  - `packages/danaview_features/pubspec.yaml` ([INTEGRATION]: `danaview_library`, `danaview_library_native`, `danaview_documents`, `danaview_search`)
+  - `FEAT/more/danaview_settings_screen.dart` (extends v1.0: settings section slots), `FEAT/more/settings_sections/settings_sections.dart`
+  - `test/architecture/dependency_rules_test.dart` (extends AIS-01), `test/architecture/fixtures/v12/`
+  - `.github/workflows/editor-ci.yml` (extends AIS-01), `scripts/ci/v12/{library.sh,documents.sh,face.sh,README.md}`
+  - `docs/v1.2/ARCHITECTURE.md` (status cells: Q-N5 answer; rule 20's `lib/src/desktop/` allowance)
+- **Spec:** ARCH V2-04, V2-05, §4. Package skeletons with every dependency they need in 1.2.0 (manifests owned here; `danaview_search` without `danaview_ai`, added by AIS-52); D-33 placeholders (`// OWNER: <ticket>`) for every new Dart file of §4.2–§4.4 in those packages, `FEAT/library/**`, `ED/editor/photo/**`, `ED/editor/panels/beauty/**`, `ED/editor/beauty/**`, `CORE/lib/src/{photo,color,beauty}/**`, and the photo lowering stage files; the four flags read in one file per package; settings section slots (privacy, library storage, search index) as optional widget builders so the app compiles before the owners land; dependency rules 20–31 with a negative fixture each; CI jobs `v12-dart` (library, search, core photo tests), `v12-flutter` (documents, features), `home-preservation` (HOM-15's script) with path filters.
+- **Acceptance criteria and tests:** every new package analyzes and tests green with placeholders; each rule fails on its planted fixture; with all four flags false a widget test shows the 1.1 Home, no photo-editor entry, no beauty tab; v1.1 suites unchanged; desktop builds compile.
+
+#### INT-104 · [INTEGRATION] Platform declarations
+
+- **Milestone:** N1 · **Lane:** Mac · **Area:** Integration
+- **Depends on:** HOM-17, HOM-20, CORE-28, INT-03
+- **Owns (Mac):** `ios/Runner.xcodeproj/project.pbxproj` (extends INT-03: `DanaviewShare` extension target, embed phase, App Group capability), `ios/Runner/Runner.entitlements` (extends INT-03), `ios/DanaviewShare/DanaviewShare.entitlements`, `ios/DanaviewShare/PrivacyInfo.xcprivacy`, `ios/Runner/Info.plist` (document types at rank Alternate, `UTImportedTypeDeclarations`, `NSPhotoLibraryUsageDescription`), `ios/Runner/PrivacyInfo.xcprivacy` (extends INT-03), `macos/Runner/{Info.plist,DebugProfile.entitlements,Release.entitlements}`, `android/app/src/main/AndroidManifest.xml` ([INTEGRATION]: intent filters, `READ_MEDIA_*` with `maxSdkVersion` rules), `android/app/src/main/res/xml/{danaview_backup_rules,danaview_data_extraction_rules}.xml` (extends CORE-28: include `library/`, exclude `library/imports/`, `search/`, `signatures/`), `ios/fastlane/` signing notes for the extension
+- **Spec:** ARCH §8 "Platform declarations". Bundle id `com.vecvel.danaview.share`, App Group `group.com.vecvel.danaview` on both targets, extension deployment target 15.0; video document types keep rank Owner; Android filters for `application/pdf`, Office MIME types, `text/*`, `image/*` on `VIEW`/`SEND`/`SEND_MULTIPLE`.
+- **Acceptance criteria and tests:** `flutter build ios --no-codesign` and `flutter build apk` succeed; the extension appears in the share sheet on the simulator; video "Open with" behaves as in 1.1 (P-7); the backup rules parse (lint) and match ARCH §5.2.
+
+#### INT-103 · [INTEGRATION] App wiring v4: search, AI search, settings routes and sections
+
+- **Milestone:** N5 · **Lane:** Mac · **Area:** Integration
+- **Depends on:** AIS-37, AIS-51, AIS-52, AIS-53, ST-04, HOM-19
+- **Owns (Mac):** `lib/main.dart`, `lib/router/app_router.dart`, root `pubspec.yaml` (all extend AIS-37), `lib/adapters/{media_analysis_adapter,document_text_adapter}.dart`, `lib/wiring/search_wiring.dart`, `FEAT/more/settings_sections/search_index_section.dart`, `test/v12/wiring/search_wiring_test.dart`
+- **Spec:** builds the search service (index store, extractors with the media-analysis and PDF-text adapters, scheduler) and the AI search flows (`onSearchWithAi` → `AiClient` plan → the one send view → filters, and deep indexing entry from folder menus); `/settings/ai` route and the Settings › AI Studio and Settings › Video editor rows (V2-20); settings sections for privacy (ST-04), library storage (HOM-17) and the search index (rebuild, delete, status); root pubspec adds `danaview_media_analysis`, `danaview_pdf`.
+- **Acceptance criteria and tests:** the wiring test boots the app with fakes and reaches the Home search, AI search disclosure, deep-index disclosure, the settings sections and `/settings/ai`; with AI Studio off no AI entry is visible; macOS boots with the on-device index and no AI.
+
+#### INT-105 · [INTEGRATION] Editor wiring v4: Home bridges, photo and montage intents, adapters
+
+- **Milestone:** N5 · **Lane:** Mac · **Area:** Integration
+- **Depends on:** INT-103, VED-01, VED-12, VED-14, VED-17, VED-28, HOM-11, HOM-12, HOM-22
+- **Owns (Mac):** `lib/main.dart`, `lib/router/app_router.dart`, root `pubspec.yaml` (extend INT-103), `ED/app/editor_bootstrap.dart` (extends AIS-37), `lib/adapters/library_media_access_adapter.dart`, `lib/wiring/editor_home_bridges.dart`, `test/v12/wiring/editor_bridges_test.dart`
+- **Spec:** Home callbacks (`onEditPhoto`, `onBatchEditPhotos`, `onMakeMontage`, `onOpenProjects`) wired to `EditorLauncher` intents; `danaview-library://` resolution for the editor's `MediaAccessPort` (V2-09) and `refs` registration in `library.db` when a project or `.dnphoto` references an entry; the face-tracking adapter (VED-16) and Beauty pack spec registered in the bootstrap; exports with destination "library" create entries (`sourceHint = editorExport`); root pubspec adds `danaview_face_tracking`.
+- **Acceptance criteria and tests:** Home photo → Edit → export → new library entry; multi-select → montage project with the right order; delete warning for a referenced entry; editor hidden on desktop (v1.1 D-17 route tests still green).
+
+#### INT-106 · [INTEGRATION] Privacy, terms and licences consolidation for 1.2.0
+
+- **Milestone:** N5 · **Lane:** Mac · **Area:** Integration
+- **Depends on:** AIS-36, INT-105, HOM-21, HOM-30, VED-13, VED-16, AIS-45
+- **Owns (Mac):** `FEAT/more/legal_texts.dart` (extends AIS-36; last in the chain), `FEAT/more/danaview_licenses_screen.dart` (extends v1.1 if needed for new entries), `lib/licenses_v12.dart`, `test/v12/legal/legal_v12_test.dart`
+- **Spec:** ARCH §9.5: Files & Media Home (Danaview folders, what backups include, Recently deleted, Share Extension, saved signatures stay on the device), the on-device search index (stored on device, excluded from backups, rebuild/delete), speaker model and Beauty pack downloads (hosts, sizes from AIS-44/VED-33), photo export metadata choices, AIS §6.4 "Added 2026-10-16" bullets, licences (sherpa-onnx, ONNX Runtime, speaker and face models, the HOM-27 library if any, Genkit if adopted), every bullet with its platform qualifier; `legalEffectiveDate` = release date. The owner reviews the text.
+- **Acceptance criteria and tests:** every host of ARCH §9.1 appears in the policy (root host test); every new bullet has a platform qualifier; licences screen lists every bundled third-party component; no overflow at 280 px @ 1.35.
+
+### 4.6 Cross-plan QA (QA-1xx)
+
+QA tickets change no product code; defects become FIX tickets. Each report lives in `docs/v1.2/qa/`.
+
+#### QA-101 · iOS Simulator E2E for 1.2.0 and the 1.1 suite re-run
+
+- **Milestone:** N5 · **Lane:** Mac · **Area:** QA
+- **Depends on:** INT-105, INT-106, HOM-32, AIS-38, AIS-54, VED-32
+- **Owns (Mac):** `integration_test/v12/e2e/`, `scripts/ci/v12/e2e_ios.sh`, `docs/v1.2/qa/QA-101-ios.md`
+- **Spec:** one simulator at a time (iPhone 17 Pro, then iPad Pro with keyboard). Cross-plan scenarios: (1) import a photo, PDF and video via picker and Share Extension → organise → delete → restore; (2) open PDF → merge, annotate, sign, compress → Save to Files; (3) photo → Still Photo Mode → tone, HSL, curves, mask, keystone, beauty → export HEIC to the library → Add to Video Project; (4) multi-select → montage → captions with speakers → karaoke → export; (5) search offline (index) → AI search with the loopback provider → deep index one folder; (6) speed test with Cloudflare blocked by the fake → consent → M-Lab fake; (7) flags off → the app equals 1.1; plus the v1.1 QA-00 and AIS-38/AIS-54 suites re-run.
+- **Acceptance criteria and tests:** every scenario passes with evidence (screens, logs without user content); no non-loopback request (spy log).
+
+#### QA-102 · Android Emulator E2E for 1.2.0 and the 1.1 suite re-run
+
+- **Milestone:** N5 · **Lane:** Android · **Area:** QA
+- **Depends on:** INT-105, INT-106, HOM-32, AIS-38, AIS-54, VED-32
+- **Owns (Android):** `integration_test/v12/e2e_android/` (Android-only steps), `scripts/ci/v12/e2e_android.sh`; the report section is merged by the Mac into `docs/v1.2/qa/QA-102-android.md`
+- **Spec:** QA-101's scenarios on the API 35 Pixel, API 29 and the tablet AVD (Share Extension → `SEND` intents; Save to Files → Save to Downloads), plus the API 28 AVD for the Home-only path (editor gated, Home works).
+- **Acceptance criteria and tests:** as QA-101; deferred device-only items recorded, never faked.
+
+#### QA-103 · Whole-app network guard and privacy-host consistency
+
+- **Milestone:** N5 · **Lane:** Mac + Android · **Area:** QA
+- **Depends on:** INT-105, INT-106, AIS-54, ST-03
+- **Owns (Mac):** `test/v12/network/whole_app_guard_test.dart`, `integration_test/v12/network_spy/`, `docs/v1.2/qa/QA-103-network.md`
+- **Spec:** ARCH §9: `HttpOverrides` spy through the real wiring plus a device-level spy on the simulator and emulator: a full session over every Home, document, editor, beauty, diarization (with the model present) and search flow with AI Studio off makes zero requests except the §9.1 rows the session starts (and only after their consent); with AI Studio on nothing goes out before Send; every send goes to the chosen host only; ML Kit, Vision, sherpa-onnx and the face runtime make no request; the privacy policy names every §9.1 host.
+- **Acceptance criteria and tests:** spy logs attached; any unexpected request is a release blocker.
+
+#### QA-104 · Performance and memory budgets on the device lab
+
+- **Milestone:** N5 · **Lane:** Mac + Android · **Area:** QA
+- **Depends on:** HOM-14, VED-31, VED-30, AIS-39, INT-105
+- **Owns (Mac):** `integration_test/v12/perf/`, `docs/v1.2/qa/QA-104-performance.md`
+- **Spec:** every ARCH §10.1 row not already certified by HOM-14, VED-31, AIS-39, AIS-44 or AIS-51, on the low and mid tiers (iPhone SE 2, iPhone 12, a 4 GB Android, a Pixel 7a or nearest available), with thermal state recorded; install sizes vs 1.1.0 (ARCH §10.3).
+- **Acceptance criteria and tests:** budgets met or renegotiated in writing with the owner; size table recorded for AIS-41.
+
+#### QA-105 · Overflow and accessibility matrix for every new surface
+
+- **Milestone:** N5 · **Lane:** Mac + Android · **Area:** QA
+- **Depends on:** INT-105, HOM-32, VED-28, ST-04
+- **Owns (Mac):** `test/v12/overflow/`, `packages/danaview_editor/test/overflow/photo_beauty/`, `docs/v1.2/qa/QA-105-a11y.md`
+- **Spec:** the v1.1 QA-09 method over every HOM, VED and ST surface and state (AIS surfaces are AIS-38's): widths 280–1280, text scale 0.85–1.35, computed contrast, targets ≥ 44 px; VoiceOver and TalkBack passes on the Home tabs, folder operations, the PDF tools, the photo tool tray, the beauty panel and the speed-test consent.
+- **Acceptance criteria and tests:** matrix green (PR subset plus nightly full); a11y checklist complete.
+
+#### QA-106 · Persistence, migration, originals and backup survival
+
+- **Milestone:** N5 · **Lane:** Mac + Android · **Area:** QA
+- **Depends on:** INT-105, INT-104, VED-15, VED-19, AIS-47, HOM-17
+- **Owns (Mac):** `test/v12/persistence/`, `integration_test/v12/persistence/`, `docs/v1.2/qa/QA-106-persistence.md`
+- **Spec:** 1.1 projects → schema 2 (with and without captions); schema 2 projects with `ph`, `bt`, lanes and easing opened by a 1.1.x build read-only (V2-V17); `.dnphoto` crash safety; `library.db` fault injection and rebuild-from-files; Recently deleted expiry with a fake clock across app restarts; originals unchanged (bytes and timestamps) after every flow; iOS device backup and restore and Android device-to-device transfer of Danaview folders (search index and signatures absent after restore, rebuilt index works).
+- **Acceptance criteria and tests:** every case passes on both platforms with evidence; closes V2-V1 and V2-V17.
+
+#### QA-107 · Release-candidate regression on lab devices
+
+- **Milestone:** N6 · **Lane:** Mac + Android · **Area:** QA
+- **Depends on:** QA-101, QA-102, QA-103, QA-104, QA-105, QA-106, AIS-40
+- **Owns (Mac):** `docs/v1.2/qa/QA-107-rc.md`
+- **Spec:** release builds with every flag on: launch and player preservation (P-1…P-8) on the iPhone 7 (iOS 15.8), iPhone 8 (iOS 16.7), iPhone SE 2, an iPad, an Android 10 and a current Android device; a smoke pass of every pillar; upgrade from 1.1.0 with existing projects, playlists, Continue watching and linked folders intact.
+- **Acceptance criteria and tests:** no regression of a 1.1 feature; every pillar's smoke passes; results feed AIS-41's checklist.
