@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 on the Mac from the code, the QA reports and the build runs. The code on `editor-wip` is the ground truth; live detail is in `PRODUCTION_READINESS.md` §0.
 
-**Totals:** 162 done, 4 open (of 166): QA-01 (automated suite certified; manual iPad steps need a person), QA-02 (Windows, M-21 left), QA-05 (iOS green; Android part on Windows), INT-05 (prepared, owner go). The Android lane is complete.
+**Totals:** 162 done, 4 open (of 166): QA-01 (automated suite certified; manual iPad steps need a person), QA-02 (Windows; M-21 and M-22 fixed, re-runs on mains power left), QA-05 (iOS green; Android part on Windows), INT-05 (prepared, owner go). The Android lane is complete.
 
 "Machine" is who builds the ticket after the split: the Mac does everything except the Android lane; the Windows laptop does the Android lane (see ANDROID_LANE.md). "In progress" means a Mac builder was working on it when this file was generated; its files may be incomplete.
 
@@ -195,7 +195,7 @@ Generated 2026-10-21 on the Mac from the code, the QA reports and the build runs
 | 152 | CORE-35 | Core benchmarks, large-project fixture, README | CORE-26, CORE-32, CORE-34, CORE-33 | ✅ done | Mac |
 | 153 | QA-00 | Shared on-device E2E suite (integration_test/editor) | INT-04, ENG-05, UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, IOS-13, IOS-14, IOS-15, IOS-16, AND-12, AND-13, AND-14, AND-15 | ✅ done | Mac |
 | 154 | QA-01 | Run and certify the E2E suite on the iOS Simulator | QA-00, INT-03 | 🟡 automated suite certified on the simulator (re-run 4, 2026-10-21: s01–s18 + extras in one batch, iPad s12, iOS 18.2); open until the manual iPad drop / keyboard / hover steps are recorded by a person | Mac |
-| 155 | QA-02 | Run and certify the E2E suite on an Android Emulator | QA-00 | 🔨 in progress (Windows; 17/18, M-21 open) | Windows |
+| 155 | QA-02 | Run and certify the E2E suite on an Android Emulator | QA-00 | 🔨 in progress (Windows; clean pass on 88469c0, M-22 fixed in 07485cf, re-runs left) | Windows |
 | 156 | QA-03 | Frame accuracy, grid-cut, A/V sync and render parity suite | IOS-11, AND-10, IOS-12, AND-11, API-03, ENG-05 | ✅ done | Mac |
 | 157 | QA-11 | Export conformance, preset matrix and audio measurement suite | IOS-13, AND-12, IOS-18, API-03, ENG-05, IOS-20, AND-19, CORE-38 | ✅ done | Mac |
 | 158 | QA-04 | Performance and memory budgets (profile mode, device lab) | INT-04, CORE-35, UX-44, AND-18, IOS-19 | ✅ done | Mac |
@@ -229,6 +229,7 @@ Filed 2026-10-15/16 by QA-08, QA-09 and QA-00's first simulator run of the E2E s
 | FIX-UX-14-3 | UX-14 | `test/transport/transport_bar_test.dart` | Minor (stale test) | The test "priority row actions that no feature binds yet … are not shown" fails on every run because a feature binding now exists. | Update the test. |
 | FIX-QA-00-4 | QA-00 | `integration_test/editor/tool/e2e_host.sh` | Minor (harness speed) | When `flutter test` never attaches to a launched app (white screen, VM service listening), the phase waits the full 900 s watchdog before the retry; add an attach watchdog (~180 s after "Xcode build done.") and pkill orphaned `simctl spawn … log stream` processes when a phase is stopped. Found in QA-01 re-run 4 |
 | FIX-UX-14-4 | UX-14 / UX-08 | `playhead_controller.dart`, `editor_controller.dart` | **Fixed** 2026-10-17 (FIX-TESTS-R6/FIX-UX-14-1 in code) | Playhead not restored on reopen (QA-01 s18); renamed from FIX-UX-14-1 in the QA-01 report to avoid the ID clash |
+| FIX-M-22 | UX-08 / QA-02 | `editor_controller.dart` | **Fixed** 2026-10-22 (`07485cf`) | On a slow device the first frame (frame 0) arrived before the opening seek, so the preview said ready while showing 0 (QA-02 s18 on the 2 GB AVD); ready now waits for the first frame and the opening seek, on open and Restart preview |
 | FIX-UX-18-1 | UX-18 | `test/preview/surface/preview_region_test.dart` | Minor (stale test) | The test "statuses offline media at the playhead: Media missing with Relink…" fails on every run, because an icon it expects to be absent is present. | Update the test or the widget, whichever matches ux.md. |
 | FIX-UX-11-1 | UX-11 | `lib/src/editor/timeline/track_headers.dart` | Minor (lead decision) | On 32 px text and subtitle lanes, the header buttons are 32 px tall. | Extend the hit areas past the lane. |
 | FIX-UX-16-1 | UX-16 | `lib/src/editor/inspector/inspector_rows.dart` | Minor | Slider value chips are 32 px tall, and the value is read twice. | Use `minHeight: 44` and exclude the inner text from semantics. |

@@ -6,13 +6,13 @@
 
 ---
 
-## 0. Live status (kept current; last update 2026-10-21 18:00 IST)
+## 0. Live status (kept current; last update 2026-10-22 IST)
 
 | Ticket | State | What's left |
 |---|---|---|
 | **QA-01** iOS simulator E2E | **Automated suite certified** (re-run 4, 2026-10-21): s01–s18 plus the iOS extras pass in one batch on iPhone 16 / iOS 26.5, including s07's back-to-back exports (FIX-IOS-12-1 confirmed fixed); iPad s12 passes; iOS 18.2 lane 3/3 | A person must do the manual iPad-simulator steps (Files/Photos drop, physical keyboard, hover pill) and record screenshots; iPhone 7/8 smoke needs devices. Optional harness speed-up FIX-QA-00-4 |
 | **QA-05** soak and crash recovery | **iOS side green.** **D7 fixed** (FIX-IOS-D7, §4.1) and verified 2026-10-17: seeded soak (5150) 965 ops, 0 failed ops, 14 exports, no crash, memory −15.9 %, 39/39 reopens valid; the process-death chain passes on the same code. `ExportD7Tests` 6/6. See `qa/QA-05-soak.md` §2 | Android soak/death on the Windows lane, and the device-only steps (§6 of the report) |
-| **QA-02** Android emulator E2E | **Windows lane, code D run done** (`ff95929`, merged): 17 of 18 scenarios and 6 of 7 extra phases, s08 in the batch, first AND-12 detached-export proof on API 35 | **FIX M-21**: the host's `swipeFromRecents` removes another app's task first, so `swipe-check` reports `ExportReattach.none` in the batch and alone. s13 fails in the batch only on emulator mic silence (passes alone). Then close the ticket |
+| **QA-02** Android emulator E2E | **Windows lane, clean pass on `88469c0`** (`bd68a8f`, merged): API 35 16/18 scenarios and 7/7 extras; AND-12 detached export proven on API 35 and 34; API 29, API 29 2 GB, API 28 and tablet s12 pass. M-1..M-10, M-15 and M-21 closed. **FIX M-22 fixed on the Mac** (`07485cf`): the preview is `ready` only once the opening seek shows the saved frame (s18 on the 2 GB AVD read frame 0) | Windows, on mains power: re-run API 29 2 GB s01–s04 and s18, s18 on API 29 and API 35, the API 35 s07 batch and the API 34 fgs pair (cut by laptop hibernation), and the QA-05 Android half. s13's low voice level on the emulator is accepted as an emulator reality (real-mic level is a device check). The owner's manual tablet M1–M4 |
 | **INT-05** release | **Prepared, not applied** (release-checklist) | Owner "go" |
 | Round 7 (Mac Dart fixes for QA-02: M-1, M-2..M-7, M-9, M-10, M-13..M-15, M-17 Dart) | **Done and merged** into `editor-wip` (`c336899`, 01:10). M-15: the Dart close no longer waits and releases the preview; whether the remaining 30 s on-screen delay is native shows in the new `[EditorClose]`/`[EditorLifecycle]` logs ("leaving the editor" with no "exit callback" means the Android native release blocks the main thread) | Windows: pull `editor-wip`, run the full QA-02 pass; on s09 check the M-15 logs |
 
@@ -29,7 +29,7 @@ QA-01 re-check was never run.
 **Next actions, in order:**
 1. ~~Merge `parallel-r7`~~ done (`c336899`).
 2. ~~Fix D7~~ done, ~~re-run QA-05~~ done, ~~QA-01 re-check~~ done (2026-10-21, automated suite certified). Round 9 small fixes merged (`256243f`: empty-project hint, Restart-preview seek ack, relink monitor, iPad device-folder hints).
-3. Windows: pull `editor-wip` and fix **M-21** (swipe-from-recents), then close QA-02.
+3. ~~M-21~~ done (`88469c0`); ~~M-22~~ done (`07485cf`). Windows: merge `editor-wip`, run the re-runs in the QA-02 row and the QA-05 Android half, then close QA-02.
 4. Close QA-01, QA-02 and QA-05, and refresh the ticket totals in `BUILD_STATE.md` (its header still
    reads 151 done / 13 in progress / 2 not started, against §1's 162 of 166).
 5. INT-05 on the owner's go.
