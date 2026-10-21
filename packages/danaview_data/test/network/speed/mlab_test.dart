@@ -449,7 +449,7 @@ void main() {
 
     test('cancelling a running upload ends it with SpeedTestCancelled', () async {
       final cancel = NetworkCancelToken();
-      final p = provider(config: const SpeedTestConfig(uploadDuration: Duration(seconds: 20), requestTimeout: Duration(seconds: 2)));
+      final p = provider(config: const SpeedTestConfig(uploadDuration: Duration(seconds: 20), maxUploadBytes: 4000 * _mb, requestTimeout: Duration(seconds: 2)));
       final run = p.upload(cancel: cancel);
       await Future<void>.delayed(const Duration(milliseconds: 300));
       cancel.cancel();

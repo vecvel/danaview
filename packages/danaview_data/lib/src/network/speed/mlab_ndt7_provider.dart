@@ -28,7 +28,7 @@ export 'mlab_locate.dart' show MLabLocateClient, MLabLocateException, MLabLocate
 // -------------------------------------------------------------------------------------------------
 
 /// The user agreed to run the speed test on the open measurement network (D-ST2 prompt: "Run on
-/// open network"). `OpenNetworkConsent.accepted(` may appear only in
+/// open network"). The `accepted` factory may be called only in
 /// `packages/danaview_features/lib/src/tools/speed_consent_sheet.dart` (ARCH rule 28, V2-23; the
 /// architecture test is ST-04's), so every ticket traces back to that prompt.
 final class OpenNetworkConsent {
