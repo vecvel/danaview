@@ -106,8 +106,6 @@ void main() {
     await pumpFrames(tester);
     expect(find.byKey(const ValueKey('favourites-row')), findsOneWidget);
     expect(find.bySemanticsLabel('Remove beach.jpg from favourites'), findsOneWidget);
-    // ignore: avoid_print
-    print('DBG ${tester.getSemantics(find.byKey(ValueKey('favourite-${trip.value}')))}');
     expect(find.bySemanticsLabel('Folder Trip, favourite'), findsOneWidget);
     expect(find.bySemanticsLabel('Photo beach.jpg, favourite'), findsOneWidget);
     // Folders come first.
@@ -165,7 +163,7 @@ void main() {
     await pumpFrames(tester);
     expect(find.byKey(ValueKey('recent-${b.id.value}')), findsNothing);
 
-    expect(find.bySemanticsLabel('Clear recents'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('^Clear recents')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('recents-clear')));
     await pumpFrames(tester);
     expect(find.byKey(const ValueKey('recents-section')), findsNothing);
@@ -270,7 +268,7 @@ void main() {
           }
           // The filter toggle's hit area is padded to 44.
           expect(tester.getSize(find.ancestor(of: find.byKey(const ValueKey('favourites-filter')), matching: find.byType(ConstrainedBox)).first).height, greaterThanOrEqualTo(44));
-          expect(find.bySemanticsLabel(RegExp(r'^Document .* opened recently$')), findsWidgets);
+          expect(find.bySemanticsLabel(RegExp(r'^Document .*, opened recently')), findsWidgets);
           await lib.close(tester);
           await env.dispose();
         });

@@ -215,27 +215,8 @@ final class PhotoLibraryServiceTests: XCTestCase {
     XCTAssertEqual(after.totalCount, before.totalCount + 1)
     XCTAssertEqual(after.changeToken, change.changeToken)
 
-    // Delete it again through PhotoKit when the runtime allows it without a confirmation alert.
-    try deleteIfPossible(newId!, service: service, sink: sink, countBefore: after.totalCount)
-  }
-
-  private func deleteIfPossible(_ id: String, service: PhotoLibraryService, sink: RecordingSink, countBefore: Int) throws {
-    let removed = expectation(description: "removed event")
-    removed.assertForOverFulfill = false
-    sink.onChange = { if $0.removed.contains(id) { removed.fulfill() } }
-    let done = expectation(description: "deleted")
-    var deleted = false
-    PHPhotoLibrary.shared().performChanges({
-      PHAssetChangeRequest.deleteAssets(PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil))
-    }) { ok, _ in
-      deleted = ok
-      done.fulfill()
-    }
-    wait(for: [done], timeout: 60)
-    guard deleted else { return } // The confirmation alert can't be answered here; testChangeEventOnDelete covers removal.
-    wait(for: [removed], timeout: 30)
-    let p = try page(service, offset: 0, limit: 1)
-    XCTAssertEqual(p.totalCount, countBefore - 1)
+    // PhotoKit asks the user to confirm every deletion (a system alert a unit test can't answer),
+    // so removal is covered by testChangeEventOnDelete with PhotoKit-computed change details.
   }
 
   /// A removal reaches the event with the removed id and a new token (details computed by PhotoKit

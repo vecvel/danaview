@@ -157,25 +157,25 @@ class _FavouriteTile extends StatelessWidget {
       onTap: onTap,
       semanticLabel: '$kindLabel ${item.name}, favourite',
       borderRadius: DanaviewRadius.mdAll,
-      child: SizedBox(
-        width: 104,
-        child: Padding(
-          padding: const EdgeInsets.all(DanaviewSpacing.xs),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              icon == null
-                  ? const DanaviewTileIcon.glyph(DanaviewGlyphKind.folder, size: 48)
-                  : DanaviewTileIcon(icon, size: 48),
-              const SizedBox(height: DanaviewSpacing.sm),
-              Text(
-                item.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: DanaviewTextStyles.caption.copyWith(color: DanaviewColors.textPrimary),
-              ),
-            ],
+      child: ExcludeSemantics(
+        child: SizedBox(
+          width: 104,
+          child: Padding(
+            padding: const EdgeInsets.all(DanaviewSpacing.xs),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                icon == null ? const DanaviewTileIcon.glyph(DanaviewGlyphKind.folder, size: 48) : DanaviewTileIcon(icon, size: 48),
+                const SizedBox(height: DanaviewSpacing.sm),
+                Text(
+                  item.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: DanaviewTextStyles.caption.copyWith(color: DanaviewColors.textPrimary),
+                ),
+              ],
+            ),
           ),
         ),
       ),
