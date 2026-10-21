@@ -1,6 +1,7 @@
 // OWNER: UX-01
 // EXTENDED: AIS-01 (SubtitlesPanelSection.transcript, review, cue; AI_STUDIO_PLAN §4.4)
-// EXTENDED: INT-101 (BeautyCategory and PhotoToolRoute, the Still Photo Mode panel routes)
+// EXTENDED: INT-101 (BeautyCategory, BeautyInspector and PhotoToolRoute: the Beauty clip inspector
+// and the Still Photo Mode panel routes)
 //
 // What the inspector shows (ARCH §17.7, ux.md §9.3). `InspectorHost` (UX-16) maps each route to
 // its panel; panel constructors take their route (`TransformPanel(route: TransformInspector(…))`).
@@ -444,4 +445,46 @@ final class PhotoToolRoute {
   @override
   String toString() =>
       tool == PhotoToolId.beauty ? 'PhotoToolRoute(${tool.name}, ${beautyCategory.name})' : 'PhotoToolRoute(${tool.name})';
+}
+
+/// The Beauty & Retouching tab of the clip inspector for one timeline clip (VED plan §6.2,
+/// BUILD_PLAN VED-26), opened by `EditorActionId.beauty` while `DANAVIEW_BEAUTY` is on.
+///
+/// It re-targets like an item route (same tab, new clip). It is not yet a member of the sealed
+/// [InspectorRoute] family: a new subtype breaks the exhaustive route switches of UX-16's
+/// `InspectorHost` and `ToolSets`, so the clip inspector hosts it once those files gain a
+/// `BeautyInspector` arm ([INTEGRATION] with VED-26).
+///
+/// See VED plan §6.2, ARCH v1.2 §6.4.
+@immutable
+final class BeautyInspector {
+  /// Creates the route on [item] with the tab [category].
+  const BeautyInspector(this.item, {this.category = BeautyCategory.faceShape});
+
+  /// The edited clip.
+  final ItemId item;
+
+  /// The open category tab.
+  final BeautyCategory category;
+
+  /// The item the panel edits.
+  ItemId get target => item;
+
+  /// This route for [item] (same tab).
+  BeautyInspector withItem(ItemId item) => BeautyInspector(item, category: category);
+
+  /// This route with the tab [category].
+  BeautyInspector withCategory(BeautyCategory category) => BeautyInspector(item, category: category);
+
+  /// The route to show when the selection changes to [item]: the same tab on the new clip.
+  BeautyInspector retarget(ItemId item) => item == this.item ? this : withItem(item);
+
+  @override
+  bool operator ==(Object other) => other is BeautyInspector && other.item == item && other.category == category;
+
+  @override
+  int get hashCode => Object.hash(BeautyInspector, item, category);
+
+  @override
+  String toString() => 'BeautyInspector($item, ${category.name})';
 }

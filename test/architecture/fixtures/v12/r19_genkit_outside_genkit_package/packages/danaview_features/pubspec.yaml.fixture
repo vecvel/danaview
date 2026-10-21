@@ -1,0 +1,5 @@
+name: danaview_features
+dependencies:
+  flutter:
+    sdk: flutter
+  genkit: ^0.5.0

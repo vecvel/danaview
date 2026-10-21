@@ -1,5 +1,6 @@
 // OWNER: UX-01
 // EXTENDED: AIS-01 (EditorActionId = the ARCH §17.6 list plus the AI_STUDIO_PLAN §4.4 additions)
+// EXTENDED: INT-101 (plus the VED plan's photo and beauty actions after AIS-01's tools)
 //
 // The editor contracts match ARCH: EditorActionId is the complete ARCH §17.6 list with its groups,
 // ToolId is the ux.md §9.1 strip, InspectorRoute equality and re-targeting, and the binding merge
@@ -17,7 +18,7 @@ import 'arch_scan.dart';
 
 void main() {
   group('EditorActionId', () {
-    test('is exactly the ARCH §17.6 list plus AI_STUDIO_PLAN §4.4, in order and by group', () {
+    test('is exactly the ARCH §17.6 list plus AI_STUDIO_PLAN §4.4 and the VED photo and beauty ids, in order and by group', () {
       final arch = File('${findRepoRoot().path}/docs/v1.1/editor/ARCHITECTURE.md').readAsStringSync();
       final aisPlan = File('${findRepoRoot().path}/docs/v1.2/ai-studio/AI_STUDIO_PLAN.md').readAsStringSync();
       final aisHeading = aisPlan.indexOf('### 4.4 Action registry additions');
@@ -31,9 +32,13 @@ void main() {
           m[1]!: m[2]!.split(',').map((s) => s.trim()).toList(),
       };
       expect(groups.keys, ['playback', 'editing', 'timeline', 'markers', 'tools']);
-      // 1.2.0 ids follow each group's 1.1 ids (AIS-01: editing and tools).
-      final added = {for (final a in EditorActionId.v12Additions) a.group.name: <String>[]};
-      for (final a in EditorActionId.v12Additions) {
+      // 1.2.0 ids follow each group's 1.1 ids (AIS-01: editing and tools), then INT-101's photo and
+      // beauty tools.
+      expect(EditorActionId.vedAdditions.map((a) => a.name),
+          ['editPhoto', 'beauty', 'compareBeforeAfter', 'photoToVideo', 'batchEditPhotos']);
+      final v12 = [...EditorActionId.v12Additions, ...EditorActionId.vedAdditions];
+      final added = {for (final a in v12) a.group.name: <String>[]};
+      for (final a in v12) {
         added[a.group.name]!.add(a.name);
       }
       expect(added.keys.toSet(), {'editing', 'tools'});
@@ -45,7 +50,7 @@ void main() {
       ];
       final actual = [for (final a in EditorActionId.values) (a.group.name, a.name)];
       expect(actual, expected);
-      expect(EditorActionId.values, hasLength(76 + 20));
+      expect(EditorActionId.values, hasLength(76 + 20 + 5));
       expect(EditorActionId.aiStudioActions,
           {EditorActionId.aiStudio, EditorActionId.askAi, EditorActionId.translateTrack, EditorActionId.reviewAiChanges});
     });

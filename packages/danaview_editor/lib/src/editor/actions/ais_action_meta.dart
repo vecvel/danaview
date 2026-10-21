@@ -1,6 +1,9 @@
 // OWNER: AIS-01
+// EXTENDED: INT-101 (the photo and beauty actions, EditorActionId.vedAdditions)
 //
-// Registry metadata (label, icon, shortcuts) of the 1.2.0 actions (AI_STUDIO_PLAN §4.4). The
+// Registry metadata (label, icon, shortcuts) of the 1.2.0 actions (AI_STUDIO_PLAN §4.4; the VED
+// plan's photo and beauty actions, INT-101, have no shortcut and are bound by VED-01, VED-12,
+// VED-14, VED-26 and VED-27). The
 // registry's exhaustive `editorActionMeta` (UX-15) delegates every 1.2.0 id here, so the feature
 // tickets that bind them (AIS-17…AIS-35) change copy through their bindings' `label`/`icon`
 // overrides and never edit the registry.
@@ -31,7 +34,7 @@ const EditorKeyCombo splitCueAtCursorCombo = EditorKeyCombo(LogicalKeyboardKey.e
 /// T: the transcript view.
 const EditorKeyCombo transcriptViewCombo = EditorKeyCombo(LogicalKeyboardKey.keyT);
 
-/// The registry metadata of a 1.2.0 action ([EditorActionId.v12Additions]).
+/// The registry metadata of a 1.2.0 action ([EditorActionId.v12Additions], [EditorActionId.vedAdditions]).
 ///
 /// Throws an [ArgumentError] for a 1.1 action (those are in `editorActionMeta`).
 EditorActionMeta aisActionMeta(EditorActionId id) {
@@ -58,6 +61,12 @@ EditorActionMeta aisActionMeta(EditorActionId id) {
     EditorActionId.reviewEmojis => const EditorActionMeta('Review emojis', Icons.emoji_emotions_rounded),
     EditorActionId.subtitlePresets => const EditorActionMeta('Caption presets', Icons.style_rounded),
     EditorActionId.importFont => const EditorActionMeta('Import font', Icons.font_download_rounded),
+    // Photo and beauty (VED plan §6; INT-101).
+    EditorActionId.editPhoto => const EditorActionMeta('Edit photo', Icons.photo_filter_rounded),
+    EditorActionId.beauty => const EditorActionMeta('Beauty', Icons.face_retouching_natural_rounded),
+    EditorActionId.compareBeforeAfter => const EditorActionMeta('Compare', Icons.compare_rounded),
+    EditorActionId.photoToVideo => const EditorActionMeta('To video', Icons.movie_creation_rounded),
+    EditorActionId.batchEditPhotos => const EditorActionMeta('Batch edit photos', Icons.burst_mode_rounded),
     _ => throw ArgumentError.value(id, 'id', 'not a 1.2.0 action; see editorActionMeta'),
   };
 }

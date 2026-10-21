@@ -1,5 +1,6 @@
 // OWNER: UX-15
 // EXTENDED: AIS-01 (editorActionMeta delegates the 1.2.0 ids to ais_action_meta.dart)
+// EXTENDED: INT-101 (and the photo and beauty ids, EditorActionId.vedAdditions)
 //
 // EditorActionRegistry (ARCH §17.6, ux.md §15): one table that feeds every way of invoking an
 // action, so tool tiles, context menus, keyboard shortcuts, semantics custom actions and the
@@ -346,7 +347,13 @@ EditorActionMeta editorActionMeta(EditorActionId id) {
     EditorActionId.speakers ||
     EditorActionId.reviewEmojis ||
     EditorActionId.subtitlePresets ||
-    EditorActionId.importFont =>
+    EditorActionId.importFont ||
+    // 1.2.0 photo and beauty (VED plan §6; INT-101): also in ais_action_meta.dart.
+    EditorActionId.editPhoto ||
+    EditorActionId.beauty ||
+    EditorActionId.compareBeforeAfter ||
+    EditorActionId.photoToVideo ||
+    EditorActionId.batchEditPhotos =>
       aisActionMeta(id),
   };
 }

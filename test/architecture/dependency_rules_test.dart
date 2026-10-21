@@ -8,7 +8,7 @@
 // 1.2.0 (AIS-01): the AI rules 9–12 (per package) and 14–15 (over every AI package) of
 // AI_STUDIO_PLAN §3.1, in their ARCH v1.2 §4.2 wording (which wins). Rule 13's consent call sites
 // are checked by packages/danaview_editor/test/architecture/ai_call_sites_test.dart (rule 17 paths,
-// V2-20). AIS-43 adds rules 16–19 and INT-101 rules 20–31.
+// V2-20). AIS-43 adds rule 17; INT-101 rules 16, 18–31.
 //
 // 1.2.0 (INT-101): rules 20, 22–24 and 29 per package (library purity, documents, features, search,
 // editor ports), and repo-wide greps for rule 21 (plugins standalone, no sockets in Dart, Swift or
@@ -16,6 +16,9 @@
 // (read-only source opens, PDF tools write new files only), 28 (OpenNetworkConsent call site), 30
 // (no content in logs), 31 (Material ban on the 1.2.0 UI files) and F (V2-04: the 1.2.0 flags are
 // read only in each package's flags file). Their fixtures are under `fixtures/v12/`.
+// INT-101 also adds the AIS rules 16 (danaview_ai purity; skipped until the package exists), 18 (no
+// sockets in diarization, media analysis and search) and 19 (Genkit only in danaview_ai_genkit,
+// through the injected transport) ahead of AIS-43, for the S1 exit criterion (FIX-S1Q-2).
 //
 // * Every `packages/*/pubspec.yaml` is parsed (dependencies, dev_dependencies,
 //   dependency_overrides) and every Dart file of the package (excluding build output, hidden
@@ -113,9 +116,9 @@ void main() {
       expect(v12FixtureExpectations.keys, containsAll(v12FixtureViolationCounts.keys));
     });
 
-    test('every 1.2.0 rule (20–31 and F) has a negative fixture that fires it alone or with its overlap', () {
+    test('every 1.2.0 rule (16, 18, 19, 20–31 and F) has a negative fixture that fires it alone or with its overlap', () {
       final ids = <String>[...v12DependencyRules.map((r) => r.id), ...v12RepoRules.map((r) => r.id)];
-      expect(ids.toSet(), {for (var i = 20; i <= 31; i++) '$i', 'F'});
+      expect(ids.toSet(), {'16', '18', '19', for (var i = 20; i <= 31; i++) '$i', 'F'});
       final covered = v12FixtureExpectations.values.expand((fired) => fired).toSet();
       expect(covered, containsAll(ids));
       for (final id in ids) {
@@ -124,10 +127,10 @@ void main() {
       }
     });
 
-    test('the 1.2.0 rules are ARCH v1.2 §4.2 rules 20–31 and V2-04', () {
+    test('the 1.2.0 rules are ARCH v1.2 §4.2 rules 16, 18, 19, 20–31 and V2-04', () {
       final arch = repo.readFile('docs/v1.2/ARCHITECTURE.md');
       expect(arch, isNotNull, reason: 'docs/v1.2/ARCHITECTURE.md is missing');
-      for (var id = 20; id <= 31; id++) {
+      for (final id in [16, 18, 19, for (var i = 20; i <= 31; i++) i]) {
         expect(arch, contains('\n$id. '), reason: 'ARCH v1.2 §4.2 has no rule $id');
       }
       expect(arch, contains('**V2-04**'));
@@ -885,6 +888,15 @@ void _pureDevDependencies(PackageView pkg, Set<String> allowedDanaview, void Fun
 /// ARCH v1.2 §4.2 rules 20, 22, 23, 24 and 29 (one package each).
 final v12DependencyRules = <DependencyRule>[
   DependencyRule(
+    '16',
+    'danaview_ai',
+    'danaview_ai is pure Dart (danaview_ai_providers, meta, collection and the SDK)',
+    (repo, pkg, report) {
+      _onlyAllowed(pkg, const {'danaview_ai_providers', 'meta', 'collection'}, report, 'rule 16');
+      _pureDevDependencies(pkg, const {'danaview_ai_providers'}, report, 'rule 16');
+    },
+  ),
+  DependencyRule(
     '20',
     'danaview_library',
     'danaview_library is pure Dart (danaview_domain, sqlite3, meta, collection, crypto, path; dart:io only in lib/src/{store,import,inbox,actions,db,desktop}/)',
@@ -986,8 +998,62 @@ final _nativeLogCall = RegExp(
   r'(?<![A-Za-z0-9_$.])(?:print|debugPrint|NSLog|os_log|println)\s*\(|(?<![A-Za-z0-9_$])(?:Log|logger|log)\s*\.\s*(?:v|d|i|w|e|wtf|debug|info|notice|warning|error|fault|trace|critical)\s*\(',
 );
 
-/// ARCH v1.2 §4.2 rules 21, 25–28, 30, 31 and F.
+/// The offline packages of rule 18 (no sockets; models only through the consented downloader).
+const offlinePackages = <String>{'danaview_diarization', 'danaview_media_analysis', 'danaview_search'};
+
+/// The only package that may use Genkit (rule 19).
+const genkitPackage = 'danaview_ai_genkit';
+
+/// Imports and dependencies that open a network path around the injected `HttpTransport` (rule 19).
+const _networkPackages = <String>{'http', 'dio', 'web_socket_channel', 'grpc'};
+
+/// ARCH v1.2 §4.2 rules 18, 19, 21, 25–28, 30, 31 and F.
 final v12RepoRules = <RepoRule>[
+  RepoRule(
+    '18',
+    offlinePackages,
+    'danaview_diarization, danaview_media_analysis and danaview_search open no sockets (Dart, Swift, Kotlin)',
+    (repo, report) {
+      for (final name in offlinePackages) {
+        final pkg = repo.package(name);
+        if (pkg == null) continue;
+        for (final file in _shippedSources(pkg, {'.dart', ...nativeExtensions})) {
+          final code = blankNonCode(file.source, blankStrings: true);
+          for (final m in _socketApi.allMatches(code)) {
+            report('${file.repoPath}:${_lineAt(code, m.start)}', 'uses `${m[0]!.trim()}`: ${pkg.name} is offline (rule 18)');
+          }
+        }
+      }
+    },
+  ),
+  RepoRule(
+    '19',
+    {genkitPackage, 'danaview_features', 'danaview_editor', 'danaview_ai_providers', 'danaview_ai_studio'},
+    'only danaview_ai_genkit uses package:genkit*, and it reaches the network only through the injected HttpTransport',
+    (repo, report) {
+      bool isGenkit(String name) => name == 'genkit' || name.startsWith('genkit_');
+      for (final name in repo.packageNames.where((n) => n != genkitPackage)) {
+        final pkg = repo.package(name)!;
+        _forbidPackages(pkg, null, report, why: 'only $genkitPackage uses Genkit (rule 19)', isForbidden: isGenkit);
+      }
+      for (final file in repo.appLibFiles) {
+        for (final uri in file.uris) {
+          final p = packageOf(uri);
+          if (p != null && isGenkit(p)) report(file.repoPath, 'imports `$uri`: only $genkitPackage uses Genkit (rule 19)');
+        }
+      }
+      final genkit = repo.package(genkitPackage);
+      if (genkit == null) return;
+      _forbidPackages(genkit, _networkPackages, report, why: 'Genkit calls go through the injected HttpTransport (rule 19)');
+      for (final file in _shippedSources(genkit, const {'.dart'})) {
+        final code = blankNonCode(file.source, blankStrings: true);
+        for (final m in _socketApi.allMatches(code)) {
+          report('${file.repoPath}:${_lineAt(code, m.start)}',
+              'uses `${m[0]!.trim()}`: Genkit calls go through the injected HttpTransport (rule 19)');
+        }
+      }
+    },
+  ),
   RepoRule(
     '21',
     v12PluginPackages,
@@ -1146,9 +1212,12 @@ final v12RepoRules = <RepoRule>[
     'OpenNetworkConsent.accepted( only in danaview_features/lib/src/tools/speed_consent_sheet.dart',
     (repo, report) {
       final call = RegExp(r'(?<![A-Za-z0-9_$])OpenNetworkConsent\s*\.\s*accepted\b');
+      // The declaration (`factory OpenNetworkConsent.accepted(…)` in danaview_data) creates nothing.
+      final declaration = RegExp(r'(?<![A-Za-z0-9_$])factory\s+OpenNetworkConsent\s*\.\s*accepted\s*\(');
       for (final file in [...repo.allPackageLibFiles, ...repo.appLibFiles]) {
         if (file.repoPath == openNetworkConsentSite) continue;
-        final code = blankNonCode(file.source, blankStrings: true);
+        final code = blankNonCode(file.source, blankStrings: true)
+            .replaceAllMapped(declaration, (m) => m[0]!.replaceAll(RegExp(r'[^\n]'), ' '));
         for (final m in call.allMatches(code)) {
           report('${file.repoPath}:${_lineAt(code, m.start)}', 'creates an OpenNetworkConsent: only $openNetworkConsentSite may (rule 28)');
         }
@@ -1248,6 +1317,9 @@ String _short(String raw) => raw.length > 40 ? '${raw.substring(0, 40)}…' : ra
 /// ids each must fire. Empty sets are positive controls.
 const v12FixtureExpectations = <String, Set<String>>{
   'ok_v12_clean': <String>{},
+  'r16_ai_depends_on_flutter': {'16'},
+  'r18_search_opens_socket': {'18'},
+  'r19_genkit_outside_genkit_package': {'19'},
   'r20_library_depends_on_flutter': {'20'},
   'r20_library_dart_io_outside_allowed': {'20'},
   'r21_plugin_depends_on_danaview_and_sockets': {'21'},
@@ -1267,6 +1339,9 @@ const v12FixtureExpectations = <String, Set<String>>{
 
 /// Exact violation counts of the 1.2.0 fixtures.
 const v12FixtureViolationCounts = <String, int>{
+  'r16_ai_depends_on_flutter': 3,
+  'r18_search_opens_socket': 2,
+  'r19_genkit_outside_genkit_package': 3,
   'r20_library_depends_on_flutter': 3,
   'r20_library_dart_io_outside_allowed': 1,
   'r21_plugin_depends_on_danaview_and_sockets': 4,
@@ -1284,7 +1359,7 @@ const v12FixtureViolationCounts = <String, int>{
   'rF_flag_read_outside_flags_file': 2,
 };
 
-/// Runs every rule (1–12, 14, 15, 20–31, F and M) against [repo].
+/// Runs every rule (1–12, 14–16, 18–31, F and M) against [repo].
 List<Violation> checkAll(RepoTree repo) => <Violation>[
       for (final rule in dependencyRules) ...rule.check(repo),
       for (final rule in repoRules) ...rule.check(repo),
@@ -1320,11 +1395,13 @@ void _forbidPackages(
   Set<String>? forbidden,
   void Function(String location, String message) report, {
   Set<String>? allowDanaview,
+  bool Function(String name)? isForbidden,
   required String why,
 }) {
   bool bad(String name) {
     if (name == pkg.name) return false;
     if (forbidden != null && forbidden.contains(name)) return true;
+    if (isForbidden != null && isForbidden(name)) return true;
     if (allowDanaview != null && name.startsWith('danaview_') && !allowDanaview.contains(name)) return true;
     return false;
   }

@@ -1,0 +1,8 @@
+class OpenNetworkConsent {
+  OpenNetworkConsent._(this.at);
+
+  /// Only the consent sheet calls this (rule 28); the declaration itself creates nothing.
+  factory OpenNetworkConsent.accepted(DateTime at) => OpenNetworkConsent._(at);
+
+  final DateTime at;
+}

@@ -1,0 +1,10 @@
+import 'dart:io';
+
+// HttpClient( in a comment is fine, and so is 'WebSocket.connect(' in a string.
+const note = 'WebSocket.connect(';
+
+Future<void> fetch() async {
+  final client = HttpClient();
+  await WebSocket.connect('wss://example.invalid');
+  client.close();
+}
