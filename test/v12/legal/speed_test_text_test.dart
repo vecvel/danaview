@@ -16,7 +16,6 @@ import 'package:danaview_data/danaview_data.dart';
 import 'package:danaview_data/src/network/speed/mlab_locate.dart';
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/more/legal_texts.dart';
-import 'package:danaview_features/src/more/settings_sections/privacy_section.dart' show PrivacySettingsSection;
 
 import '../../library_test_utils.dart';
 

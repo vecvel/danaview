@@ -1,3 +1,7 @@
+// EXTENDED: S1-W (S1 wiring: Settings › Privacy, the speed test's open-network toggle from ST-04,
+// in the privacy settings slot of INT-101; BUILD_PLAN v1.2 §1A. The speed test itself and its
+// one-time consent prompt are reached through the 1.0 `/settings/speed-test` route unchanged.)
+
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
@@ -164,6 +168,11 @@ Widget _settingsPage(BuildContext context, SettingsDestination destination) {
   };
 }
 
+/// The 1.2.0 Settings sections the app shows (INT-101 slots). S1 adds Settings › Privacy (ST-04,
+/// no flag: the open-network speed test is consent-gated); library storage (HOM-17, S2) and the
+/// search index (INT-103, S7) join with their slices.
+const SettingsSections appSettingsSections = SettingsSections(privacy: buildPrivacySettingsSection);
+
 /// Pages are nested under Home so Back always has somewhere to go, even after a deep link.
 GoRouter createAppRouter() => GoRouter(
       navigatorKey: appNavigatorKey,
@@ -189,6 +198,7 @@ GoRouter createAppRouter() => GoRouter(
                 onBack: () => _back(context),
                 onNavigate: (destination) => context.push(settingsLocation(destination)),
                 onOpenEditorSettings: editorReachable(context) ? () => context.push(editorSettingsLocation) : null,
+                sections: appSettingsSections,
               ),
               routes: [
                 for (final destination in SettingsDestination.values)
