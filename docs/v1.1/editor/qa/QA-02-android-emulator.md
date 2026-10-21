@@ -209,7 +209,8 @@ notification request, and the s06/s08/s10/s12/s13 test fixes) reached this branc
 | **A** (before the fixes) | 542dcc6 + Android-lane backups up to 75b6a53, before e0fa7e8 | API 35 full pass 1 (13:12–14:38) and pass 2 (failed batches, 14:43–16:37); API 28 / 29 / 29 2 GB (14:23–16:06, from the `dv2` copy) |
 | **B** | d723c10 + merge 2be8a84 + the final AND-14 `Permissions.kt` (e6a9340) and its tests, up to 0ad2477 | API 35 reruns (19:27–21:44, main checkout); API 34 and tablet runs (19:33–21:10, `dv2` refreshed from the main checkout's tracked files) |
 | **C** (current) | 0cfc691: editor-wip c93ad22 merged (incl. the Mac's ebc2fb2: job resume after the first media resolve, preview restart, captions resume fraction) + AND-18's range-touch vectors | API 35 full pass (22:07–23:06) and the solo reruns of the failed batches (23:09–23:43), main checkout, `emulator-5554` only |
-| **D** (2026-10-17, current) | 3d38ef2 on `editor-android`: editor-wip c336899 (parallel-r7: the Mac fixes for M-1..M-17, incl. FIX-M15 close after recovery, the tier-aware close flush, the handoff playhead, the QA-00 suite and `e2e_host.sh` changes for M-6/M-7) merged with the Android-lane fixes (M-11, M-12, M-16..M-20, the capture fix ae6cda2). Clean tree, no uncommitted change; no Android-lane change during or after the runs | API 35 full pass (2026-10-17 00:58–01:55) and the solo reruns of s13 (01:54–01:58, freshly booted emulator) and the swipe pair (01:59–02:02), main checkout, `emulator-5554` |
+| **D** (2026-10-17) | 3d38ef2 on `editor-android`: editor-wip c336899 (parallel-r7: the Mac fixes for M-1..M-17, incl. FIX-M15 close after recovery, the tier-aware close flush, the handoff playhead, the QA-00 suite and `e2e_host.sh` changes for M-6/M-7) merged with the Android-lane fixes (M-11, M-12, M-16..M-20, the capture fix ae6cda2). Clean tree, no uncommitted change; no Android-lane change during or after the runs | API 35 full pass (2026-10-17 00:58–01:55) and the solo reruns of s13 (01:54–01:58, freshly booted emulator) and the swipe pair (01:59–02:02), main checkout, `emulator-5554` |
+| **E** (2026-10-21, current) | 88469c0 on `editor-android`: editor-wip merged again (c336899 and 88469c0: FIX M-21 `swipeFromRecents` by task id, the round 9 Dart fixes in editor_controller / editor_session / relink / preview_status, an s13 test change). Only uncommitted change: `e2e_android.sh` no longer restarts the adb server; no Android-lane code change | API 35 full pass (18:31–21:37) and solo reruns of s07 (21:38–21:46) and s13 (21:48–22:15, three runs), main checkout, `emulator-5554` |
 | **C+** | C + the `PreviewSession.debugCaptureFrame` fix (WIP 550b8ac) | the s09 recover phase run alone (23:14–23:16) and the solo reruns from s02 on (23:17–23:43: s02, s06, s07, s12, s13, the extra phases), the s18 rerun at 23:44–23:46 and the PreviewSessionTest run. The fix only changes `debugCaptureFrame` |
 
 Runs on A and on B differ only in the e0fa7e8 fixes, AND-14 and the runner changes. Every API 35
@@ -226,6 +227,81 @@ Windows-only path test (FIX M-11). `RangeTouchVectorTest` (new, FIX-AND-18-1) pa
 `RangeTouchTest` 3 of 3 (0cfc691's commit message).
 
 ## Results matrix
+
+### API 35 phone on code E (88469c0), 2026-10-21
+
+Code E = `editor-android` at **88469c0** (editor-wip c336899 and 88469c0 merged: FIX M-21
+`swipeFromRecents` removes the app's own task by id, plus the Mac's round 9 Dart fixes), with one
+uncommitted runner change (`e2e_android.sh` never restarts the adb server; it does not touch the
+app or the tests). No Android-lane code change during or after the runs. One command, one emulator
+(`emulator-5554`, booted by the runner with audio, `-no-snapshot-save`), fresh install, models from
+`C:/dev/models`, app data cleared before every batch:
+`DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=C:/dev/models scripts/ci/editor/e2e_android.sh`
+(18:31–21:37). 22 batches, 20 pass, 0 emulator restarts. Evidence: `emulator-5554/full/`; solo
+reruns in `emulator-5554/solo/`.
+
+| Batch | Batch result (time) | Solo rerun (fresh install, same code) | Note |
+|---|---|---|---|
+| s01–s06 | **pass** (409, 189, 203, 219, 243, 361 s) | | |
+| s07 | **timeout** (4129 s) | **pass** (482 s) | host laptop hibernated mid-export (below) |
+| s08 | **pass** (449 s) | | in the batch, with the models: 3 cues |
+| s09 | **pass** (357 s; edit + recover) | | close trace below: "exit callback" logged |
+| s10–s12 | **pass** (195, 158, 394 s) | | |
+| s13 | **fail** (369 s): level -66.3 dBFS | **fail** ×3: stop not applied within 30 s (once); -76.2 dBFS; -69.4 dBFS | host microphone silence (emulator reality, as on code D) |
+| s14–s18 | **pass** (296, 263, 401, 388, 169 s) | | |
+| x: fgs + fgs-check | **pass** + **pass** (389 s) | | `destroyActivity: no ActivityRecord left (attempt 1)`; FGS `types=0x00002000`; export `detached=true`; relaunch shows the finished card |
+| x: cancel | **pass** (158 s) | | |
+| x: swipe + swipe-check | **pass** + **pass** (366 s) | | `swipeFromRecents: task 822 removed by id (attempt 1)`; export `detached=true`; relaunch shows the finished card (M-21 fixed): AND-12 detached proof on API 35 complete |
+| x: death + death-check | **pass** + **pass** (349 s) | | |
+
+**s07 timeout: host power event, not the app.** The first export passed
+(`E2E export 18229.mp4`, 4,305,971 B). The second export started at 19:07:46; the last logcat line of
+any process is 19:08:32 and the next 20:10:21. Windows' System log: 19:08:25 Kernel-Power 524
+"Critical Battery Trigger Met", 19:08:29 "entering sleep, Sleep Reason: Battery", resumed from
+hibernate at 20:10:21. The test then hit its 360 s wait at 93 %, and the batch timeout ended it.
+Rerun alone on the same code: both exports verified (`solo/s07/`). The batch's own s07 logs were
+overwritten by that rerun (a move of `logs/` was refused first); the excerpts are kept in
+`full/s07_batch_note.txt`.
+
+**s13: host microphone.** Every take recorded (clip on the voice lane, length check passes, start
+latency 0.57–0.97 s on the emulator), but the export level stays at -66 to -76 dBFS against the
+-60 dBFS bar: the laptop microphone fed the emulator near-silence, also with a tone played on the
+laptop's speakers during one rerun (`solo/s13_tone/`, -69.4 dBFS). On code D s13 passed alone at
+-53.1 dBFS; the level depends on the room, not the code. The first solo rerun (`solo/s13/`) failed
+differently: after Stop the sheet still showed "recording" and the clip did not reach the voice lane
+within 30 s, and two `activeJobs` calls (export lane) timed out meanwhile; no ANR, no app log line,
+no thread dump (it did not repeat in the next two reruns, which took thread dumps:
+`solo/s13_diag/s13_threads/`, `solo/s13_tone/s13_threads/`). Classified flaky, one occurrence;
+the recorder's stop waits at most 5 s for its capture thread (`VoiceRecorder.finish`).
+
+#### s09 close trace (code E)
+
+From `emulator-5554/full/logs/s09_recovery_after_kill_test-recover.log` (also
+`emulator-5554/full/s09_close_trace.txt`):
+
+```
+[EditorLifecycle] close requested (shell: ready)
+[EditorLifecycle] flushBeforeClose: saved
+[EditorLifecycle] release: start
+[EditorClose] pr_QYo0BGJu8FtY: start (attached: true, open pending: true)
+[EditorClose] pr_QYo0BGJu8FtY: open still finishing (first plan / seek): not awaited
+[EditorClose] pr_QYo0BGJu8FtY: flushBeforeClose: saved
+[EditorClose] pr_QYo0BGJu8FtY: release: start
+[EditorClose] pr_QYo0BGJu8FtY: release: session detached (EditorSession closed)
+[EditorClose] pr_QYo0BGJu8FtY: release: plan sync dispose
+[EditorClose] pr_QYo0BGJu8FtY: release: preview dispose
+[EditorClose] pr_QYo0BGJu8FtY: release: repository close
+[EditorClose] pr_QYo0BGJu8FtY: release: end
+[EditorClose] pr_QYo0BGJu8FtY: done (CloseOutcome(saved: true))
+[EditorLifecycle] release: end
+[EditorLifecycle] leaving the editor
+[EditorLifecycle] exit callback
+```
+
+"leaving the editor" is followed by "exit callback": the Android preview release does not block
+the main thread. Across the pass every scenario that closes the editor (s02–s06, s08–s12,
+s14–s18; s10 and s18 twice) logs both lines the same number of times, with no "timed out" step, and
+no batch logcat has an ANR for the app. No Android-lane change was needed.
 
 ### API 35 phone on code D (3d38ef2), 2026-10-17
 
@@ -616,6 +692,9 @@ host for `grantNotifications` and the export started. None waited at "Preparing�
   death phase and before the summary, so it wrote no `summary.txt`. That happened because the death
   fix was saved into the script while bash was still reading it. Run 2 covers the death phases. The
   current file passes `bash -n`.
+- 2026-10-21 (before the code E pass): an emulator restart no longer runs `adb kill-server`, even
+  when no other device is listed. A second emulator that is still booting is not yet a listed
+  device, and a server restart would cut it off. Saved before the run started; `bash -n` passes.
 
 ### Other Android-lane changes in this window (for completeness)
 
@@ -1009,11 +1088,17 @@ the code C pass, everything that was in `emulator-5554/` was moved to
 Before the code D pass, everything that was in `emulator-5554/` (the code C and C+ evidence) was
 moved to `_before_3d38ef2/emulator-5554/`; the C/C+ rows below now live under that folder.
 
+Before the code E pass (2026-10-21), everything that was in `emulator-5554/` (the code D evidence)
+was moved to `_before_88469c0/emulator-5554/`; the D rows below now live under that folder.
+
 | Folder | Device | Code | Content |
 |---|---|---|---|
-| `emulator-5554/full/` (`logs/`, `screens/`, `files/`, `summary.txt`, `runner.log`, `s09_close_trace.txt`) | API 35 | **D** | the full pass, 2026-10-17 00:58–01:55, fresh install, audio, models, one emulator |
-| `emulator-5554/solo/s13/` | API 35 | **D** | s13 alone on a freshly booted emulator (pass) |
-| `emulator-5554/solo/x_swipe/` | API 35 | **D** | the swipe pair alone (swipe pass, swipe-check fail, M-21) |
+| `emulator-5554/full/` (`logs/`, `screens/`, `files/`, `summary.txt`, `runner.log`, `s09_close_trace.txt`, `s07_batch_note.txt`) | API 35 | **E** | the full pass, 2026-10-21 18:31–21:37, fresh install, audio, models, one emulator; `logs/` lacks the batch's s07 logs (see the note) |
+| `emulator-5554/solo/s07/` | API 35 | **E** | s07 alone (pass) |
+| `emulator-5554/solo/{s13,s13_diag,s13_tone}/` | API 35 | **E** | s13 alone three times (fail: stop not applied once, host mic silence twice); `s13_threads/` holds two app thread dumps per run (`trace_*.txt`) |
+| `_before_88469c0/emulator-5554/full/` | API 35 | D | the full pass, 2026-10-17 00:58–01:55, fresh install, audio, models, one emulator |
+| `_before_88469c0/emulator-5554/solo/s13/` | API 35 | D | s13 alone on a freshly booted emulator (pass) |
+| `_before_88469c0/emulator-5554/solo/x_swipe/` | API 35 | D | the swipe pair alone (swipe pass, swipe-check fail, M-21) |
 | `_before_3d38ef2/emulator-5554/full/` (`logs/`, `screens/`, `files/`, `summary.txt`, `runner.log`) | API 35 | C | the full pass, 22:07–23:06, fresh install, audio, models, one emulator |
 | `_before_3d38ef2/emulator-5554/solo/{s10,s18,s09,s02,s06,s07,s12,s13,x_fgs,x_cancel,x_swipe}/` | API 35 | C (s02 on: C+) | each failed batch rerun alone on a fresh install (23:07–23:43); `s10/hostcaps/` holds the host screenshots of the relink |
 | `_before_3d38ef2/emulator-5554/solo/s18_capturefix/` | API 35 | C+ | s18 alone after the capture fix (pass), `PreviewSessionTest_connected.log`, `preview_unit.log` |
@@ -1038,6 +1123,17 @@ Superseded and not used: `_run3_cert/`, `_rerun4_cert/`, `_stale_before_1145/`,
 BUILD_PLAN acceptance: every scenario passes on API 35, the gate/minimal/FGS checks pass on API 29
 and 34, the API 28 checks pass, and the tablet keyboard/mouse and drop evidence is recorded, with
 artifacts attached.
+
+**Update after the code E pass (2026-10-21, API 35, 88469c0):** 16 of 18 scenarios and all 7
+extra phases pass in the batch, s08 included; swipe-check passes (M-21 fixed), so the AND-12
+detached export is proven on API 35 by fgs-check and swipe-check. s07 failed in the batch only
+because the host laptop hibernated on critical battery mid-export, and passes alone on the same
+code. s13 fails on the host microphone's silence in the batch and in three solo runs (emulator
+reality; one solo run also showed a stop that did not apply within 30 s, not reproduced). The s09
+close trace shows "exit callback" after "leaving the editor": no native-release block, no
+Android-lane fix. For API 35 certification the owner either accepts s07-alone after a host power
+event and the s13 microphone reality, or the full command is rerun on mains power in a room where
+the laptop microphone hears a voice.
 
 **Update after the code D pass (2026-10-17, API 35):** items 1 and 2 below are done for API 35
 except two batch items: s13 (failed in the batch only because the host microphone fed the emulator
