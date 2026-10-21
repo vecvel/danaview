@@ -1,9 +1,10 @@
 // OWNER: HOM-16
 //
-// Placeholder (D-33) created by INT-101. HOM-16 replaces this file:
-// the public entry of lib/src/classify/, the classifier (type table, ARCH v1.2 §5.1). The package barrel exports it; HOM-16 re-exports
-// the public files of its directory from here (barrels never change after INT-101).
-// Until then it declares no public names.
+// The public entry of lib/src/classify/ (ARCH v1.2 §5.1, V2-114): the type table and the
+// classifier. The package barrel exports this file; it re-exports the directory's public files.
 
-/// The public entry of lib/src/classify/: the classifier (type table, ARCH v1.2 §5.1).
+/// The classifier: the type table (HOM plan §8.1) and `classify(uti?, mime?, fileName)`.
 library;
+
+export 'classifier.dart';
+export 'type_table.dart';
