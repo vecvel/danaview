@@ -7,28 +7,48 @@ Emulators on the Windows laptop (BUILD_PLAN QA-02). It also holds the API 28 bel
 Android export extra on API 34 and API 35, the tablet run of scenario 12, and the manual tablet
 steps for the owner (hardware keyboard, mouse, drag from Files and Photos).
 
-**Status (2026-10-21, 23:00 IST): not certified.** The clean pass on code E (`editor-android`
-**88469c0**) ran on every device in the matrix. No Android-lane code change was made during or
-after it, so every result in this report's matrix ran on 88469c0. Most items now pass. Four are
-still open: two are environment items, one is a Mac fix, and one is an owner step.
+**Status (2026-10-22, 03:00 IST): not certified.** The owner's re-run on code F (`editor-android`
+**d680bd3**, which carries FIX M-22, 07485cf) ran on mains power on 2026-10-22. Every re-run item
+passes except one: **s02 failed in the API 29 2 GB batch** (the player-to-editor handoff opened at
+frame 0, the M-9 symptom; FIX M-23, Mac). The same s02 passed alone on a fresh install, but a batch
+failure is not a clean pass. Still open: FIX M-23 and the owner's manual tablet M1–M4. The owner
+accepts s13's low voice level on the emulator as an emulator limitation.
 
+- **Re-run on d680bd3, mains power, fresh install on every device** ("Re-run of 2026-10-22" below):
+  - **API 29 2 GB (tier MINIMAL):** s01, s03, s04 and **s18 pass in one batch**, so M-22 is fixed
+    on the AVD where s18 failed 2 of 3 runs before. **s02 fails in the batch** (expected frame
+    160, got 0) and passes alone (FIX M-23).
+  - **s18 passes on API 29 (tier LOW) and on API 35** (in the API 35 batch with s07).
+  - **API 35 s07 passes in the batch** (808 s, 0 emulator restarts, no hibernation): both exports
+    are verified and the burned cues change 313 and 293 samples.
+  - **API 34 fgs pair passes** (fgs + fgs-check, 472 s): `detached=true`, `completed while
+    detached; savedToGallery=true notified=true`. The first attempt stopped in staging right after
+    boot (an emulator storage error, not a test run) and was run again once.
+  - **s13:** the owner accepted the low voice level on the emulator as an emulator limitation
+    (2026-10-22). Real-mic levels are a device check (QA-04, device lab). The measured levels stay
+    on record below.
+- The rest of the clean pass ran on code E (**88469c0**), as follows.
 - **API 35 phone (`emulator-5554`, one command, fresh install, audio, models):** 20 of 22 batches
   pass, with 0 emulator restarts. **16 of 18 scenarios and all 7 extra phases pass in the batch**,
   s08 included. fgs-check and swipe-check both return `finished` with `detached=true`, so the
   **AND-12 detached export is proven on API 35**. M-21 is fixed: the swipe removes the app's own
   task by id.
   - **s07** timed out in the batch because the host laptop hibernated on critical battery
-    (19:08:29–20:10:21) mid-export. It **passes alone** on the same code.
+    (19:08:29–20:10:21) mid-export. It passed alone on the same code. **Superseded:** it passes in
+    the batch on d680bd3, on mains power.
   - **s13** fails on the export level in the batch (-66.3 dBFS) and in 2 of 3 solo runs (-76.2 and
-    -69.4 dBFS; it needs > -60); the third solo run failed differently (Stop not applied, flaky). The cause is the laptop microphone, which feeds the emulator
-    near-silence. This is an emulator reality.
+    -69.4 dBFS; it needs > -60); the third solo run failed differently (Stop not applied, flaky).
+    The cause is the laptop microphone, which feeds the emulator near-silence. **The owner accepts
+    this as an emulator limitation** (2026-10-22); every other s13 check passes.
 - **API 34 (`emulator-5556`, from `dv2`):** **all 7 extra phases pass**. Notification Cancel
   passes, so M-7 is fixed. The fgs pair was in the batch when the same host hibernation hit, and
-  passed alone right after. With that, **AND-12 is proven on API 34** for both fgs and swipe.
+  passed alone right after. **Superseded:** the fgs pair passes on d680bd3, on mains power. With
+  that, **AND-12 is proven on API 34** for both fgs and swipe.
 - **API 29 (GLES 3, tier LOW):** s01–s04 and s18 **all pass in one batch**. s02 passing means M-9
-  is fixed.
-- **API 29 2 GB (tier MINIMAL):** s01–s04 pass. **s18 fails** 2 of 3 runs on the barcode after the
-  reopen (0 instead of 77). The cause is a race in the open sequence (FIX M-22, Mac).
+  is fixed. s18 passes again on d680bd3.
+- **API 29 2 GB (tier MINIMAL):** s01–s04 passed on 88469c0, and **s18 failed** 2 of 3 runs on the
+  barcode after the reopen (0 instead of 77), from a race in the open sequence (FIX M-22, Mac).
+  **Superseded** by the d680bd3 batch above: s18 passes, s02 fails once (M-23).
 - **API 28:** `x_android_api28` really runs and **passes**, so M-10 is fixed.
 - **Tablet:** **s12 passes**, so M-3 and M-4 are fixed. The owner's manual checklist M1–M4 has
   not been run.
@@ -37,6 +57,9 @@ still open: two are environment items, one is a Mac fix, and one is an owner ste
 
 "What remains for certification" at the end lists the open items with their owners. Older results
 (codes A–D) are summarised in a short history note under "Results matrix".
+
+The Android half of QA-05 (the seeded soak and the process-death chain) ran on the same code and
+emulator in this round. Its results are in `QA-05-soak.md`, not here.
 
 ## Scope
 
@@ -191,7 +214,19 @@ API 35 images the emulator raises the 3072 MB of `config.ini` to 4096 MB, which 
 
 ## Code versions
 
-**Current: E = 88469c0** (`editor-android`, 2026-10-21). This is editor-wip merged again: c336899
+**Re-run items: F = d680bd3** (`editor-android`, 2026-10-22). This is code E with `origin/editor-wip`
+merged again (dd0f310), which brings FIX M-22 (07485cf: the preview is ready only after the opening
+seek shows the saved frame), the QA-02 runner change 1f11813 (no adb server restart on an emulator
+restart) and docs. No Android-lane code changed between E and F.
+
+| Where | Code as run |
+|---|---|
+| API 35 phone, main checkout `C:/dev/danaview`, `emulator-5554`, 2026-10-22 00:42–01:03 | d680bd3, clean checkout |
+| API 29 2 GB, API 29 and API 34, copy `C:/dev/dv2`, `emulator-5556`, 2026-10-22 00:45–01:39 | d680bd3. `dv2` was refreshed from the main checkout's tracked files at 00:40:52, and `cmp` found every tracked file byte-identical to d680bd3. Its only extra file is an untracked whisper.cpp `bindings/javascript/package.json`, which the build does not use. Each device folder has a `CODE_VERSION.txt`. |
+
+The laptop was on mains power for the whole round, and no emulator restarted.
+
+**Rest of the clean pass: E = 88469c0** (`editor-android`, 2026-10-21). This is editor-wip merged again: c336899
 (the Mac fixes for M-1..M-17 and the QA-00 harness changes for M-6/M-7) and 88469c0 (FIX M-21:
 `swipeFromRecents` removes the app's own task by id). It also brings the Mac's round 9 Dart fixes
 in editor_controller, editor_session, relink and preview_status, and an s13 test change. It
@@ -217,7 +252,61 @@ Earlier labels, used only in the history note:
 
 ## Results matrix
 
-This is the clean pass of 2026-10-21. **Every result below ran on code E (88469c0).** Every device
+### Re-run of 2026-10-22 on code F (d680bd3), mains power
+
+The owner asked for these re-runs after FIX M-22 landed. Every device started from a fresh install
+with `DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=C:/dev/models`. `emulator-5554`
+ran from the main checkout with `DANAVIEW_E2E_ONLY="s07 s18"`. `emulator-5556` ran from `dv2`, one
+AVD at a time, booted with `-port 5556` (and `-feature GLESDynamicVersion` on API 29). No emulator
+restarted, and the host stayed on mains power.
+
+| Item | Device | Batch (time) | Alone (fresh install) | Note |
+|---|---|---|---|---|
+| s01 | API 29 2 GB (MINIMAL) | **pass** (527 s, includes the first build) | | |
+| s02 | API 29 2 GB | **fail** (193 s): `s02_player_to_editor_test.dart:62`, `Expected: <160> Actual: <0>` | **pass** (155 s) | FIX M-23 (below) |
+| s03 | API 29 2 GB | **pass** (230 s) | | |
+| s04 | API 29 2 GB | **pass** (192 s) | | |
+| s18 | API 29 2 GB | **pass** (191 s) | | M-22 fixed here (it failed 2 of 3 runs on 88469c0) |
+| s18 | API 29 (LOW) | **pass** (212 s) | | |
+| s18 | API 35 phone | **pass** (402 s, in one runner call with s07) | | |
+| s07 | API 35 phone | **pass** (808 s) | | both exports verified; no hibernation |
+| x: fgs + fgs-check | API 34 | **pass** + **pass** (472 s) | | attempt 1 stopped in staging (see below) |
+
+The tiers come from the capabilities lines of this round: `tier=MINIMAL api=29 ram=2089222144
+gles3=true` (2 GB), `tier=LOW api=29 ram=3143041024 gles3=true` (API 29) and `tier=LOW api=35
+ram=4110274560 gles3=true` (API 35).
+
+**s07 on API 35.** The two exports were 4,305,971 B and 4,259,887 B, 8.0 s each, with
+`c2.android.avc.encoder`. The burned cues changed 313 (t1a) and 293 (t1b) samples, against a bar of
+> 180. HEVC/MOV are not offered (`hevcEncode false`), which is reported, not failed.
+
+**s02 on the 2 GB AVD: the handoff carried position 0.** In the batch (after the runner's `pm clear`),
+the test read the player at 5,333,333 µs just before it tapped Edit. But `EditorLauncher` logged
+"Handoff: creating a project, at 0 us" and opened the editor at frame 0. Alone, on a fresh install,
+the same test logged "Handoff: at 5333333 us -> frame 160" and passed. It failed once in 2 runs. The
+symptom is M-9's (the player-to-editor handoff loses the playhead), and the code is the Mac's Dart
+player screen, so it is FIX M-23, not an Android-lane defect.
+
+**The API 34 fgs pair.** The first attempt never reached a test: staging stopped right after boot
+with `chmod …/e2e_handshake: Transport endpoint is not connected`. The folder was fine moments
+later. This is the emulator's shared storage not yet ready (see "Emulator realities"). The rerun,
+from a fresh install, passed both phases, with this AND-12 detached-export proof:
+
+- `destroyActivity: no ActivityRecord left (attempt 1)`;
+- `ExportService … isForeground=true … types=00000001` (dataSync);
+- `export ex_dadf4aeda8d5476f: done, encoder c2.android.avc.encoder (hardware=false), 7785197 bytes,
+  detached=true`;
+- `completed while detached; savedToGallery=true notified=true`.
+
+Evidence: `emulator-5554/` (`summary.txt`, `runner.log`, `logs/`), and
+`emulator-5556_<AVD>/d680bd3/` for `Pixel_API_29_2GB` (`batch_s01-s04_s18/`,
+`s02_alone_rerun_PASS/`), `Pixel_API_29` (`s18/`) and `Pixel_API_34` (`fgs_pair_PASS/`,
+`fgs_attempt1_STAGE_FUSE_ERROR/`).
+
+### Clean pass of 2026-10-21 on code E (88469c0)
+
+This is the clean pass of 2026-10-21. **Every result in this section ran on code E (88469c0).** Its
+evidence now lives under `_before_d680bd3/` (see "Evidence"). Every device
 started from a fresh install. Each run used the §4.3 command. `emulator-5554` ran from the main
 checkout, and `emulator-5556` ran from `dv2`. The gate AVDs and the tablet add their serial, and
 the tablet run adds `DANAVIEW_E2E_ONLY=s12`:
@@ -232,22 +321,24 @@ on the 2 GB AVD twice, and s13 three times. The "Batch" column is the clean-pass
 
 ### Overview
 
+Cells marked "F:" are the d680bd3 re-run of 2026-10-22; everything else is code E.
+
 | # | API 35 phone | API 29 | API 29 2 GB | Tablet | API 34 |
 |---|---|---|---|---|---|
-| s01 | **pass** | **pass** | **pass** | — | — |
-| s02 | **pass** | **pass** | **pass** | — | — |
-| s03 | **pass** | **pass** | **pass** | — | — |
-| s04 | **pass** | **pass** | **pass** | — | — |
+| s01 | **pass** | **pass** | **pass**; F: **pass** | — | — |
+| s02 | **pass** | **pass** | **pass**; F: **fail** in the batch, alone **pass** (FIX M-23) | — | — |
+| s03 | **pass** | **pass** | **pass**; F: **pass** | — | — |
+| s04 | **pass** | **pass** | **pass**; F: **pass** | — | — |
 | s05, s06 | **pass** | — | — | — | — |
-| s07 | **timeout** (host hibernated); alone **pass** | — | — | — | — |
+| s07 | **timeout** (host hibernated); alone **pass**; F: **pass** in the batch | — | — | — | — |
 | s08 | **pass** (3 cues) | — | — | — | — |
 | s09 | **pass** | — | — | — | — |
 | s10, s11 | **pass** | — | — | — | — |
 | s12 | **pass** | — | — | **pass** | — |
-| s13 | **fail** (host mic); alone **fail** ×3 | — | — | — | — |
+| s13 | **fail** (host mic); alone **fail** ×3; level accepted by the owner as an emulator limitation | — | — | — | — |
 | s14–s17 | **pass** | — | — | — | — |
-| s18 | **pass** | **pass** | **fail**; alone **fail**, then **pass** (FIX M-22) | — | — |
-| x: fgs / fgs-check | **pass** / **pass** | — | — | — | **pass** / **timeout** (host hibernated); pair alone **pass** / **pass** |
+| s18 | **pass**; F: **pass** | **pass**; F: **pass** | **fail**; alone **fail**, then **pass** (FIX M-22); F: **pass** in the batch | — | — |
+| x: fgs / fgs-check | **pass** / **pass** | — | — | — | **pass** / **timeout** (host hibernated); pair alone **pass** / **pass**; F: pair **pass** / **pass** |
 | x: cancel | **pass** | — | — | — | **pass** |
 | x: swipe / swipe-check | **pass** / **pass** | — | — | — | **pass** / **pass** |
 | x: death / death-check | **pass** / **pass** | — | — | — | **pass** / **pass** |
