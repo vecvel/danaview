@@ -3,7 +3,7 @@
 > **Release:** Danaview 1.2.0 (app version `1.2.0+N`). **Date:** 2026-10-21. **Baseline:** `editor-wip` @ `c2ee137` (v1.1: 162 of 166 tickets done; 1.2.0 work starts after v1.1 INT-05).
 > **Authority:** [`ARCHITECTURE.md`](ARCHITECTURE.md) (this folder, "ARCH") wins over this plan; this plan wins over the four feature plans: the HOM plan ([`files-media-home/FILES_MEDIA_HOME_PLAN.md`](files-media-home/FILES_MEDIA_HOME_PLAN.md)), the AIS plan ([`ai-studio/AI_STUDIO_PLAN.md`](ai-studio/AI_STUDIO_PLAN.md)), the VED plan ([`video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md`](video-editor-update/VIDEO_EDITOR_UPDATE_PLAN.md)) and the ST plan ([`speed-test/SPEED_TEST_FALLBACK_PLAN.md`](speed-test/SPEED_TEST_FALLBACK_PLAN.md)). "v1.1 ARCH" and "v1.1 BP" are [`../v1.1/editor/ARCHITECTURE.md`](../v1.1/editor/ARCHITECTURE.md) and [`../v1.1/editor/BUILD_PLAN.md`](../v1.1/editor/BUILD_PLAN.md).
 > **Size:** **166 tickets** in 7 milestones (N0–N6): 41 HOM, 54 AIS (one conditional: AIS-27), 52 VED, 5 ST, 7 INT-1xx, 7 QA-1xx. 116 run on the Mac, 31 on the Windows laptop (Android lane), 19 need both (a report with one section per platform). Everything ships together; milestones only order the work.
-> **AIS tickets** keep their full specs in the AIS plan §5.5 and §7.9; this plan indexes them, places them in the N milestones and lists the amendments the cross-plan resolutions need (§8). **HOM, VED, ST, INT-1xx and QA-1xx** tickets are specified in full in §4.
+> **AIS tickets** keep their full specs in the AIS plan §5.5 and §7.9; this plan indexes them, places them in the N milestones and lists the amendments the cross-plan resolutions need (§4.1, §8). **HOM, VED, ST, INT-1xx and QA-1xx** tickets are specified in full in §4.
 > **Validation:** the ticket graph was checked by script: every dependency exists (v1.1 ticket ids count as done), the graph is acyclic, every prefix of §3 is dependency-complete, no ticket depends on a later milestone, every HOM, AIS, VED and ST id of the plans is present, and no two tickets own the same path except the register in §5.
 
 ---
@@ -636,7 +636,7 @@ The 54 AIS tickets keep the specs of AIS plan §5.5 and §7.9. Their milestones 
 
 - **Milestone:** N3 · **Lane:** Mac · **Area:** Integration
 - **Depends on:** INT-101, VED-33, ENG-06, INT-06, CORE-29
-- **Owns (Mac):** `CORE/lib/src/plan/{render_plan,plan_json,plan_validator}.dart` (extends CORE-29), `CORE/schema/render_plan.v2.schema.json`, `CORE/test/fixtures/render_plans/contract/v2/`, `CORE/test/plan/v2/`, `API/lib/src/still/`, `API/lib/src/face_tracking.dart`, `API/lib/src/capabilities.dart` (extends API-01), `API/lib/src/fake/` (extends API-01), `API/lib/src/reference/passes/registry.dart`, `API/lib/src/reference/reference_renderer.dart` (extends API-03: calls the registry), `API/test/contract/` (extends API-01), `ENGP/pigeons/engine_api.dart`, `ENGP/lib/src/pigeon/`, `ENGP/ios/Classes/Pigeon/`, `ENGP/android/src/main/kotlin/com/vecvel/danaview/editor/engine/pigeon/` (generated only), `ENGP/lib/src/mobile_editor_engine.dart` (extends ENG-01), `ENGP/ios/Classes/Glue/` (extends ENG-07), `ENGP/ios/Classes/Plan/` (extends: v2 decode), `ENGP/ios/Classes/Render/LayerRenderer.swift` (extends IOS-10: registry hook), `ENGP/ios/Classes/{Photo,Beauty}/Registry.swift`, `ENGP/test/glue/` (extends ENG-01), `docs/v1.2/ARCHITECTURE.md` (§6.3 final field names; Q-N1/Q-N2 answers)
+- **Owns (Mac):** `CORE/lib/src/plan/{render_plan,plan_json,plan_validator}.dart` (extends CORE-29), `CORE/schema/render_plan.v2.schema.json`, `CORE/test/fixtures/render_plans/contract/v2/`, `CORE/test/plan/v2/`, `API/lib/src/still/`, `API/lib/src/face_tracking.dart`, `API/lib/src/capabilities.dart` (extends API-01), `API/lib/src/fake/` (extends API-01), `API/lib/src/reference/passes/registry.dart`, `API/lib/src/reference/reference_renderer.dart` (extends API-03: calls the registry), `API/test/contract/` (extends API-01), `ENGP/pigeons/engine_api.dart`, `ENGP/lib/src/pigeon/`, `ENGP/ios/Classes/Pigeon/`, `ENGP/android/src/main/kotlin/com/vecvel/danaview/editor/engine/pigeon/` (generated only), `ENGP/lib/src/mobile_editor_engine.dart` (extends ENG-01), `ENGP/ios/Classes/Glue/` (extends ENG-07), `ENGP/ios/Classes/Plan/` (extends IOS-08: v2 decode), `ENGP/ios/Classes/Render/LayerRenderer.swift` (extends IOS-10: registry hook), `ENGP/ios/Classes/{Photo,Beauty}/Registry.swift`, `ENGP/test/glue/` (extends ENG-01), `docs/v1.2/ARCHITECTURE.md` (§6.3 final field names; Q-N1/Q-N2 answers)
 - **Spec:** ARCH V2-12, §6.3. RenderPlan `v = 2` with the additive fields and asset kinds of §6.3; validators accept v1 and v2; a v1-shaped plan encodes identically except `v` (fixture). Engine API: `StillPreviewSession`, `StillExportService`, `StillEncodeSettings`, `FaceTrackingPort` (`trackImage`, `trackVideo`, `cancel`, progress), capabilities `stillMaxPixels`, `halfFloatTargets`, `beautyTier`, `segmentationAvailable`; fake engine implementations; reference renderer pass registry (passes added by VED tickets). Pigeon amendment (`StillHostApi`, `JobKindMsg.exportStill`, capability fields, landmark/mask asset messages), regenerated; iOS glue and v2 plan decode; the pass registries and the `LayerRenderer` hook calling registered passes in the §6.2 order; placeholders returning pass-through for every VED pass. A lead-approved amendment exactly like v1.1 INT-06.
 - **Acceptance criteria and tests:** contract fixtures decode identically in Dart and Swift; the v1.1 contract and engine suites unchanged; with no passes registered a v2 plan renders pixel-equal to v1; the fake engine passes the extended contract kit.
 
@@ -644,7 +644,7 @@ The 54 AIS tickets keep the specs of AIS plan §5.5 and §7.9. Their milestones 
 
 - **Milestone:** N3 · **Lane:** Android · **Area:** Integration
 - **Depends on:** INT-102
-- **Owns (Android):** `ENGK/glue/` (extends ENG-08), `ENGK/plan/` (extends: v2 decode), `ENGK/effects/LayerEffectChainFactory.kt` (extends: registry hook), `ENGK/{photo,beauty}/Registry.kt`, `ENGP/android/src/test/kotlin/com/vecvel/danaview/editor/engine/planv2/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/planv2/`
+- **Owns (Android):** `ENGK/glue/` (extends ENG-08), `ENGK/plan/` (extends AND-08: v2 decode), `ENGK/effects/LayerEffectChainFactory.kt` (extends AND-09: registry hook), `ENGK/{photo,beauty}/Registry.kt`, `ENGP/android/src/test/kotlin/com/vecvel/danaview/editor/engine/planv2/`, `ENGP/android/src/androidTest/kotlin/com/vecvel/danaview/editor/engine/planv2/`
 - **Spec:** the Android side of INT-102: glue for the new host API and job kind, v2 decode with the Kotlin validator, the effect-chain hook and pass registries with pass-through placeholders.
 - **Acceptance criteria and tests:** Kotlin decodes every v2 contract fixture identically; the v1.1 Android suites unchanged; a v2 plan with no passes renders pixel-equal to v1 on the emulator.
 
@@ -884,7 +884,7 @@ The 54 AIS tickets keep the specs of AIS plan §5.5 and §7.9. Their milestones 
 
 - **Milestone:** N4 · **Lane:** Mac · **Area:** Core (pure Dart)
 - **Depends on:** VED-15, CORE-19
-- **Owns (Mac):** `CORE/lib/src/model/keyframes/keyframe_data.dart` (extends CORE-03), `CORE/lib/src/model/keyframes/property_keys.dart` (extends CORE-05: `beauty.*` keys), `CORE/lib/src/eval/easing.dart`, `CORE/lib/src/ops/commands/keyframe_easing_commands.dart`, `CORE/lib/src/plan/lowering_visual.dart` (extends VED-15: eased keys lowered to frame-grid linear keys), `CORE/test/eval/easing/`, `ED/editor/panels/keyframes_panel.dart` (extends v1.1: easing control)
+- **Owns (Mac):** `CORE/lib/src/model/keyframes/keyframe_data.dart` (extends CORE-03), `CORE/lib/src/model/keyframes/property_keys.dart` (extends CORE-05: `beauty.*` keys), `CORE/lib/src/eval/easing.dart`, `CORE/lib/src/ops/commands/keyframe_easing_commands.dart`, `CORE/lib/src/plan/lowering_visual.dart` (extends VED-15: eased keys lowered to frame-grid linear keys), `CORE/test/eval/easing/`, `ED/editor/panels/keyframes_panel.dart` (extends UX-26: easing control)
 - **Spec:** ARCH V2-16, V2-319. Per-key easing `linear` or cubic bezier (presets ease-in, ease-out, ease-in-out, custom handles); evaluation in core; lowering to one linear key per frame across eased spans with collinear merge (1e-4); every numeric beauty parameter and every v1.1 keyframable property can ease.
 - **Acceptance criteria and tests:** lowered keys reproduce the eased curve at every frame exactly (frame-grid property test); linear projects lower byte-identically to 1.1; undo of easing changes.
 
@@ -1108,7 +1108,7 @@ The 54 AIS tickets keep the specs of AIS plan §5.5 and §7.9. Their milestones 
   - `ED/editor/contracts/{action_ids,inspector_routes,tool_ids}.dart`, `ED/editor/wiring/action_bindings.dart` (extend AIS-01: photo tools, beauty, compare, To video, batch edit; `BeautyInspector`, photo tool routes; merge `photo_bindings.dart` and `beauty_bindings.dart`)
   - `ED/app/flags_v12.dart`, `FEAT/flags.dart`
   - `packages/danaview_features/pubspec.yaml` ([INTEGRATION]: `danaview_library`, `danaview_library_native`, `danaview_documents`, `danaview_search`)
-  - `FEAT/more/danaview_settings_screen.dart` (extends v1.0: settings section slots), `FEAT/more/settings_sections/settings_sections.dart`
+  - `FEAT/more/danaview_settings_screen.dart` (extends UX-04: settings section slots), `FEAT/more/settings_sections/settings_sections.dart`
   - `test/architecture/dependency_rules_test.dart` (extends AIS-01), `test/architecture/fixtures/v12/`
   - `.github/workflows/editor-ci.yml` (extends AIS-01), `scripts/ci/v12/{library.sh,documents.sh,face.sh,README.md}`
   - `docs/v1.2/ARCHITECTURE.md` (status cells: Q-N5 answer; rule 20's `lib/src/desktop/` allowance)
@@ -1206,3 +1206,206 @@ QA tickets change no product code; defects become FIX tickets. Each report lives
 - **Owns (Mac):** `docs/v1.2/qa/QA-107-rc.md`
 - **Spec:** release builds with every flag on: launch and player preservation (P-1…P-8) on the iPhone 7 (iOS 15.8), iPhone 8 (iOS 16.7), iPhone SE 2, an iPad, an Android 10 and a current Android device; a smoke pass of every pillar; upgrade from 1.1.0 with existing projects, playlists, Continue watching and linked folders intact.
 - **Acceptance criteria and tests:** no regression of a 1.1 feature; every pillar's smoke passes; results feed AIS-41's checklist.
+
+---
+
+## 5. Shared and integration file register
+
+These are the only paths edited by more than one ticket. The order is mandatory: each later ticket depends (directly or through the graph) on the earlier one. "v1.0" means code that predates the editor and has no `// OWNER:` header.
+
+| Path | Tickets, in order | What each 1.2.0 edit does |
+|---|---|---|
+| `packages/danaview_features/lib/src/more/legal_texts.dart` | UX-42 → **ST-05 → AIS-36 → INT-106** | speed-test providers → AI Studio text (AIS §6.4) → Home, documents, index, downloads, metadata, licences, effective date |
+| `lib/main.dart`, `lib/router/app_router.dart`, root `pubspec.yaml` | INT-02/INT-04/INT-05 → **AIS-37 → INT-103 → INT-105 → AIS-41** | AI wiring, key store, `/settings/ai` → search and AI search wiring, settings sections → editor bridges, adapters → version `1.2.0+N` only |
+| `test/architecture/dependency_rules_test.dart` | INT-01 → **AIS-01 → INT-101 → AIS-43** | rules 9–15 → rules 20–31 → rules 16–19 (rule 17 replaces 13) |
+| `.github/workflows/editor-ci.yml` | INT-01 → **AIS-01 → INT-101** | `ai-dart` job → `v12-dart`, `v12-flutter`, `home-preservation` jobs |
+| `ED/editor/contracts/{action_ids,inspector_routes,tool_ids}.dart`, `ED/editor/wiring/action_bindings.dart` | UX-01 → **AIS-01 → INT-101** | AIS action ids and sections → photo, beauty, compare, To video, batch ids; beauty inspector and photo tool routes; merge of `photo_bindings.dart`, `beauty_bindings.dart` |
+| `packages/danaview_editor/pubspec.yaml` | UX-01 → **AIS-01 → AIS-43** | AI Studio and providers → `danaview_ai`, `danaview_ai_ui` |
+| `CORE/lib/src/ops/edit_command.dart` | CORE-09 → **AIS-01 → INT-101** | `part` files for rich-cue and AI commands → photo bridge, beauty and easing commands |
+| `CORE/lib/src/model/items.dart`, `CORE/lib/src/validate/` | CORE-03 / CORE-08 → **AIS-02 → VED-15** | rich cue fields, I10/I11 → `ph`, `bt`, I12 |
+| `CORE/lib/src/model/subtitle.dart` | CORE-03 → **AIS-02 → AIS-47** | rich track fields → speaker lanes |
+| `CORE/lib/src/codec/project_json.dart` | CORE-22 → **AIS-04 → VED-15** | schema 2 → `ph`, `bt`, `e` encoding (same schema 2, V2-03) |
+| `CORE/schema/project.v2.schema.json` | **AIS-04 → VED-15** | schema 2 → photo, beauty and easing definitions |
+| `CORE/lib/src/plan/lowering_text.dart` | CORE-31 → **AIS-14 → AIS-47** | karaoke layers, placement → lane stacking |
+| `CORE/lib/src/formats/` (SRT/VTT files) | CORE-20 → **AIS-07 → AIS-47** | codec v2 → lane group export |
+| `CORE/lib/src/plan/lowering_visual.dart` | CORE-30 → **VED-15 → VED-19** | photo stages for image clips and `layer.beauty` → eased keys lowered to grid keys |
+| `CORE/lib/src/plan/render_ranges.dart` | CORE-37 → **VED-15** | beauty counts as heavy |
+| `CORE/lib/src/plan/{render_plan,plan_json,plan_validator}.dart` | CORE-29 → **INT-102** | RenderPlan v2 additive fields |
+| `CORE/lib/src/model/keyframes/{keyframe_data,property_keys}.dart` | CORE-03 / CORE-05 → **VED-19** | easing per key; `beauty.*` property keys |
+| `API/lib/src/fake/`, `API/test/contract/` | API-01 → **AIS-24 → INT-102** | font pick in the fake → still, face tracking, capabilities in the fake and contract kit |
+| `API/lib/src/capabilities.dart` | API-01 → **INT-102** | still, half-float, beauty tier, segmentation capabilities |
+| `API/lib/src/reference/reference_renderer.dart` | API-03 → **INT-102** | pass registry call (passes added in their own files) |
+| `ENGP/pigeons/engine_api.dart`, `ENGP/lib/src/pigeon/`, `ENGP/ios/Classes/Pigeon/`, generated Kotlin, `ENGP/lib/src/mobile_editor_engine.dart`, `ENGP/ios/Classes/Glue/` | ENG-01/ENG-06/ENG-07/INT-06 → **AIS-24 → INT-102** | font pick kind → still host API, still export job, capabilities, landmark and mask assets |
+| `ENGK/glue/` | ENG-08/INT-06 → **AIS-24 (Android half) → INT-102A** | font pick → v2 glue |
+| `ENGP/ios/Classes/Plan/`, `ENGP/ios/Classes/Render/LayerRenderer.swift` | IOS-08, IOS-10 → **INT-102** | v2 decode; registry hook |
+| `ENGK/plan/`, `ENGK/effects/LayerEffectChainFactory.kt` | AND-08, AND-09 → **INT-102A** | v2 decode; registry hook |
+| `ED/app/editor_launcher.dart` | UX-41 → **VED-01** | photo, batch and montage intents |
+| `ED/app/editor_bootstrap.dart` | INT-02 → **AIS-37 → INT-105** | AI Studio service → face tracking, Beauty pack, library media access |
+| `ED/editor/panels/keyframes_panel.dart` | UX-26 → **VED-19** | easing control |
+| `ED/editor/photo/export/photo_export_sheet.dart` | **VED-29 → VED-13** | export sheet → metadata switches |
+| `packages/danaview_transcription/lib/src/catalog/` (new files only) | AI-08 → **AIS-45 → VED-16** | speaker model specs → Beauty pack spec |
+| `FEAT/library/danaview_home_screen.dart` | v1.0 → **HOM-05** | tab shell behind `DANAVIEW_FILES_HOME` |
+| `FEAT/library/search/library_search_field.dart` | **HOM-19 → AIS-51** | name search → index search and the "Search with AI" entry |
+| `FEAT/more/danaview_settings_screen.dart` | v1.0/UX-04 → **INT-101** | settings section slots |
+| `packages/danaview_features/pubspec.yaml` | v1.0 → **INT-101** | library, native, documents, search |
+| `packages/danaview_search/pubspec.yaml` | **INT-101 → AIS-52** | skeleton → `danaview_ai` |
+| `packages/danaview_platform/lib/src/incoming_media_bridge.dart`, `FEAT/player/danaview_player_actions.dart` | v1.0 → **HOM-21** | documents and photos go to import; "Save to Danaview folder" |
+| `test/home_screen_test.dart` | v1.0 → **HOM-06** | flag-off/flag-on preservation cases |
+| `LN/android/src/main/AndroidManifest.xml` | **HOM-02A → HOM-22A** | plugin manifest → its `FileProvider` |
+| `PDF/android/build.gradle.kts` | **HOM-25 → HOM-28A** | plugin build → the HOM-27 library, only if chosen |
+| `ios/Runner.xcodeproj/project.pbxproj`, `ios/Runner/{Runner.entitlements,PrivacyInfo.xcprivacy,Info.plist}` | INT-01/INT-03 → **INT-104** | Share Extension target, App Group, document types, photo usage string |
+| `android/app/src/main/AndroidManifest.xml`, `android/app/src/main/res/xml/danaview_*_rules.xml` | CORE-28/INT-03 → **INT-104** | intent filters, media permissions; library backup rules |
+| `docs/v1.2/ARCHITECTURE.md` | this document → **AIS-01 → INT-101 → INT-102 → AIS-41** | AIS decision status → rule records, Q-N5 → §6.3 field names, Q-N1/Q-N2 → release status and [VERIFY] closures |
+| Placeholder files (§0.2) | skeleton ticket → owner ticket | the owner replaces the placeholder |
+
+`danaview_features` tickets add only optional parameters and callbacks, so the app keeps compiling before the integration tickets wire them (the v1.1 pattern).
+
+## 6. Feature coverage (owner's lists → tickets)
+
+Every owner feature of the four plans maps to the tickets that build it and the QA ticket that certifies it.
+
+### 6.1 Files & Media Home (roadmap Pillar 1, HOM plan §1–§9)
+
+| Feature | Tickets |
+|---|---|
+| Player hub, Continue watching, quick actions, playlists, linked folders, queue, streams, drag-and-drop preserved | HOM-05, HOM-06, HOM-07, HOM-08, HOM-15, QA-107 |
+| Filters All / Videos / Photos / Documents; document sub-filters | HOM-16, HOM-18, QA-101, QA-102 |
+| Photos tab: masonry grid, albums, system library with limited/partial access | HOM-02, HOM-02A, HOM-10, HOM-04, HOM-04A |
+| Desktop photo folders, sidebar, external drives, drag and drop | HOM-03, HOM-08 |
+| Recent photos tray on Overview | HOM-09 |
+| Fullscreen photo viewer, EXIF sheet, Edit in Editor | HOM-11, INT-105 |
+| Badges (duration, resolution, fps, RAW, HDR, Live) | HOM-13 |
+| Multi-select: Make video montage, Play in Player, Add to playlist, Batch edit | HOM-12, VED-14, VED-12, INT-105 |
+| Danaview folders: app-private, nested, mixed types, included in backups | HOM-17, HOM-18, INT-104, QA-106 |
+| Recently deleted for 30 days, Restore, Empty now | HOM-17, HOM-18, QA-106 |
+| Favourites, recents, name search, sort per folder | HOM-19 |
+| Import from Photos/Gallery and Files, originals never modified | HOM-20, HOM-20A, HOM-32, QA-106 |
+| "Open with Danaview" and the iOS Share Extension | INT-104, HOM-21, HOM-21A |
+| File actions and the multi-select bar | HOM-22, HOM-22A |
+| Save to Files, Save to Downloads, share, Open in another app | HOM-22, HOM-22A |
+| Native viewers: photos, the existing player, PDFKit, `PdfRenderer`, Quick Look; Android text/CSV viewer and Office file card | HOM-23, HOM-24, HOM-25, HOM-26 |
+| PDF tools: merge, split, reorder, rotate, delete pages | HOM-27, HOM-28, HOM-28A |
+| Annotate and highlight | HOM-29, HOM-29A |
+| Sign (saved signatures on device) | HOM-30, HOM-30A |
+| Compress | HOM-31, HOM-31A |
+| No Office editing; Windows/Linux PDF viewing and tools in 1.3.0 | (non-goals, ARCH §1.3, V2-124) |
+| 50,000-item scale, 10,000 documents | HOM-14, HOM-32, QA-104 |
+| Editor actions only where the editor runs | HOM-05, HOM-11, HOM-12, INT-105 |
+| Search over document text, OCR, captions (with the index) | AIS-50, AIS-51 |
+
+### 6.2 AI Studio and rich subtitles (roadmap Pillar 2, AIS plan §5.7)
+
+AIS plan §5.7 maps every owner bullet (groups 1–11 and the rules) to AIS tickets and stays authoritative. Cross-plan additions:
+
+| Feature (AIS §5.7 group) | AIS tickets | Plus in this plan |
+|---|---|---|
+| 1 BYO key, five providers, settings, Keychain/Keystore, off = v1.1 behaviour | AIS-08…AIS-11, AIS-31, AIS-37 | QA-103 (whole-app guard) |
+| 2 Clean-up, emotion (text and voice), emoji, emotion styles, speakers | AIS-28, AIS-29, AIS-32, AIS-33 | QA-101, QA-102 |
+| 3 Translation as a new track, timing, RTL, export | AIS-30, AIS-35, AIS-13, AIS-22, AIS-14, AIS-21 | — |
+| 4 Transcript view, rich styling, placement, karaoke, timing tools, emoji tools, review | AIS-12…AIS-21, AIS-33 | QA-101 scenario 4 |
+| 5 Ask AI with presets and free text, diff review | AIS-30, AIS-34 | — |
+| 6 Fonts: bundled scripts, import, picker | AIS-22…AIS-25 (+ AIS-27 conditional) | INT-106 (licences) |
+| 7 Subtitle presets | AIS-23, AIS-26 | — |
+| 8 Multi-speaker transcription, overlaps, lanes, cloud diarization | AIS-44…AIS-49 | INT-106 (model text), QA-103 |
+| 9 On-device search index, AI search (a) and (b) | AIS-50…AIS-53 | INT-103 (wiring, settings), HOM-19 (fallback), QA-101 scenario 5 |
+| 10 Shared `danaview_ai` layer, one switch | AIS-43 | V2-20 paths |
+| 11 Genkit spike, all or nothing | AIS-42 | — |
+| Rules: UI, schema 2, privacy and terms | AIS-01, AIS-04, AIS-36, AIS-37, AIS-38 | V2-03 (one schema), INT-106, QA-105 |
+
+### 6.3 Unified Photo & Video Editor (roadmap Pillar 3, VED plan §3–§6)
+
+| Feature (VED section) | Tickets |
+|---|---|
+| Intent routing: Still Photo Mode vs timeline (§3.1) | VED-01, INT-105 |
+| `.dnphoto` non-destructive recipes (§3.2) | VED-02, QA-106 |
+| Shared GPU pipeline, effect order (§3.3) | INT-102, INT-102A, VED-03, VED-03A |
+| 16-bit half float, P3 (§3.4) | VED-04, VED-04A |
+| Tiled 60 fps viewport (§3.4, §6.1) | VED-05, VED-05A |
+| Exposure, contrast, highlights, shadows, whites, blacks, clarity, dehaze, vignette, grain, clipping warnings (§4.1) | VED-06, VED-06A |
+| White balance, vibrance, 8-band HSL with TAT (§4.2) | VED-06, VED-07 |
+| Spline RGB and channel curves with histogram (§4.3) | VED-08 |
+| Crop, aspect ratios, auto-straighten, keystone (§4.4) | VED-09, VED-09A |
+| Linear, radial, brush and luminance masks with local adjustments (§4.5) | VED-10, VED-10A |
+| Text, stickers, borders, date stamps (§4.6) | VED-11 |
+| Presets, copy/paste, batch export (§4.7) | VED-12 |
+| EXIF/IPTC keep and strip (§4.7, D-129) | VED-13, VED-13A |
+| High-resolution export JPEG/PNG/WebP/HEIC (§3.4, §5.8) | VED-29, VED-29A, VED-31 |
+| Add to Video Project with Ken Burns (§4.8) | VED-14, VED-15 |
+| `BeautyEffectSpec` in projects (§3.2, D-136) | VED-15 |
+| Face shape and slimming (§5.1) | VED-20, VED-20A |
+| Eyes and eyebrows, lashes (§5.2) | VED-21, VED-21A |
+| Nose and lips, smile (§5.3) | VED-22, VED-22A |
+| Skin retouching, blemishes, teeth (§5.4) | VED-23, VED-23A |
+| Virtual makeup, lenses, hair colour, freckles (§5.5) | VED-24, VED-24A |
+| Body reshaping (§5.6) | VED-25, VED-25A |
+| Beauty filters, portrait bokeh, AR stickers (§5.7) | VED-34, VED-34A |
+| Before/after split and press-and-hold (§5.7, §6.3) | VED-27 |
+| Intensity, per-category bypass, undo/redo (§5.7, D-144) | VED-26, VED-18 |
+| 468/478-point landmarks, One-Euro smoothing, occlusion fade (§3.5) | VED-33, VED-33A, VED-16, VED-16A, VED-17, VED-17A |
+| Background pre-tracking `.dnface` (D-135) | VED-17, VED-17A |
+| Up to 4 subjects with independent settings (§3.6) | VED-18, VED-26 |
+| Keyframable beauty with linear and bezier easing (§3.6, D-134) | VED-19 |
+| Automatic enhancement, preset styles, recipes (§5.8) | VED-28 |
+| Inspector "Beauty & Retouching" tab (§6.2) | VED-26 |
+| Low-tier proxies (D-142) | VED-26, VED-15 (heavy ranges) |
+| 4K export with beauty, memory stress, golden parity (§8 phase 3) | VED-30, VED-31, VED-32, QA-104 |
+| On-device only (D-143) | VED-16 (consented pack), QA-103 |
+
+### 6.4 Speed-test fallback (ST plan §1)
+
+| Goal | Tickets |
+|---|---|
+| G1 $0 running cost | ST-01, ST-02 (public endpoints only) |
+| G2 Resilient failover on 429/403/stall/connection failure | ST-03 |
+| G3 Quiet UI with no provider names | ST-04 |
+| G4 Honest privacy: both providers named; M-Lab only after consent | ST-02, ST-04, ST-05, INT-106, QA-103 |
+| G5 Honest numbers: one provider per phase, notes in details | ST-03, ST-04 |
+
+### 6.5 Cross-cutting rules
+
+| Rule | Tickets |
+|---|---|
+| Owner UI rules on every surface | every UI ticket's matrix tests, INT-101 (Material ban), QA-105 |
+| Originals never modified | HOM-20, HOM-28, HOM-32, VED-29, QA-106 |
+| Network inventory closed, nothing silent | AIS-37, AIS-54, QA-103 |
+| One project schema, lossless upgrade, 1.1.x read-only | AIS-04, VED-15, QA-106 |
+| Install-size records | AIS-22, AIS-44, VED-33, HOM-27, QA-104, AIS-41 |
+
+## 7. Effort per milestone
+
+Planning estimates in **builder-days** (one autonomous builder working one ticket; small ≈ 1 day, medium ≈ 2, large ≈ 3–4), from the plans' own figures where they give them (HOM documents ≈ 2–2.5 weeks with two lanes; ST ≈ 1.5–2 days) and from v1.1's ticket pace otherwise. Calendar ranges assume about three parallel builders on the Mac and one or two on the Windows laptop; milestones overlap where lanes allow (N2 runs alongside N1 and N3).
+
+| Milestone | Tickets | Mac / Android / both | Large tickets (≥ 1,000 lines expected) | Builder-days | Calendar |
+|---|---|---|---|---|---|
+| N0 Foundations and day-1 spikes | 9 | 6 / 2 / 1 | INT-101 | ≈ 20 | 1–1.5 weeks |
+| N1 Files & Media Home, documents, speed test | 42 | 32 / 10 / 0 | HOM-17, HOM-20, HOM-21, HOM-24, HOM-25, HOM-28, HOM-28A | ≈ 75 | 3–4 weeks |
+| N2 AI Studio, rich subtitles, speakers, search | 44 | 40 / 0 / 4 | per AIS plan §6.5 (AIS-04, -08, -09, -10, -11, -13, -17, -18, -25, -28, -30, -32, -43, -45, -46, -47, -50, -53) | ≈ 100 | 5–7 weeks (from N0's end, parallel with N1) |
+| N3 Still Photo Mode | 26 | 17 / 9 / 0 | INT-102, VED-03, VED-06, VED-10, VED-29 | ≈ 55 | 3–4 weeks |
+| N4 Beauty & Retouching Suite | 23 | 14 / 9 / 0 | VED-16, VED-17, VED-20, VED-23, VED-24, VED-26 | ≈ 60 | 3–5 weeks |
+| N5 Integration and QA | 20 | 6 / 1 / 13 | INT-105, QA-101, QA-102 | ≈ 40 | 2–3 weeks |
+| N6 Release | 2 | 1 / 0 / 1 | — | ≈ 4 | about 1 week (with store review preparation) |
+| **Total** | **166** (165 unconditional) | 116 / 31 / 19 | | **≈ 355** | **≈ 14–18 weeks** end to end |
+
+The longest chain (§2, 16 tickets) sets the floor; the beauty lane (VED-33A → VED-33 → INT-102 → … → VED-30 → VED-32) is the second-longest and the largest native unknown, followed by the Android PDF write path (HOM-27 → HOM-28A).
+
+## 8. Corrections and amendments made while sequencing
+
+These were contradictions or ordering problems found while merging the four plans; ARCH §14 lists the reasoning, and the plan tickets are amended as follows (in addition to §4.1).
+
+1. **One schema** (ARCH V2-03): VED-15 extends AIS-04's schema 2 instead of adding schema 3; it moves from the VED plan's phase 2 to N3 and also carries the photo recipe on image clips, so VED-14 can carry recipes (C-9).
+2. **HOM-27** runs on day 1 in `spikes/android_pdf/` and depends only on INT-101 (was HOM-24); HOM-28 records its report in `docs/` because the Windows lane doesn't edit docs (C-11).
+3. **HOM-11 and HOM-12** expose optional callbacks instead of depending on editor tickets; INT-105 wires them (C-10).
+4. **VED-12** depends on VED-29 (batch export needs the exporter) (C-25).
+5. **VED-16** no longer depends on VED-03 (the plan's dependency); it depends on the VED-33 spike and INT-101, and its tracker is a separate `danaview_face_tracking` plugin for 1.3.0 reuse (C-29).
+6. **VED-20…VED-25** gain the Android halves `VED-20A…VED-25A`; VED-21 and VED-22 depend on VED-20 (shared mesh warp); their scopes cover every bullet of VED §5.1–§5.6, not only the plan's short titles.
+7. **New tickets:** VED-33/33A (face runtime spike, C-7, C-26), VED-34/34A (§5.7 filters, bokeh and stickers had no ticket), the remaining `A` halves (Android lane), INT-101…INT-106 and QA-101…QA-107.
+8. **VED-01** owns `editor_launcher.dart` (extends UX-41); the photo controller is VED-03's because every tool needs it.
+9. **ST-01** cites the real test file `test/network_tools_test.dart` (C-22).
+10. **HOM-04** encodes JPEG/HEIC on Apple and WebP on Android (C-21); HOM-26 owns document thumbnails on Apple.
+11. **HOM-17** doesn't edit the app's Android backup XML (INT-104 does, after CORE-28); it owns the library side and the Settings note.
+12. **AIS-50** writes `search.db`, not tables inside `library.db` (C-5).
+13. **The AIS milestones S1–S6** map to N0/N2/N5/N6 as §4.1 lists (C-28); AIS-42 and AIS-43 sit where their dependencies put them (C-30).
+
+## 9. Validation
+
+The ticket graph of §3 was generated from one table and checked by script: 166 unique ids; every dependency is a 1.2.0 ticket earlier in the list or a v1.1 ticket; no ticket depends on a later milestone; HOM-01…HOM-32, AIS-01…AIS-54, VED-01…VED-34 and ST-01…ST-05 are all present; the longest chain is the one in §2. Ownership was checked by hand against the code on `editor-wip` @ `c2ee137` (v1.1 `// OWNER:` headers) and against §5: no path is owned by two tickets except the register rows, in their order.
