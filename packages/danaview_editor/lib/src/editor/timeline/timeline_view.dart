@@ -365,6 +365,8 @@ class TimelineViewState extends ConsumerState<TimelineView> with TickerProviderS
 
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent || event.logicalKey != LogicalKeyboardKey.escape || !mounted || _id == null) return false;
+    // An open menu takes Esc first (it closes itself).
+    if (DanaviewMenuAnchor.anyOpen) return false;
     // With the `escape` action bound, Esc runs the back steps (which include ours).
     final registry = ref.read(editorActionRegistryProvider);
     if (registry.spec(EditorActionId.escape).isBound) return false;
