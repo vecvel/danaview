@@ -37,7 +37,11 @@
 //     whether it is hardware). With no Dart listener attached (D-39) the job's [detachedHandler]
 //     records a completedWhileDetached record (default: keep the file and exempt it from the
 //     work/ wipe; AND-12's ExportService replaces it with its MediaStore handoff);
-//   - failure: ExportErrors.map (ARCH §14.3), the partial output is deleted, jobFailed.
+//   - failure: ExportErrors.map (ARCH §14.3), the partial output is deleted, jobFailed. A failure
+//     because engine files below the cache root went missing (the system purged them under low
+//     storage, QA-05 D8), or an output the purge removed before completion, is a storage failure
+//     (StorageLoss: diskFull when the volume is low, else io), never internal or mediaOffline;
+//     purged generated images are written again when opened (GeneratedImageAssetLoaderFactory).
 // cancel(jobId): stops the job, deletes the partial output and work/export-<jobId>/, jobFailed
 //   (cancelled). Idempotent.
 // activeJobs(): ActiveExportStore records (running jobs of this process; one-shot interrupted
@@ -61,6 +65,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.os.Looper
+import android.os.StatFs
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.annotation.VisibleForTesting
@@ -75,6 +80,7 @@ import com.vecvel.danaview.editor.engine.composition.AudioStreamAssetLoaderFacto
 import com.vecvel.danaview.editor.engine.composition.CompositionMapper
 import com.vecvel.danaview.editor.engine.composition.CompositionSpec
 import com.vecvel.danaview.editor.engine.composition.ExtractorSourceTimeline
+import com.vecvel.danaview.editor.engine.composition.GeneratedImageAssetLoaderFactory
 import com.vecvel.danaview.editor.engine.composition.Media3Composition
 import com.vecvel.danaview.editor.engine.composition.PngCompositionImages
 import com.vecvel.danaview.editor.engine.composition.SourceTimeline
@@ -357,6 +363,9 @@ interface ExportEnvironment {
 
     /** The job ended (any outcome): undo [exportStarted]. */
     fun exportEnded(jobId: String, output: File)
+
+    /** Whether the volume holding [dir] is low on space right now (StorageLoss.isLow; QA-05 D8). */
+    fun isStorageLow(dir: File): Boolean = false
 }
 
 /** Production [ExportEnvironment] over the engine context. */
@@ -406,6 +415,15 @@ class ContextExportEnvironment(private val ctx: EngineContext) : ExportEnvironme
         guarded("work pin") { DiskCache.unmarkActive(output) }
         guarded("preview resume") { ctx.previews.resumeAfterExport(jobId) }
         guarded("job registry") { ctx.jobs.setExportActive(jobId, false) }
+    }
+
+    /** StatFs of [dir]'s nearest existing ancestor (the purge may have removed [dir] itself). */
+    override fun isStorageLow(dir: File): Boolean = try {
+        generateSequence(dir.absoluteFile) { it.parentFile }.firstOrNull { it.exists() }
+            ?.let { StatFs(it.path) }
+            ?.let { StorageLoss.isLow(it.availableBytes, it.totalBytes) } ?: false
+    } catch (e: IllegalArgumentException) {
+        false
     }
 
     private inline fun guarded(what: String, block: () -> Unit) {
@@ -668,11 +686,13 @@ class ExportCoordinator(private val ctx: EngineContext) {
             },
             assetLoaders = { built ->
                 val base = baseLoader?.invoke(ctx.appContext)
-                when {
+                val inner = when {
                     !built.selectsAudioStreams -> base
                     base == null -> AudioStreamAssetLoaderFactory(ctx.appContext)
                     else -> AudioStreamAssetLoaderFactory(ctx.appContext, base = base)
                 }
+                // QA-05 D8: generated images purged under the job are written again when opened.
+                GeneratedImageAssetLoaderFactory(ctx.appContext, images, inner)
             },
         )
         val info = ExportJobInfo(jobId, title, output.absolutePath, msg, whenDetached)
@@ -747,6 +767,11 @@ class ExportCoordinator(private val ctx: EngineContext) {
     private fun complete(r: Running, encoderName: String?) {
         if (r.ended) return
         val output = r.job.output
+        if (!output.isFile && Paths.isInside(output, r.paths.cacheRoot)) {
+            // QA-05 D8: the muxer wrote to a file the system purged from the cache root under it.
+            end(r, ExportOutcome.FAILED, StorageLoss.failure(environment.isStorageLow(r.paths.cacheRoot)))
+            return
+        }
         if (!output.isFile || output.length() <= 0L) {
             end(r, ExportOutcome.FAILED, EngineException(EngineErrorCode.encodingFailed, "export finished without an output file"))
             return
@@ -798,7 +823,8 @@ class ExportCoordinator(private val ctx: EngineContext) {
         r.job.output.delete()
         r.job.workDir.deleteRecursively()
         if (outcome == ExportOutcome.INTERRUPTED) r.store.markInterrupted(r.info.jobId) else r.store.finish(r.info.jobId)
-        val mapped = ExportErrors.map(error)
+        val lost = if (outcome == ExportOutcome.FAILED) StorageLoss.classify(error, r.paths.cacheRoot) { environment.isStorageLow(r.paths.cacheRoot) } else null
+        val mapped = lost ?: ExportErrors.map(error)
         Log.i(EngineContext.TAG, "export ${r.info.jobId}: ended $outcome (${mapped.code})")
         if (outcome == ExportOutcome.FAILED) Log.w(EngineContext.TAG, "export ${r.info.jobId}: failure ${describeFailure(error)}")
         ctx.events.jobFailed(r.info.jobId, mapped)

@@ -44,6 +44,7 @@ import androidx.media3.transformer.Codec
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import com.vecvel.danaview.editor.engine.composition.AudioStreamAssetLoaderFactory
+import com.vecvel.danaview.editor.engine.composition.GeneratedImageAssetLoaderFactory
 import com.vecvel.danaview.editor.engine.composition.CompositionMapper
 import com.vecvel.danaview.editor.engine.composition.ExtractorSourceTimeline
 import com.vecvel.danaview.editor.engine.composition.Media3Composition
@@ -364,20 +365,24 @@ class RenderPreviewJob internal constructor(
         val env = ContextExportEnvironment(ctx)
         return Media3Composition.build(
             RenderPreviewSpecs.videoOnly(spec),
-            PngCompositionImages(paths.engineAssets),
+            images(paths),
             LayerEffectChainFactory(settings.width, settings.height, service.assets()),
             AtomicReference(ParamSnapshot.of(plan)),
             Media3Composition.Options(hdrMode = env.hdrMode(plan), outputWidth = settings.width, outputHeight = settings.height),
         )
     }
 
-    private fun loaderFor(ctx: EngineContext, built: Media3Composition.Built): AssetLoader.Factory? {
+    private fun images(paths: Paths) = PngCompositionImages(paths.engineAssets)
+
+    private fun loaderFor(ctx: EngineContext, built: Media3Composition.Built): AssetLoader.Factory {
         val base = service.assetLoaderFactory?.invoke(ctx.appContext)
-        return when {
+        val inner = when {
             !built.selectsAudioStreams -> base
             base == null -> AudioStreamAssetLoaderFactory(ctx.appContext)
             else -> AudioStreamAssetLoaderFactory(ctx.appContext, base = base)
         }
+        // QA-05 D8: generated images purged under the render are written again when opened.
+        return GeneratedImageAssetLoaderFactory(ctx.appContext, images(ctx.requirePaths()), inner)
     }
 
     private companion object {

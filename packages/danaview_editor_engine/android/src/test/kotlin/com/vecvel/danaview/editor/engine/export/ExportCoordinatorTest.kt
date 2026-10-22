@@ -342,6 +342,65 @@ class ExportCoordinatorTest {
         assertEquals(listOf("started:$id", "ended:$id"), env.calls)
     }
 
+    /** QA-05 D8's chain: the image asset loader could not open a generated image the system purged. */
+    private fun purgedImage(): ExportException {
+        val png = File(paths.engineAssets, "dv_opaque_ff000000_1280x720.png")
+        val fnf = java.io.FileNotFoundException("${png.path}: open failed: ENOENT (No such file or directory)")
+        val source = androidx.media3.datasource.FileDataSource.FileDataSourceException(fnf, androidx.media3.common.PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND)
+        return ExportException.createForAssetLoader(source, ExportException.ERROR_CODE_IO_UNSPECIFIED)
+    }
+
+    @Test
+    fun aPurgedEngineFileUnderLowStorageIsDiskFull() {
+        env.storageLow = true
+        val id = start().getOrThrow()
+        single.listener!!.onFailed(ExportErrors.map(purgedImage()))
+        fake.settle()
+        val f = terminal(id).failure!!
+        assertEquals(EngineErrorCode.diskFull.name, f.code)
+        assertTrue(f.retryable)
+        assertFalse(f.message.contains(paths.cacheRoot.name))
+        assertFalse(output.exists())
+    }
+
+    @Test
+    fun aPurgedEngineFileWithSpaceLeftIsIo() {
+        env.storageLow = false
+        val id = start().getOrThrow()
+        single.listener!!.onFailed(purgedImage())
+        fake.settle()
+        assertEquals(EngineErrorCode.io.name, terminal(id).failure!!.code)
+    }
+
+    @Test
+    fun aMissingUserFileKeepsItsMapping() {
+        env.storageLow = true
+        val id = start().getOrThrow()
+        val user = java.io.FileNotFoundException("${File(paths.media, "a.mp4").path}: open failed: ENOENT (No such file or directory)")
+        single.listener!!.onFailed(ExportException.createForAssetLoader(user, ExportException.ERROR_CODE_IO_FILE_NOT_FOUND))
+        fake.settle()
+        assertEquals(EngineErrorCode.mediaOffline.name, terminal(id).failure!!.code)
+    }
+
+    @Test
+    fun anOutputPurgedBeforeCompletionIsAStorageFailure() {
+        env.storageLow = true
+        val id = start().getOrThrow()
+        // The muxer finished writing an unlinked file: nothing is left at the output path.
+        single.listener!!.onCompleted("c2.qti.avc.encoder")
+        fake.settle()
+        assertEquals(EngineErrorCode.diskFull.name, terminal(id).failure!!.code)
+    }
+
+    @Test
+    fun anEmptyOutputIsStillAnEncodingFailure() {
+        env.storageLow = true
+        val id = start().getOrThrow()
+        single.complete("c2.qti.avc.encoder", bytes = 0)
+        fake.settle()
+        assertEquals(EngineErrorCode.encodingFailed.name, terminal(id).failure!!.code)
+    }
+
     @Test
     fun passThatThrowsFailsTheJob() {
         coordinator.singlePass = ExportPass { _, _ -> throw EngineException(EngineErrorCode.mediaOffline, "source unreadable", itemId = "it_l0#v") }
