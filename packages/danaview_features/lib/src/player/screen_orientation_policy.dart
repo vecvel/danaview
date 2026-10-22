@@ -50,10 +50,36 @@ abstract final class ScreenOrientationPolicy {
   static bool get _supported =>
       !kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android);
 
-  static bool get _isPhone {
-    final view = WidgetsBinding.instance.platformDispatcher.views.first;
-    return (view.physicalSize / view.devicePixelRatio).shortestSide < 600;
+  /// Shortest logical side below which a device is a phone.
+  static const double phoneShortestSide = 600;
+
+  /// Whether this is a phone, from a real size: the first view's size, else its display's; null
+  /// while neither is known yet. At a cold start `main` runs before the platform has sent the
+  /// view's metrics, so the view is still 0×0; read as a phone, that locked a tablet (Pixel Tablet,
+  /// iPad) to portrait until a screen re-applied the orientation (QA-02 tablet observation).
+  @visibleForTesting
+  static bool? phoneOrUnknown() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return null;
+    final view = views.first;
+    Size logical(Size physical, double dpr) => dpr > 0 ? physical / dpr : Size.zero;
+    var size = logical(view.physicalSize, view.devicePixelRatio);
+    if (size.isEmpty) {
+      try {
+        final display = view.display;
+        size = logical(display.size, display.devicePixelRatio);
+      } catch (_) {
+        // No display information on this platform.
+      }
+    }
+    if (size.isEmpty) return null;
+    return size.shortestSide < phoneShortestSide;
   }
+
+  /// Unknown sizes count as "not a phone": nothing is locked before the size is known.
+  static bool get _isPhone => phoneOrUnknown() ?? false;
+
+  static _MetricsWaiter? _waiter;
 
   /// On iPhone the player and the editor follow how the phone is held, one orientation at a time.
   static bool get _followsDevice => defaultTargetPlatform == TargetPlatform.iOS && _isPhone;
@@ -61,10 +87,24 @@ abstract final class ScreenOrientationPolicy {
   static bool _isLandscape(DeviceOrientation o) =>
       o == DeviceOrientation.landscapeLeft || o == DeviceOrientation.landscapeRight;
 
-  /// Phones keep the library upright; tablets rotate freely.
+  /// Phones keep the library upright; tablets rotate freely. While the size is not known yet (a
+  /// cold start) nothing is locked: the platform default (every orientation) stays, and the
+  /// default is applied once the first real size arrives, if nobody owns the orientation by then.
   static Future<void> applyAppDefault() {
     if (!_supported) return Future<void>.value();
-    return SystemChrome.setPreferredOrientations(_isPhone ? const [DeviceOrientation.portraitUp] : const []);
+    final phone = phoneOrUnknown();
+    if (phone == null) {
+      _waiter ??= _MetricsWaiter()..attach();
+      return Future<void>.value();
+    }
+    _waiter?.detach();
+    return SystemChrome.setPreferredOrientations(phone ? const [DeviceOrientation.portraitUp] : const []);
+  }
+
+  static void _onMetrics() {
+    if (phoneOrUnknown() == null) return;
+    _waiter?.detach();
+    if (_stack.isEmpty || _stack.last.mode == OrientationMode.appDefault) unawaited(applyAppDefault());
   }
 
   /// Makes [owner] the top of the stack with [mode] and applies it. An owner that is already
@@ -105,7 +145,12 @@ abstract final class ScreenOrientationPolicy {
   static void resetForTesting() {
     _stack.clear();
     _stopFollowing();
+    _waiter?.detach();
   }
+
+  /// Whether the app default waits for the first real view size. Tests only.
+  @visibleForTesting
+  static bool get waitingForSize => _waiter != null;
 
   static Future<void> _applyTop() {
     if (!_supported) return Future<void>.value();
@@ -159,6 +204,19 @@ abstract final class ScreenOrientationPolicy {
     _heldKnown = false;
     _held = DeviceOrientation.portraitUp;
   }
+}
+
+/// Waits for the first non-zero view size (see [ScreenOrientationPolicy.applyAppDefault]).
+class _MetricsWaiter with WidgetsBindingObserver {
+  void attach() => WidgetsBinding.instance.addObserver(this);
+
+  void detach() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (identical(ScreenOrientationPolicy._waiter, this)) ScreenOrientationPolicy._waiter = null;
+  }
+
+  @override
+  void didChangeMetrics() => ScreenOrientationPolicy._onMetrics();
 }
 
 class _OrientationEntry {
