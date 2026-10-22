@@ -283,14 +283,14 @@ void main() {
   group('layout matrix', () {
     const long = '$longTitle.mov';
     List<ImportItem> items() => [
-          ImportItem(id: 'q', displayName: long, state: ImportItemState.queued, resumed: true),
-          ImportItem(id: 'c', displayName: long, state: ImportItemState.copying, bytesDone: 1200000000, bytesTotal: 2147483648),
-          ImportItem(id: 'f', displayName: long, state: ImportItemState.finishing, bytesDone: 10, bytesTotal: 10),
-          ImportItem(id: 'a', displayName: long, state: ImportItemState.awaitingDuplicateDecision),
-          ImportItem(id: 'd', displayName: long, state: ImportItemState.done),
-          ImportItem(id: 's', displayName: long, state: ImportItemState.skipped),
-          ImportItem(id: 'x', displayName: long, state: ImportItemState.failed, failure: ImportFailure.sourceChanged),
-          ImportItem(id: 'k', displayName: long, state: ImportItemState.cancelled),
+          const ImportItem(id: 'q', displayName: long, state: ImportItemState.queued, resumed: true),
+          const ImportItem(id: 'c', displayName: long, state: ImportItemState.copying, bytesDone: 1200000000, bytesTotal: 2147483648),
+          const ImportItem(id: 'f', displayName: long, state: ImportItemState.finishing, bytesDone: 10, bytesTotal: 10),
+          const ImportItem(id: 'a', displayName: long, state: ImportItemState.awaitingDuplicateDecision),
+          const ImportItem(id: 'd', displayName: long, state: ImportItemState.done),
+          const ImportItem(id: 's', displayName: long, state: ImportItemState.skipped),
+          const ImportItem(id: 'x', displayName: long, state: ImportItemState.failed, failure: ImportFailure.sourceChanged),
+          const ImportItem(id: 'k', displayName: long, state: ImportItemState.cancelled),
         ];
     for (final scale in [0.85, 1.0, 1.35]) {
       for (final size in const [Size(280, 653), Size(320, 568), Size(375, 667), Size(768, 1024), Size(874, 402), Size(1280, 800)]) {

@@ -159,6 +159,11 @@ final class PickerHostApiImpl: PickerHostApi {
 
   #if os(macOS)
   private func presentOpenPanel(multiple: Bool, utis: [String], completion: @escaping (Result<[PickedItemMsg], Error>) -> Void) {
+    // A sheet on the app's window only: without one (a test runner, a headless process) a modeless
+    // panel would wait for a person forever.
+    guard let window = context.presentingWindow() else {
+      return completion(.failure(Self.error(.io("no window to present from"))))
+    }
     let panel = NSOpenPanel()
     panel.canChooseFiles = true
     panel.canChooseDirectories = false
@@ -176,17 +181,12 @@ final class PickerHostApiImpl: PickerHostApi {
       #endif
     }
     session = panel
-    let done: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+    panel.beginSheetModal(for: window) { [weak self] response in
       guard let self = self else { return }
       guard response == .OK else { return self.finish(completion, .success([])) }
       // The user's own files: read directly (read-only) by the import, never staged or moved.
       let files = panel.urls.map { PickerCore.pickedFile(at: $0, fromPhotoLibrary: false, needsCopy: false) }
       self.finish(completion, .success(files.map(Self.msg)))
-    }
-    if let window = context.presentingWindow() {
-      panel.beginSheetModal(for: window, completionHandler: done)
-    } else {
-      panel.begin(completionHandler: done)
     }
   }
   #endif
