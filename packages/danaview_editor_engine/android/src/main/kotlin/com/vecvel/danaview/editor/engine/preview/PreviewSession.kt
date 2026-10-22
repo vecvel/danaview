@@ -31,7 +31,11 @@
 //   `timeUs = timeOfFrame(k)` of the displayed frame (D-35). Seeks go through [SeekController].
 // - Quality: [QualityGovernor] (auto full → 1/2 → 1/4 under dropped frames, back after 10 s clean,
 //   pinned levels never move, thermal SEVERE caps at half); a change resizes the SurfaceProducer
-//   and is reported with `degraded(q)` and `frameSize`.
+//   and is reported with `degraded(q)` (`recovered` when auto is back at full) and `frameSize`.
+//   When playback stops for good (pause, end of the plan, export suspension) auto returns to the
+//   requested level at once, reports it as such a step and the renderer draws the paused frame
+//   again at that size; a paused seek does the same, before it is issued, if it still finds a
+//   lowered level, so the paused frame is never left at a lowered quality (QA-05 D11).
 // - Look stills, colour sampling and trim-edge frames come from AND-06's SourceFrameCache
 //   (FrameExtractor EXACT; look stills through LayerLookEffect overrides), off the preview lane.
 // - Export suspension (ARCH §14.3): PreviewSessionManager suspends sessions on minimal/low/mid
@@ -577,6 +581,8 @@ class PreviewSession internal constructor(
         val s = ++seq
         enqueue { next ->
             if (!playing) {
+                // Playback may have stopped without a reset (nothing to do when it had one).
+                resetQualityOnStop()
                 appliedSeq = maxOf(appliedSeq, s)
                 emitClock()
                 done.succeed(s)
@@ -608,6 +614,7 @@ class PreviewSession internal constructor(
                     renderer.cancel()
                     requestPausedRender(null)
                 }
+                resetQualityOnStop()
                 then()
             }
         }
@@ -620,6 +627,9 @@ class PreviewSession internal constructor(
         val s = ++seq
         clearSourceFrame()
         val k = SeekMath.targetFrame(grid, timeUs, frameCount)
+        // A paused seek renders at the requested quality (QA-05 D11): the resize is queued before
+        // the seek is issued, so the ack comes after it.
+        if (!playing) resetQualityOnStop()
         if (committed == null || frameCount <= 0) {
             playhead = k
             appliedSeq = maxOf(appliedSeq, s)
@@ -715,6 +725,16 @@ class PreviewSession internal constructor(
     private fun targetRenderSize(): Pair<Int, Int> =
         QualityGovernor.renderSize(canvas.w, canvas.h, governor.level, maxPreviewLongSide)
 
+    /**
+     * Playback stopped for good: auto goes back to the requested level (QA-05 D11) and reports it
+     * like a governor step (`degraded(q)`, plus `recovered` at full); [applyQuality] draws the
+     * paused frame again at the new size. Nothing happens when the level did not change.
+     */
+    private fun resetQualityOnStop() {
+        if (disposed) return
+        governor.onPlaybackStopped()?.let { applyQuality(it) }
+    }
+
     /** Resizes the texture to the governor's level when it differs ([change] reports an automatic step). */
     private fun applyQuality(change: QualityGovernor.Change?, done: Completion<Unit>? = null) {
         val (w, h) = targetRenderSize()
@@ -734,8 +754,15 @@ class PreviewSession internal constructor(
                     done?.succeed(Unit)
                     return@resize next()
                 }
+                val drawer = owner
                 replaceSurface(o.surface, o.width, o.height) {
                     ctx.events.preview(sessionId, PreviewEventMsg(PreviewEventKindMsg.FRAME_SIZE, width = o.width.toLong(), height = o.height.toLong()))
+                    // A backend that draws on the Surface only scales its last frame up: after a
+                    // stop reset the renderer composes the paused frame at the new size (D11). The
+                    // renderer, when it drew, has already done so in replaceSurface.
+                    if (change?.reason == QualityGovernor.Reason.STOP && drawer == Owner.BACKEND && !playing && committed != null) {
+                        requestPausedRender(null)
+                    }
                     done?.succeed(Unit)
                     next()
                 }
@@ -1055,6 +1082,7 @@ class PreviewSession internal constructor(
         playhead = if (frameCount > 0) k.coerceIn(0, frameCount - 1) else 0
         renderer.setFrame(playhead)
         if (backend.drawsOnSurface) renderer.prefetch(playhead) { }
+        resetQualityOnStop()
         emitClock()
     }
 
