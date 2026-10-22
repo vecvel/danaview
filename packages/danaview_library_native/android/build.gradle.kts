@@ -84,9 +84,10 @@ kotlin {
 }
 
 dependencies {
-    // EXIF basics from a content stream (assetDetail). androidx.core (FileProvider, HOM-22A) comes
-    // with its ticket.
+    // EXIF basics from a content stream (assetDetail).
     implementation("androidx.exifinterface:exifinterface:1.3.6")
+    // FileProvider and ContextCompat.registerReceiver (HOM-22A), the editor engine's version.
+    implementation("androidx.core:core:1.13.1")
     // PickVisualMedia / PickMultipleVisualMedia contracts (HOM-20A), the editor engine's version.
     implementation("androidx.activity:activity:1.10.1")
 

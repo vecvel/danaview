@@ -3,5 +3,22 @@
      Plugin manifest of danaview_library_native. It declares no permission: the photo permissions
      (READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, READ_MEDIA_VISUAL_USER_SELECTED, READ_EXTERNAL_STORAGE up
      to API 32) are the app's (D-3, android/app/src/main/AndroidManifest.xml); a second declaration
-     with another maxSdkVersion would be a merge error. No ACCESS_MEDIA_LOCATION (owner). -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" />
+     with another maxSdkVersion would be a merge error. No ACCESS_MEDIA_LOCATION (owner). Getting
+     files out (HOM-22A) needs no storage permission: MediaStore inserts on API 29+, the system
+     "save as" below that, and read-only grants on temporary copies for share / open in.
+     - LibraryFileProvider (exportout/AndroidFileOut.kt): a FileProvider subclass, so the merge never
+       clashes with another library's androidx.core.content.FileProvider entry; it serves only
+       <cacheDir>/danaview-out/ (res/xml/library_file_paths.xml), never the library. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name="com.vecvel.danaview.library.exportout.LibraryFileProvider"
+            android:authorities="${applicationId}.danaview.library.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/library_file_paths" />
+        </provider>
+    </application>
+</manifest>

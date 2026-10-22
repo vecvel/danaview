@@ -121,10 +121,19 @@ object SystemUi {
     /** Opens the Downloads root in DocumentsUI unless [name] is already listed. */
     fun openDownloadsIfNeeded(name: String) {
         if (waitAny(6_000, byText(Pattern.quote(name))) != null) return
-        val roots = waitAny(5_000, byDesc("(?i)show roots")) ?: error("no roots button:\n" + dump())
-        roots.click()
-        val downloads = waitAny(5_000, byText("(?i)^downloads?$")) ?: error("no Downloads root:\n" + dump())
-        downloads.click()
+        // The picker may still be laying out (a freshly booted device): retry stale nodes.
+        repeat(3) { attempt ->
+            try {
+                val roots = waitAny(5_000, byDesc("(?i)show roots")) ?: error("no roots button:\n" + dump())
+                roots.click()
+                val downloads = waitAny(5_000, byText("(?i)^downloads?$")) ?: error("no Downloads root:\n" + dump())
+                downloads.click()
+                return
+            } catch (e: androidx.test.uiautomator.StaleObjectException) {
+                if (attempt == 2) throw e
+                Thread.sleep(1_000)
+            }
+        }
     }
 
     /** Multi-selects [names] in DocumentsUI's Downloads (long press, tap, Select). */

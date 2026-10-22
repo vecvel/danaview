@@ -47,6 +47,9 @@ class DanaviewLibraryNativePlugin : FlutterPlugin, ActivityAware {
     private var photoLibrary: PhotoLibraryHostApiImpl? = null
     private var thumbnails: ThumbnailHostApiImpl? = null
     private var pickers: PickerHostApiImpl? = null
+    private var exportOut: ExportOutHostApiImpl? = null
+    private var share: ShareHostApiImpl? = null
+    private var openIn: OpenInHostApiImpl? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         val ctx = LibraryPluginContext(binding.applicationContext, binding.binaryMessenger, LibraryEventHub())
@@ -61,11 +64,17 @@ class DanaviewLibraryNativePlugin : FlutterPlugin, ActivityAware {
         photoLibrary?.dispose()
         thumbnails?.dispose()
         pickers?.dispose()
+        exportOut?.dispose()
+        share?.dispose()
+        openIn?.dispose()
         setUpChannels(binding.binaryMessenger, null, null)
         context = null
         photoLibrary = null
         thumbnails = null
         pickers = null
+        exportOut = null
+        share = null
+        openIn = null
     }
 
     /** Sets up every host API on [messenger]; null [ctx] tears them down. */
@@ -75,9 +84,12 @@ class DanaviewLibraryNativePlugin : FlutterPlugin, ActivityAware {
         PickerHostApi.setUp(messenger, pickers)
         thumbnails = ctx?.let { ThumbnailHostApiImpl(it) }
         ThumbnailHostApi.setUp(messenger, thumbnails)
-        ExportOutHostApi.setUp(messenger, ctx?.let { ExportOutHostApiImpl(it) })
-        ShareHostApi.setUp(messenger, ctx?.let { ShareHostApiImpl(it) })
-        OpenInHostApi.setUp(messenger, ctx?.let { OpenInHostApiImpl(it) })
+        exportOut = ctx?.let { ExportOutHostApiImpl(it) }
+        share = ctx?.let { ShareHostApiImpl(it) }
+        openIn = ctx?.let { OpenInHostApiImpl(it) }
+        ExportOutHostApi.setUp(messenger, exportOut)
+        ShareHostApi.setUp(messenger, share)
+        OpenInHostApi.setUp(messenger, openIn)
         IncomingHostApi.setUp(messenger, ctx?.let { IncomingHostApiImpl(it) })
         QuickLookHostApi.setUp(messenger, ctx?.let { QuickLookHostApiImpl() })
         InboxHostApi.setUp(messenger, ctx?.let { InboxHostApiImpl() })
