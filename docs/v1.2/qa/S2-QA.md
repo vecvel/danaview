@@ -162,26 +162,38 @@ below was re-run on that tree; the tables carry the re-run numbers. **FIX-S2Q-1 
 FIX-S2Q-3 and FIX-S2Q-5 are still open (no `setMeta` caller; `E2eApp._boot` unchanged), so the verdict
 stays red. New: FIX-S2Q-6 (low, flaky RSS test) and the S2 Home stress probe (§2a).
 
-**Gate verdict (Mac half): red** until FIX-S2Q-3 and FIX-S2Q-5 land and §3 batch 2 is re-run on the
-wired library (FIX-S2Q-2, FIX-S2Q-4 and FIX-S2Q-6 are low; D-2 still blocks S2-R). The full v1.1 iOS
-suite passes with the flags off, HOM-15 is green and bites, the native and Dart package suites, the
-architecture test, the matrix, the persistence checks, the network guard and the stress probe are
-green, and the S2 E2E passes every step except the photo details (FIX-S2Q-3).
+**Second re-run 2026-10-22, 11:37–12:21 (after the fixer round; tree at `1ec307b` plus the uncommitted
+FIX-S2Q-3 / FIX-S2Q-6 work in `packages/danaview_library` and `test/v12/import`).** Fixes in the tree:
+FIX-S2Q-3 (`photo_facts.dart`: the import reads size, date taken, camera and orientation from the
+copy's header and writes `entry_meta` in the commit's transaction), FIX-S2Q-5 (`E2eApp._boot` adds
+`filesHomeOverrides`), FIX-S2Q-2 (`checkInvariants` on the isolate writer), FIX-S2Q-6 (the RSS test
+samples a child process). Every check below was re-run on that tree; the tables carry the new numbers.
+**FIX-S2Q-2, FIX-S2Q-3, FIX-S2Q-5 and FIX-S2Q-6 are closed.** No new defect; one QA-tooling note (N-3).
+
+**Gate verdict (Mac half): green.** Analyze is clean, `library.sh` passes whole (283 / 4 / 14), the
+architecture test and `test/v12` pass with the flags off (1208 pass, 2 skip), HOM-15 passes with and
+without the flag and its self-check bites, the S2 E2E passes every step including the viewer's File
+info with camera, date taken and dimensions, and the full v1.1 iOS suite passes **with
+`DANAVIEW_FILES_HOME=true` on the wired library** (§3 batch 2, 20 of 20) as it does with the flags off.
+With the flag, `test/v12` has the same 9 flag-off-only assertions that don't skip themselves (N-2, not
+product defects). D-2 / FIX-S2Q-4 are fixed; D-3, D-4, D-6, D-7 and the legal items stay with S2-R
+and their owners. **Android half: pending: Windows** (§7), so the S2-Q gate as a whole is not closed
+until that half reports.
 
 ### 1. S2 packages and suites
 
 | Package / suite | Command | Analyze | Tests |
 |---|---|---|---|
-| `danaview_library` (HOM-16, HOM-17, HOM-19, HOM-20, HOM-22 Dart), `danaview_search`, core photo tests | `scripts/ci/v12/library.sh` | clean | re-run: 267 pass, **1 fail**: `import_memory_test` "2048 MiB import keeps memory flat" (RSS +76.9 MB, limit 64) while `property_test` runs in the same VM. Alone 3/3 pass, `dart test -j 1` 268 pass (FIX-S2Q-6, low); search 4 and core 14 pass |
-| `danaview_library_native` (HOM-02, HOM-04, HOM-20, HOM-22 Dart side) | `flutter analyze --fatal-infos && flutter test -j 2` | clean | re-run: 22 pass (FIX-S2Q-1 fixed) |
+| `danaview_library` (HOM-16, HOM-17, HOM-19, HOM-20, HOM-22 Dart), `danaview_search`, core photo tests | `scripts/ci/v12/library.sh` | clean | second re-run: **283 pass, 0 fail** (incl. FIX-S2Q-3's `photo_facts_test`, FIX-S2Q-2's isolate-writer invariants test, FIX-S2Q-6's child-process RSS test, all in the script's default concurrent `dart test`); search 4 and core 14 pass. (First re-run: 267 pass, 1 fail, FIX-S2Q-6) |
+| `danaview_library_native` (HOM-02, HOM-04, HOM-20, HOM-22 Dart side) | `flutter analyze --fatal-infos && flutter test -j 1` | clean | second re-run: 22 pass |
 | `danaview_library_native` XCTests, macOS runner | `darwin/Tests/<X>/run_xctests.sh macos` | — | re-run: PhotoLibrary 26 (10 skipped: PhotoKit, no TCC for a CLI runner), Thumbnails 34 (5 skipped), Pickers 20, ExportOut 26: all pass, no hang (FIX-S2Q-1 fixed) |
 | `danaview_features` | `flutter analyze --fatal-infos` | clean | (tests live in root `test/v12`) |
-| Root analyze | `flutter analyze --fatal-infos lib test/v12 test/architecture integration_test/v12 packages/danaview_features` | clean | — |
-| Root `test/architecture` + `test/v12`, flags off | `flutter test -j 2 test/architecture test/v12` | — | re-run: 1186 pass, 2 skip, 0 fail (rule 30 green, D-5 fixed) |
-| Root `test/v12`, `DANAVIEW_FILES_HOME=true` | `flutter test -j 2 --dart-define=DANAVIEW_FILES_HOME=true test/v12` | — | re-run: 1083 pass, 1 skip, 9 fail, all of them flags-off assertions (`int101/flags_off_test.dart` 6, `wiring/s1_wiring_test.dart` 3) that don't skip themselves when built with the flag (not product defects; see note N-2) |
-| S2-Q's own tests (`test/v12/s2_qa/`, below) | `flutter test -j 1 test/v12/s2_qa`; again with the flag define | clean | 14 pass; 14 pass |
-| HOM-15 preservation suite (merge gate) | `scripts/ci/v12/home_preservation.sh -j 1`; again with `--dart-define=DANAVIEW_FILES_HOME=true` | — | re-run: 406 pass; 406 pass |
-| HOM-15 gate bites | `scripts/ci/v12/home_preservation.sh --self-check -j 1` (scratch copy, planted "Continue Watching") | — | re-run: OK, the planted regression fails the suite (18 tests) |
+| Root analyze | `flutter analyze --no-pub --fatal-infos lib test integration_test packages/danaview_features packages/danaview_library_native` (whole `test/` and `integration_test/`; `danaview_library` / `danaview_search` by `library.sh`) | clean | — |
+| Root `test/architecture` + `test/v12`, flags off | `flutter test -j 1 test/architecture test/v12` | — | second re-run: **1208 pass, 2 skip, 0 fail** (11:38–11:41) |
+| Root `test/architecture` + `test/v12`, `DANAVIEW_FILES_HOME=true` | `flutter test -j 1 --dart-define=DANAVIEW_FILES_HOME=true test/architecture test/v12` | — | second re-run: 1198 pass, 3 skip, 9 fail, the same flags-off assertions as before (`int101/flags_off_test.dart` 6, `wiring/s1_wiring_test.dart` 3: "flags default to false", "the 1.1 Home", "Settings has only the S1 section") that don't skip themselves when built with the flag (not product defects; N-2). Every S2 test passes with the flag |
+| S2-Q's own tests (`test/v12/s2_qa/`, below) | inside the two rows above | clean | pass in both |
+| HOM-15 preservation suite (merge gate) | `scripts/ci/v12/home_preservation.sh -j 1`; again with `--dart-define=DANAVIEW_FILES_HOME=true` | — | second re-run: 406 pass; 406 pass |
+| HOM-15 gate bites | `scripts/ci/v12/home_preservation.sh --self-check -j 1` (scratch copy, planted "Continue Watching") | — | second re-run: OK, the planted regression fails the suite (18 tests) |
 | v1.1 root tests that S2 touches | `flutter test -j 1 test/widget_test.dart test/home_screen_test.dart test/settings_account_test.dart test/editor_routes_test.dart test/editor_wiring_test.dart test/privacy_policy_host_test.dart test/editor_entry/legal_texts_test.dart test/network_tools_test.dart` | — | flags off: 174 pass (re-run). With the flag: 161 pass, 13 fail in `widget_test` / `home_screen_test` (duplicate "Folders"/"Playlists" texts from the tab strip, a second `EditableText` (search), the pinned header 107 px instead of 47): these are 1.1 layout tests of the flag-off Home; the flag-on Home is HOM-15's job (N-2) |
 
 ### 2. S2 E2E on the iOS Simulator (new scenarios)
