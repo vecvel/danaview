@@ -1106,7 +1106,7 @@ class PreviewSession internal constructor(
             renderAfterResume = true
             return done?.invoke(null) ?: Unit
         }
-        if (false && seeks.isBusy) { // D10TEMP
+        if (seeks.isBusy) {
             // QA-05 D10: the backend may be composing the seek's frame on the Surface; taking the
             // Surface now would leave that frame unpresented. Draw after the ack, on the acked frame.
             renderAfterSeek = true
