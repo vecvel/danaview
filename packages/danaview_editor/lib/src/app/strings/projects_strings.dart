@@ -37,6 +37,9 @@ abstract final class ProjectsStrings {
         ProjectSortPreference.name => 'Name',
       };
 
+  /// Spoken label and tooltip of the narrow-width sort icon button.
+  static String sortButton(ProjectSortPreference sort) => '$sortLabel: ${sortName(sort)}';
+
   /// Search field hint.
   static const String searchHint = 'Search projects';
 

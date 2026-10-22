@@ -1124,13 +1124,24 @@ class EditorController extends StateNotifier<EditorState> implements EditorShell
       inspector = primary == null ? null : route.retarget(primary);
     }
     if (selection == state.selection && inspector == route) return;
-    _set(state.copyWith(selection: selection, inspector: inspector));
+    // A new selection takes the place of an open tool tab (its context tools show instead), so the
+    // active tool never names a tab the pane no longer shows.
+    final tool = state.tool;
+    final closeTab = tool != null && tool.opensTab && !selection.isEmpty && selection != state.selection;
+    _set(state.copyWith(selection: selection, inspector: inspector, tool: closeTab ? null : tool));
   }
 
   /// Sets the active top-level tool.
   void setTool(ToolId? tool) {
     if (!mounted || state.tool == tool) return;
     _set(state.copyWith(tool: tool));
+  }
+
+  /// Opens the tab of [tool] (a tool whose tile opens sub-tools: `ToolId.opensTab`) and closes the
+  /// open panel in the same change, so the pane shows the tab and not the previous tool's panel.
+  void openToolTab(ToolId tool) {
+    if (!mounted || (state.tool == tool && state.inspector == null)) return;
+    _set(state.copyWith(tool: tool, inspector: null));
   }
 
   /// Opens [route] in the inspector.

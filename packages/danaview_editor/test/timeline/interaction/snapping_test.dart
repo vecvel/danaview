@@ -12,6 +12,7 @@ import 'package:danaview_editor/src/editor/timeline/snapping.dart';
 import 'package:danaview_editor_core/model.dart';
 
 import 'interaction_support.dart';
+import '../../support/neutral_borders.dart';
 
 void main() {
   group('TimelineSnapping', () {
@@ -105,6 +106,7 @@ void main() {
       expect(i.ghosts[const ItemId('it_c')]!.range, const TimeRange(8 * s, 12 * s));
       expect(haptics.selectionClicks, 1);
       expect(find.byKey(const ValueKey('snap-pill')), findsOneWidget);
+      expectNeutralBorders(tester, of: find.byKey(const ValueKey('snap-pill')));
 
       await g.moveBy(const Offset(3, 0)); // still in reach of the same target.
       await tester.pump();

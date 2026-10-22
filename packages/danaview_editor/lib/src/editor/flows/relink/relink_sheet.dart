@@ -202,7 +202,6 @@ class _Message extends StatelessWidget {
         container: true,
         child: DanaviewSurface(
           color: DanaviewColors.surface,
-          borderColor: color.withValues(alpha: 0.5),
           padding: const EdgeInsets.all(DanaviewSpacing.md),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,

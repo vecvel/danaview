@@ -356,7 +356,7 @@ class _OfflineCard extends ConsumerWidget {
           padding: const EdgeInsets.all(DanaviewSpacing.lg),
           decoration: BoxDecoration(
             borderRadius: DanaviewRadius.lgAll,
-            border: Border.all(color: DanaviewColors.borderBright),
+            border: const Border.fromBorderSide(DanaviewBorders.hairline),
             boxShadow: DanaviewShadows.soft,
           ),
           child: Column(

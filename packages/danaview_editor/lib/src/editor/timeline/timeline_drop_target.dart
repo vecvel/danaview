@@ -547,15 +547,15 @@ class _DropGhostLayer extends ConsumerWidget {
         if (size.isFinite) {
           final x = header + viewport.xOf(ghost.start);
           final text = ghost.valid ? MediaStrings.dropStart(EditStrings.timePill(ghost.start, rate)) : MediaStrings.dropRefused;
-          pills.add(_pill(size, x, 2, text, key: const ValueKey('drop-pill'), accent: ghost.valid ? null : _invalid));
+          pills.add(_pill(size, x, 2, text, key: const ValueKey('drop-pill')));
           final guide = ghost.guide;
           if (guide != null) {
             pills.add(_pill(size, header + viewport.xOf(guide.time), ruler + 4, EditStrings.timePill(guide.time, rate),
-                key: const ValueKey('drop-snap-pill'), accent: style.snapGuide));
+                key: const ValueKey('drop-snap-pill')));
           }
           if (ghost.createsTrack) {
             pills.add(_pill(size, x, math.max(0, ghost.pointer.dy - 28), EditStrings.newTrack,
-                key: const ValueKey('drop-new-track-pill'), accent: style.selection));
+                key: const ValueKey('drop-new-track-pill')));
           }
         }
         return Stack(
@@ -573,7 +573,7 @@ class _DropGhostLayer extends ConsumerWidget {
     );
   }
 
-  static Widget _pill(Size size, double x, double top, String text, {Key? key, Color? accent}) {
+  static Widget _pill(Size size, double x, double top, String text, {Key? key}) {
     final width = math.min(_pillMaxWidth, size.width);
     final left = (x - width / 2).clamp(0.0, math.max(0.0, size.width - width)).toDouble();
     final y = top.clamp(0.0, math.max(0.0, size.height - 24)).toDouble();
@@ -588,7 +588,6 @@ class _DropGhostLayer extends ConsumerWidget {
           color: DanaviewColors.surfaceElevatedHigher,
           borderRadius: DanaviewRadius.smAll,
           shadow: DanaviewShadow.soft,
-          borderColor: accent == null ? DanaviewColors.hairline : accent.withValues(alpha: 0.6),
           padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: 2),
           child: Text(
             text,

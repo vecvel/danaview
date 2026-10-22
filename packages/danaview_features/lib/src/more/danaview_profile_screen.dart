@@ -491,7 +491,8 @@ class _DateOfBirthField extends StatelessWidget {
     final date = value;
     final text = date == null ? 'Add date of birth' : danaviewFormatDate(date);
     final age = date == null || error != null ? null : ProfileValidation.ageOn(date, DateTime.now());
-    final border = error != null ? const BorderSide(color: Color(0x61EF4444), width: 1) : DanaviewBorders.hairline;
+    // The error reads from its message below the field; the outline stays a neutral hairline.
+    const border = DanaviewBorders.hairline;
 
     final field = DanaviewPressable.builder(
       onTap: onTap,

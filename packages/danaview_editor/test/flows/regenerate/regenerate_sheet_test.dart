@@ -6,12 +6,14 @@
 // (locked lane, nothing produced, read-only) and Transcribe again opening the prefilled Auto
 // captions sheet.
 
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/app/editor_providers.dart';
 import 'package:danaview_editor/src/editor/flows/captions/regenerate_sheet.dart';
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_transcription/danaview_transcription.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewColors, DanaviewSurface;
 
 import '../../support/support.dart';
 import 'regenerate_rig.dart';
@@ -198,6 +200,23 @@ void main() {
       expect(rig.transcription.resegmentCalls.single.$2.preset, SegmentationPreset.shortPhrases);
       expect((rig.lane.items.first as SubtitleCue).text, 'Nuevo 0');
       expectOwnerUiRules(tester);
+      await tester.pump(const Duration(seconds: 3));
+    });
+
+    testWidgets('the selected mode reads from its check and tint, not a primary outline', (tester) async {
+      final rig = RegenRig();
+      await rig.pump(tester);
+      await rig.openSheet(tester);
+      for (final key in ['regenerate-mode-resplit', 'regenerate-mode-transcribe']) {
+        final surface = find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(DanaviewSurface), matchRoot: true).first;
+        expect(tester.widget<DanaviewSurface>(surface).borderColor, DanaviewColors.hairline, reason: key);
+      }
+      expect(find.descendant(of: find.byKey(const ValueKey('regenerate-mode-resplit')), matching: find.byIcon(Icons.check_rounded)), findsOneWidget);
+      expectNeutralBorders(tester, of: find.byKey(const ValueKey('regenerate-sheet')));
+      await tester.tap(find.byKey(const ValueKey('regenerate-mode-transcribe')));
+      await rig.pumpSome(tester);
+      expect(find.descendant(of: find.byKey(const ValueKey('regenerate-mode-transcribe')), matching: find.byIcon(Icons.check_rounded)), findsOneWidget);
+      expectNeutralBorders(tester, of: find.byKey(const ValueKey('regenerate-sheet')));
       await tester.pump(const Duration(seconds: 3));
     });
 

@@ -145,6 +145,10 @@ void main() {
       rig.editor.setMediaHealth(MediaHealth(missing: {const MediaId('md_a')}));
       await tester.pump();
       expect(find.text(PreviewStrings.mediaMissing), findsOneWidget);
+      final card = find.ancestor(of: find.text(PreviewStrings.mediaMissing), matching: find.byType(Container)).first;
+      expect((tester.widget<Container>(card).decoration! as BoxDecoration).border, const Border.fromBorderSide(DanaviewBorders.hairline),
+          reason: 'the offline card is edged by the hairline token');
+      expectNeutralBorders(tester, of: card);
       expect(find.text(PreviewStrings.relink), findsOneWidget);
       // UX-40 binds `relink` (enabled while media is offline): the button runs it.
       final button = tester.widget<DanaviewButton>(find.widgetWithText(DanaviewButton, PreviewStrings.relink));

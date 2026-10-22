@@ -340,7 +340,15 @@ class _ProjectsTopBar extends StatelessWidget {
   }
 }
 
-/// Sort dropdown and (with more than 8 projects) the search field; stacked when narrow.
+/// Below this toolbar width the Sort control collapses to a 44 px icon button next to the search.
+const double projectsToolbarCompactWidth = 480;
+
+/// Widest the search field grows on wide screens.
+const double projectsSearchMaxWidth = 480;
+
+/// The search field (with more than 8 projects) and the Sort control right next to it, both
+/// left-aligned in one row. Narrower than [projectsToolbarCompactWidth] the search fills the row
+/// and Sort is an icon button opening the same menu.
 class _Toolbar extends StatelessWidget {
   const _Toolbar({required this.sort, required this.searchable, required this.query, required this.onSort, required this.onQuery});
 
@@ -371,22 +379,45 @@ class _Toolbar extends StatelessWidget {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 520) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        if (constraints.maxWidth < projectsToolbarCompactWidth) {
+          return Row(
+            key: const ValueKey('projects-toolbar-compact'),
             children: [
-              search,
-              const SizedBox(height: DanaviewSpacing.sm),
-              Align(alignment: AlignmentDirectional.centerStart, child: dropdown),
+              Expanded(child: search),
+              const SizedBox(width: DanaviewSpacing.md),
+              DanaviewMenuAnchor(
+                width: 180,
+                alignment: DanaviewMenuAlignment.end,
+                entries: [
+                  const DanaviewMenuHeader(ProjectsStrings.sortLabel),
+                  for (final s in ProjectSort.values)
+                    DanaviewMenuItem(label: ProjectsStrings.sortName(s), selected: s == sort, onTap: () => onSort(s)),
+                ],
+                builder: (context, open, isOpen) => DanaviewIconButton(
+                  key: const ValueKey('projects-sort'),
+                  icon: Icons.sort_rounded,
+                  size: DanaviewSpacing.minTapTarget,
+                  variant: DanaviewIconButtonVariant.filled,
+                  selected: isOpen,
+                  tooltip: ProjectsStrings.sortButton(sort),
+                  semanticLabel: ProjectsStrings.sortButton(sort),
+                  onPressed: open,
+                ),
+              ),
             ],
           );
         }
         return Row(
+          key: const ValueKey('projects-toolbar'),
           children: [
-            Flexible(child: dropdown),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: projectsSearchMaxWidth),
+                child: SizedBox(width: double.infinity, child: search),
+              ),
+            ),
             const SizedBox(width: DanaviewSpacing.md),
-            const Spacer(),
-            ConstrainedBox(constraints: const BoxConstraints(maxWidth: 320), child: SizedBox(width: 320, child: search)),
+            dropdown,
           ],
         );
       },

@@ -614,7 +614,8 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
           ),
           foregroundDecoration: BoxDecoration(
             borderRadius: radius,
-            border: Border.fromBorderSide(highlighted ? DanaviewBorders.focus : DanaviewBorders.hairline),
+            // Open shows as the tinted fill; only keyboard focus draws the ring.
+            border: Border.fromBorderSide(state.focused ? DanaviewBorders.focus : DanaviewBorders.hairline),
           ),
           child: Row(
             mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
