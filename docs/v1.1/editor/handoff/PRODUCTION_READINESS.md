@@ -16,6 +16,8 @@
 | **INT-05** release | **Prepared, not applied** (release-checklist) | Owner "go" |
 | Round 7 (Mac Dart fixes for QA-02: M-1, M-2..M-7, M-9, M-10, M-13..M-15, M-17 Dart) | **Done and merged** into `editor-wip` (`c336899`, 01:10). M-15: the Dart close no longer waits and releases the preview; whether the remaining 30 s on-screen delay is native shows in the new `[EditorClose]`/`[EditorLifecycle]` logs ("leaving the editor" with no "exit callback" means the Android native release blocks the main thread) | Windows: pull `editor-wip`, run the full QA-02 pass; on s09 check the M-15 logs |
 
+**FIX-QA05-D8-2 done (2026-10-22, `911110f`):** orphaned export outputs in `<support>/danaview/editor/exports` (cancelled, failed or killed-before-handoff exports) are swept: unreferenced files older than 24 h at bootstrap (+20 s) and after every export job's end, fail-safe on any unreadable job record; Settings › Storage lists "Export files" with its size and clears unreferenced files of any age. No Android change needed; if the D8 engine half moves `export-jobs.json` off the cache, put it at `<supportRoot>/export-jobs.json` or `<supportRoot>/exports/export-jobs.json` in the same v1 format (both are read).
+
 Other follow-ups found by QA-01 (not blocking):
 - The player library screens (`danaview_home_screen.dart`, `danaview_folder_screen.dart`, `library_storage.dart`) have a follow-up noted in `QA-01-ios-simulator.md`.
 - An empty new project shows a preview spinner that keeps spinning with no media; check whether that is intended (UX-18).
