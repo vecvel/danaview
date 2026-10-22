@@ -20,6 +20,11 @@
 //   Surface; experimentalRedrawLastFrame is never used. A backend that draws on the Surface itself
 //   (AND-16) hands it to the renderer for paused edits and takes it back on play or seek
 //   ([Owner]); the renderer prefetches the exact frames on pause and after an exact seek settles.
+//   A paused render asked for while a seek is in flight or pending waits until the seek is acked
+//   and then draws the acked frame (QA-05 D10: taking the Surface from a backend that was
+//   composing the seek's frame left that frame unpresented, and the seek was acked at its timeout
+//   with the frame shown before it). The seek ack's timeout reports the frame actually on screen,
+//   whoever drew it.
 // - Transport and seq (ARCH §12.2): play, pause and seek take the next command seq; replies carry
 //   it and clock samples carry the seq of the last command they reflect. Clock samples go out at
 //   every state change and at 10 Hz while playing (EventHub coalesces to <= 10 Hz), with
@@ -279,6 +284,13 @@ class PreviewSession internal constructor(
         }
     }
     private val idleWaiters = ArrayList<() -> Unit>()
+
+    /** A paused render was asked for while a seek was busy (D10), and the callers waiting for it. */
+    private var renderAfterSeek = false
+    private val afterSeekWaiters = ArrayList<(PausedFrameRenderer.RenderResult?) -> Unit>()
+
+    /** Paused renders queued or running and not finished yet (debugCaptureFrame waits for them). */
+    private var pausedRendersInFlight = 0
 
     // ---- state (danaview-preview) ----
     private var committed: ParamSnapshot? = null
@@ -618,6 +630,7 @@ class PreviewSession internal constructor(
             onLane {
                 val ack = r.getOrElse {
                     done.fail(EngineErrors.from(it))
+                    renderDeferredAfterSeek()
                     return@onLane
                 }
                 val shown = ack.displayedFrame
@@ -629,8 +642,18 @@ class PreviewSession internal constructor(
                 appliedSeq = maxOf(appliedSeq, ack.seq)
                 emitClock()
                 done.succeed(SeekAckMsg(timeUs, grid.timeOfFrame(shown), shown, ack.seq))
+                renderDeferredAfterSeek()
             }
         })
+    }
+
+    /** Runs the paused render deferred while seeks were busy (D10), once none is in flight or pending. */
+    private fun renderDeferredAfterSeek() {
+        if (!renderAfterSeek || seeks.isBusy) return
+        renderAfterSeek = false
+        val waiting = afterSeekWaiters.toList()
+        afterSeekWaiters.clear()
+        requestPausedRender { r -> waiting.forEach { it(r) } }
     }
 
     private fun issueSeek(k: Long, exact: Boolean, done: Completion<Unit>) {
@@ -872,10 +895,14 @@ class PreviewSession internal constructor(
         // yet while the Surface still shows the earlier frame (QA-02 s18: a capture right after the
         // editor's opening seek failed with "nothing composed"). Wait, bounded by the seek's own
         // timeout, until that seek has put its frame on screen, then read the Surface's owner.
+        // Likewise a paused render in flight (or deferred behind a seek, D10): the renderer's
+        // canvas still holds its previous frame until the render presents, while the Surface shows
+        // what the backend drew, so reading the canvas then returned a stale frame.
         val deadline = scheduler.nowMs() + seeks.exactTimeoutMs + CAPTURE_SEEK_GRACE_MS
         fun capture() {
             if (disposed) return done.fail(cancelled())
-            if (seeks.isBusy && scheduler.nowMs() < deadline) {
+            val busy = seeks.isBusy || renderAfterSeek || pausedRendersInFlight > 0
+            if (busy && scheduler.nowMs() < deadline) {
                 scheduler.schedule(CAPTURE_POLL_MS) { capture() }
                 return
             }
@@ -896,15 +923,23 @@ class PreviewSession internal constructor(
         backend.trim(level)
     }
 
-    /** Export suspension on weak tiers (ARCH §14.3): pause, release decoders, defer paused renders. */
-    internal fun suspendForExport() {
-        if (disposed || suspended) return
+    /**
+     * Export suspension on weak tiers (ARCH §14.3): pause, release decoders, defer paused renders.
+     * [released] runs once the backend has released its decoders (or at once when there is nothing
+     * to suspend); the export waits for it before it creates its own codecs (QA-05 D9).
+     */
+    internal fun suspendForExport(released: (() -> Unit)? = null) {
+        if (disposed || suspended) {
+            released?.invoke()
+            return
+        }
         suspended = true
         seeks.cancelAll(busy())
         enqueue { next ->
             val finish = {
                 backend.suspendForExport { r ->
                     r.exceptionOrNull()?.let { Log.w(TAG, "backend suspend: ${EngineErrors.from(it).code}") }
+                    released?.invoke()
                     onLane {
                         renderer.cancel()
                         renderer.trim(CacheTrimLevelMsg.BACKGROUND)
@@ -1071,20 +1106,33 @@ class PreviewSession internal constructor(
             renderAfterResume = true
             return done?.invoke(null) ?: Unit
         }
+        if (seeks.isBusy) {
+            // QA-05 D10: the backend may be composing the seek's frame on the Surface; taking the
+            // Surface now would leave that frame unpresented. Draw after the ack, on the acked frame.
+            renderAfterSeek = true
+            done?.let { afterSeekWaiters += it }
+            return
+        }
+        pausedRendersInFlight++
         enqueue { next ->
             if (playing || disposed) {
+                pausedRendersInFlight--
                 done?.invoke(null)
                 return@enqueue next()
             }
             ensureOwner(Owner.RENDERER) {
                 renderer.render { r ->
                     onLane {
+                        pausedRendersInFlight--
                         val result = r.getOrNull()
                         r.exceptionOrNull()?.let {
                             val code = EngineErrors.from(it).code
                             if (code != EngineErrorCode.cancelled) Log.w(TAG, "paused render failed: $code")
                         }
                         if (result != null && result.presented) {
+                            // The renderer's frame is the one on screen now: a seek acked at its
+                            // timeout reports it, not an older backend frame (D10).
+                            seeks.resetDisplayed(result.k)
                             lastRender = result
                             onRendered?.invoke(result)
                             noteFirstFrame()

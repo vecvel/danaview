@@ -224,6 +224,9 @@ object ExactFrames {
             return await(extractor.getFrame(seekPositionMs(rulePtsUs)), control)
         } finally {
             closeQuietly(extractor)
+            // QA-05 D9: a stopped extraction keeps its decoder until its frame arrives; wait (bounded)
+            // so the job's terminal event comes after the extractor's codec work and release.
+            FrameExtractorDrain.awaitIdle()
         }
     }
 
