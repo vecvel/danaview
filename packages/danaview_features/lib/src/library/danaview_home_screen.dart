@@ -379,7 +379,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
                           selected: selected,
                           pageBuilder: _tabPage,
                         );
-                        final barHeight = 0.0;
+                        final barHeight = selectionBar == null ? 0.0 : _selectionBarHeight;
                         // Always wrapped (same tree shape) so the tab pages keep their state when
                         // the bar appears. The bar already includes the bottom safe area, so it
                         // replaces that inset rather than adding to it.

@@ -93,16 +93,55 @@ final class FilesHomeDirectories {
   /// The application-support directory (`Library/Application Support`, Android `filesDir`).
   final String support;
 
-  /// The cache directory (`Library/Caches`, Android `cacheDir`).
+  /// The app's own cache directory: `Library/Caches` on iOS and Android `cacheDir` (what
+  /// `getTemporaryDirectory` returns there); on macOS, Windows and Linux the per-app cache folder
+  /// (`getApplicationCacheDirectory`), never the system temporary folder, which other users and
+  /// apps can share (ARCH v1.2 §5.2 `<cache>/danaview/library/thumbs/`).
   final String cache;
 
   /// Where pickers stage photo and document picks before the import copies them.
   String get importStaging => '$cache${Platform.pathSeparator}danaview${Platform.pathSeparator}import_staging';
 
-  /// The app's directories ([AppStorage]).
-  static Future<FilesHomeDirectories> resolve() async {
+  /// The app's directories ([AppStorage]) on [platform] (default [defaultTargetPlatform]).
+  ///
+  /// iOS and Android take [AppStorage.cacheDirectory] (`getTemporaryDirectory`, the app's own
+  /// cache there). macOS, Windows and Linux take the per-app cache folder that 1.1's Storage clear
+  /// also empties ([AppStorage.appCacheDirectories]); without one the cache goes under the support
+  /// directory, never the shared system temporary folder. Tests pass [appCacheDirectories].
+  static Future<FilesHomeDirectories> resolve({
+    TargetPlatform? platform,
+    Future<List<Directory>> Function()? appCacheDirectories,
+  }) async {
     await AppStorage.initialize();
-    return FilesHomeDirectories(support: AppStorage.appDataDirectory.path, cache: AppStorage.cacheDirectory.path);
+    final support = AppStorage.appDataDirectory.path;
+    return FilesHomeDirectories(
+      support: support,
+      cache: await cacheFor(
+        platform: platform ?? defaultTargetPlatform,
+        support: support,
+        temporary: AppStorage.cacheDirectory.path,
+        appCacheDirectories: appCacheDirectories ?? AppStorage.appCacheDirectories,
+      ),
+    );
+  }
+
+  /// The cache root on [platform]: [temporary] on iOS and Android; elsewhere the first of
+  /// [appCacheDirectories], or `<support>/cache` when the platform gives none.
+  @visibleForTesting
+  static Future<String> cacheFor({
+    required TargetPlatform platform,
+    required String support,
+    required String temporary,
+    required Future<List<Directory>> Function() appCacheDirectories,
+  }) async {
+    if (platform == TargetPlatform.iOS || platform == TargetPlatform.android) return temporary;
+    List<Directory> folders;
+    try {
+      folders = await appCacheDirectories();
+    } on Object {
+      folders = const [];
+    }
+    return folders.isNotEmpty ? folders.first.path : '$support${Platform.pathSeparator}cache';
   }
 }
 
@@ -213,7 +252,7 @@ Future<FilesHomeRuntime> filesHomeOverrides({
   if (!filesHomeWired) return FilesHomeRuntime.off;
   final target = platform ?? defaultTargetPlatform;
   final native = hasNativeLibraryPlugin(target);
-  final dirs = directories ?? await FilesHomeDirectories.resolve();
+  final dirs = directories ?? await FilesHomeDirectories.resolve(platform: target);
   final backup = native ? NativeBackupFlagPort() : const NoBackupFlagPort();
 
   LibraryStore? store;

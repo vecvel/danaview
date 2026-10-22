@@ -15,8 +15,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:danaview_features/src/library/badges/media_badge_overlay.dart';
 import 'package:danaview_features/src/library/files/library_store_providers.dart';
 import 'package:danaview_features/src/library/organise/organise_providers.dart';
+import 'package:danaview_features/src/library/photos/photo_grid_item.dart';
 import 'package:danaview_features/src/library/photos/photo_masonry_layout.dart';
 import 'package:danaview_features/src/library/photos/photos_tab_providers.dart';
 import 'package:danaview_features/src/library/photos/photos_tab_widgets.dart';
@@ -150,13 +152,13 @@ class _Lib {
 
   Future<T> run<T>(WidgetTester tester, Future<T> Function(LibraryStore s) op) async => (await tester.runAsync(() => op(store))) as T;
 
-  Future<FileEntry> addPhoto(WidgetTester tester, String name, DateTime taken, {FolderId? folder, int w = 4032, int h = 3024}) =>
+  Future<FileEntry> addPhoto(WidgetTester tester, String name, DateTime taken, {FolderId? folder, int w = 4032, int h = 3024, int flags = 0}) =>
       run(tester, (s) => s.write((wr, now) {
             final job = wr.beginImport(target: folder, now: now);
             (wr.fs.openPart(job.id)..writeFromSync(const [1, 2, 3])).closeSync();
             return wr.commitImport(
               job.id,
-              ImportedFileInfo(displayName: name, kind: FileKind.photo, modifiedAt: taken, meta: EntryMeta(width: w, height: h, takenAt: taken)),
+              ImportedFileInfo(displayName: name, kind: FileKind.photo, modifiedAt: taken, meta: EntryMeta(width: w, height: h, takenAt: taken, flags: flags)),
               now: now,
             );
           }));
@@ -243,6 +245,73 @@ void main() {
     expect(opened, [(5, 2)]);
     await lib.close(tester);
     await env.dispose();
+  });
+
+  testWidgets('Live and RAW photos show their badges and speak them in the cell label', (tester) async {
+    useSurface(tester, librarySurfaces[4]);
+    final env = await LibraryTestEnv.create();
+    final lib = await _Lib.open(tester);
+    await lib.addPhoto(tester, 'live.heic', DateTime(2026, 10, 22, 9), flags: EntryMeta.flagLive | EntryMeta.flagRaw);
+    await lib.addPhoto(tester, 'plain.jpg', DateTime(2026, 10, 22, 8));
+    await tester.pumpWidget(_app(env, const PhotosTab(), store: lib.store));
+    await pumpFrames(tester, count: 2);
+    expect(tester.takeException(), isNull);
+    expect(find.bySemanticsLabel(RegExp(r'^Photo live\.heic, 22 October 2026, Live Photo, RAW$')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Photo plain\.jpg, 22 October 2026$')), findsOneWidget);
+    final live = find.ancestor(of: find.text('LIVE'), matching: find.byType(PhotoGridCell));
+    expect(live, findsOneWidget);
+    expect(tester.widget<PhotoGridCell>(live).photo.name, 'live.heic');
+    expect(find.descendant(of: live, matching: find.byType(MediaBadgeOverlay)), findsOneWidget);
+    // Wide cells show every indicator; the plain photo draws none.
+    expect(find.text('RAW'), findsOneWidget);
+    expect(find.text('LIVE'), findsOneWidget);
+    await lib.close(tester);
+    await env.dispose();
+  });
+
+  test('system and desktop photos carry their Live, RAW and HDR badges', () {
+    final item = photoGridItemOf(
+      PhotoMediaItem(
+        id: ItemId.parse('ph:A1'),
+        uri: 'ph:A1',
+        name: 'IMG_1.DNG',
+        modifiedAt: DateTime.utc(2026, 10, 1),
+        mimeType: 'image/x-adobe-dng',
+        isRaw: true,
+        isLivePhoto: true,
+      ),
+      PhotoOrigin.system,
+    );
+    expect(item.badges.isRaw, isTrue);
+    expect(item.badges.isLive, isTrue);
+    expect(item.badges.isHdr, isFalse);
+    expect(photoCellLabel(item), endsWith(', Live Photo, RAW'));
+  });
+
+  testWidgets('one joined read: a write that touches no photo keeps the list, a favourite toggle replaces one item', (tester) async {
+    final lib = await _Lib.open(tester);
+    final a = await lib.addPhoto(tester, 'a.jpg', DateTime(2026, 10, 22, 9));
+    await lib.addPhoto(tester, 'b.jpg', DateTime(2026, 10, 21, 9));
+    // No capture time: ordered by its modification time instead.
+    await lib.run(tester, (s) => s.write((wr, now) {
+          final job = wr.beginImport(now: now);
+          (wr.fs.openPart(job.id)..writeFromSync(const [1])).closeSync();
+          return wr.commitImport(job.id, ImportedFileInfo(displayName: 'c.jpg', kind: FileKind.photo, modifiedAt: DateTime(2026, 10, 21, 20)), now: now);
+        }));
+    final first = readDanaviewPhotos(lib.store);
+    expect([for (final p in first) p.name], ['a.jpg', 'c.jpg', 'b.jpg']);
+
+    await lib.run(tester, (s) => s.write((w, now) => w.createFolder('Docs', now: now)));
+    expect(identical(readDanaviewPhotos(lib.store, previous: first), first), isTrue);
+
+    await lib.run(tester, (s) => s.write((w, now) => w.setEntryFavourite(a.id, true)));
+    final second = readDanaviewPhotos(lib.store, previous: first);
+    expect(identical(second, first), isFalse);
+    expect(second[0].isFavourite, isTrue);
+    expect(identical(second[0], first[0]), isFalse);
+    expect(identical(second[1], first[1]), isTrue);
+    expect(identical(second[2], first[2]), isTrue);
+    await lib.close(tester);
   });
 
   testWidgets('an empty library shows the empty state', (tester) async {

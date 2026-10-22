@@ -210,6 +210,60 @@ void main() {
       expect(runtime.overrides, isNotEmpty);
     });
 
+    test('desktop thumbnails and import staging live in the per-app cache, not the system temp folder', () async {
+      final sep = Platform.pathSeparator;
+      final appCache = '${sep}home${sep}u$sep.cache${sep}app.danaview';
+      final support = '${sep}home${sep}u$sep.local${sep}share${sep}app.danaview';
+      for (final platform in [TargetPlatform.linux, TargetPlatform.windows, TargetPlatform.macOS]) {
+        final cache = await FilesHomeDirectories.cacheFor(
+          platform: platform,
+          support: support,
+          temporary: Directory.systemTemp.path,
+          appCacheDirectories: () async => [Directory(appCache)],
+        );
+        expect(cache, appCache, reason: '$platform');
+        expect(cache, isNot(startsWith(Directory.systemTemp.path)), reason: '$platform');
+        final dirs = FilesHomeDirectories(support: support, cache: cache);
+        expect(dirs.importStaging, '$appCache${sep}danaview${sep}import_staging');
+
+        FeatureFlags.debugFilesHomeOverride = true;
+        final thumbRoots = <String>[];
+        await filesHomeOverrides(
+          prefs: (await LibraryTestEnv.create()).prefs,
+          platform: platform,
+          directories: dirs,
+          openStore: (_, __) async => throw const FileSystemException('none'),
+          openThumbnails: (dir) async {
+            thumbRoots.add(dir);
+            throw const FileSystemException('none');
+          },
+          observeLifecycle: false,
+        );
+        expect(thumbRoots, [appCache], reason: '$platform');
+
+        // No per-app cache folder: fall back under the support directory, never the system temp.
+        final fallback = await FilesHomeDirectories.cacheFor(
+          platform: platform,
+          support: support,
+          temporary: Directory.systemTemp.path,
+          appCacheDirectories: () async => const [],
+        );
+        expect(fallback, '$support${sep}cache', reason: '$platform');
+      }
+    });
+
+    test('iOS and Android keep the app cache path_provider gives as temporary', () async {
+      for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+        final cache = await FilesHomeDirectories.cacheFor(
+          platform: platform,
+          support: '/s',
+          temporary: '/app/Library/Caches',
+          appCacheDirectories: () async => [Directory('/other')],
+        );
+        expect(cache, '/app/Library/Caches', reason: '$platform');
+      }
+    });
+
     test('library entries become the media items the selection and file menu take', () {
       FileEntry entry(String name, FileKind kind, {String? sub}) => FileEntry(
             id: EntryId.parse('fe_0123456789abcdef'),

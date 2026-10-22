@@ -414,7 +414,11 @@ void main() {
         await pumpFrames(tester);
         expect(tester.widget<HomeTabHost>(find.byType(HomeTabHost)).selected, HomeTab.home);
         expect(find.byKey(const ValueKey('photos-tab-body')), findsNothing);
-        await tester.ensureVisible(find.byKey(ValueKey(key)));
+        // The "+N" tile trails the lazily built carousel: scroll it in sideways first.
+        await tester.ensureVisible(find.byKey(const ValueKey('recent-photos-tray')));
+        final list = find.descendant(of: find.byKey(const ValueKey('recent-photos-tray')), matching: find.byType(Scrollable)).first;
+        if (key == 'recent-photos-more') await tester.scrollUntilVisible(find.byKey(ValueKey(key)), 200, scrollable: list);
+        await pumpFrames(tester, count: 2);
         await tester.tap(find.byKey(ValueKey(key)));
         await pumpFrames(tester);
         expect(tester.takeException(), isNull);

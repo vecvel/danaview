@@ -227,7 +227,7 @@ v1.1 release defines `DANAVIEW_EDITOR=true`, `DANAVIEW_AUTO_CAPTIONS=true`.
 | Batch | 1.2.0 defines | Started / ended | Result |
 |---|---|---|---|
 | 1 · every 1.2.0 flag off | none | 07:25 / 07:58 | **20 of 20 files pass** (s01–s18, `x_android_api28`, `x_ios_background_export`; `x_android_export_background` skipped on iOS as designed) |
-| 2 · S2 flag set | `DANAVIEW_FILES_HOME=true` (via `DV_E2E_EXTRA_DEFINES`, confirmed on the running `flutter test` command line) | 08:14 / 08:42 | **20 of 20 files pass** |
+| 2 · S2 flag set | `DANAVIEW_FILES_HOME=true` (via `DV_E2E_EXTRA_DEFINES`, confirmed on the running `flutter test` command line) | 08:14 / 08:42 | **partial**: 20 of 20 files pass, but against the new Home shell **without the S2 library** (no `filesHomeOverrides` in QA-00's boot, FIX-S2Q-5); to be re-run once FIX-S2Q-5 lands |
 
 Simulator realities, reported not failed (both batches): HEVC/MOV not offered (`hevcEncode false`);
 `pausedInBackground observed: false`; s13 start latency 267 / 233 ms (device budget 100 ms). s07 burned
@@ -235,10 +235,16 @@ cues 341 and 324 changed samples; s08 3 cues; s15 head -14.6 dBFS, body -9.0 dBF
 `build/e2e/ios/6663101E-6BE7-47D4-B3B8-055700BF2E02/`. The iPhone 16 simulator was already booted
 (not by this ticket) and was left as found.
 
-Note for batch 2: QA-00's `E2eApp._boot` mirrors `lib/main.dart` step by step but not S2-W's
-`filesHomeOverrides`, so in the flag-on batch the Home is the Files & Media Home **without** a library
-store (tabs present, library tabs empty). It proves the 1.1 flows survive the new Home shell; the
-wired library is covered by §2 (FIX-S2Q-5, low).
+Batch 2 is **partial**, not a pass of the gate requirement. QA-00's `E2eApp._boot` mirrors
+`lib/main.dart` step by step but not S2-W's `filesHomeOverrides`, so in the flag-on batch the Home is
+the Files & Media Home **without** a library store: library tabs empty, the Overview's Import hidden,
+no import service, no thumbnails. That is not the composition `lib/main.dart` ships in the S2 release
+candidate, so "the full v1.1 suite re-run with the slice's flags on" (BUILD_PLAN §0 S<n>-Q) is only
+partly met: the run proves the 1.1 flows survive the new Home shell, not that they survive next to
+the wired library (store on its isolate writer, daily sweep, thumbnail cache and its memory-pressure
+trim, import service). §2 covers the wired library for the S2 flows only. **FIX-S2Q-5 blocks the
+S2-Q verdict**: once QA-00 adds `...(await filesHomeOverrides(prefs: prefs)).overrides` to
+`E2eApp._boot`, batch 2 is re-run and this row replaced.
 
 ### 4. Persistence (QA-106 scope for S2)
 
@@ -302,7 +308,7 @@ pending: Windows
 | **FIX-S2Q-3** | HOM-20 (import) with HOM-11 (viewer) | Danaview-folder photos never get their photo facts: nothing writes `entry_meta` on import (`LibraryWriter.setMeta` has no caller; `ImportService` commits without `meta`; no import hook reads EXIF), and HOM-11's File info reads only `EntryMeta` for Danaview photos. So imported photos show no Taken, Camera, Lens, exposure or Dimensions, and the Photos grid groups them by file date with width/height 0. The S2 result "photo grid and viewer with EXIF" (§1A) is not met for imported photos | §2 row "Viewer File info", log line `info rows: [name, size, format, source, imported, added, modified]` for a JPEG with full EXIF | An import hook (or the copier) reads EXIF and dimensions after the copy (ImageIO / `ExifInterface` through the native plugin, or a Dart EXIF reader) and calls `setMeta`; HOM-11 test with a real EXIF JPEG through the import path |
 | FIX-S2Q-2 (low) | HOM-17 | `LibraryStore.checkInvariants()` throws with the isolate writer the app uses: its op closure captures `this` (`unavailable`), which holds the `ReceivePort` (`Illegal argument in isolate message: object is unsendable`). Only the in-process writer of the tests can run it, so the app and on-device QA can't check invariants | `s2_persistence_test` first draft; stack `LibraryStore.checkInvariants → _IsolateHost.run` | Copy `unavailable` into a local before building the closure (and add a test with `background: true`) |
 | FIX-S2Q-4 (low) | INT-104 (`ios/Runner/Info.plist`) | `NSPhotoLibraryAddUsageDescription` is still the 1.1 text "Danaview saves the videos you export to your photo library.", but S2's Save to Photos saves photos and videos from Danaview folders | Simulator prompt screenshot (§2) | Reword (for example "Danaview saves copies of your photos and videos to your photo library when you choose Save to Photos.") together with D-2's `NSPhotoLibraryUsageDescription` |
-| FIX-S2Q-5 (low) | QA-00 (`integration_test/editor/support/e2e_app.dart`) | `E2eApp._boot` does not add S2-W's `filesHomeOverrides`, so the v1.1 suite with `DANAVIEW_FILES_HOME=true` runs the new Home without the library | §3 note | Add `...(await filesHomeOverrides(prefs: prefs)).overrides` to the boot (nothing with the flag off) |
+| **FIX-S2Q-5** | QA-00 (`integration_test/editor/support/e2e_app.dart`) | `E2eApp._boot` does not add S2-W's `filesHomeOverrides`, so the v1.1 suite with `DANAVIEW_FILES_HOME=true` runs the new Home without the library (tabs empty, no Import, no import service, no thumbnails): not the shipped S2 composition, so §3 batch 2 is partial. **Blocks the S2-Q verdict** | §3 | Add `...(await filesHomeOverrides(prefs: prefs)).overrides` to the boot (nothing with the flag off), then S2-Q re-runs §3 batch 2 |
 | D-5 (from §Wiring) | HOM-04 | Rule 30 still fails on `ThumbnailCoreTests.swift:186` | §1 | as §Wiring |
 | D-2 (from §Wiring) | INT-104 | No `NSPhotoLibraryUsageDescription`: "Show my photo library" terminates the app (not exercised in E2E for that reason) | §Wiring | blocks S2-R |
 
