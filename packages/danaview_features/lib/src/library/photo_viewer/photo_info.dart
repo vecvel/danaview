@@ -165,7 +165,10 @@ final class PhotoInfoRow {
 String _two(int v) => v.toString().padLeft(2, '0');
 
 /// `21 October 2026, 09:05`.
-String formatPhotoDateTime(DateTime t) => '${t.day} ${photoMonthName(t.month)} ${t.year}, ${_two(t.hour)}:${_two(t.minute)}';
+String formatPhotoDateTime(DateTime time) {
+  final t = time.toLocal();
+  return '${t.day} ${photoMonthName(t.month)} ${t.year}, ${_two(t.hour)}:${_two(t.minute)}';
+}
 
 /// `1/120 s`, `0.5 s`, `2 s`, `30 s`.
 String formatExposure(double seconds) {
