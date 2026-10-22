@@ -7,7 +7,19 @@ Emulators on the Windows laptop (BUILD_PLAN QA-02). It also holds the API 28 bel
 Android export extra on API 34 and API 35, the tablet run of scenario 12, and the manual tablet
 steps for the owner (hardware keyboard, mouse, drag from Files and Photos).
 
-**Status (2026-10-22, 18:40 IST, code I `editor-android` d2600495, the D11 fix): not certified,
+**Status (2026-10-22, 20:00 IST): QA-02 certified (2026-10-22), except the owner's manual tablet
+checklist M1–M4.** The last open item, the QA-05 Android half, is green on **code J
+`editor-android` 0fa78966** (the D12 fix): selftest pass, process-death chain 7/7, and both seeded
+soaks (seed 5150, 15 min) with 0 failures, no crash, ANR or OOM in our app and memory −3.0 % and
++1.1 % (`QA-05-soak.md` §A0000). **s18 on Pixel_API_29_2GB (tier MINIMAL) passes on 0fa78966**
+(208 s, fresh install, audio, alone, 0 emulator restarts; "Re-run on 0fa78966 (D12)" below). The
+certification rests on these code versions: **0fa78966** for the QA-05 Android half and s18 on the
+2 GB AVD (s18 there also passed on d2600495), **8725e25c** for the other final re-run items (the
+2 GB batch s01–s04, s18 on API 29 and API 35), **d680bd3** and **88469c0** for the earlier certified
+parts, and the owner's s13 emulator-limitation decision. D11 and D12 are closed. Open: only the
+owner's M1–M4.
+
+**Previous status (2026-10-22, 18:40 IST, code I `editor-android` d2600495, the D11 fix): not certified,
 because the QA-05 Android half is still not green.** QA-02's own item for this round passes:
 **s18 on Pixel_API_29_2GB (tier MINIMAL) passes on d2600495** (139 s, fresh install, audio, 0
 emulator restarts; "Re-run on d2600495 (D11)" below). On the QA-05 side, D11 is fixed: the
@@ -268,6 +280,11 @@ API 35 images the emulator raises the 3072 MB of `config.ini` to 4096 MB, which 
 
 ## Code versions
 
+**Certification round: J = 0fa78966** (`editor-android`, 2026-10-22): H plus the D11 fix (I =
+d2600495) and the D12 fix (0fa78966). The QA-05 Android half ran from the main checkout
+(`emulator-5554`, clean checkout) and s18 on the 2 GB AVD from `C:/dev/dv2` (`emulator-5556`),
+both at 0fa78966 ("Re-run on 0fa78966 (D12)").
+
 **Final re-run: H = 8725e25c** (`editor-android`, 2026-10-22). This is code G plus the Android-lane
 op #262 fix (f11d4abc: a superseded plan build in `MultiPlayerEngine` waits for the newest one),
 the AND-14 test change (9eebbff0) and `origin/editor-wip` merged again, which brings FIX M-24
@@ -325,6 +342,29 @@ Earlier labels, used only in the history note:
   2026-10-16/17.
 
 ## Results matrix
+
+### Re-run on 0fa78966 (D12)
+
+**Code J = 0fa78966** (`editor-android`): code I plus the D12 fix (0fa78966, `PcmStream` teardown
+runs on the decoder's callback thread) and the D11 session tests (c5a458d7, test only). The Mac
+lead's rule (97ec109e, cbefb080): on one code version and on mains power, re-run the QA-05 death
+chain and both seeded soaks, plus s18 once on the 2 GB AVD; if green, certify.
+
+| Item | Device | Result |
+|---|---|---|
+| QA-05 selftest, death chain, seeded soaks a and b | Pixel_9_Pro_XL_API_35, `emulator-5554`, alone | **pass**: selftest 30 ok, death 7/7, soaks 0 failures each (334 and 262 ops), −3.0 % and +1.1 % memory, one pid each, no ANR/fatal/OOM (`QA-05-soak.md` §A0000) |
+| s18 | Pixel_API_29_2GB (MINIMAL), `emulator-5556`, alone | **pass** (208 s), 0 failed, 0 emulator restarts |
+
+The s18 command was `DANAVIEW_E2E_ONLY="s18" DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1
+DANAVIEW_E2E_MODELS=C:/dev/models scripts/ci/editor/e2e_android.sh emulator-5556`, run from
+`C:/dev/dv2` (`CODE_VERSION.txt`: 0fa78966; refreshed 19:06 from the main checkout's tracked files,
+`cmp` found `lib`, `integration_test`, `scripts` and the engine's Android sources byte-identical, no
+stale files). The AVD was booted by hand with `-port 5556 -feature GLESDynamicVersion
+-no-snapshot-save` and audio, 19:49–19:54 IST, on mains power, after `emulator-5554` was stopped.
+Zygote heap 512m. Capabilities line: `tier=MINIMAL api=29 ram=2089222144 gles3=true`. Evidence:
+`build/e2e/android/emulator-5556_Pixel_API_29_2GB/0fa78966/` (`summary.txt`, `runner_console.log`,
+`CODE_VERSION.txt`, `README.txt`, `logs/`, `screens/`, `files/`). The d2600495 evidence is in
+`build/e2e/android/_before_0fa78966/`.
 
 ### Re-run on d2600495 (D11)
 
@@ -1331,7 +1371,23 @@ The owner's rule for this round (2026-10-22): the re-run items run on d680bd3 an
 clean pass stands on 88469c0. If every re-run item passes and nothing else is open except the
 manual M1–M4, QA-02 is certified with that exception.
 
-**Verdict (2026-10-22, D11 re-run on d2600495): QA-02 is NOT certified yet.**
+**Verdict (2026-10-22, D12 re-run on 0fa78966): QA-02 is certified (2026-10-22), except the
+owner's manual tablet checklist M1–M4.**
+
+- **QA-02's own item: green.** s18 passes on Pixel_API_29_2GB on 0fa78966 (208 s).
+- **QA-05 Android half: green and certified** (`QA-05-soak.md` §A0000): selftest pass, death chain
+  7/7, seeded runs a and b with 0 failures, no crash, ANR or OOM in our app, memory −3.0 % and
+  +1.1 %. D11 and D12 are closed.
+
+The certification names **0fa78966** for the QA-05 Android half and s18 on the 2 GB AVD,
+**8725e25c** for the other final re-run items, **d680bd3** and **88469c0** for the earlier certified
+parts, and the owner's s13 emulator-limitation decision.
+
+**Still open (this list replaces the d2600495 list below):**
+
+1. **Owner (manual): M1–M4 on the tablet.**
+
+**Earlier verdict (2026-10-22, D11 re-run on d2600495): QA-02 is NOT certified yet.**
 
 - **QA-02's own item: green.** s18 passes on Pixel_API_29_2GB on d2600495. The 8725e25c items
   below still stand, because D11 does not touch the QA-02 paths (Mac lead, 97ec109e).
