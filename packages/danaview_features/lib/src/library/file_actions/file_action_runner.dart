@@ -6,7 +6,7 @@
 // create-new copies), the library actions through [LibraryFileActions] (every write fires the
 // store's changes, so tabs re-query in the same frame), with kit dialogs and toasts. Delete asks
 // first and says "Used in N projects" when an editor project or photo edit holds a file. Nothing
-// here logs (rule 30).
+// here logs (rule 30), and no error escapes: unexpected ones end in the generic toast.
 
 import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -117,6 +117,12 @@ Future<bool> runFileAction(BuildContext context, WidgetRef ref, FileAction actio
       _ => 'That didn’t work. Try again',
     };
     if (context.mounted) _toast(context, message, kind: DanaviewToastKind.error);
+    return false;
+  } catch (_) {
+    // Anything else (a raw FileSystemException in process, the writer isolate's StateError, a
+    // platform error): its text can carry library paths and file names, so it is neither logged
+    // nor rethrown (rule 30); the user gets the generic toast.
+    if (context.mounted) _toast(context, fileOutErrorMessage(FileOutError.failed, action), kind: DanaviewToastKind.error);
     return false;
   }
 }

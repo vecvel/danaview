@@ -36,7 +36,7 @@ final class _Port implements FileOutPort {
 
   final List<(String, List<OutFile>, SaveOutTarget?)> calls = [];
   SaveOutOutcome saveAnswer = const SaveOutOutcome(cancelled: false, saved: 2, failed: 0);
-  FileOutException? fail;
+  Object? fail;
 
   @override
   Future<SaveOutOutcome> saveOut(List<OutFile> files, SaveOutTarget target, {OutAnchor? anchor}) async {
@@ -267,6 +267,19 @@ void main() {
     expect(port.calls.last.$3, SaveOutTarget.photos);
     expect(find.text('Danaview isn’t allowed to add to Photos'), findsOneWidget);
     expect(_container(tester).read(homeSelectionProvider).length, 1, reason: 'a failure keeps the selection');
+
+    // Any other error (a raw FileSystemException whose text holds a path and a file name, or the
+    // writer isolate's StateError) ends in the generic toast, never as an unhandled error.
+    port.fail = const FileSystemException('Cannot copy file', '/library/files/fe_1/Secret name.pdf');
+    await _tapAction(tester, 'file-save-out');
+    expect(find.text('That didn’t work. Try again'), findsOneWidget);
+    expect(find.textContaining('Secret name'), findsNothing);
+    expect(tester.takeException(), isNull);
+    expect(_container(tester).read(homeSelectionProvider).length, 1);
+    port.fail = StateError('PathNotFoundException');
+    await _tapAction(tester, 'file-save-out');
+    expect(find.text('That didn’t work. Try again'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await lib.close(tester);
   });
 

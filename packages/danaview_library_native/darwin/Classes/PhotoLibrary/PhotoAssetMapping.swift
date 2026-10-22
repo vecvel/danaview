@@ -1,7 +1,11 @@
 // OWNER: HOM-02
 //
 // PHAsset → PhotoAssetRecord and image properties → PhotoDetailRecord (ARCH v1.2 §8; V2-V2 Apple
-// half): RAW from the asset's resources (`public.camera-raw-image` conformance, RAW+JPEG pairs as
+// half). Two grid records: `pageRecord` (fetchPage) reads PHAsset properties only, because
+// `PHAssetResource.assetResources(for:)` is a per-asset database lookup that a 200-500 asset page
+// can't afford (HOM-04's 120 ms visible-cell budget); its filename, UTI and MIME are nil, RAW is
+// false and Live comes from `photoLive`. `record` (fetchAssets for a few ids, assetDetail) adds the
+// resource facts: RAW from the asset's resources (`public.camera-raw-image` conformance, RAW+JPEG pairs as
 // `.alternatePhoto`), HDR from `photoHDR`, Live from `photoLive` (or a paired-video resource),
 // HEIC/AVIF from the primary resource's UTI. EXIF basics come from ImageIO properties, which reads
 // headers without decoding pixels.
@@ -45,7 +49,32 @@ enum PhotoAssetMapping {
     }
   }
 
-  /// The grid record of [asset]; [resources] defaults to the asset's resources.
+  /// The page record of [asset]: PHAsset properties only, no resource lookup (filename, UTI and
+  /// MIME are nil, RAW is false; `record` or the detail call has them).
+  static func pageRecord(from asset: PHAsset) -> PhotoAssetRecord? {
+    guard let kind = kind(of: asset) else { return nil }
+    let subtypes = asset.mediaSubtypes
+    return PhotoAssetRecord(
+      localIdentifier: asset.localIdentifier,
+      kind: kind,
+      widthPx: asset.pixelWidth,
+      heightPx: asset.pixelHeight,
+      creationTimeMs: asset.creationDate.map(millis),
+      modificationTimeMs: asset.modificationDate.map(millis),
+      durationMs: kind == .video ? Int64((asset.duration * 1000).rounded()) : 0,
+      isFavorite: asset.isFavorite,
+      isRaw: false,
+      isHdr: subtypes.contains(.photoHDR),
+      isLivePhoto: kind == .photo && subtypes.contains(.photoLive),
+      isScreenshot: subtypes.contains(.photoScreenshot),
+      originalFilename: nil,
+      uti: nil,
+      mimeType: nil
+    )
+  }
+
+  /// The full grid record of [asset] with its resource facts; [resources] defaults to the asset's
+  /// resources (one database lookup per asset: use it for a few ids, never for a page).
   static func record(from asset: PHAsset, resources: [PHAssetResource]? = nil) -> PhotoAssetRecord? {
     guard let kind = kind(of: asset) else { return nil }
     let all = resources ?? PHAssetResource.assetResources(for: asset)

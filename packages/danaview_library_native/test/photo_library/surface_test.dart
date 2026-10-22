@@ -23,13 +23,10 @@ const _hostApis = [
   'BackupFlagHostApi',
 ];
 
-/// Placeholder classes of later tickets: file → owner.
+/// Placeholder classes of later tickets that have not landed yet: file → owner. Pickers (HOM-20),
+/// Thumbnails (HOM-04) and ExportOut / Share / OpenIn (HOM-22) are implemented and left this
+/// list; their own tests cover them.
 const _placeholders = {
-  'darwin/Classes/Pickers/PickerHostApiImpl.swift': 'HOM-20',
-  'darwin/Classes/Thumbnails/ThumbnailHostApiImpl.swift': 'HOM-04',
-  'darwin/Classes/ExportOut/ExportOutHostApiImpl.swift': 'HOM-22',
-  'darwin/Classes/Share/ShareHostApiImpl.swift': 'HOM-22',
-  'darwin/Classes/OpenIn/OpenInHostApiImpl.swift': 'HOM-22',
   'darwin/Classes/QuickLook/QuickLookHostApiImpl.swift': 'HOM-26',
   'darwin/Classes/Inbox/InboxHostApiImpl.swift': 'HOM-21',
 };
@@ -89,6 +86,12 @@ void main() {
       expect(methods, greaterThan(0), reason: entry.key);
       expect(answers, methods, reason: '${entry.key}: every method answers notSupportedOnDevice');
     }
+    final thumbs = File('darwin/Classes/Thumbnails/ThumbnailHostApiImpl.swift').readAsStringSync();
+    expect(
+      RegExp(r'func documentThumbnail\([^{]*\{\s*completion\(\.failure\(LibraryErrors\.notSupported\(').hasMatch(thumbs),
+      isTrue,
+      reason: 'documentThumbnail answers notSupportedOnDevice until HOM-26 lands',
+    );
     final incoming = File('darwin/Classes/Glue/IncomingHostApiImpl.swift').readAsStringSync();
     expect(RegExp(r'LibraryErrors\.notSupported\(').allMatches(incoming), hasLength(2), reason: 'Android only');
   });

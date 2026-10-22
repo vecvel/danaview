@@ -4,8 +4,7 @@
 // Now Playing strip (opens the player), Continue watching (the 1.1 history; plays through
 // `danaviewPlayItems`, so the player still receives `MediaRef`, ARCH §1.5), the playlists, the
 // video folders (linked folders; they open the 1.1 browser), then a grid of the Danaview library's
-// videos with a duration pill and resolution / frame-rate / HDR labels (HOM-13's badge widgets
-// replace these labels once they land). The 1.1 sections themselves stay on the Overview tab
+// videos with HOM-13's badge overlay (duration pill, resolution, frame rate >= 50, HDR; V2-110). The 1.1 sections themselves stay on the Overview tab
 // unchanged; this tab only reads the same providers.
 
 import 'package:danaview_domain/danaview_domain.dart';

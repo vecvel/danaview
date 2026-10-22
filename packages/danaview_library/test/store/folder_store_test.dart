@@ -145,6 +145,24 @@ void main() {
       expect(await store.checkInvariants(), isEmpty);
     });
 
+    test('a move refused partway through leaves every row and file as it was', () async {
+      final x = await store.write((w, now) => w.createFolder('X', now: now));
+      await importInto(store, 'a.txt', folder: x);
+      final a2 = await importInto(store, 'a.txt');
+      final b = await importInto(store, 'b.txt');
+      await store.write((w, now) => w.trashEntries([b.id], now: now));
+      await expectLater(
+        store.write((w, now) => w.moveEntries([a2.id, b.id], x, now: now)),
+        throwsA(isA<LibraryWriteException>().having((e) => e.error, 'error', LibraryWriteError.trashed)),
+      );
+      final row = store.reader.entry(a2.id)!;
+      expect(row.folderId, imported());
+      expect(row.displayName, 'a.txt');
+      expect(store.fsNames(a2.id), ['a.txt']);
+      expect(File(store.paths.entryFile(a2.id, row.displayName)).existsSync(), isTrue);
+      expect(await store.checkInvariants(), isEmpty);
+    });
+
     test('favourites, page queries by kind and folder', () async {
       final photo = await importInto(store, 'beach.jpg');
       await importInto(store, 'clip.mp4');

@@ -7,7 +7,7 @@
 //   §1A), and appear when the switch is on;
 // * linked-folder documents are read-only: Open only, no Rename / Move / Delete;
 // * the Videos tab keeps the player hub (Continue watching, playlists, video folders) and grids
-//   the library's videos with duration and resolution labels;
+//   the library's videos with HOM-13's badges (duration, resolution, frame rate, HDR);
 // * a write re-reads the lists in the next frame;
 // * the matrix 280–1280 px × text scale 0.85–1.35 with no overflow, ≥ 44 px targets, semantics
 //   labels (ARCH §1.4).
@@ -18,6 +18,7 @@
 import 'dart:io';
 
 import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_features/src/library/badges/media_badges.dart';
 import 'package:danaview_features/src/library/filters/entry_widgets.dart';
 import 'package:danaview_features/src/library/filters/filter_providers.dart';
 import 'package:danaview_features/src/library/filters/library_filters.dart';
@@ -332,7 +333,7 @@ void main() {
       expect(find.descendant(of: tile, matching: find.text('4K')), findsOneWidget);
       expect(find.descendant(of: tile, matching: find.text('60 fps')), findsOneWidget);
       expect(find.descendant(of: tile, matching: find.text('3:05')), findsOneWidget);
-      expect(find.bySemanticsLabel(RegExp('^Video Drone.mp4, 3:05, 4K, 60 fps')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('^Video Drone.mp4, 4K, 60 frames per second, 3:05')), findsOneWidget);
 
       await tester.tap(tile);
       await tester.tap(find.text('Road trip'));
@@ -345,13 +346,15 @@ void main() {
       await env.dispose();
     });
 
-    test('resolution labels', () {
-      expect(videoResolutionLabel(3840, 2160), '4K');
-      expect(videoResolutionLabel(2160, 3840), '4K');
-      expect(videoResolutionLabel(1920, 1080), '1080p');
-      expect(videoResolutionLabel(1280, 720), '720p');
-      expect(videoResolutionLabel(640, 480), isNull);
-      expect(videoResolutionLabel(null, 1080), isNull);
+    test('video tile badges follow HOM-13 (V2-110)', () {
+      List<String> labels(EntryMeta meta) => [for (final l in MediaBadges.ofMeta(FileKind.video, meta).labels) l.label];
+      expect(labels(const EntryMeta(width: 3840, height: 2160)), ['4K']);
+      expect(labels(const EntryMeta(width: 2160, height: 3840)), ['4K']);
+      expect(labels(const EntryMeta(width: 1920, height: 1080)), ['1080p']);
+      expect(labels(const EntryMeta(width: 1920, height: 800)), ['1080p']);
+      expect(labels(const EntryMeta(width: 1280, height: 720)), isEmpty);
+      expect(labels(const EntryMeta(width: 640, height: 480, fps: 30)), isEmpty);
+      expect(labels(const EntryMeta(height: 1080)), isEmpty);
       expect(formatFileSize(512), '512 B');
       expect(formatFileSize(1536), '1.5 KB');
       expect(formatFileSize(12 * 1024 * 1024), '12 MB');

@@ -16,6 +16,7 @@ import 'package:danaview_features/src/library/home/home_tab_host.dart';
 import 'package:danaview_features/src/library/home/home_tab_strip.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -443,6 +444,94 @@ void main() {
       expect(homeEditorPlatform(TargetPlatform.fuchsia), isFalse);
       expect(HomeTabSlots.none.bodyOf(HomeTab.home), isNull);
       expect(HomeCallbacks.none.onOpenProjects, isNull);
+    });
+  });
+
+  group('selection bar inset, flag on', () {
+    const barKey = ValueKey('test-selection-bar');
+
+    /// A bar that shows only while [selecting], like HomeSelectionBar (which is empty without a
+    /// selection), and includes the bottom safe area.
+    HomeSlotBuilder bar(ValueNotifier<bool> selecting) => (_) => ValueListenableBuilder<bool>(
+          valueListenable: selecting,
+          builder: (_, on, __) => on
+              ? const SafeArea(top: false, child: SizedBox(key: barKey, height: 120, child: Text('SELECTION BAR')))
+              : const SizedBox.shrink(),
+        );
+
+    /// Scrolls the visible scrollable of [tab] to its end.
+    Future<void> scrollToEnd(WidgetTester tester, HomeTab tab) async {
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(of: _page(tab), matching: find.byType(Scrollable)).first,
+      );
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+      await pumpFrames(tester, count: 4);
+    }
+
+    /// The bottom edge, in global coordinates, of the last laid-out row of [tab]'s list.
+    double lastRowBottom(WidgetTester tester, HomeTab tab) {
+      final list = tester.renderObject<RenderSliverMultiBoxAdaptor>(
+        find.descendant(of: _page(tab), matching: find.byWidgetPredicate((w) => w is SliverMultiBoxAdaptorWidget)).first,
+      );
+      final last = list.lastChild!;
+      return last.localToGlobal(Offset(0, last.size.height)).dy;
+    }
+
+    testWidgets('the last row of a shell page and of a supplied body scrolls above the bar', (tester) async {
+      useFilesHome(true);
+      final selecting = ValueNotifier(false);
+      addTearDown(selecting.dispose);
+      const surface = TestSurface(Size(402, 874), 1.0, padding: EdgeInsets.only(top: 47, bottom: 34));
+      useSurface(tester, surface);
+      final env = await LibraryTestEnv.create();
+      await seedFixedLibrary(env);
+      for (var i = 0; i < 30; i++) {
+        await env.library.createPlaylist('Inset playlist $i');
+      }
+      await tester.pumpWidget(libraryTestApp(
+        env,
+        _home(
+          slots: HomeTabSlots(
+            photos: (_) => ListView.builder(
+              itemCount: 80,
+              itemBuilder: (_, i) => SizedBox(height: 60, child: Text('photo row $i')),
+            ),
+            selectionBar: bar(selecting),
+          ),
+        ),
+      ));
+      await pumpFrames(tester);
+      expect(tester.takeException(), isNull);
+
+      for (final tab in [HomeTab.playlists, HomeTab.photos]) {
+        await _tapTab(tester, tab);
+        await scrollToEnd(tester, tab);
+        final offsetBefore = tester
+            .state<ScrollableState>(find.descendant(of: _page(tab), matching: find.byType(Scrollable)).first)
+            .position
+            .pixels;
+
+        selecting.value = true; // an item is selected: the bar appears
+        await pumpFrames(tester, count: 4);
+        expect(find.byKey(barKey), findsOneWidget);
+        // The page keeps its state (scroll offset) when the bar appears.
+        expect(
+          tester
+              .state<ScrollableState>(find.descendant(of: _page(tab), matching: find.byType(Scrollable)).first)
+              .position
+              .pixels,
+          offsetBefore,
+        );
+        await scrollToEnd(tester, tab);
+        final barTop = tester.getTopLeft(find.byKey(const ValueKey('home-slot-selection-bar'))).dy;
+        expect(lastRowBottom(tester, tab), lessThanOrEqualTo(barTop), reason: '$tab last row under the bar');
+
+        selecting.value = false;
+        await pumpFrames(tester, count: 4);
+        expect(find.byKey(barKey), findsNothing);
+      }
+      expect(tester.takeException(), isNull);
+      await finishHome(tester, env);
     });
   });
 

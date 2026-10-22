@@ -1,7 +1,7 @@
 // OWNER: HOM-02
 //
-// Glue tests (macOS, linked against FlutterMacOS): every placeholder class of a later ticket
-// answers `notSupportedOnDevice` (BUILD_PLAN HOM-02), Incoming is Android-only, the backup flag
+// Glue tests (macOS, linked against FlutterMacOS): every placeholder class of a later ticket that
+// has not landed yet answers `notSupportedOnDevice` (BUILD_PLAN HOM-02), Incoming is Android-only, the backup flag
 // round-trips on a temporary file, and the Pigeon conversions keep every field.
 
 import FlutterMacOS
@@ -34,29 +34,13 @@ final class LibraryGlueTests: XCTestCase {
 
   func testEveryPlaceholderAnswersNotSupportedOnDevice() {
     let item = FileItemMsg(path: "/tmp/x", displayName: "x")
-    let pickers = PickerHostApiImpl(context: context)
-    assertNotSupported("pickPhotos") { pickers.pickPhotos(request: PhotoPickRequestMsg(selectionLimit: 0, filter: .all, destinationDirectory: "/tmp"), completion: $0) }
-    assertNotSupported("pickDocuments") { pickers.pickDocuments(request: DocumentPickRequestMsg(allowMultiple: true, utis: [], mimeTypes: []), completion: $0) }
-    assertNotSupported("copyToFile") { pickers.copyToFile(request: CopyRequestMsg(requestId: "r", sourceUri: "file:///tmp/x", destinationPath: "/tmp/y", resumeFromOffset: 0), completion: $0) }
-    assertThrowsNotSupported("picker cancelCopy") { try pickers.cancelCopy(requestId: "r") }
-    assertThrowsNotSupported("release") { try pickers.release(uri: "file:///tmp/x") }
-
+    // Pickers (HOM-20), Thumbnails (HOM-04, except documentThumbnail until HOM-26) and
+    // ExportOut / Share / OpenIn (HOM-22) are implemented; only placeholder answers are checked.
     let thumbs = ThumbnailHostApiImpl(context: context)
-    assertNotSupported("mediaThumbnail") {
-      thumbs.mediaThumbnail(request: MediaThumbnailRequestMsg(requestId: "t", source: "ph:x", widthPx: 1, heightPx: 1, mode: .fill, format: .jpeg, quality: 0.8, outputPath: "/tmp/t"), completion: $0)
-    }
     assertNotSupported("documentThumbnail") {
       thumbs.documentThumbnail(request: DocumentThumbnailRequestMsg(requestId: "t", path: "/tmp/x", widthPx: 1, heightPx: 1, scale: 2, format: .jpeg, quality: 0.8, outputPath: "/tmp/t"), completion: $0)
     }
-    assertThrowsNotSupported("thumb cancel") { try thumbs.cancel(requestId: "t") }
-    assertThrowsNotSupported("updateCaching") { try thumbs.updateCaching(window: ThumbnailCachingMsg(startSources: [], stopSources: [], widthPx: 1, heightPx: 1, mode: .fill)) }
 
-    let out = ExportOutHostApiImpl(context: context)
-    assertNotSupported("saveOut") { out.saveOut(request: SaveOutRequestMsg(items: [item], destination: .files), completion: $0) }
-    let share = ShareHostApiImpl(context: context)
-    assertNotSupported("share") { share.share(request: ShareRequestMsg(items: [item]), completion: $0) }
-    let openIn = OpenInHostApiImpl(context: context)
-    assertNotSupported("openIn") { openIn.openIn(request: OpenInRequestMsg(item: item), completion: $0) }
     let quickLook = QuickLookHostApiImpl(context: context)
     assertNotSupported("canPreview") { quickLook.canPreview(item: item, completion: $0) }
     assertNotSupported("present") { quickLook.present(request: QuickLookRequestMsg(items: [item], initialIndex: 0), completion: $0) }

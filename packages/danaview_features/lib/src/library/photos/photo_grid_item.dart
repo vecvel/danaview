@@ -10,6 +10,8 @@
 import 'package:danaview_library/danaview_library.dart';
 import 'package:flutter/foundation.dart';
 
+import '../badges/media_badges.dart';
+
 /// Where a Photos tab cell comes from.
 enum PhotoOrigin {
   /// A Danaview folder (library.db, `fe_` id).
@@ -74,6 +76,7 @@ final class PhotoGridItem {
     this.height = 0,
     this.folderId,
     this.isFavourite = false,
+    this.badges = MediaBadges.none,
     this.media,
   });
 
@@ -107,6 +110,9 @@ final class PhotoGridItem {
   /// Starred in Danaview.
   final bool isFavourite;
 
+  /// The Live, RAW and HDR badges (V2-110, HOM-13).
+  final MediaBadges badges;
+
   /// The library item for system and desktop photos (the viewer's input), null for Danaview ones.
   final MediaItem? media;
 
@@ -117,10 +123,12 @@ final class PhotoGridItem {
   bool operator ==(Object other) =>
       other is PhotoGridItem &&
       other.id == id &&
+      other.date.isAtSameMomentAs(date) &&
       other.modifiedAt.isAtSameMomentAs(modifiedAt) &&
       other.width == width &&
       other.height == height &&
       other.isFavourite == isFavourite &&
+      other.badges == badges &&
       other.name == name &&
       other.folderId == folderId;
 
@@ -146,6 +154,7 @@ PhotoGridItem photoGridItemOf(PhotoMediaItem photo, PhotoOrigin origin) {
     thumbSource: source,
     width: photo.width,
     height: photo.height,
+    badges: MediaBadges.ofItem(photo),
     media: photo,
   );
 }

@@ -6,6 +6,7 @@
 // unchanged plus the Recent photos and Favourites slots; the other tabs come from [HomeTabSlots].
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_data/danaview_data.dart';
 import 'package:danaview_domain/danaview_domain.dart';
@@ -78,6 +79,15 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
 
   /// The selected tab with DANAVIEW_FILES_HOME on.
   late HomeTab _tab = widget.initialTab;
+
+  /// The laid-out height of the selection bar slot (0 while it shows nothing). The tab host gets it
+  /// as bottom MediaQuery padding so the last row of every page scrolls out from under the bar.
+  double _selectionBarHeight = 0;
+
+  void _onSelectionBarSize(Size size) {
+    if (!mounted || size.height == _selectionBarHeight) return;
+    setState(() => _selectionBarHeight = size.height);
+  }
 
   LibraryController get _library => ref.read(libraryControllerProvider.notifier);
 
@@ -355,10 +365,32 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
             body: Stack(
               children: [
                 Positioned.fill(
-                  child: HomeTabHost(
-                    tabs: tabs,
-                    selected: selected,
-                    pageBuilder: _tabPage,
+                  // A page or slot asks for a tab (See all of the Recent photos tray): select it
+                  // here, and let the request keep bubbling to any app shell above (false).
+                  child: NotificationListener<HomeTabRequestNotification>(
+                    onNotification: (request) {
+                      if (_visibleTabs(context).contains(request.tab)) _selectTab(request.tab);
+                      return false;
+                    },
+                    child: Builder(
+                      builder: (context) {
+                        final host = HomeTabHost(
+                          tabs: tabs,
+                          selected: selected,
+                          pageBuilder: _tabPage,
+                        );
+                        final barHeight = 0.0;
+                        // Always wrapped (same tree shape) so the tab pages keep their state when
+                        // the bar appears. The bar already includes the bottom safe area, so it
+                        // replaces that inset rather than adding to it.
+                        final media = MediaQuery.of(context);
+                        final bottom = barHeight > media.padding.bottom ? barHeight : media.padding.bottom;
+                        return MediaQuery(
+                          data: media.copyWith(padding: media.padding.copyWith(bottom: bottom)),
+                          child: host,
+                        );
+                      },
+                    ),
                   ),
                 ),
                 if (selectionBar != null)
@@ -366,7 +398,10 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    child: KeyedSubtree(key: const ValueKey('home-slot-selection-bar'), child: Builder(builder: selectionBar)),
+                    child: _SizeReporter(
+                      onSize: _onSelectionBarSize,
+                      child: KeyedSubtree(key: const ValueKey('home-slot-selection-bar'), child: Builder(builder: selectionBar)),
+                    ),
                   ),
               ],
             ),
@@ -629,6 +664,35 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Reports [child]'s laid-out size after each layout in which it changed (HOM-05 selection bar).
+class _SizeReporter extends SingleChildRenderObjectWidget {
+  const _SizeReporter({required this.onSize, super.child});
+
+  final ValueChanged<Size> onSize;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderSizeReporter(onSize);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderSizeReporter renderObject) => renderObject.onSize = onSize;
+}
+
+class _RenderSizeReporter extends RenderProxyBox {
+  _RenderSizeReporter(this.onSize);
+
+  ValueChanged<Size> onSize;
+  Size? _reported;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final current = size;
+    if (current == _reported) return;
+    _reported = current;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onSize(current));
   }
 }
 

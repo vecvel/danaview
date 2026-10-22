@@ -11,6 +11,7 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../badges/media_badge_overlay.dart';
 import '../sources/system_photos_source.dart';
 import '../thumbs/library_thumbnail.dart';
 import '../thumbs/thumb_key.dart';
@@ -200,7 +201,9 @@ class PhotoDateHeader extends StatelessWidget {
 String photoCellLabel(PhotoGridItem photo) {
   final d = photo.date.toLocal();
   final date = '${d.day} ${photoMonthName(d.month)} ${d.year}';
-  return photo.name.isEmpty ? 'Photo, $date' : 'Photo ${photo.name}, $date';
+  final base = photo.name.isEmpty ? 'Photo, $date' : 'Photo ${photo.name}, $date';
+  final badges = photo.badges.semanticsLabel;
+  return badges.isEmpty ? base : '$base, $badges';
 }
 
 /// One photo of the grid: its thumbnail (HOM-04), centre-cropped to the cell.
@@ -246,6 +249,7 @@ class PhotoGridCell extends StatelessWidget {
               bottom: 4,
               child: Icon(Icons.star_rounded, size: 14, color: DanaviewColors.warning),
             ),
+          MediaBadgeOverlay(badges: photo.badges, excludeSemantics: true),
         ]),
       ),
     );

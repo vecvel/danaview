@@ -348,17 +348,42 @@ final class LibraryWriter {
     _writable();
     transaction(() {
       _liveFolder(target);
+      // Check every id and plan every name before touching a file: a refused id (trashed in the
+      // meantime, missing) must leave the files exactly as they were.
       final taken = _liveEntryNames(target);
+      final plan = <(EntryId, String, String)>[];
+      final planned = <EntryId>{};
       for (final id in ids) {
         final e = _liveEntry(id);
-        if (e.folderId == target) continue;
+        if (e.folderId == target || !planned.add(id)) continue;
         final unique = uniqueName(e.displayName, taken);
-        if (unique != e.displayName) {
-          if (fs.entryFileExists(id, e.displayName)) fs.renameEntryFile(id, e.displayName, unique);
-        }
         taken.add(unique.toLowerCase());
-        db.execute('UPDATE entries SET folder_id = ?, display_name = ? WHERE id = ?', [target.value, unique, id.value]);
-        _faults.hit('move.row');
+        plan.add((id, e.displayName, unique));
+      }
+      // Renames done so far, undone when a later step throws so the rolled-back rows still name
+      // their files. A LibraryCrash is a dying process: nothing runs after it, the next launch's
+      // reconcile repairs the names.
+      final renamed = <(EntryId, String, String)>[];
+      try {
+        for (final (id, from, to) in plan) {
+          if (to != from && fs.entryFileExists(id, from)) {
+            fs.renameEntryFile(id, from, to);
+            renamed.add((id, from, to));
+          }
+          db.execute('UPDATE entries SET folder_id = ?, display_name = ? WHERE id = ?', [target.value, to, id.value]);
+          _faults.hit('move.row');
+        }
+      } on LibraryCrash {
+        rethrow;
+      } catch (_) {
+        for (final (id, from, to) in renamed.reversed) {
+          try {
+            if (fs.entryFileExists(id, to)) fs.renameEntryFile(id, to, from);
+          } catch (_) {
+            // Left for the next launch's reconcile, which renames the file back to its row's name.
+          }
+        }
+        rethrow;
       }
     });
   }

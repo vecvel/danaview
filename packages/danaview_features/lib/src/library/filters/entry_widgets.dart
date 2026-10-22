@@ -2,8 +2,8 @@
 //
 // Rows and tiles of the filter tabs and the Folders tab (HOM plan §5.2, §8.1; ARCH v1.2 §1.4):
 // a file row (type icon or thumbnail, name, size, date, page count where known) for Danaview
-// entries and for linked-folder documents, and the video grid tile of the Videos tab (duration
-// pill, resolution and frame-rate labels until HOM-13's badges land). A Danaview entry's menu
+// entries and for linked-folder documents, and the video grid tile of the Videos tab (HOM-13's
+// MediaBadgeOverlay: duration pill, resolution, frame rate and HDR badges, V2-110). A Danaview entry's menu
 // offers Open, Rename, Move and Delete; a linked-folder file offers Open only: actions that change
 // a file exist only inside Danaview folders (§8.1). Kit components only, ≥ 44 px targets,
 // semantics labels, ellipsised text so nothing overflows at 280 px and text scale 1.35.
@@ -13,6 +13,8 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../badges/media_badge_overlay.dart';
+import '../badges/media_badges.dart';
 import '../files/library_store_providers.dart';
 import '../library_format.dart';
 import '../library_widgets.dart';
@@ -206,18 +208,9 @@ class LinkedDocumentRow extends StatelessWidget {
   }
 }
 
-/// The resolution label of a video: `4K`, `1080p`, `720p` or null.
-String? videoResolutionLabel(int? width, int? height) {
-  if (width == null || height == null) return null;
-  final short = width < height ? width : height;
-  final long = width < height ? height : width;
-  if (long >= 3840 || short >= 2160) return '4K';
-  if (short >= 1080) return '1080p';
-  if (short >= 720) return '720p';
-  return null;
-}
-
-/// One video of the Videos tab's grid: thumbnail, duration pill, resolution and frame-rate labels.
+/// One video of the Videos tab's grid: thumbnail with HOM-13's badge overlay (duration pill,
+/// resolution, frame rate >= 50 and HDR, V2-110) and the name below. The tile speaks the badges in
+/// its own label, so the overlay's semantics are excluded.
 class LibraryVideoTile extends ConsumerWidget {
   /// The tile of [entry].
   const LibraryVideoTile({super.key, required this.entry, this.onOpen});
@@ -231,25 +224,14 @@ class LibraryVideoTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final meta = ref.watch(libraryEntryMetaProvider(entry.id));
-    final duration = meta?.duration;
-    final resolution = videoResolutionLabel(meta?.width, meta?.height);
-    final fps = meta?.fps;
-    final labels = [
-      if (resolution != null) resolution,
-      if (fps != null && fps >= 50) '${fps.round()} fps',
-      if (meta != null && meta.flags & EntryMeta.flagHdr != 0) 'HDR',
-    ];
-    final spoken = [
-      'Video ${entry.displayName}',
-      if (duration != null) formatClock(duration),
-      ...labels,
-    ].join(', ');
+    final badges = MediaBadges.ofMeta(FileKind.video, meta);
+    final spoken = badges.semanticsLabel;
     return KeyedSubtree(
       key: ValueKey('library-video-${entry.id.value}'),
       child: DanaviewPressable(
         onTap: onOpen == null ? null : () => onOpen!(entry),
         borderRadius: DanaviewRadius.mdAll,
-        semanticLabel: spoken,
+        semanticLabel: spoken.isEmpty ? 'Video ${entry.displayName}' : 'Video ${entry.displayName}, $spoken',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -260,19 +242,7 @@ class LibraryVideoTile extends ConsumerWidget {
                   fit: StackFit.expand,
                   children: [
                     LibraryEntryLeading(entry: entry, size: 200),
-                    if (labels.isNotEmpty)
-                      PositionedDirectional(
-                        top: 6,
-                        start: 6,
-                        end: 6,
-                        child: Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: [for (final l in labels) _Pill(l)],
-                        ),
-                      ),
-                    if (duration != null)
-                      PositionedDirectional(bottom: 6, end: 6, child: _Pill(formatClock(duration))),
+                    MediaBadgeOverlay(badges: badges, excludeSemantics: true),
                   ],
                 ),
               ),
@@ -286,29 +256,6 @@ class LibraryVideoTile extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// A label on a dark scrim (light text on near-black: contrast well above 4.5:1 over any frame).
-class _Pill extends StatelessWidget {
-  const _Pill(this.label);
-
-  final String label;
-
-  static const Color _scrim = Color(0xD9000000);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: _scrim, borderRadius: DanaviewRadius.smAll),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: DanaviewTextStyles.micro.copyWith(color: DanaviewColors.foregroundOn(_scrim), fontWeight: FontWeight.w600),
       ),
     );
   }

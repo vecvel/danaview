@@ -74,7 +74,7 @@ final class ExportOutGlueTests: FileOutTestCase {
     XCTAssertFalse(fm.fileExists(atPath: presenter.seen[0].directory.path), "temporary copies are cleaned up")
   }
 
-  func testSavePanelNameIsUsedAndAnExistingFileIsNotReplaced() throws {
+  func testFolderSaveWithChosenNamesNeverReplacesAnExistingFile() throws {
     let a = try libraryItem("Report.pdf")
     let out = dir.appendingPathComponent("Desktop", isDirectory: true)
     try fm.createDirectory(at: out, withIntermediateDirectories: true)
@@ -83,6 +83,43 @@ final class ExportOutGlueTests: FileOutTestCase {
     let r = try save([a]).get()
     XCTAssertEqual(URL(string: r.savedUris[0])!.lastPathComponent, "Final (2).pdf")
     XCTAssertEqual(try Data(contentsOf: out.appendingPathComponent("Final.pdf")), Data("theirs".utf8))
+    try assertUnchanged(a)
+  }
+
+  func testSavePanelFileIsWrittenExactlyAndAConfirmedReplaceOverwrites() throws {
+    let a = try libraryItem("Report.pdf")
+    let out = dir.appendingPathComponent("Desktop", isDirectory: true)
+    try fm.createDirectory(at: out, withIntermediateDirectories: true)
+    let chosen = out.appendingPathComponent("Final: draft.pdf")
+    try Data("theirs".utf8).write(to: chosen)
+    presenter.answer = .success(.file(chosen))
+    let r = try save([a]).get()
+    XCTAssertFalse(r.cancelled)
+    XCTAssertEqual(r.failedCount, 0)
+    XCTAssertEqual(r.savedUris, [chosen.absoluteString], "the exact URL the panel granted, name as typed")
+    XCTAssertEqual(try Data(contentsOf: chosen), Data("library bytes".utf8), "the confirmed Replace overwrites")
+    XCTAssertFalse(fm.fileExists(atPath: out.appendingPathComponent("Final: draft (2).pdf").path), "no numbered file")
+    XCTAssertEqual(try fm.contentsOfDirectory(atPath: out.path), ["Final: draft.pdf"])
+    try assertUnchanged(a)
+    XCTAssertTrue(tempStore().batches().isEmpty, "the batch is removed")
+  }
+
+  func testSavePanelFileNewNameAndAFolderInTheWayFails() throws {
+    let a = try libraryItem("Report.pdf")
+    let out = dir.appendingPathComponent("Docs", isDirectory: true)
+    try fm.createDirectory(at: out, withIntermediateDirectories: true)
+    presenter.answer = .success(.file(out.appendingPathComponent("New.pdf")))
+    XCTAssertEqual(try save([a]).get().savedUris.map { URL(string: $0)!.lastPathComponent }, ["New.pdf"])
+    XCTAssertEqual(try Data(contentsOf: out.appendingPathComponent("New.pdf")), Data("library bytes".utf8))
+
+    let folder = out.appendingPathComponent("Folder.pdf", isDirectory: true)
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    presenter.answer = .success(.file(folder))
+    let r = try save([a]).get()
+    XCTAssertEqual(r.failedCount, 1)
+    XCTAssertTrue(r.savedUris.isEmpty)
+    var isDir: ObjCBool = false
+    XCTAssertTrue(fm.fileExists(atPath: folder.path, isDirectory: &isDir) && isDir.boolValue, "a folder is never replaced")
     try assertUnchanged(a)
   }
 

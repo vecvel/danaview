@@ -2,9 +2,11 @@
 //
 // PhotoLibraryService against the real PhotoKit library of the iOS Simulator (BUILD_PLAN HOM-02):
 // run_xctests.sh seeds it with `xcrun simctl addmedia` (locally generated JPEG, HEIC, PNG and a
-// short H.264 movie) and grants photo access to the test runner. Covers paging, change events on
-// add and delete, limited access and denied access. Tests that need the real library skip when
-// the process has no access (macOS command-line runs: TCC can't be granted there).
+// short H.264 movie) and grants photo access to the test runner. Covers paging (cheap page
+// records, full fetchAssets records), change events on add and delete, stale tokens across
+// stop/start and unobserved re-fetches, limited access and denied access. Tests that need the
+// real library skip when the process has no access (macOS command-line runs: TCC can't be
+// granted there).
 
 import Foundation
 import Photos
@@ -127,8 +129,12 @@ final class PhotoLibraryServiceTests: XCTestCase {
     XCTAssertFalse(videos.assets.isEmpty, "run_xctests.sh seeds a movie")
     XCTAssertTrue(videos.assets.contains { $0.durationMs > 0 })
     XCTAssertTrue(photos.assets.allSatisfy { $0.widthPx > 0 && $0.heightPx > 0 })
-    XCTAssertTrue(photos.assets.contains { $0.uti == "public.heic" && $0.mimeType == "image/heic" }, "the seeded HEIC")
-    XCTAssertTrue(photos.assets.contains { $0.uti == "public.jpeg" && $0.mimeType == "image/jpeg" })
+    // Pages carry cheap fields only (no resource lookups); fetchAssets adds the resource facts.
+    XCTAssertTrue(photos.assets.allSatisfy { $0.uti == nil && $0.mimeType == nil && $0.originalFilename == nil && !$0.isRaw })
+    let full = try resultOf { service.fetchAssets(photos.assets.map(\.localIdentifier), completion: $0) }
+    XCTAssertEqual(full.map(\.localIdentifier), photos.assets.map(\.localIdentifier))
+    XCTAssertTrue(full.contains { $0.uti == "public.heic" && $0.mimeType == "image/heic" }, "the seeded HEIC")
+    XCTAssertTrue(full.contains { $0.uti == "public.jpeg" && $0.mimeType == "image/jpeg" })
     let ids = Array(photos.assets.prefix(2).map(\.localIdentifier)) + ["missing/L0/001"]
     let fetched = try resultOf { service.fetchAssets(ids, completion: $0) }
     XCTAssertEqual(fetched.map(\.localIdentifier), Array(ids.prefix(2)), "unknown ids are left out, order kept")
@@ -137,8 +143,7 @@ final class PhotoLibraryServiceTests: XCTestCase {
   func testDetailOfTheSeededJpeg() throws {
     try requireLibrary()
     let service = liveService()
-    let photos = try page(service, PhotoFetchKey(filter: .photos, sort: .creationNewestFirst, albumId: nil), offset: 0, limit: 500)
-    let seeded = try XCTUnwrap(photos.assets.first { $0.originalFilename?.hasPrefix("dv_seed_exif") == true }, "seeded EXIF JPEG")
+    let seeded = try XCTUnwrap(seededExifJpeg(service), "seeded EXIF JPEG")
     let d = try resultOf { service.assetDetail(seeded.localIdentifier, completion: $0) }
     XCTAssertTrue(d.locallyAvailable)
     XCTAssertEqual(d.cameraModel, "Fixture Cam")
@@ -155,8 +160,7 @@ final class PhotoLibraryServiceTests: XCTestCase {
   func testCopyIsCreateNewAndLeavesTheOriginal() throws {
     try requireLibrary()
     let service = liveService()
-    let photos = try page(service, PhotoFetchKey(filter: .photos, sort: .creationNewestFirst, albumId: nil), offset: 0, limit: 500)
-    let asset = try XCTUnwrap(photos.assets.first { $0.originalFilename?.hasPrefix("dv_seed_exif") == true })
+    let asset = try XCTUnwrap(seededExifJpeg(service))
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("dv_copy_\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: dir) }
@@ -224,6 +228,9 @@ final class PhotoLibraryServiceTests: XCTestCase {
   func testChangeEventOnDelete() throws {
     try requireLibrary()
     let service = liveService()
+    // Observing: the cached snapshot follows applied changes (unobserved pages re-fetch).
+    service.startObserving()
+    defer { service.stopObserving() }
     let full = try page(service, offset: 0, limit: 500)
     let victim = try XCTUnwrap(full.assets.first)
     let options = PhotoLibraryService.options(for: .baseline)
@@ -270,7 +277,48 @@ final class PhotoLibraryServiceTests: XCTestCase {
     XCTAssertEqual(p.totalCount, PHAsset.fetchAssets(with: PhotoLibraryService.options(for: .baseline)).count)
   }
 
+  /// Stopping and restarting the observer drops the snapshots and moves the token, so pages read
+  /// before (when changes went unapplied) are stale.
+  func testStopAndStartObservingMakeEarlierTokensStale() throws {
+    try requireLibrary()
+    let service = liveService()
+    let before = try page(service, offset: 0, limit: 5)
+    service.startObserving()
+    let observed = try page(service, offset: 0, limit: 5, token: before.changeToken)
+    XCTAssertTrue(observed.tokenStale, "startObserving starts from a fresh snapshot")
+    XCTAssertEqual(observed.totalCount, before.totalCount)
+    service.stopObserving()
+    let after = try page(service, offset: 0, limit: 5, token: observed.changeToken)
+    XCTAssertTrue(after.tokenStale, "stopObserving drops the snapshots")
+    let again = try page(service, offset: 5, limit: 5, token: after.changeToken)
+    XCTAssertFalse(again.tokenStale, "an unchanged library keeps the token while not observing")
+  }
+
+  /// Unobserved pages re-fetch and compare: a count change or shifted ids in the page window move
+  /// the token; the same snapshot does not.
+  func testUnobservedRefetchDetectsShifts() throws {
+    try requireLibrary()
+    let options = PhotoLibraryService.options(for: .baseline)
+    let all = PHAsset.fetchAssets(with: options)
+    let first = try XCTUnwrap(all.firstObject)
+    let without = PHAsset.fetchAssets(with: {
+      let o = PhotoLibraryService.options(for: .baseline)
+      o.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [options.predicate!, NSPredicate(format: "NOT (localIdentifier == %@)", first.localIdentifier)])
+      return o
+    }())
+    XCTAssertFalse(PhotoLibraryService.shifted(from: all, to: PHAsset.fetchAssets(with: options), window: (0, 3)))
+    XCTAssertTrue(PhotoLibraryService.shifted(from: all, to: without, window: (0, 3)))
+    XCTAssertTrue(PhotoLibraryService.shifted(from: all, to: without, window: nil))
+  }
+
   // MARK: Helpers
+
+  /// The full record of the seeded EXIF JPEG (pages have no filenames; fetchAssets does).
+  private func seededExifJpeg(_ service: PhotoLibraryService) throws -> PhotoAssetRecord? {
+    let photos = try page(service, PhotoFetchKey(filter: .photos, sort: .creationNewestFirst, albumId: nil), offset: 0, limit: 500)
+    let full = try resultOf { service.fetchAssets(photos.assets.map(\.localIdentifier), completion: $0) }
+    return full.first { $0.originalFilename?.hasPrefix("dv_seed_exif") == true }
+  }
 
   private func resultOf<T>(_ call: (@escaping (Result<T, PhotoLibraryFailure>) -> Void) -> Void) throws -> T {
     let done = expectation(description: "result")

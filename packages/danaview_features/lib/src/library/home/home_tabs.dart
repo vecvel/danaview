@@ -70,6 +70,17 @@ List<HomeTab> visibleHomeTabs({
           tab,
     ];
 
+/// Asks the Home shell to show [tab]. Any page or slot can dispatch it (the Recent photos tray's
+/// See all does when it has no `onSeeAll`); `DanaviewHomeScreen` selects the tab when it is
+/// visible and lets the notification keep bubbling so an app shell above can follow along.
+class HomeTabRequestNotification extends Notification {
+  /// A request for [tab].
+  const HomeTabRequestNotification(this.tab);
+
+  /// The tab to show.
+  final HomeTab tab;
+}
+
 /// The body of one Home tab or slot.
 typedef HomeSlotBuilder = Widget Function(BuildContext context);
 

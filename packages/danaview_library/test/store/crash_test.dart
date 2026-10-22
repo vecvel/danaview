@@ -93,6 +93,23 @@ void main() {
         (s, c) => s.write((w, now) => w.moveEntries([EntryId.parse(c['x']!), EntryId.parse(c['y']!)], FolderId.parse(c['b']!), now: now)));
   });
 
+  test('a move that fails partway (not a crash) undoes the renames it did', () async {
+    final faults = _ThrowAt('move.row');
+    final root = tempRoot();
+    final store = await openStore(root, FakeLibraryClock(t0), faults: faults, seed: 42);
+    final c = await twoFoldersThreeFiles(store);
+    final before = _snapshot(store);
+    faults.armed = true;
+    await expectLater(
+      store.write((w, now) => w.moveEntries([EntryId.parse(c['x']!), EntryId.parse(c['y']!)], FolderId.parse(c['b']!), now: now)),
+      throwsA(isA<StateError>()),
+    );
+    faults.armed = false;
+    expect(_snapshot(store), before);
+    expect(await store.checkInvariants(), isEmpty);
+    await store.close();
+  });
+
   test('move folder', () async {
     await _crashEverywhere('move folder', twoFoldersThreeFiles, (s, c) => s.write((w, now) => w.moveFolder(FolderId.parse(c['b']!), null, now: now)));
   });
@@ -149,4 +166,19 @@ void main() {
     expect(reopened.reader.allEntries(), isEmpty);
     await reopened.close();
   });
+}
+
+/// Throws a plain error (not a [LibraryCrash]) the first time [step] is reached while armed.
+final class _ThrowAt implements LibraryFaults {
+  _ThrowAt(this.step);
+  final String step;
+  bool armed = false;
+
+  @override
+  void hit(String s) {
+    if (armed && s == step) {
+      armed = false;
+      throw StateError('injected failure at $s');
+    }
+  }
 }

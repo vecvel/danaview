@@ -18,6 +18,7 @@
 import 'dart:async';
 
 import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_features/src/library/home/home_tab_host.dart';
 import 'package:danaview_features/src/library/home/recent_photos_tray.dart';
 import 'package:danaview_features/src/library/library_widgets.dart';
 import 'package:danaview_features/src/library/organise/organise_providers.dart';
@@ -37,9 +38,12 @@ import '../photos_tab/photo_masonry_layout_test.dart' show synthetic;
 
 /// A fake system library of [assets] (newest first).
 class _FakeLibrary implements SystemPhotoLibrary {
-  _FakeLibrary(this.assets);
+  _FakeLibrary(this.assets, {this.albums = const {}});
 
   final List<SystemPhotoAsset> assets;
+
+  /// Album id -> the ids of its assets.
+  final Map<String, Set<String>> albums;
   PhotoLibraryAuthorization status = PhotoLibraryAuthorization.notDetermined;
   int requests = 0;
   int fetches = 0;
@@ -80,7 +84,9 @@ class _FakeLibrary implements SystemPhotoLibrary {
     fetches++;
     final list = [
       for (final a in assets)
-        if (filter != SystemPhotoFilter.photos || a.kind == SystemAssetKind.photo) a,
+        if ((filter != SystemPhotoFilter.photos || a.kind == SystemAssetKind.photo) &&
+            (albumId == null || (albums[albumId]?.contains(a.localIdentifier) ?? false)))
+          a,
     ];
     final start = offset.clamp(0, list.length);
     final end = (start + limit).clamp(0, list.length);
@@ -289,6 +295,51 @@ void main() {
     await finishHome(tester, env);
   });
 
+  testWidgets('an album picked on the Photos tab does not narrow the tray (whole library)', (tester) async {
+    useFilesHome(true);
+    final fake = _FakeLibrary(
+      [_asset('A', DateTime(2026, 10, 22, 19)), _asset('B', DateTime(2026, 10, 22, 17)), _asset('C', DateTime(2020, 1, 1))],
+      albums: {
+        'old': {'C'},
+      },
+    );
+    final prefs = InMemorySortPreferenceStore();
+    await prefs.write(photosShowSystemLibraryKey, 'true');
+    final danaview = synthetic(1, from: DateTime(2026, 10, 22, 18));
+    final env = await _pump(tester, const RecentPhotosTray(), photos: danaview, system: fake, prefs: prefs);
+    await pumpFrames(tester, count: 3);
+    expect(_tiles(), findsNWidgets(4));
+
+    // The Photos tab's album chip (photos_tab.dart `_selectAlbum`) narrows the shared controller.
+    final container = ProviderScope.containerOf(tester.element(find.byType(RecentPhotosTray)));
+    await container.read(systemPhotosControllerProvider.notifier).setFilter(SystemPhotoFilter.photos, albumId: 'old');
+    await pumpFrames(tester, count: 3);
+    expect(container.read(systemPhotosControllerProvider).items.map((i) => i.name), ['IMG_C.HEIC']);
+    expect(tester.takeException(), isNull);
+
+    // The tray still shows the newest photos of the whole library, newest first.
+    expect(_tiles(), findsNWidgets(4));
+    expect(find.bySemanticsLabel(RegExp(r'^Photo IMG_A\.HEIC, ')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Photo IMG_B\.HEIC, ')), findsOneWidget);
+    final first = tester.widget(_tiles().first).key! as ValueKey<String>;
+    expect(first.value, 'recent-photo-${systemItemId(_asset('A', DateTime(2026)), SystemPhotoPlatform.photoKit).value}');
+    await finishHome(tester, env);
+  });
+
+  testWidgets('the "+N" tile counts the whole system library, not only the fetched page', (tester) async {
+    useFilesHome(true);
+    final fake = _FakeLibrary([for (var i = 0; i < 9; i++) _asset('S$i', DateTime(2026, 10, 22, 12).subtract(Duration(hours: i)))]);
+    final prefs = InMemorySortPreferenceStore();
+    await prefs.write(photosShowSystemLibraryKey, 'true');
+    final env = await _pump(tester, const RecentPhotosTray(limit: 4), photos: synthetic(2, from: DateTime(2020)), system: fake, prefs: prefs);
+    await pumpFrames(tester, count: 3);
+    final list = find.descendant(of: find.byKey(const ValueKey('recent-photos-tray')), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('recent-photos-more')), 200, scrollable: list);
+    await pumpFrames(tester, count: 2);
+    expect(find.text('+${9 + 2 - 4}'), findsOneWidget);
+    await finishHome(tester, env);
+  });
+
   testWidgets('flag off: the tray is absent', (tester) async {
     useFilesHome(false);
     final env = await _pump(tester, const RecentPhotosTray(), photos: synthetic(5));
@@ -336,6 +387,43 @@ void main() {
       expect(y('Recent photos'), lessThan(y('Playlists')));
       await finishHome(tester, env);
     });
+
+    // The shell itself answers the tray's tab request: no listener wraps the Home here.
+    for (final (name, tray, key) in [
+      ('See all', const RecentPhotosTray(), 'recent-photos-see-all'),
+      ('"+N See all"', const RecentPhotosTray(limit: 4), 'recent-photos-more'),
+    ]) {
+      testWidgets('$name with no onSeeAll opens the Photos tab of the real Home', (tester) async {
+        useFilesHome(true);
+        useSurface(tester, const TestSurface(Size(402, 2400), 1.0));
+        final env = await LibraryTestEnv.create();
+        await seedFixedLibrary(env);
+        await tester.pumpWidget(libraryTestApp(
+          env,
+          DanaviewHomeScreen(
+            onOpenPlayer: () {},
+            onOpenFolder: (_) {},
+            onOpenPlaylist: (_) {},
+            tabSlots: HomeTabSlots(
+              recentPhotos: (_) => tray,
+              photos: (_) => const SizedBox.expand(key: ValueKey('photos-tab-body')),
+            ),
+          ),
+          overrides: _overrides(photos: synthetic(6)),
+        ));
+        await pumpFrames(tester);
+        expect(tester.widget<HomeTabHost>(find.byType(HomeTabHost)).selected, HomeTab.home);
+        expect(find.byKey(const ValueKey('photos-tab-body')), findsNothing);
+        await tester.ensureVisible(find.byKey(ValueKey(key)));
+        await tester.tap(find.byKey(ValueKey(key)));
+        await pumpFrames(tester);
+        expect(tester.takeException(), isNull);
+        expect(tester.widget<HomeTabHost>(find.byType(HomeTabHost)).selected, HomeTab.photos);
+        // The host builds a page only once it is shown, so the Photos body exists only now.
+        expect(find.byKey(const ValueKey('photos-tab-body')), findsOneWidget);
+        await finishHome(tester, env);
+      });
+    }
   });
 
   test('tile extent: about three on a phone, never under 88 px', () {

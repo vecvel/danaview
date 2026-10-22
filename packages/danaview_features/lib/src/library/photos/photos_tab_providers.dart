@@ -17,6 +17,7 @@ import 'package:danaview_library_native/danaview_library_native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../badges/media_badges.dart';
 import '../files/library_store_providers.dart';
 import '../organise/organise_providers.dart';
 import '../sources/desktop_photos_source.dart';
@@ -29,41 +30,66 @@ import 'photo_masonry_layout.dart';
 final photosTabClockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
 /// Every Danaview photo (all Danaview folders), newest first (empty without a store).
+///
+/// Re-run on every library write, but cheaply: one joined, already sorted query (no per-entry
+/// meta reads, no Dart sort), and the photos that didn't change keep their instances, so a write
+/// that touched no photo hands back the very same list and nothing downstream rebuilds, and a
+/// favourite toggle replaces one item.
 final danaviewPhotoItemsProvider = Provider<List<PhotoGridItem>>((ref) {
   final store = ref.watch(libraryStoreProvider);
   if (store == null) return const [];
   ref.watch(libraryRevisionProvider);
-  return readDanaviewPhotos(store);
+  final next = readDanaviewPhotos(store, previous: _lastDanaviewPhotos[store]);
+  _lastDanaviewPhotos[store] = next;
+  return next;
 });
 
-/// Reads the live photo entries of [store] as grid items, newest first.
-List<PhotoGridItem> readDanaviewPhotos(LibraryStore store) {
-  const query = EntryQuery(kinds: {FileKind.photo}, sort: EntrySortKey.modifiedAt);
-  const page = 500;
-  final reader = store.reader;
-  final out = <PhotoGridItem>[];
-  for (var offset = 0;; offset += page) {
-    final entries = reader.entriesPage(query, offset: offset, limit: page);
-    for (final e in entries) {
-      final meta = reader.meta(e.id);
-      out.add(PhotoGridItem(
-        id: e.id,
-        origin: PhotoOrigin.danaview,
-        name: e.displayName,
-        date: meta?.takenAt ?? e.modifiedAt,
-        modifiedAt: e.modifiedAt,
-        thumbSource: store.paths.entryFile(e.id, e.displayName),
-        width: meta?.width ?? 0,
-        height: meta?.height ?? 0,
-        folderId: e.folderId,
-        isFavourite: e.isFavourite,
-      ));
-    }
-    if (entries.length < page) break;
+/// The last read of each store, for [readDanaviewPhotos]'s instance reuse.
+final Expando<List<PhotoGridItem>> _lastDanaviewPhotos = Expando('danaview photos');
+
+// One query: the live photo entries with their size, capture time and badge flags, newest capture
+// (or, without one, modification) first. `id` breaks ties so the order is stable.
+final String _danaviewPhotosSql = 'SELECT e.id, e.folder_id, e.display_name, e.modified_at, e.is_favourite, '
+    'm.width, m.height, m.taken_at, m.flags, m.entry_id AS meta_id '
+    'FROM entries e LEFT JOIN entry_meta m ON m.entry_id = e.id '
+    "WHERE e.trashed_at IS NULL AND e.kind = '${FileKind.photo.code}' "
+    'ORDER BY COALESCE(m.taken_at, e.modified_at) DESC, e.id DESC';
+
+/// Reads the live photo entries of [store] as grid items, newest first, in one query. Items equal
+/// to one of [previous] (an earlier read) reuse that instance; when every item is unchanged,
+/// [previous] itself is returned.
+List<PhotoGridItem> readDanaviewPhotos(LibraryStore store, {List<PhotoGridItem>? previous}) {
+  final rows = store.reader.db.select(_danaviewPhotosSql);
+  final old = previous == null || previous.isEmpty ? null : {for (final p in previous) p.id: p};
+  var unchanged = previous != null && previous.length == rows.length;
+  final out = List<PhotoGridItem?>.filled(rows.length, null);
+  for (var i = 0; i < rows.length; i++) {
+    final row = rows[i];
+    final id = EntryId.parse(row['id'] as String);
+    final name = row['display_name'] as String;
+    final modifiedAt = timeOrNull(row['modified_at']) ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+    final hasMeta = row['meta_id'] != null;
+    final meta = hasMeta ? EntryMeta(flags: row['flags'] as int? ?? 0) : null;
+    final item = PhotoGridItem(
+      id: id,
+      origin: PhotoOrigin.danaview,
+      name: name,
+      date: timeOrNull(row['taken_at']) ?? modifiedAt,
+      modifiedAt: modifiedAt,
+      thumbSource: store.paths.entryFile(id, name),
+      width: row['width'] as int? ?? 0,
+      height: row['height'] as int? ?? 0,
+      folderId: FolderId.parse(row['folder_id'] as String),
+      isFavourite: row['is_favourite'] == 1,
+      badges: MediaBadges.ofMeta(FileKind.photo, meta),
+    );
+    final before = old?[id];
+    final kept = before != null && before == item ? before : item;
+    out[i] = kept;
+    if (unchanged && !identical(previous![i], kept)) unchanged = false;
   }
-  // Capture time can differ from the modification order the query used.
-  out.sort((a, b) => b.date.compareTo(a.date));
-  return List.unmodifiable(out);
+  if (unchanged) return previous!;
+  return List.unmodifiable(out.cast<PhotoGridItem>());
 }
 
 /// The Danaview folders that hold at least one photo, by name (empty without a store).

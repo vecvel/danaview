@@ -6,8 +6,10 @@
 //   temporary read-only copies named as the user sees them; the picker writes new files where the
 //   user chose and the library file is never moved.
 // * files, macOS: a save panel for one file, an open panel choosing a folder ("Save Here") for
-//   several; the copies are created new in the chosen folder (`Name (2).ext` when the name is taken,
-//   even after the panel's own "Replace" answer: save-out never writes over a file it didn't create).
+//   several. The sandbox grants a save panel only the exact URL chosen, so one file is written to
+//   exactly that URL as typed (replacing a file there only after the panel's own "Replace"
+//   confirmation); several files are created new in the chosen folder (`Name (2).ext` when a name
+//   is taken: the folder path never writes over a file it didn't create).
 // * photos: "Save to Photos", add-only (`PHPhotoLibrary` `.addOnly` authorization,
 //   `PHAssetCreationRequest` with `shouldMoveFile = false`); items that aren't photos or videos are
 //   counted as failed.
@@ -40,6 +42,10 @@ enum ExportPick {
   /// The user chose a folder; the plugin writes create-new copies there, named [names] (one per
   /// item) or the items' display names.
   case directory(URL, names: [String]?)
+
+  /// The user chose exactly this file in a save panel (one item) and confirmed any Replace; the
+  /// plugin writes the copy to that URL as is.
+  case file(URL)
 }
 
 /// Shows the system "save a copy" UI.
@@ -111,6 +117,9 @@ final class ExportOutHostApiImpl: ExportOutHostApi {
         outcome = .success(SaveOutResultMsg(cancelled: false, savedUris: urls.map { $0.absoluteString }, failedCount: Int64(max(0, files.count - urls.count))))
       case .success(.directory(let dir, let names)):
         outcome = .success(Self.copy(files, into: dir, names: names))
+      case .success(.file(let url)):
+        let one = Self.copy(files[0], toExactly: url)
+        outcome = .success(SaveOutResultMsg(cancelled: false, savedUris: one.savedUris, failedCount: one.failedCount + Int64(files.count - 1)))
       }
       self.temp.remove(batch)
       self.busy = false
@@ -132,6 +141,14 @@ final class ExportOutHostApiImpl: ExportOutHostApi {
       }
     }
     return SaveOutResultMsg(cancelled: false, savedUris: saved, failedCount: Int64(failed))
+  }
+
+  /// A copy of [file] written to exactly [url], the save panel's choice (see the file header).
+  static func copy(_ file: OutFile, toExactly url: URL) -> SaveOutResultMsg {
+    if let saved = try? FileOutCore.exportCopy(file, toExactly: url) {
+      return SaveOutResultMsg(cancelled: false, savedUris: [saved.absoluteString], failedCount: 0)
+    }
+    return SaveOutResultMsg(cancelled: false, savedUris: [], failedCount: 1)
   }
 
   // MARK: Save to Photos
@@ -190,7 +207,7 @@ final class SystemExportPresenter: NSObject, ExportPresenter {
       panel.isExtensionHidden = false
       let done: (NSApplication.ModalResponse) -> Void = { response in
         guard response == .OK, let url = panel.url else { return completion(.success(.cancelled)) }
-        completion(.success(.directory(url.deletingLastPathComponent(), names: [url.lastPathComponent])))
+        completion(.success(.file(url)))
       }
       if let w = window { panel.beginSheetModal(for: w, completionHandler: done) } else { done(panel.runModal()) }
     } else {

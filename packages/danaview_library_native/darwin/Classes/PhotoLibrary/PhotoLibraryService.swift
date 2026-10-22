@@ -1,7 +1,8 @@
 // OWNER: HOM-02
 //
 // The PhotoKit library (ARCH v1.2 §8, V2-103, V2-111): authorization, paged fetches over cached
-// `PHFetchResult` snapshots with change tokens, albums, EXIF basics, create-new copies of
+// `PHFetchResult` snapshots with change tokens (kept current by the change observer while
+// observing; re-fetched and compared on every page while not), albums, EXIF basics, create-new copies of
 // originals, and `PHPhotoLibraryChangeObserver` → change events. Limited access is honoured by
 // PhotoKit itself (fetches return only the selected assets). Every PhotoKit call runs on one serial
 // background queue; completions are called on that queue (the Glue hops to the main thread). No
@@ -107,6 +108,9 @@ final class PhotoLibraryService: NSObject, PHPhotoLibraryChangeObserver {
     queue.async {
       self.lastAuthorization = self.authorizing.status()
       guard !self.observing, self.lastAuthorization?.canRead == true else { return }
+      // Changes made while nobody observed were never applied: start from fresh snapshots and
+      // make every earlier token stale.
+      self.resetSnapshots()
       self.observing = true
       _ = self.snapshot(for: .baseline)
       self.library().register(self)
@@ -118,7 +122,16 @@ final class PhotoLibraryService: NSObject, PHPhotoLibraryChangeObserver {
       guard self.observing else { return }
       self.observing = false
       self.library().unregisterChangeObserver(self)
+      // Nothing keeps the snapshots current from here on.
+      self.resetSnapshots()
     }
+  }
+
+  /// Drops every cached snapshot and moves the token (earlier pages are stale). On `queue`.
+  private func resetSnapshots() {
+    snapshots.removeAll()
+    lru.removeAll()
+    book.record(shiftsIndices: true)
   }
 
   /// PhotoKit change callback (any queue).
@@ -185,20 +198,25 @@ final class PhotoLibraryService: NSObject, PHPhotoLibraryChangeObserver {
     return o
   }
 
-  /// The cached snapshot of [key], fetched when missing; nil for an unknown album. On `queue`.
-  private func snapshot(for key: PhotoFetchKey) -> PHFetchResult<PHAsset>? {
-    if let cached = snapshots[key] {
+  /// The snapshot of [key]; nil for an unknown album. On `queue`.
+  ///
+  /// While observing, the cached snapshot is current (the change observer applies every change)
+  /// and is returned as is. While not observing, nothing keeps a cache current, so every call
+  /// fetches afresh; when the fresh fetch differs from the previous one in count or in the ids of
+  /// [window] (an insert, delete or move that shifts indices), the token moves so pages read
+  /// against the old snapshot are stale.
+  private func snapshot(for key: PhotoFetchKey, window: (offset: Int, limit: Int)? = nil) -> PHFetchResult<PHAsset>? {
+    if observing, let cached = snapshots[key] {
       touch(key)
       return cached
     }
-    let result: PHFetchResult<PHAsset>
-    if let albumId = key.albumId {
-      guard let collection = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [albumId], options: nil).firstObject else {
-        return nil
-      }
-      result = PHAsset.fetchAssets(in: collection, options: Self.options(for: key))
-    } else {
-      result = PHAsset.fetchAssets(with: Self.options(for: key))
+    guard let result = Self.fetch(key) else {
+      snapshots[key] = nil
+      lru.removeAll { $0 == key }
+      return nil
+    }
+    if !observing, let previous = snapshots[key], Self.shifted(from: previous, to: result, window: window) {
+      book.record(shiftsIndices: true)
     }
     snapshots[key] = result
     touch(key)
@@ -207,6 +225,27 @@ final class PhotoLibraryService: NSObject, PHPhotoLibraryChangeObserver {
       snapshots[victim] = nil
     }
     return result
+  }
+
+  /// A fresh fetch of [key]; nil for an unknown album.
+  private static func fetch(_ key: PhotoFetchKey) -> PHFetchResult<PHAsset>? {
+    if let albumId = key.albumId {
+      guard let collection = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [albumId], options: nil).firstObject else {
+        return nil
+      }
+      return PHAsset.fetchAssets(in: collection, options: options(for: key))
+    }
+    return PHAsset.fetchAssets(with: options(for: key))
+  }
+
+  /// True when [next] has another count than [previous] or other ids in the page [window] (the
+  /// whole leading page when none is given). Reads identifiers only, never resources.
+  static func shifted(from previous: PHFetchResult<PHAsset>, to next: PHFetchResult<PHAsset>, window: (offset: Int, limit: Int)?) -> Bool {
+    guard previous.count == next.count else { return true }
+    let range = (try? PhotoSnapshotBook.window(offset: window?.offset ?? 0, limit: window?.limit ?? 200, count: next.count)) ?? 0..<0
+    guard !range.isEmpty else { return false }
+    let indices = IndexSet(integersIn: range)
+    return previous.objects(at: indices).map(\.localIdentifier) != next.objects(at: indices).map(\.localIdentifier)
   }
 
   private func touch(_ key: PhotoFetchKey) {
@@ -224,13 +263,14 @@ final class PhotoLibraryService: NSObject, PHPhotoLibraryChangeObserver {
     queue.async {
       do {
         try self.requireRead()
-        guard let result = self.snapshot(for: key) else { throw PhotoLibraryFailure(.notFound, "album not found") }
+        guard let result = self.snapshot(for: key, window: (offset, limit)) else { throw PhotoLibraryFailure(.notFound, "album not found") }
         let window = try PhotoSnapshotBook.window(offset: offset, limit: limit, count: result.count)
         var assets: [PhotoAssetRecord] = []
         assets.reserveCapacity(window.count)
         if !window.isEmpty {
           for asset in result.objects(at: IndexSet(integersIn: window)) {
-            if let record = PhotoAssetMapping.record(from: asset) { assets.append(record) }
+            // Cheap fields only: no resource lookups on the page path (see PhotoAssetMapping).
+            if let record = PhotoAssetMapping.pageRecord(from: asset) { assets.append(record) }
           }
         }
         completion(.success(PhotoPageRecord(

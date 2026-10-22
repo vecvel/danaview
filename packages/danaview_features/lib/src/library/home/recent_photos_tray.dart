@@ -12,12 +12,14 @@
 //   whole newest-first list so the viewer can swipe past the tray's last photo.
 // * See all opens the Photos tab: [RecentPhotosTray.onSeeAll] when set, otherwise a
 //   [HomeTabRequestNotification] for [HomeTab.photos] bubbles up to the Home shell.
+// * The system photos come from the tray's own listing of the whole library
+//   ([recentSystemPhotosProvider]), so an album picked on the Photos tab does not narrow it.
 // * The tray never asks for photo access: it lists the system library only after the opt-in, and
 //   then starts loading it (the user already granted access when opting in, V2-103).
 
 import 'dart:async';
 
-import 'package:danaview_library_native/danaview_library_native.dart' show SystemPhotoFilter;
+import 'package:danaview_library_native/danaview_library_native.dart' show LibraryNativeException, SystemPhotoFilter;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,28 +35,83 @@ import '../thumbs/library_thumbnail.dart';
 import '../thumbs/thumb_key.dart' show ThumbSizeClass;
 import 'home_tabs.dart';
 
+export 'home_tabs.dart' show HomeTabRequestNotification;
+
 /// How many photos the tray shows at most (a "See all" tile follows when there are more).
 const int recentPhotosTrayLimit = 20;
 
 /// Opens [photos] (newest first) at [index] in the viewer (HOM-11).
 typedef RecentPhotosOpen = void Function(List<PhotoGridItem> photos, int index);
 
-/// Asks the Home shell to show [tab] (dispatched by See all when no `onSeeAll` is given).
-class HomeTabRequestNotification extends Notification {
-  /// A request for [tab].
-  const HomeTabRequestNotification(this.tab);
+/// The newest system-library photos of the tray: the first page of the whole library, photos only,
+/// listed on its own so the Photos tab's album choice never narrows the Overview (HOM §2 item 6).
+@immutable
+class RecentSystemPhotos {
+  /// [items] newest first, out of [totalCount] photos in the whole library.
+  const RecentSystemPhotos(this.items, this.totalCount);
 
-  /// The tab to show.
-  final HomeTab tab;
+  /// Nothing listed (not opted in, no access, no system library).
+  static const RecentSystemPhotos none = RecentSystemPhotos([], 0);
+
+  /// The newest photos.
+  final List<PhotoGridItem> items;
+
+  /// Photos in the whole library.
+  final int totalCount;
 }
 
-/// Every recent photo, newest first: the Danaview photos and, after the opt-in (Q-N8), the system
-/// library and the desktop Pictures folders.
-final recentPhotosProvider = Provider<List<PhotoGridItem>>((ref) {
+/// The newest [limit] photos of the whole system library, whatever album the Photos tab lists.
+/// It lists only after the opt-in (Q-N8) and once the shared controller holds readable access (the
+/// tray never asks for access itself), and lists again when that controller sees the library
+/// change (a new snapshot token or reloaded items).
+final recentSystemPhotosProvider = FutureProvider.autoDispose.family<RecentSystemPhotos, int>((ref, limit) async {
+  if (!ref.watch(photosLibraryOptInProvider)) return RecentSystemPhotos.none;
+  final library = ref.watch(systemPhotoLibraryProvider);
+  final platform = ref.watch(systemPhotosControllerProvider.select((s) => s.platform));
+  final readable = ref.watch(systemPhotosControllerProvider.select((s) => s.opened && s.authorization.canRead));
+  // Library changes reach the shared controller first (it observes); follow its snapshots.
+  ref.watch(systemPhotosControllerProvider.select((s) => s.changeToken));
+  ref.watch(systemPhotosControllerProvider.select((s) => s.items));
+  if (library == null || platform == null || !readable) return RecentSystemPhotos.none;
+  try {
+    final page = await library.fetchPage(filter: SystemPhotoFilter.photos, limit: limit);
+    final items = <PhotoGridItem>[];
+    for (final asset in page.assets) {
+      try {
+        final item = systemMediaItem(asset, platform);
+        if (item is PhotoMediaItem) items.add(photoGridItemOf(item, PhotoOrigin.system));
+      } on FormatException {
+        // A platform id outside the V2-09 rules is skipped, as on the Photos tab.
+      }
+    }
+    final total = page.totalCount < items.length ? items.length : page.totalCount;
+    return RecentSystemPhotos(List.unmodifiable(items), total);
+  } on LibraryNativeException {
+    return RecentSystemPhotos.none;
+  }
+});
+
+/// The tray's photos: [items] newest first, out of [totalCount] recent photos in all.
+@immutable
+class RecentPhotos {
+  /// [items] out of [totalCount].
+  const RecentPhotos(this.items, this.totalCount);
+
+  /// The photos the tray can show and hand to the viewer, newest first.
+  final List<PhotoGridItem> items;
+
+  /// Every photo the Photos tab holds (the system library counted whole), for the "+N" tile.
+  final int totalCount;
+}
+
+/// The recent photos for a [limit]-tile tray, newest first: the Danaview photos and, after the
+/// opt-in (Q-N8), the newest photos of the whole system library and the desktop Pictures folders.
+final recentPhotosProvider = Provider.autoDispose.family<RecentPhotos, int>((ref, limit) {
   final danaview = ref.watch(danaviewPhotoItemsProvider);
-  final system = ref.watch(systemPhotoItemsProvider);
+  final system = ref.watch(recentSystemPhotosProvider(limit)).valueOrNull ?? RecentSystemPhotos.none;
   final desktop = ref.watch(desktopPhotoItemsProvider);
-  return mergeNewestFirst(mergeNewestFirst(danaview, system), desktop);
+  final items = mergeNewestFirst(mergeNewestFirst(danaview, system.items), desktop);
+  return RecentPhotos(items, danaview.length + system.totalCount + desktop.length);
 });
 
 /// The square tile side of the tray for a [width]-wide Overview: about three tiles on a phone,
@@ -97,8 +154,10 @@ class _RecentPhotosTrayState extends ConsumerState<RecentPhotosTray> {
     });
   }
 
-  /// Starts listing the opted-in libraries if nothing listed them yet (the Overview usually shows
-  /// before the Photos tab). Keeps the Photos tab's album filter.
+  /// Opens the shared system controller (access, observing) and lists the desktop folders if
+  /// nothing did yet (the Overview usually shows before the Photos tab). The tray's own system
+  /// listing ([recentSystemPhotosProvider]) covers the whole library; the Photos tab's album filter
+  /// is left as it is.
   void _loadLibrary() {
     final system = ref.read(systemPhotosControllerProvider);
     if (system.available && !system.opened) {
@@ -126,10 +185,12 @@ class _RecentPhotosTrayState extends ConsumerState<RecentPhotosTray> {
   @override
   Widget build(BuildContext context) {
     if (!FeatureFlags.filesHomeEnabled) return const SizedBox.shrink();
-    final photos = ref.watch(recentPhotosProvider);
+    final recent = ref.watch(recentPhotosProvider(widget.limit));
+    final photos = recent.items;
     if (photos.isEmpty) return const SizedBox.shrink(key: ValueKey('recent-photos-hidden'));
     final shown = photos.length < widget.limit ? photos.length : widget.limit;
-    final more = photos.length > shown;
+    final remaining = (recent.totalCount < photos.length ? photos.length : recent.totalCount) - shown;
+    final more = remaining > 0;
     final open = widget.onOpenPhoto;
     return Semantics(
       container: true,
@@ -165,7 +226,7 @@ class _RecentPhotosTrayState extends ConsumerState<RecentPhotosTray> {
                     return _SeeAllTile(
                       key: const ValueKey('recent-photos-more'),
                       extent: extent,
-                      remaining: photos.length - shown,
+                      remaining: remaining,
                       onTap: () => _seeAll(context),
                     );
                   }

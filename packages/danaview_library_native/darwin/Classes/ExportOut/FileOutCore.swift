@@ -12,6 +12,9 @@
 // * exportCopy / uniqueDestination: save-out into a folder the user picked writes create-new
 //   copies only (`Name (2).ext` when the name is taken) and never moves, renames or rewrites the
 //   source (rule 26).
+// * exportCopy(_:toExactly:): a macOS save panel grants the sandbox exactly the URL the user
+//   chose, so a single-file save writes that URL as typed, replacing a file there only because
+//   the panel already asked the user and they confirmed Replace. The source is still only read.
 //
 // Nothing here logs; failure messages carry no names or paths (rule 30).
 
@@ -112,6 +115,31 @@ enum FileOutCore {
       throw OutFailure.io("copy failed")
     }
     return target
+  }
+
+  /// Copies [file] to exactly [destination] (a save panel's URL), replacing an existing regular
+  /// file there that the user confirmed in the panel. Never writes over a directory; the source
+  /// is only read.
+  static func exportCopy(_ file: OutFile, toExactly destination: URL, fileManager: FileManager = .default) throws -> URL {
+    let source = URL(fileURLWithPath: file.path)
+    guard source.standardizedFileURL.path != destination.standardizedFileURL.path else {
+      throw OutFailure.invalid("destination is the source")
+    }
+    var isDir: ObjCBool = false
+    if fileManager.fileExists(atPath: destination.path, isDirectory: &isDir) {
+      guard !isDir.boolValue else { throw OutFailure.io("destination is a folder") }
+      do {
+        try fileManager.removeItem(at: destination)
+      } catch {
+        throw OutFailure.io("replace failed")
+      }
+    }
+    do {
+      try fileManager.copyItem(at: source, to: destination)
+    } catch {
+      throw OutFailure.io("copy failed")
+    }
+    return destination
   }
 
   /// Photo, video or neither, from the UTType, then the MIME type, then the extension.
