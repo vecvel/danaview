@@ -11,8 +11,12 @@
 //   only delete path, D-44). It never touches `work/` (in-progress picks, drops and exports) or
 //   anything under `<support>` (projects and media), and it is disabled while a project is open or a job runs. The contributor owns the whole
 //   `<cache>/danaview/editor` folder, so the app's own "Clear cache" leaves it alone.
+// * "Export files" (FIX-QA05-D8-2): `<support>/danaview/editor/exports`, where exports are written
+//   before they are saved. Clearing runs `ExportOutputSweeper.clear`: every file no export job
+//   references (running, resumable, kept or detached records, and the export flow's own files) is
+//   deleted, whatever its age; it is blocked like the cache while a project is open or a job runs.
 //
-// The router (INT-02) builds both through [EditorStorageContributor.all] and lists them in
+// The router (INT-02) builds them through [EditorStorageContributor.all] and lists them in
 // `storageContributorsProvider` on iOS/Android only (D-17).
 
 import 'dart:async';
@@ -27,6 +31,7 @@ import 'package:danaview_features/storage.dart';
 import 'package:danaview_transcription/danaview_transcription.dart' show TranscriptionService;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
+import 'export_output_sweeper.dart';
 import 'strings/settings_strings.dart';
 
 /// What keeps the editor cache in use (ARCH §17.10: clearing is disabled while a session or job is
@@ -171,17 +176,19 @@ final class EditorCacheCleaner {
 sealed class EditorStorageContributor extends StorageContributor {
   const EditorStorageContributor();
 
-  /// The editor's contributors in display order: projects, then cache. [onOpenProjects] opens the
-  /// Projects screen (the router pushes `/projects`).
+  /// The editor's contributors in display order: projects, cache, then (with [exports]) the
+  /// export files. [onOpenProjects] opens the Projects screen (the router pushes `/projects`).
   static List<EditorStorageContributor> all({
     required ProjectRepository repository,
     required EditorCacheCleaner cache,
     required EditorCacheUseCheck cacheUse,
     required void Function(BuildContext context) onOpenProjects,
+    ExportOutputSweeper? exports,
   }) =>
       [
         EditorProjectsStorageContributor(repository: repository, onOpenProjects: onOpenProjects),
         EditorCacheStorageContributor(cleaner: cache, cacheUse: cacheUse),
+        if (exports != null) EditorExportsStorageContributor(sweeper: exports, cacheUse: cacheUse),
       ];
 
   @override
@@ -298,6 +305,76 @@ final class EditorCacheStorageContributor extends EditorStorageContributor {
     return StorageContributorUsage(
       bytes: bytes,
       clearBlockedReason: use == EditorCacheUse.none ? null : StorageStrings.cacheBlocked(use),
+    );
+  }
+}
+
+/// "Export files": exports written to `<support>/danaview/editor/exports` that no job still needs
+/// (FIX-QA05-D8-2). Clearing deletes only unreferenced files and is blocked while a project is
+/// open or a job runs.
+final class EditorExportsStorageContributor extends EditorStorageContributor {
+  /// Creates the contributor.
+  EditorExportsStorageContributor({required this.sweeper, required this.cacheUse});
+
+  /// Measures and clears the exports folder.
+  final ExportOutputSweeper sweeper;
+
+  /// What uses the editor right now.
+  final EditorCacheUseCheck cacheUse;
+
+  final StreamController<void> _changed = StreamController<void>.broadcast();
+
+  @override
+  String get id => 'editor.exports';
+
+  @override
+  String get title => StorageStrings.exportsTitle;
+
+  @override
+  String get subtitle => StorageStrings.exportsSubtitle;
+
+  @override
+  IconData get icon => Icons.ios_share_rounded;
+
+  @override
+  StorageClearAction get clearAction => StorageClearAction(
+        label: StorageStrings.clearExports,
+        confirmTitle: StorageStrings.clearExports,
+        confirmMessage: StorageStrings.clearExportsMessage,
+        confirmLabel: StorageStrings.clearCacheConfirm,
+        icon: Icons.cleaning_services_rounded,
+        run: clear,
+      );
+
+  /// Measured now and again after every [clear].
+  @override
+  Stream<StorageContributorUsage> watchUsage() async* {
+    yield await _measure();
+    await for (final _ in _changed.stream) {
+      yield await _measure();
+    }
+  }
+
+  /// Deletes the unreferenced export files unless something uses the editor
+  /// ([StorageClearOutcome.blocked] then, or when a job record could not be read).
+  Future<StorageClearOutcome> clear() async {
+    final use = await cacheUse();
+    if (use != EditorCacheUse.none) return StorageClearOutcome.blocked(StorageStrings.exportsBlocked(use));
+    final report = await sweeper.clear();
+    _changed.add(null);
+    if (report.skipped) return const StorageClearOutcome.blocked(StorageStrings.exportsUnreadable);
+    return StorageClearOutcome.done(
+      freedBytes: report.freedBytes,
+      message: report.deletedFiles == 0 ? StorageStrings.exportsAlreadyEmpty : null,
+    );
+  }
+
+  Future<StorageContributorUsage> _measure() async {
+    final (size, use) = await (sweeper.measure(), cacheUse()).wait;
+    return StorageContributorUsage(
+      bytes: size.bytes,
+      detail: StorageStrings.exportFileCount(size.files),
+      clearBlockedReason: use == EditorCacheUse.none ? null : StorageStrings.exportsBlocked(use),
     );
   }
 }

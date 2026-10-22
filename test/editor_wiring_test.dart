@@ -393,7 +393,7 @@ void main() {
         final app = await pumpWiredApp(tester, platform: platform, transcription: service);
         try {
           final contributors = app.container.read(storageContributorsProvider);
-          expect(contributors.map((c) => c.id), ['editor.projects', 'editor.cache', 'editor.speech']);
+          expect(contributors.map((c) => c.id), ['editor.projects', 'editor.cache', 'editor.exports', 'editor.speech']);
           expect(app.container.read(transcriptionServiceProvider), same(service));
           expect(app.container.read(autoCaptionsHostProvider).onOpenPrivacyPolicy, isNotNull);
           expect(app.container.read(exportHostProvider).onPlay, isNotNull);
@@ -412,7 +412,7 @@ void main() {
     testWidgets('Auto captions off: no service override and no speech row', (tester) async {
       final app = await pumpWiredApp(tester, platform: TargetPlatform.iOS, captions: false);
       try {
-        expect(app.container.read(storageContributorsProvider).map((c) => c.id), ['editor.projects', 'editor.cache']);
+        expect(app.container.read(storageContributorsProvider).map((c) => c.id), ['editor.projects', 'editor.cache', 'editor.exports']);
         expect(() => app.container.read(transcriptionServiceProvider), throwsA(anything));
       } finally {
         await app.dispose();

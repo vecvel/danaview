@@ -14,6 +14,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/app/editor_providers.dart';
+import 'package:danaview_editor/src/app/export_output_sweeper.dart';
 import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart';
 import 'package:danaview_editor/src/editor/contracts/contracts.dart';
 import 'package:danaview_editor/src/editor/flows/export/export_controller.dart';
@@ -35,6 +36,7 @@ import '../../actions/action_test_support.dart';
 import '../../state/state_support.dart' show TestClock, imageAsset, resolverFor;
 import '../../support/support.dart';
 
+export 'package:danaview_editor/src/app/export_output_sweeper.dart' show ExportOutputLeases;
 export 'package:danaview_editor_engine_api/testing.dart' show FakeEditorEngine, FakeExportJob;
 
 const int s = microsPerSecond;
@@ -271,6 +273,8 @@ class ExportRig {
       wakelock: wakelock.add,
       newToken: () => 't${_tokens++}',
       notificationPermissionTimeout: notificationPermissionTimeout,
+      outputLeases: leases,
+      onJobEnded: () => jobEnded++,
     );
     engine = RigEngine(fake, scripted);
     harness = EditorTestHarness(
@@ -314,6 +318,12 @@ class ExportRig {
 
   /// The clock.
   final TestClock clock = TestClock();
+
+  /// The export files the controller holds (FIX-QA05-D8-2).
+  final ExportOutputLeases leases = ExportOutputLeases();
+
+  /// How often the controller reported a job's terminal state (the export sweep hook).
+  int jobEnded = 0;
 
   /// Media ids the resolver reports offline.
   final Set<MediaId> offline = {};

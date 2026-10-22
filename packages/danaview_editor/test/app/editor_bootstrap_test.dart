@@ -174,6 +174,64 @@ final class _DocsEngine implements EditorEngine {
   Future<void> trimCaches(CacheTrimLevel level) => inner.trimCaches(level);
 }
 
+/// [FakeEditorEngine] with another export service (FIX-QA05-D8-2).
+final class _ExporterEngine implements EditorEngine {
+  _ExporterEngine(this.inner, this.exporter);
+
+  final FakeEditorEngine inner;
+
+  @override
+  final ExportService exporter;
+
+  @override
+  MediaAccess get access => inner.access;
+
+  @override
+  Future<EditorCapabilities> capabilities() => inner.capabilities();
+
+  @override
+  Future<EditCompatibility> compatibility(String pathOrUri) => inner.compatibility(pathOrUri);
+
+  @override
+  Future<MediaProbe> probe(EngineMedia media) => inner.probe(media);
+
+  @override
+  Future<PreviewSession> openPreview(PreviewConfig config) => inner.openPreview(config);
+
+  @override
+  ThumbnailSource get thumbnails => inner.thumbnails;
+
+  @override
+  WaveformSource get waveforms => inner.waveforms;
+
+  @override
+  MediaJobs get jobs => inner.jobs;
+
+  @override
+  VoiceRecorder? get voiceRecorder => inner.voiceRecorder;
+
+  @override
+  MediaPicker get picker => inner.picker;
+
+  @override
+  FileHandoff get files => inner.files;
+
+  @override
+  BackgroundWorkGuard get background => inner.background;
+
+  @override
+  ExternalDropTarget get drops => inner.drops;
+
+  @override
+  Future<int> freeBytes(String path) => inner.freeBytes(path);
+
+  @override
+  Stream<EngineSignal> get signals => inner.signals;
+
+  @override
+  Future<void> trimCaches(CacheTrimLevel level) => inner.trimCaches(level);
+}
+
 Future<void> _settle() async {
   for (var i = 0; i < 10; i++) {
     await Future<void>.delayed(Duration.zero);
@@ -284,9 +342,10 @@ void main() {
       var opened = 0;
       final withNav = containerOf(await create(onOpenProjects: (_) => opened++));
       final contributors = withNav.read(storageContributorsProvider);
-      expect(contributors.map((c) => c.id), ['editor.projects', 'editor.cache']);
+      expect(contributors.map((c) => c.id), ['editor.projects', 'editor.cache', 'editor.exports']);
       expect(contributors.first, isA<EditorProjectsStorageContributor>());
-      expect(contributors.last.ownedPaths, {_roots.editorCache});
+      expect(contributors[1].ownedPaths, {_roots.editorCache});
+      expect(contributors.last, isA<EditorExportsStorageContributor>(), reason: 'FIX-QA05-D8-2');
 
       final withoutNav = containerOf(await create());
       expect(withoutNav.read(storageContributorsProvider), isEmpty);
@@ -350,6 +409,61 @@ void main() {
     expect(config.cacheRoot, '/fake/cache/danaview/editor');
     expect(config.supportRoot, '/fake/support/danaview/editor');
     expect(config.exportNotificationTexts, same(ExportStrings.notificationTexts));
+  });
+
+  group('FIX-QA05-D8-2 export sweep', () {
+    test('bootstrap schedules the sweep off the startup path; it removes old orphans when it runs', () async {
+      final old = DateTime.now().subtract(const Duration(days: 2));
+      fs.putFile('${_roots.exportsDir}/export-orphan.mp4', [1, 2, 3], modified: old);
+      fs.putFile('${_roots.exportsDir}/export-fresh.mp4', [1, 2, 3]);
+      final runtime = await EditorBootstrap.createRuntime(
+        engine: engine,
+        roots: _roots,
+        prefs: EditorPrefs.memory(),
+        fs: fs,
+        timer: timers.call,
+        listenToLifecycle: false,
+      );
+      addTearDown(runtime.dispose);
+      expect(fs.peek('${_roots.exportsDir}/export-orphan.mp4'), isNotNull, reason: 'createRuntime does not wait for the sweep');
+      final sweep = timers.after(EditorBootstrap.exportSweepDelay);
+      expect(sweep, hasLength(1));
+      sweep.single.fire();
+      await _settle();
+      expect(fs.peek('${_roots.exportsDir}/export-orphan.mp4'), isNull);
+      expect(fs.peek('${_roots.exportsDir}/export-fresh.mp4'), isNotNull);
+      expect(runtime.exportSweeper.quietFailures, 0);
+    });
+
+    test('a failing engine skips the sweep without throwing; startGc false schedules none', () async {
+      final failing = _ExporterEngine(engine, _FailingExporter());
+      fs.putFile('${_roots.exportsDir}/export-orphan.mp4', [1], modified: DateTime.now().subtract(const Duration(days: 2)));
+      final runtime = await EditorBootstrap.createRuntime(
+        engine: failing,
+        roots: _roots,
+        prefs: EditorPrefs.memory(),
+        fs: fs,
+        timer: timers.call,
+        listenToLifecycle: false,
+      );
+      addTearDown(runtime.dispose);
+      timers.after(EditorBootstrap.exportSweepDelay).single.fire();
+      await _settle();
+      expect(fs.peek('${_roots.exportsDir}/export-orphan.mp4'), isNotNull, reason: 'fail safe');
+
+      final quiet = _Timers();
+      final idle = await EditorBootstrap.createRuntime(
+        engine: engine,
+        roots: _roots,
+        prefs: EditorPrefs.memory(),
+        fs: fs,
+        timer: quiet.call,
+        startGc: false,
+        listenToLifecycle: false,
+      );
+      addTearDown(idle.dispose);
+      expect(quiet.after(EditorBootstrap.exportSweepDelay), isEmpty);
+    });
   });
 
   group('FIX-WIRING', () {
