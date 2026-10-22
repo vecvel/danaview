@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 on the Mac from the code, the QA reports and the build runs. The code on `editor-wip` is the ground truth; live detail is in `PRODUCTION_READINESS.md` §0.
 
-**Totals:** 162 done, 4 open (of 166): QA-01 (automated suite certified; manual iPad steps need a person), QA-02 (Windows; M-21, M-22 and M-23 fixed, re-runs on mains power left), QA-05 (iOS green; Android half: D8 Dart and W1–W7 fixed, D9, D10 and the D8 engine half on the Windows lane), INT-05 (prepared, owner go). The Android lane is complete.
+**Totals:** 163 done, 3 open (of 166): QA-01 (automated suite certified; manual iPad steps need a person), QA-02 (Windows; M-21, M-22 and M-23 fixed, re-runs on mains power left), QA-05 (iOS green; Android half: D8, D9, D10 and W1–W7 fixed, the Android re-runs left). INT-05 is closed in 1.1 (owner, 2026-10-22): moved into the single 1.0.0 release ticket at the end of 1.3 (widened AIS-41, `docs/v1.2/BUILD_PLAN.md`); its release-pipeline checks are applied (`f8cd585`). The Android lane is complete.
 
 "Machine" is who builds the ticket after the split: the Mac does everything except the Android lane; the Windows laptop does the Android lane (see ANDROID_LANE.md). "In progress" means a Mac builder was working on it when this file was generated; its files may be incomplete.
 
@@ -188,7 +188,7 @@ Generated 2026-10-21 on the Mac from the code, the QA reports and the build runs
 | 150 | UX-42 | Privacy policy and terms update, custom licences screen, About row | — | ✅ done | Mac |
 | 151 | INT-04 | [INTEGRATION] App wiring v2: auto captions service, adapters, player Edit, licences route | INT-02, AI-13, UX-38, UX-41, UX-42, ENG-03, ENG-04 | ✅ done | Mac |
 
-## M6 (11/15 done)
+## M6 (12/15 done)
 
 | # | Ticket | Title | Depends on | Status | Machine |
 |---|---|---|---|---|---|
@@ -206,7 +206,7 @@ Generated 2026-10-21 on the Mac from the code, the QA reports and the build runs
 | 163 | QA-08 | Accessibility pass (guidelines, VoiceOver, TalkBack) | UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, UX-44 | ✅ done | Mac |
 | 164 | QA-09 | No-overflow matrix suite (full nightly, PR subset) | UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, UX-44 | ✅ done | Mac |
 | 165 | QA-10 | Persistence, crash recovery and media-access survival on device | INT-04, IOS-15, AND-14, CORE-26, CORE-28 | ✅ done | Mac |
-| 166 | INT-05 | [INTEGRATION] Release 1.1.0: flags, version, release pipelines, store metadata, docs | QA-01, QA-02, QA-03, QA-04, QA-05, QA-07, QA-08, QA-09, QA-10, CORE-35, UX-43, INT-03, INT-04, QA-11 | ⏳ prepared, waiting for owner go | Mac |
+| 166 | INT-05 | [INTEGRATION] Release 1.1.0: flags, version, release pipelines, store metadata, docs | QA-01, QA-02, QA-03, QA-04, QA-05, QA-07, QA-08, QA-09, QA-10, CORE-35, UX-43, INT-03, INT-04, QA-11 | ✅ closed in 1.1: moved to the 1.0.0 release ticket after 1.3 (widened AIS-41, `docs/v1.2/BUILD_PLAN.md`); pipeline checks applied `f8cd585` | Mac |
 
 ## Open FIX tickets filed by QA
 

@@ -1,14 +1,15 @@
 # Danaview release checklist (editor milestone 1.1)
 
-> **Owner:** INT-05 (BUILD_PLAN INT-05; ARCH §23 is the source of every item).
-> **State: prepared, nothing switched on (INT-05-PREP, 2026-10-16; status columns refreshed 2026-10-22 against BUILD_STATE, PRODUCTION_READINESS §0 and the QA reports).** This file holds the filled ARCH §23 checklist, the release changes written out as diffs, the store and privacy texts, and the steps only the owner can do. None of the diffs below are applied. `pubspec.yaml` is `1.0.0+1`, both flags still default to false, and the release workflows, Fastfiles and fastlane metadata are unchanged.
+> **INT-05 is closed in 1.1 (owner, 2026-10-22): moved into the single 1.0.0 release ticket at the end of 1.3**, the widened AIS-41 in `docs/v1.2/BUILD_PLAN.md` (branch `v1.2-wip`). Only the release-pipeline checks of §3.2 are applied now (`f8cd585`); the editor and Auto captions `--dart-define`s, the version, `app_info.dart`, `legal_texts.dart`, the store metadata and every upload wait for that ticket. This file stays its plan for the 1.1 part.
+> **Owner:** INT-05 (BUILD_PLAN INT-05; ARCH §23 is the source of every item), now carried by the 1.0.0 release ticket (widened AIS-41).
+> **State: prepared, nothing switched on (INT-05-PREP, 2026-10-16; status columns refreshed 2026-10-22 against BUILD_STATE, PRODUCTION_READINESS §0 and the QA reports).** This file holds the filled ARCH §23 checklist, the release changes written out as diffs, the store and privacy texts, and the steps only the owner can do. Only the release-pipeline part of §3.2 is applied (`f8cd585`, 2026-10-22: whisper xcframework build, `check_ios_min_os.sh` and the `nm -um` NEWLAPACK check in the iOS lane; `check_native_libs.sh` in the Android lane and the Android release workflow). Everything else is still a prepared diff: `pubspec.yaml` is `1.0.0+1`, both flags still default to false and no release build passes them, and the fastlane metadata is unchanged.
 > **Version (owner decision 2026-10-22):** nothing has been released to production yet, and 1.1, 1.2 and 1.3 are dev milestones only. The first store release is **version 1.0.0, build 1**, tagged `v1.0.0`; nothing has ever been uploaded to App Store Connect or Play (owner, 2026-10-22). "1.1" in this file names the editor milestone (its docs and tickets), not a store version.
 > **Go-live:** the app ships once, after the internal 1.3 dev milestone completes (owner, 2026-10-22). INT-05 is applied at that point, with all of 1.1–1.3 in it. Until then this file is the plan for that release build, written for the 1.1 milestone. The store texts in §4 describe what the 1.1 milestone really has. When the public release moves to the 1.3 milestone, rewrite them for that feature set (photos on Home and photo editing arrive in 1.2; the desktop editor and the camera arrive in 1.3).
 > **Related:** [user guide](user-guide.md) · [QA index](qa/README.md) · [ARCHITECTURE §23](ARCHITECTURE.md) · [BUILD_PLAN INT-05](BUILD_PLAN.md)
 
 ## Remaining before go (2026-10-22)
 
-Tickets: 162 of 166 done; open are QA-01, QA-02, QA-05 and INT-05 ([BUILD_STATE](handoff/BUILD_STATE.md), [PRODUCTION_READINESS §0](handoff/PRODUCTION_READINESS.md)).
+Tickets: 163 of 166 done; open are QA-01, QA-02 and QA-05. INT-05 is closed in 1.1 and moved to the 1.0.0 release ticket after 1.3 (widened AIS-41, `docs/v1.2/BUILD_PLAN.md`) ([BUILD_STATE](handoff/BUILD_STATE.md), [PRODUCTION_READINESS §0](handoff/PRODUCTION_READINESS.md)).
 
 **Windows (Android lane):**
 1. Merge `editor-wip` (it carries FIX M-23 `8fb43c2`, D8 Dart `2c09282`, W1–W7 `5912db4`, FIX-QA05-D8-2 `911110f`).
@@ -21,7 +22,7 @@ Tickets: 162 of 166 done; open are QA-01, QA-02, QA-05 and INT-05 ([BUILD_STATE]
 1. QA-01 manual iPad-simulator steps with screenshots (Files/Photos drop, physical keyboard, hover pill).
 2. QA-02 manual tablet checklist M1–M4.
 3. Device-lab items (§6 O4), including one iOS and one Android QA-07 device row, which the Auto captions flag needs (§3.3).
-4. The INT-05 "go" once the internal 1.3 milestone is complete; INT-05 then applies with all of 1.1–1.3 in it, followed by the §6 steps. Until then the 1.1 milestone only has to reach release-ready.
+4. The "go" for the 1.0.0 release ticket (widened AIS-41) once the internal 1.3 milestone is complete; it then applies the rest of INT-05 with all of 1.1–1.3 in it, followed by the §6 steps. Until then the 1.1 milestone only has to reach release-ready.
 
 **Mac:** nothing blocking. After the Windows re-runs: close QA-01, QA-02 and QA-05 in BUILD_STATE; re-run the QA-09 full nightly matrix and the CI items of §1.1 on the release commit. Optional: FIX-QA-00-4 (harness attach watchdog).
 
@@ -35,7 +36,7 @@ Status values: **open** (work or evidence still missing), **ready** (evidence ex
 
 | Check | Status | Evidence / next step |
 |---|---|---|
-| All tickets merged (BUILD_PLAN §5) | open | 2026-10-22: 162 of 166 done. Open: QA-01 (manual iPad steps), QA-02 (Windows re-runs), QA-05 (Android half), INT-05 (owner go). [handoff/BUILD_STATE.md](handoff/BUILD_STATE.md) (Totals, M6). |
+| All tickets merged (BUILD_PLAN §5) | open | 2026-10-22: 163 of 166 done. Open: QA-01 (manual iPad steps), QA-02 (Windows re-runs), QA-05 (Android half). INT-05 closed in 1.1, moved to the 1.0.0 release ticket (widened AIS-41). [handoff/BUILD_STATE.md](handoff/BUILD_STATE.md) (Totals, M6). |
 | `editor-ci.yml` green on `main` | open | Run on the release commit. Link the run here. |
 | Existing player tests green (`flutter test` at the root) | open | Run on the release commit. Known: `settings_account_test` "app version matches pubspec.yaml" needs `app_info.dart` and `pubspec.yaml` to agree; both stay at 1.0.0 / 1 (§3.1). |
 | App builds for iOS, Android, macOS, Windows, Linux (desktop with the editor hidden) | open | Release workflows and lanes dry-run (§3.4). Desktop builds get **no** editor dart-defines. |
@@ -64,8 +65,8 @@ Status values: **open** (work or evidence still missing), **ready** (evidence ex
 | Deployment target 15.0 everywhere | ready | Done in INT-01 (ARCH §3.1). Re-check: `grep -n IPHONEOS_DEPLOYMENT_TARGET ios/Runner.xcodeproj/project.pbxproj` shows only 15.0, and `ios/Podfile` has `platform :ios, '15.0'`. |
 | Launch, player and editor smoke on iPhone 7 (iOS 15.8) and iPhone 8 (iOS 16.7) | deferred | No iOS 15/16 lab devices (owner default in ARCH D-43). Covered by `-Werror=unguarded-availability-new` and `check_ios_min_os.sh`. If a device turns up: `DV_E2E_LAB_UDIDS=<udid> scripts/ci/editor/e2e_ios.sh lab`. |
 | Smoke on iOS 26 | ready | QA-01 re-run 4 (2026-10-21): the full suite passes in one batch on the iPhone 16 / iOS 26.5 simulator ([QA-01](qa/QA-01-ios-simulator.md#run-of-2026-10-21-re-run-4-after-fix-ios-12-1-d7-and-the-round-7-dart-fixes)). Re-check on the release build. |
-| `check_ios_min_os.sh` clean on the release app | open | Added to the iOS release lane by the §3.2 diff. Paste the output here. |
-| `nm -um` shows no `NEWLAPACK` | open | `build_ios_xcframework.sh` checks it after every build. Also run `nm -um` on the release `Runner.app/Frameworks/*` and paste the empty result here. |
+| `check_ios_min_os.sh` clean on the release app | open (pipeline applied) | **Applied `f8cd585`:** `flutter_ipa` (lanes `build`, `beta`, `release`) runs `check_ios_min_os.sh --min 15.0` on `build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app` after `flutter build ipa`. Dry run 2026-10-22 on an existing local release archive (the v1.2-wip build, flags off, whisper linked): `check_ios_min_os: OK`, 28 binaries, 1414 strongly bound symbols probed. Paste the output of the 1.0.0 release build here. |
+| `nm -um` shows no `NEWLAPACK` | open (pipeline applied) | `build_ios_xcframework.sh` checks it after every build. **Applied `f8cd585`:** the iOS lane also runs `nm -um` on the release `Runner.app` binary and every `Frameworks/*.framework` / `*.dylib` and fails on any `NEWLAPACK` reference (`check_ios_min_os.sh` doesn't probe `$NEWLAPACK` names). Dry run 2026-10-22 on the same local archive: no NEWLAPACK in 28 binaries; a fixture referencing `_dgemm$NEWLAPACK` fails the check. Paste the lane output of the release build here. |
 | Privacy manifests valid | open | ARCH §20.4. The Xcode privacy report from the release archive (Organizer › Generate Privacy Report) lists the engine pod (C617.1, E174.1, 35F9.1) and the whisper pod (E174.1); Runner has `NSPrivacyTracking = false` and no collected data types. |
 | Info.plist strings present | ready | INT-03: `NSMicrophoneUsageDescription`, `NSPhotoLibraryAddUsageDescription`, `BGTaskSchedulerPermittedIdentifiers`, and no `NSPhotoLibraryUsageDescription`. |
 | App Store Connect validation clean | owner | Upload through `fastlane ios beta` (TestFlight), then read the processing email. |
@@ -76,7 +77,7 @@ Status values: **open** (work or evidence still missing), **ready** (evidence ex
 
 | Check | Status | Evidence / next step |
 |---|---|---|
-| AAB holds `libdanaview_whisper*.so` for arm64-v8a and x86_64 only, 16 KB aligned, only `dv_*` exported, ≤ 3 MB each | open | Added to the release workflow and the Android lane by the §3.2 diff (`check_native_libs.sh`). Paste the output here. |
+| AAB holds `libdanaview_whisper*.so` for arm64-v8a and x86_64 only, 16 KB aligned, only `dv_*` exported, ≤ 3 MB each | open (pipeline applied) | **Applied `f8cd585`:** `check_native_libs.sh` runs in the Android lane on every AAB `flutter_aab` returns (built, `ENV["AAB"]` or an existing `build/` one) and in `android-release.yml` on the AAB and the universal and split APKs. The whisper libraries are linked whatever the flags say, so flags-off builds must pass too. Dry run 2026-10-22 on the Mac: the script runs (NDK 28.2 `llvm-readelf`); the only local AAB (4 Oct, before the whisper plugin) fails "missing whisper libraries", as it should. Paste the output of the release build here. |
 | FGS declaration submitted | owner | Text in §5.4. |
 | Play pre-launch report clean | owner | Internal testing track, then Play Console › Pre-launch report. |
 | `POST_NOTIFICATIONS` / `RECORD_AUDIO` flows verified | deferred | Emulator side done: AND-14's real notification dialog passes on API 35, and every QA-02 export asks for `grantNotifications` and starts; s13 records a voiceover (low level accepted as an emulator limitation, 2026-10-22) ([QA-02](qa/QA-02-android-emulator.md#and-14-the-notification-permission-request-always-returns)). One device check left. |
@@ -96,7 +97,7 @@ Status values: **open** (work or evidence still missing), **ready** (evidence ex
 
 | Check | Status | Evidence / next step |
 |---|---|---|
-| Release builds pass `--dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true` on iOS and Android | open | Diff in §3.2. Not applied. `DANAVIEW_AUTO_CAPTIONS` waits for the QA-07 conditions still open on 2026-10-22: Android Emulator run and one iOS and one Android device row (§3.3). |
+| Release builds pass `--dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true` on iOS and Android | open | Diff in §3.2. Not applied (it belongs to the 1.0.0 release ticket, widened AIS-41). `DANAVIEW_AUTO_CAPTIONS` waits for the QA-07 conditions still open on 2026-10-22: Android Emulator run and one iOS and one Android device row (§3.3). |
 | Desktop builds keep the editor hidden | ready | Desktop builds get no defines, and `EditorAvailability.platform` hides the editor on macOS/Windows/Linux regardless of the flags (ARCH §3.3, D-17). Desktop absence tests: INT-02, INT-04. |
 | Version `1.0.0+1` | ready | Owner decision 2026-10-22: the first store release stays 1.0.0, build 1, so `pubspec.yaml` (`1.0.0+1`) and `app_info.dart` (`1.0.0` / `1`) need no change (§3.1). Nothing has been uploaded to either store, so build 1 is free (owner, 2026-10-22). |
 | Project schema 1, `minReader` 1, RenderPlan `v` 1, migration fixtures committed | ready | CORE-25 (schema and migration fixtures), CORE-29 (plan `v` 1). Re-check on the release commit: `cd packages/danaview_editor_core && dart test test/store test/plan`. |
@@ -121,14 +122,14 @@ The app ships once, after the internal 1.3 dev milestone completes (owner, 2026-
    - QA-07: the Android Emulator run (default phase, job-kill/job-resume) and one iOS and one Android device row, before the Auto captions flag ships (§3.3).
    - QA-09 (Mac): a green full nightly matrix on the release commit.
    - Device-lab items (§6 O4) as devices allow.
-2. Apply §3.1 (the legal effective date; the version stays `1.0.0+1`) and §3.2 (release builds) in one INT-05 commit. Apply §3.3 (the Auto captions flag) only once QA-07 says yes. If it doesn't, ship with Auto captions off and leave the captions text out of the store copy (§4.6).
+2. Apply §3.1 (the legal effective date; the version stays `1.0.0+1`) and the flag part of §3.2 (its pipeline checks are already applied, `f8cd585`) in one release commit. Apply §3.3 (the Auto captions flag) only once QA-07 says yes. If it doesn't, ship with Auto captions off and leave the captions text out of the store copy (§4.6).
 3. Copy the §4 texts into the fastlane metadata files listed in §4.5, replacing the current, never released store descriptions (owner decision 2026-10-16: at launch time, not before).
 4. Dry-run every release workflow and lane (§3.4). Upload to TestFlight and to the Play internal track.
 5. Owner steps in §6, then tag `v1.0.0` on `main`.
 
 ---
 
-## 3. Prepared changes (not applied)
+## 3. Prepared changes (not applied, except the §3.2 pipeline checks)
 
 ### 3.1 Version 1.0.0+1 (no change)
 
@@ -153,6 +154,8 @@ Notes:
 ### 3.2 Release builds: flags, whisper framework and native checks
 
 Both editor flags are compile-time `--dart-define`s that default to false (ARCH D-31). The code never flips them. Only the iOS and Android release builds pass them.
+
+**Applied 2026-10-22 (`f8cd585`), pipeline part only:** the whisper xcframework build, `check_ios_min_os.sh` and an `nm -um` NEWLAPACK check in the iOS lane (`flutter_ipa`), and `check_native_libs.sh` in the Android lane (`flutter_aab`, also on pre-built AABs) and in `android-release.yml` (the step below). The `--dart-define` lines (`EDITOR_DEFINES`, the workflow `env:` block and the `$EDITOR_DEFINES` arguments) are **not** applied; they belong to the 1.0.0 release ticket (widened AIS-41). The checks don't depend on the flags: `danaview_whisper` is a plain dependency in `pubspec.yaml`, so its pod (iOS, which needs the xcframework) and its CMake libraries (Android, arm64-v8a and x86_64) are linked into every build, and the defines only gate Dart code. The applied iOS lane runs the min-OS check with `bash` and adds the NEWLAPACK scan, which the diff below doesn't show.
 
 **iOS lane** (`ios/fastlane/Fastfile`): build the whisper xcframework first, pass both flags, and check the 15.0 floor on the built app. The macOS build (`macos_pkg`) gets nothing.
 
@@ -255,9 +258,9 @@ PRODUCTION_READINESS §1 says the flag can ship; the QA-07 report does not say s
 
 | What | How | Result |
 |---|---|---|
-| iOS lane | `cd ios && BUILD_NUMBER=1 fastlane ios build` (or the next free build number, §3.1): builds the IPA with the flags, runs the min-OS check, uploads nothing | open |
-| Android lane | `cd android && BUILD_NUMBER=1 fastlane android build` (without `BUILD_NUMBER` the lane stamps `yymmddHH`) | open |
-| Android workflow | `workflow_dispatch` with `build_type: both` on a branch; don't publish the GitHub release | open |
+| iOS lane | `cd ios && BUILD_NUMBER=1 fastlane ios build` (or the next free build number, §3.1): builds the xcframework (`--if-missing`) and the IPA with the flags, runs the min-OS and NEWLAPACK checks, uploads nothing | open. Static checks 2026-10-22 (`f8cd585`): `ruby -c` OK, `fastlane lanes` lists all 9 iOS lanes, both checks pass on an existing local release archive; no build run (8 GB Mac shared with other builders). The release Mac needs `cmake` ≥ 3.28 on PATH (not installed on the dev Mac). |
+| Android lane | `cd android && BUILD_NUMBER=1 fastlane android build` (without `BUILD_NUMBER` the lane stamps `yymmddHH`); runs `check_native_libs.sh` on the AAB | open. Static checks 2026-10-22: `ruby -c` OK, `fastlane lanes` lists all 8 Android lanes. A stale `build/app/outputs/bundle/release/app-release.aab` now fails the check instead of being reused silently: delete it or pass a fresh `AAB`. |
+| Android workflow | `workflow_dispatch` with `build_type: both` on a branch; don't publish the GitHub release | open. Static checks 2026-10-22: the YAML parses, the new step sits after the three builds and before "Prepare Release Artifacts", shellcheck on its script is clean apart from the intentional unquoted `$1`. |
 | Linux and Windows workflows | `workflow_dispatch` on a branch; confirm no editor entry points (Home has no editor button) | open |
 | macOS | `fastlane ios mac_release` without upload, or `flutter build macos --release`; the editor stays hidden | open |
 | Flags reach the app | On a TestFlight or internal-track build: Home shows the editor button left of the gear, and Auto captions shows in the Captions tool | open |
