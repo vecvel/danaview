@@ -7,19 +7,39 @@ Emulators on the Windows laptop (BUILD_PLAN QA-02). It also holds the API 28 bel
 Android export extra on API 34 and API 35, the tablet run of scenario 12, and the manual tablet
 steps for the owner (hardware keyboard, mouse, drag from Files and Photos).
 
-**Status (2026-10-22, 03:00 IST): not certified.** The owner's re-run on code F (`editor-android`
-**d680bd3**, which carries FIX M-22, 07485cf) ran on mains power on 2026-10-22. The owner set four
-re-run items and asked to certify only if everything passes. **Two of the four failed:**
-(1) **s02 failed in the API 29 2 GB batch** (the player-to-editor handoff opened at frame 0, the M-9
-symptom; FIX M-23, Mac). It passed alone on a fresh install, but a batch failure is not a clean pass.
-(2) **The QA-05 Android half is not green** (see `QA-05-soak.md`): the process-death chain passes
-(7/7), but the seeded soak (seed 5150) fails: D8 (the editor cache root is purged by the system under
-low storage during an export; Mac product, plus a soak gap), D9 (an export deadlocks creating its audio
-encoder, with preview players stuck in the same codec reclaim; Android lane) and D10 (stale preview
-frames after seeks; Android lane). The soak only runs on Windows through a scratch wrapper, so the
-host fixes W1–W7 in `soak_host.py` are Mac requests. The other re-run items pass. Still open: FIX M-23,
-D8 (Mac), D9 and D10 (Android lane), W1–W7 (Mac), and the owner's manual tablet M1–M4. The owner
-accepts s13's low voice level on the emulator as an emulator limitation.
+**Status (2026-10-22, 12:00 IST): not certified.** The re-run on code G (`editor-android`
+**034a0d3**) ran on mains power on 2026-10-22. Code G carries FIX M-23 (8fb43c2), the Dart half of
+QA-05 D8 (2c09282), the `soak_host.py` fixes W1–W7 (5912db4) and the Android-lane fixes D8 engine
+half (c90819a), D9 (92623ff) and D10 (74392c9). The owner's rule was to certify only if everything
+is green. **Two items are not green:**
+
+1. **s18 failed in the first API 29 2 GB batch.** It timed out at its second editor close, a close
+   stall on the MINIMAL tier with no stack captured; see "Re-run of 2026-10-22 on code G" below.
+   It passed alone on a fresh install, and a second full batch with the same command passed all 5
+   scenarios. One failure in a certifying batch is not a clean pass.
+2. **The QA-05 Android half is not green** (`QA-05-soak.md` §A0). The death chain passes 7/7 and
+   seeded run b passes. Seeded run a fails one op, #262: a seek right after a reverse acked frame 0
+   (a D10 residual, Android lane). An earlier run on the same code (a1, not counted as run a)
+   crashed with SIGSEGV during an export cancel, and the cause is not proven. Also, `soak_host.py`
+   still needs a manual folder step on Android after its own uninstall (W4b, Mac).
+
+FIX M-23 is fixed. s02 passes in both 2 GB batches and on API 29. Still open: the s18 close stall
+(Android lane, unproven), D10 residual and the a1 crash (Android lane), W4b (Mac), and the owner's
+manual tablet M1–M4. The owner accepts s13's low voice level on the emulator as an emulator
+limitation.
+
+- **Re-run on 034a0d3, mains power, fresh install** ("Re-run of 2026-10-22 on code G" below):
+  - **API 29 2 GB (tier MINIMAL), batch 1:** s01, s02, s03 and s04 pass. **s18 fails** at
+    `s18_close_reopen_test.dart:56`, the second `ed.close()`: "Timed out after 60 s waiting for the
+    editor to close".
+  - **s18 alone** (fresh install): pass. **Batch 2** (same command): all 5 pass.
+  - **s02 on API 29 (tier LOW):** pass. M-23 is fixed.
+
+The d680bd3 round below is kept as the previous status.
+
+**Previous status (2026-10-22, 03:00 IST, code F d680bd3): not certified.** s02 failed in the API
+29 2 GB batch (FIX M-23), and the QA-05 Android half was not green (D8, D9, D10, W1–W7). The other
+re-run items passed, and they stand on d680bd3:
 
 - **Re-run on d680bd3, mains power, fresh install on every device** ("Re-run of 2026-10-22" below):
   - **API 29 2 GB (tier MINIMAL):** s01, s03, s04 and **s18 pass in one batch**, so M-22 is fixed
@@ -221,7 +241,16 @@ API 35 images the emulator raises the 3072 MB of `config.ini` to 4096 MB, which 
 
 ## Code versions
 
-**Re-run items: F = d680bd3** (`editor-android`, 2026-10-22). This is code E with `origin/editor-wip`
+**This round: G = 034a0d3** (`editor-android`, 2026-10-22). This is code F with `origin/editor-wip`
+merged again. It brings the Mac's FIX M-23 (8fb43c2), the Dart half of QA-05 D8 (2c09282, including
+the soak's low-storage wait) and the `soak_host.py` fixes W1–W7 (5912db4). It also brings the
+Android-lane fixes D8 engine half (c90819a), D9 (92623ff) and D10 (74392c9).
+
+| Where | Code as run |
+|---|---|
+| API 29 2 GB and API 29, copy `C:/dev/dv2`, `emulator-5556`, 2026-10-22 morning | 034a0d3. `dv2` was refreshed from the main checkout's tracked files at 034a0d3 (`build/media_kit_libs_android_video` kept). Each device folder has a `CODE_VERSION.txt`. |
+
+**Previous re-run items: F = d680bd3** (`editor-android`, 2026-10-22). This is code E with `origin/editor-wip`
 merged again (dd0f310), which brings FIX M-22 (07485cf: the preview is ready only after the opening
 seek shows the saved frame), the QA-02 runner change 1f11813 (no adb server restart on an emulator
 restart) and docs. No Android-lane code changed between E and F.
@@ -258,6 +287,57 @@ Earlier labels, used only in the history note:
   2026-10-16/17.
 
 ## Results matrix
+
+### Re-run of 2026-10-22 on code G (034a0d3), mains power
+
+The lead asked for these re-runs after the Mac fixes landed: s01–s04 and s18 in one batch on the
+2 GB AVD, plus s02 on API 29. Both ran on `emulator-5556` from `dv2`, booted with `-port 5556 -feature
+GLESDynamicVersion`, with audio on and
+`DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=C:/dev/models`. No emulator restarted.
+
+| Item | Device | Batch 1 | Alone (fresh install) | Batch 2 (same command) |
+|---|---|---|---|---|
+| s01 | API 29 2 GB (MINIMAL) | **pass** (228 s) | | **pass** (97 s) |
+| s02 | API 29 2 GB | **pass** (109 s) | | **pass** (135 s) |
+| s03 | API 29 2 GB | **pass** (251 s) | | **pass** (158 s) |
+| s04 | API 29 2 GB | **pass** (208 s) | | **pass** (147 s) |
+| s18 | API 29 2 GB | **fail** (276 s): `s18_close_reopen_test.dart:56`, "Timed out after 60 s waiting for the editor to close" | **pass** (366 s) | **pass** (137 s) |
+| s02 | API 29 (LOW) | **pass** (136 s), fresh install | | |
+
+The tiers come from the capabilities lines: `tier=MINIMAL api=29 ram=2089222144 lowRam=false
+gles3=true` (2 GB) and `tier=LOW api=29 ram=3143041024 gles3=true` (API 29).
+
+**M-23 is fixed.** s02 passed in both 2 GB batches and on API 29. On d680bd3 it failed in the 2 GB
+batch.
+
+**s18 on the 2 GB AVD: a stall at the second close (open, Android lane, cause not proven).** The
+test closes the editor, reopens the project, and closes it again. In batch 1, the second close timed
+out after Dart had logged `[EditorLifecycle] leaving the editor` and `exit callback`, and the editor
+screen was still showing. The logcat (`batch-s18.logcat.txt`, app pid 10210) shows:
+
+- 09:05:48: the first close releases the 4 contingency deck players on the preview thread (tid
+  10288);
+- 09:05:52: `DanaviewPreview: open contingency` (the reopen) and 4 new deck players;
+- 09:06:04.415: `ExoPlayerImpl: Release bfa3348` on the main thread (Media3's FrameExtractor),
+  followed by a SurfaceUtils disconnect;
+- after that, no app output until the harness killed the process at 09:07:19. The 4 deck players
+  of the reopened session were never released. In the passing runs they are released within about
+  1 s of the close.
+
+So the platform main thread or the preview release path stalled. That fits a codec-release hang of
+the D9 kind, or a regression around the D9/D10 changes, but no thread dump was taken while the
+stall was live. Batch 2 ran with a `jdb` thread-dump watcher armed, and the watcher never fired.
+After that, a diagnostic loop ran s18 alone on the 2 GB AVD (`s18_close_stall/`, `-no-audio`,
+built from `dv2`). This folder does not record its code version, so it is not a result. 16 runs
+passed. Run 5 hung, but that run is invalid: the probe paused the Dart isolate through the VM
+service. Tally on 034a0d3 for the certifying command: 1 failure in 3 runs. Next step for the
+Android lane: when it recurs, take a thread dump while the stall is live, then check the main
+thread and the preview thread's release of the deck players.
+
+Evidence: `emulator-5556_Pixel_API_29_2GB/034a0d3/` (`batch_s01-s04_s18/`, `s18_alone_rerun_PASS/`,
+`batch2_s01-s04_s18_ALLPASS/`, `README.txt`, `CODE_VERSION.txt`) and
+`emulator-5556_Pixel_API_29/034a0d3/s02/`. Each run folder has its runner console log, `logs/` and
+`summary.txt`.
 
 ### Re-run of 2026-10-22 on code F (d680bd3), mains power
 
@@ -839,11 +919,17 @@ host for `grantNotifications` and the export started. None waited at "Preparing�
 |---|---|
 | M-22, s18 frame 0 after the reopen | s18 passes in the API 29 2 GB batch (191 s), on API 29 (212 s) and on API 35 (402 s), all on d680bd3 |
 
+**Closed by the 034a0d3 re-run (2026-10-22):**
+
+| Request | Proof |
+|---|---|
+| M-23, s02 handoff at position 0 (fixed by 8fb43c2) | s02 passes in both API 29 2 GB batches (109 s and 135 s) and on API 29 (136 s), all on 034a0d3 |
+
 **M-14 (s08 close past "export interrupted")** is fixed in `E2eEditor.close` (FIX-QA00-R7). The
 clean pass did not exercise it, because every batch starts from cleared data.
 
-**M-23. s02 on the 2 GB AVD: the player-to-editor handoff carries position 0** (new, 2026-10-22;
-the M-9 symptom again, intermittent).
+**M-23. s02 on the 2 GB AVD: the player-to-editor handoff carries position 0** (fixed by 8fb43c2,
+confirmed on 034a0d3; kept for the record; the M-9 symptom again, intermittent).
 
 - **Where:** `s02_player_to_editor_test.dart:62`, the playhead frame after the handoff:
   `Expected: <160> Actual: <0>`.
@@ -1072,6 +1158,18 @@ rows passed or failed (one line each is enough). This report then links the scre
 Paths are relative to `build/e2e/android/`. They are local to the Windows laptop and not
 committed.
 
+**Before the 034a0d3 re-run,** the d680bd3 evidence of `emulator-5556` for the API 29 2 GB and API
+29 AVDs was moved to `_before_034a0d3/emulator-5556_<AVD>/d680bd3/`. Prefix the d680bd3 paths of
+those two AVDs below with `_before_034a0d3/`.
+
+**Code G (034a0d3), 2026-10-22: this round**
+
+| Folder | Device | Content |
+|---|---|---|
+| `emulator-5556_Pixel_API_29_2GB/034a0d3/` (`batch_s01-s04_s18/`, `s18_alone_rerun_PASS/`, `batch2_s01-s04_s18_ALLPASS/`, `README.txt`, `CODE_VERSION.txt`) | API 29 2 GB | batch 1 (s18 fail), s18 alone, batch 2 (all pass) |
+| `emulator-5556_Pixel_API_29/034a0d3/` (`s02/`, `CODE_VERSION.txt`) | API 29 | s02 |
+| `s18_close_stall/` (`repro_results.txt`, `repro_notes.txt`, `repro_*`) | API 29 2 GB | diagnostic s18 loop, not a result (code version not recorded in the folder) |
+
 **Before the d680bd3 re-run,** the code E evidence of both serials was moved to `_before_d680bd3/`
 (`emulator-5554/{full,solo}/` and `emulator-5556_<AVD>/`), keeping the relative paths. The code E
 table below names the folders as they were; prefix each with `_before_d680bd3/`. The `dv2`
@@ -1137,13 +1235,23 @@ The owner's rule for this round (2026-10-22): the re-run items run on d680bd3 an
 clean pass stands on 88469c0. If every re-run item passes and nothing else is open except the
 manual M1–M4, QA-02 is certified with that exception.
 
-**Verdict (2026-10-22): QA-02 is NOT certified.** Two of the owner's four re-run items failed:
-s02 in the API 29 2 GB batch (FIX M-23; it passed alone, but a batch failure is not a clean pass),
-and the QA-05 Android half (death chain 7/7, but the seeded soak is not green: D8, D9, D10; see
-`QA-05-soak.md`). The owner's rule certifies only if everything passes.
+**Verdict (2026-10-22, 034a0d3): QA-02 is NOT certified.** The rule for this round (owner, relayed
+from the lead): re-run s01–s04 and s18 in one 2 GB batch plus s02 on API 29 on 034a0d3, run the
+QA-05 Android half, and certify if everything is green. Two things are not green:
+
+- s18 failed in the 2 GB batch with a close stall (1 of 3 runs). The alone re-run and batch 2 passed,
+  but a failure in a certifying batch is not a clean pass, and the stall has no root cause yet.
+- The QA-05 Android half is not green: seeded run a failed op #262 (D10 residual), and run a1 crashed
+  (SIGSEGV, cause not proven). See `QA-05-soak.md` §A0.
+
+The earlier verdict on d680bd3 failed on s02 (M-23, now fixed) and on the QA-05 Android half.
 
 **Done:**
 
+- **On 034a0d3 (mains power):**
+  - FIX M-23: s02 passes in both API 29 2 GB batches and on API 29;
+  - API 29 2 GB: s01, s03 and s04 pass in both batches; s18 passes alone and in batch 2 (not
+    batch 1).
 - **On d680bd3 (mains power):**
   - API 29 2 GB: s01, s03, s04 and s18 pass in the batch (M-22 fixed);
   - s18 passes on API 29 and API 35;
@@ -1159,28 +1267,29 @@ and the QA-05 Android half (death chain 7/7, but the seeded soak is not green: D
   - the s09 close trace is clean.
 - **s13:** the owner accepts the low voice level on the emulator as an emulator limitation. Real-mic
   levels are a device check (QA-04, device lab). Every other s13 check passes.
-- **Android lane:** no defect found in QA-02 and no fix needed.
+- **Android lane:** no defect found in QA-02 through d680bd3. On 034a0d3, the s18 close stall is a
+  possible Android-lane defect (below).
 
 **Still open, by owner:**
 
-1. **Mac (Dart, player screen): FIX M-23.** s02 on the 2 GB AVD opened the editor at frame 0,
-   because the Edit request carried position 0 (1 failure in 2 runs). After the fix, rerun s01–s04
-   and s18 on Pixel_API_29_2GB in one batch (fresh install, `-feature GLESDynamicVersion`), and s02
-   on API 29 for the gate.
-2. **Owner (manual): M1–M4 on the tablet** (keyboard, mouse, drag from Files, drag from Photos),
+1. **Android lane: the s18 close stall on the 2 GB AVD** (034a0d3, 1 failure in 3 runs; see "Re-run
+   of 2026-10-22 on code G"). Take a thread dump while the stall is live, find the cause, and fix it
+   if it is ours. Then re-run s01–s04 and s18 in one batch on Pixel_API_29_2GB (fresh install,
+   `-feature GLESDynamicVersion`).
+2. **QA-05 Android half, see `QA-05-soak.md` §A0:**
+   - Android lane: the D10 residual (run a, op #262: a seek right after a reverse acked frame 0) and
+     the run a1 SIGSEGV during an export cancel (classed as an emulator codec crash, not proven).
+   - Mac: W4b (`soak_host.py` must open the shared folders to the app after its own uninstall).
+   - After these: the seeded soak (seed 5150, two runs) and the death chain again.
+3. **Owner (manual): M1–M4 on the tablet** (keyboard, mouse, drag from Files, drag from Photos),
    using the checklist above. This report then records each row with its screenshot.
-3. **QA-05 Android half (owner's re-run item 4), see `QA-05-soak.md`:** D8 (editor cache root purged
-   under low storage during an export; Mac product, plus the soak's low-storage gap), W1–W7
-   (`soak_host.py` on Windows/Android; Mac), and **D9 and D10 for the Android lane** (an export
-   deadlock creating the audio encoder with preview players stuck in the same codec reclaim; stale
-   preview frames after seeks). After the fixes, rerun the seeded soak (seed 5150) and the death chain.
 
-When M-23 lands and its rerun passes in the batch, and the QA-05 Android half is green, with nothing
-else open, the status becomes
-"QA-02 certified, except the owner's manual tablet checklist M1–M4", naming the code version of
-each part. If M-23 changes code that other scenarios use, the lead decides whether a wider rerun is
-needed.
+When items 1 and 2 are green, with nothing else open, the status becomes "QA-02 certified
+(<date>), except the owner's manual tablet checklist M1–M4". It names the code version of each part:
+the new code for the re-run items, d680bd3 and 88469c0 for the earlier certified parts, and the
+owner's s13 emulator-limitation decision. If the fixes change code that other scenarios use, the lead
+decides whether a wider re-run is needed.
 
-**Android-lane items open in QA-02's own scenarios:** none (D9 and D10 come from the QA-05 soak). The `debugCaptureFrame` fix (ae6cda2) passed s18 in the
-batch on API 35 and API 29 (88469c0 and d680bd3) and on the 2 GB AVD (d680bd3). The QA-05 Android
-findings of this round (an export deadlock candidate in the engine) are tracked in `QA-05-soak.md`.
+**Android-lane items open in QA-02's own scenarios:** the s18 close stall on the 2 GB AVD (034a0d3,
+cause not proven). The `debugCaptureFrame` fix (ae6cda2) passed s18 in the batch on API 35 and API 29
+(88469c0 and d680bd3) and on the 2 GB AVD (d680bd3, and 034a0d3 batch 2).
