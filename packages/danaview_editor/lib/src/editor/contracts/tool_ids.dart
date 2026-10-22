@@ -49,6 +49,11 @@ enum ToolId {
 
   /// The strip order of ux.md §9.1.
   static const List<ToolId> stripOrder = values;
+
+  /// Whether the tool's tile opens a tab of sub-tools (`ToolSets.toolTabs`) instead of a panel:
+  /// opening it closes the open panel, and a new selection closes it (the selection's context
+  /// tools take its place).
+  bool get opensTab => this == ToolId.audio;
 }
 
 /// A tool of the Still Photo Mode tray (VED plan §6.1, BUILD_PLAN VED-01). The photo screen is not

@@ -165,6 +165,23 @@ void main() {
       expect(selected, [false, true, false, false, false, false]);
     });
 
+    testWidgets('unselected swatches use the border token; only the selected swatch keeps its ring', (tester) async {
+      await openEditor(tester);
+      Border ring(int i) {
+        final dot = find.descendant(
+          of: key('marker-color-$i'),
+          matching: find.byWidgetPredicate((w) => w is Container && w.decoration is BoxDecoration && (w.decoration! as BoxDecoration).shape == BoxShape.circle),
+        );
+        return (tester.widget<Container>(dot).decoration! as BoxDecoration).border! as Border;
+      }
+      for (final i in [0, 2, 3, 4, 5]) {
+        expect(ring(i).top.color, DanaviewColors.border, reason: 'swatch $i');
+      }
+      expect(ring(1).top.color, DanaviewColors.textPrimary, reason: 'the selected swatch keeps its meaning-carrying ring');
+      expect(find.descendant(of: key('marker-color-1'), matching: find.byIcon(Icons.check_rounded)), findsOneWidget);
+      expectNeutralBorders(tester, skip: key('marker-color-1'));
+    });
+
     testWidgets('name, colour and note are committed together as ONE history entry by Done', (tester) async {
       final (rig, m) = await openEditor(tester);
       final before = stateOf(rig).history.length;

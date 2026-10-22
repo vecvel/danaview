@@ -20,6 +20,7 @@ import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart';
 
 import 'interaction_support.dart';
+import '../../support/neutral_borders.dart';
 
 Map<ItemId, (TimeRange, TrackId?)> _shape(Map<ItemId, Placement> p) =>
     {for (final e in p.entries) e.key: (e.value.range, e.value.newTrack == null ? e.value.track : null)};
@@ -87,6 +88,7 @@ void main() {
       expect(i.ghost!.createsTrack, isTrue);
       expect(i.ghosts[const ItemId('it_c')]!.onNewTrack, isTrue);
       expect(find.byKey(const ValueKey('new-track-pill')), findsOneWidget);
+      expectNeutralBorders(tester, of: find.byKey(const ValueKey('new-track-pill')));
       final lanes = t.project.timeline.tracks.length;
       await g.up();
       await tester.pump();

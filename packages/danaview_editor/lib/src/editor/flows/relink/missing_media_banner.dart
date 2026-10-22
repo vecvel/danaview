@@ -191,7 +191,6 @@ class _BannerFrame extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: DanaviewSpacing.xs),
           child: DanaviewSurface(
             color: DanaviewColors.surfaceElevated,
-            borderColor: color.withValues(alpha: 0.45),
             borderRadius: DanaviewRadius.mdAll,
             shadow: DanaviewShadow.soft,
             padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.md, vertical: DanaviewSpacing.xs),

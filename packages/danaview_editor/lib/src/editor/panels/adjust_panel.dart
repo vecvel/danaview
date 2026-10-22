@@ -457,7 +457,7 @@ class CompareButton extends StatelessWidget {
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
-              border: Border.all(color: active ? DanaviewColors.primaryLight : DanaviewColors.border, width: DanaviewBorders.width),
+              border: const Border.fromBorderSide(DanaviewBorders.hairline),
               boxShadow: active ? DanaviewShadows.none : DanaviewShadows.subtle,
             ),
             child: Icon(Icons.compare_rounded, size: 22, color: active ? DanaviewColors.primaryLight : DanaviewColors.textPrimary),

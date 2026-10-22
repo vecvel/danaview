@@ -356,13 +356,19 @@ class InspectorNumberRow extends StatelessWidget {
   /// Whether the row accepts edits.
   final bool enabled;
 
+  /// Widest the number field grows (half the row at most); steppers show from
+  /// [DanaviewNumberField.minWidthForSteppers].
+  static const double maxFieldWidth = 184;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: DanaviewSpacing.xs),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final fieldWidth = math.min(DanaviewNumberField.minWidthForSteppers, constraints.maxWidth * 0.5);
+          // Wide panels give the field room past the stepper threshold so a value such as
+          // "3.00 s" is not clipped between the steppers.
+          final fieldWidth = math.min(maxFieldWidth, constraints.maxWidth * 0.5);
           return Row(
             children: [
               Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _labelStyle)),

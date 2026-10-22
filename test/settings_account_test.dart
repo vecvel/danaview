@@ -452,6 +452,30 @@ void main() {
       await _finish(tester, env);
     });
 
+    testWidgets('fields in error keep the neutral hairline; the message carries the error colour', (tester) async {
+      useSurface(tester, librarySurfaces[2]);
+      final env = await LibraryTestEnv.create();
+      await ProfileRepository(env.prefs).save(UserProfile(name: 'Ada', dateOfBirth: DateTime(1850, 3, 14)));
+      await pumpProfile(tester, env);
+      const dobError = 'Enter an age of 120 or under';
+      await tester.scrollUntilVisible(find.text(dobError), 200, scrollable: find.byType(Scrollable).first);
+      expect(tester.widget<Text>(find.text(dobError)).style!.color, DanaviewColors.errorLight);
+      final dob = find.ancestor(of: find.byIcon(Icons.cake_rounded), matching: find.byType(AnimatedContainer)).first;
+      final dobBorder = (tester.widget<AnimatedContainer>(dob).foregroundDecoration! as BoxDecoration).border! as Border;
+      expect(dobBorder.top, DanaviewBorders.hairline, reason: 'no red outline around the date of birth');
+
+      await _enter(tester, 1, 'ada@example');
+      await pumpFrames(tester, count: 8);
+      const emailError = 'Enter an email like name@example.com';
+      expect(find.text(emailError), findsOneWidget);
+      final email = find.ancestor(of: find.text(emailError), matching: find.byType(DanaviewTextField)).first;
+      final frame = tester.widget<AnimatedContainer>(find.descendant(of: email, matching: find.byType(AnimatedContainer)).first);
+      expect(((frame.foregroundDecoration! as BoxDecoration).border! as Border).top, DanaviewBorders.hairline,
+          reason: 'no red outline around the email field');
+      expect(tester.takeException(), isNull);
+      await _finish(tester, env);
+    });
+
     testWidgets('leaving with unsaved changes asks first', (tester) async {
       useSurface(tester, librarySurfaces[2]);
       final env = await LibraryTestEnv.create();

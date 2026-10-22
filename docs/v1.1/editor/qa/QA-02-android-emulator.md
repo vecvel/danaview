@@ -7,7 +7,18 @@ Emulators on the Windows laptop (BUILD_PLAN QA-02). It also holds the API 28 bel
 Android export extra on API 34 and API 35, the tablet run of scenario 12, and the manual tablet
 steps for the owner (hardware keyboard, mouse, drag from Files and Photos).
 
-**Status (2026-10-22, 20:00 IST): QA-02 certified (2026-10-22), except the owner's manual tablet
+**Status (2026-10-22, 22:30 IST): the manual tablet checklist M1–M4 has been run, automated
+(route b), on Pixel_Tablet_API_35. 23 of 24 rows pass; one row fails in the app: M2 row 2, Esc does
+not close the clip context menu opened by a right-click (FIX-QA02-M2-2, Dart side, Mac).** Code:
+`editor-android` **1bb7a65e** (a docs-only merge of `origin/editor-wip` into 14be3422; no file
+outside `docs/` differs from the certified **0fa78966**), debug APK with `DANAVIEW_EDITOR=true
+DANAVIEW_AUTO_CAPTIONS=true`, on mains power, the tablet alone on `emulator-5558`. Every input was
+a real system-level event (`InputManager.injectInputEvent` from a harness outside the app, see
+"Manual checklist" below); split screen was opened through the system UI. M1 13/13, M2 5/6, M3
+pass, M4 pass. QA-02 stays certified as below; the only open item is FIX-QA02-M2-2. Details, the
+emulator realities met and three observations for the Mac are under "Manual checklist".
+
+**Previous status (2026-10-22, 20:00 IST): QA-02 certified (2026-10-22), except the owner's manual tablet
 checklist M1–M4.** The last open item, the QA-05 Android half, is green on **code J
 `editor-android` 0fa78966** (the D12 fix): selftest pass, process-death chain 7/7, and both seeded
 soaks (seed 5150, 15 min) with 0 failures, no crash, ANR or OOM in our app and memory −3.0 % and
@@ -717,7 +728,7 @@ The tier is LOW on API 29 and MINIMAL on the 2 GB AVD; both have GLES 3 (see "GL
 |---|---|
 | s12 automated | **pass**, first attempt (158 s, 22:37–22:40). The wheel zoom and marquee reports were logged, so M-3 and M-4 are fixed on the tablet. |
 | Editor screenshot at tablet size | `emulator-5556_Pixel_Tablet_API_35/clean_88469c0/tablet_editor_2560x1600.png`. It is the two-pane editor with the tool rail scrolled to Format, the preview, the timeline and the clip context menu with Ctrl shortcuts. |
-| Manual M1–M4 | **not run** (owner; see the checklist) |
+| Manual M1–M4 | **run 2026-10-22 on 1bb7a65e (= 0fa78966 code), automated with system-level input, `emulator-5558`:** 23 of 24 rows pass; M2 row 2 fails (FIX-QA02-M2-2). See the checklist. |
 
 ### History (codes A–D, 2026-10-16/17; superseded by the clean pass above)
 
@@ -1139,6 +1150,81 @@ This covers the four manual items in `docs/v1.1/editor/qa/README.md` ("Manual ch
 hardware keyboard (s12 by hand), real mouse, drag from Files, and drag from Photos (ARCH D-18,
 AND-15). Do it when no automated run is going, so the emulators do not fight over the CPU.
 
+### Run of 2026-10-22 (Windows lane, route b: automated, system-level input)
+
+The owner asked the Windows lane to run M1–M4 (Mac 36fb0931). Nobody was at the laptop, so the
+rows were driven with real input events, not widget-level taps.
+
+- **Code:** `editor-android` **1bb7a65e** = 14be3422 + a docs-only merge of `origin/editor-wip`
+  (36fb0931); no file outside `docs/` differs from the certified **0fa78966**. Debug APK
+  (`flutter build apk --debug --dart-define=DANAVIEW_EDITOR=true
+  --dart-define=DANAVIEW_AUTO_CAPTIONS=true`, the setup step 6 defines), `adb install -r`.
+- **Device:** Pixel_Tablet_API_35 (Google APIs image, `hw.keyboard=yes`, 2560×1600, 320 dpi),
+  `-port 5558 -gpu host -no-snapshot-load -no-snapshot-save -no-window -no-audio` (lock
+  `build/danaview_locks/emulator3`), landscape. The only other emulator was another agent's
+  `emulator-5554`. Mains power. The tablet did not die at media_kit video start this time (one
+  cold boot, no retry needed).
+- **Setup:** steps 1, 5, 6 and 7 as written (media pushed and indexed; project "Manual QA-02"
+  created from Files with `frame_counter_1080p30.mp4`). Step 2's window and step 3's emulator
+  setting do not apply (headless, events injected inside the guest). Step 4: the headless tablet
+  has no virtio mouse device, so mouse events come from device 0 with `SOURCE_MOUSE` (as
+  `adb shell input mouse` does). `POST_NOTIFICATIONS` was granted with `pm grant` (no export ran).
+- **Harness** (outside the app, `spikes/qa02_manual/`): `Inject.java`, run as the shell user via
+  `app_process`, calls `InputManager(Global).injectInputEvent` (the path UiAutomation and
+  `adb shell input` use):
+  - keyboard: hardware `KeyEvent`s from the tablet's real keyboard device (`qwerty2`, id 0,
+    `SOURCE_KEYBOARD`), modifier key down → key down/up with meta state → modifier up;
+  - mouse: `SOURCE_MOUSE` / `TOOL_TYPE_MOUSE` MotionEvents: `ACTION_HOVER_MOVE` paths, right-click
+    = `DOWN`+`BUTTON_PRESS(BUTTON_SECONDARY)`+`BUTTON_RELEASE`+`UP`, primary-button drags,
+    `ACTION_SCROLL` with `AXIS_VSCROLL`/`AXIS_HSCROLL` while a real Shift/Ctrl key is held;
+  - touch: `SOURCE_TOUCHSCREEN` taps and long-press drags (hold 1.3 s, move 1.5 s, hover 2.5 s,
+    lift) for the cross-app drags.
+  Split screen was opened through the system UI (`KEYCODE_APP_SWITCH` → Overview → **Split** →
+  Danaview card), located with `uiautomator dump`. Screenshots: `adb exec-out screencap`.
+- **Harness incident (not an app or emulator failure):** the first M2 run sent a second
+  `ACTION_HOVER_ENTER` while already hovering; API 35's InputDispatcher aborted system_server
+  ("Expected ACTION_HOVER_MOVE"), the system restarted and the app was killed
+  (`manual/harness_system_server_crash_2152.txt`). The harness now sends only `HOVER_MOVE`. On
+  relaunch the app offered **Unsaved changes found → Restore**, and the project came back intact
+  (19:08, all M1 edits), so crash recovery worked. M2 row 1 was redone.
+- **Emulator / system realities met (not failures):**
+  - The Pixel Tablet launcher's app-icon menu in Overview has only "App info" and "Pause app";
+    split screen is the **Split** action under the Overview card (then "Choose another app").
+  - Right after entering split screen no window had input focus (`dumpsys input`:
+    `FocusedWindows` empty), so keys went nowhere until the editor was touched once.
+  - Files and Photos: the first long-press selects the item; a second long-press on the selected
+    item starts the drag. Photos lifts the drag shadow about 3 s after the press.
+  - The on-screen keyboard still opens for text fields although `hw.keyboard=yes`.
+
+**Verdict: 23 of 24 rows pass. M2 row 2 fails (FIX-QA02-M2-2, Dart). M3 and M4 pass.**
+
+**FIX-QA02-M2-2 (Dart side, Mac): Esc does not close the clip context menu opened with a
+right-click.** Right-click on a clip opens the menu at the pointer (Select multiple, Split S, Copy
+Ctrl+C, Cut Ctrl+X, Duplicate Ctrl+D, Move to track, Clip info, Delete, Ripple delete
+Shift+Delete), but Esc leaves it open: three injected Esc presses and one `adb shell input
+keyboard keyevent ESCAPE` changed nothing, while the same Esc closed the Format panel, the text
+editor and the Keyboard shortcuts sheet in M1. A mouse click outside closes it. Likely cause (not
+verified): `DanaviewMenuAnchor` requests focus for its scope in a post-frame callback, and the
+timeline's menu is opened from `TimelineView.showContextMenu` in another post-frame callback, so
+the menu scope may never get focus, or the editor-wide `escape` action (`worksInTextFields`)
+takes the key first. Evidence: `m2_mouse_context_menu.png` (the menu, and the screen after Esc
+looked the same).
+
+**Observations for the Mac (outside the checklist, not counted):**
+
+1. **Tablet starts letterboxed in portrait.** On a cold launch the activity asks for
+   `SCREEN_ORIENTATION_PORTRAIT`, so Home and Projects show in a 1200×1600 letterbox (with the
+   system's "Double-tap to move this app" hint). Once the editor has opened, Home and Projects are
+   full-screen landscape. Probably `main.dart` calls `PlayerOrientation.applyAppDefault()` before
+   the first frame, when the view size is still 0, so `_isPhone` is true.
+2. **Stale hover pill.** The hover pill stays on screen when the clip under a still mouse is split
+   or deleted (it kept "· 0:08" after the split, and stayed after the clip was deleted) until the
+   mouse moves.
+3. **Shift+wheel ignored twice in split screen**, until another key (N twice) was pressed; then it
+   worked, and later it worked straight after a touch. Not reproducible on demand.
+
+Screenshots and files are in `build/e2e/android/manual/` (gitignored, local to the laptop).
+
 Use **Git Bash**. Start each new window with:
 
 ```bash
@@ -1216,19 +1302,19 @@ Click the timeline once first (not a text field). A row passes when the "Expecte
 
 | # | Do | Expected | Screenshot | Result |
 |---|---|---|---|---|
-| 1 | Space, then K | Space starts playback (counter runs); K pauses | `m1_keyboard_space.png` (playing) | not run |
-| 2 | Paused: → once, then ← once | counter +1 frame, then back | `m1_keyboard_frame_step.png` (after →) | not run |
-| 3 | Shift+→, then Shift+← | playhead jumps 1 s (30 frames) forward, then back | `m1_keyboard_shift_step.png` | not run |
-| 4 | Tap the clip to select it, press S | splits in two at the playhead | `m1_keyboard_split.png` | not run |
-| 5 | Select the right half, Delete | that part is removed | `m1_keyboard_delete.png` | not run |
-| 6 | Ctrl+Z | the deleted part comes back | `m1_keyboard_undo.png` | not run |
-| 7 | Ctrl+Shift+Z (then Ctrl+Z again) | deleted again (redo), then back | `m1_keyboard_redo.png` | not run |
-| 8 | Right half, Backspace, then Ctrl+Z | Backspace deletes like Delete; Ctrl+Z restores | `m1_keyboard_backspace.png` | not run |
-| 9 | Left clip, Ctrl+C, playhead to the end, Ctrl+V | a copy is pasted at the end | `m1_keyboard_paste.png` | not run |
-| 10 | Last clip, Ctrl+D | the clip is duplicated | `m1_keyboard_duplicate.png` | not run |
-| 11 | Add a text (Text tool), click into its field, note the text, Ctrl+S | the project saves; **no "s" is typed**; Esc twice to leave | `m1_keyboard_ctrl_s.png` | not run |
-| 12 | Tap a tool tile (for example Format; scroll the rail if needed), Esc, Space twice | Space starts and stops playback; the tile is not pressed again | `m1_keyboard_space_after_tile.png` (playing) | not run |
-| 13 | Ctrl+/ (or ?) | the Keyboard shortcuts sheet opens; every row has its key, with Ctrl glyphs (not ⌘); scroll through it all | `m1_shortcuts_sheet_1.png`, `_2.png`, … | not run |
+| 1 | Space, then K | Space starts playback (counter runs); K pauses | `m1_keyboard_space.png` (playing) | **pass** (KeyEvent SPACE, then K): playing at 00:03:03 (counter 94, pause icon), K stopped it at 00:05:19 (counter 169), still 169 afterwards |
+| 2 | Paused: → once, then ← once | counter +1 frame, then back | `m1_keyboard_frame_step.png` (after →) | **pass** (DPAD_RIGHT, DPAD_LEFT): 169 → 170 → 169 |
+| 3 | Shift+→, then Shift+← | playhead jumps 1 s (30 frames) forward, then back | `m1_keyboard_shift_step.png` | **pass** (DPAD_RIGHT/LEFT with Shift held): 169 → 199 → 169 |
+| 4 | Tap the clip to select it, press S | splits in two at the playhead | `m1_keyboard_split.png` | **pass** (mouse click selects; KeyEvent S): 0:08 clip split into 0:05 + 0:02 at 00:05:19 |
+| 5 | Select the right half, Delete | that part is removed | `m1_keyboard_delete.png` | **pass** (FORWARD_DEL): the 0:02 half removed |
+| 6 | Ctrl+Z | the deleted part comes back | `m1_keyboard_undo.png` | **pass** (Ctrl+Z): the 0:02 half back |
+| 7 | Ctrl+Shift+Z (then Ctrl+Z again) | deleted again (redo), then back | `m1_keyboard_redo.png` | **pass**: Ctrl+Shift+Z deleted it again, Ctrl+Z brought it back |
+| 8 | Right half, Backspace, then Ctrl+Z | Backspace deletes like Delete; Ctrl+Z restores | `m1_keyboard_backspace.png` | **pass** (DEL = Backspace): removed, Ctrl+Z restored |
+| 9 | Left clip, Ctrl+C, playhead to the end, Ctrl+V | a copy is pasted at the end | `m1_keyboard_paste.png` | **pass**: Ctrl+C on the left clip, playhead to the end (>| button), Ctrl+V: 0:05 copy at 00:08:00, length 08:00 → 13:19 |
+| 10 | Last clip, Ctrl+D | the clip is duplicated | `m1_keyboard_duplicate.png` | **pass**: length 13:19 → 19:08 (a second 5:19 copy) |
+| 11 | Add a text (Text tool), click into its field, note the text, Ctrl+S | the project saves; **no "s" is typed**; Esc twice to leave | `m1_keyboard_ctrl_s.png` | **pass**: Text tool added "Your text"; with the cursor in the field, Ctrl+S wrote `project.dnproj` (mtime 21:50:07.37 for the key at 21:50:07.06; also at the first Ctrl+S) and the field still reads "Your text" (no "s"); Esc twice left the text editor |
+| 12 | Tap a tool tile (for example Format; scroll the rail if needed), Esc, Space twice | Space starts and stops playback; the tile is not pressed again | `m1_keyboard_space_after_tile.png` (playing) | **pass**: Format tile (rail scrolled) opened Format, Esc closed it, Space played (00:11:01, pause icon), Space stopped at 00:12:10 and it stayed there; Format did not reopen |
+| 13 | Ctrl+/ (or ?) | the Keyboard shortcuts sheet opens; every row has its key, with Ctrl glyphs (not ⌘); scroll through it all | `m1_shortcuts_sheet_1.png`, `_2.png`, … | **pass** (Ctrl+/): sheet opened; Playback, Editing, Timeline, Markers, Help sections; every row has its key, Ctrl glyphs throughout (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y, Ctrl+S, Ctrl+=, Ctrl+/ / ?), no ⌘; scrolled to the end (`_1`–`_3`). Home/End also work (used later) |
 
 If a key does nothing, write down which one. If the emulator reacts instead of the app, recheck
 setup step 3.
@@ -1237,12 +1323,12 @@ setup step 3.
 
 | # | Do | Expected | Screenshot | Result |
 |---|---|---|---|---|
-| 1 | Move the mouse over a clip, do not click | a hover pill shows the clip's name and length; it goes away when the mouse leaves | `m2_mouse_hover_pill.png` | not run |
-| 2 | Right-click a clip | the clip's context menu opens (Split, Delete, …); Esc closes it | `m2_mouse_context_menu.png` | not run |
-| 3 | Press on an **empty** part of a lane (after the last clip) and drag back over two clips | a marquee shows; on release both clips are selected | `m2_mouse_marquee.png` | not run |
-| 4 | Wheel over the lanes | the lanes scroll up/down; zoom unchanged | — | not run |
-| 5 | Shift+wheel over the lanes | the timeline scrolls in time (left/right) | `m2_mouse_shift_wheel.png` | not run |
-| 6 | Ctrl+wheel over a clip | the timeline zooms, anchored at the mouse | `m2_mouse_ctrl_wheel_before.png`, `_after.png` | not run |
+| 1 | Move the mouse over a clip, do not click | a hover pill shows the clip's name and length; it goes away when the mouse leaves | `m2_mouse_hover_pill.png` | **pass** (HOVER_MOVE path onto the clip, then off it): pill "frame_counter_1080p30.mp4 · 0:05" shown, gone after leaving (`m2_mouse_hover_pill_left.png`). See observation 2 (stale pill) |
+| 2 | Right-click a clip | the clip's context menu opens (Split, Delete, …); Esc closes it | `m2_mouse_context_menu.png` | **FAIL (FIX-QA02-M2-2)**: right-click (BUTTON_SECONDARY) opens the clip menu at the pointer (Select multiple, Split S, Copy, Cut, Duplicate, Move to track, Clip info, Delete, Ripple delete) and selects the clip, but **Esc does not close it** (3 injected Esc + 1 `input keyevent ESCAPE`); a click outside does |
+| 3 | Press on an **empty** part of a lane (after the last clip) and drag back over two clips | a marquee shows; on release both clips are selected | `m2_mouse_marquee.png` | **pass** (primary-button mouse drag from the empty Main lane after the last clip back over two clips): marquee rectangle shown during the drag; on release both clips selected ("2 items") (`m2_mouse_marquee_released.png`) |
+| 4 | Wheel over the lanes | the lanes scroll up/down; zoom unchanged | — | **pass** (AXIS_VSCROLL −3 / +3 over the lanes, with 6 lanes so they overflow): lanes scroll down to Main and back; ruler and zoom unchanged (`m2_mouse_wheel_before/after/back.png`) |
+| 5 | Shift+wheel over the lanes | the timeline scrolls in time (left/right) | `m2_mouse_shift_wheel.png` | **pass** (AXIS_VSCROLL −3 with Shift held): time view moves ~3 s right (0:09–0:28 → 0:12–0:31), zoom unchanged. In the default centre-locked mode the playhead moves with it |
+| 6 | Ctrl+wheel over a clip | the timeline zooms, anchored at the mouse | `m2_mouse_ctrl_wheel_before.png`, `_after.png` | **pass** (AXIS_VSCROLL +2 with Ctrl held): zooms in. With "Center playhead on touch" off (free mode) the time under the mouse stays put (15.7 s before, 15.76 s after; `m2_mouse_ctrl_wheel_free_before/after.png`). In the Android default (centre-locked) the zoom anchors at the playhead, not the mouse (`m2_mouse_ctrl_wheel_before/after.png`); that is the documented design (`timeline_viewport.dart`: "in centre-locked mode always the playhead at the centre"). Mac: reword the row or confirm. The setting was turned back on after the run |
 
 Row 3 checks by hand what s12's automated marquee step checks (it passes on code E on the phone
 and the tablet). If the emulator window zooms on Ctrl+wheel, or right-click never
@@ -1265,7 +1351,24 @@ on an audio lane.
 
 | Screenshots | Result |
 |---|---|
-| `m3_files_split_screen.png`, `m3_files_dragging.png` (if you can), `m3_files_dropped.png`, `m3_files_audio_dropped.png` | not run |
+| `m3_files_split_screen.png`, `m3_files_dragging.png` (if you can), `m3_files_dropped.png`, `m3_files_audio_dropped.png` | **pass** (2026-10-22, see below) |
+
+M3 result (split screen Danaview | Files > Downloads via Overview > Split; touch long-press drags):
+
+- **Video, ripple on (project default):** dropped `frame_counter_1080p30.mp4` on the Main lane at
+  0:20.0, 0.8 s after the end of the last Main clip (19:08). WindowManager: "dropping at
+  816.0,1336.0", "Drop result=true". The clip landed on Main at **19:08** (length 19:08 → 27:08).
+  That is the documented ripple rule ("on the main lane with ripple on, inserts and moves snap to
+  the nearest cut", `clip_commands.dart`), not a fault. The drag shadow showed over the timeline
+  (`m3_files_dragging.png`); no "Starts …" pill (that pill is for in-app drags; external drops get
+  the import sheet). `m3_files_dropped.png`.
+- **Video, ripple off (R):** dropped on Main at 0:29.0 after a gap: landed at **0:29.0** exactly,
+  gap hatched (37:00 total) (`m3_files_dragging_ripple_off.png`, `m3_files_dropped_ripple_off.png`).
+  The screen recording `m3_files_drop_ripple_off.mp4` shows **"Add dropped media — Adding 1 item —
+  frame_counter_1080p30.mp4 Checking…" before the clip appears**, then "1 item added — Done"
+  (`m3_files_import_progress.png`).
+- **Audio:** `tone_440hz.wav` dropped at 0:18.0 below the lanes: a new **Music 1** lane, clip
+  starting at **0:18** (length 28:04) (`m3_files_audio_dragging.png`, `m3_files_audio_dropped.png`).
 
 ### M4. Drag from Photos
 
@@ -1284,7 +1387,57 @@ You should see a folder with a random id and the file inside it. (`run-as` works
 
 | Screenshots / file | Result |
 |---|---|
-| `m4_photos_split_screen.png`, `m4_photos_dropped.png`, `m4_drops_listing.txt` (paste the listing here) | not run |
+| `m4_photos_split_screen.png`, `m4_photos_dropped.png`, `m4_drops_listing.txt` (paste the listing here) | **pass** (2026-10-22, see below) |
+
+M4 result (split screen Danaview | Google Photos, opened without an account, via Overview > Split;
+ripple off from M3):
+
+- **`clap_flash_av.mp4`** (Movies) dropped on Main at 0:38.0: landed at **0:38** (length 37:00 →
+  44:11) (`m4_photos_dragging.png`, `m4_photos_dropped.png`; the recording
+  `m4_photos_drop.mp4` ends before the drop because Photos lifted the shadow late).
+- **`still_4k.jpg`** (Pictures) dropped on Main at 0:46.0 → landed at **0:46** (49:10)
+  (`m4_photos_still_dragging.png`, `m4_photos_still_dropped.png`), and again at 0:51.0 → **0:51**,
+  recorded: `m4_photos_still_drop.mp4` shows **"Add dropped media — Adding 1 item" before the clip
+  appears** (`m4_photos_import_progress.png`, `m4_photos_still2_dropped.png`).
+- **`work/drops/`:** the copy lives there only briefly, because Dart moves it into `media/` when
+  the import finishes (ARCH §9.1; `DropTarget.kt` header). A one-shot `ls` a few seconds after the
+  drop therefore shows only the empty `<uuid>/` folders (`m4_drops_listing_after_import.txt`).
+  A device-side `ls -lR` loop every ~30 ms during the still drop (`m4_drops_poll_full.txt`) caught
+  the file in a new random-id folder from 22:20:56.59 to about 22:20:57.1, at the source's size
+  (212124 bytes), then empty; the imported files are under
+  `files/danaview/editor/media/<2>/<sha1>/still_4k.jpg` and `.../clap_flash_av.mp4`. The snapshot
+  (`m4_drops_listing.txt`; `run-as … ls -lR`):
+
+  ```text
+  == 22:20:56.590685900
+  cache/danaview/editor/work/drops:
+  total 40
+  drwx--S--- 2 u0_a219 u0_a219_cache 4096 2026-10-22 22:11 237ea6e1-63af-4a47-a21c-886f1e7d49f6
+  drwx--S--- 2 u0_a219 u0_a219_cache 4096 2026-10-22 22:19 30623e4d-658a-4cce-af1d-2202808054c7
+  drwx--S--- 2 u0_a219 u0_a219_cache 4096 2026-10-22 22:08 40f0d01e-2563-438d-a39d-4b3b76c19086
+  drwx--S--- 2 u0_a219 u0_a219_cache 4096 2026-10-22 22:20 4934d380-7c48-4d2a-89cf-7ac6b66a9045
+  drwx--S--- 2 u0_a219 u0_a219_cache 4096 2026-10-22 22:10 8e8d17d7-af24-459a-9e3f-3901b2aa4f63
+
+  cache/danaview/editor/work/drops/237ea6e1-63af-4a47-a21c-886f1e7d49f6:
+  total 0
+
+  cache/danaview/editor/work/drops/30623e4d-658a-4cce-af1d-2202808054c7:
+  total 0
+
+  cache/danaview/editor/work/drops/40f0d01e-2563-438d-a39d-4b3b76c19086:
+  total 0
+
+  cache/danaview/editor/work/drops/4934d380-7c48-4d2a-89cf-7ac6b66a9045:
+  total 212
+  -rw------- 1 u0_a219 u0_a219_cache 212124 2026-10-22 22:20 still_4k.jpg
+
+  cache/danaview/editor/work/drops/8e8d17d7-af24-459a-9e3f-3901b2aa4f63:
+  total 0
+  ```
+
+  The four empty folders are the earlier drops (three from Files at 22:08–22:11, the clap at
+  22:19). Mac: the checklist's "Check right after the drop" needs this wording change (the file is
+  gone once the import sheet finishes; the empty `<uuid>/` folder stays until the next launch).
 
 **When done:** press `q` in the `flutter run` window, close the emulator, and tell Claude which
 rows passed or failed (one line each is enough). This report then links the screenshots.
@@ -1353,7 +1506,11 @@ nothing was moved for that serial. The `dv2` copies of the gate runs remain in
 Superseded and not used: `_run3_cert/`, `_rerun4_cert/`, `_stale_before_1145/` and
 `_api35_slowemu_1252/`.
 
-**Owner's manual evidence** goes to `manual/` (M1–M4, not yet taken).
+**Manual M1–M4 evidence (2026-10-22, 1bb7a65e, `emulator-5558`)** is in `manual/`: the `m1_*`,
+`m2_*`, `m3_*` and `m4_*` screenshots named in the checklist, the recordings
+`m3_files_drop_ripple_off.mp4`, `m4_photos_drop.mp4` and `m4_photos_still_drop.mp4`, the drops
+listings `m4_drops_listing.txt`, `m4_drops_listing_after_import.txt` and `m4_drops_poll_full.txt`,
+the harness incident log `harness_system_server_crash_2152.txt`, and `emulator_5558.log`.
 
 ## What remains for certification
 
@@ -1371,7 +1528,22 @@ The owner's rule for this round (2026-10-22): the re-run items run on d680bd3 an
 clean pass stands on 88469c0. If every re-run item passes and nothing else is open except the
 manual M1–M4, QA-02 is certified with that exception.
 
-**Verdict (2026-10-22, D12 re-run on 0fa78966): QA-02 is certified (2026-10-22), except the
+**Verdict (2026-10-22, 22:30, manual M1–M4 on 1bb7a65e = 0fa78966 code): the checklist has
+been run (Windows lane, automated with system-level input, the owner's request in 36fb0931).
+23 of 24 rows pass; M3 and M4 pass. One row fails in the app.**
+
+**Still open (this list replaces the 0fa78966 list below):**
+
+1. **Mac (Dart): FIX-QA02-M2-2**, Esc does not close the clip context menu opened by a
+   right-click (see "Run of 2026-10-22" under the checklist). After the fix, M2 row 2 can be
+   re-checked on the tablet (one row, a few minutes).
+2. **Mac (docs, no re-run):** two checklist wordings: M2 row 6 "anchored at the mouse" holds in
+   free mode only (centre-locked zoom anchors at the playhead by design), and M4's
+   "the dropped copy exists under `work/drops/`" holds only until the import finishes.
+
+Everything else in QA-02 is certified as below.
+
+**Earlier verdict (2026-10-22, D12 re-run on 0fa78966): QA-02 is certified (2026-10-22), except the
 owner's manual tablet checklist M1–M4.**
 
 - **QA-02's own item: green.** s18 passes on Pixel_API_29_2GB on 0fa78966 (208 s).

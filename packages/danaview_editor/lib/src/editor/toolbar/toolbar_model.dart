@@ -3,14 +3,16 @@
 // The tiles the toolbar shows right now (ux.md §9.1, §9.2), shared by the bottom strip, the
 // expanded rail and the tool panes:
 //
-//   selection (ToolSets.forSelection) ─► [✕ Video clip] + context tools
-//   else an open tool tab (Audio)     ─► [✕ Audio] + Add music, Record voiceover, Extract audio
+//   an open tool tab (Audio)          ─► [✕ Audio] + Add music, Record voiceover, Extract audio
+//   else selection (ToolSets.forSelection) ─► [✕ Video clip] + context tools
 //   else                              ─► the nine top-level tools
 //
 // * Every action tile is driven by the EditorActionRegistry (UX-15): label, icon, visibility,
 //   enablement, the disabled reason and the handler (invoked with source `toolTile`). Hidden
 //   actions are left out; disabled ones show at 40 % and explain themselves in a toast.
-// * Top-level tools set `EditorState.tool` and run their primary action (Audio opens its tab).
+// * Top-level tools set `EditorState.tool` and run their primary action (Audio opens its tab and
+//   closes the open panel, so the pane never keeps the previous tool's panel; an open tab outranks
+//   the selection, and a new selection closes the tab).
 // * Panel tools (text tabs, subtitle sections, transition settings) open their route directly.
 // * Rebuilds: only when the editor state the predicates read changes (phase, selection, tool,
 //   inspector, project, modes, history, media), never per playback frame.
@@ -184,7 +186,12 @@ abstract final class ToolbarModel {
       );
     }
 
-    final set = topLevelOnly ? null : ToolSets.forSelection(inputs.selection, inputs.project);
+    final tab = inputs.tool;
+    final tabActions = tab == null ? null : ToolSets.toolTabs[tab];
+    // An open tab outranks the selection: the tab is opened after the selection (a new selection
+    // closes it, EditorController), so it is what the user picked last (the expanded rail shows
+    // the top-level tools whatever is selected).
+    final set = topLevelOnly || tabActions != null ? null : ToolSets.forSelection(inputs.selection, inputs.project);
     if (set != null) {
       final tiles = <ToolTileData>[];
       for (final e in set.entries) {
@@ -213,8 +220,6 @@ abstract final class ToolbarModel {
       );
     }
 
-    final tab = inputs.tool;
-    final tabActions = tab == null ? null : ToolSets.toolTabs[tab];
     if (!topLevelOnly && tab != null && tabActions != null) {
       return ToolbarContents(
         tab: tab,
@@ -242,7 +247,10 @@ abstract final class ToolbarModel {
   ) {
     final label = ToolbarStrings.tool(tool);
     final icon = ToolbarStrings.toolIcon(tool);
-    final selected = inputs.tool == tool;
+    // A panel tool reads as active only while a panel is open: once its panel closes (Done, back,
+    // or undo removing the item it edits) the pane falls back to the media bin, so the tile must
+    // not stay highlighted. A tab tool is active while its tab shows.
+    final selected = inputs.tool == tool && (tool.opensTab || inputs.inspector != null);
     if (ToolSets.toolTabs.containsKey(tool)) {
       return ToolTileData(
         key: 'tool.${tool.name}',
@@ -251,7 +259,7 @@ abstract final class ToolbarModel {
         enabled: ready,
         selected: selected,
         reason: ready ? null : ToolbarStrings.notOpen,
-        onTap: () => ready ? controller.setTool(tool) : explain(ToolbarStrings.notOpen),
+        onTap: () => ready ? controller.openToolTab(tool) : explain(ToolbarStrings.notOpen),
       );
     }
     final spec = registry.spec(tool.primaryAction);

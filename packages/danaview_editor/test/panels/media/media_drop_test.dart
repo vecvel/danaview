@@ -202,6 +202,7 @@ void main() {
       final ghost = t.ghost!;
       expect(ghost.createsTrack, isTrue);
       expect(find.byKey(const ValueKey('drop-new-track-pill')), findsOneWidget);
+      expectNeutralBorders(tester, of: find.byKey(const ValueKey('drop-new-track-pill')));
       final expected = _shape(ghost.placements.values);
       final lanes = t.rig.project.timeline.tracks.length;
       await g.up();
@@ -289,6 +290,7 @@ void main() {
       expect(t.ghost!.start, 14 * s, reason: '6 px right of it_c end snaps to it');
       expect(t.ghost!.guide?.time, 14 * s);
       expect(find.byKey(const ValueKey('drop-snap-pill')), findsOneWidget);
+      expectNeutralBorders(tester, of: find.byKey(const ValueKey('drop-snap-pill')));
       expect(haptics.selectionClicks, 1);
       await g.moveTo(t.drop.at(15 * s, 'tr_main'));
       await tester.pump();
@@ -324,6 +326,8 @@ void main() {
       expect(t.ghost!.valid, isFalse);
       expect(t.ghost!.rejection, isA<TrackLocked>());
       expect(find.text(MediaStrings.dropRefused), findsOneWidget);
+      // The refusal reads from the pill's text (and the red ghost), not a red outline.
+      expectNeutralBorders(tester, of: find.byKey(const ValueKey('drop-pill')));
       final depth = t.rig.historyDepth;
       await g.up();
       await tester.pump();
