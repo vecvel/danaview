@@ -4,14 +4,14 @@
 
 This report covers QA-00's app-level suite (`integration_test/editor`, ARCH §21.2) run on the iOS Simulator with the release dart-defines `DANAVIEW_EDITOR=true` and `DANAVIEW_AUTO_CAPTIONS=true` (BUILD_PLAN QA-01).
 
-**Status: the automated suite is certified on the simulator (re-run 4, 2026-10-21 15:45 to 17:07); QA-01 stays open (in progress) until the manual steps below are recorded with screenshots.** In one full batch on the iPhone 16 (iOS 26.5), every scenario s01 to s18 passes, and so do both iOS-relevant extras. That includes s07, whose two back-to-back exports both complete inside the batch, so FIX-IOS-12-1 is confirmed fixed. s13 also passes inside the batch. s12 passes on the iPad Pro 13-inch (M5), and the iOS 18.2 lane passes 3 of 3. The run is on the code after D7 (QA-05 §2 green) and the round 7 Dart fixes (c336899), with the repo at its new path `/Users/besaoct/Desktop/vecvel/vecvel-cross-platform/danaview`.
+**Status: the automated suite is certified on the simulator (re-run 4, 2026-10-21 15:45 to 17:07), and three of the four manual iPad steps are now automated and pass (XCUITest, 2026-10-22); QA-01 stays open (in progress) until the pointer hover pill (step 4) is recorded.** In one full batch on the iPhone 16 (iOS 26.5), every scenario s01 to s18 passes, and so do both iOS-relevant extras. That includes s07, whose two back-to-back exports both complete inside the batch, so FIX-IOS-12-1 is confirmed fixed. s13 also passes inside the batch. s12 passes on the iPad Pro 13-inch (M5), and the iOS 18.2 lane passes 3 of 3. The run is on the code after D7 (QA-05 §2 green) and the round 7 Dart fixes (c336899), with the repo at its new path `/Users/besaoct/Desktop/vecvel/vecvel-cross-platform/danaview`.
 
-Still open, none of them automated (these are simulator steps, so they are not covered by "deferred: no device available"):
+Still open (these are simulator steps, so they are not covered by "deferred: no device available"):
 
-- The manual iPad drops from Files and Photos (checklist steps 1 and 2) need a person at the Simulator and must be recorded with screenshots (BUILD_PLAN QA-01). The panel's injected touches do not start the system dock drag, so the harness cannot open Split View. See the manual checklist below.
-- V-U5 with a physical keyboard (step 3) needs a person. V-U5 is certified at simulator level (s12 on the iPad).
-- The pointer hover pill (step 4) is pending and needs a person; the right-click menu and marquee pass in s12.
+- The pointer hover pill (step 4) needs a person at the Simulator with the Mac pointer. XCUITest's `hover()` delivers no hover events to any app on the iPadOS 26.5 simulator, not even to a native SwiftUI probe, so it cannot be automated. See "Manual iPad steps automated with XCUITest (2026-10-22)".
 - The lab smoke on the iPhone 7 and iPhone 8: deferred, no device available.
+
+Done since re-run 4: the drops from Files and Photos (steps 1 and 2) and the hardware-keyboard shortcuts with the ⌘/ sheet (step 3) pass, driven by XCUITest system-level events, with screenshots.
 
 ## How to run
 
@@ -42,6 +42,28 @@ Evidence goes to `build/e2e/ios/<udid>/`: `logs/`, `screens/`, `files/` (exporte
 | lab | iPhone 7 (iOS 15.8), iPhone 8 (iOS 16.7), set with `DV_E2E_LAB_UDIDS` | s01–s04 smoke |
 
 > **ID note (2026-10-21):** the playhead-restore defect is renamed **FIX-UX-14-4** in this report, because FIX-UX-14-1 already names the transport time-readout a11y defect (QA-08) and FIX-UX-14-3 names the stale `transport_bar_test.dart` test (BUILD_STATE, QA-09). Code and test headers (`playhead_reopen_test.dart`) still say FIX-UX-14-1 for this fix.
+
+## Manual iPad steps automated with XCUITest (2026-10-22)
+
+Environment:
+
+- iPad Pro 13-inch (M5), iPadOS 26.5 (`2C9213E9-…`), landscape. It was the only simulator booted, and it was shut down afterwards. Xcode 26.6 (17F113). No other build ran in parallel.
+- App: a debug simulator build of `editor-wip` at 03fe9f2 with `--dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true`, built in a separate worktree and installed with `simctl install`. The repo's `ios/` project was not changed.
+- Media: `frame_counter_720p25.mp4` in Photos (`simctl addmedia`), and `frame_counter_720p24.mp4` copied into Files › On My iPad (the simulator's `group.com.apple.FileProvider.LocalStorage` container). Both come from `packages/danaview_editor_engine/test_fixtures/media`. Nothing was downloaded.
+- Hardware keyboard: `defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool true` before booting.
+- Harness: a minimal Xcode project outside the repo (a tiny host app plus a UI-test target). It drives Danaview, SpringBoard, Files and Photos by bundle id (`com.vecvel.danaview`, `com.apple.springboard`, `com.apple.DocumentsApp`, `com.apple.mobileslideshow`). All input is XCUITest system-level events: `press(forDuration:thenDragTo:withVelocity:thenHoldForDuration:)` on SpringBoard coordinates for the dock and cross-app drags, `typeKey(_:modifierFlags:)` for keys, and `hover()` / `click()` for the pointer. Copies of the harness and the `.xcresult` are in `build/e2e/ios/qa01_manual_ipad/` (`harness/`, `scripted/ManualSteps.xcresult`).
+- Two passes: an interactive driver session (`DriverTests.testDriver`, steered step by step; screenshots in `driver_session/`), then the scripted test `ManualStepsTests.testManualIPadSteps`, which does all four steps in one run. It **passed** in 187.7 s, with step 4 recorded as an expected failure (screenshots in `scripted/`).
+
+How the second app was opened: on iPadOS 26.5 the dock drag does work with XCUITest. Swipe up about 70 pt from the bottom edge to show the dock. Long-press the Photos or Files dock icon for 0.55 s, then drag it to the right edge and hold for 1.5 s. The app opens in a window on the right (Slide Over, with window controls), over full-screen Danaview. The earlier failure (2026-10-17, "injected touches couldn't start SpringBoard's dock drag") came from the panel's synthetic touches; XCUITest's events start the drag. Notes: a press of 0.7 s or more often opens the icon's context menu instead, and the drag then only moves through the menu. One leftover window once came back tiled as Split View, and the script then makes Danaview full screen again with Window Controls › Zoom. The multitasking "…" menu and Stage Manager were not needed.
+
+Screenshots are under `build/e2e/ios/qa01_manual_ipad/` (landscape PNGs).
+
+| Step | Result | Method and evidence |
+|---|---|---|
+| 1. Drop from Files (security-scoped URL, copied, ARCH §16) | **pass** | `frame_counter_720p24` long-pressed in the Files window and dragged onto Danaview's Media panel: it is imported into the bin ("frame_counter_720p24.mp4, Video, 0:08") and placed at the playhead (Add to timeline on). Dragged onto the timeline at the x for 0:02: the clip's semantics read "starts at 0:02", and its left edge is within 2 pt of the drop x (`scripted/m05…m07`). In the driver session a drop at the 0:09 x on Main landed "starts at 0:09, track Main" at x 837.8, exactly the drop x (`driver_session/f02…f05`). The managed copy is at `Application Support/danaview/editor/media/41/41f9…/frame_counter_720p24.mp4`, and the original stays in On My iPad. `work/drops/` holds no files afterwards; only empty per-drop folders remain, which DiskCache wipes after 24 h. |
+| 2. Drop from Photos (item provider) | **pass** | A video long-pressed in the Photos window and dragged onto the Media panel ("No media yet"): it is imported and placed at 0:00 on Main (`scripted/m01…m03`). Dragged onto the timeline at the x for 0:03, with ripple off: the clip reads "starts at 0:03", a new lane (Video 2) because Main was busy, and its left edge is within 2 pt of the drop x (`scripted/m04`, `driver_session/p04`). With ripple on, a main-lane drop snaps to the nearest cut by design (ops: "on the main lane with ripple on, inserts snap to the nearest cut"), so the drop-time check runs with ripple off. Photos' long-press needed a 0.75 s press on the first drop (the 0.6 and 0.5 s tries dropped nothing, `scripted/drop_retry_*`). |
+| 3. Hardware keyboard and the ⌘/ sheet (V-U5) | **pass** | `typeKey` sends keyboard HID events through the simulator's connected hardware keyboard. ⌘Z removed the Files timeline drop, and ⌘⇧Z put it back (`m08`, `m09`). With a clip selected, ⌘C then ⌘V pasted a clip ("Undo Paste", one more clip), and ⌘D duplicated it ("Undo Duplicate", one more) (`m10`). M added a marker (a "Marker at …" element appears; at 0:07 in the driver session), and ⌘Z removed it (`m11`, `m12`). ⌘/ opened the "Keyboard shortcuts" sheet (Playback and Editing sections, "Undo, ⌘Z") (`m13`). The driver session got the same results (`driver_session/k00…k07`). This is the simulator's keyboard path, not a physical keyboard on a device. |
+| 4. Pointer hover pill | **not automatable (stays pending, needs a person)** | `XCUIElement.hover()` and `XCUICoordinate.hover()` on a toolbar button (Undo) and on a timeline clip showed no tooltip or pill (`scripted/m14`, `m15`). During a hover, 10 parallel `simctl io screenshot` frames 0.6 s apart showed neither a cursor nor a pill (`driver_session/hv_*`). To rule out Danaview, the host app has a SwiftUI `onContinuousHover` probe. On it, `hover()`, element `hover()` and app-relative `hover()` produced **zero** hover events. `click()` and `click(forDuration:)` produced one hover phase of only 90 to 100 ms, right before the press. The timeline pill needs 600 ms of hover with no button down, so XCUITest on this simulator cannot show it. A long pointer press on Undo opens the Edit history sheet instead, which is correct behaviour and not a hover. The right-click menu and the marquee stay covered by s12. Step 4 needs a person: in the Simulator, I/O › Input › Send Pointer to Device, then rest the pointer on a clip for about 1 s and on a toolbar button. |
 
 ## Run of 2026-10-21 (re-run 4, after FIX-IOS-12-1, D7 and the round 7 Dart fixes)
 
@@ -223,10 +245,10 @@ Deferred: no device available. Under the owner default of 2026-10-08 (ARCH D-43)
 
 ## Manual checklist (iPad simulator)
 
-1. Drop from Files into the editor (Split View): pending, needs a person. Tried on 2026-10-17; see re-run 3.
-2. Drop from Photos (Split View): pending, needs a person. Same as step 1.
-3. Physical hardware keyboard and the ⌘/ sheet (V-U5): pending, needs a person. The simulator-level V-U5 check passes (s12 on the iPad).
-4. Pointer (hover pill, right-click menu, marquee): the right-click menu and the marquee are covered automatically and pass in s12. The hover pill is pending.
+1. Drop from Files into the editor: **pass** (XCUITest, 2026-10-22; see the section above).
+2. Drop from Photos: **pass** (XCUITest, 2026-10-22).
+3. Hardware keyboard and the ⌘/ sheet (V-U5): **pass** at simulator level (XCUITest `typeKey` through the simulator's hardware keyboard, 2026-10-22; s12 also passes).
+4. Pointer (hover pill, right-click menu, marquee): the right-click menu and the marquee pass in s12. The hover pill is pending and needs a person, because XCUITest `hover()` delivers no hover events on the iPadOS 26.5 simulator.
 
 ## Earlier run: first run of 2026-10-16
 
