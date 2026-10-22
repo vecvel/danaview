@@ -770,7 +770,12 @@ class PreviewSession internal constructor(
         }
     }
 
+    /** Test hook: replaces PowerManager's thermal status (THERMAL_STATUS_*) when set; lane only. */
+    @VisibleForTesting
+    var thermalStatusOverride: Int? = null
+
     private fun pollThermal() {
+        thermalStatusOverride?.let { status -> governor.setThermalStatus(status)?.let { applyQuality(it) }; return }
         if (Build.VERSION.SDK_INT < 29) return
         val status = thermalStatus29() ?: return
         governor.setThermalStatus(status)?.let { applyQuality(it) }
