@@ -396,3 +396,128 @@ Notes (not defects):
 | `test/v12/s2_qa/s2_matrix_test.dart` | Composed overflow / a11y matrix and HttpOverrides guard (§5, §6) |
 | `test/v12/s2_qa/s2_persistence_test.dart` | Persistence across restarts (§4) |
 | `docs/v1.2/qa/S2-QA.md` | This section |
+
+## Release candidate
+
+Ticket **S2-R**, Mac half, on `v1.2-wip`, 2026-10-22, 12:23–12:40. Build tree: `756bb15` with a clean
+working tree for code (only this report was modified; the backup `5a9b645` that followed changed only
+this file, so `5a9b645` is code-identical). Nothing was signed, uploaded or changed in the signing
+settings; the version files were not touched.
+
+**The S2 candidate commit is `756bb15`** (or the code-identical `5a9b645`), at version **`1.0.0+1`**
+already in the tree (`pubspec.yaml` `1.0.0+1`, `app_info.dart` `1.0.0` / `1`): unlike S1, no version
+revert is needed before signing. It carries the S2 wiring (`filesHomeOverrides`, the library packages,
+INT-104's photo strings) and the fixes of the S2-Q rounds. **FIX-S2R-1 is fixed** (2026-10-22: `danaview_library_native` now ships `PrivacyInfo.xcprivacy` declaring file timestamps C617.1, in its own resource bundle; confirmed inside `Runner.app/Frameworks/danaview_library_native.framework/danaview_library_native_privacy.bundle` of a release build). Previously: **It is not uploadable yet: FIX-S2R-1**
+(privacy manifest, below) must land first, and fastlane stays blocked by FIX-S1R-1.
+
+### iOS release build
+
+```text
+flutter build ipa --release --no-codesign --build-name=1.0.0 --build-number=1 \
+  --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true \
+  --dart-define=DANAVIEW_FILES_HOME=true --dart-define=DANAVIEW_PHOTO_EDITOR=false \
+  --dart-define=DANAVIEW_BEAUTY=false --dart-define=DANAVIEW_AI_STUDIO=false
+```
+
+The v1.1 release defines plus S2's `DANAVIEW_FILES_HOME`; the other 1.2.0 flags off (only S1 + S2 flags
+on; S1 adds none). `WhisperCore.xcframework`: `tool/build_ios_xcframework.sh --status` = **up-to-date**
+(stamp of 2026-10-16, Xcode 26.6 17F113), used as is; nothing rebuilt or downloaded (cmake is not
+installed on this Mac and was not needed).
+
+| Check | Result |
+|---|---|
+| Build | **pass**, 2 min (archive 101.8 s): `build/ios/archive/Runner.xcarchive` (253.5 MB with dSYMs; S1 247.6 MB); `--no-codesign` skips the IPA export |
+| Info.plist (archived `Runner.app`) | `CFBundleShortVersionString 1.0.0`, `CFBundleVersion 1`, `MinimumOSVersion 15.0`, `com.vecvel.danaview`, display name Danaview; `NSPhotoLibraryUsageDescription` present ("Danaview shows your photos and videos in its library and lets you edit them. They stay on your device."), `NSPhotoLibraryAddUsageDescription` the S2 text |
+| `check_ios_min_os.sh --min 15.0` on the archived `Runner.app` | **OK**: 28 binaries, 1458 strongly bound symbols probed (S1 1414), weak allowlist BackgroundTasks |
+| `nm -um` `NEWLAPACK` on `Runner` and `Frameworks/*` | none |
+| Privacy manifests in the bundle | app (`NSPrivacyAccessedAPITypes` empty), Flutter, danaview_whisper, danaview_editor_engine, file_selector, shared_preferences, wakelock_plus, package_info_plus. **None for `danaview_library_native`**, which references `NSURLContentModificationDateKey` (`nm -um`): see FIX-S2R-1 |
+| Flutter warning | launch image is the default placeholder (as in 1.1 and S1; owner asset, not a blocker) |
+
+**Size** (unsigned, measured on the archive's `Runner.app`, same method as S1):
+
+| Measure | S1 candidate | S2 candidate | Delta |
+|---|---|---|---|
+| `Runner.app` on disk | 61.5 MB (62 956 KB) | **63.8 MB (65 324 KB)** | +2.3 MB (+3.8 %) |
+| `Payload/Runner.app` zipped (`zip -9`, unsigned stand-in for the IPA) | 24.2 MB (24 237 779 B) | **25.1 MB (25 076 450 B)** | +0.84 MB (+3.5 %) |
+| Largest frameworks | App 21.8, Flutter 9.8, Harfbuzz 6.4, editor engine 5.0, whisper 3.5, Avcodec 3.4 MB | App 23.0, Flutter 9.8, Harfbuzz 6.4, editor engine 5.0, whisper 3.5, Avcodec 3.4 MB | App +1.2 MB (S2 Dart) |
+
+S2's native additions: `danaview_library_native.framework` 1.2 MB; `danaview_pdf.framework` (92 KB)
+is also linked, reached through `danaview_features` → `danaview_documents` (S3 code with no S2 entry
+point). The store file sizes (vs 1.1.0) stay with the owner after upload (ARCH §10.3, AIS-41).
+
+### Install and smoke on the iOS Simulator (iPhone 16, iOS 26.5)
+
+Release and profile builds can't run on a simulator, so the smoke ran a **debug** simulator build of
+the same tree, version and defines (`flutter build ios --simulator --debug --build-name=1.0.0
+--build-number=1` + the defines above, 69 s), fresh install (app uninstalled, Photos privacy reset),
+media from `integration_test/v12/s2/tool/make_s2_media.sh` (`build/e2e/s2_media/`, generated locally,
+added to the simulator's Photos with `simctl addmedia`). Driven by hand through the simulator, every
+system sheet real (PHPicker, the PhotoKit prompt):
+
+| Step | Result |
+|---|---|
+| Launch | pass: Home with tabs Home, All, Videos, Photos, Playlists, Folders, Projects; 1.1 quick actions, Import, search, Playlists, Folders; editor and settings buttons. No permission prompt at launch |
+| Photos tab asks for access only when opened | pass: opening the tab shows "Show my photo library" (off) and "No photos yet", **no prompt**; turning the row on asks (system sheet with the INT-104 string, Limit / Allow Full / Don't Allow; no crash, D-2 fixed); Allow Full Access lists the system library under "Today". The prompt appeared about 15 s after the tap on the simulator (TCC log shows the request at once; see N-R1) |
+| Import a generated photo | pass: Home › Import › From Photos (PHPicker, no library access needed) › the generated JPEG › Imports "s2_photo.jpeg · Imported" into Imported (85 KB) |
+| Viewer with File info | pass: Folders › Imported › the photo opens the viewer ("1 of 1"; Share, Favourite, Info, Delete; no Edit, as wired); File info: Name, **Taken 21 October 2026, 09:05, Camera "Danaview QA S2 Test Cam", Lens, Exposure, Dimensions 2400 × 1600 · 3.8 MP**, Size 86.7 KB, Format JPEG, Source "Danaview folder · Imported", Added from Photos, Added, Modified (exposure as the fixture writes it, N-3) |
+| Danaview folders | pass: Folders shows Danaview folders (Imported, Recently deleted) and Linked folders (On This Device); breadcrumb Folders › Imported |
+| Recently deleted | pass: viewer › Delete › "It stays in Recently deleted for 30 days" › toast "Moved to Recently deleted"; Recently deleted lists it (1 item · 85 KB, 30 days left, Restore / Empty now); Restore → toast, back in Imported. The row shows a generic file icon, not the photo's thumbnail (N-R2) |
+| Player still opens | pass: the generated 4 s clip imported From Photos, All › clip opens the player and plays to the end (frame counter 00:00:03.967, 00:03 / 00:04). mpv logs "Could not open/initialize audio device" (simulator, as in 1.1) |
+| Editor still opens | pass: player › Edit opens the editor with the clip on the timeline ("Saved", 00:04:00), closes back to the player |
+| Settings › Privacy speed-test toggle | pass: "Open network speed tests" off with "You'll be asked the first time it's needed"; on (that sentence goes, answer stored); back off. Library storage follows Privacy (Danaview folders 2 files 1.73 MB, Recently deleted 0 bytes, "included in your device and iCloud backups"); About "Version 1.0.0" |
+| Rule 30 | pass: the app's log for the session (2 142 lines) names no imported file; the one path line is iOS's own CoreServices note setting the backup-exclusion attribute |
+
+The simulator was booted for this step and shut down after it.
+
+Device smoke of the signed release build (iPhone 12 mid tier, iPhone 7 iOS 15.8, iPhone 8 iOS 16.7):
+deferred: no device available.
+
+### Android candidate
+
+pending: Windows (`flutter build appbundle --release --build-name=1.0.0 --build-number=1` with the same
+defines, `check_native_libs.sh`, install and smoke on the API 35 emulator, D-7's `libsqlite3.so`, the
+photo permissions of D-3 and the Play photo-permission declaration).
+
+### Release checklist (S2)
+
+| # | Item | Owner | Status |
+|---|---|---|---|
+| 1 | Gate: S2-W done; S2-Q Mac half green (§Slice QA); Android half of S2-Q | Windows | open (Android pending) |
+| 2 | Version `1.0.0+1` in `pubspec.yaml` and `app_info.dart` (never bumped) | S2-R | **done** (in the tree, no revert needed) |
+| 3 | iOS release build with the S1 + S2 flag set, Info.plist, min-OS check, `NEWLAPACK` check, size | S2-R | **done** (above) |
+| 4 | Simulator install and smoke | S2-R | **done** (debug build; release impossible on simulator) |
+| 5 | **Privacy manifest: FIX-S2R-1** (File timestamp reason for `danaview_library_native`) | HOM-02 (or INT-104) | **open, blocks upload** |
+| 6 | Device smoke of the signed build, incl. the first photo prompt and limited access on iOS 15–17 | owner / lab | deferred: no device available |
+| 7 | Android release build, native-lib check, emulator smoke | Windows lane | pending: Windows |
+| 8 | **Signing** from a clean checkout of the candidate commit with the exact commands of S1 §Signing step 2 / 3, with `--dart-define=DANAVIEW_FILES_HOME=true` and **without** the `sed` version revert. fastlane lanes still blocked by FIX-S1R-1 (no defines in `flutter_ipa` / `flutter_aab`, build number from `BUILD_NUMBER` or 1) | **owner** (after FIX-S2R-1; fastlane after FIX-S1R-1) | open, blocked |
+| 9 | **Upload** to TestFlight / Play internal testing (internal until the owner's go) | **owner** | open |
+| 10 | **`legalEffectiveDate`** (still `11 October 2026`) to the release date; regenerate the hosted privacy page **from a build with `DANAVIEW_FILES_HOME=true`** (the S2 text exists only there) | **owner** (date), then the release integration ticket | open |
+| 11 | Owner review of the S2 privacy and terms wording (§Wiring "Privacy policy, terms and licences") and Q-S1 (M-Lab wording, from S1) | **owner** | open |
+| 12 | **Store answers**: App Privacy unchanged ("Data Not Collected" for S2; M-Lab reading from S1 still open); App Review note for the Photos tab (§Wiring "Store-answer deltas"); Play Data safety unchanged; **Play Photo and Video Permissions declaration** (or Photo Picker only) before the S2 Play upload | **owner** (with legal) | open |
+| 13 | Privacy report from the signed archive (Organizer › Generate Privacy Report): **changes from 1.1** once FIX-S2R-1 lands (File timestamp reason added; no data collected) | owner | open |
+| 14 | IPA/AAB size vs 1.1.0 from the store reports (S2 unsigned numbers above) | owner, AIS-41 | open |
+| 15 | Launch image placeholder (Flutter validation warning) | owner | open, not a blocker |
+
+### Defects (S2-R)
+
+| Id | Owner | Defect | Evidence | Fix direction |
+|---|---|---|---|---|
+| **FIX-S2R-1** (blocks upload) | HOM-02 (`packages/danaview_library_native/darwin/`), else INT-104 (`ios/Runner/PrivacyInfo.xcprivacy`) | `danaview_library_native` reads file timestamps (`contentModificationDateKey` in `Pickers/PickerCore.swift` and `ExportOut/FileOutCore.swift`, `attributesOfItem` in `PhotoLibrary/PhotoLibraryService.swift` and `PickerCore.swift`), a required-reason API (`NSPrivacyAccessedAPICategoryFileTimestamp`), but neither the plugin (no `PrivacyInfo.xcprivacy`, no `resource_bundles` in its podspec) nor the app's manifest (`NSPrivacyAccessedAPITypes` empty) declares a reason. App Store Connect rejects such uploads (ITMS-91053) | `nm -um …/danaview_library_native` → `_NSURLContentModificationDateKey`; manifest list above | Give the plugin its own `Resources/PrivacyInfo.xcprivacy` (FileTimestamp with `3B52.1` for files the user picked and `C617.1` for files in the app container) and a `resource_bundles` entry, as `danaview_whisper` / `danaview_editor_engine` do; rebuild and re-check the bundle list and the Organizer privacy report (item 13). ARCH §8 (INT-104 platform declarations) already expects the File timestamp and disk space reasons |
+| FIX-S1R-1 (from S1) | INT-05 / release integration | fastlane lanes pass no `--dart-define` and default the build number; for S2 they would also need `DANAVIEW_FILES_HOME=true` | `ios/fastlane/Fastfile` `flutter_ipa` unchanged | as in S1 §Defects; S2's flag set adds `DANAVIEW_FILES_HOME=true` |
+
+Notes (not defects; for the device smoke and HOM owners):
+
+- N-R1: on the simulator the PhotoKit prompt appeared about 15 s after "Show my photo library" was
+  turned on (the row already read "Your device photos are shown…" meanwhile); the TCC request is issued
+  at once, so this looks like simulator latency. Check on a device (item 6).
+- N-R2 (low, HOM-18): Recently deleted shows a generic file icon for a deleted photo instead of its
+  thumbnail.
+
+**S2-R Mac verdict:** the iOS candidate (`756bb15`, `1.0.0+1`, S1 + S2 flags) builds in release, reads
+`1.0.0 (1)` with the 15.0 floor and the photo usage strings, passes the min-OS and `NEWLAPACK` checks,
+grows 2.3 MB on disk / 0.84 MB zipped over S1, and smokes green on the iPhone 16 / iOS 26.5 simulator
+(debug build of the same tree): Home tabs, the Photos tab asking only after the opt-in, a PHPicker
+import with EXIF in File info, Danaview folders, Recently deleted, player, editor and the Privacy
+toggle. **It is not ready to upload until FIX-S2R-1 lands** (privacy manifest). Signing, upload, the
+effective date, the wording review and the store answers are the owner's; the Android candidate is
+pending: Windows.

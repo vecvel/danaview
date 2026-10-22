@@ -26,4 +26,8 @@ Pod::Spec.new do |s|
   s.weak_frameworks  = 'UniformTypeIdentifiers'
   s.swift_version    = '5.0'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
+  # Required-reason API declaration (file timestamps, C617.1) in its own resource bundle (FIX-S2R-1).
+  s.resource_bundles = {
+    'danaview_library_native_privacy' => ['Resources/PrivacyInfo.xcprivacy'],
+  }
 end
