@@ -8,7 +8,7 @@
 // - A mapped composition (clock band, a top slot with transparent gaps before and after its layer)
 //   whose generated images are deleted after the build, and deleted again every 20 ms while the
 //   export runs, fails through Transformer's default image loading with the D8 chain (the control;
-//   StorageLoss classifies that real chain as io, or diskFull on a low volume) and exports every
+//   StorageLoss classifies that real chain as diskFull) and exports every
 //   frame exactly through GeneratedImageAssetLoaderFactory.
 
 package com.vecvel.danaview.editor.engine.composition
@@ -166,8 +166,7 @@ class GeneratedImagesInstrumentedTest {
         assertEquals(ExportException.ERROR_CODE_IO_UNSPECIFIED, failure!!.errorCode)
         // The real chain names the purged file below the cache root: a storage failure, never unknown.
         assertTrue(StorageLoss.lostBelow(failure, ctx.cacheDir))
-        assertEquals(EngineErrorCode.io, StorageLoss.classify(failure, ctx.cacheDir) { false }!!.code)
-        assertEquals(EngineErrorCode.diskFull, StorageLoss.classify(failure, ctx.cacheDir) { true }!!.code)
+        assertEquals(EngineErrorCode.diskFull, StorageLoss.classify(failure, ctx.cacheDir)!!.code)
 
         // Fixed: the same images purged after the build and again every 20 ms during the export.
         val built = build(images)

@@ -7,10 +7,12 @@
 // engine never deletes those files while a job runs, so an export that fails because one of them is
 // missing (ENOENT / FileNotFoundException naming a path below the cache root, anywhere in the cause
 // chain) lost them to the system. That is a storage failure, not a broken source (`mediaOffline`)
-// or an unknown one: `diskFull` when the volume is low right now ([isLow]), else `io` (the files went
-// for another reason, e.g. the user cleared the cache). The Pigeon/Dart codes have no "temporary
-// files lost" code; `diskFull` is what Dart shows as "Not enough space to export". A missing file
-// outside the cache root (the user's media) keeps ExportErrors' mapping.
+// or an unknown one: always `diskFull` (retryable). Free space is not measured when the failure is
+// mapped: by then installd has purged toward its target (1 GB requested in QA-05 run a), so on a
+// device whose caches were big enough the volume no longer reads as low, and `io` would reach Dart
+// as exportFailed.unknown. The Pigeon/Dart codes have no "temporary files lost" code; `diskFull` is
+// what Dart shows as "Not enough space to export". A missing file outside the cache root (the
+// user's media) keeps ExportErrors' mapping.
 //
 // Messages never carry paths (ARCH §20.1).
 
@@ -24,16 +26,6 @@ import java.io.FileNotFoundException
 
 /** Classification of engine files lost under a job (file header). Pure (JVM-tested). */
 object StorageLoss {
-    /** Android's low-storage rule (DeviceStorageMonitorService defaults): 5 % of the volume, at most 500 MiB. */
-    const val LOW_PERCENT = 5L
-    const val LOW_MAX_BYTES = 500L * 1024 * 1024
-
-    /** Whether [availableBytes] of a [totalBytes] volume is low by Android's rule. */
-    fun isLow(availableBytes: Long, totalBytes: Long): Boolean {
-        if (availableBytes < 0 || totalBytes <= 0) return false
-        return availableBytes < minOf(totalBytes / 100 * LOW_PERCENT, LOW_MAX_BYTES)
-    }
-
     /** Whether [error]'s cause chain reports a missing file below [cacheRoot]. */
     fun lostBelow(error: Throwable, cacheRoot: File): Boolean {
         val chain = generateSequence(error) { it.cause }.take(MAX_CAUSES).toList()
@@ -45,22 +37,18 @@ object StorageLoss {
         return chain.any { t -> val m = t.message.orEmpty(); roots.any { r -> names(m, r) } }
     }
 
-    /** The failure of an export that lost engine files: `diskFull` when [low], else `io`. */
-    fun failure(low: Boolean, cause: Throwable? = null): EngineException =
-        if (low) {
-            EngineException(EngineErrorCode.diskFull, "not enough space: the system removed the export's temporary files", retryable = true, cause = cause)
-        } else {
-            EngineException(EngineErrorCode.io, "the export's temporary files were removed", retryable = true, cause = cause)
-        }
+    /** The failure of an export that lost engine files: `diskFull`, retryable (file header). */
+    fun failure(cause: Throwable? = null): EngineException =
+        EngineException(EngineErrorCode.diskFull, "not enough space: the system removed the export's temporary files", retryable = true, cause = cause)
 
     /**
-     * The storage failure for [error] when it lost files below [cacheRoot] ([low] is asked only
-     * then), or null. Cancellation, interruption and an already-classified `diskFull` stay as they are.
+     * The storage failure for [error] when it lost files below [cacheRoot], or null. Cancellation,
+     * interruption and an already-classified `diskFull` stay as they are.
      */
-    fun classify(error: Throwable, cacheRoot: File, low: () -> Boolean): EngineException? {
+    fun classify(error: Throwable, cacheRoot: File): EngineException? {
         if (error is EngineException && error.code in KEPT) return null
         if (!lostBelow(error, cacheRoot)) return null
-        return failure(low(), error)
+        return failure(error)
     }
 
     private val KEPT = setOf(EngineErrorCode.cancelled, EngineErrorCode.interrupted, EngineErrorCode.diskFull)

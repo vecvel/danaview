@@ -312,7 +312,6 @@ class ProxyJob(private val ctx: EngineContext) {
         /** The partial output of job [jobId]: `work/proxy-<jobId>.mp4.part`. */
         fun partFile(paths: Paths, jobId: String): File = File(paths.work, "proxy-${CacheStore.fileName(jobId)}.mp4.part")
 
-        /** Maps a Transformer failure to an [EngineException] (same mapping as AND-11, ARCH §14.3). */
         /** Waits (bounded) for a quit job looper's thread to end; keeps the interrupt flag. */
         fun joinQuietly(thread: Thread, boundMs: Long = 2_000) {
             try {
@@ -322,6 +321,7 @@ class ProxyJob(private val ctx: EngineContext) {
             }
         }
 
+        /** Maps a Transformer failure to an [EngineException] (same mapping as AND-11, ARCH §14.3). */
         fun mapError(error: Throwable): EngineException {
             if (error !is ExportException) return EngineErrors.from(error)
             val code = when (error.errorCode) {

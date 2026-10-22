@@ -117,12 +117,8 @@ object Plans {
 class FakeEnvironment(
     var budget: DecoderBudget = DecoderBudget(maxVisualSequences = 3, maxDecoderInstances = 16),
     var listener: Boolean = true,
-    /** isStorageLow's answer (QA-05 D8). */
-    var storageLow: Boolean = false,
 ) : ExportEnvironment {
     val calls = mutableListOf<String>()
-
-    override fun isStorageLow(dir: File): Boolean = storageLow
 
     override fun decoderBudget(): DecoderBudget = budget
 

@@ -3,9 +3,9 @@
 // StorageLoss on the JVM: an export failure whose cause chain reports a missing file below the
 // cache root (the chain QA-05 D8 logged on the emulator: ExportException[ERROR_CODE_IO_UNSPECIFIED]
 // from the image asset loader ← FileDataSourceException ← FileNotFoundException "…: open failed:
-// ENOENT") is a storage failure, diskFull on a low volume and io otherwise; a missing file outside
-// the cache root, a full volume, a refused open, cancellation and interruption are not; Android's
-// low-storage rule; no paths in messages.
+// ENOENT") is a storage failure, diskFull (retryable) whatever the free space after the purge; a
+// missing file outside the cache root, a full volume, a refused open, cancellation and interruption
+// are not; no paths in messages.
 
 package com.vecvel.danaview.editor.engine.export
 
@@ -41,8 +41,9 @@ class StorageLossTest {
     fun theD8ChainIsAStorageLoss() {
         val e = imageLoaderEnoent(generatedPng)
         assertTrue(StorageLoss.lostBelow(e, root))
-        assertEquals(EngineErrorCode.io, StorageLoss.classify(e, root) { false }!!.code)
-        assertEquals(EngineErrorCode.diskFull, StorageLoss.classify(e, root) { true }!!.code)
+        val lost = StorageLoss.classify(e, root)!!
+        assertEquals(EngineErrorCode.diskFull, lost.code)
+        assertTrue(lost.retryable)
         // Before: ExportErrors alone answers io, which Dart shows as exportFailed.unknown.
         assertEquals(EngineErrorCode.io, ExportErrors.map(e).code)
     }
@@ -50,7 +51,7 @@ class StorageLossTest {
     @Test
     fun anAlreadyMappedFailureIsClassifiedThroughItsCause() {
         val mapped = ExportErrors.map(imageLoaderEnoent(generatedPng))
-        val lost = StorageLoss.classify(mapped, root) { true }
+        val lost = StorageLoss.classify(mapped, root)
         assertNotNull(lost)
         assertEquals(EngineErrorCode.diskFull, lost!!.code)
         assertSame(mapped, lost.cause)
@@ -67,7 +68,7 @@ class StorageLossTest {
     fun missingFilesOutsideTheCacheRootAreNotStorageLosses() {
         val user = imageLoaderEnoent("/data/user/0/com.vecvel.danaview/files/danaview/editor/media/photo.png")
         assertFalse(StorageLoss.lostBelow(user, root))
-        assertNull(StorageLoss.classify(user, root) { true })
+        assertNull(StorageLoss.classify(user, root))
         // A sibling whose name only starts like the root.
         assertFalse(StorageLoss.lostBelow(imageLoaderEnoent("${root}2/engine/x.png"), root))
         assertFalse(StorageLoss.lostBelow(imageLoaderEnoent("/sdcard/DCIM/a.png"), root))
@@ -85,36 +86,19 @@ class StorageLossTest {
     fun cancellationInterruptionAndDiskFullStay() {
         val cause = imageLoaderEnoent(generatedPng)
         for (code in listOf(EngineErrorCode.cancelled, EngineErrorCode.interrupted, EngineErrorCode.diskFull)) {
-            assertNull(code.name, StorageLoss.classify(EngineException(code, "x", cause = cause), root) { false })
+            assertNull(code.name, StorageLoss.classify(EngineException(code, "x", cause = cause), root))
         }
     }
 
     @Test
-    fun lowIsAskedOnlyForALoss() {
-        var asked = 0
-        StorageLoss.classify(IllegalStateException("x"), root) { asked++; true }
-        assertEquals(0, asked)
-        StorageLoss.classify(imageLoaderEnoent(generatedPng), root) { asked++; true }
-        assertEquals(1, asked)
-    }
-
-    @Test
-    fun androidsLowStorageRule() {
-        val gb = 1024L * 1024 * 1024
-        // 5 % of the volume, at most 500 MiB.
-        assertTrue(StorageLoss.isLow(199L * 1024 * 1024, 6 * gb)) // QA-05 op #75: 199 MB free
-        assertFalse(StorageLoss.isLow(600L * 1024 * 1024, 64 * gb))
-        assertTrue(StorageLoss.isLow(499L * 1024 * 1024, 64 * gb))
-        assertTrue(StorageLoss.isLow(90L * 1024 * 1024, 2 * gb)) // 5 % of 2 GiB = 102.4 MiB
-        assertFalse(StorageLoss.isLow(110L * 1024 * 1024, 2 * gb))
-        assertFalse("unknown volume", StorageLoss.isLow(0, 0))
+    fun otherFailuresAreNotStorageLosses() {
+        assertNull(StorageLoss.classify(IllegalStateException("x"), root))
     }
 
     @Test
     fun messagesNeverCarryPaths() {
-        for (low in listOf(true, false)) {
-            val e = StorageLoss.classify(imageLoaderEnoent(generatedPng), root) { low }!!
-            assertFalse(e.message!!.contains("/"))
-        }
+        val e = StorageLoss.classify(imageLoaderEnoent(generatedPng), root)!!
+        assertFalse(e.message!!.contains("/"))
+        assertFalse(StorageLoss.failure().message!!.contains("/"))
     }
 }

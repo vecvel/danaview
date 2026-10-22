@@ -351,8 +351,7 @@ class ExportCoordinatorTest {
     }
 
     @Test
-    fun aPurgedEngineFileUnderLowStorageIsDiskFull() {
-        env.storageLow = true
+    fun aPurgedEngineFileIsDiskFull() {
         val id = start().getOrThrow()
         single.listener!!.onFailed(ExportErrors.map(purgedImage()))
         fake.settle()
@@ -364,17 +363,17 @@ class ExportCoordinatorTest {
     }
 
     @Test
-    fun aPurgedEngineFileWithSpaceLeftIsIo() {
-        env.storageLow = false
+    fun aPurgedEngineFileWithSpaceLeftAfterThePurgeIsStillDiskFull() {
+        // installd purges toward its target (QA-05 run a: 1 GB requested), so free space after a
+        // successful purge is not low; the loss is still a storage failure, never io (Dart: unknown).
         val id = start().getOrThrow()
         single.listener!!.onFailed(purgedImage())
         fake.settle()
-        assertEquals(EngineErrorCode.io.name, terminal(id).failure!!.code)
+        assertEquals(EngineErrorCode.diskFull.name, terminal(id).failure!!.code)
     }
 
     @Test
     fun aMissingUserFileKeepsItsMapping() {
-        env.storageLow = true
         val id = start().getOrThrow()
         val user = java.io.FileNotFoundException("${File(paths.media, "a.mp4").path}: open failed: ENOENT (No such file or directory)")
         single.listener!!.onFailed(ExportException.createForAssetLoader(user, ExportException.ERROR_CODE_IO_FILE_NOT_FOUND))
@@ -384,7 +383,6 @@ class ExportCoordinatorTest {
 
     @Test
     fun anOutputPurgedBeforeCompletionIsAStorageFailure() {
-        env.storageLow = true
         val id = start().getOrThrow()
         // The muxer finished writing an unlinked file: nothing is left at the output path.
         single.listener!!.onCompleted("c2.qti.avc.encoder")
@@ -394,7 +392,6 @@ class ExportCoordinatorTest {
 
     @Test
     fun anEmptyOutputIsStillAnEncodingFailure() {
-        env.storageLow = true
         val id = start().getOrThrow()
         single.complete("c2.qti.avc.encoder", bytes = 0)
         fake.settle()

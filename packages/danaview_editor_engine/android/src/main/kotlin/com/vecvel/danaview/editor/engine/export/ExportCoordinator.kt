@@ -40,7 +40,7 @@
 //   - failure: ExportErrors.map (ARCH §14.3), the partial output is deleted, jobFailed. A failure
 //     because engine files below the cache root went missing (the system purged them under low
 //     storage, QA-05 D8), or an output the purge removed before completion, is a storage failure
-//     (StorageLoss: diskFull when the volume is low, else io), never internal or mediaOffline;
+//     (StorageLoss: diskFull, whatever the free space after the purge), never internal or mediaOffline;
 //     purged generated images are written again when opened (GeneratedImageAssetLoaderFactory).
 // cancel(jobId): stops the job, deletes the partial output and work/export-<jobId>/, jobFailed
 //   (cancelled). Idempotent.
@@ -65,7 +65,6 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.os.Looper
-import android.os.StatFs
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.annotation.VisibleForTesting
@@ -369,9 +368,6 @@ interface ExportEnvironment {
      * pre-empted jobs) are released, or after [CodecHandover.BOUND_MS] (QA-05 D9). At once by default.
      */
     fun whenCodecsReleased(jobId: String, ready: () -> Unit) = ready()
-
-    /** Whether the volume holding [dir] is low on space right now (StorageLoss.isLow; QA-05 D8). */
-    fun isStorageLow(dir: File): Boolean = false
 }
 
 /** Production [ExportEnvironment] over the engine context. */
@@ -449,15 +445,6 @@ class ContextExportEnvironment(private val ctx: EngineContext) : ExportEnvironme
         guarded("work pin") { DiskCache.unmarkActive(output) }
         guarded("preview resume") { ctx.previews.resumeAfterExport(jobId) }
         guarded("job registry") { ctx.jobs.setExportActive(jobId, false) }
-    }
-
-    /** StatFs of [dir]'s nearest existing ancestor (the purge may have removed [dir] itself). */
-    override fun isStorageLow(dir: File): Boolean = try {
-        generateSequence(dir.absoluteFile) { it.parentFile }.firstOrNull { it.exists() }
-            ?.let { StatFs(it.path) }
-            ?.let { StorageLoss.isLow(it.availableBytes, it.totalBytes) } ?: false
-    } catch (e: IllegalArgumentException) {
-        false
     }
 
     private inline fun guarded(what: String, block: () -> Unit) {
@@ -804,7 +791,7 @@ class ExportCoordinator(private val ctx: EngineContext) {
         val output = r.job.output
         if (!output.isFile && Paths.isInside(output, r.paths.cacheRoot)) {
             // QA-05 D8: the muxer wrote to a file the system purged from the cache root under it.
-            end(r, ExportOutcome.FAILED, StorageLoss.failure(environment.isStorageLow(r.paths.cacheRoot)))
+            end(r, ExportOutcome.FAILED, StorageLoss.failure())
             return
         }
         if (!output.isFile || output.length() <= 0L) {
@@ -858,7 +845,7 @@ class ExportCoordinator(private val ctx: EngineContext) {
         r.job.output.delete()
         r.job.workDir.deleteRecursively()
         if (outcome == ExportOutcome.INTERRUPTED) r.store.markInterrupted(r.info.jobId) else r.store.finish(r.info.jobId)
-        val lost = if (outcome == ExportOutcome.FAILED) StorageLoss.classify(error, r.paths.cacheRoot) { environment.isStorageLow(r.paths.cacheRoot) } else null
+        val lost = if (outcome == ExportOutcome.FAILED) StorageLoss.classify(error, r.paths.cacheRoot) else null
         val mapped = lost ?: ExportErrors.map(error)
         Log.i(EngineContext.TAG, "export ${r.info.jobId}: ended $outcome (${mapped.code})")
         if (outcome == ExportOutcome.FAILED) Log.w(EngineContext.TAG, "export ${r.info.jobId}: failure ${describeFailure(error)}")
