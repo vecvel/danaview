@@ -123,6 +123,11 @@ Also run green: `test/v12/wiring` (S1 + S2), `test/v12/legal`, `test/v12/int101`
 fails only on rule 30 in HOM-04's Swift test (D-5, not an S2-W file). `flutter analyze --fatal-infos`
 on `lib`, `test/v12/wiring`, `test/v12/legal` and `packages/danaview_features`: no issues.
 
+Re-audit 2026-10-22 (resume): all of the above re-run green (S2 wiring and legal plain and with the flag;
+the plain app tests 163; `test/v12/preservation` 528), analyzer clean. `test/v12/wiring/s1_wiring_test.dart`
+pins the S1 flag set, so it runs plain only: with `DANAVIEW_FILES_HOME=true` its three "flags default to
+false" / "exactly the S1 section" checks fail by design (Library storage is then present).
+
 Device checks — the install-and-smoke of the flag-on build on the iOS Simulator and Android
 Emulator, the first-run library open (`sqlite3` against the platform SQLite) and the photo library
 prompt — are **deferred: no device available** to S2-Q / S2-R. S2-W ran widget tests only.
