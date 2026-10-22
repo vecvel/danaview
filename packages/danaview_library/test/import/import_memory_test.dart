@@ -16,11 +16,13 @@ import 'dart:isolate';
 
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'import_harness.dart';
 
 const String _child = 'test/import/import_memory_child.dart';
 
 void main() {
+  setUpAll(useHostSqlite);
   final size = int.tryParse(Platform.environment['DV_IMPORT_TEST_BYTES'] ?? '') ?? 2 * 1024 * 1024 * 1024;
 
   test('a ${size >> 20} MiB import keeps memory flat', () async {

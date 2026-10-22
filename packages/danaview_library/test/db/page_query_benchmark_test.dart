@@ -12,7 +12,10 @@ import 'dart:math';
 import 'package:danaview_library/danaview_library.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
+
 void main() {
+  setUpAll(useHostSqlite);
   test('200-row page queries over 50,000 entries take ≤ 2 ms (median)', () {
     final dir = Directory.systemTemp.createTempSync('hom17_bench_');
     addTearDown(() => dir.deleteSync(recursive: true));

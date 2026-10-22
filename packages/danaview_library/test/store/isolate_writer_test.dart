@@ -9,9 +9,11 @@ import 'dart:io';
 import 'package:danaview_library/testing.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'store_harness.dart';
 
 void main() {
+  setUpAll(useHostSqlite);
   test('checkInvariants runs through the isolate writer', () async {
     final root = tempRoot();
     final store = await LibraryStore.open(root: root, clock: FakeLibraryClock(t0).call);

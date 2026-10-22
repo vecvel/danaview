@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:danaview_library/testing.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'store_harness.dart';
 
 typedef _Setup = Future<Map<String, String>> Function(LibraryStore store);
@@ -79,6 +80,7 @@ Future<void> _crashEverywhere(String name, _Setup setup, _Op op) async {
 }
 
 void main() {
+  setUpAll(useHostSqlite);
   Future<Map<String, String>> twoFoldersThreeFiles(LibraryStore s) async {
     final a = await s.write((w, now) => w.createFolder('A', now: now));
     final b = await s.write((w, now) => w.createFolder('B', parent: a, now: now));

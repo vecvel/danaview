@@ -12,9 +12,11 @@ import 'package:crypto/crypto.dart';
 import 'package:danaview_library/testing.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'import_harness.dart';
 
 void main() {
+  setUpAll(useHostSqlite);
   late Directory src;
   late String root;
   late LibraryStore store;

@@ -341,7 +341,7 @@ Rules 1–8 are v1.1 ARCH §4.2 and stay as they are. Rules 9–19 are the AIS p
 | `danaview_pdf` | Flutter plugin (iOS, macOS via `darwin/`, Android) | INT-101; surface HOM-24 | `pigeons/pdf_api.dart`, `lib/src/{pdf_document,pdf_view,pdf_tools,pdf_text}.dart`, `darwin/Classes/{Glue,Viewer,Text,Tools,Annotate,Sign,Compress}/`, `android/src/main/kotlin/com/vecvel/danaview/pdf/{glue,viewer,text,tools,annotate,sign,compress}/` |
 | `danaview_documents` | Flutter UI | INT-101 | `lib/src/{router,text,card,pdf/{viewer,organiser,annotate,sign,compress},quicklook,signatures}/` |
 | `danaview_face_tracking` | Flutter plugin (iOS, Android) | INT-101; surface VED-16 | `pigeons/face_api.dart`, `lib/src/{face_tracker,video_sampler,models}.dart`, `ios/Classes/{Glue,Face,Pose,Segmentation,VideoSampler}/`, `android/src/main/kotlin/com/vecvel/danaview/face/{glue,face,pose,segmentation,videosampler}/` |
-| **Status (INT-101, 2026-10-22)** | | | The five packages above and the `danaview_search` skeleton exist with D-33 placeholders and one public entry file per directory (barrels never change); `danaview_library_native` and `danaview_pdf` are plugins for iOS, macOS (shared `darwin/`) and Android, `danaview_face_tracking` for iOS and Android, with empty native glue stubs until HOM-02/HOM-02A, HOM-24/HOM-25 and VED-16/VED-16A. `sqlite3` is pinned to 2.x (no build-hook download); HOM-17 and AIS-50 settle the Android SQLite and FTS5 question (V-S21). |
+| **Status (INT-101, 2026-10-22)** | | | The five packages above and the `danaview_search` skeleton exist with D-33 placeholders and one public entry file per directory (barrels never change); `danaview_library_native` and `danaview_pdf` are plugins for iOS, macOS (shared `darwin/`) and Android, `danaview_face_tracking` for iOS and Android, with empty native glue stubs until HOM-02/HOM-02A, HOM-24/HOM-25 and VED-16/VED-16A. `sqlite3` is pinned to 2.x (no build-hook download); HOM-17 and AIS-50 settle the Android SQLite and FTS5 question (V-S21): bundled via `sqlite3_flutter_libs` at the app root, D-7, 2026-10-22. |
 | AI packages | per AIS plan §3.1 | AIS-01, AIS-11, AIS-43, AIS-45, AIS-50; `danaview_search` skeleton by INT-101 | per AIS plan §3.2 as amended by V2-20, V2-24. **Status (AIS-01, 2026-10-22):** `danaview_ai_providers` and `danaview_ai_studio` exist with D-33 placeholders; the moved paths (`danaview_ai_ui`, V2-20; `lib/adapters/`, V2-24) are left to AIS-43 and AIS-37 |
 
 ### 4.4 Changed existing packages (who extends what)
@@ -776,7 +776,7 @@ v1.1 ARCH §20.1 extended: sources are opened read-only (rule 27); imports copy;
 | Diarization runtime | **0** install growth (owner 2026-10-16) | AIS-44 |
 | Face/pose/segmentation runtime code | recorded; models not bundled (Q-N1 decided: download) | VED-33 |
 | PDF library (only if HOM-27 picks b or c) | recorded per ABI | HOM-27 |
-| SQLite (`sqlite3` native libs where the OS one lacks FTS5) | recorded | HOM-17, AIS-50 |
+| SQLite: bundled via `sqlite3_flutter_libs` 0.5.x at the app root on every platform, FTS5 included (D-7, V-S21, 2026-10-22); pure-Dart packages keep only `sqlite3` 2.x | recorded (about +1.5 MB per ABI / per iOS arch uncompressed) | HOM-17, AIS-50 |
 | Share Extension | ≤ 1 MB | HOM-21 |
 
 AIS-41's release checklist records IPA and AAB sizes against 1.1.0.

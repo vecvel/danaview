@@ -11,6 +11,7 @@ import 'dart:math';
 import 'package:danaview_library/testing.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'organise_harness.dart';
 
 SearchItem _file(String id, String name, {FileKind kind = FileKind.photo, String? subKind, String? folder, SearchOrigin origin = SearchOrigin.danaview}) =>
@@ -19,6 +20,7 @@ SearchItem _file(String id, String name, {FileKind kind = FileKind.photo, String
 List<String> _names(SearchResults r) => [for (final h in r.hits) h.item.name];
 
 void main() {
+  setUpAll(useHostSqlite);
   group('matching and ranks', () {
     late NameIndex index;
     setUp(() {

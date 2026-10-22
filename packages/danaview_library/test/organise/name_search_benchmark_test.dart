@@ -18,6 +18,7 @@ import 'dart:math';
 import 'package:danaview_library/testing.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'organise_harness.dart';
 
 const _budget = Duration(milliseconds: 50);
@@ -49,6 +50,7 @@ Future<void> _seed(LibraryStore store) => store.write((w, now) {
     });
 
 void main() {
+  setUpAll(useHostSqlite);
   test('≤ 50 ms per keystroke over 50,000 names', () async {
     final store = await openTestStore(FakeLibraryClock(t0));
     await _seed(store);

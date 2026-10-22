@@ -72,6 +72,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart' show applyWorkaroundToOpenSqlite3OnOldAndroidVersions;
 
 /// Whether this build wires the Files & Media Home (`DANAVIEW_FILES_HOME`, default false).
 bool get filesHomeWired => FeatureFlags.filesHomeEnabled;
@@ -312,7 +313,14 @@ Future<FilesHomeRuntime> filesHomeOverrides({
   return FilesHomeRuntime._(store, thumbnails, overrides, observers);
 }
 
-Future<LibraryStore> _openStore(String root, BackupFlagPort backup) => LibraryStore.open(root: root, backup: backup);
+/// Opens `library.db` with the SQLite that sqlite3_flutter_libs bundles (D-7, ARCH v1.2 V-S21).
+/// On Android the library is first loaded from Java where old versions can't dlopen it from Dart;
+/// this runs here, on the main isolate, before the store spawns its writer isolate, and does
+/// nothing on the other platforms.
+Future<LibraryStore> _openStore(String root, BackupFlagPort backup) async {
+  await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
+  return LibraryStore.open(root: root, backup: backup);
+}
 
 Future<ThumbnailService> _openThumbnails(String cache, {required bool native}) {
   if (!native) return openThumbnailService(cacheDir: cache);
