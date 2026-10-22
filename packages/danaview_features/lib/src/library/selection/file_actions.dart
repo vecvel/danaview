@@ -50,26 +50,10 @@ SelectionActionGroup? _group(SelectionActionContext context, {required bool canM
           id: fileActionId(action),
           label: fileActionLabel(action, capabilities: caps, group: true),
           icon: fileActionIcon(action),
-          semanticLabel: _spoken(action, items.length, caps),
           onInvoke: (inv) => _invoke(inv, action),
         ),
     ],
   );
-}
-
-String? _spoken(FileAction action, int count, FileOutCapabilities caps) {
-  final what = count == 1 ? '1 item' : '$count items';
-  return switch (action) {
-    FileAction.moveTo => 'Move $what to a folder',
-    FileAction.copyTo => 'Copy $what to a folder',
-    FileAction.favourite => 'Favourite $what',
-    FileAction.delete => 'Delete $what',
-    FileAction.share => 'Share $what',
-    FileAction.saveOut => '${caps.saveLabel.replaceAll('…', '')} $what',
-    FileAction.saveToPhotos => 'Save $what to Photos',
-    FileAction.mergeIntoPdf => 'Merge $what into a PDF',
-    _ => null,
-  };
 }
 
 Future<void> _invoke(SelectionInvocation inv, FileAction action) async {

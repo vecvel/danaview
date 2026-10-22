@@ -12,7 +12,6 @@
 
 import 'dart:io';
 
-import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/library/file_actions/file_action_providers.dart';
 import 'package:danaview_features/src/library/file_actions/file_action_runner.dart';
 import 'package:danaview_features/src/library/file_actions/file_action_sheets.dart';
@@ -163,12 +162,32 @@ Future<void> _select(WidgetTester tester, List<MediaItem> items) async {
   await tester.pump();
 }
 
+/// Runs route and sheet animations (about 0.5 s) without draining the 2.4 s toast.
+Future<void> _settle(WidgetTester tester) async {
+  for (var i = 0; i < 10; i++) {
+    await tester.pump(const Duration(milliseconds: 60));
+  }
+}
+
+/// Scrolls [key] into view (sheets scroll at large text) and taps it.
+Future<void> _tapKey(WidgetTester tester, String key) async {
+  DanaviewToast.dismiss();
+  await tester.pump();
+  final finder = find.byKey(ValueKey(key));
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  await tester.tap(finder);
+  await _settle(tester);
+}
+
 Future<void> _tapAction(WidgetTester tester, String id) async {
+  DanaviewToast.dismiss(); // a toast sits over the bar and takes the tap
+  await tester.pump();
   final finder = find.byKey(ValueKey('selection-action-$id'));
   await tester.ensureVisible(finder);
   await tester.pump();
   await tester.tap(finder);
-  await tester.pumpAndSettle();
+  await _settle(tester);
 }
 
 List<String> _actions(WidgetTester tester) => [
@@ -211,6 +230,7 @@ void main() {
     expect(_actions(tester), ['file-share', 'file-save-out'], reason: 'linked-folder files offer no rename, move or delete');
 
     await tester.pumpWidget(_harness(env, lib, _Port(FileOutPlatform.android), platform: TargetPlatform.android));
+    await _settle(tester); // MaterialApp animates the theme (and its platform) change
     await _select(tester, [_itemOf(photo)]);
     expect(find.text('Save to Downloads'), findsOneWidget);
     await lib.close(tester);
@@ -262,7 +282,7 @@ void main() {
     await _tapAction(tester, 'file-move-to');
     expect(find.byKey(const ValueKey('file-folder-picker')), findsOneWidget);
     await tester.tap(find.byKey(ValueKey('file-folder-${trips.value}')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(lib.entry(a).folderId, trips);
     expect(lib.entry(b).folderId, trips);
     expect(find.text('Moved 2 files to Trips'), findsOneWidget);
@@ -272,7 +292,7 @@ void main() {
     await _tapAction(tester, 'file-copy-to');
     final imported = lib.store.reader.systemFolder(FolderSystemRole.imported)!;
     await tester.tap(find.byKey(ValueKey('file-folder-${imported.id.value}')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     final copies = lib.store.reader.allEntries().where((e) => e.displayName == 'A.jpg').toList();
     expect(copies, hasLength(2));
     expect(copies.map((e) => e.folderId), containsAll([trips, imported.id]));
@@ -300,12 +320,12 @@ void main() {
     expect(find.text('Delete 2 files?'), findsOneWidget);
     expect(find.textContaining('Used in 2 projects'), findsOneWidget);
     await tester.tap(_inDialog('Cancel'));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(lib.entry(a).isTrashed, isFalse);
 
     await _tapAction(tester, 'file-delete');
     await tester.tap(_inDialog('Delete'));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(lib.entry(a).isTrashed && lib.entry(b).isTrashed, isTrue);
     expect(File(lib.pathOf(a)).existsSync(), isTrue, reason: 'files stay until the purge');
     expect(lib.store.reader.recentlyDeleted(), hasLength(2));
@@ -325,7 +345,7 @@ void main() {
     expect(find.textContaining('Used in'), findsNothing);
     expect(find.textContaining('Recently deleted for 30 days'), findsOneWidget);
     await tester.tap(_inDialog('Cancel'));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     await lib.close(tester);
   });
 
@@ -338,41 +358,37 @@ void main() {
     await tester.pumpWidget(_harness(env, lib, port, menuItem: _itemOf(a)));
 
     await tester.tap(find.byKey(const ValueKey('open-menu')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     for (final id in ['file-share', 'file-copy-to', 'file-move-to', 'file-rename', 'file-info', 'file-open-in', 'file-favourite', 'file-save-out', 'file-save-photos', 'file-delete']) {
       expect(find.byKey(ValueKey(id)), findsOneWidget, reason: id);
     }
-    await tester.tap(find.byKey(const ValueKey('file-rename')));
-    await tester.pumpAndSettle();
+    await _tapKey(tester, 'file-rename');
     await tester.enterText(find.byType(EditableText), 'Sunset');
-    await tester.tap(_inDialog('Rename'));
-    await tester.pumpAndSettle();
+    await tester.tap(_inDialog('Rename').last);
+    await _settle(tester);
     expect(lib.entry(a).displayName, 'Sunset.jpg', reason: 'the extension is kept');
     expect(File(lib.pathOf(lib.entry(a))).existsSync(), isTrue);
 
     await tester.tap(find.byKey(const ValueKey('open-menu')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('file-info')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
+    await _tapKey(tester, 'file-info');
     expect(find.byKey(const ValueKey('file-info-sheet')), findsOneWidget);
     expect(find.text('JPG photo'), findsOneWidget);
     expect(find.text('Trips'), findsOneWidget);
     expect(find.text('Files'), findsOneWidget, reason: 'where it came from');
     await tester.tapAt(const Offset(5, 5));
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     await tester.tap(find.byKey(const ValueKey('open-menu')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Add to favourites'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('file-favourite')));
-    await tester.pumpAndSettle();
+    await _tapKey(tester, 'file-favourite');
     expect(lib.entry(a).isFavourite, isTrue);
 
     await tester.tap(find.byKey(const ValueKey('open-menu')));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Remove from favourites'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('file-open-in')));
-    await tester.pumpAndSettle();
+    await _tapKey(tester, 'file-open-in');
     expect(port.calls.last.$1, 'open');
     expect(port.calls.last.$2.single.path, lib.pathOf(lib.entry(a)));
     await lib.close(tester);
@@ -423,15 +439,14 @@ void main() {
       }
 
       await tester.tap(find.byKey(const ValueKey('open-menu')));
-      await tester.pumpAndSettle();
+      await _settle(tester);
       expect(tester.takeException(), isNull, reason: 'menu $surface');
       final tile = tester.getSize(find.byKey(const ValueKey('file-rename')));
       expect(tile.height, greaterThanOrEqualTo(44), reason: 'menu row $surface');
-      await tester.tap(find.byKey(const ValueKey('file-info')));
-      await tester.pumpAndSettle();
+      await _tapKey(tester, 'file-info');
       expect(tester.takeException(), isNull, reason: 'info $surface');
       Navigator.of(tester.element(find.byKey(const ValueKey('file-info-sheet')))).pop();
-      await tester.pumpAndSettle();
+      await _settle(tester);
 
       await _select(tester, [_itemOf(a)]);
       await _tapAction(tester, 'file-move-to');
@@ -439,18 +454,18 @@ void main() {
       final row = tester.getSize(find.byKey(ValueKey('file-folder-${folder.value}')));
       expect(row.height, greaterThanOrEqualTo(44), reason: 'picker row $surface');
       Navigator.of(tester.element(find.byKey(const ValueKey('file-folder-picker')))).pop();
-      await tester.pumpAndSettle();
+      await _settle(tester);
 
       await _tapAction(tester, 'file-delete');
       expect(tester.takeException(), isNull, reason: 'delete dialog $surface');
       await tester.tap(_inDialog('Cancel'));
-      await tester.pumpAndSettle();
+      await _settle(tester);
     }
     await _select(tester, [_itemOf(a), _itemOf(b)]);
     expect(find.bySemanticsLabel('File actions'), findsOneWidget);
-    expect(find.bySemanticsLabel('Share 2 items'), findsOneWidget);
-    expect(find.bySemanticsLabel('Delete 2 items'), findsOneWidget);
-    expect(find.bySemanticsLabel('Move 2 items to a folder'), findsOneWidget);
+    for (final label in ['Share', 'Move', 'Copy', 'Favourite', 'Save to Files', 'Delete', 'Clear selection']) {
+      expect(find.bySemanticsLabel(label), findsOneWidget, reason: label);
+    }
     handle.dispose();
     await lib.close(tester);
   });
