@@ -20,7 +20,7 @@ import 'selection_model.dart';
 export 'selection_actions.dart';
 export 'selection_gestures.dart';
 export 'selection_model.dart';
-export 'media_actions.dart' show mediaSelectionGroup, mediaSelectionGroupId, playQueueFor, skippedPhotosNotice;
+export 'media_actions.dart' show mediaSelectionGroup, mediaSelectionGroupId, playQueueFor, playerDecodesPhoto, skippedPhotosNotice;
 
 /// The text of the bar's count.
 String selectionCountLabel(int count) => count == 1 ? '1 selected' : '$count selected';

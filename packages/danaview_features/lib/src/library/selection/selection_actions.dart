@@ -119,14 +119,18 @@ final selectionActionGroupsProvider = Provider<List<SelectionGroupBuilder>>((ref
 
 /// Whether the player shows still photos in a queue (ARCH v1.2 C-23, [VERIFY] V2-V4).
 ///
-/// V2-V4 answer (HOM-12, 2026-10-22): **not on Apple platforms**. media_kit's bundled libmpv
-/// (media_kit_libs_ios_video 1.1.4, media_kit_libs_macos_video 1.1.4; mpv 0.36.0) is built from an
-/// FFmpeg configured with `--disable-all` and a whitelist that has no PNG, TIFF, BMP or GIF
-/// decoder and no `image2` / `image_*_pipe` demuxer; `image-display-duration` exists in mpv, but
-/// the files never open as images. Android (media_kit_libs_android_video 1.3.8, fetched at Gradle
-/// time) is recorded by the Windows lane; Windows and Linux are unverified. Every platform is
-/// therefore false until its build is verified: "Play all" skips photos with a notice. Override
-/// this provider when a platform's player is proven to show photos.
+/// V2-V4 answer (HOM-12, 2026-10-22, run on this Mac against the app's bundled
+/// media_kit_libs_macos_video 1.1.4 libmpv with `vo=null`, `image-display-duration=1`): a JPEG
+/// in a playlist opens through mpv's `mf` demuxer with the `mjpeg` decoder and lasts exactly
+/// `image-display-duration`; PNG, TIFF, GIF and BMP are demuxed but fail with "no decoders",
+/// and HEIC doesn't open at all. media_kit_libs_ios_video 1.1.4 is the same libmpv-darwin build
+/// (its Avcodec carries the same `mjpeg` decoder strings and no PNG decoder), so iOS gives the
+/// same answer: **JPEG only** ([playerDecodesPhoto]). The player (v1.0/1.1 package) never sets
+/// `image-display-duration`, so a photo would flash for mpv's 1 s default, and most iPhone photos
+/// are HEIC; "Play all" therefore still skips photos with a notice everywhere. Android
+/// (media_kit_libs_android_video 1.3.8, fetched at Gradle time) is recorded by the Windows lane;
+/// Windows and Linux are unverified. Override this provider with true where the player sets a
+/// slideshow duration; JPEG photos then join the queue and other formats stay skipped.
 final playerShowsPhotosProvider = Provider<bool>((ref) => playerShowsPhotos(defaultTargetPlatform));
 
 /// The verified V2-V4 result of [platform] (see [playerShowsPhotosProvider]).

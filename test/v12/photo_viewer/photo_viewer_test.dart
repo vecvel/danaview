@@ -474,15 +474,21 @@ void main() {
   testWidgets('an empty list does not open; a lone photo opens at index 0', (tester) async {
     useSurface(tester, librarySurfaces[1]);
     final env = await LibraryTestEnv.create();
+    var opened = false;
     await tester.pumpWidget(_app(env, Builder(builder: (context) {
       return GestureDetector(
         key: const ValueKey('open-empty'),
-        onTap: () => openPhotoViewer(context, const [], 0),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          opened = true;
+          openPhotoViewer(context, const [], 0);
+        },
         child: const SizedBox(width: 100, height: 100),
       );
     })));
     await tester.tap(find.byKey(const ValueKey('open-empty')));
     await tester.pumpAndSettle();
+    expect(opened, isTrue, reason: 'the launcher was tapped');
     expect(find.byType(PhotoViewerScreen), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(_app(env, _launcher([desktopPhoto('/nowhere/beach.jpg')]), platform: TargetPlatform.macOS));

@@ -11,12 +11,12 @@ import 'package:danaview_library/danaview_library.dart';
 final DateTime fixtureDate = DateTime.utc(2026, 10, 20, 12);
 
 /// Photo number [n] (a Danaview file, `fe_` id).
-PhotoMediaItem photo(int n, {String? uri}) => PhotoMediaItem(
+PhotoMediaItem photo(int n, {String? uri, String mimeType = 'image/jpeg'}) => PhotoMediaItem(
       id: ItemId.opaque('fe_photo$n'),
       uri: uri ?? '/library/files/photo$n.jpg',
       name: 'Photo $n.jpg',
       modifiedAt: fixtureDate,
-      mimeType: 'image/jpeg',
+      mimeType: mimeType,
       width: 4032,
       height: 3024,
     );

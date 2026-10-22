@@ -191,5 +191,20 @@ void main() {
       expect([for (final r in q.refs) r.id], ['fe_photo1', 'fe_video1', 'fe_photo3']);
       expect(q.skippedPhotos, 1);
     });
+
+    test('only JPEG stills join the queue: the bundled libmpv has no PNG/HEIC/TIFF/GIF decoder', () {
+      final q = playQueueFor([
+        photo(1),
+        photo(2, uri: '/library/files/photo2.heic', mimeType: 'image/heic'),
+        video(1),
+        photo(3, uri: '/library/files/photo3.png', mimeType: 'image/png'),
+        photo(4, uri: '/library/files/photo4.JPEG', mimeType: ''),
+        photo(5, uri: '/library/files/photo5.gif', mimeType: 'application/octet-stream'),
+      ], photosPlayable: true);
+      expect([for (final r in q.refs) r.id], ['fe_photo1', 'fe_video1', 'fe_photo4']);
+      expect(q.skippedPhotos, 3);
+      expect(playerDecodesPhoto(photo(6, mimeType: 'image/JPEG')), isTrue);
+      expect(playerDecodesPhoto(photo(7, uri: '/x/a.webp', mimeType: 'image/webp')), isFalse);
+    });
   });
 }

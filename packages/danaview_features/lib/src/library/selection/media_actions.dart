@@ -75,9 +75,10 @@ SelectionActionGroup? mediaSelectionGroup(SelectionActionContext context) {
   return SelectionActionGroup(id: mediaSelectionGroupId, title: 'Media actions', actions: actions);
 }
 
-/// The queue "Play all" builds from [items]: videos always, photos only when [photosPlayable]
-/// and their URI is one the player opens (a file path or a `file://` URI, not a system-library
-/// asset id). Returns the refs in selection order and how many photos were left out.
+/// The queue "Play all" builds from [items]: videos always, photos only when [photosPlayable],
+/// their URI is one the player opens (a file path or a `file://` URI, not a system-library asset
+/// id) and their format is one the bundled libmpv decodes ([playerDecodesPhoto]: JPEG only, V2-V4).
+/// Returns the refs in selection order and how many photos were left out.
 ({List<MediaRef> refs, int skippedPhotos}) playQueueFor(List<MediaItem> items, {required bool photosPlayable}) {
   final refs = <MediaRef>[];
   var skipped = 0;
@@ -86,7 +87,7 @@ SelectionActionGroup? mediaSelectionGroup(SelectionActionContext context) {
       case VideoMediaItem():
         refs.add(item.toMediaRef());
       case PhotoMediaItem():
-        if (photosPlayable && _playerOpens(item.uri)) {
+        if (photosPlayable && _playerOpens(item.uri) && playerDecodesPhoto(item)) {
           refs.add(MediaRef(id: item.id.value, title: item.name, pathOrUri: item.uri, fileSize: item.sizeBytes));
         } else {
           skipped++;
@@ -96,6 +97,17 @@ SelectionActionGroup? mediaSelectionGroup(SelectionActionContext context) {
     }
   }
   return (refs: List.unmodifiable(refs), skippedPhotos: skipped);
+}
+
+/// Whether the bundled libmpv decodes [photo]'s format (ARCH V2-V4, HOM-12 2026-10-22): media_kit's
+/// FFmpeg has the `mjpeg` decoder but no PNG, HEIF/HEIC, TIFF, GIF, BMP or WebP image decoder,
+/// so only JPEG stills open (mpv's `mf` demuxer, shown for `image-display-duration`).
+bool playerDecodesPhoto(PhotoMediaItem photo) {
+  final mime = photo.mimeType.toLowerCase();
+  if (mime == 'image/jpeg' || mime == 'image/jpg' || mime == 'image/pjpeg') return true;
+  if (mime.isNotEmpty && mime != 'application/octet-stream') return false;
+  final path = photo.uri.toLowerCase();
+  return path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.jpe');
 }
 
 bool _playerOpens(String uri) => uri.startsWith('/') || uri.startsWith('file://') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(uri);

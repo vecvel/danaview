@@ -757,7 +757,9 @@ void main() {
       await engine.dispose();
       await _finish(tester, env);
     });
+  });
 
+  group('Home hub (HOM-06)', () {
     testWidgets('tapping the Now Playing card returns to the player (HOM-06, P-1)', (tester) async {
       useSurface(tester, librarySurfaces[2]);
       final env = await LibraryTestEnv.create();
