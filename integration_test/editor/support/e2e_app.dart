@@ -2,7 +2,8 @@
 //
 // Boots the real app for the E2E suite: the same wiring as `lib/main.dart` (mpv player engine,
 // session and library repositories, `EditorBootstrap.createRuntime`, `editorAppOverrides` with Auto
-// captions), with the production `MobileEditorEngine` wrapped by `E2eEditorEngine` (picker and
+// captions, then S2-W's `filesHomeOverrides`, which is empty with DANAVIEW_FILES_HOME off and the
+// wired library, thumbnails and import with it on; FIX-S2Q-5), with the production `MobileEditorEngine` wrapped by `E2eEditorEngine` (picker and
 // handoff seams only). The wiring is built once per test process; every `testWidgets` pumps a new
 // `ProviderScope` + `DanaviewApp` over it.
 //
@@ -18,6 +19,7 @@ import 'dart:io';
 
 import 'package:danaview/app.dart';
 import 'package:danaview/main.dart' show createAutoCaptions, editorAppOverrides;
+import 'package:danaview/wiring/files_home_wiring.dart' show FilesHomeRuntime, filesHomeOverrides;
 import 'package:danaview_data/danaview_data.dart';
 import 'package:danaview_editor/danaview_editor.dart';
 import 'package:danaview_editor_engine/danaview_editor_engine.dart';
@@ -40,7 +42,13 @@ import 'e2e_wait.dart';
 
 /// The wired app of this test process.
 final class E2eWorld {
-  E2eWorld._({required this.engine, required this.runtime, required this.captions, required this.overrides});
+  E2eWorld._({
+    required this.engine,
+    required this.runtime,
+    required this.captions,
+    required this.filesHome,
+    required this.overrides,
+  });
 
   /// The editor engine with the test seams.
   final E2eEditorEngine engine;
@@ -50,6 +58,10 @@ final class E2eWorld {
 
   /// Auto captions, when the build has them.
   final AutoCaptionsRuntime? captions;
+
+  /// The Files & Media Home wiring (`FilesHomeRuntime.off` with DANAVIEW_FILES_HOME off). Kept
+  /// alive for the process, as the app keeps it.
+  final FilesHomeRuntime filesHome;
 
   /// The app's provider overrides.
   final List<Override> overrides;
@@ -99,13 +111,16 @@ abstract final class E2eApp {
     final runtime = await EditorBootstrap.createRuntime(engine: engine, roots: roots, prefs: await EditorPrefs.load());
     final captions = EditorAppWiring.autoCaptionsEnabled ? createAutoCaptions(engine: engine, supportDirectory: roots.support) : null;
     if (captions != null) await captions.service.initialize();
+    // Files & Media Home (S2), as lib/main.dart: no override with the flag off (FIX-S2Q-5).
+    final filesHome = await filesHomeOverrides(prefs: prefs);
     final overrides = <Override>[
       playbackEngineProvider.overrideWithValue(player),
       sessionRepositoryProvider.overrideWithValue(sessionRepo),
       libraryRepositoryProvider.overrideWithValue(libraryRepo),
       ...editorAppOverrides(runtime, transcription: captions?.service),
+      ...filesHome.overrides,
     ];
-    return E2eWorld._(engine: engine, runtime: runtime, captions: captions, overrides: overrides);
+    return E2eWorld._(engine: engine, runtime: runtime, captions: captions, filesHome: filesHome, overrides: overrides);
   }
 
   /// Boots the wiring (once per process) and pumps the app at Home.

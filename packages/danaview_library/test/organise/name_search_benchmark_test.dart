@@ -12,6 +12,7 @@
 // flight, then the O(1) swap plus the first full search over the new snapshot — must stay inside
 // 50 ms. A write that changes no searchable row (an import progress checkpoint) builds nothing.
 
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:danaview_library/testing.dart';
@@ -107,7 +108,7 @@ void main() {
         for (var i = 0; i < 20000; i++)
           SearchItem(id: ItemId.opaque('/linked/$i'), name: 'Linked holiday clip $i.mov', origin: SearchOrigin.linked, kind: FileKind.video, folderName: 'Clips'),
       ]);
-    final initial = await loadDanaviewSearchSnapshot(dbPath);
+    final initial = await loadDanaviewSearchSnapshot(dbPath, run: Isolate.run);
     index.replacePreparedSource(danaviewSearchSourceId, initial.source!);
     for (final q in ['ho', 'pd', 're', 'holiday']) {
       index.search(SearchQuery(q));
@@ -128,7 +129,7 @@ void main() {
       final entry = store.reader.db.select('SELECT id FROM entries WHERE trashed_at IS NULL ORDER BY id LIMIT 1 OFFSET ?', [round * 7]).first['id'] as String;
       await store.write((w, now) => w.renameEntry(EntryId.parse(entry), 'Renamed holiday $round.pdf', now: now));
       final rebuild = Stopwatch()..start();
-      final pending = loadDanaviewSearchSnapshot(dbPath, unlessFingerprint: fingerprint);
+      final pending = loadDanaviewSearchSnapshot(dbPath, run: Isolate.run, unlessFingerprint: fingerprint);
       // A keystroke while the read is in flight answers from the index as it is.
       time(() => index.search(const SearchQuery('holiday r')));
       final snapshot = await pending;
@@ -152,7 +153,7 @@ void main() {
       w.recordImportProgress(job.id, 1 << 19);
     });
     final skip = Stopwatch()..start();
-    final unchanged = await loadDanaviewSearchSnapshot(dbPath, unlessFingerprint: fingerprint);
+    final unchanged = await loadDanaviewSearchSnapshot(dbPath, run: Isolate.run, unlessFingerprint: fingerprint);
     skip.stop();
     expect(unchanged.changed, isFalse);
     expect(unchanged.fingerprint, fingerprint);

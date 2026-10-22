@@ -19,6 +19,7 @@
 // query are dropped. Nothing here logs a name, a path or a query (ARCH rule 30).
 
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:danaview_data/danaview_data.dart';
 import 'package:danaview_domain/danaview_domain.dart';
@@ -66,7 +67,7 @@ typedef DanaviewSearchLoader = Future<DanaviewSearchSnapshot> Function(LibrarySt
 /// How the controller reads the Danaview folders: in a background isolate over its own read-only
 /// connection (tests that run in fake time override it with [readDanaviewSearchSnapshot] inline).
 final danaviewSearchLoaderProvider = Provider<DanaviewSearchLoader>(
-  (ref) => (store, {unlessFingerprint}) => loadDanaviewSearchSnapshot(store.paths.databasePath, unlessFingerprint: unlessFingerprint),
+  (ref) => (store, {unlessFingerprint}) => loadDanaviewSearchSnapshot(store.paths.databasePath, run: Isolate.run, unlessFingerprint: unlessFingerprint),
 );
 
 /// How the linked-folder walk lists a folder.

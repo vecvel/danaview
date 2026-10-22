@@ -39,7 +39,9 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Danaview uses the microphone only while you record a voiceover in the video editor.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Danaview saves the videos you export to your photo library.</string>
+	<string>Danaview saves photos and videos you export or save to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Danaview shows your photos and videos in its library and lets you edit them. They stay on your device.</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

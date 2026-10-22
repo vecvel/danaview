@@ -363,8 +363,12 @@ final class LibraryStore {
 
   /// The invariants currently broken (tests and diagnostics; reads files, so not for the UI isolate
   /// on a large library).
-  Future<List<String>> checkInvariants() =>
-      write((w, _) => checkLibraryInvariants(w.reader, w.fs, unavailable: unavailable));
+  Future<List<String>> checkInvariants() {
+    // The op crosses to the writer isolate: capture a sendable copy of the set, never `this`
+    // (the store holds the host's ReceivePort, which is unsendable).
+    final known = Set<EntryId>.of(unavailable);
+    return write((w, _) => checkLibraryInvariants(w.reader, w.fs, unavailable: known));
+  }
 
   /// Closes the store.
   Future<void> close() async {

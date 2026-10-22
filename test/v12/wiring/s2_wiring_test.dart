@@ -364,8 +364,18 @@ void main() {
           tester,
           filesHome: true,
           platform: platform,
-          // No real Pictures folders or volumes are scanned in tests.
-          overrides: [desktopRootResolverProvider.overrideWithValue(null)],
+          // A desktop resolver that discovers nothing: no home (no Pictures folder) and no mount
+          // directories (no volumes), so no real folders are scanned. A null resolver would mean
+          // "not a desktop", where dropped folders are refused.
+          overrides: [
+            desktopRootResolverProvider.overrideWithValue(shown
+                ? DesktopRootResolver(
+                    platform: desktopPlatformFor(platform, isWeb: false)!,
+                    environment: const {},
+                    volumeMountDirs: const [],
+                  )
+                : null),
+          ],
         );
         await app.tab(HomeTab.photos);
         expect(find.byKey(const ValueKey('s2-desktop-sidebar')), shown ? findsOneWidget : findsNothing);
@@ -376,7 +386,9 @@ void main() {
           expect(tester.getSize(find.byKey(const ValueKey('desktop-root-all'))).height, greaterThanOrEqualTo(44));
           // A dropped folder becomes a photo root.
           final drop = tester.state<DesktopFolderDropTargetState>(find.byType(DesktopFolderDropTarget));
-          await tester.runAsync(() => drop.handleDrop([Directory.systemTemp.path]));
+          final dropped = (await tester.runAsync(() => Directory.systemTemp.createTemp('s2_drop_')))!;
+          addTearDown(() => tester.runAsync(() => dropped.delete(recursive: true)));
+          await tester.runAsync(() => drop.handleDrop([dropped.path]));
           await pumpFrames(tester, count: 4);
           expect(app.container.read(desktopPhotosControllerProvider).rootsOf(DesktopRootKind.custom), isNotEmpty);
         }

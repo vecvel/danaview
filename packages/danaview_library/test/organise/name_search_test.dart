@@ -5,6 +5,7 @@
 // while typing equals a full scan (property); "trashed items never appear" (V2-08); the
 // SearchBackend hook.
 
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:danaview_library/testing.dart';
@@ -183,12 +184,12 @@ void main() {
       await expectChanged((w, now) => w.moveEntries([beach.id], other, now: now));
       await expectChanged((w, now) => w.trashEntries([beach.id], now: now));
 
-      final loaded = await loadDanaviewSearchSnapshot(store.paths.databasePath);
+      final loaded = await loadDanaviewSearchSnapshot(store.paths.databasePath, run: Isolate.run);
       expect(loaded.fingerprint, fp);
       final index = NameIndex()..replacePreparedSource(danaviewSearchSourceId, loaded.source!);
       expect(_names(index.search(const SearchQuery('summer'))), ['Summer trip']);
       expect(index.search(const SearchQuery('shore')).hits, isEmpty);
-      final unchanged = await loadDanaviewSearchSnapshot(store.paths.databasePath, unlessFingerprint: fp);
+      final unchanged = await loadDanaviewSearchSnapshot(store.paths.databasePath, run: Isolate.run, unlessFingerprint: fp);
       expect(unchanged.changed, isFalse);
     });
 

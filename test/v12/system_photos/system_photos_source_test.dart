@@ -196,9 +196,11 @@ void main() {
       const asset = SystemPhotoAsset(localIdentifier: 'X/L0/001', kind: SystemAssetKind.photo, width: -1, height: 0);
       final item = systemMediaItem(asset, SystemPhotoPlatform.photoKit) as PhotoMediaItem;
       expect(item.name, isEmpty);
-      expect(item.mimeType, 'application/octet-stream');
+      expect(item.mimeType, unknownPhotoMimeType);
       expect(item.modifiedAt, DateTime.fromMillisecondsSinceEpoch(0, isUtc: true));
       expect((item.width, item.height), (0, 0));
+      final video = systemMediaItem(const SystemPhotoAsset(localIdentifier: 'X/L0/002', kind: SystemAssetKind.video, width: 0, height: 0), SystemPhotoPlatform.photoKit) as VideoMediaItem;
+      expect(video.mimeType, unknownVideoMimeType);
       expect(() => systemMediaItem(_asset('not-a-number'), SystemPhotoPlatform.mediaStore), throwsFormatException);
     });
   });

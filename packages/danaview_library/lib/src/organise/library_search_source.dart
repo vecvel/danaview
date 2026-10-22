@@ -6,14 +6,16 @@
 // columns per row.
 //
 // The FEAT controller re-reads it after library writes, off the UI isolate:
-// [loadDanaviewSearchSnapshot] opens its own read-only connection in a background isolate, reads
-// the rows, and fingerprints them (FNV-1a over every searchable column). When the fingerprint
+// [loadDanaviewSearchSnapshot] hands [readDanaviewSearchSnapshotAt] to the caller's background
+// runner (`Isolate.run` in the app). This file never imports dart:isolate itself (ARCH rule 20:
+// dart:io and dart:isolate only under lib/src/{store,import,inbox,actions,db,desktop}/). There it
+// opens its own read-only connection, reads the rows, and fingerprints them (FNV-1a over every searchable column). When the fingerprint
 // matches the one the index already holds, the write changed no searchable row (an import progress
 // checkpoint, a favourite, a sort, a last-opened stamp) and nothing is built or swapped. Otherwise
 // it builds and sorts the items there ([prepareSearchSource]) and hands back a source the UI
 // isolate swaps in with [NameIndex.replacePreparedSource] in O(1).
 
-import 'dart:isolate';
+import 'dart:async';
 
 import 'package:sqlite3/sqlite3.dart';
 
@@ -108,17 +110,26 @@ DanaviewSearchSnapshot readDanaviewSearchSnapshot(Database db, {int? unlessFinge
   return DanaviewSearchSnapshot(rows.fingerprint, prepareSearchSource(_items(rows)));
 }
 
-/// [readDanaviewSearchSnapshot] in a background isolate over its own read-only connection to the
-/// library database at [databasePath] (`LibraryStore.paths.databasePath`).
-Future<DanaviewSearchSnapshot> loadDanaviewSearchSnapshot(String databasePath, {int? unlessFingerprint}) =>
-    Isolate.run(() {
-      final db = openLibraryReadConnection(databasePath);
-      try {
-        return readDanaviewSearchSnapshot(db, unlessFingerprint: unlessFingerprint);
-      } finally {
-        db.dispose();
-      }
-    }, debugName: 'library-search-source');
+/// [readDanaviewSearchSnapshot] over its own read-only connection to the library database at
+/// [databasePath] (`LibraryStore.paths.databasePath`), closed before it returns. Meant to run in a
+/// background isolate (see [loadDanaviewSearchSnapshot]).
+DanaviewSearchSnapshot readDanaviewSearchSnapshotAt(String databasePath, {int? unlessFingerprint}) {
+  final db = openLibraryReadConnection(databasePath);
+  try {
+    return readDanaviewSearchSnapshot(db, unlessFingerprint: unlessFingerprint);
+  } finally {
+    db.dispose();
+  }
+}
+
+/// Runs [computation] off the calling isolate and returns its result: `Isolate.run` in the app
+/// and in tests. Injected so lib/src/organise/ stays free of dart:isolate (ARCH rule 20).
+typedef BackgroundRunner = Future<R> Function<R>(FutureOr<R> Function() computation);
+
+/// [readDanaviewSearchSnapshotAt] through [run] (a background isolate), so neither the read nor the
+/// build and sort of the items lands on the UI isolate.
+Future<DanaviewSearchSnapshot> loadDanaviewSearchSnapshot(String databasePath, {required BackgroundRunner run, int? unlessFingerprint}) =>
+    run(() => readDanaviewSearchSnapshotAt(databasePath, unlessFingerprint: unlessFingerprint));
 
 /// Refreshes the Danaview source of [index] from [reader] on the calling isolate (tests and small
 /// libraries; the app loads it with [loadDanaviewSearchSnapshot]).
