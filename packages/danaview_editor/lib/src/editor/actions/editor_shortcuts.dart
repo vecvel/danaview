@@ -18,7 +18,8 @@
 //
 // The focus guard
 // * A key belongs to the editor only while focus is in the editor's own focus scope. A menu
-//   (its own scope), a sheet or a dialog (another route) is left alone.
+//   (its own scope), a sheet or a dialog (another route) is left alone. While a kit menu is open
+//   the editor leaves every key alone, wherever focus is: Esc closes the menu first.
 // * While an `EditableText` has focus the non-text-safe actions are disabled and do not consume
 //   the key, so Space, Backspace, the arrows and ⌘C/⌘V reach the text field. Only `save` and
 //   `escape` keep working there (ux.md §15.2: ⌘S works in text fields).
@@ -31,6 +32,7 @@ import 'package:flutter/material.dart' show Theme;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewMenuAnchor;
 
 import '../contracts/contracts.dart';
 import '../editor_scope.dart';
@@ -103,6 +105,8 @@ class _EditorShortcutsState extends ConsumerState<EditorShortcuts> {
   /// Where a key event lands right now.
   EditorKeyScope scopeNow() {
     if (!mounted) return EditorKeyScope.outOfScope;
+    // An open menu owns the keyboard even when its focus scope does not hold focus (FIX-QA02-M2-2).
+    if (DanaviewMenuAnchor.anyOpen) return EditorKeyScope.outOfScope;
     final scope = Focus.maybeOf(context, scopeOk: true, createDependency: false)?.nearestScope;
     final primary = FocusManager.instance.primaryFocus;
     if (primary == null || primary == scope) {
