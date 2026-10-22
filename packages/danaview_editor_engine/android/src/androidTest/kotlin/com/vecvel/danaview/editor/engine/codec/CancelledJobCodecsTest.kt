@@ -121,8 +121,28 @@ class CancelledJobCodecsTest {
         while (progress(id) < atProgress && terminal(id) == null && System.currentTimeMillis() < deadline) Thread.sleep(10)
         ctx.jobs.cancel(id)
         val end = awaitTerminal(id)
-        Log.i(TAG, "${request.kind} ${end.failure?.code ?: "done"}: at its terminal event ${CodecCensus.take()}")
+        checkReleased("${request.kind} ${end.failure?.code ?: "done"}")
         return end
+    }
+
+    /** Worst time from a terminal event until the job's codecs and playback threads were gone. */
+    private var worstReleaseMs = 0L
+    private val releaseLog = ArrayList<String>()
+
+    /** How long after a job's terminal event its codecs (clients, playback threads, MediaCodec loopers) were still alive. */
+    private fun checkReleased(what: String) {
+        val t0 = System.currentTimeMillis()
+        val at = CodecCensus.take()
+        val settled = CodecCensus.settle(RELEASE_SETTLE_MS) { it.clients.isEmpty() && it.playbackThreads == 0 && it.codecLoopers == 0 && it.transformerThreads == 0 }
+        val ms = if (settled.clients.isEmpty() && settled.playbackThreads == 0 && settled.codecLoopers == 0 && settled.transformerThreads == 0) {
+            if (at.clients.isEmpty() && at.playbackThreads == 0 && at.codecLoopers == 0 && at.transformerThreads == 0) 0L else System.currentTimeMillis() - t0
+        } else {
+            Long.MAX_VALUE
+        }
+        worstReleaseMs = maxOf(worstReleaseMs, ms)
+        val line = "$what: at the terminal event $at; released ${if (ms == Long.MAX_VALUE) "NOT within $RELEASE_SETTLE_MS ms" else "after $ms ms"}"
+        releaseLog += line
+        Log.i(TAG, line)
     }
 
     private fun reverse(cycle: Int) = JobRequestMsg(
@@ -174,7 +194,7 @@ class CancelledJobCodecsTest {
         while (System.currentTimeMillis() < deadline && exports.events.none { it.jobId == id && it.kind != EngineEventKindMsg.EXPORT_PROGRESS }) Thread.sleep(10)
         exports.cancel(id)
         val end = exports.await(id, timeoutSec = 120)
-        Log.i(TAG, "export cycle $cycle: ${end.failure?.code ?: "done"} in ${end.wallMs} ms; at its terminal event ${CodecCensus.take()}")
+        checkReleased("EXPORT ${end.failure?.code ?: "done"} (${end.wallMs} ms)")
     }
 
     /** Creates (and releases) an AAC encoder on a fresh thread; the time it took, or null when it did not return within [boundMs]. */
@@ -210,7 +230,13 @@ class CancelledJobCodecsTest {
                 c.codecLoopers <= baseline.codecLoopers &&
                 c.transformerThreads <= baseline.transformerThreads
         }
-        Log.i(TAG, "after $CYCLES cycles: $after")
+        Log.i(TAG, "after $CYCLES cycles: $after; worst release after a terminal event: $worstReleaseMs ms")
+        assertTrue(
+            "every cancelled job's codecs are gone within $TERMINAL_RELEASE_MS ms of its terminal event:
+" + releaseLog.joinToString("
+"),
+            worstReleaseMs <= TERMINAL_RELEASE_MS,
+        )
         assertEquals("codec clients after the cancelled jobs ($after)", baseline.clients, after.clients)
         assertTrue("playback threads back at the baseline ($baseline -> $after)", after.playbackThreads <= baseline.playbackThreads)
         assertTrue("MediaCodec loopers back at the baseline ($baseline -> $after)", after.codecLoopers <= baseline.codecLoopers)
@@ -231,6 +257,10 @@ class CancelledJobCodecsTest {
     companion object {
         private const val TAG = "DanaviewD9Test"
         private const val CYCLES = 6
+        private const val RELEASE_SETTLE_MS = 15_000L
+
+        /** Async codec release (ResourceManagerService bookkeeping, looper exit) right after a terminal event. */
+        private const val TERMINAL_RELEASE_MS = 1_000L
         private const val SETTLE_MS = 10_000L
         private const val ENCODER_BOUND_MS = 5_000L
         private const val EXPORT_BOUND_MS = 120_000L

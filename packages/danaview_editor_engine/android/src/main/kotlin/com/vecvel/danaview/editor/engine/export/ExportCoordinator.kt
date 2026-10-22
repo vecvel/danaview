@@ -364,6 +364,12 @@ interface ExportEnvironment {
     /** The job ended (any outcome): undo [exportStarted]. */
     fun exportEnded(jobId: String, output: File)
 
+    /**
+     * Calls [ready] once the codecs that [exportStarted] asked others to release (preview decks,
+     * pre-empted jobs) are released, or after [CodecHandover.BOUND_MS] (QA-05 D9). At once by default.
+     */
+    fun whenCodecsReleased(jobId: String, ready: () -> Unit) = ready()
+
     /** Whether the volume holding [dir] is low on space right now (StorageLoss.isLow; QA-05 D8). */
     fun isStorageLow(dir: File): Boolean = false
 }
@@ -399,9 +405,18 @@ class ContextExportEnvironment(private val ctx: EngineContext) : ExportEnvironme
 
     override fun hasDartListener(): Boolean = ctx.events.hasListener
 
+    private val handovers = java.util.concurrent.ConcurrentHashMap<String, CodecHandover>()
+
     override fun exportStarted(jobId: String, output: File) {
-        guarded("job registry") { ctx.jobs.setExportActive(jobId, true) }
-        guarded("preview suspension") { ctx.previews.suspendForExport(jobId) }
+        val handover = CodecHandover(2)
+        handovers[jobId] = handover
+        val jobsStopped = handover.part()
+        val previewsReleased = handover.part()
+        guarded("job registry") {
+            ctx.jobs.setExportActive(jobId, true)
+            ctx.jobs.whenHeldJobsStopped(jobsStopped)
+        }
+        guarded("preview suspension") { ctx.previews.suspendForExport(jobId, previewsReleased) }
         guarded("work pin") { DiskCache.markActive(output) }
         guarded("export service") {
             val intent = Intent(ctx.appContext, ExportService::class.java)
@@ -411,7 +426,26 @@ class ContextExportEnvironment(private val ctx: EngineContext) : ExportEnvironme
         }
     }
 
+    override fun whenCodecsReleased(jobId: String, ready: () -> Unit) {
+        val handover = handovers[jobId] ?: return ready()
+        val started = android.os.SystemClock.uptimeMillis()
+        val handler = ctx.threads.export.handler ?: android.os.Handler(Looper.getMainLooper())
+        val timeout = Runnable { handover.timeout() }
+        handover.whenOpen {
+            handler.removeCallbacks(timeout)
+            val waited = android.os.SystemClock.uptimeMillis() - started
+            if (handover.allReported) {
+                Log.i(EngineContext.TAG, "export $jobId: previews and paused jobs released their codecs in $waited ms")
+            } else {
+                Log.w(EngineContext.TAG, "export $jobId: codec handover timed out after $waited ms; starting anyway")
+            }
+            ready()
+        }
+        if (!handover.isOpen) handler.postDelayed(timeout, CodecHandover.BOUND_MS)
+    }
+
     override fun exportEnded(jobId: String, output: File) {
+        handovers.remove(jobId)?.timeout()
         guarded("work pin") { DiskCache.unmarkActive(output) }
         guarded("preview resume") { ctx.previews.resumeAfterExport(jobId) }
         guarded("job registry") { ctx.jobs.setExportActive(jobId, false) }
@@ -558,7 +592,8 @@ class ExportCoordinator(private val ctx: EngineContext) {
                 "slots=${running.job.load.slots} peak=${running.job.load.peakDecoders} multiPass=${running.multiPassRoute}",
         )
         done.succeed(running.info.jobId)
-        onLane { launch(running) }
+        // QA-05 D9: the export's codecs start after the previews and paused jobs released theirs.
+        environment.whenCodecsReleased(running.info.jobId) { onLane { launch(running) } }
     }
 
     /** Cancels [jobId] and deletes its partial output. Idempotent; callable from any thread. */

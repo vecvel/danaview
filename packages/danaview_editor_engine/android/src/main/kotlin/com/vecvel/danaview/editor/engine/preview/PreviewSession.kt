@@ -896,15 +896,23 @@ class PreviewSession internal constructor(
         backend.trim(level)
     }
 
-    /** Export suspension on weak tiers (ARCH §14.3): pause, release decoders, defer paused renders. */
-    internal fun suspendForExport() {
-        if (disposed || suspended) return
+    /**
+     * Export suspension on weak tiers (ARCH §14.3): pause, release decoders, defer paused renders.
+     * [released] runs once the backend has released its decoders (or at once when there is nothing
+     * to suspend); the export waits for it before it creates its own codecs (QA-05 D9).
+     */
+    internal fun suspendForExport(released: (() -> Unit)? = null) {
+        if (disposed || suspended) {
+            released?.invoke()
+            return
+        }
         suspended = true
         seeks.cancelAll(busy())
         enqueue { next ->
             val finish = {
                 backend.suspendForExport { r ->
                     r.exceptionOrNull()?.let { Log.w(TAG, "backend suspend: ${EngineErrors.from(it).code}") }
+                    released?.invoke()
                     onLane {
                         renderer.cancel()
                         renderer.trim(CacheTrimLevelMsg.BACKGROUND)
