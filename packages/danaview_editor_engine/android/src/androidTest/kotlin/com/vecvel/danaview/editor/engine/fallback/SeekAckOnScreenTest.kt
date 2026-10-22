@@ -100,8 +100,7 @@ class SeekAckOnScreenTest {
             val want = (expectOffset + k).toInt()
             val what = "seek $seeks to $k with $during"
             if (ack.displayedFrame != k) problems += "$what: acked frame ${ack.displayedFrame}"
-            val (w, hgt) = h.sync { h.session.renderSize }
-            val captured = FrameBarcode.decode(h.capture(), w, hgt)
+            val captured = decode16x9(h.capture())
             if (captured != want) problems += "$what: debugCaptureFrame shows ${captured} (want $want)"
             // The producer: a frame newer than the seek shows the target, and nothing stale follows.
             val deadline = System.currentTimeMillis() + 3_000
@@ -127,6 +126,17 @@ class SeekAckOnScreenTest {
                 val k = rnd.nextLong(0, PreviewPlans.FRAMES)
                 seek(k, kinds[i % kinds.size])
             }
+        }
+    }
+
+    private companion object {
+        /** The barcode of a 16:9 RGBA capture (its size follows the quality level the frame was composed at). */
+        fun decode16x9(rgba: ByteArray): Int? {
+            val pixels = rgba.size / 4
+            val w = Math.round(Math.sqrt(pixels * 16.0 / 9.0)).toInt()
+            val h = if (w > 0) pixels / w else 0
+            if (w <= 0 || w * h * 4 != rgba.size) return null
+            return FrameBarcode.decode(rgba, w, h)
         }
     }
 
