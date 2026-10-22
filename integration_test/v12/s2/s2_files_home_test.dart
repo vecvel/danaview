@@ -15,7 +15,8 @@
 //   5. save out (Save to Files) and Save to Photos from the selection bar;
 //   6. both are deleted (All tab), Recently deleted lists them, the photo is restored to Japan;
 //   7. the library is closed and reopened (an app restart of the store): folders, entries and the
-//      still-deleted video persist; the video is restored to Trips; the store invariants hold.
+//      still-deleted video persist; the video is restored to Trips; every entry's file is there;
+//   8. no HttpClient is created during the whole scenario (HttpOverrides spy, QA-103 scope).
 //
 // Local test media only: integration_test/v12/s2/tool/make_s2_media.sh writes them on the host and
 // the simulator reads them in place (`--dart-define=DV_S2_MEDIA=<dir>`). System UI that a Flutter
@@ -143,6 +144,17 @@ final class _RecordingFileOut implements FileOutPort {
   Future<bool> openIn(OutFile file, {OutAnchor? anchor}) async => true;
 }
 
+/// Records every HttpClient the app creates during the scenario (QA-103 scope: S2 adds no host).
+final class _HttpSpy extends HttpOverrides {
+  final List<String> created = [];
+
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    created.add(StackTrace.current.toString().split('\n').skip(1).take(4).join(' | '));
+    return super.createHttpClient(context);
+  }
+}
+
 final class _World {
   _World(this.prefs, this.player, this.editor, this.picker, this.out);
 
@@ -257,6 +269,9 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('S2: import, organise in nested folders, view, share and save out, delete and restore, reopen', (tester) async {
+    final spy = _HttpSpy();
+    HttpOverrides.global = spy;
+    addTearDown(() => HttpOverrides.global = null);
     final world = await _boot();
     final photoSrc = File('$_mediaDir/$_photoName');
     final videoSrc = File('$_mediaDir/$_videoName');
@@ -429,7 +444,11 @@ void main() {
     await E2eApp.pumpUntil(tester, () => !reopened.reader.entry(video.id)!.isTrashed, what: 'video restored');
     expect(reopened.reader.entry(video.id)!.folderId, trips);
     expect(File(reopened.paths.entryFile(video.id, _videoName)).readAsBytesSync(), videoBytes);
-    expect(await reopened.checkInvariants(), isEmpty, reason: 'library invariants');
+    // LibraryStore.checkInvariants() can't run on the app's isolate writer (FIX-S2Q-2): every live
+    // entry's file is checked here instead.
+    for (final e in reopened.reader.allEntries()) {
+      expect(File(reopened.paths.entryFile(e.id, e.displayName)).existsSync(), isTrue, reason: 'file of ${e.displayName}');
+    }
     await E2eApp.screenshot(tester, 's2-09-after-reopen');
 
     // Originals: bytes and timestamps unchanged.
@@ -437,7 +456,9 @@ void main() {
     expect(videoSrc.readAsBytesSync(), videoBytes);
     expect(photoSrc.lastModifiedSync(), photoMtime);
     expect(videoSrc.lastModifiedSync(), videoMtime);
-    _report('reopen: folders, entries, Recents and Recently deleted persisted; video restored to Trips; invariants ok; originals unchanged');
+    expect(spy.created, isEmpty, reason: 'no HttpClient during the S2 flows: ${spy.created}');
+    _report('network: no HttpClient created');
+    _report('reopen: folders, entries, Recents and Recently deleted persisted; video restored to Trips; entry files present; originals unchanged');
 
     await world.close(tester);
   });
