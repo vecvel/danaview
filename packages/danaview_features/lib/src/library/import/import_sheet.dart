@@ -257,6 +257,9 @@ class ImportProgressRow extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 34, top: 6, right: 52),
               child: DanaviewProgressBar(
+                // A new bar when it switches between determinate and indeterminate: the kit bar's
+                // single ticker can't be recreated in one State (defect reported against the kit).
+                key: ValueKey(item.state == ImportItemState.finishing || item.fraction == null),
                 value: item.state == ImportItemState.finishing ? null : item.fraction,
                 semanticLabel: 'Importing ${item.displayName}',
               ),

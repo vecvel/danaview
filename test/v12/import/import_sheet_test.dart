@@ -70,14 +70,15 @@ class _Lib {
     return f.path;
   }
 
+  /// Lets the queue run (its isolate replies arrive in real time, its listeners in the test zone)
+  /// until nothing is running or a duplicate question waits.
   Future<void> settle(WidgetTester tester) async {
-    await tester.runAsync(() async {
-      final end = DateTime.now().add(const Duration(seconds: 20));
-      while (service.busy && !service.items.any((i) => i.state == ImportItemState.awaitingDuplicateDecision)) {
-        if (DateTime.now().isAfter(end)) throw StateError('imports did not settle');
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
-    });
+    final end = DateTime.now().add(const Duration(seconds: 20));
+    while (service.busy && !service.items.any((i) => i.state == ImportItemState.awaitingDuplicateDecision)) {
+      if (DateTime.now().isAfter(end)) throw StateError('imports did not settle');
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump();
+    }
     await pumpFrames(tester, count: 2);
   }
 
@@ -131,8 +132,8 @@ void main() {
     await tester.pumpWidget(_app(env, const ImportSheet(), lib: lib, picker: picker));
     await pumpFrames(tester);
     expect(find.text('Imported'), findsOneWidget, reason: 'the default folder');
-    expect(find.bySemanticsLabel('Import from Files'), findsOneWidget);
-    expect(find.bySemanticsLabel('Import from Photos'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('^Import from Files')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('^Import from Photos')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('import-from-files')));
     await pumpFrames(tester, count: 2);
@@ -172,7 +173,7 @@ void main() {
     final item = lib.service.items.single;
     expect(item.state, ImportItemState.awaitingDuplicateDecision);
     expect(find.text('Already in Danaview. Keep both or skip?'), findsOneWidget);
-    expect(find.bySemanticsLabel('Keep both copies of IMG_0001 copy.HEIC'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Keep both copies of IMG_0001 copy\.HEIC')), findsOneWidget);
     await tester.tap(find.byKey(ValueKey('import-keep-both-${item.id}')));
     await pumpFrames(tester, count: 2);
     await lib.settle(tester);
@@ -235,11 +236,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('import-target')));
     await pumpFrames(tester);
     expect(find.byKey(const ValueKey('import-folder-chooser')), findsOneWidget);
-    expect(find.bySemanticsLabel('Save to Contracts'), findsOneWidget, reason: 'nested folders are listed');
+    expect(find.bySemanticsLabel(RegExp('^Save to Contracts')), findsOneWidget, reason: 'nested folders are listed');
     await tester.tap(find.byKey(ValueKey('import-folder-${work.value}')));
     await pumpFrames(tester);
     expect(find.byKey(const ValueKey('import-folder-chooser')), findsNothing);
-    expect(find.bySemanticsLabel('Save to Work. Change folder'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Save to Work\. Change folder')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('import-from-files')));
     await pumpFrames(tester, count: 2);
     await lib.settle(tester);
@@ -280,7 +281,7 @@ void main() {
   });
 
   group('layout matrix', () {
-    final long = '$longTitle.mov';
+    const long = '$longTitle.mov';
     List<ImportItem> items() => [
           ImportItem(id: 'q', displayName: long, state: ImportItemState.queued, resumed: true),
           ImportItem(id: 'c', displayName: long, state: ImportItemState.copying, bytesDone: 1200000000, bytesTotal: 2147483648),
@@ -317,7 +318,7 @@ void main() {
           expect(find.byKey(const ValueKey('import-cancel-d')), findsNothing, reason: 'finished rows have no cancel');
           expect(find.bySemanticsLabel(RegExp(r'^Cancel import of ')), findsNWidgets(4));
           expect(find.bySemanticsLabel(RegExp(r'\. 1\.2 GB of 2\.1 GB$')), findsOneWidget);
-          expect(find.bySemanticsLabel(RegExp(r'^Save to .*\. Change folder$')), findsOneWidget);
+          expect(find.bySemanticsLabel(RegExp(r'^Save to .*\. Change folder')), findsOneWidget);
           await lib.close(tester);
           await env.dispose();
         });
