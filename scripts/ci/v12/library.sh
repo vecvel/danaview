@@ -19,7 +19,13 @@ for pkg in danaview_library danaview_search; do
     exit 1
   fi
   group "$pkg (dart)"
-  (cd "$dir" && dart pub get && dart analyze --fatal-infos && dart test)
+  if [ -f "$dir/dart_test.yaml" ] && grep -q '^  benchmark:' "$dir/dart_test.yaml"; then
+    # Timing tests (tag `benchmark`) run on their own, one at a time, after the rest, so the
+    # parallel runner's load doesn't skew them (FIX after the Windows-host re-run 33b3b8d).
+    (cd "$dir" && dart pub get && dart analyze --fatal-infos && dart test -x benchmark && dart test -t benchmark -j 1)
+  else
+    (cd "$dir" && dart pub get && dart analyze --fatal-infos && dart test)
+  fi
   endgroup
 done
 
