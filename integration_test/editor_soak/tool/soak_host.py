@@ -38,7 +38,10 @@ Commands:
 
 Android: stage the fixtures and models first (integration_test/editor/tool/e2e_host.sh -p android
 -d <serial> stage; ... stage-models <dir>), and pass the same models folder with -m so `death` can
-stage them again after its uninstall.
+stage them again after its uninstall. On API 30+ every staging step first opens the shared folders
+to the app (W4b, as scripts/ci/editor/e2e_android.sh prepare_shared() does: one `mkdir -p` of
+Android/data/<app>/{,files,files/e2e_fixtures,e2e_models,e2e_handshake,e2e_out}, then `chmod 2777`
+on each one the shell (uid 2000) owns), so no manual folder step is needed.
 
 Windows (Git Bash or cmd, QA-05 W1-W7): runs unmodified. `flutter` is started by its full path
 (flutter.bat; override with DV_FLUTTER), phases run in a new process group and are stopped with
@@ -75,7 +78,11 @@ ROOT = Path(__file__).resolve().parents[3]
 SOAK_TEST = "integration_test/editor_soak/soak_test.dart"
 DEATH_TEST = "integration_test/editor_soak/process_death_test.dart"
 FIXTURES = ROOT / "packages/danaview_editor_engine/test_fixtures/media"
-ANDROID_SHARED = f"/sdcard/Android/data/{APP_ID}/files"
+ANDROID_APP_DATA = f"/sdcard/Android/data/{APP_ID}"
+ANDROID_SHARED = f"{ANDROID_APP_DATA}/files"
+# W4b: the folders scripts/ci/editor/e2e_android.sh prepare_shared() opens to the app, same order.
+ANDROID_SHARED_DIRS = [ANDROID_APP_DATA, ANDROID_SHARED, *(f"{ANDROID_SHARED}/{d}" for d in ("e2e_fixtures", "e2e_models", "e2e_handshake", "e2e_out"))]
+SHELL_UID = "2000"
 ANDROID_FILL = "/data/local/tmp/danaview_soak_fill"
 DEATH_JOBS = ["autosave", "proxy", "reverse", "freeze", "export", "captions"]
 GSM_NUMBER = "5551234"
@@ -290,10 +297,45 @@ class Host:
             return True
         return self.adb("shell", "pm", "path", APP_ID).returncode == 0
 
+    def android_api(self) -> int:
+        """The device's API level; 0 when getprop cannot be read (then the folders are opened, as
+        on API 30+, which is harmless on API 29)."""
+        try:
+            return int(self.adb("shell", "getprop", "ro.build.version.sdk").stdout.strip())
+        except ValueError:
+            return 0
+
+    def open_shared_android(self) -> None:
+        """W4b, the approach of scripts/ci/editor/e2e_android.sh prepare_shared(): on API 30+ a folder
+        adb creates under Android/data/<app> belongs to the shell user (uid 2000, mode 2770), and
+        the app can neither enter nor create it (only its own getExternalFilesDir() has vold create
+        it, and the suite never calls that). So the folders the suite uses are created with one
+        `mkdir -p` and every one the shell owns is opened to the app (chmod 2777); adb push writes
+        files as 0666, which the app can read. Needs no run-as, so it works on any emulator image.
+        API 29 (sdcardfs) derives the owner from the path and needs none of this."""
+        api = self.android_api()
+        if 0 < api < 30:
+            self.log(f"API {api}: the shared folders need no opening")
+            return
+        r = self.adb("shell", "mkdir -p " + " ".join(ANDROID_SHARED_DIRS))
+        if r.returncode != 0:
+            self.log(f"WARNING cannot create {ANDROID_SHARED} ({r.stderr.strip()})")
+        opened = []
+        for d in ANDROID_SHARED_DIRS:
+            if self.adb("shell", "stat", "-c", "%u", d).stdout.strip() != SHELL_UID:
+                continue
+            c = self.adb("shell", "chmod", "2777", d)
+            if c.returncode == 0:
+                opened.append(d)
+            else:
+                self.log(f"WARNING cannot open {d} to the app ({c.stderr.strip()})")
+        self.log(f"shared folders opened to the app (API {api or '?'}): {len(opened)} of {len(ANDROID_SHARED_DIRS)} were shell-owned")
+
     def stage_android(self) -> None:
         """W4: pushes the fixtures (and, with -m, the models) to the app's shared folder; `adb
-        uninstall` deletes Android/data/<app>/files with everything staged there."""
-        self.adb("shell", "mkdir", "-p", f"{ANDROID_SHARED}/e2e_fixtures")
+        uninstall` deletes Android/data/<app>/files with everything staged there. W4b: the folders
+        are opened to the app first, or the reinstalled app cannot read them."""
+        self.open_shared_android()
         n = 0
         for f in sorted(FIXTURES.iterdir()):
             if f.is_file():
@@ -303,7 +345,6 @@ class Host:
         if not self.models:
             self.log("no -m models folder: the models were not staged again (the captions phase needs them)")
             return
-        self.adb("shell", "mkdir", "-p", f"{ANDROID_SHARED}/e2e_models")
         for m in MODEL_FILES:
             src = Path(self.models) / m
             if src.is_file():
@@ -397,7 +438,7 @@ class Host:
         if not speech:
             return None
         device_path = f"{ANDROID_SHARED}/e2e_fixtures/{SPEECH60}"
-        self.adb("shell", "mkdir", "-p", f"{ANDROID_SHARED}/e2e_fixtures")
+        self.open_shared_android()
         r = self.adb("push", str(speech), device_path, timeout=300)
         if r.returncode != 0:
             self.log(f"pushing the 60 s WAV failed ({r.stderr.strip()}); the captions phase falls back to duplicated clips")
@@ -548,6 +589,8 @@ class Host:
             extra.append("DV_SOAK_CAPTIONS=false")
         if self.platform == "android":
             self.free_storage()
+            # W4b: fixtures staged by e2e_host.sh on a fresh install sit in shell-owned folders.
+            self.open_shared_android()
         ok = self.run_phase(SOAK_TEST, "soak", expect_death=False, extra=extra, sample_memory=True, timeout=(minutes + 60) * 60)
         if self.platform == "android":
             self.free_storage()
@@ -569,8 +612,9 @@ class Host:
 
 def selftest() -> int:
     """No device: checks the commands the host builds on iOS and Android (Windows simulated for
-    W1/W2), the staging after death()'s uninstall (W4), the grants (W5/W6) and the real 60 s WAV
-    (W7, with afconvert or ffmpeg on this machine)."""
+    W1/W2), the staging after death()'s uninstall (W4) with the folders opened to the app first
+    (W4b, a fake adb), the grants (W5/W6) and the real 60 s WAV (W7, with afconvert or ffmpeg on
+    this machine). Passes on macOS, Linux and Windows."""
     import tempfile
 
     global IS_WINDOWS
@@ -582,15 +626,33 @@ def selftest() -> int:
             failures.append(what)
 
     class Recorder(Host):
-        def __init__(self, platform, out, models=""):
+        """Records every command; a fake adb answers getprop (API level `api`) and `stat -c %u`
+        (`owner`: shell 2000 after an uninstall, as on the emulator)."""
+
+        def __init__(self, platform, out, models="", api="35", owner=SHELL_UID):
             super().__init__(platform, "emulator-5554" if platform == "android" else "SIM-UDID", models, 60, out=out)
             self.calls = []
+            self.api, self.owner = api, owner
 
         def sh(self, *cmd, timeout=120):
             if cmd and cmd[0] in ("afconvert", "ffmpeg"):
                 return Host.sh(self, *cmd, timeout=timeout)
             self.calls.append(list(cmd))
-            return subprocess.CompletedProcess(list(cmd), 0, "", "")
+            out = ""
+            if cmd[:1] == ("adb",) and "getprop" in cmd:
+                out = f"{self.api}\r\n"
+            elif cmd[:1] == ("adb",) and "stat" in cmd:
+                out = f"{self.owner}\r\n"
+            return subprocess.CompletedProcess(list(cmd), 0, out, "")
+
+    def first(calls, pred, start=0):
+        return next((i for i in range(start, len(calls)) if pred(calls[i])), None)
+
+    def is_open_mkdir(c):
+        return c[3:4] == ["shell"] and c[4:5] and c[4].startswith("mkdir -p ") and c[4].split()[2:] == ANDROID_SHARED_DIRS
+
+    def is_chmod(c, d=None):
+        return c[3:6] == ["shell", "chmod", "2777"] and (d is None or c[6:] == [d])
 
     with tempfile.TemporaryDirectory() as tmp:
         models = Path(tmp) / "models"
@@ -612,7 +674,15 @@ def selftest() -> int:
                 seconds = w.getnframes() / w.getframerate()
             check(59 <= seconds <= 61, f"the speech WAV is 60 s ({seconds:.1f} s)")
         check(ios.grant_notifications()[0] and not ios.calls, "grantNotifications: ok, nothing to run on iOS")
-        check(popen_group_kwargs() == {"start_new_session": True}, "a new session on POSIX")
+        if IS_WINDOWS:
+            check("creationflags" in popen_group_kwargs(), "a new process group on Windows (CREATE_NEW_PROCESS_GROUP)")
+        else:
+            check(popen_group_kwargs() == {"start_new_session": True}, "a new session on POSIX")
+        ios.calls.clear()
+        ios.run_phase = lambda *a, **k: True
+        ios.death_lines = lambda: []
+        ios.death(["autosave"])
+        check(ios.calls == [["xcrun", "simctl", "uninstall", "SIM-UDID", APP_ID]], "iOS death: simctl uninstall only, no adb")
 
         print("Android")
         an = Recorder("android", Path(tmp) / "android", models=str(models))
@@ -625,11 +695,44 @@ def selftest() -> int:
         an.run_phase = lambda *a, **k: True
         an.death_lines = lambda: []
         an.death(["autosave"])
-        uninstall = next((i for i, c in enumerate(an.calls) if "uninstall" in c), None)
-        pushes = [c for c in an.calls if "push" in c]
-        check(uninstall is not None and pushes and an.calls.index(pushes[0]) > uninstall, "W4 restaged after the uninstall")
+        calls = an.calls
+        uninstall = first(calls, lambda c: "uninstall" in c)
+        pushes = [c for c in calls if "push" in c]
+        check(uninstall is not None and pushes and calls.index(pushes[0]) > uninstall, "W4 restaged after the uninstall")
+        mk = first(calls, is_open_mkdir, (uninstall or 0) + 1)
+        first_push = first(calls, lambda c: "push" in c)
+        check(uninstall is not None and mk is not None and mk > uninstall, "W4b the shared folders are created (one mkdir -p) after the uninstall")
+        chmods = [i for i, c in enumerate(calls) if is_chmod(c)]
+        check([calls[i][6] for i in chmods] == ANDROID_SHARED_DIRS, "W4b every shell-owned folder gets chmod 2777, in prepare_shared order")
+        check(chmods and mk is not None and first_push is not None and mk < chmods[0] and chmods[-1] < first_push,
+              "W4b the folders are opened after the uninstall and before the first push")
+        check(all(first(calls, lambda c, d=d: c[3:] == ["shell", "stat", "-c", "%u", d]) is not None for d in ANDROID_SHARED_DIRS),
+              "W4b the owner of each folder is checked (stat -c %u)")
+        check(not any(c[3:4] == ["shell"] and "run-as" in " ".join(c) for c in calls), "W4b no run-as needed")
+        check(not any(c[3:6] == ["shell", "mkdir", "-p"] for c in calls), "W4b no other mkdir path (one code path)")
         check(sum(1 for c in pushes if "e2e_models/" in c[-1]) == len(MODEL_FILES), "W4 the models are pushed again")
         check(sum(1 for c in pushes if "e2e_fixtures/" in c[-1]) == sum(1 for f in FIXTURES.iterdir() if f.is_file()), "W4 every fixture is pushed again")
+        an.calls.clear()
+        an.speech_60s_on_device()
+        mk, wav = first(an.calls, is_open_mkdir), first(an.calls, lambda c: "push" in c)
+        check(mk is not None and wav is not None and mk < wav, "W4b the folders are opened before the 60 s WAV push")
+        an.calls.clear()
+        an.soak(1, 0, True)
+        mk, phase_chmod = first(an.calls, is_open_mkdir), first(an.calls, is_chmod)
+        check(mk is not None and phase_chmod is not None, "W4b soak opens the shared folders before its phase")
+
+        app = Recorder("android", Path(tmp) / "android-app", models=str(models), owner="10123")
+        app.run_phase = lambda *a, **k: True
+        app.death_lines = lambda: []
+        app.death(["autosave"])
+        check(first(app.calls, is_open_mkdir) is not None and first(app.calls, is_chmod) is None, "W4b app-owned folders are left alone (no chmod)")
+        old = Recorder("android", Path(tmp) / "android-29", models=str(models), api="29")
+        old.run_phase = lambda *a, **k: True
+        old.death_lines = lambda: []
+        old.death(["autosave"])
+        check(first(old.calls, is_open_mkdir) is None and first(old.calls, is_chmod) is None and any("push" in c for c in old.calls),
+              "W4b API 29: no folder opening, the fixtures are still pushed")
+
         an.calls.clear()
         ok, detail = an.grant_notifications()
         check(ok and an.calls == [["adb", "-s", "emulator-5554", "shell", "pm", "grant", APP_ID, "android.permission.POST_NOTIFICATIONS"]], f"W5/W6 pm grant ({detail})")
