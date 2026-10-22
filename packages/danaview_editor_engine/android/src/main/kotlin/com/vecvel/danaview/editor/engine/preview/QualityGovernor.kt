@@ -12,7 +12,12 @@
 // - recovery = 10 s of playback without such a window steps up one level (never above the
 //   requested level);
 // - thermal: PowerManager status SEVERE or worse caps every level at half, pinned ones included
-//   (ARCH §13.3 "Thermal SEVERE forces <= half"); it lifts when the status drops below SEVERE.
+//   (ARCH §13.3 "Thermal SEVERE forces <= half"); it lifts when the status drops below SEVERE;
+// - stop: when playback really stops (pause, end of the plan, export suspension), auto goes straight
+//   back to the requested level (full, or half while thermally capped) and the statistics restart,
+//   so a paused preview, and the paused seeks after it, are never left at a lowered quality
+//   (QA-05 D11); the next playback starts there and may step down again. A restart without a stop
+//   (play while playing) only restarts the statistics.
 //
 // Each automatic change is returned as a [QualityGovernor.Change]; the session resizes the
 // SurfaceProducer and reports it with `degraded(q)` (ARCH §12.2: "reporting each step").
@@ -68,7 +73,7 @@ class QualityGovernor(
     )
 
     /** Why the level changed. */
-    enum class Reason { LOAD, RECOVERY, THERMAL, REQUEST }
+    enum class Reason { LOAD, RECOVERY, THERMAL, REQUEST, STOP }
 
     /** A change of the effective level. */
     data class Change(val from: QualityLevel, val to: QualityLevel, val reason: Reason)
@@ -119,6 +124,18 @@ class QualityGovernor(
     fun onPlaybackStarted() {
         resetWindow()
         lastTroubleMs = clock()
+    }
+
+    /**
+     * Playback stopped for good: auto returns to the requested level (full, or half while thermally
+     * capped; QA-05 D11) and the statistics restart; pinned levels never change. Returns the change
+     * ([Reason.STOP]) when the level moved, null otherwise (a second stop reports nothing).
+     */
+    fun onPlaybackStopped(): Change? {
+        resetWindow()
+        lastTroubleMs = clock()
+        if (!isAuto) return null
+        return changeBy(Reason.STOP) { autoLevel = QualityLevel.FULL }
     }
 
     /** One output frame of playback was shown ([dropped] = false) or dropped. */
