@@ -11,7 +11,9 @@
 // 4. duplicates: a same-name file in the folder is suffixed `Name (2).ext` by the writer; a file
 //    with the same size and SHA-256 anywhere in the library asks "keep both or skip" (or follows
 //    the item's [DuplicatePolicy]);
-// 5. fsync (the copier) → `commitImport` (rename into `files/<id>/` + one transaction);
+// 5. fsync (the copier) → photo facts read from the part's header (size, date taken, camera,
+//    orientation: `photo_facts.dart`) → `commitImport` (rename into `files/<id>/` + one
+//    transaction that also writes `entry_meta`);
 // 6. the picker's staged copy (app-owned) is deleted, a security-scoped grant released, and the
 //    import hooks run (thumbnail request HOM-04, index request AIS-50).
 //
@@ -26,11 +28,13 @@ import 'package:meta/meta.dart';
 import '../classify/classifier.dart';
 import '../db/library_reader.dart';
 import '../model/file_entry.dart';
+import '../model/file_kind.dart';
 import '../model/ids.dart';
 import '../store/library_store.dart';
 import '../store/library_writer.dart';
 import 'import_copier.dart';
 import 'import_source.dart';
+import 'photo_facts.dart';
 
 /// Where an item of the import queue is.
 enum ImportItemState {
@@ -515,6 +519,9 @@ final class ImportService {
     final quick = await quickHashOfFile(partPath);
     final name = importDisplayName(source.displayName);
     final kind = classify(uti: source.uti, mime: source.mime, fileName: name);
+    // Photo facts (size, date taken, camera, orientation) from the copy's header, written in the
+    // commit's transaction (FIX-S2Q-3). Read-only, bounded, never throws.
+    final meta = kind.kind == FileKind.photo ? photoEntryMeta(partPath, fileName: name) : null;
     final FileEntry entry;
     try {
       entry = await store.write(_commitOp(
@@ -529,6 +536,7 @@ final class ImportService {
           contentSha256: sha,
           sourceHint: source.sourceHint,
           modifiedAt: stat.modifiedAt ?? source.modifiedAt,
+          meta: meta,
         ),
       ));
     } on LibraryWriteException {

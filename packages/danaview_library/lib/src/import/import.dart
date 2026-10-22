@@ -2,7 +2,7 @@
 //
 // The public entry of lib/src/import/: the import pipeline (ARCH v1.2 §5.6, V2-116): the source
 // descriptor, the byte copiers (local files on a worker isolate, read-only) and the import queue
-// with resume, duplicate rules and hooks.
+// with resume, duplicate rules and hooks, and the photo-facts reader that fills `entry_meta`.
 
 /// The public entry of lib/src/import/: the import pipeline (ARCH v1.2 §5.6).
 library;
@@ -10,3 +10,4 @@ library;
 export 'import_copier.dart';
 export 'import_service.dart';
 export 'import_source.dart';
+export 'photo_facts.dart';
