@@ -199,7 +199,125 @@ the full v1.1 suite on the iPhone 16 lane); the lab lane is deferred: no device 
 
 ### 6. Android Emulator half
 
-pending: Windows
+Windows / Android lane, on `v1.2-android`, 2026-10-22. **Tree: `f865874` plus the S1 version revert**
+(`pubspec.yaml` `1.0.0+1`, `app_info.dart` `1.0.0` / `1`; exactly the two `sed` lines of "Signing",
+`git diff --stat`: 2 files, 3 lines), checked out detached in the worktree `C:/dev/v12`. Host: Windows 11,
+Flutter 3.44.8 (Dart 3.12.2), JBR 21.0.10. Emulator: **Pixel_API_34** (API 34, google_apis x86_64,
+3 GB) as `emulator-5556`; Pixel_9_Pro_XL_API_35 was in use by the 1.1 lane on `emulator-5554`, so
+nothing here ran on API 35, and the API 29 / API 28 batches of QA-02 were not part of this run. QA
+changed no product code. Evidence (not committed): `build/s1_evidence/` and
+`build/e2e/android/emulator-5556/` in that worktree.
+
+**Gate verdict (Android half): green for the Android build and the device-side checks**: full v1.1
+suite 17 of 18 files + 4 of 4 Android extras (s13 is the accepted emulator-microphone limitation),
+release build and native-lib check pass, install-and-smoke green apart from two observations
+(§6.5). The **Windows host** runs of the S1 packages are not clean: three Windows-only test defects
+and the S2 work in progress that `f865874` carries (§6.1). None of them is in the S1 binary;
+FIX-S1Q-A1…A3 below.
+
+#### 6.1 S1 packages on the Windows host
+
+Same commands as §1, on the candidate tree.
+
+| Package / suite | Command | Analyze | Tests |
+|---|---|---|---|
+| `danaview_ai_providers`, `danaview_ai_studio` | `scripts/ci/editor/ai.sh` | clean | 4 + 5 pass |
+| `danaview_library` | `scripts/ci/v12/library.sh` (stops here) | **2 errors**: `lib/src/db/migrations.dart:45`, `:58` `Undefined class 'CommonDatabase'` (`package:sqlite3/sqlite3.dart` hides it) | `dart test`: 132 pass, **1 fail**: `package_skeleton_test` "the barrels reach every lib/src file": `lib/src/db/{library_folder,library_schema,migrations,row_codec}.dart` not in a barrel |
+| `danaview_search` (rest of `library.sh`, run by hand) | `dart analyze --fatal-infos && dart test` | clean | 4 pass |
+| core photo / colour / beauty (rest of `library.sh`) | `dart test test/purity_test.dart` (the only target that exists in this tree) | clean | 14 pass |
+| `danaview_library_native`, `danaview_pdf`, `danaview_documents`, `danaview_features` analyze | `scripts/ci/v12/documents.sh` (first part) | clean | 5 + 5 + 4 pass |
+| `danaview_face_tracking` | `scripts/ci/v12/face.sh` | clean | 5 pass |
+| `danaview_data` speed test | `flutter analyze --fatal-infos && flutter test test/network` | clean | 96 pass, **3 fail** (FIX-S1Q-A2) |
+| Root `test/architecture` + `test/v12` | `scripts/ci/v12/documents.sh` (last part) | — | 173 pass, 2 skip (rule 11, rule 16: packages not created yet), **1 fail** (FIX-S1Q-A1). Rule 28 of `dependency_rules_test.dart` **passes** here: FIX-S1Q-1 (`1a3d0af`) is in `f865874` |
+| Editor architecture | `cd packages/danaview_editor && flutter test test/architecture` | — | 44 pass |
+| v1.1 root suites | the seven files of §1 | — | 163 pass, **2 fail** (FIX-S1Q-A3) |
+| Root analyze | `flutter analyze --fatal-infos lib test/v12 test/architecture` | clean | — |
+
+The `danaview_library` errors are the **S2 work in progress** (HOM-17 `db/` files) that the backup
+`f865874` captured from builders still running; §1 ran on `b111fcc`, which has none of these files.
+The root `pubspec.yaml` of `f865874` does not depend on `danaview_library`, so they are not in the S1
+binary, and `origin/v1.2-wip` no longer has them. No fix asked for the candidate; `library.sh` on
+`f865874` stays red for this reason only.
+
+#### 6.2 Speed-test QA
+
+Per the lead's answer 5 (`a5c4c4d`): no system hacks, so the blocked-server cases are the fake-provider
+widget runs, plus real runs on the emulator.
+
+| Check | Where | Result |
+|---|---|---|
+| Failover only after consent; "Not now" calm failure stored `declined`; toggle off = default servers only (3 runs); neutral copy | host widget tests: `coordinator_test.dart`, `speed_consent_test.dart`, `s1_wiring_test.dart` (§6.1 rows) | pass, except the Windows-only failures FIX-S1Q-A1 / A2, which are path- and loopback-related and do not touch these behaviours. The Mac's scratch 8-test file of §3 is not in the repo and was not re-run |
+| Default servers healthy, never asked (app data cleared first) | release APK on the emulator | **pass**: no prompt; result "Tested against a nearby server · Bengaluru (MAA)", 13.3 Mbps down, 22.7 up, ping 31 ms, jitter 117 ms, 26.6 MB in 18 s; afterwards Settings › Privacy still shows the toggle off with "You'll be asked the first time it's needed" (nothing stored) |
+| Neutral copy on the device | `uiautomator dump` of the result screen, every text and content description | **pass**: none of `cloudflare`, `m-lab`, `measurement lab`, `measurementlab`, `ndt`, `locate.` |
+| Toggle off (`declined`), real run | release APK, three minutes after a cold emulator boot | calm failure "Couldn't reach a test server · Try again in a minute. You can allow the open network in Settings › Privacy.", no prompt (correct for `declined`). The default servers did not answer in time on the first run after boot (emulator RTT 126–272 ms against 10 ms on the host); the next run, after clearing the app data, passed. Not reproduced, reported only |
+| No M-Lab lookup before consent / with the toggle off (network capture) | emulator `-tcpdump` | **inconclusive**: the emulator's capture stopped writing about two minutes after boot (39 KB, boot-time lookups only), and Android's Private DNS (DNS over TLS) hides the app's lookups anyway. Same status as iOS: device network spy deferred |
+
+The consent prompt itself was never shown on the emulator (Cloudflare reachable; no hacks allowed),
+and "Run on open network" was not pressed: no traffic was sent to M-Lab.
+
+#### 6.3 Full v1.1 suite on the Android Emulator
+
+`DANAVIEW_E2E_MODELS=C:/dev/models DANAVIEW_E2E_FRESH=1 scripts/ci/editor/e2e_android.sh emulator-5556`
+(headless, `-no-audio`, as the script boots its own emulators). The script passes the v1.1 defines
+`DANAVIEW_EDITOR=true DANAVIEW_AUTO_CAPTIONS=true` and no 1.2.0 define: `e2e_android.sh` in `f865874`
+has no `DV_E2E_EXTRA_DEFINES`, so the Mac's explicit batch 2 could not be repeated; the defaults (all
+four 1.2.0 flags false) are the S1 flag set. The host tool stopped the driver after s10, so s11 onward
+ran as a second invocation with `DANAVIEW_E2E_RESET=1 DANAVIEW_E2E_SKIP="s01 … s10"` on the same
+emulator and tree.
+
+| Batch | Result |
+|---|---|
+| s01–s12, s14–s18 | **17 of 18 pass**, no harness retry, no emulator restart |
+| s13 | fail: voiceover level in export -78.5 dBFS (needs > -60): the emulator microphone feeds silence. Same as QA-02, where the owner accepted it as an emulator limitation (real microphone = device check). Start latency 900 ms (device budget 100 ms, emulator) |
+| `x_android_export_background` fgs, cancel, swipe, death | **4 of 4 pairs pass** (export service in the foreground, type `dataSync` on API 34) |
+
+Evidence: s07 burned cues 313 and 293 changed samples (needs > 180), HEVC/MOV not offered
+(`hevcEncode false`, reported, not failed); s08 3 cues from the tiny model; s12 wheel zoom 41.3 → 68.9
+px/s and marquee as QA-02; s15 head -15.1 dBFS, body -9.0 dBFS. Logs:
+`build/e2e/android/emulator-5556/` (summary.txt of the second part) and `build/s1_evidence/e2e_part1/`.
+
+#### 6.4 Host checks the lead asked for (`a5c4c4d`, D-7)
+
+Run on `origin/v1.2-wip` (`33371e5`), not the candidate (these files are S2):
+
+- **`winsqlite3.dll` has FTS5.** `C:\Windows\System32\winsqlite3.dll` is SQLite **3.53.4**, compile
+  options include `ENABLE_FTS5` (also FTS3/FTS4, RTREE, `OMIT_LOCALTIME`); `CREATE VIRTUAL TABLE …
+  USING fts5`, an insert and a `MATCH` query work. Note `OMIT_LOCALTIME`: SQL `'localtime'` date
+  modifiers fail on this library.
+- **Unix `cp` in `import_memory_test.dart`.** `Process.runSync('cp', …)` works from Git Bash (its
+  `/usr/bin` is on `PATH`): 2 GiB import 4 100 ms, `cp` 8 917 ms, RSS growth 3.2 MB, pass. From
+  PowerShell / cmd without Git's `usr\bin` on `PATH` it throws `ProcessException: The system cannot
+  find the file specified`, which the test does not catch (it only checks `exitCode`), so the test
+  fails. FIX-S1Q-A4. (On NTFS the 2 GiB source is not sparse; it needs the 2 GiB of disk.)
+- `danaview_library` `dart test -j 1` on that tree from Git Bash: 219 pass, 3 skip, **61 fail**, nearly
+  all `PathAccessException: Deletion failed … being used by another process` in the temp-dir
+  tear-down (`store_harness.dart:19`, `import_harness.dart:22`): the database is still open when the
+  test deletes its folder, which Windows refuses. Plus `file_action_test` (expects `/Users/me/…`, gets
+  `\Users\me\…`), `library_file_actions_test` (OutFile path equality) and the page-query benchmark
+  (3.8 ms median against ≤ 2 ms). FIX-S1Q-A5 (S2 scope, reported now because the lead asked for the
+  Windows host). `danaview_search` (no FTS5 use yet): 4 pass.
+
+#### 6.5 Observations (not defects yet)
+
+- **OBS-S1A-1, release player on the emulator.** Opening `frame_counter_1080p30.mp4` with
+  `am start -a VIEW` (cold start) shows the player with duration 0:08, but in the **release** build the
+  position barely advanced (the editor opened at 00:00:19, i.e. about 0.6 s) and the player then showed
+  the replay control; same on a headless and on a windowed SwiftShader emulator. The **debug** build on
+  the same emulator plays it in s02. Likely emulator software decoding of 1080p in release, but it needs
+  the device smoke (§Release candidate, item 5) to confirm.
+- **OBS-S1A-2, VIEW intent while running.** A second `VIEW` intent to the already running app ("delivered
+  to currently running top-most instance") left it on Home; only a cold start opened the player. Not
+  checked against 1.1; S1 does not touch this path.
+
+#### 6.6 FIX requests from the Android half (Windows-host test defects; none blocks the S1 binary)
+
+| Id | Owner | Defect | Evidence | Fix direction |
+|---|---|---|---|---|
+| **FIX-S1Q-A1** | ST-04 (`test/v12/speed_test/speed_consent_test.dart`) | "OpenNetworkConsent.accepted( is called only in speed_consent_sheet.dart" fails on Windows: `rel = file.path.substring(root.length + 1)` keeps backslashes, so `rel == declaration` and `rel == site` never match; offenders `packages\danaview_data/lib\src\network\speed\mlab_ndt7_provider.dart` and `packages\danaview_features/lib\src\tools\speed_consent_sheet.dart`. Still so on `origin/v1.2-wip` (line 457) | §6.1 root row | normalise with `.replaceAll(Platform.pathSeparator, '/')`, as `dependency_rules_test.dart` does when it builds repo paths |
+| **FIX-S1Q-A2** | ST-01…ST-03 (`danaview_data` tests) | coordinator "a refused connection fails over as unreachable", mlab "a closed locate port is unreachable", cloudflare "nothing listening is unreachable, in every phase": `stalled` (timeout 1.5 s / 2 s) instead of `unreachable`. Windows retries a refused loopback connect for about 2 s; Linux, macOS and Android refuse at once | §6.1 data row | give these tests a timeout above the Windows retry (e.g. 5 s) or accept `stalled` on Windows; product unchanged (on Android a refused connection is immediate) |
+| **FIX-S1Q-A3** | v1.1 owners of `test/editor_wiring_test.dart` / `test/editor_routes_test.dart` | On Windows: "the real service built by createAutoCaptions offers tiers from the device profile" expects `/nonexistent/support/danaview/speech`, gets `/nonexistent/support\danaview\speech`; "Projects opens a project in the editor and its storage link opens Settings › Storage" finds no `project-card-<id>` (reproducible, also on `origin/v1.2-wip`) | §6.1 v1.1 row | compare with `p.join` / normalised paths; look at why the created project does not appear on Projects on a Windows host |
+| **FIX-S1Q-A4** | HOM-20 (`packages/danaview_library/test/import/import_memory_test.dart`) | `Process.runSync('cp', …)` throws when no Unix `cp` is on `PATH` (plain Windows shells) | §6.4 | catch `ProcessException` (skip the comparison) or copy with `File.copy` / `copy` via `runInShell` on Windows |
+| **FIX-S1Q-A5** | HOM-17 / HOM-20 (`danaview_library` test harnesses) | 61 tests fail on a Windows host: temp folders deleted while `library.db` is open, plus two POSIX-path expectations and the 2 ms benchmark | §6.4 | close the store (and its isolate writer) before deleting the temp root; `p.posix`-independent expectations; benchmark budget per host or skip on Windows |
 
 ### 7. Defects (FIX tickets, block the gate)
 
@@ -309,8 +427,46 @@ deferred: no device available.
 
 ### Android candidate
 
-pending: Windows (`flutter build appbundle --release` with the same defines and `1.0.0+1`, from `f865874` as in "Signing",
-`check_native_libs.sh`, install and smoke on the API 35 emulator).
+Windows / Android lane, 2026-10-22, on the tree of §6 (`f865874` plus the two-line version revert).
+Nothing was signed, uploaded or changed in the signing settings; there is no `android/key.properties`.
+
+```text
+flutter build appbundle --release --build-name=1.0.0 --build-number=1 \
+  --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true \
+  --dart-define=DANAVIEW_FILES_HOME=false --dart-define=DANAVIEW_PHOTO_EDITOR=false \
+  --dart-define=DANAVIEW_BEAUTY=false --dart-define=DANAVIEW_AI_STUDIO=false
+```
+
+| Check | Result |
+|---|---|
+| Build | **pass**, 16 min 37 s (cold worktree, single Gradle worker): `build/app/outputs/bundle/release/app-release.aab`. A first attempt failed in `compileReleaseJavaWithJavac` (`package dev.flutter.plugins.integration_test does not exist` in `GeneratedPluginRegistrant.java`) because a `flutter test` ran in the same tree at the same time and rewrote the registrant with dev dependencies; built alone it passes. Lesson for the lane, not a product defect |
+| Signing | debug key (`CN=Android Debug`), as expected without `key.properties` |
+| `check_native_libs.sh` on the AAB | **all checks passed**: 16 KB LOAD alignment of every `.so` (arm64-v8a, x86_64), Whisper libraries exactly `arm64-v8a/libdanaview_whisper{,_v82}.so` + `x86_64/libdanaview_whisper.so`, 24 `dv_*` exports each, no `libc++_shared.so`, sizes ≤ 3 MB |
+| Version (`flutter build apk --release`, same tree and defines, `aapt2 dump badging`) | `versionName 1.0.0`, `versionCode 1`, `com.vecvel.danaview`, compileSdk 36; native code arm64-v8a, armeabi-v7a, x86_64; no new permission (no `READ_MEDIA_IMAGES`: S2 is not linked) |
+
+**Size** (debug-signed; Play's per-device sizes come from the console after upload, checklist item 12):
+
+| Measure | S1 candidate 1.0.0+1 |
+|---|---|
+| `app-release.aab` | 95.4 MB (100 061 654 B) |
+| Native libraries per ABI in the AAB (uncompressed) | arm64-v8a 38.8 MB, armeabi-v7a 32.8 MB, x86_64 42.1 MB |
+| Fat release APK of the same tree (smoke only) | 120.1 MB |
+
+No 1.1.0 Android release build is recorded to compare against (as for iOS).
+
+**Install and smoke** of the release APK (same tree and defines) on Pixel_API_34 (API 34), app data
+cleared first:
+
+| Step | Result |
+|---|---|
+| Launch, Home | pass: the **1.1 Home** (Open file / Open folder / Open link, Playlists, Folders › On This Device, editor button left of the gear), no Files Home tabs |
+| Player | partial: `frame_counter_1080p30.mp4` (pushed to `Download/`, opened by a cold-start `VIEW` intent) opens with duration 0:08 and plays, but the position advanced only about 0.6 s before the player showed the replay control (OBS-S1A-1); the debug build plays it in s02 |
+| Editor open | pass: player › Edit opens the editor with one clip at the player position (00:00:19), "Saved"; closing returns to the player |
+| Settings › Privacy toggle | pass: section after Tools with the "You'll be asked the first time it's needed" note; toggled on (note goes) and off; About shows "Version 1.0.0", footer "Danaview 1.0.0 (1)" |
+| Speed test, default servers healthy | pass: no prompt, "Tested against a nearby server · Bengaluru (MAA)", no provider name (§6.2) |
+
+Not done: API 35 (in use by the 1.1 lane), `bundletool build-apks` from the AAB itself (the APK of the
+same tree stood in), and the device smoke of a signed build (owner / lab).
 
 ### Release checklist (S1)
 
@@ -321,7 +477,7 @@ pending: Windows (`flutter build appbundle --release` with the same defines and 
 | 3 | iOS release build with the S1 flag set, min-OS check, `NEWLAPACK` check | S1-R | **done** (above) |
 | 4 | Simulator install and smoke | S1-R | **done** (debug build, release impossible on simulator) |
 | 5 | Device smoke of the signed build | owner / lab | deferred: no device available |
-| 6 | Android release build, native-lib check, emulator smoke | Windows lane | pending: Windows |
+| 6 | Android release build, native-lib check, emulator smoke | Windows lane | **done** (debug-signed AAB, all native-lib checks pass, smoke on API 34 green except OBS-S1A-1, see "Android candidate") |
 | 7 | **Signing**: archive with the distribution certificate and profile, Android upload key. **Blocked by FIX-S1R-1** for every fastlane lane (see "Signing" below): until INT-05 applies the v1.1 §3.2 Fastfile diff, `fastlane ios build` / `beta` / `release` and `fastlane android …` build **without** `DANAVIEW_EDITOR` / `DANAVIEW_AUTO_CAPTIONS` (editor hidden) and with build number 1 (`build`, `release`) or the next TestFlight number (`beta`), which is not the candidate. Sign only with the exact commands under "Signing", from a clean checkout of the candidate commit `f865874` | **owner** (after FIX-S1R-1 for any lane) | open, blocked |
 | 8 | **Upload** to TestFlight / Play internal testing (candidates stay internal until the owner's go; v1.1 goes live after v1.3) | **owner** | open |
 | 9 | **`legalEffectiveDate`** (`legal_texts.dart`, still `11 October 2026`) to the candidate's release date, then regenerate the hosted privacy page from `privacyPolicyText` | **owner** (date), then the release integration ticket | open |
