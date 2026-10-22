@@ -345,7 +345,7 @@ void main() {
     // Move the video to Trips from the All tab.
     await _tab(tester, HomeTab.all);
     await _menu(tester, _entryRow(video.id), 'Move to…');
-    await E2eApp.tapKey(tester, 'folder-pick-${trips.value}');
+    await E2eApp.tapKey(tester, 'file-folder-${trips.value}');
     await E2eApp.pumpUntil(tester, () => store.reader.entry(video.id)!.folderId == trips, what: 'the video in Trips');
     video = store.reader.entry(video.id)!;
     expect(File(store.paths.entryFile(video.id, video.displayName)).readAsBytesSync(), videoBytes);
@@ -355,7 +355,7 @@ void main() {
     await _tab(tester, HomeTab.photos);
     await E2eApp.tap(tester, find.byKey(ValueKey<String>(photo.id.value)).hitTestable(), what: 'photo cell');
     await E2eApp.waitKey(tester, 'photo-viewer-pages');
-    expect(find.descendant(of: _key('photo-viewer-name'), matching: find.text(_photoName)), findsOneWidget);
+    expect((tester.widget<Text>(_key('photo-viewer-name'))).data, _photoName);
     await E2eApp.tapKey(tester, 'photo-viewer-info');
     await E2eApp.waitKey(tester, 'photo-info-rows', timeout: const Duration(seconds: 20));
     final camera = find.descendant(of: _key('photo-info-camera'), matching: find.textContaining('S2 Test Cam'));
