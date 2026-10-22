@@ -7,7 +7,7 @@
 // "hidden, not disabled").
 
 import 'package:danaview_library/danaview_library.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 /// The Home's optional entry points into the editor, projects and AI (all nullable).
 ///
@@ -60,4 +60,21 @@ class HomeCallbacks {
   @override
   int get hashCode =>
       Object.hash(onEditPhoto, onBatchEditPhotos, onMakeMontage, onOpenProjects, onSearchWithAi, onOpenAiSettings);
+}
+
+/// Makes the Home's [HomeCallbacks] available to every tab, tray and bar below it, so the slot
+/// widgets of later tickets (HOM-11, HOM-12, AIS-51) read them without new constructor wiring.
+class HomeCallbacksScope extends InheritedWidget {
+  /// Provides [callbacks] to [child].
+  const HomeCallbacksScope({super.key, required this.callbacks, required super.child});
+
+  /// The callbacks in scope.
+  final HomeCallbacks callbacks;
+
+  /// The nearest callbacks, or [HomeCallbacks.none] outside a Home.
+  static HomeCallbacks of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<HomeCallbacksScope>()?.callbacks ?? HomeCallbacks.none;
+
+  @override
+  bool updateShouldNotify(HomeCallbacksScope oldWidget) => callbacks != oldWidget.callbacks;
 }

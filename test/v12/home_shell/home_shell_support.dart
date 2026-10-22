@@ -6,7 +6,6 @@
 // DANAVIEW_FILES_HOME test override.
 
 import 'package:danaview_domain/danaview_domain.dart';
-import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/flags.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart';

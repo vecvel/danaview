@@ -1,3 +1,10 @@
+// EXTENDED: HOM-05 (Files & Media Home tab shell behind DANAVIEW_FILES_HOME; ARCH v1.2 V2-101, V2-32)
+//
+// With DANAVIEW_FILES_HOME off [DanaviewHomeScreen] builds exactly the 1.1 tree (pinned by
+// test/home_screen_test.dart and the goldens of test/v12/home_shell/). With it on, the header and a
+// tab strip sit in the top bar and a tab host shows one tab: `Home` holds the 1.1 sections
+// unchanged plus the Recent photos and Favourites slots; the other tabs come from [HomeTabSlots].
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_data/danaview_data.dart';
@@ -5,8 +12,13 @@ import 'package:danaview_domain/danaview_domain.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import '../controllers/providers.dart';
+import '../flags.dart';
 import '../player/danaview_player_actions.dart';
 import 'add_to_playlist_sheet.dart';
+import 'home/home_callbacks.dart';
+import 'home/home_tab_host.dart';
+import 'home/home_tab_strip.dart';
+import 'home/home_tabs.dart';
 import 'library_actions.dart';
 import 'library_controller.dart';
 import 'library_format.dart';
@@ -14,6 +26,10 @@ import 'library_providers.dart';
 import 'library_widgets.dart';
 import 'media_picker.dart';
 import 'open_link_dialog.dart';
+
+export 'home/home_callbacks.dart' show HomeCallbacks, HomeCallbacksScope;
+export 'home/home_tab_strip.dart' show homeTabKey;
+export 'home/home_tabs.dart' show HomeSlotBuilder, HomeTab, HomeTabSlots, homeEditorPlatform, visibleHomeTabs;
 
 /// Start screen: now playing, quick open actions, continue watching, playlists and folders.
 class DanaviewHomeScreen extends ConsumerStatefulWidget {
@@ -24,6 +40,9 @@ class DanaviewHomeScreen extends ConsumerStatefulWidget {
     required this.onOpenPlaylist,
     this.onOpenSettings,
     this.onOpenEditor,
+    this.callbacks = HomeCallbacks.none,
+    this.tabSlots = HomeTabSlots.none,
+    this.initialTab = HomeTab.home,
   });
 
   final VoidCallback onOpenPlayer;
@@ -38,6 +57,15 @@ class DanaviewHomeScreen extends ConsumerStatefulWidget {
   /// editor: the router supplies the navigation.
   final VoidCallback? onOpenEditor;
 
+  /// The optional 1.2.0 entry points (editor, projects, AI); used only with DANAVIEW_FILES_HOME on.
+  final HomeCallbacks callbacks;
+
+  /// The bodies of the 1.2.0 tabs and Overview slots; used only with DANAVIEW_FILES_HOME on.
+  final HomeTabSlots tabSlots;
+
+  /// The tab shown first with DANAVIEW_FILES_HOME on (falls back to `Home` when hidden).
+  final HomeTab initialTab;
+
   @override
   ConsumerState<DanaviewHomeScreen> createState() => _DanaviewHomeScreenState();
 }
@@ -47,6 +75,9 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
 
   bool _showAllRecent = false;
   bool _busy = false;
+
+  /// The selected tab with DANAVIEW_FILES_HOME on.
+  late HomeTab _tab = widget.initialTab;
 
   LibraryController get _library => ref.read(libraryControllerProvider.notifier);
 
@@ -182,6 +213,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(libraryControllerProvider);
+    if (FeatureFlags.filesHomeEnabled) return _buildFilesHome(context);
     return DanaviewRefreshOnReturn(
       onReturn: () => _library.refresh(),
       child: Scaffold(
@@ -201,52 +233,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
                       children: [
                         _HomeHeader(onOpenSettings: widget.onOpenSettings, onOpenEditor: widget.onOpenEditor),
                         const SizedBox(height: DanaviewSpacing.xl),
-                        _NowPlayingCard(onOpen: widget.onOpenPlayer),
-                        _QuickActions(
-                          actions: [
-                            _QuickAction(
-                              'Open file',
-                              'Pick videos to play',
-                              DanaviewColors.primaryLight,
-                              _openFile,
-                              icon: Icons.video_file_rounded,
-                            ),
-                            _QuickAction(
-                              'Open folder',
-                              canPickFolders ? 'Browse a folder' : 'Videos on this device',
-                              DanaviewColors.purple,
-                              _openFolder,
-                              glyph: DanaviewGlyphKind.folderOpen,
-                            ),
-                            _QuickAction(
-                              'Open link',
-                              'Stream from a URL',
-                              DanaviewColors.cyan,
-                              _openLink,
-                              icon: Icons.link_rounded,
-                            ),
-                          ],
-                        ),
-                        if (state.error != null) ...[
-                          const SizedBox(height: DanaviewSpacing.xl),
-                          DanaviewInlineEmpty(
-                            icon: Icons.error_outline_rounded,
-                            iconColor: DanaviewColors.errorLight,
-                            title: state.error!,
-                            message: 'Your files are safe. Try loading the library again.',
-                            action: DanaviewButton.secondary(
-                              label: 'Try again',
-                              icon: Icons.refresh_rounded,
-                              size: DanaviewButtonSize.sm,
-                              onPressed: () => _library.refresh(),
-                            ),
-                          ),
-                        ],
-                        if (state.hasLoaded) ...[
-                          ..._recentSection(state.recent),
-                          ..._playlistSection(state.playlists),
-                          ..._folderSection(state.roots),
-                        ],
+                        ..._overviewSections(state),
                       ],
                     ),
                   ),
@@ -256,6 +243,174 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// The 1.1 Home sections below the header, in 1.1 order. With [slots] (DANAVIEW_FILES_HOME on)
+  /// the Overview's additive rows (Recent photos, Favourites) follow Continue watching; the 1.1
+  /// sections themselves are the same widgets either way.
+  List<Widget> _overviewSections(LibraryState state, {HomeTabSlots? slots}) {
+    return [
+      _NowPlayingCard(onOpen: widget.onOpenPlayer),
+      _QuickActions(
+        actions: [
+          _QuickAction(
+            'Open file',
+            'Pick videos to play',
+            DanaviewColors.primaryLight,
+            _openFile,
+            icon: Icons.video_file_rounded,
+          ),
+          _QuickAction(
+            'Open folder',
+            canPickFolders ? 'Browse a folder' : 'Videos on this device',
+            DanaviewColors.purple,
+            _openFolder,
+            glyph: DanaviewGlyphKind.folderOpen,
+          ),
+          _QuickAction(
+            'Open link',
+            'Stream from a URL',
+            DanaviewColors.cyan,
+            _openLink,
+            icon: Icons.link_rounded,
+          ),
+        ],
+      ),
+      if (state.error != null) ...[
+        const SizedBox(height: DanaviewSpacing.xl),
+        DanaviewInlineEmpty(
+          icon: Icons.error_outline_rounded,
+          iconColor: DanaviewColors.errorLight,
+          title: state.error!,
+          message: 'Your files are safe. Try loading the library again.',
+          action: DanaviewButton.secondary(
+            label: 'Try again',
+            icon: Icons.refresh_rounded,
+            size: DanaviewButtonSize.sm,
+            onPressed: () => _library.refresh(),
+          ),
+        ),
+      ],
+      if (state.hasLoaded) ...[
+        ..._recentSection(state.recent),
+        if (slots?.recentPhotos case final tray?)
+          KeyedSubtree(key: const ValueKey('home-slot-recent-photos'), child: Builder(builder: tray)),
+        if (slots?.favourites case final favourites?)
+          KeyedSubtree(key: const ValueKey('home-slot-favourites'), child: Builder(builder: favourites)),
+        ..._playlistSection(state.playlists),
+        ..._folderSection(state.roots),
+      ],
+    ];
+  }
+
+  // ---- DANAVIEW_FILES_HOME on (HOM-05) ----
+
+  List<HomeTab> _visibleTabs(BuildContext context) => visibleHomeTabs(
+        platform: Theme.of(context).platform,
+        projectsAvailable: widget.callbacks.onOpenProjects != null || widget.tabSlots.projects != null,
+        showDocuments: widget.tabSlots.showDocuments,
+      );
+
+  void _selectTab(HomeTab tab) {
+    if (tab != _tab) setState(() => _tab = tab);
+  }
+
+  Widget _buildFilesHome(BuildContext context) {
+    final tabs = _visibleTabs(context);
+    final selected = tabs.contains(_tab) ? _tab : HomeTab.home;
+    final selectionBar = widget.tabSlots.selectionBar;
+    return HomeCallbacksScope(
+      callbacks: widget.callbacks,
+      child: DanaviewRefreshOnReturn(
+        onReturn: () => _library.refresh(),
+        child: Scaffold(
+          backgroundColor: DanaviewColors.background,
+          body: DanaviewLibraryFrame(
+            topBar: LayoutBuilder(
+              builder: (context, constraints) {
+                final insets = danaviewLibraryInsets(constraints.maxWidth);
+                return Column(
+                  key: const ValueKey('home-files-top-bar'),
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: insets.copyWith(top: DanaviewSpacing.lg),
+                      child: _HomeHeader(onOpenSettings: widget.onOpenSettings, onOpenEditor: widget.onOpenEditor),
+                    ),
+                    const SizedBox(height: DanaviewSpacing.sm),
+                    HomeTabStrip(
+                      key: const ValueKey('home-tab-strip'),
+                      tabs: tabs,
+                      selected: selected,
+                      onSelected: _selectTab,
+                      padding: insets,
+                    ),
+                    const SizedBox(height: DanaviewSpacing.xs),
+                  ],
+                );
+              },
+            ),
+            body: Stack(
+              children: [
+                Positioned.fill(
+                  child: HomeTabHost(
+                    tabs: tabs,
+                    selected: selected,
+                    pageBuilder: _tabPage,
+                  ),
+                ),
+                if (selectionBar != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: KeyedSubtree(key: const ValueKey('home-slot-selection-bar'), child: Builder(builder: selectionBar)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The page of [tab]: the shell's own pages for Home and Playlists, the supplied body for the
+  /// others, and the fallbacks of home_tabs.dart when none was supplied.
+  Widget _tabPage(BuildContext context, HomeTab tab) {
+    final body = widget.tabSlots.bodyOf(tab);
+    if (body != null) return body(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final insets = danaviewLibraryInsets(constraints.maxWidth);
+        final padding = insets.copyWith(
+          top: DanaviewSpacing.lg,
+          bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
+        );
+        // Each page reads the latest library state itself: pages built once stay alive.
+        return Consumer(
+          builder: (context, ref, _) {
+            final state = ref.watch(libraryControllerProvider);
+            final sections = switch (tab) {
+              HomeTab.home => _overviewSections(state, slots: widget.tabSlots),
+              HomeTab.playlists => state.hasLoaded ? _playlistSection(state.playlists) : const <Widget>[],
+              HomeTab.folders => state.hasLoaded ? _folderSection(state.roots) : const <Widget>[],
+              _ => null,
+            };
+            if (sections == null) {
+              if (tab == HomeTab.projects && widget.callbacks.onOpenProjects != null) {
+                return HomeProjectsPane(onOpenProjects: widget.callbacks.onOpenProjects!, padding: padding);
+              }
+              return HomeEmptyTabPane(tab: tab, padding: padding);
+            }
+            return CustomScrollView(
+              key: PageStorageKey('home-tab-scroll-${tab.name}'),
+              slivers: [SliverPadding(padding: padding, sliver: SliverList.list(children: sections))],
+            );
+          },
+        );
+      },
     );
   }
 
