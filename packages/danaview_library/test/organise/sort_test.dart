@@ -9,6 +9,7 @@ import 'dart:math';
 import 'package:danaview_library/testing.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'organise_harness.dart';
 
 FileEntry _e(String id, String name, {int size = 0, int added = 0, int modified = 0, FileKind kind = FileKind.photo, String? subKind}) => FileEntry(
@@ -47,6 +48,7 @@ int _reference11(String a, String b) {
 List<String> _names(Iterable<FileEntry> es) => [for (final e in es) e.displayName];
 
 void main() {
+  setUpAll(useHostSqlite);
   group('natural order', () {
     test('numbers compare by value, text case-insensitively, shorter first', () {
       final names = ['Episode 10', 'episode 2', 'Episode 1', 'Episode', 'Episode 02b', 'a100', 'A20', 'b'];

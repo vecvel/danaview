@@ -6,9 +6,11 @@
 import 'package:danaview_library/testing.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'organise_harness.dart';
 
 void main() {
+  setUpAll(useHostSqlite);
   group('favourites', () {
     test('files and folders star, unstar and toggle; folders list first', () async {
       final clock = FakeLibraryClock(t0);

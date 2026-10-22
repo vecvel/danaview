@@ -11,9 +11,11 @@ import 'package:danaview_library/testing.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'store_harness.dart';
 
 void main() {
+  setUpAll(useHostSqlite);
   late String root;
   late FakeLibraryClock clock;
 

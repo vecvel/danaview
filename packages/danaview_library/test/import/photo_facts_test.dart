@@ -11,10 +11,12 @@ import 'dart:typed_data';
 import 'package:danaview_library/testing.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'import_harness.dart';
 import 'photo_fixtures.dart';
 
 void main() {
+  setUpAll(useHostSqlite);
   group('readPhotoFacts', () {
     test('JPEG: SOF size, EXIF date, make, model, orientation (big-endian)', () {
       final jpeg = jpegWithExif(

@@ -16,11 +16,14 @@ import 'dart:io';
 
 import 'package:danaview_library/testing.dart';
 
+import '../support/sqlite_open.dart';
+
 Future<void> main(List<String> args) async {
   if (args.length != 3) {
     stderr.writeln('usage: import_memory_child <bigSource> <warmSource> <libraryRoot>');
     exit(64);
   }
+  useHostSqlite();
   final [big, warm, root] = args;
   final store = await LibraryStore.open(root: root, clock: FakeLibraryClock(DateTime.utc(2026, 10, 22, 9)).call, background: false);
   final service = ImportService(store: store);

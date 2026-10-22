@@ -15,6 +15,8 @@ import 'dart:math';
 import 'package:danaview_library/testing.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
+
 final DateTime t0 = DateTime.utc(2026, 10, 1, 12);
 
 String _tempRoot() {
@@ -58,6 +60,7 @@ MediaItem _itemOf(FileEntry e) => PhotoMediaItem(
     );
 
 void main() {
+  setUpAll(useHostSqlite);
   late FakeLibraryClock clock;
   late LibraryStore store;
   late LibraryFileActions actions;

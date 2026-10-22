@@ -9,7 +9,10 @@ import 'package:danaview_library/danaview_library.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
+
 void main() {
+  setUpAll(useHostSqlite);
   late Database db;
   setUp(() => db = sqlite3.openInMemory());
   tearDown(() => db.dispose());

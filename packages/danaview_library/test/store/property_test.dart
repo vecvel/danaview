@@ -11,6 +11,7 @@ import 'dart:math';
 import 'package:danaview_library/testing.dart';
 import 'package:test/test.dart';
 
+import '../support/sqlite_open.dart';
 import 'store_harness.dart';
 
 final class _F {
@@ -302,6 +303,7 @@ Future<void> _runSequence(int seed) async {
 }
 
 void main() {
+  setUpAll(useHostSqlite);
   test('1,000 seeded random operation sequences keep every invariant and match the model', () async {
     for (var seed = 0; seed < 1000; seed++) {
       await _runSequence(seed);
