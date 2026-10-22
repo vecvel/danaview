@@ -1,9 +1,10 @@
 // OWNER: IOS-11
 //
 // Pure parts of the IOS-11 preview session (BUILD_PLAN IOS-11, ARCH §12.2, §13.2, D-43(e)):
-// QualityGovernor (auto steps on missed frames and recovers, pinned qualities never change,
-// thermal cap, render size), PlaybackStills (decoder budget → hold stills), AudioSessionCoordinator
-// (playback category while playing, previous one restored on dispose).
+// QualityGovernor (auto steps on missed frames and recovers, a stop returns auto to the requested
+// level (QA-05 D11), pinned qualities never change, thermal cap, render size), PlaybackStills
+// (decoder budget → hold stills), AudioSessionCoordinator (playback category while playing,
+// previous one restored on dispose).
 
 import AVFoundation
 import XCTest
@@ -49,13 +50,55 @@ final class QualityGovernorTests: XCTestCase {
     func testPausedTimeDoesNotCount() {
         let g = QualityGovernor(requested: .auto)
         g.playbackStarted(at: 0)
-        let r = play(g, from: 0, seconds: 2.5, missEvery: 3)
-        XCTAssertEqual(g.level, .half)
-        g.playbackStopped()
-        // 60 s later, 1 s of clean playback: still half.
+        // 1.9 s at 20 % missed: no full window yet.
+        let r = play(g, from: 0, seconds: 1.9, missEvery: 5)
+        XCTAssertEqual(r.steps, [])
+        XCTAssertNil(g.playbackStopped(), "not degraded: nothing to report")
+        // 60 s later, 0.5 s more of the same: the window restarted, so still no step.
         g.playbackStarted(at: r.end + 60)
-        XCTAssertEqual(play(g, from: r.end + 60, seconds: 1, missEvery: 0).steps, [])
+        XCTAssertEqual(play(g, from: r.end + 60, seconds: 0.5, missEvery: 5).steps, [])
+        XCTAssertEqual(g.level, .full)
+    }
+
+    // QA-05 D11: a stop returns auto to the requested level at once.
+    func testStopReturnsAutoToTheRequestedLevel() {
+        let g = QualityGovernor(requested: .auto)
+        g.playbackStarted(at: 0)
+        var r = play(g, from: 0, seconds: 4.5, missEvery: 3)
+        XCTAssertEqual(r.steps, [.half, .quarter])
+        XCTAssertEqual(g.playbackStopped(), .full, "stop: back to the requested level")
+        XCTAssertEqual(g.level, .full)
+        XCTAssertNil(g.playbackStopped(), "a second stop reports nothing")
+        // Playback starts at the requested level and may step down again (same thresholds).
+        g.playbackStarted(at: r.end + 5)
+        r = play(g, from: r.end + 5, seconds: 2.5, missEvery: 3)
+        XCTAssertEqual(r.steps, [.half])
+        // A rebuild while playing keeps the level.
+        g.playbackInterrupted()
         XCTAssertEqual(g.level, .half)
+        // Repeated stop/start without new misses: one report only.
+        XCTAssertEqual(g.playbackStopped(), .full)
+        for i in 0..<5 {
+            g.playbackStarted(at: r.end + 10 + Double(i))
+            _ = play(g, from: r.end + 10 + Double(i), seconds: 0.5, missEvery: 0)
+            XCTAssertNil(g.playbackStopped())
+        }
+    }
+
+    func testStopKeepsThermalCapAndPinnedQualities() {
+        let g = QualityGovernor(requested: .auto)
+        g.setThermal(.serious, at: 0)
+        g.playbackStarted(at: 0)
+        let r = play(g, from: 0, seconds: 2.5, missEvery: 3)
+        XCTAssertEqual(r.steps, [.quarter])
+        XCTAssertEqual(g.playbackStopped(), .half, "hot: back to the cap, not to full")
+        for q in [PreviewQualityMsg.full, .half, .quarter] {
+            let p = QualityGovernor(requested: q)
+            p.playbackStarted(at: 0)
+            _ = play(p, from: 0, seconds: 5, missEvery: 2)
+            XCTAssertNil(p.playbackStopped(), "\(q)")
+            XCTAssertEqual(p.level, QualityGovernor.Level.of(q))
+        }
     }
 
     func testPinnedQualitiesNeverChange() {
