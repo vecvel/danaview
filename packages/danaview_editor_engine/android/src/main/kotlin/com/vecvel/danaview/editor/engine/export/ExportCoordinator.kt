@@ -427,6 +427,7 @@ class ContextExportEnvironment(private val ctx: EngineContext) : ExportEnvironme
     }
 
     override fun whenCodecsReleased(jobId: String, ready: () -> Unit) {
+        if (System.getProperty("d9.temp.off") == null) return ready() //D9TEMP
         val handover = handovers[jobId] ?: return ready()
         val started = android.os.SystemClock.uptimeMillis()
         val handler = ctx.threads.export.handler ?: android.os.Handler(Looper.getMainLooper())

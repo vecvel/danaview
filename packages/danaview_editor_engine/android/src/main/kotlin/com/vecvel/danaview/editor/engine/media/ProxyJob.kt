@@ -239,6 +239,8 @@ class ProxyJob(private val ctx: EngineContext) {
             }
             drained.await(STOP_POLL_MS * 10, TimeUnit.MILLISECONDS)
             thread.quitSafely()
+            // QA-05 D9: the Transformer's looper is gone before the job reports its end.
+            joinQuietly(thread)
         }
         control.throwIfCancelled()
         failure?.let { throw mapError(it) }
@@ -311,6 +313,15 @@ class ProxyJob(private val ctx: EngineContext) {
         fun partFile(paths: Paths, jobId: String): File = File(paths.work, "proxy-${CacheStore.fileName(jobId)}.mp4.part")
 
         /** Maps a Transformer failure to an [EngineException] (same mapping as AND-11, ARCH §14.3). */
+        /** Waits (bounded) for a quit job looper's thread to end; keeps the interrupt flag. */
+        fun joinQuietly(thread: Thread, boundMs: Long = 2_000) {
+            try {
+                thread.join(boundMs)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
+
         fun mapError(error: Throwable): EngineException {
             if (error !is ExportException) return EngineErrors.from(error)
             val code = when (error.errorCode) {
