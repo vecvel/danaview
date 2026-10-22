@@ -128,8 +128,12 @@ void main() {
   tearDown(FeatureFlags.debugReset);
 
   group('flag off: the S1 app', () {
-    test('DANAVIEW_FILES_HOME defaults to false and the wiring adds nothing', () async {
+    test('DANAVIEW_FILES_HOME defaults to false', () {
       expect(FeatureFlags.filesHome, isFalse);
+    }, skip: FeatureFlags.filesHome ? 'built with --dart-define=DANAVIEW_FILES_HOME=true' : null);
+
+    test('with the flag off the wiring adds nothing', () async {
+      FeatureFlags.debugFilesHomeOverride = false;
       expect(filesHomeWired, isFalse);
       final runtime = await filesHomeOverrides(
         prefs: (await LibraryTestEnv.create()).prefs,
