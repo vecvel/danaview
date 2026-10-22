@@ -229,7 +229,8 @@ off; captured by backup `f865874`). Nothing was signed, uploaded or changed in t
 Build 4 is above build 3, which the 1.1.0 checklist (`docs/v1.1/editor/release-checklist.md` §3.1)
 reserves for 1.1.0 and never applied (1.0.0 was build 1). If App Store Connect or Play already holds
 a build ≥ 4, the owner uses the next free number on both stores; the iOS `beta` lane takes the next
-TestFlight number by itself, `release` needs `BUILD_NUMBER=4`.
+TestFlight number by itself, `release` needs `BUILD_NUMBER=4`. None of the lanes may be used for
+the candidate before FIX-S1R-1 (see "Signing").
 
 ### iOS release build
 
@@ -308,7 +309,7 @@ pending: Windows (`flutter build appbundle --release` with the same defines and 
 | 4 | Simulator install and smoke | S1-R | **done** (debug build, release impossible on simulator) |
 | 5 | Device smoke of the signed build | owner / lab | deferred: no device available |
 | 6 | Android release build, native-lib check, emulator smoke | Windows lane | pending: Windows |
-| 7 | **Signing**: archive with the distribution certificate and profile (`fastlane ios build` / `beta` with the release `.env`), Android upload key | **owner** | open |
+| 7 | **Signing**: archive with the distribution certificate and profile, Android upload key. **Blocked by FIX-S1R-1** for every fastlane lane (see "Signing" below): until INT-05 applies the v1.1 §3.2 Fastfile diff, `fastlane ios build` / `beta` / `release` and `fastlane android …` build **without** `DANAVIEW_EDITOR` / `DANAVIEW_AUTO_CAPTIONS` (editor hidden) and with build number 1 (`build`, `release`) or the next TestFlight number (`beta`), which is not the candidate. Sign only with the exact commands under "Signing", from a clean checkout of the candidate commit | **owner** (after FIX-S1R-1 for any lane) | open, blocked |
 | 8 | **Upload** to TestFlight / Play internal testing (candidates stay internal until the owner's go; v1.1 goes live after v1.3) | **owner** | open |
 | 9 | **`legalEffectiveDate`** (`legal_texts.dart`, still `11 October 2026`) to the candidate's release date, then regenerate the hosted privacy page from `privacyPolicyText` | **owner** (date), then the release integration ticket | open |
 | 10 | **Owner policy review Q-S1**: the Cloudflare and M-Lab wording in "When Danaview uses the internet" (ST-05, V2-406) | **owner** | open |
