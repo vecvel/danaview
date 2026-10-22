@@ -45,6 +45,7 @@ import io.flutter.plugin.common.BinaryMessenger
 class DanaviewLibraryNativePlugin : FlutterPlugin, ActivityAware {
     private var context: LibraryPluginContext? = null
     private var photoLibrary: PhotoLibraryHostApiImpl? = null
+    private var thumbnails: ThumbnailHostApiImpl? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         val ctx = LibraryPluginContext(binding.applicationContext, binding.binaryMessenger, LibraryEventHub())
@@ -57,16 +58,19 @@ class DanaviewLibraryNativePlugin : FlutterPlugin, ActivityAware {
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         photoLibrary?.dispose()
+        thumbnails?.dispose()
         setUpChannels(binding.binaryMessenger, null, null)
         context = null
         photoLibrary = null
+        thumbnails = null
     }
 
     /** Sets up every host API on [messenger]; null [ctx] tears them down. */
     private fun setUpChannels(messenger: BinaryMessenger, ctx: LibraryPluginContext?, photos: PhotoLibraryHostApiImpl?) {
         PhotoLibraryHostApi.setUp(messenger, photos)
         PickerHostApi.setUp(messenger, ctx?.let { PickerHostApiImpl(it) })
-        ThumbnailHostApi.setUp(messenger, ctx?.let { ThumbnailHostApiImpl(it) })
+        thumbnails = ctx?.let { ThumbnailHostApiImpl(it) }
+        ThumbnailHostApi.setUp(messenger, thumbnails)
         ExportOutHostApi.setUp(messenger, ctx?.let { ExportOutHostApiImpl(it) })
         ShareHostApi.setUp(messenger, ctx?.let { ShareHostApiImpl(it) })
         OpenInHostApi.setUp(messenger, ctx?.let { OpenInHostApiImpl(it) })
