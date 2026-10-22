@@ -8,6 +8,12 @@
 // partial access are honoured (the platform lists only the selection). Paging follows the
 // snapshot change token; change events refresh changed cells in place and reload the loaded
 // window when assets were added, removed or moved. Nothing here logs names or ids (rule 30).
+//
+// PhotoKit pages larger than a screen carry cheap records (no RAW flag, filename or type: the
+// native side skips the per-asset resource lookup on the page path); after each page the
+// controller fills those cells through `fetchAssets` in small batches, off the page path, and
+// keeps the filled items across reloads while the asset is unmodified. A missing type maps to
+// `image/*` or `video/*`, a missing name to '' (the grid's labels leave an empty name out).
 
 import 'dart:async';
 
@@ -52,7 +58,18 @@ String systemItemUri(SystemPhotoAsset asset, SystemPhotoPlatform platform) => sw
           : 'content://media/external/images/media/${asset.localIdentifier}',
     };
 
-/// [asset] as a library item: a [PhotoMediaItem] or a [VideoMediaItem] (ARCH v1.2 §5.1).
+/// The MIME type of a photo whose exact type is not known yet.
+const String unknownPhotoMimeType = 'image/*';
+
+/// The MIME type of a video whose exact type is not known yet.
+const String unknownVideoMimeType = 'video/*';
+
+/// True when [asset] carries its resource facts (type, original name, RAW flag); a cheap PhotoKit
+/// page record does not, and `SystemPhotoLibrary.fetchAssets` fills it.
+bool systemAssetHasDetails(SystemPhotoAsset asset) => asset.mimeType != null || asset.uti != null || asset.originalFilename != null;
+
+/// [asset] as a library item: a [PhotoMediaItem] or a [VideoMediaItem] (ARCH v1.2 §5.1). A
+/// missing type maps to [unknownPhotoMimeType] / [unknownVideoMimeType], a missing name to ''.
 MediaItem systemMediaItem(SystemPhotoAsset asset, SystemPhotoPlatform platform) {
   final id = systemItemId(asset, platform);
   final uri = systemItemUri(asset, platform);
@@ -66,7 +83,7 @@ MediaItem systemMediaItem(SystemPhotoAsset asset, SystemPhotoPlatform platform) 
         uri: uri,
         name: name,
         modifiedAt: modified,
-        mimeType: asset.mimeType ?? 'application/octet-stream',
+        mimeType: asset.mimeType ?? unknownPhotoMimeType,
         sizeBytes: size != null && size >= 0 ? size : null,
         width: asset.width < 0 ? 0 : asset.width,
         height: asset.height < 0 ? 0 : asset.height,
@@ -81,7 +98,7 @@ MediaItem systemMediaItem(SystemPhotoAsset asset, SystemPhotoPlatform platform) 
         uri: uri,
         name: name,
         modifiedAt: modified,
-        mimeType: asset.mimeType ?? 'application/octet-stream',
+        mimeType: asset.mimeType ?? unknownVideoMimeType,
         sizeBytes: size != null && size >= 0 ? size : null,
         duration: asset.duration.isNegative ? Duration.zero : asset.duration,
         width: asset.width > 0 ? asset.width : null,
@@ -186,8 +203,13 @@ class SystemPhotosState {
 class SystemPhotosController extends StateNotifier<SystemPhotosState> {
   /// A controller over [library] on [platform]; a null [library] or [platform] keeps it empty
   /// and unavailable.
-  SystemPhotosController({required this.library, required SystemPhotoPlatform? platform, this.pageSize = 200})
-      : assert(pageSize > 0 && pageSize <= 500),
+  SystemPhotosController({
+    required this.library,
+    required SystemPhotoPlatform? platform,
+    this.pageSize = 200,
+    this.detailBatchSize = 48,
+  })  : assert(pageSize > 0 && pageSize <= 500),
+        assert(detailBatchSize > 0),
         super(SystemPhotosState(platform: library == null ? null : platform));
 
   /// The native library, or null where there is none.
@@ -195,6 +217,17 @@ class SystemPhotosController extends StateNotifier<SystemPhotosState> {
 
   /// Assets per page (the platform caps it at 500).
   final int pageSize;
+
+  /// Assets per `fetchAssets` call when filling cheap page records.
+  final int detailBatchSize;
+
+  /// Filled items by id, with the modification time they were filled at (reused by reloads
+  /// while the asset is unmodified).
+  final Map<ItemId, MediaItem> _filled = {};
+
+  /// Platform ids of loaded cells still waiting for their details, oldest page first.
+  final List<String> _pendingDetails = [];
+  Future<void>? _filling;
 
   StreamSubscription<SystemPhotoChange>? _changes;
   StreamSubscription<PhotoLibraryAuthorization>? _authorizations;
@@ -291,6 +324,7 @@ class SystemPhotosController extends StateNotifier<SystemPhotosState> {
         loading: false,
         clearError: true,
       );
+      _queueDetails(page.assets, platform);
     } on LibraryNativeException catch (e) {
       if (mounted && epoch == _epoch) state = state.copyWith(loading: false, error: e.code);
     }
@@ -306,11 +340,13 @@ class SystemPhotosController extends StateNotifier<SystemPhotosState> {
     state = state.copyWith(loading: true);
     try {
       final items = <MediaItem>[];
+      final assets = <SystemPhotoAsset>[];
       String? token;
       var total = 0;
       var offset = 0;
       for (var attempt = 0; attempt < 3; attempt++) {
         items.clear();
+        assets.clear();
         token = null;
         offset = 0;
         var stale = false;
@@ -330,12 +366,17 @@ class SystemPhotosController extends StateNotifier<SystemPhotosState> {
           token = page.changeToken;
           total = page.totalCount;
           items.addAll(_items(page.assets, platform));
+          assets.addAll(page.assets);
           offset += page.assets.length;
           if (page.nextOffset == null) break;
         }
         if (!stale) break;
       }
+      _pendingDetails.clear();
+      final loaded = {for (final i in items) i.id};
+      _filled.removeWhere((id, _) => !loaded.contains(id));
       state = state.copyWith(items: items, totalCount: total, changeToken: token, loading: false, clearError: true);
+      _queueDetails(assets, platform);
     } on LibraryNativeException catch (e) {
       if (mounted && epoch == _epoch) state = state.copyWith(loading: false, error: e.code);
     }
@@ -359,6 +400,7 @@ class SystemPhotosController extends StateNotifier<SystemPhotosState> {
     try {
       final fresh = {for (final item in _items(await lib.fetchAssets(ids), platform)) item.id: item};
       if (!mounted || epoch != _epoch || fresh.isEmpty) return;
+      _filled.addAll(fresh);
       state = state.copyWith(items: [for (final item in state.items) fresh[item.id] ?? item]);
     } on LibraryNativeException catch (e) {
       if (mounted) state = state.copyWith(error: e.code);
@@ -372,6 +414,8 @@ class SystemPhotosController extends StateNotifier<SystemPhotosState> {
       unawaited(reload());
     } else {
       _epoch++;
+      _pendingDetails.clear();
+      _filled.clear();
       state = state.copyWith(items: const [], totalCount: 0);
     }
   }
@@ -399,11 +443,15 @@ class SystemPhotosController extends StateNotifier<SystemPhotosState> {
     }
   }
 
+  /// [assets] as items; a cheap record whose asset was filled earlier and is unmodified since
+  /// comes back filled.
   List<MediaItem> _items(List<SystemPhotoAsset> assets, SystemPhotoPlatform platform) {
     final out = <MediaItem>[];
     for (final a in assets) {
       try {
-        out.add(systemMediaItem(a, platform));
+        final item = systemMediaItem(a, platform);
+        final filled = systemAssetHasDetails(a) ? null : _filled[item.id];
+        out.add(filled != null && filled.modifiedAt == item.modifiedAt ? filled : item);
       } on FormatException {
         // A platform id outside the V2-09 rules is skipped rather than shown with a broken id.
       }
@@ -411,9 +459,59 @@ class SystemPhotosController extends StateNotifier<SystemPhotosState> {
     return out;
   }
 
+  /// Queues the cheap records of [assets] that were not filled yet and starts filling them.
+  void _queueDetails(List<SystemPhotoAsset> assets, SystemPhotoPlatform platform) {
+    for (final a in assets) {
+      if (systemAssetHasDetails(a)) continue;
+      try {
+        final item = systemMediaItem(a, platform);
+        final filled = _filled[item.id];
+        if (filled != null && filled.modifiedAt == item.modifiedAt) continue;
+        _pendingDetails.add(a.localIdentifier);
+      } on FormatException {
+        // Skipped, as in _items.
+      }
+    }
+    if (_pendingDetails.isNotEmpty) _filling ??= _fillDetails().whenComplete(() => _filling = null);
+  }
+
+  /// Fills queued cells in batches of [detailBatchSize] (one native call, one state update each).
+  Future<void> _fillDetails() async {
+    final lib = library;
+    final platform = _platform;
+    if (lib == null || platform == null) return;
+    while (mounted && _pendingDetails.isNotEmpty) {
+      final epoch = _epoch;
+      final take = _pendingDetails.length < detailBatchSize ? _pendingDetails.length : detailBatchSize;
+      final ids = _pendingDetails.sublist(0, take);
+      _pendingDetails.removeRange(0, take);
+      List<SystemPhotoAsset> assets;
+      try {
+        assets = await lib.fetchAssets(ids);
+      } on LibraryNativeException {
+        // The cells keep their cheap records; a later reload queues them again.
+        continue;
+      }
+      if (!mounted) return;
+      if (epoch != _epoch) continue;
+      final fresh = <ItemId, MediaItem>{};
+      for (final a in assets) {
+        try {
+          fresh[systemItemId(a, platform)] = systemMediaItem(a, platform);
+        } on FormatException {
+          // Skipped, as in _items.
+        }
+      }
+      if (fresh.isEmpty) continue;
+      _filled.addAll(fresh);
+      state = state.copyWith(items: [for (final item in state.items) fresh[item.id] ?? item]);
+    }
+  }
+
   @override
   void dispose() {
     _epoch++;
+    _pendingDetails.clear();
     unawaited(_changes?.cancel());
     unawaited(_authorizations?.cancel());
     if (_observing) unawaited(library?.stopObserving().catchError((Object _) {}));

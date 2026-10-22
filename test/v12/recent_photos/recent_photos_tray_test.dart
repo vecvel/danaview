@@ -281,11 +281,14 @@ void main() {
 
     final prefs = InMemorySortPreferenceStore();
     await prefs.write(photosShowSystemLibraryKey, 'true');
+    // Opting in on the Photos tab granted the access (V2-103).
+    fake.status = PhotoLibraryAuthorization.authorized;
     final opened = <List<PhotoGridItem>>[];
     env = await _pump(tester, RecentPhotosTray(onOpenPhoto: (list, _) => opened.add(list)), photos: danaview, system: fake, prefs: prefs);
     await pumpFrames(tester, count: 3);
     expect(_tiles(), findsNWidgets(4));
     expect(fake.fetches, greaterThan(0));
+    expect(fake.requests, 0);
     // Newest first across sources: the 19:00 system photo leads, the 2020 one trails.
     await tester.tap(_tiles().first);
     await tester.pump();
@@ -295,6 +298,26 @@ void main() {
     await finishHome(tester, env);
   });
 
+  for (final status in [PhotoLibraryAuthorization.notDetermined, PhotoLibraryAuthorization.denied]) {
+    testWidgets('a stored opt-in with access ${status.name} lists no system photos and asks nothing', (tester) async {
+      // The stored opt-in can disagree with the OS: a backup restored on a new device, reset
+      // privacy settings, or the app killed during the first prompt.
+      useFilesHome(true);
+      final fake = _FakeLibrary([_asset('A', DateTime(2026, 10, 22, 19))])..status = status;
+      final prefs = InMemorySortPreferenceStore();
+      await prefs.write(photosShowSystemLibraryKey, 'true');
+      final env = await _pump(tester, const RecentPhotosTray(), photos: synthetic(2, from: DateTime(2026, 10, 22, 18)), system: fake, prefs: prefs);
+      await pumpFrames(tester, count: 3);
+      expect(fake.requests, 0);
+      expect(fake.fetches, 0);
+      expect(_tiles(), findsNWidgets(2));
+      expect(find.bySemanticsLabel(RegExp(r'^Photo IMG_A\.HEIC, ')), findsNothing);
+      final container = ProviderScope.containerOf(tester.element(find.byType(RecentPhotosTray)));
+      expect(container.read(systemPhotosControllerProvider).opened, isFalse);
+      await finishHome(tester, env);
+    });
+  }
+
   testWidgets('an album picked on the Photos tab does not narrow the tray (whole library)', (tester) async {
     useFilesHome(true);
     final fake = _FakeLibrary(
@@ -302,7 +325,7 @@ void main() {
       albums: {
         'old': {'C'},
       },
-    );
+    )..status = PhotoLibraryAuthorization.authorized;
     final prefs = InMemorySortPreferenceStore();
     await prefs.write(photosShowSystemLibraryKey, 'true');
     final danaview = synthetic(1, from: DateTime(2026, 10, 22, 18));
@@ -328,7 +351,8 @@ void main() {
 
   testWidgets('the "+N" tile counts the whole system library, not only the fetched page', (tester) async {
     useFilesHome(true);
-    final fake = _FakeLibrary([for (var i = 0; i < 9; i++) _asset('S$i', DateTime(2026, 10, 22, 12).subtract(Duration(hours: i)))]);
+    final fake = _FakeLibrary([for (var i = 0; i < 9; i++) _asset('S$i', DateTime(2026, 10, 22, 12).subtract(Duration(hours: i)))])
+      ..status = PhotoLibraryAuthorization.authorized;
     final prefs = InMemorySortPreferenceStore();
     await prefs.write(photosShowSystemLibraryKey, 'true');
     final env = await _pump(tester, const RecentPhotosTray(limit: 4), photos: synthetic(2, from: DateTime(2020)), system: fake, prefs: prefs);

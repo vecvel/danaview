@@ -52,8 +52,10 @@ import 'package:danaview_features/src/library/organise/organise_widgets.dart';
 import 'package:danaview_features/src/library/photo_viewer/photo_viewer_actions.dart';
 import 'package:danaview_features/src/library/photo_viewer/photo_viewer_entry.dart' show PhotoViewerEntry, photoMimeTypeOf;
 import 'package:danaview_features/src/library/photo_viewer/photo_viewer_screen.dart';
+import 'package:danaview_features/src/library/desktop/desktop_sidebar.dart' show DesktopPhotoSidebarPane;
 import 'package:danaview_features/src/library/photos/photos_tab_providers.dart' show readDanaviewPhotos;
 import 'package:danaview_features/src/library/search/library_search_field.dart';
+import 'package:danaview_features/src/library/sources/desktop_photos_source.dart' show desktopPlatformFor;
 import 'package:danaview_features/src/library/selection/selection_bar.dart';
 import 'package:danaview_features/src/library/tabs/all_tab.dart';
 import 'package:danaview_features/src/library/tabs/folders_tab.dart';
@@ -503,17 +505,10 @@ class FilesHome extends StatefulWidget {
 
 /// The state of [FilesHome] (public for tests).
 class FilesHomeState extends State<FilesHome> {
-  HomeTab _initial = HomeTab.home;
-  int _generation = 0;
-
-  /// The tab the shell opened on last.
-  HomeTab get initialTab => _initial;
-
-  /// Re-opens the shell on [tab].
-  void showTab(HomeTab tab) => setState(() {
-        _initial = tab;
-        _generation++;
-      });
+  /// Asks the Home shell for [tab] from [context], which sits inside the shell's tab pages: the
+  /// shell selects the tab itself (HOM-05 listens for [HomeTabRequestNotification]), so the other
+  /// tabs keep their scroll and folder positions.
+  static void showTab(BuildContext context, HomeTab tab) => HomeTabRequestNotification(tab).dispatch(context);
 
   void _openEntry(BuildContext context, WidgetRef ref, FileEntry entry) =>
       unawaited(openLibraryEntry(context, ref, entry, onOpenPlayer: widget.onOpenPlayer));
@@ -523,14 +518,14 @@ class FilesHomeState extends State<FilesHome> {
 
   void _openFavourite(BuildContext context, WidgetRef ref, FavouriteItem item) => switch (item) {
         FavouriteEntry(:final entry) => _openEntry(context, ref, entry),
-        FavouriteFolder() => showTab(HomeTab.folders),
+        FavouriteFolder() => showTab(context, HomeTab.folders),
       };
 
   void _openHit(BuildContext context, WidgetRef ref, SearchHit hit) {
     final item = hit.item;
     switch (item.origin) {
       case SearchOrigin.danaview:
-        if (item.isFolder) return showTab(HomeTab.folders);
+        if (item.isFolder) return showTab(context, HomeTab.folders);
         final id = EntryId.tryParse(item.id.value);
         final entry = id == null ? null : ref.read(libraryStoreProvider)?.reader.entry(id);
         if (entry != null) _openEntry(context, ref, entry);
@@ -544,7 +539,7 @@ class FilesHomeState extends State<FilesHome> {
           widget.onOpenFolder(File(path).parent.path);
         }
       case SearchOrigin.system:
-        showTab(HomeTab.photos);
+        showTab(context, HomeTab.photos);
     }
   }
 
@@ -579,7 +574,8 @@ class FilesHomeState extends State<FilesHome> {
   /// The S2 slots of the Home (BUILD_PLAN §1A S2; Documents hidden until S3).
   HomeTabSlots get slots => libraryFilterTabSlots(
         base: HomeTabSlots(
-          photos: _consumer((context, ref) => PhotosTab(
+          photos: _consumer((context, ref) => FilesHomePhotosPane(
+                photos: PhotosTab(
                 onOpenPhoto: (photos, index) {
                   final photo = photos[index];
                   final media = photo.media ?? _danaviewPhotoMedia(ref, photo);
@@ -593,6 +589,7 @@ class FilesHomeState extends State<FilesHome> {
                   final media = photo.media ?? _danaviewPhotoMedia(ref, photo);
                   if (media != null) ref.read(homeSelectionProvider.notifier).toggle(media);
                 },
+              ),
               )),
           recentPhotos: _consumer((context, ref) => Column(
                 key: const ValueKey('s2-overview-library'),
@@ -600,10 +597,8 @@ class FilesHomeState extends State<FilesHome> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   FilesHomeToolsRow(onOpenHit: (hit) => _openHit(context, ref, hit)),
-                  RecentPhotosTray(
-                    onOpenPhoto: (photos, index) => _openPhotos(context, photos, index),
-                    onSeeAll: () => showTab(HomeTab.photos),
-                  ),
+                  // See all bubbles a tab request up to the shell (HOM-09, HOM-05).
+                  RecentPhotosTray(onOpenPhoto: (photos, index) => _openPhotos(context, photos, index)),
                 ],
               )),
           favourites: _consumer((context, ref) => Column(
@@ -632,22 +627,71 @@ class FilesHomeState extends State<FilesHome> {
 
   @override
   Widget build(BuildContext context) {
-    return NotificationListener<HomeTabRequestNotification>(
-      onNotification: (request) {
-        showTab(request.tab);
-        return true;
+    return DanaviewHomeScreen(
+      onOpenPlayer: widget.onOpenPlayer,
+      onOpenFolder: widget.onOpenFolder,
+      onOpenPlaylist: widget.onOpenPlaylist,
+      onOpenSettings: widget.onOpenSettings,
+      onOpenEditor: widget.onOpenEditor,
+      callbacks: HomeCallbacks(onOpenProjects: widget.onOpenProjects),
+      tabSlots: slots,
+    );
+  }
+}
+
+/// The Photos tab with, on macOS, Windows and Linux, HOM-03's photo-location sidebar: shortcuts to
+/// every photo root and the drop target that adds dropped folders as roots (V2-109). Picking a
+/// shortcut filters the tab (`desktopPhotosControllerProvider`). Two panes from
+/// [twoPaneMinWidth]; narrower, the sidebar sits above the grid in a short scrolling band. iOS and
+/// Android show the tab alone.
+class FilesHomePhotosPane extends StatelessWidget {
+  /// The pane around [photos]; [platform] defaults to [defaultTargetPlatform].
+  const FilesHomePhotosPane({super.key, required this.photos, this.platform});
+
+  /// The Photos tab.
+  final Widget photos;
+
+  /// The platform deciding whether the sidebar shows (tests).
+  final TargetPlatform? platform;
+
+  /// The narrowest width with the sidebar beside the grid.
+  static const double twoPaneMinWidth = DanaviewBreakpoints.compact;
+
+  /// The sidebar's width in two panes.
+  static const double sidebarWidth = 260;
+
+  /// The sidebar band's share of the height when stacked (narrow windows).
+  static const double stackedHeightFraction = 0.34;
+
+  @override
+  Widget build(BuildContext context) {
+    if (desktopPlatformFor(platform ?? defaultTargetPlatform) == null) return photos;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const sidebar = DesktopPhotoSidebarPane(key: ValueKey('s2-desktop-sidebar'));
+        const divider = ColoredBox(color: DanaviewColors.hairline);
+        if (constraints.maxWidth >= twoPaneMinWidth) {
+          return Row(
+            key: const ValueKey('s2-photos-two-pane'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(width: sidebarWidth, child: sidebar),
+              const SizedBox(width: 1, child: divider),
+              Expanded(child: photos),
+            ],
+          );
+        }
+        final height = constraints.hasBoundedHeight ? constraints.maxHeight * stackedHeightFraction : 200.0;
+        return Column(
+          key: const ValueKey('s2-photos-stacked'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: height, child: sidebar),
+            const SizedBox(height: 1, child: divider),
+            Expanded(child: photos),
+          ],
+        );
       },
-      child: DanaviewHomeScreen(
-        key: ValueKey('files-home-$_generation'),
-        onOpenPlayer: widget.onOpenPlayer,
-        onOpenFolder: widget.onOpenFolder,
-        onOpenPlaylist: widget.onOpenPlaylist,
-        onOpenSettings: widget.onOpenSettings,
-        onOpenEditor: widget.onOpenEditor,
-        callbacks: HomeCallbacks(onOpenProjects: widget.onOpenProjects),
-        tabSlots: slots,
-        initialTab: _initial,
-      ),
     );
   }
 }

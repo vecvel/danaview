@@ -4,8 +4,10 @@
 // date, camera, lens, exposure (shutter, aperture, ISO, focal length), dimensions, size, format and
 // where the photo lives. System photos ask `SystemPhotoLibrary.assetDetail` (PhotoKit /
 // MediaStore; an iCloud-only original has no EXIF and the sheet says so, no network, §9.1);
-// Danaview photos read library.db (entry + meta, folder, how it arrived); desktop photos use the
-// facts their scan found. The rows are computed by a pure function so the sheet stays dumb and
+// Danaview photos read library.db (entry + meta, folder, how it arrived) plus the library file's
+// own EXIF for what `EntryMeta` does not keep (make, lens, exposure, aperture, ISO, focal length;
+// `photo_exif_reader.dart`, read-only); desktop photos use the facts their scan found, filled in
+// from their file's EXIF the same way. The rows are computed by a pure function so the sheet stays dumb and
 // the formatting is unit tested. Location is never shown or read here (§9.4). Nothing is logged
 // (rule 30).
 
@@ -19,6 +21,7 @@ import '../files/library_store_providers.dart';
 import '../photos/photo_date_groups.dart' show photoMonthName;
 import '../photos/photo_grid_item.dart';
 import '../sources/system_photos_source.dart';
+import 'photo_exif_reader.dart';
 import 'photo_viewer_entry.dart';
 
 /// Where a photo lives, for the info sheet's Source row.
@@ -273,9 +276,18 @@ List<PhotoInfoRow> photoInfoRows(PhotoInfo info) {
 }
 
 /// Reads the info of [item]. [system] answers for `ph:`/`ms:` photos; [store] for Danaview ones.
-Future<PhotoInfo> loadPhotoInfo(PhotoGridItem item, {LibraryStore? store, SystemPhotoLibrary? system}) async {
+/// Danaview and desktop photos also read their local file's EXIF through [readExif] (read-only;
+/// library.db and scan facts win where both know a value).
+Future<PhotoInfo> loadPhotoInfo(
+  PhotoGridItem item, {
+  LibraryStore? store,
+  SystemPhotoLibrary? system,
+  PhotoExif? Function(String path) readExif = readPhotoExif,
+}) async {
   final entry = resolvePhotoViewerEntry(item, store: store);
   final media = item.media;
+  final path = entry.filePath;
+  final exif = item.origin == PhotoOrigin.system || path == null ? null : readExif(path);
   switch (item.origin) {
     case PhotoOrigin.danaview:
       final id = EntryId.tryParse(item.id.value);
@@ -288,12 +300,18 @@ Future<PhotoInfo> loadPhotoInfo(PhotoGridItem item, {LibraryStore? store, System
         source: PhotoInfoSource.danaviewFolder,
         folderName: folder?.name,
         importedFrom: e?.sourceHint,
-        takenAt: meta?.takenAt,
+        takenAt: meta?.takenAt ?? exif?.takenAt,
         addedAt: e?.addedAt,
         modifiedAt: e?.modifiedAt ?? item.modifiedAt,
-        cameraModel: meta?.camera,
-        width: meta?.width ?? item.width,
-        height: meta?.height ?? item.height,
+        cameraMake: exif?.cameraMake,
+        cameraModel: meta?.camera ?? exif?.cameraModel,
+        lensModel: exif?.lensModel,
+        exposureSeconds: exif?.exposureSeconds,
+        aperture: exif?.aperture,
+        iso: exif?.iso,
+        focalLengthMm: exif?.focalLengthMm,
+        width: _positive(meta?.width) ?? _positive(item.width) ?? exif?.width ?? 0,
+        height: _positive(meta?.height) ?? _positive(item.height) ?? exif?.height ?? 0,
         sizeBytes: e?.sizeBytes,
         formatLabel: photoFormatLabel(name: item.name),
         isRaw: entry.isRaw,
@@ -344,13 +362,17 @@ Future<PhotoInfo> loadPhotoInfo(PhotoGridItem item, {LibraryStore? store, System
       return PhotoInfo(
         name: item.name,
         source: PhotoInfoSource.picturesFolder,
-        takenAt: photo?.takenAt,
+        takenAt: photo?.takenAt ?? exif?.takenAt,
         modifiedAt: item.modifiedAt,
-        cameraModel: photo?.cameraModel,
-        aperture: photo?.aperture,
-        iso: photo?.iso,
-        width: item.width,
-        height: item.height,
+        cameraMake: exif?.cameraMake,
+        cameraModel: photo?.cameraModel ?? exif?.cameraModel,
+        lensModel: exif?.lensModel,
+        exposureSeconds: exif?.exposureSeconds,
+        aperture: photo?.aperture ?? exif?.aperture,
+        iso: photo?.iso ?? exif?.iso,
+        focalLengthMm: exif?.focalLengthMm,
+        width: _positive(item.width) ?? exif?.width ?? 0,
+        height: _positive(item.height) ?? exif?.height ?? 0,
         sizeBytes: photo?.sizeBytes,
         formatLabel: photoFormatLabel(name: item.name, mimeType: photo?.mimeType),
         isRaw: entry.isRaw,
@@ -359,6 +381,8 @@ Future<PhotoInfo> loadPhotoInfo(PhotoGridItem item, {LibraryStore? store, System
       );
   }
 }
+
+int? _positive(int? v) => v != null && v > 0 ? v : null;
 
 /// The info of one photo (re-read after library writes).
 final photoInfoProvider = FutureProvider.autoDispose.family<PhotoInfo, PhotoGridItem>((ref, item) {

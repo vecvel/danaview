@@ -3,11 +3,12 @@
 // Name search (HOM plan §8.1, D-98f / V2-119; ARCH §7.6 "HOM-19's name search is the fallback and
 // the default when the index is off or still building"). As-you-type matching of names, folder
 // names and file types across Danaview folders, linked folders and (when shown) the system
-// library. Each source hands the index a snapshot of [SearchItem]s; the index keeps them in
-// natural name order, so a query is one linear pass that drops each hit into a rank bucket and
-// never sorts: ≤ 50 ms per keystroke over 50,000 names on the mid tier (test/organise/
-// name_search_benchmark_test.dart). A query that extends the previous one only rescans the
-// previous hits.
+// library. Each source hands the index a snapshot of [SearchItem]s, kept in natural name order
+// per source ([prepareSearchSource] sorts it, on a background isolate for the Danaview folders), so
+// a query is one linear pass per source that drops each hit into a rank bucket, then merges only
+// the bucketed hits: ≤ 50 ms per keystroke over 50,000 names on the mid tier (test/organise/
+// name_search_benchmark_test.dart). Swapping a source in is O(1) and never re-sorts the others. A
+// query that extends the previous one only rescans the previous hits.
 //
 // Matching: the query splits on white space; every word must match the name, the folder name or a
 // type term (kind, plural, sub-kind, extension) as a substring (type terms by prefix). Ranks: name starts with the first word, a name word starts with it, the name
@@ -195,11 +196,15 @@ abstract interface class SearchBackend {
 /// A prepared item: lower-cased fields and type terms.
 final class _Prepared {
   _Prepared(this.item)
-      : name = item.name.toLowerCase(),
+      : key = NaturalSortKey(item.name),
+        name = item.name.toLowerCase(),
         folder = item.folderName?.toLowerCase(),
         types = _typeTerms(item);
 
   final SearchItem item;
+
+  /// The natural-order key of the name.
+  final NaturalSortKey key;
   final String name;
   final String? folder;
 
@@ -245,58 +250,82 @@ List<String> searchWords(String text) => [
         if (w.isNotEmpty) w,
     ];
 
-/// The in-memory name index over every source's snapshot.
+/// One source's items, prepared and in natural name order (ties by id), ready to swap into a
+/// [NameIndex]. [prepareSearchSource] builds it on any isolate, so a large source (the Danaview
+/// folders) is sorted off the UI isolate and swapped in with [NameIndex.replacePreparedSource].
+final class PreparedSearchSource {
+  PreparedSearchSource._(this._items);
+
+  /// No items.
+  static final PreparedSearchSource empty = PreparedSearchSource._(const []);
+
+  final List<_Prepared> _items;
+
+  /// How many items.
+  int get length => _items.length;
+
+  /// The items, in natural name order.
+  Iterable<SearchItem> get items => _items.map((p) => p.item);
+}
+
+int _compareByName(_Prepared a, _Prepared b) {
+  final c = a.key.compareTo(b.key);
+  return c != 0 ? c : a.item.id.value.compareTo(b.item.id.value);
+}
+
+/// Prepares and sorts [items] (O(n log n); safe to run in a background isolate).
+PreparedSearchSource prepareSearchSource(Iterable<SearchItem> items) {
+  final list = [for (final item in items) _Prepared(item)]..sort(_compareByName);
+  return PreparedSearchSource._(List.unmodifiable(list));
+}
+
+/// One source in the index, with the previous query's hits over it (for refining as the user types
+/// on). A new snapshot of the source is a new [_Source], so the cache can't outlive its items.
+final class _Source {
+  _Source(this.prepared);
+
+  final PreparedSearchSource prepared;
+  List<String>? cacheWords;
+  List<int>? cacheHits;
+}
+
+/// The in-memory name index over every source's snapshot. Each source is kept sorted on its own;
+/// a query scans every source and merges only the ranked hits (at most `limit` per rank and
+/// source), so swapping one source in never re-sorts the others.
 final class NameIndex {
-  final Map<String, List<SearchItem>> _sources = {};
-  List<_Prepared>? _prepared;
+  final Map<String, _Source> _sources = {};
   int _version = 0;
 
-  // The previous query's words and hit positions, for refining as the user types on.
-  int _cacheVersion = -1;
-  List<String>? _cacheWords;
-  List<int>? _cacheHits;
-
-  /// Bumped on every [replaceSource] / [removeSource].
+  /// Bumped on every [replaceSource] / [replacePreparedSource] / [removeSource].
   int get version => _version;
 
   /// Items across every source.
-  int get length => _ensure().length;
+  int get length {
+    var n = 0;
+    for (final s in _sources.values) {
+      n += s.prepared.length;
+    }
+    return n;
+  }
 
-  /// Replaces the snapshot of source [sourceId] with [items].
-  void replaceSource(String sourceId, Iterable<SearchItem> items) {
-    _sources[sourceId] = List.unmodifiable(items);
-    _invalidate();
+  /// Replaces the snapshot of source [sourceId] with [items] (prepared and sorted here, on the
+  /// calling isolate; use [prepareSearchSource] elsewhere and [replacePreparedSource] for large
+  /// sources).
+  void replaceSource(String sourceId, Iterable<SearchItem> items) => replacePreparedSource(sourceId, prepareSearchSource(items));
+
+  /// Replaces the snapshot of source [sourceId] with [source] (O(1)).
+  void replacePreparedSource(String sourceId, PreparedSearchSource source) {
+    _sources[sourceId] = _Source(source);
+    _version++;
   }
 
   /// Drops source [sourceId].
   void removeSource(String sourceId) {
-    if (_sources.remove(sourceId) != null) _invalidate();
+    if (_sources.remove(sourceId) != null) _version++;
   }
 
   /// The ids of the sources indexed.
   Iterable<String> get sourceIds => _sources.keys;
-
-  void _invalidate() {
-    _prepared = null;
-    _version++;
-    _cacheWords = null;
-    _cacheHits = null;
-  }
-
-  List<_Prepared> _ensure() {
-    final ready = _prepared;
-    if (ready != null) return ready;
-    final keyed = <(NaturalSortKey, _Prepared)>[
-      for (final items in _sources.values)
-        for (final item in items) (NaturalSortKey(item.name), _Prepared(item)),
-    ];
-    // Natural name order; ties by id so the order doesn't depend on source order.
-    keyed.sort((a, b) {
-      final c = a.$1.compareTo(b.$1);
-      return c != 0 ? c : a.$2.item.id.value.compareTo(b.$2.item.id.value);
-    });
-    return _prepared = [for (final k in keyed) k.$2];
-  }
 
   SearchMatch? _match(_Prepared p, List<String> words, List<String> typeWords) {
     final first = words.first;
@@ -321,19 +350,16 @@ final class NameIndex {
     return anyFolder ? SearchMatch.folder : SearchMatch.type;
   }
 
-  /// Answers [query] synchronously (the benchmark measures this).
-  SearchResults search(SearchQuery query) {
-    final words = searchWords(query.text);
-    if (words.isEmpty || query.limit <= 0) return SearchResults.empty(query);
-    final all = _ensure();
-    final typeWords = [for (final w in words) '\u0001$w'];
-
+  /// Scans [source] for [words], filling [buckets] (natural order within each); returns the count
+  /// of hits that pass [query]'s filters.
+  int _scan(_Source source, SearchQuery query, List<String> words, List<String> typeWords, List<List<_Prepared>> buckets) {
+    final all = source.prepared._items;
     // Refine the previous hit set when every previous word is a prefix of the new word in the same
-    // position (typing on) and nothing changed since.
+    // position (typing on).
     List<int>? candidates;
-    final prevWords = _cacheWords;
-    final prevHits = _cacheHits;
-    if (_cacheVersion == _version && prevWords != null && prevHits != null && prevWords.length <= words.length) {
+    final prevWords = source.cacheWords;
+    final prevHits = source.cacheHits;
+    if (prevWords != null && prevHits != null && prevWords.length <= words.length) {
       var refines = true;
       for (var i = 0; i < prevWords.length; i++) {
         // A longer word can only drop hits (substrings and term prefixes shrink).
@@ -345,7 +371,6 @@ final class NameIndex {
       if (refines) candidates = prevHits;
     }
 
-    final buckets = List<List<SearchHit>>.generate(SearchMatch.values.length, (_) => <SearchHit>[]);
     final hits = <int>[];
     final kinds = query.kinds;
     var total = 0;
@@ -360,17 +385,41 @@ final class NameIndex {
       if (kind == null ? !query.includeFolders : (kinds != null && !kinds.contains(kind))) continue;
       total++;
       final bucket = buckets[m.index];
-      if (bucket.length < query.limit) bucket.add(SearchHit(p.item, m));
+      if (bucket.length < query.limit) bucket.add(p);
     }
-    _cacheVersion = _version;
-    _cacheWords = words;
-    _cacheHits = hits;
+    source.cacheWords = words;
+    source.cacheHits = hits;
+    return total;
+  }
+
+  /// Answers [query] synchronously (the benchmark measures this).
+  SearchResults search(SearchQuery query) {
+    final words = searchWords(query.text);
+    if (words.isEmpty || query.limit <= 0) return SearchResults.empty(query);
+    final typeWords = [for (final w in words) '\u0001$w'];
+
+    var total = 0;
+    final perSource = <List<List<_Prepared>>>[];
+    for (final source in _sources.values) {
+      final buckets = List<List<_Prepared>>.generate(SearchMatch.values.length, (_) => <_Prepared>[]);
+      total += _scan(source, query, words, typeWords, buckets);
+      perSource.add(buckets);
+    }
 
     final out = <SearchHit>[];
-    for (final bucket in buckets) {
-      for (final hit in bucket) {
+    for (final match in SearchMatch.values) {
+      if (out.length == query.limit) break;
+      final List<_Prepared> rank;
+      if (perSource.length == 1) {
+        rank = perSource.first[match.index];
+      } else {
+        // Each source's bucket is already in natural order: sorting their union is merging at most
+        // `limit` items per source.
+        rank = [for (final b in perSource) ...b[match.index]]..sort(_compareByName);
+      }
+      for (final p in rank) {
         if (out.length == query.limit) break;
-        out.add(hit);
+        out.add(SearchHit(p.item, match));
       }
     }
     return SearchResults(query: query, hits: List.unmodifiable(out), total: total, backend: NameSearchBackend.backendId);

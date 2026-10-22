@@ -56,9 +56,9 @@ void main() {
       expect(r.at(ThumbSizeClass.l).key.sizeClass, ThumbSizeClass.l);
     });
 
-    test('platform formats (V2-28): WebP on Android, HEIC on iOS, JPEG elsewhere', () {
+    test('platform formats (V2-28): WebP on Android, JPEG on iOS (HEIC unverified) and elsewhere', () {
       expect(thumbnailFormatFor(TargetPlatform.android), NativeThumbnailFormat.webp);
-      expect(thumbnailFormatFor(TargetPlatform.iOS), NativeThumbnailFormat.heic);
+      expect(thumbnailFormatFor(TargetPlatform.iOS), NativeThumbnailFormat.jpeg);
       expect(thumbnailFormatFor(TargetPlatform.macOS), NativeThumbnailFormat.jpeg);
       expect(thumbnailFormatFor(TargetPlatform.windows), NativeThumbnailFormat.jpeg);
       expect(thumbnailFormatFor(TargetPlatform.linux), NativeThumbnailFormat.jpeg);

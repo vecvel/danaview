@@ -4,7 +4,7 @@
 // platform hits; coalescing of requests for one key; cancellation of queued jobs (they never
 // reach the platform) and of running ones (the native request is cancelled); newest-first
 // scheduling; failures remembered for the session; documents without a thumbnail; a damaged cache
-// file regenerated; the prefetch window for ph: assets only; and the acceptance test: memory never
+// file regenerated; the JPEG fallback for a HEIC the engine cannot decode (V2-28); the prefetch window for ph: assets only; and the acceptance test: memory never
 // exceeds 64 MB under a 10,000-cell fling with a fake decoder. A second group runs the service
 // over the real dart:io disk tier: the cache survives a restart (no platform call) and is
 // invalidated by a new modification time.
@@ -188,6 +188,71 @@ void main() {
     expect(gen.started, ['/lib/item4.jpg']);
     expect(disk.files[disk.pathOf(r.key)], 'generated');
     b!.dispose();
+  });
+
+  group('JPEG fallback (V2-28: a HEIC the engine cannot decode)', () {
+    late ThumbnailService heic;
+
+    setUp(() {
+      heic = ThumbnailService(disk: disk, generator: gen, decoder: decoder, format: NativeThumbnailFormat.heic);
+      decoder.undecodable.add(NativeThumbnailFormat.heic);
+    });
+
+    test('a fresh HEIC that does not decode is regenerated as JPEG, not failed', () async {
+      final r = req(21);
+      final b = await heic.load(r).result;
+      expect(b, isNotNull);
+      expect(gen.formats, [NativeThumbnailFormat.heic, NativeThumbnailFormat.jpeg]);
+      expect(heic.hasFailed(r), isFalse);
+      expect(heic.stats.jpegFallbacks, 1);
+      expect(heic.stats.failures, 0);
+      expect(disk.files[disk.pathOf(r.key)], 'generated');
+      expect(disk.parts, isEmpty);
+      b!.dispose();
+    });
+
+    test('after one fallback the session asks JPEG directly', () async {
+      (await heic.load(req(22)).result)!.dispose();
+      expect(heic.effectiveFormat, NativeThumbnailFormat.jpeg);
+      gen.formats.clear();
+      (await heic.load(req(23)).result)!.dispose();
+      expect(gen.formats, [NativeThumbnailFormat.jpeg]);
+      expect(heic.stats.jpegFallbacks, 1);
+    });
+
+    test('a HEIC cache file from an earlier session is dropped and regenerated as JPEG', () async {
+      final r = req(24);
+      disk.files[disk.pathOf(r.key)] = 'generated:heic';
+      final b = await heic.load(r).result;
+      expect(b, isNotNull);
+      expect(gen.formats, [NativeThumbnailFormat.heic, NativeThumbnailFormat.jpeg]);
+      expect(disk.files[disk.pathOf(r.key)], 'generated');
+      b!.dispose();
+    });
+
+    test('a decodable HEIC keeps HEIC; a JPEG that does not decode still fails', () async {
+      decoder.undecodable.clear();
+      (await heic.load(req(25)).result)!.dispose();
+      expect(gen.formats, [NativeThumbnailFormat.heic]);
+      expect(heic.effectiveFormat, NativeThumbnailFormat.heic);
+      // JPEG written for a HEIC request (iOS < 17) that does not decode: no second attempt.
+      gen.writesJpegFor.add(NativeThumbnailFormat.heic);
+      final r = req(26);
+      decoder.corrupt.add(disk.pathOf(r.key));
+      expect(await heic.load(r).result, isNull);
+      expect(heic.hasFailed(r), isTrue);
+      expect(heic.stats.jpegFallbacks, 0);
+    });
+
+    test('a JPEG retry that does not decode either is failed once', () async {
+      final r = req(27);
+      decoder.corrupt.add(disk.pathOf(r.key));
+      expect(await heic.load(r).result, isNull);
+      expect(gen.formats, [NativeThumbnailFormat.heic, NativeThumbnailFormat.jpeg]);
+      expect(heic.hasFailed(r), isTrue);
+      expect(heic.stats.failures, 1);
+      expect(disk.files.containsKey(disk.pathOf(r.key)), isFalse);
+    });
   });
 
   test('prefetch moves the native window for ph: assets only, and ignores errors', () async {

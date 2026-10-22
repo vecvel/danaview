@@ -80,8 +80,18 @@ Widget _app(LibraryTestEnv env, {LibraryStore? store, ValueChanged<SearchHit>? o
         ),
       ),
       textScale: textScale,
-      overrides: [if (store != null) libraryStoreProvider.overrideWithValue(store), ...overrides],
+      overrides: [
+        if (store != null) libraryStoreProvider.overrideWithValue(store),
+        danaviewSearchLoaderProvider.overrideWithValue(_inlineLoader()),
+        ...overrides,
+      ],
     );
+
+/// The Danaview read inline (fake time can't wait on the background isolate); [calls] counts reads.
+DanaviewSearchLoader _inlineLoader([List<int?>? calls]) => (store, {unlessFingerprint}) async {
+      calls?.add(unlessFingerprint);
+      return readDanaviewSearchSnapshot(store.reader.db, unlessFingerprint: unlessFingerprint);
+    };
 
 Future<void> _type(WidgetTester tester, String text) async {
   await tester.enterText(find.byKey(const ValueKey('library-search-field')), text);
@@ -131,6 +141,47 @@ void main() {
     // Clearing the field hides the hits.
     await _type(tester, '');
     expect(find.text(LibrarySearchField.noMatches), findsNothing);
+    await lib.close(tester);
+    await env.dispose();
+  });
+
+  testWidgets('library writes re-read off the keystroke path; writes that change no name swap nothing in', (tester) async {
+    useSurface(tester, librarySurfaces[2]);
+    final env = await LibraryTestEnv.create();
+    final lib = await _Lib.open(tester);
+    final report = await lib.add(tester, 'Report.pdf');
+    final calls = <int?>[];
+    await tester.pumpWidget(_app(env, store: lib.store, overrides: [danaviewSearchLoaderProvider.overrideWithValue(_inlineLoader(calls))]));
+    await pumpFrames(tester);
+    final container = ProviderScope.containerOf(tester.element(find.byType(LibrarySearchField)));
+    final index = container.read(nameSearchIndexProvider);
+    expect(calls, hasLength(1), reason: 'the controller reads the Danaview folders once when it starts');
+
+    // Typing never reads the library.
+    for (final q in ['r', 're', 'rep', 'repo']) {
+      await _type(tester, q);
+    }
+    expect(calls, hasLength(1));
+    expect(find.text('Report.pdf'), findsOneWidget);
+
+    // An import progress checkpoint, a favourite: read once each, fingerprint unchanged, nothing swapped.
+    final version = index.version;
+    await lib.run(tester, (s) => s.write((w, now) {
+          final job = w.beginImport(now: now, bytesTotal: 10);
+          w.recordImportProgress(job.id, 5);
+        }));
+    await pumpFrames(tester, count: 2);
+    await lib.run(tester, (s) => s.write((w, now) => w.setEntryFavourite(report.id, true)));
+    await pumpFrames(tester, count: 2);
+    expect(calls.length, greaterThan(1));
+    expect(calls.skip(1), everyElement(isNotNull), reason: 'later reads pass the fingerprint held');
+    expect(index.version, version);
+
+    // A rename changes the fingerprint: the new name is swapped in and the hits on screen follow.
+    await lib.run(tester, (s) => s.write((w, now) => w.renameEntry(report.id, 'Repository.pdf', now: now)));
+    await pumpFrames(tester, count: 2);
+    expect(index.version, greaterThan(version));
+    expect(find.text('Repository.pdf'), findsOneWidget);
     await lib.close(tester);
     await env.dispose();
   });

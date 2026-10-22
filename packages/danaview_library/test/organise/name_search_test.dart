@@ -150,6 +150,48 @@ void main() {
       expect(_names(index.search(const SearchQuery('gone'))), ['summer gone.jpg']);
     });
 
+    test('the Danaview snapshot fingerprints searchable rows only; the isolate load matches the inline read', () async {
+      final store = await openTestStore(FakeLibraryClock(t0));
+      final trip = await folderNamed(store, 'Summer trip');
+      final beach = await importNamed(store, 'beach.jpg', folder: trip);
+      final first = readDanaviewSearchSnapshot(store.reader.db);
+      expect(first.changed, isTrue);
+      expect([for (final i in first.source!.items) i.name], ['beach.jpg', 'Summer trip']);
+
+      // Writes that change no searchable column: same fingerprint, nothing built.
+      await store.write((w, now) {
+        final job = w.beginImport(now: now, bytesTotal: 8);
+        w.recordImportProgress(job.id, 4);
+      });
+      await store.write((w, now) => w.setEntryFavourite(beach.id, true));
+      final same = readDanaviewSearchSnapshot(store.reader.db, unlessFingerprint: first.fingerprint);
+      expect(same.changed, isFalse);
+      expect(same.fingerprint, first.fingerprint);
+
+      // Rename, move and trash each change it.
+      var fp = first.fingerprint;
+      Future<void> expectChanged(LibraryWrite<Object?> op) async {
+        await store.write(op);
+        final s = readDanaviewSearchSnapshot(store.reader.db, unlessFingerprint: fp);
+        expect(s.changed, isTrue);
+        fp = s.fingerprint;
+      }
+
+      await expectChanged((w, now) => w.renameEntry(beach.id, 'shore.jpg', now: now));
+      final other = await folderNamed(store, 'Other');
+      fp = readDanaviewSearchSnapshot(store.reader.db).fingerprint;
+      await expectChanged((w, now) => w.moveEntries([beach.id], other, now: now));
+      await expectChanged((w, now) => w.trashEntries([beach.id], now: now));
+
+      final loaded = await loadDanaviewSearchSnapshot(store.paths.databasePath);
+      expect(loaded.fingerprint, fp);
+      final index = NameIndex()..replacePreparedSource(danaviewSearchSourceId, loaded.source!);
+      expect(_names(index.search(const SearchQuery('summer'))), ['Summer trip']);
+      expect(index.search(const SearchQuery('shore')).hits, isEmpty);
+      final unchanged = await loadDanaviewSearchSnapshot(store.paths.databasePath, unlessFingerprint: fp);
+      expect(unchanged.changed, isFalse);
+    });
+
     test('NameSearchBackend answers through the SearchBackend hook', () async {
       final SearchBackend backend = NameSearchBackend()..index.replaceSource('x', [_file('1', 'Report.pdf', kind: FileKind.document, subKind: 'pdf')]);
       expect(backend.id, 'names');

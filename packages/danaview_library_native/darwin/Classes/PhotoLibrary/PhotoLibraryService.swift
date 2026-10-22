@@ -269,8 +269,8 @@ final class PhotoLibraryService: NSObject, PHPhotoLibraryChangeObserver {
         assets.reserveCapacity(window.count)
         if !window.isEmpty {
           for asset in result.objects(at: IndexSet(integersIn: window)) {
-            // Cheap fields only: no resource lookups on the page path (see PhotoAssetMapping).
-            if let record = PhotoAssetMapping.pageRecord(from: asset) { assets.append(record) }
+            // Large pages: cheap fields only, no resource lookups (see PhotoAssetMapping).
+            if let record = PhotoAssetMapping.gridRecord(from: asset, pageSize: limit) { assets.append(record) }
           }
         }
         completion(.success(PhotoPageRecord(

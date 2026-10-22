@@ -129,8 +129,16 @@ final class PhotoLibraryServiceTests: XCTestCase {
     XCTAssertFalse(videos.assets.isEmpty, "run_xctests.sh seeds a movie")
     XCTAssertTrue(videos.assets.contains { $0.durationMs > 0 })
     XCTAssertTrue(photos.assets.allSatisfy { $0.widthPx > 0 && $0.heightPx > 0 })
-    // Pages carry cheap fields only (no resource lookups); fetchAssets adds the resource facts.
-    XCTAssertTrue(photos.assets.allSatisfy { $0.uti == nil && $0.mimeType == nil && $0.originalFilename == nil && !$0.isRaw })
+    // Large pages carry cheap fields only (no resource lookups); fetchAssets adds the resource facts.
+    let seeded = PHAsset.fetchAssets(with: PhotoLibraryService.options(for: .baseline))
+    seeded.enumerateObjects { asset, _, _ in
+      let cheap = PhotoAssetMapping.gridRecord(from: asset, pageSize: PhotoAssetMapping.fullRecordPageLimit + 1)
+      XCTAssertTrue(cheap.map { $0.uti == nil && $0.mimeType == nil && $0.originalFilename == nil && !$0.isRaw } ?? true)
+    }
+    // A screen-sized page (the Home tray, a first grid screen) carries full records.
+    let small = try page(service, PhotoFetchKey(filter: .photos, sort: .creationNewestFirst, albumId: nil), offset: 0, limit: 4)
+    XCTAssertFalse(small.assets.isEmpty)
+    XCTAssertTrue(small.assets.allSatisfy { $0.uti != nil && $0.mimeType != nil && $0.originalFilename != nil })
     let full = try resultOf { service.fetchAssets(photos.assets.map(\.localIdentifier), completion: $0) }
     XCTAssertEqual(full.map(\.localIdentifier), photos.assets.map(\.localIdentifier))
     XCTAssertTrue(full.contains { $0.uti == "public.heic" && $0.mimeType == "image/heic" }, "the seeded HEIC")

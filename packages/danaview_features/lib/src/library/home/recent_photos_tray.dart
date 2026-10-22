@@ -15,7 +15,8 @@
 // * The system photos come from the tray's own listing of the whole library
 //   ([recentSystemPhotosProvider]), so an album picked on the Photos tab does not narrow it.
 // * The tray never asks for photo access: it lists the system library only after the opt-in, and
-//   then starts loading it (the user already granted access when opting in, V2-103).
+//   then only when the OS already grants read access (checked without prompting); a stored opt-in
+//   with access not yet decided leaves the library unlisted until the Photos tab asks (V2-103).
 
 import 'dart:async';
 
@@ -162,9 +163,15 @@ class _RecentPhotosTrayState extends ConsumerState<RecentPhotosTray> {
     final system = ref.read(systemPhotosControllerProvider);
     if (system.available && !system.opened) {
       final controller = ref.read(systemPhotosControllerProvider.notifier);
-      unawaited(controller.setFilter(SystemPhotoFilter.photos, albumId: system.albumId).then((_) {
-        if (!ref.read(systemPhotosControllerProvider).opened) return controller.open();
-        return null;
+      unawaited(controller.setFilter(SystemPhotoFilter.photos, albumId: system.albumId).then((_) async {
+        // The stored opt-in can disagree with the OS (a backup restored on a new device, reset
+        // privacy settings, the app killed during the first prompt): read the access without
+        // prompting and open only when it is already readable. Otherwise the system library stays
+        // unlisted until the Photos tab's own opt-in asks (V2-103).
+        await controller.refreshAuthorization();
+        if (!mounted) return;
+        final now = ref.read(systemPhotosControllerProvider);
+        if (!now.opened && now.authorization.canRead) await controller.open();
       }));
     }
     if (ref.read(desktopRootResolverProvider) != null) {

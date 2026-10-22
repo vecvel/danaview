@@ -12,6 +12,8 @@
 //   cells now on screen are served before the ones flung past.
 // * Failures (corrupt file, unsupported source, iCloud-only asset) are remembered for the session,
 //   so a cell scrolling back does not ask again; the cell shows its type icon.
+// * Format fallback: a freshly generated non-JPEG thumbnail (HEIC) that the engine cannot decode
+//   is regenerated as JPEG, and the session asks JPEG from then on (V2-28).
 // * Prefetch: [updatePrefetch] moves the native window (`PHCachingImageManager`) for `ph:` items.
 //
 // Nothing here logs ids, names or paths (rule 30).
@@ -55,11 +57,15 @@ final class UiThumbDecoder implements ThumbDecoder {
   }
 }
 
-/// The format the disk cache stores on [platform] (V2-28): WebP on Android, HEIC on iOS (the
-/// platform writes JPEG before iOS 17), JPEG elsewhere.
+/// The format the disk cache stores on [platform] (V2-28): WebP on Android, JPEG on Apple and
+/// elsewhere.
+///
+/// iOS requests JPEG, not HEIC: ARCH V2-28's "HEIC on iOS 17+" is **[VERIFY: HOM-04]** and stays
+/// off until `test/v12/thumbs/heic_decode_ios_test.dart` (a hosted iOS Simulator check that
+/// decodes a native HEIC output through [UiThumbDecoder]) has passed and is recorded. Even with
+/// HEIC requested, [ThumbnailService] falls back to JPEG when the engine cannot decode it.
 NativeThumbnailFormat thumbnailFormatFor(TargetPlatform platform) => switch (platform) {
       TargetPlatform.android => NativeThumbnailFormat.webp,
-      TargetPlatform.iOS => NativeThumbnailFormat.heic,
       _ => NativeThumbnailFormat.jpeg,
     };
 
@@ -140,6 +146,10 @@ final class ThumbnailStats {
 
   /// Failures remembered for the session.
   int failures = 0;
+
+  /// Freshly generated thumbnails that did not decode in the requested format and were
+  /// regenerated as JPEG.
+  int jpegFallbacks = 0;
 }
 
 /// The thumbnail cache of the Home.
@@ -170,8 +180,12 @@ final class ThumbnailService {
   /// Jobs running at once.
   final int maxConcurrent;
 
-  /// Format written to disk.
+  /// Format requested from the platform (until a fallback, see [effectiveFormat]).
   final NativeThumbnailFormat format;
+
+  /// The format requested now: [format], or JPEG for the rest of the session once a freshly
+  /// generated thumbnail in [format] did not decode here (V2-28: HEIC the engine can't read).
+  NativeThumbnailFormat get effectiveFormat => _jpegOnly ? NativeThumbnailFormat.jpeg : format;
 
   /// Encoder quality.
   final double quality;
@@ -183,6 +197,7 @@ final class ThumbnailService {
   int _running = 0;
   int _ids = 0;
   bool _disposed = false;
+  bool _jpegOnly = false;
 
   /// Counters.
   final ThumbnailStats stats = ThumbnailStats();
@@ -336,6 +351,37 @@ final class ThumbnailService {
       }
     }
     if (job.cancelled) return null;
+    final out = await _generate(job, effectiveFormat);
+    if (out == null || job.cancelled) return null;
+    try {
+      return await _decoder.decode(out.path);
+    } on Object {
+      await disk.evict(key);
+      // The engine could not read what the platform wrote (V2-28: HEIC on an engine without a
+      // HEIC codec). Ask JPEG from now on and regenerate this one instead of failing it.
+      if (out.format == NativeThumbnailFormat.jpeg) {
+        _fail(key);
+        return null;
+      }
+      _jpegOnly = true;
+      stats.jpegFallbacks++;
+      if (job.cancelled) return null;
+      final again = await _generate(job, NativeThumbnailFormat.jpeg);
+      if (again == null || job.cancelled) return null;
+      try {
+        return await _decoder.decode(again.path);
+      } on Object {
+        await disk.evict(key);
+        _fail(key);
+        return null;
+      }
+    }
+  }
+
+  /// Asks the platform for [job]'s thumbnail in [fmt] and commits it to the disk tier. Null when
+  /// cancelled or failed (failures other than cancel / busy are remembered).
+  Future<({String path, NativeThumbnailFormat format})?> _generate(_ThumbJob job, NativeThumbnailFormat fmt) async {
+    final key = job.key;
     final part = await disk.partPathFor(key);
     final id = 'th-${++_ids}';
     job.nativeRequestId = id;
@@ -349,7 +395,7 @@ final class ThumbnailService {
           width: r.sizeClass.pixels,
           height: r.sizeClass.pixels,
           outputPath: part,
-          format: format,
+          format: fmt,
           quality: quality,
         );
       } else {
@@ -360,7 +406,7 @@ final class ThumbnailService {
           height: r.sizeClass.pixels,
           outputPath: part,
           mode: r.sizeClass.mode,
-          format: format,
+          format: fmt,
           quality: quality,
         );
       }
@@ -375,8 +421,7 @@ final class ThumbnailService {
       }
       final path = await disk.commit(key, part);
       stats.generated++;
-      if (job.cancelled) return null;
-      return await _decoder.decode(path);
+      return (path: path, format: out.format);
     } on LibraryNativeException catch (e) {
       await disk.discard(part);
       if (e.code != LibraryNativeErrorCode.cancelled && e.code != LibraryNativeErrorCode.busy) _fail(key);

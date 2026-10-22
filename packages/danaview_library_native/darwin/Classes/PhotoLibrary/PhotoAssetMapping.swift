@@ -1,10 +1,13 @@
 // OWNER: HOM-02
 //
 // PHAsset → PhotoAssetRecord and image properties → PhotoDetailRecord (ARCH v1.2 §8; V2-V2 Apple
-// half). Two grid records: `pageRecord` (fetchPage) reads PHAsset properties only, because
-// `PHAssetResource.assetResources(for:)` is a per-asset database lookup that a 200-500 asset page
-// can't afford (HOM-04's 120 ms visible-cell budget); its filename, UTI and MIME are nil, RAW is
-// false and Live comes from `photoLive`. `record` (fetchAssets for a few ids, assetDetail) adds the
+// half). Two grid records: `pageRecord` (large fetchPage pages) reads PHAsset properties only,
+// because `PHAssetResource.assetResources(for:)` is a per-asset database lookup that a 200-500
+// asset page can't afford (HOM-04's 120 ms visible-cell budget); its filename, UTI and MIME are
+// nil, RAW is false and Live comes from `photoLive`. A page of at most `fullRecordPageLimit`
+// assets (about one screen: the Home tray, a first grid screen) gets full records, and the Dart
+// source fills the flags of larger pages through fetchAssets in small batches after each page, so
+// every shown cell gets its RAW badge. `record` (fetchAssets, assetDetail, small pages) adds the
 // resource facts: RAW from the asset's resources (`public.camera-raw-image` conformance, RAW+JPEG pairs as
 // `.alternatePhoto`), HDR from `photoHDR`, Live from `photoLive` (or a paired-video resource),
 // HEIC/AVIF from the primary resource's UTI. EXIF basics come from ImageIO properties, which reads
@@ -15,6 +18,15 @@ import ImageIO
 import Photos
 
 enum PhotoAssetMapping {
+  /// Pages of at most this many assets carry full records (one resource lookup per asset);
+  /// larger pages carry `pageRecord`s.
+  static let fullRecordPageLimit = 48
+
+  /// The record fetchPage returns for [asset] in a page of [pageSize] assets.
+  static func gridRecord(from asset: PHAsset, pageSize: Int) -> PhotoAssetRecord? {
+    pageSize <= fullRecordPageLimit ? record(from: asset) : pageRecord(from: asset)
+  }
+
   /// The resource whose name, type and bytes stand for [asset] (the original, not an edit).
   static func primaryResource(_ resources: [PHAssetResource], kind: PhotoAssetKind) -> PHAssetResource? {
     let preferred: [PHAssetResourceType] = kind == .video ? [.video, .fullSizeVideo] : [.photo, .fullSizePhoto, .alternatePhoto]

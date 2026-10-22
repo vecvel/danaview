@@ -51,6 +51,9 @@ stays null, S4).
   (`DANAVIEW_EDITOR`, `DANAVIEW_AUTO_CAPTIONS`, v1.1 release checklist §3.2/§3.3). `DANAVIEW_PHOTO_EDITOR`,
   `DANAVIEW_BEAUTY`, `DANAVIEW_AI_STUDIO` stay off.
 - `documentsFilterShown` (HOM-18) stays `false` until S3.
+- The S2 candidate stays at version **`1.0.0+1`** (owner decision 2026-10-22, BUILD_PLAN header):
+  `pubspec.yaml` and `app_info.dart` are never bumped; S2-R builds with `--build-name=1.0.0
+  --build-number=1`. (The `1.2.0+4` bump in S1's backups was reverted by the S1-R fixer.)
 - With the flag off the app is the S1 app (pinned by `s2_wiring_test.dart` "flag off", INT-101's
   `flags_off_test.dart`, the S1 wiring test and HOM-15's suite).
 
@@ -264,14 +267,16 @@ v1.1 release defines `DANAVIEW_EDITOR=true`, `DANAVIEW_AUTO_CAPTIONS=true`.
 
 | Batch | 1.2.0 defines | Started / ended | Result |
 |---|---|---|---|
-| 1 · every 1.2.0 flag off | none | 07:25 / 07:58 | **20 of 20 files pass** (s01–s18, `x_android_api28`, `x_ios_background_export`; `x_android_export_background` skipped on iOS as designed) |
+| 1 · every 1.2.0 flag off | none | 07:25 / 07:58; re-run on `2aafc88` (product code identical at `7d943c3`) 10:35 / 11:03 | **20 of 20 files pass** both times (s01–s18, `x_android_api28`, `x_ios_background_export`; `x_android_export_background` skipped on iOS as designed) |
 | 2 · S2 flag set | `DANAVIEW_FILES_HOME=true` (via `DV_E2E_EXTRA_DEFINES`, confirmed on the running `flutter test` command line) | 08:14 / 08:42 | **partial**: 20 of 20 files pass, but against the new Home shell **without the S2 library** (no `filesHomeOverrides` in QA-00's boot, FIX-S2Q-5); to be re-run once FIX-S2Q-5 lands |
 
 Simulator realities, reported not failed (both batches): HEVC/MOV not offered (`hevcEncode false`);
 `pausedInBackground observed: false`; s13 start latency 267 / 233 ms (device budget 100 ms). s07 burned
 cues 341 and 324 changed samples; s08 3 cues; s15 head -14.6 dBFS, body -9.0 dBFS. Logs and summary:
-`build/e2e/ios/6663101E-6BE7-47D4-B3B8-055700BF2E02/`. The iPhone 16 simulator was already booted
-(not by this ticket) and was left as found.
+`build/e2e/ios/6663101E-6BE7-47D4-B3B8-055700BF2E02/`. In the first run the iPhone 16 simulator was
+already booted (not by this ticket) and was left as found; for the re-run S2-Q booted it and shut it
+down at 11:03. Batch 2 was not re-run: `E2eApp._boot` is unchanged (FIX-S2Q-5 open), so a re-run would
+test the same incomplete composition.
 
 Batch 2 is **partial**, not a pass of the gate requirement. QA-00's `E2eApp._boot` mirrors
 `lib/main.dart` step by step but not S2-W's `filesHomeOverrides`, so in the flag-on batch the Home is

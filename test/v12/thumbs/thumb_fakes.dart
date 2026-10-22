@@ -136,12 +136,19 @@ final class FakeDecoder implements ThumbDecoder {
   final PixelTracker tracker;
   final MemoryThumbDisk? disk;
   final Set<String> corrupt = {};
+
+  /// Formats this "engine" has no codec for (the generator tags non-JPEG files with their format).
+  final Set<NativeThumbnailFormat> undecodable = {};
   int decodes = 0;
 
   @override
   Future<ThumbBitmap> decode(String path) async {
     decodes++;
     if (corrupt.contains(path) || disk?.files[path] == 'corrupt') throw const FormatException('corrupt');
+    final content = disk?.files[path];
+    if (content != null && undecodable.any((f) => content == 'generated:${f.name}')) {
+      throw const FormatException('no codec');
+    }
     final cls = ThumbSizeClass.values.firstWhere((c) => path.contains('/${c.name}/'), orElse: () => ThumbSizeClass.m);
     final side = cls.pixels;
     final h = cls == ThumbSizeClass.l ? side * 3 ~/ 4 : side;
@@ -165,6 +172,12 @@ class FakeGenerator implements ThumbnailGenerator {
   final Set<String> noDocumentThumbnail = {};
 
   final List<String> started = [];
+
+  /// The format of each request, in order.
+  final List<NativeThumbnailFormat> formats = [];
+
+  /// Formats this "platform" writes as JPEG instead (the iOS < 17 HEIC downgrade).
+  final Set<NativeThumbnailFormat> writesJpegFor = {};
   final List<String> cancelled = [];
   final List<({List<String> start, List<String> stop})> caching = [];
   final Map<String, Completer<void>> _gates = {};
@@ -188,6 +201,7 @@ class FakeGenerator implements ThumbnailGenerator {
 
   Future<NativeThumbnail> _make(String id, String source, String outputPath, int w, int h, NativeThumbnailFormat f) async {
     started.add(source);
+    formats.add(f);
     _sources[id] = source;
     if (gated) {
       final g = Completer<void>();
@@ -198,8 +212,9 @@ class FakeGenerator implements ThumbnailGenerator {
     if (cancelled.contains(id)) throw const LibraryNativeException(LibraryNativeErrorCode.cancelled, 'cancelled');
     final code = failures[source];
     if (code != null) throw LibraryNativeException(code, 'scripted');
-    disk?.files[outputPath] = 'generated';
-    return NativeThumbnail(path: outputPath, width: w, height: h, format: f);
+    final written = writesJpegFor.contains(f) ? NativeThumbnailFormat.jpeg : f;
+    disk?.files[outputPath] = written == NativeThumbnailFormat.jpeg ? 'generated' : 'generated:${written.name}';
+    return NativeThumbnail(path: outputPath, width: w, height: h, format: written);
   }
 
   @override

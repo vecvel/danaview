@@ -9,6 +9,9 @@
 // The root package reaches danaview_library(_native) through danaview_features.
 // ignore_for_file: depend_on_referenced_packages
 
+import 'dart:io';
+
+import 'package:danaview_features/src/library/photo_viewer/photo_exif_reader.dart';
 import 'package:danaview_features/src/library/photo_viewer/photo_info.dart';
 import 'package:danaview_features/src/library/photo_viewer/photo_viewer_actions.dart';
 import 'package:danaview_features/src/library/photo_viewer/photo_viewer_entry.dart';
@@ -160,6 +163,109 @@ void main() {
       expect(info.cameraModel, 'X100V');
       expect(info.aperture, 2.8);
       expect(info.formatLabel, 'JPEG');
+    });
+  });
+
+  group('file EXIF (Danaview and desktop photos)', () {
+    void expectFixture(PhotoExif? exif) {
+      expect(exif, isNotNull);
+      expect(exif!.cameraMake, 'FUJIFILM');
+      expect(exif.cameraModel, 'X-T5');
+      expect(exif.lensModel, 'XF23mmF1.4 R LM WR');
+      expect(exif.exposureSeconds, closeTo(1 / 250, 1e-9));
+      expect(exif.aperture, closeTo(2.8, 1e-9));
+      expect(exif.iso, 400);
+      expect(exif.focalLengthMm, 23);
+      expect(exif.takenAt, DateTime(2026, 9, 14, 17, 42, 5));
+      expect(exif.width, 7728);
+      expect(exif.height, 5152);
+    }
+
+    test('TIFF in both byte orders, JPEG APP1 and the HEIC Exif item', () {
+      expectFixture(parsePhotoExif(buildExifTiff()));
+      expectFixture(parsePhotoExif(buildExifTiff(endian: Endian.little)));
+      expectFixture(parsePhotoExif(buildExifJpeg(buildExifTiff())));
+      expectFixture(parsePhotoExif(buildExifJpeg(buildExifTiff(endian: Endian.little))));
+      expectFixture(parsePhotoExif(buildExifHeic(buildExifTiff())));
+    });
+
+    test('garbage, truncated and EXIF-less files answer null without throwing', () {
+      expect(parsePhotoExif(Uint8List.fromList(List<int>.filled(2048, 7))), isNull);
+      expect(parsePhotoExif(Uint8List(0)), isNull);
+      final jpeg = buildExifJpeg(buildExifTiff());
+      for (final cut in [3, 12, 40, 90, jpeg.length ~/ 2]) {
+        expect(() => parsePhotoExif(Uint8List.sublistView(jpeg, 0, cut)), returnsNormally);
+      }
+      final heic = buildExifHeic(buildExifTiff());
+      expect(() => parsePhotoExif(Uint8List.sublistView(heic, 0, heic.length - 40)), returnsNormally);
+      expect(parsePhotoExif(Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xDA, 0, 2, 0xFF, 0xD9])), isNull);
+      expect(readPhotoExif('/nonexistent/hom11/none.jpg'), isNull);
+      expect(parseExifDateTime('0000:00:00 00:00:00'), isNull);
+      expect(parseExifDateTime('2026:09:14 17:42:05'), DateTime(2026, 9, 14, 17, 42, 5));
+    });
+
+    test('reads a real file read-only and leaves its bytes and timestamp unchanged', () {
+      final dir = Directory.systemTemp.createTempSync('hom11_exif_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File('${dir.path}/x.jpg')..writeAsBytesSync(buildExifJpeg(buildExifTiff()));
+      final before = file.readAsBytesSync();
+      final modified = file.lastModifiedSync();
+      expectFixture(readPhotoExif(file.path));
+      expect(file.readAsBytesSync(), before);
+      expect(file.lastModifiedSync(), modified);
+    });
+
+    testWidgets('a Danaview-folder JPEG shows Camera, Lens and Exposure rows from its EXIF', (tester) async {
+      final lib = await ViewerLib.open(tester);
+      await lib.addPhoto(tester, 'DSCF0001.JPG', DateTime(2026, 9, 14, 17, 42), bytes: buildExifJpeg(buildExifTiff()));
+      final item = danaviewItems(lib.store).single;
+      final info = (await tester.runAsync(() => loadPhotoInfo(item, store: lib.store)))!;
+      expect(info.source, PhotoInfoSource.danaviewFolder);
+      expect(info.lensModel, 'XF23mmF1.4 R LM WR');
+      final rows = photoInfoRows(info);
+      expect(_value(rows, 'camera'), 'FUJIFILM X-T5');
+      expect(_value(rows, 'lens'), 'XF23mmF1.4 R LM WR');
+      expect(_value(rows, 'exposure'), '1/250 s · ƒ/2.8 · ISO 400 · 23 mm');
+      // library.db keeps winning where it knows the value (dimensions, capture time).
+      expect(_value(rows, 'dimensions'), '4032 × 3024 · 12.2 MP');
+      expect(_value(rows, 'taken'), '14 September 2026, 17:42');
+      // No location is read or shown (ARCH §9.4): the fixture's GPS IFD carries latitude 51.
+      expect(rows.any((r) => r.value.contains('51')), isFalse);
+      await lib.close(tester);
+    });
+
+    testWidgets('a Danaview HEIC reads its Exif item; the stored camera wins over EXIF', (tester) async {
+      final lib = await ViewerLib.open(tester);
+      await lib.addPhoto(tester, 'IMG_0001.HEIC', DateTime(2026, 9, 14, 17, 42), camera: 'Stored model', bytes: buildExifHeic(buildExifTiff()));
+      final item = danaviewItems(lib.store).single;
+      final info = (await tester.runAsync(() => loadPhotoInfo(item, store: lib.store)))!;
+      expect(info.cameraModel, 'Stored model');
+      expect(info.lensModel, 'XF23mmF1.4 R LM WR');
+      expect(info.iso, 400);
+      await lib.close(tester);
+    });
+
+    test('a desktop photo fills lens and exposure from its file; scanned facts win', () {
+      final dir = Directory.systemTemp.createTempSync('hom11_exif_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File('${dir.path}/beach.jpg')..writeAsBytesSync(buildExifJpeg(buildExifTiff()));
+      return loadPhotoInfo(desktopPhoto(file.path)).then((info) {
+        expect(info.cameraModel, 'X100V');
+        expect(info.aperture, 2.8);
+        expect(info.iso, 200);
+        expect(info.lensModel, 'XF23mmF1.4 R LM WR');
+        expect(info.exposureSeconds, closeTo(1 / 250, 1e-9));
+        expect(info.focalLengthMm, 23);
+      });
+    });
+
+    test('system photos never read a file', () async {
+      var calls = 0;
+      await loadPhotoInfo(systemPhoto('A1'), system: FakeViewerSystemLibrary(), readExif: (_) {
+        calls++;
+        return null;
+      });
+      expect(calls, 0);
     });
   });
 

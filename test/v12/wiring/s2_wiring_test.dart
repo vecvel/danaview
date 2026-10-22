@@ -23,6 +23,7 @@ import 'package:danaview/router/app_router.dart';
 import 'package:danaview/wiring/files_home_wiring.dart';
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/flags.dart';
+import 'package:danaview_features/src/library/desktop/desktop_drop_target.dart';
 import 'package:danaview_features/src/library/file_actions/file_actions.dart';
 import 'package:danaview_features/src/library/files/library_store_providers.dart';
 import 'package:danaview_features/src/library/home/recent_photos_tray.dart' show HomeTabRequestNotification;
@@ -31,9 +32,11 @@ import 'package:danaview_features/src/library/import/import_providers.dart';
 import 'package:danaview_features/src/library/organise/organise_providers.dart';
 import 'package:danaview_features/src/library/photo_viewer/photo_viewer_actions.dart';
 import 'package:danaview_features/src/library/selection/selection_bar.dart';
+import 'package:danaview_features/src/library/sources/desktop_photos_source.dart';
 import 'package:danaview_features/src/more/settings_sections/library_storage_section.dart';
 import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
+import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -91,6 +94,7 @@ Future<_App> _pumpApp(
   TargetPlatform platform = TargetPlatform.iOS,
   Future<void> Function(FixtureLibrary lib)? seed,
   List<String>? roots,
+  List<Override> overrides = const [],
 }) async {
   FeatureFlags.debugFilesHomeOverride = filesHome;
   addTearDown(FeatureFlags.debugReset);
@@ -109,7 +113,7 @@ Future<_App> _pumpApp(
         openThumbnails: (_) async => throw const FileSystemException('no thumbnails in tests'),
         observeLifecycle: false,
       )))!;
-  final container = ProviderContainer(overrides: [...env.overrides, ...runtime.overrides]);
+  final container = ProviderContainer(overrides: [...env.overrides, ...runtime.overrides, ...overrides]);
   tester.platformDispatcher.textScaleFactorTestValue = textScale;
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
   await tester.pumpWidget(UncontrolledProviderScope(container: container, child: const DanaviewApp()));
@@ -328,15 +332,80 @@ void main() {
       await app.dispose();
     });
 
-    testWidgets('a tab request (See all, a folder hit) re-opens the shell on that tab', (tester) async {
+    testWidgets('a tab request (See all, a folder hit) switches the tab without re-mounting the Home', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 844), 1.0));
       final app = await _pumpApp(tester, filesHome: true, seed: (lib) => _seedMixed(lib, tester));
-      const HomeTabRequestNotification(HomeTab.photos).dispatch(tester.element(find.text('Open file')));
+      final shell = tester.state(find.byType(DanaviewHomeScreen));
+      FilesHomeState.showTab(tester.element(find.text('Open file')), HomeTab.photos);
       await pumpFrames(tester, count: 8);
-      expect(tester.state<FilesHomeState>(find.byType(FilesHome)).initialTab, HomeTab.photos);
       expect(find.text('Open file').hitTestable(), findsNothing, reason: 'the Photos tab is showing');
+      expect(tester.state(find.byType(DanaviewHomeScreen)), same(shell), reason: 'the shell switched tabs itself');
+      // A See all from the Overview (the tray's own notification) does the same.
+      await app.tab(HomeTab.home);
+      expect(tester.state(find.byType(DanaviewHomeScreen)), same(shell));
+      const HomeTabRequestNotification(HomeTab.folders).dispatch(tester.element(find.text('Open file')));
+      await pumpFrames(tester, count: 8);
+      expect(find.text('Danaview folders'), findsWidgets);
+      expect(tester.state(find.byType(DanaviewHomeScreen)), same(shell), reason: 'no keyed re-mount');
       await app.dispose();
     });
+
+    for (final (platform, shown) in [
+      (TargetPlatform.macOS, true),
+      (TargetPlatform.linux, true),
+      (TargetPlatform.iOS, false),
+      (TargetPlatform.android, false),
+    ]) {
+      testWidgets('the Photos tab ${shown ? 'has' : 'has no'} desktop photo sidebar on ${platform.name}', (tester) async {
+        debugDefaultTargetPlatformOverride = platform;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        useSurface(tester, const TestSurface(Size(1024, 768), 1.0));
+        final app = await _pumpApp(
+          tester,
+          filesHome: true,
+          platform: platform,
+          // No real Pictures folders or volumes are scanned in tests.
+          overrides: [desktopRootResolverProvider.overrideWithValue(null)],
+        );
+        await app.tab(HomeTab.photos);
+        expect(find.byKey(const ValueKey('s2-desktop-sidebar')), shown ? findsOneWidget : findsNothing);
+        expect(find.byType(DesktopFolderDropTarget), shown ? findsOneWidget : findsNothing);
+        if (shown) {
+          expect(find.byKey(const ValueKey('s2-photos-two-pane')), findsOneWidget);
+          expect(find.byKey(const ValueKey('desktop-root-all')), findsOneWidget);
+          expect(tester.getSize(find.byKey(const ValueKey('desktop-root-all'))).height, greaterThanOrEqualTo(44));
+          // A dropped folder becomes a photo root.
+          final drop = tester.state<DesktopFolderDropTargetState>(find.byType(DesktopFolderDropTarget));
+          await tester.runAsync(() => drop.handleDrop([Directory.systemTemp.path]));
+          await pumpFrames(tester, count: 4);
+          expect(app.container.read(desktopPhotosControllerProvider).rootsOf(DesktopRootKind.custom), isNotEmpty);
+        }
+        expect(tester.takeException(), isNull);
+        debugDefaultTargetPlatformOverride = null;
+        await app.dispose();
+      });
+    }
+
+    for (final width in [280.0, 1280.0]) {
+      testWidgets('the desktop Photos pane does not overflow at ${width.toInt()} px @1.35x', (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        useSurface(tester, TestSurface(Size(width, 640), 1.35));
+        final app = await _pumpApp(
+          tester,
+          filesHome: true,
+          textScale: 1.35,
+          platform: TargetPlatform.macOS,
+          overrides: [desktopRootResolverProvider.overrideWithValue(null)],
+        );
+        await app.tab(HomeTab.photos);
+        expect(find.byKey(ValueKey(width < FilesHomePhotosPane.twoPaneMinWidth ? 's2-photos-stacked' : 's2-photos-two-pane')),
+            findsOneWidget);
+        expect(tester.takeException(), isNull);
+        debugDefaultTargetPlatformOverride = null;
+        await app.dispose();
+      });
+    }
 
     testWidgets('the import sheet opens from Home', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 844), 1.0));

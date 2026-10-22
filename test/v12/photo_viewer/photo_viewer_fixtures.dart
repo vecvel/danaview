@@ -9,6 +9,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:danaview_features/src/library/photos/photo_grid_item.dart';
 import 'package:danaview_library/danaview_library.dart';
@@ -40,10 +41,11 @@ class ViewerLib {
     int flags = 0,
     String? camera,
     SourceHint hint = SourceHint.photos,
+    List<int>? bytes,
   }) =>
       run(tester, (s) => s.write((wr, now) {
             final job = wr.beginImport(now: now);
-            (wr.fs.openPart(job.id)..writeFromSync(List<int>.filled(2048, 7))).closeSync();
+            (wr.fs.openPart(job.id)..writeFromSync(bytes ?? List<int>.filled(2048, 7))).closeSync();
             return wr.commitImport(
               job.id,
               ImportedFileInfo(
@@ -187,4 +189,142 @@ class FakeViewerSystemLibrary implements SystemPhotoLibrary {
 
   @override
   Stream<PhotoLibraryAuthorization> get authorizationChanges => const Stream.empty();
+}
+
+
+/// The EXIF a fixture photo carries.
+const exifFixture = (
+  make: 'FUJIFILM',
+  model: 'X-T5',
+  lens: 'XF23mmF1.4 R LM WR',
+  exposure: (1, 250),
+  fNumber: (28, 10),
+  iso: 400,
+  focal: (23, 1),
+  taken: '2026:09:14 17:42:05',
+  width: 7728,
+  height: 5152,
+);
+
+/// A TIFF/EXIF block (header, IFD0 with Make/Model and the Exif and GPS pointers, the Exif IFD,
+/// a GPS IFD with a latitude that must never be read) in [endian].
+Uint8List buildExifTiff({Endian endian = Endian.big}) {
+  final out = BytesBuilder();
+  final data = BytesBuilder(); // out-of-line values, appended after the IFDs
+  // Layout: header 8 | IFD0 (4 entries) | Exif IFD (8 entries) | GPS IFD (1 entry) | data.
+  const ifd0At = 8;
+  const ifd0Len = 2 + 4 * 12 + 4;
+  const exifAt = ifd0At + ifd0Len;
+  const exifLen = 2 + 8 * 12 + 4;
+  const gpsAt = exifAt + exifLen;
+  const gpsLen = 2 + 1 * 12 + 4;
+  const dataAt = gpsAt + gpsLen;
+
+  int place(List<int> bytes) {
+    final at = dataAt + data.length;
+    data.add(bytes);
+    if (data.length.isOdd) data.addByte(0);
+    return at;
+  }
+
+  Uint8List u16(int v) => (ByteData(2)..setUint16(0, v, endian)).buffer.asUint8List();
+  Uint8List u32(int v) => (ByteData(4)..setUint32(0, v, endian)).buffer.asUint8List();
+  List<int> asciiZ(String s) => [...s.codeUnits, 0];
+  List<int> rational((int, int) r) => [...u32(r.$1), ...u32(r.$2)];
+
+  List<int> entry(int tag, int type, int count, List<int> inlineOrPointer) {
+    final value = List<int>.filled(4, 0);
+    for (var i = 0; i < inlineOrPointer.length && i < 4; i++) {
+      value[i] = inlineOrPointer[i];
+    }
+    return [...u16(tag), ...u16(type), ...u32(count), ...value];
+  }
+
+  List<int> asciiEntry(int tag, String text) {
+    final bytes = asciiZ(text);
+    return bytes.length <= 4 ? entry(tag, 2, bytes.length, bytes) : entry(tag, 2, bytes.length, u32(place(bytes)));
+  }
+
+  List<int> rationalEntry(int tag, (int, int) r) => entry(tag, 5, 1, u32(place(rational(r))));
+  List<int> shortEntry(int tag, int v) => entry(tag, 3, 1, u16(v));
+  List<int> longEntry(int tag, int v) => entry(tag, 4, 1, u32(v));
+
+  final ifd0 = [
+    ...u16(4),
+    ...asciiEntry(0x010F, exifFixture.make),
+    ...asciiEntry(0x0110, exifFixture.model),
+    ...longEntry(0x8769, exifAt),
+    ...longEntry(0x8825, gpsAt),
+    ...u32(0),
+  ];
+  final exif = [
+    ...u16(8),
+    ...rationalEntry(0x829A, exifFixture.exposure),
+    ...rationalEntry(0x829D, exifFixture.fNumber),
+    ...shortEntry(0x8827, exifFixture.iso),
+    ...asciiEntry(0x9003, exifFixture.taken),
+    ...rationalEntry(0x920A, exifFixture.focal),
+    ...longEntry(0xA002, exifFixture.width),
+    ...longEntry(0xA003, exifFixture.height),
+    ...asciiEntry(0xA434, exifFixture.lens),
+    ...u32(0),
+  ];
+  final gps = [
+    ...u16(1),
+    ...entry(0x0002, 5, 1, u32(place(rational((51, 1))))),
+    ...u32(0),
+  ];
+  assert(ifd0.length == ifd0Len && exif.length == exifLen && gps.length == gpsLen);
+  out
+    ..add(endian == Endian.little ? [0x49, 0x49, 42, 0] : [0x4D, 0x4D, 0, 42])
+    ..add(u32(ifd0At))
+    ..add(ifd0)
+    ..add(exif)
+    ..add(gps)
+    ..add(data.takeBytes());
+  return out.takeBytes();
+}
+
+/// A JPEG head (SOI, APP0, APP1 Exif, a fake scan, EOI) carrying [tiff].
+Uint8List buildExifJpeg(Uint8List tiff) {
+  final app1 = [...'Exif'.codeUnits, 0, 0, ...tiff];
+  final len = app1.length + 2;
+  return Uint8List.fromList([
+    0xFF, 0xD8, //
+    0xFF, 0xE0, 0, 16, ...'JFIF'.codeUnits, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0,
+    0xFF, 0xE1, len >> 8, len & 0xFF, ...app1,
+    0xFF, 0xDA, 0, 2, 1, 2, 3, 4,
+    0xFF, 0xD9,
+  ]);
+}
+
+/// A minimal HEIC (ftyp, meta with iinf/iloc naming an `Exif` item, mdat) carrying [tiff].
+Uint8List buildExifHeic(Uint8List tiff) {
+  List<int> box(String type, List<int> body) {
+    final size = 8 + body.length;
+    return [...(ByteData(4)..setUint32(0, size)).buffer.asUint8List(), ...type.codeUnits, ...body];
+  }
+
+  List<int> be16(int v) => [v >> 8 & 0xFF, v & 0xFF];
+  List<int> be32(int v) => (ByteData(4)..setUint32(0, v)).buffer.asUint8List();
+
+  final ftyp = box('ftyp', [...'heic'.codeUnits, 0, 0, 0, 0, ...'mif1'.codeUnits, ...'heic'.codeUnits]);
+  final infeHvc = box('infe', [2, 0, 0, 0, ...be16(1), ...be16(0), ...'hvc1'.codeUnits, 0]);
+  final infeExif = box('infe', [2, 0, 0, 0, ...be16(2), ...be16(0), ...'Exif'.codeUnits, 0]);
+  final iinf = box('iinf', [0, 0, 0, 0, ...be16(2), ...infeHvc, ...infeExif]);
+  final payload = [...be32(0), ...tiff];
+  List<int> metaWith(int exifOffset) {
+    final iloc = box('iloc', [
+      0, 0, 0, 0, // version 0
+      0x44, 0x00, // offset size 4, length size 4, base offset size 0
+      ...be16(2),
+      ...be16(1), ...be16(0), ...be16(1), ...be32(0), ...be32(0),
+      ...be16(2), ...be16(0), ...be16(1), ...be32(exifOffset), ...be32(payload.length),
+    ]);
+    return box('meta', [0, 0, 0, 0, ...box('hdlr', [0, 0, 0, 0, 0, 0, 0, 0, ...'pict'.codeUnits, ...List.filled(13, 0)]), ...iinf, ...iloc]);
+  }
+
+  final metaLen = metaWith(0).length;
+  final exifOffset = ftyp.length + metaLen + 8;
+  return Uint8List.fromList([...ftyp, ...metaWith(exifOffset), ...box('mdat', payload)]);
 }

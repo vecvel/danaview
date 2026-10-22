@@ -3,8 +3,12 @@
 // The Home name search controller (HOM plan §8.1, D-98f / V2-119; ARCH §7.6). It keeps one
 // [NameIndex] filled from three kinds of source:
 //
-// - the Danaview folders: re-read from the library store after each write (lazily, on the next
-//   query; a query on screen is re-run);
+// - the Danaview folders: re-read after library writes in a background isolate
+//   ([danaviewSearchLoaderProvider]), never on a keystroke. At most one read is in flight; writes
+//   that land meanwhile coalesce into one more read. A read whose fingerprint matches the index
+//   (a write that changed no searchable row, such as an import progress checkpoint) swaps nothing
+//   in. A new snapshot is swapped in O(1) and a query on screen is re-run; until then a keystroke
+//   searches the index as it is;
 // - the linked folders: a bounded background walk of the 1.1 linked roots (names of folders and of
 //   the files the 1.1 browser lists), re-walked when the roots change;
 // - the system library, when shown: its owner fills the `system` source of
@@ -54,6 +58,16 @@ final nameSearchBackendProvider = Provider<NameSearchBackend>((ref) => NameSearc
 /// The engine behind the Home search field: the name search, unless AIS-51 overrides this with the
 /// on-device index while it is enabled and built.
 final searchBackendProvider = Provider<SearchBackend>((ref) => ref.watch(nameSearchBackendProvider));
+
+/// Reads the Danaview folders of [store] for the index; the items are built only when the rows'
+/// fingerprint differs from [unlessFingerprint].
+typedef DanaviewSearchLoader = Future<DanaviewSearchSnapshot> Function(LibraryStore store, {int? unlessFingerprint});
+
+/// How the controller reads the Danaview folders: in a background isolate over its own read-only
+/// connection (tests that run in fake time override it with [readDanaviewSearchSnapshot] inline).
+final danaviewSearchLoaderProvider = Provider<DanaviewSearchLoader>(
+  (ref) => (store, {unlessFingerprint}) => loadDanaviewSearchSnapshot(store.paths.databasePath, unlessFingerprint: unlessFingerprint),
+);
 
 /// How the linked-folder walk lists a folder.
 final linkedSearchBrowserProvider = Provider<DirectoryBrowser>((ref) => LibraryRepository.browseDirectory);
@@ -125,22 +139,74 @@ final class NameSearchState {
 /// Drives the search field.
 final class NameSearchController extends StateNotifier<NameSearchState> {
   /// A controller over [_ref]'s providers.
-  NameSearchController(this._ref) : super(const NameSearchState());
+  NameSearchController(this._ref) : super(const NameSearchState()) {
+    _scheduleDanaview();
+  }
 
   final Ref _ref;
   int _seq = 0;
-  bool _danaviewStale = true;
   int _linkedWalk = 0;
+
+  // The Danaview source: dirty after a write, one read in flight at a time.
+  bool _danaviewDirty = true;
+  Future<void>? _danaviewLoad;
+  LibraryStore? _danaviewStore;
+  int? _danaviewFingerprint;
 
   /// Most hits asked for.
   static const int limit = 100;
 
   NameIndex get _index => _ref.read(nameSearchIndexProvider);
 
-  /// Marks the Danaview folders changed; a query on screen is re-run.
+  /// Marks the Danaview folders changed and re-reads them in the background; a query on screen is
+  /// re-run once a changed snapshot is swapped in.
   void libraryChanged() {
-    _danaviewStale = true;
-    if (state.active) unawaited(_run());
+    _danaviewDirty = true;
+    _scheduleDanaview();
+  }
+
+  /// Completes when no Danaview read is pending (tests).
+  Future<void> get danaviewSettled async {
+    while (_danaviewLoad case final load?) {
+      await load;
+    }
+  }
+
+  void _scheduleDanaview() {
+    if (_danaviewLoad != null || !mounted) return;
+    _danaviewLoad = _loadDanaview().whenComplete(() => _danaviewLoad = null);
+  }
+
+  Future<void> _loadDanaview() async {
+    while (_danaviewDirty && mounted) {
+      _danaviewDirty = false;
+      final store = _ref.read(libraryStoreProvider);
+      if (store == null) {
+        _danaviewStore = null;
+        _danaviewFingerprint = null;
+        if (_index.sourceIds.contains(danaviewSearchSourceId)) {
+          _index.removeSource(danaviewSearchSourceId);
+          if (state.active) unawaited(_run());
+        }
+        continue;
+      }
+      final DanaviewSearchSnapshot snapshot;
+      try {
+        snapshot = await _ref.read(danaviewSearchLoaderProvider)(store, unlessFingerprint: identical(store, _danaviewStore) ? _danaviewFingerprint : null);
+      } on Object {
+        // A store closing under the read: the next write or store change reads again.
+        continue;
+      }
+      if (!mounted) return;
+      // The store changed while reading: its change set the dirty flag, so the loop reads again.
+      if (!identical(_ref.read(libraryStoreProvider), store)) continue;
+      _danaviewStore = store;
+      _danaviewFingerprint = snapshot.fingerprint;
+      final source = snapshot.source;
+      if (source == null) continue;
+      _index.replacePreparedSource(danaviewSearchSourceId, source);
+      if (state.active) unawaited(_run());
+    }
   }
 
   /// Re-walks the linked folders [roots] in the background; a query on screen is re-run after.
@@ -170,17 +236,6 @@ final class NameSearchController extends StateNotifier<NameSearchState> {
     state = NameSearchState(kinds: state.kinds);
   }
 
-  void _syncDanaview() {
-    if (!_danaviewStale) return;
-    _danaviewStale = false;
-    final store = _ref.read(libraryStoreProvider);
-    if (store == null) {
-      _index.removeSource(danaviewSearchSourceId);
-    } else {
-      refreshDanaviewSearchSource(_index, store.reader);
-    }
-  }
-
   Future<void> _run() async {
     final seq = ++_seq;
     final current = state;
@@ -188,7 +243,6 @@ final class NameSearchController extends StateNotifier<NameSearchState> {
       state = NameSearchState(query: current.query, kinds: current.kinds);
       return;
     }
-    _syncDanaview();
     final query = SearchQuery(current.query, limit: limit, kinds: current.kinds, includeFolders: current.kinds == null);
     SearchResults results;
     try {

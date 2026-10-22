@@ -218,19 +218,32 @@ Ticket **S1-R**, Mac half, on `v1.2-wip`, 2026-10-22. Build tree: `4499909` plus
 04:20 (the version bump below and other builders' S2 work in progress behind `DANAVIEW_FILES_HOME`,
 off; captured by backup `f865874`). Nothing was signed, uploaded or changed in the signing settings.
 
+**The S1 candidate commit is `f865874`** (root `pubspec.yaml` without `danaview_library` /
+`danaview_library_native`, `lib/main.dart` without `filesHomeOverrides`), built at version
+**`1.0.0+1`** (owner decision 2026-10-22, BUILD_PLAN header; see "Version"). Later `v1.2-wip`
+commits are **not** the S1 candidate: they link the S2 PhotoKit plugin (`danaview_library_native`)
+and wire the Files Home overrides, which changes the binary, possibly the privacy manifest, and the
+App Review answers that item 13 assumes. The owner may tag it (proposed `v1.2-s1-rc1`, on a commit
+of `f865874` plus only the version revert below); until then sign from `f865874` as in "Signing".
+
 ### Version
 
-| File | Before | After |
-|---|---|---|
-| `pubspec.yaml` | `1.0.0+1` | **`1.2.0+4`** |
-| `packages/danaview_features/lib/src/more/app_info.dart` (must match, `settings_account_test`) | `1.0.0` / `1` | `1.2.0` / `4` |
-| `test/settings_account_test.dart` | literals `Danaview 1.0.0 (1)`, `Version 1.0.0 (build 1)` | read from `danaviewAppVersion` / `danaviewBuildNumber` (no literal to bump next time) |
+**The candidate is `1.0.0+1`.** The owner decided on 2026-10-22 (BUILD_PLAN header, commits
+`f0d7d57` / `dc7595a`) that nothing has been released yet, so every 1.1, 1.2 and 1.3 build and
+candidate stays at `1.0.0+1` and the first store release ships as 1.0.0 build 1 (AIS-41). The earlier
+S1-R bump to `1.2.0+4` (in backups after `4499909`, so also in `f865874`) predates that decision and
+was reverted by the S1-R fixer:
 
-Build 4 is above build 3, which the 1.1.0 checklist (`docs/v1.1/editor/release-checklist.md` §3.1)
-reserves for 1.1.0 and never applied (1.0.0 was build 1). If App Store Connect or Play already holds
-a build ≥ 4, the owner uses the next free number on both stores; the iOS `beta` lane takes the next
-TestFlight number by itself, `release` needs `BUILD_NUMBER=4`. None of the lanes may be used for
-the candidate before FIX-S1R-1 (see "Signing").
+| File | Bumped (wrong, in `f865874`) | Now |
+|---|---|---|
+| `pubspec.yaml` | `1.2.0+4` | **`1.0.0+1`** |
+| `packages/danaview_features/lib/src/more/app_info.dart` (must match, `settings_account_test`) | `1.2.0` / `4` | **`1.0.0` / `1`** |
+| `test/settings_account_test.dart` | — | kept: reads `danaviewAppVersion` / `danaviewBuildNumber` (no literal) |
+
+Because `f865874` still carries `1.2.0+4`, a signed build from it must first apply the same two-line
+revert (see "Signing"). The build, size and smoke records below were taken at `1.2.0+4`, before the
+decision; only the version strings differ from the `1.0.0+1` candidate. If a store already holds an
+uploaded build 1, the owner uses the next free number on both stores (BUILD_PLAN header).
 
 ### iOS release build
 
@@ -296,7 +309,7 @@ deferred: no device available.
 
 ### Android candidate
 
-pending: Windows (`flutter build appbundle --release` with the same defines and `1.2.0+4`,
+pending: Windows (`flutter build appbundle --release` with the same defines and `1.0.0+1`, from `f865874` as in "Signing",
 `check_native_libs.sh`, install and smoke on the API 35 emulator).
 
 ### Release checklist (S1)
@@ -304,12 +317,12 @@ pending: Windows (`flutter build appbundle --release` with the same defines and 
 | # | Item | Owner | Status |
 |---|---|---|---|
 | 1 | Gate: S1-W done; S1-Q Mac half green once FIX-S1Q-1 and FIX-S1Q-2 have landed (§7); Android half of S1-Q | INT-101 / AIS-43, Windows | open (see BUILD_STATE) |
-| 2 | Version `1.2.0+4` in `pubspec.yaml` and `app_info.dart` | S1-R | **done** |
+| 2 | Version `1.0.0+1` in `pubspec.yaml` and `app_info.dart` (owner decision 2026-10-22; the `1.2.0+4` bump reverted) | S1-R | **done** in the tree; applied on top of `f865874` when signing |
 | 3 | iOS release build with the S1 flag set, min-OS check, `NEWLAPACK` check | S1-R | **done** (above) |
 | 4 | Simulator install and smoke | S1-R | **done** (debug build, release impossible on simulator) |
 | 5 | Device smoke of the signed build | owner / lab | deferred: no device available |
 | 6 | Android release build, native-lib check, emulator smoke | Windows lane | pending: Windows |
-| 7 | **Signing**: archive with the distribution certificate and profile, Android upload key. **Blocked by FIX-S1R-1** for every fastlane lane (see "Signing" below): until INT-05 applies the v1.1 §3.2 Fastfile diff, `fastlane ios build` / `beta` / `release` and `fastlane android …` build **without** `DANAVIEW_EDITOR` / `DANAVIEW_AUTO_CAPTIONS` (editor hidden) and with build number 1 (`build`, `release`) or the next TestFlight number (`beta`), which is not the candidate. Sign only with the exact commands under "Signing", from a clean checkout of the candidate commit | **owner** (after FIX-S1R-1 for any lane) | open, blocked |
+| 7 | **Signing**: archive with the distribution certificate and profile, Android upload key. **Blocked by FIX-S1R-1** for every fastlane lane (see "Signing" below): until INT-05 applies the v1.1 §3.2 Fastfile diff, `fastlane ios build` / `beta` / `release` and `fastlane android …` build **without** `DANAVIEW_EDITOR` / `DANAVIEW_AUTO_CAPTIONS` (editor hidden) and with build number 1 (`build`, `release`) or the next TestFlight number (`beta`), which is not the candidate. Sign only with the exact commands under "Signing", from a clean checkout of the candidate commit `f865874` | **owner** (after FIX-S1R-1 for any lane) | open, blocked |
 | 8 | **Upload** to TestFlight / Play internal testing (candidates stay internal until the owner's go; v1.1 goes live after v1.3) | **owner** | open |
 | 9 | **`legalEffectiveDate`** (`legal_texts.dart`, still `11 October 2026`) to the candidate's release date, then regenerate the hosted privacy page from `privacyPolicyText` | **owner** (date), then the release integration ticket | open |
 | 10 | **Owner policy review Q-S1**: the Cloudflare and M-Lab wording in "When Danaview uses the internet" (ST-05, V2-406) | **owner** | open |
@@ -318,7 +331,80 @@ pending: Windows (`flutter build appbundle --release` with the same defines and 
 | 13 | Privacy manifest report from the signed archive (Organizer › Generate Privacy Report): unchanged from 1.1 (S1 adds no SDK) | owner | open |
 | 14 | Launch image placeholder (Flutter validation warning, as in 1.1) | owner | open, not a blocker |
 
-**S1-R Mac verdict:** the iOS candidate `1.2.0+4` builds in release with only the S1 flags, passes the
+### Signing
+
+Owner only, on a machine with the distribution certificate / provisioning profile (iOS) and the
+upload key in `android/key.properties` (Android). Nothing here was run by S1-R.
+
+**Why not fastlane yet (FIX-S1R-1, §Defects below).** `ios/fastlane/Fastfile` `flutter_ipa` and
+`android/fastlane/Fastfile` `flutter_aab` pass no `--dart-define`, so every lane builds with
+`DANAVIEW_EDITOR` and `DANAVIEW_AUTO_CAPTIONS` off (editor hidden, not the smoked app); the iOS
+`build` / `release` lanes default to `BUILD_NUMBER` 1 and `beta` takes the next TestFlight number,
+Android `release` defaults to version code 1 and `build` to a timestamp, so the build number does not
+come from the candidate's pubspec. The lanes also don't pin the 1.2.0 flags. Use them only after
+FIX-S1R-1 lands; until then use the commands below.
+
+**1. Clean checkout of the candidate and the version revert**
+
+```text
+git fetch origin
+git worktree add ../danaview-s1-rc f865874
+cd ../danaview-s1-rc
+sed -i '' 's/^version: 1.2.0+4$/version: 1.0.0+1/' pubspec.yaml
+sed -i '' "s/danaviewAppVersion = '1.2.0'/danaviewAppVersion = '1.0.0'/; s/danaviewBuildNumber = 4/danaviewBuildNumber = 1/" \
+  packages/danaview_features/lib/src/more/app_info.dart
+git diff --stat            # exactly these two files, 3 lines
+flutter pub get
+flutter test test/settings_account_test.dart   # version sync test
+```
+
+(If the owner tags a candidate commit instead, `git worktree add ../danaview-s1-rc <tag>` and skip the
+two `sed` lines.) Stage the Whisper framework as for the 1.1 release (`WhisperCore.xcframework`
+vendored; nothing downloaded).
+
+**2. iOS, signed IPA**
+
+```text
+flutter build ipa --release \
+  --build-name=1.0.0 --build-number=1 \
+  --export-options-plist=ios/ExportOptions.plist \
+  --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true \
+  --dart-define=DANAVIEW_FILES_HOME=false --dart-define=DANAVIEW_PHOTO_EDITOR=false \
+  --dart-define=DANAVIEW_BEAUTY=false --dart-define=DANAVIEW_AI_STUDIO=false
+```
+
+`ios/ExportOptions.plist`: `app-store-connect`, automatic signing, team `63LNPXAB49`,
+`manageAppVersionAndBuildNumber false` (App Store Connect keeps `1.0.0 (1)`), upload symbols. Output:
+`build/ios/ipa/*.ipa` and `build/ios/archive/Runner.xcarchive`. Alternative: run the same command
+with `--no-codesign` instead of `--export-options-plist`, open `build/ios/archive/Runner.xcarchive` in
+Xcode › Organizer, Distribute App › App Store Connect › Upload (or Export), automatic signing.
+Before upload check the archived `Info.plist` reads `CFBundleShortVersionString 1.0.0`,
+`CFBundleVersion 1`, and rerun `scripts/ci/editor/check_ios_min_os.sh --min 15.0` on `Runner.app`.
+Organizer › Generate Privacy Report on this archive gives checklist item 13.
+
+**3. Android, signed App Bundle** (Windows laptop or any machine with the upload key)
+
+```text
+flutter build appbundle --release \
+  --build-name=1.0.0 --build-number=1 \
+  --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true \
+  --dart-define=DANAVIEW_FILES_HOME=false --dart-define=DANAVIEW_PHOTO_EDITOR=false \
+  --dart-define=DANAVIEW_BEAUTY=false --dart-define=DANAVIEW_AI_STUDIO=false
+```
+
+`android/key.properties` must exist (otherwise the bundle is debug-signed). Output:
+`build/app/outputs/bundle/release/app-release.aab`; run `scripts/ci/editor/check_native_libs.sh` on it as for 1.1.
+Upload by hand in the Play Console (internal testing) until FIX-S1R-1 lands.
+
+Afterwards `git worktree remove ../danaview-s1-rc`.
+
+### Defects (S1-R)
+
+| Id | Owner | Defect | Files | Fix direction |
+|---|---|---|---|---|
+| **FIX-S1R-1** | INT-05 / the release integration ticket (AIS-41 in 1.2/1.3) | The fastlane lanes cannot build the candidate: `flutter_ipa` (`ios/fastlane/Fastfile`) and `flutter_aab` (`android/fastlane/Fastfile`) pass no `--dart-define`, so `DANAVIEW_EDITOR` / `DANAVIEW_AUTO_CAPTIONS` are off and the 1.2.0 flags are not pinned; iOS `build` / `release` default to `BUILD_NUMBER` 1, `beta` uses the next TestFlight number, Android `release` defaults to version code 1 and `build` to a timestamp, none read the pubspec | `ios/fastlane/Fastfile`, `android/fastlane/Fastfile` | Pass `DANAVIEW_EDITOR=true`, `DANAVIEW_AUTO_CAPTIONS=true` and the slice's 1.2.0 flags (S1: all four `false`; from S2 the S<n>-R set) in `flutter_ipa` / `flutter_aab` (v1.1 checklist §3.2 diff); take the build number from the pubspec `version:` (or fail when `BUILD_NUMBER` is unset) instead of defaulting to 1 / a timestamp / the next TestFlight number. Blocks checklist item 7 for any lane, not the manual commands above |
+
+**S1-R Mac verdict:** the iOS candidate (`f865874`, built at `1.2.0+4` before the owner decision; signed as `1.0.0+1`) builds in release with only the S1 flags, passes the
 15.0 floor and `NEWLAPACK` checks, and smokes green on the iPhone 16 / iOS 26.5 simulator (debug build
 of the same tree). Signing, upload, the effective date, Q-S1 and the M-Lab store answers are the
 owner's and stay open; the Android candidate is pending on Windows.

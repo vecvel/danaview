@@ -5,6 +5,12 @@
 // 50 ms per keystroke; the mid-tier device run (iPhone 12) is recorded in the HOM-19 report. The
 // index is built from a 50,000-row library.db through the Danaview source, so the read path the app
 // uses on every library change is timed too.
+//
+// The second case times the first keystroke after a library change, rebuild included: the
+// Danaview source is re-read and sorted in a background isolate (not timed against the budget: it
+// never runs on the UI isolate), and what the UI isolate does — a keystroke while that read is in
+// flight, then the O(1) swap plus the first full search over the new snapshot — must stay inside
+// 50 ms. A write that changes no searchable row (an import progress checkpoint) builds nothing.
 
 import 'dart:math';
 
@@ -88,6 +94,73 @@ void main() {
     print('HOM-19 benchmark: $_count names, index build ${build.elapsedMilliseconds} ms, '
         '$keystrokes keystrokes, mean ${(total.inMicroseconds / keystrokes / 1000).toStringAsFixed(2)} ms, '
         'worst ${(worst.inMicroseconds / 1000).toStringAsFixed(2)} ms');
+    expect(worst, lessThanOrEqualTo(_budget));
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test('first keystroke after a library change, rebuild included, ≤ 50 ms on the UI isolate', () async {
+    final store = await openTestStore(FakeLibraryClock(t0));
+    await _seed(store);
+    final dbPath = store.paths.databasePath;
+    final index = NameIndex()
+      // A linked-folder source beside it, so the query merges across sources as in the app.
+      ..replaceSource('linked', [
+        for (var i = 0; i < 20000; i++)
+          SearchItem(id: ItemId.opaque('/linked/$i'), name: 'Linked holiday clip $i.mov', origin: SearchOrigin.linked, kind: FileKind.video, folderName: 'Clips'),
+      ]);
+    final initial = await loadDanaviewSearchSnapshot(dbPath);
+    index.replacePreparedSource(danaviewSearchSourceId, initial.source!);
+    for (final q in ['ho', 'pd', 're', 'holiday']) {
+      index.search(SearchQuery(q));
+    }
+
+    var worst = Duration.zero;
+    void time(void Function() keystroke) {
+      final sw = Stopwatch()..start();
+      keystroke();
+      sw.stop();
+      if (sw.elapsed > worst) worst = sw.elapsed;
+    }
+
+    var fingerprint = initial.fingerprint;
+    var rebuildMs = 0;
+    for (var round = 0; round < 3; round++) {
+      // A rename: a searchable change.
+      final entry = store.reader.db.select('SELECT id FROM entries WHERE trashed_at IS NULL ORDER BY id LIMIT 1 OFFSET ?', [round * 7]).first['id'] as String;
+      await store.write((w, now) => w.renameEntry(EntryId.parse(entry), 'Renamed holiday $round.pdf', now: now));
+      final rebuild = Stopwatch()..start();
+      final pending = loadDanaviewSearchSnapshot(dbPath, unlessFingerprint: fingerprint);
+      // A keystroke while the read is in flight answers from the index as it is.
+      time(() => index.search(const SearchQuery('holiday r')));
+      final snapshot = await pending;
+      rebuild.stop();
+      rebuildMs = rebuild.elapsedMilliseconds;
+      expect(snapshot.changed, isTrue);
+      fingerprint = snapshot.fingerprint;
+      // The swap and the first search over the new snapshot (fresh caches: a full scan).
+      late SearchResults r;
+      time(() {
+        index.replacePreparedSource(danaviewSearchSourceId, snapshot.source!);
+        r = index.search(SearchQuery('renamed holiday $round'));
+      });
+      expect(r.hits.map((h) => h.item.name), contains('Renamed holiday $round.pdf'));
+      time(() => index.search(SearchQuery('renamed holiday $round.')));
+    }
+
+    // An import progress checkpoint changes no searchable row: the read builds nothing.
+    await store.write((w, now) {
+      final job = w.beginImport(now: now, bytesTotal: 1 << 20);
+      w.recordImportProgress(job.id, 1 << 19);
+    });
+    final skip = Stopwatch()..start();
+    final unchanged = await loadDanaviewSearchSnapshot(dbPath, unlessFingerprint: fingerprint);
+    skip.stop();
+    expect(unchanged.changed, isFalse);
+    expect(unchanged.fingerprint, fingerprint);
+
+    // ignore: avoid_print
+    print('HOM-19 benchmark (after a change): background rebuild $rebuildMs ms (off the UI isolate), '
+        'unchanged check ${skip.elapsedMilliseconds} ms (off the UI isolate), '
+        'worst UI-isolate keystroke ${(worst.inMicroseconds / 1000).toStringAsFixed(2)} ms');
     expect(worst, lessThanOrEqualTo(_budget));
   }, timeout: const Timeout(Duration(minutes: 3)));
 }
