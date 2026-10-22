@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OWNER: HOM-22A (a5c4c4d answer 11)
+     Paths the library plugin's FileProvider (authority ${applicationId}.danaview.library.files) may
+     share: only the temporary read-only copies of share and "Open in another app"
+     (<cacheDir>/danaview-out/<UUID>/, exportout/FileOutSupport.kt TempCopyStore). No files-path:
+     the library (filesDir/library) is never exposed. Separate from the editor's
+     cache/danaview/editor/work/ and from open_with. -->
+<paths>
+    <cache-path name="danaview_out" path="danaview-out/" />
+</paths>
