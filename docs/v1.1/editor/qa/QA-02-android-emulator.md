@@ -23,9 +23,9 @@ is green. **Two items are not green:**
    crashed with SIGSEGV during an export cancel, and the cause is not proven. Also, `soak_host.py`
    still needs a manual folder step on Android after its own uninstall (W4b, Mac).
 
-FIX M-23 is fixed. s02 passes in both 2 GB batches and on API 29. Still open: the s18 close stall
-(Android lane, unproven), D10 residual and the a1 crash (Android lane), W4b (Mac), and the owner's
-manual tablet M1–M4. The owner accepts s13's low voice level on the emulator as an emulator
+FIX M-23 is fixed. s02 passes in both 2 GB batches and on API 29. Still open: the s18 close tap
+(QA-00 harness, root cause proven, FIX M-24, Mac), the D10 residual and the a1 crash (Android lane),
+W4b (Mac), and the owner's manual tablet M1–M4. The owner accepts s13's low voice level on the emulator as an emulator
 limitation.
 
 - **Re-run on 034a0d3, mains power, fresh install** ("Re-run of 2026-10-22 on code G" below):
@@ -310,29 +310,26 @@ gles3=true` (2 GB) and `tier=LOW api=29 ram=3143041024 gles3=true` (API 29).
 **M-23 is fixed.** s02 passed in both 2 GB batches and on API 29. On d680bd3 it failed in the 2 GB
 batch.
 
-**s18 on the 2 GB AVD: a stall at the second close (open, Android lane, cause not proven).** The
-test closes the editor, reopens the project, and closes it again. In batch 1, the second close timed
-out after Dart had logged `[EditorLifecycle] leaving the editor` and `exit callback`, and the editor
-screen was still showing. The logcat (`batch-s18.logcat.txt`, app pid 10210) shows:
+**s18 on the 2 GB AVD: the second close tap was swallowed (QA-00 harness, root cause proven,
+FIX M-24, Mac).** The test closes the editor, reopens the project, and closes it again. In batch 1
+the second close timed out ("Timed out after 60 s waiting for the editor to close") with the editor
+still on screen; in the logcat the reopened session's deck players are never released, because the
+second close was never requested at all (no `[EditorLifecycle] close requested` for it).
 
-- 09:05:48: the first close releases the 4 contingency deck players on the preview thread (tid
-  10288);
-- 09:05:52: `DanaviewPreview: open contingency` (the reopen) and 4 new deck players;
-- 09:06:04.415: `ExoPlayerImpl: Release bfa3348` on the main thread (Media3's FrameExtractor),
-  followed by a SurfaceUtils disconnect;
-- after that, no app output until the harness killed the process at 09:07:19. The 4 deck players
-  of the reopened session were never released. In the passing runs they are released within about
-  1 s of the close.
-
-So the platform main thread or the preview release path stalled. That fits a codec-release hang of
-the D9 kind, or a regression around the D9/D10 changes, but no thread dump was taken while the
-stall was live. Batch 2 ran with a `jdb` thread-dump watcher armed, and the watcher never fired.
-After that, a diagnostic loop ran s18 alone on the 2 GB AVD (`s18_close_stall/`, `-no-audio`,
-built from `dv2`). This folder does not record its code version, so it is not a result. 16 runs
-passed. Run 5 hung, but that run is invalid: the probe paused the Dart isolate through the VM
-service. Tally on 034a0d3 for the certifying command: 1 failure in 3 runs. Next step for the
-Android lane: when it recurs, take a thread dump while the stall is live, then check the main
-thread and the preview thread's release of the deck players.
+Cause (proven 2026-10-22 on emulator-5556, files in `s18_close_stall/`): QA-00's `E2eApp.tap`
+(`integration_test/editor/support/e2e_app.dart`, around line 241) does `await tester.pump()` between
+pointer down and pointer up. On a device that pump waits for a real frame. A slow frame (a GC, a
+loaded 2 GB emulator) holds the pointer past the long-press timeout (500 ms). The Close editor
+button (`DanaviewIconButton`, which has a Tooltip) then gives the gesture to the Tooltip as a long
+press, and its `onPressed` never runs. Proof: with a forced 700 ms slow frame 50 ms into the second
+Close press, s18 fails with the current `tap` (`slowframe_unfixed_results.txt`, 11:38) and passes
+with the pump removed (`slowframe_fixed_results.txt`, 11:40); the patched file is
+`s18_close_stall/e2e_app.dart.slow_fixed` (diagnostic copy in `dv2`, not committed). Fix: delete
+that one `await tester.pump()` between `startGesture` and `gesture.up()`; the 0.1 s timer always
+fires before the long-press timer. No Android-lane change is needed for s18. The earlier
+"main thread or preview release stalled" reading of this failure was wrong: nothing stalled, the
+close was never sent. The diagnostic loop (`s18_close_stall/repro_*`, 18 runs, 1 hang that was a
+probe artifact) is not a result.
 
 Evidence: `emulator-5556_Pixel_API_29_2GB/034a0d3/` (`batch_s01-s04_s18/`, `s18_alone_rerun_PASS/`,
 `batch2_s01-s04_s18_ALLPASS/`, `README.txt`, `CODE_VERSION.txt`) and
@@ -1267,15 +1264,15 @@ The earlier verdict on d680bd3 failed on s02 (M-23, now fixed) and on the QA-05 
   - the s09 close trace is clean.
 - **s13:** the owner accepts the low voice level on the emulator as an emulator limitation. Real-mic
   levels are a device check (QA-04, device lab). Every other s13 check passes.
-- **Android lane:** no defect found in QA-02 through d680bd3. On 034a0d3, the s18 close stall is a
-  possible Android-lane defect (below).
+- **Android lane:** no defect found in QA-02's own scenarios. The s18 failure on 034a0d3 is the QA-00
+  harness (FIX M-24, below).
 
 **Still open, by owner:**
 
-1. **Android lane: the s18 close stall on the 2 GB AVD** (034a0d3, 1 failure in 3 runs; see "Re-run
-   of 2026-10-22 on code G"). Take a thread dump while the stall is live, find the cause, and fix it
-   if it is ours. Then re-run s01–s04 and s18 in one batch on Pixel_API_29_2GB (fresh install,
-   `-feature GLESDynamicVersion`).
+1. **Mac (QA-00 harness): FIX M-24, the s18 close tap** (034a0d3, 1 failure in 3 runs; root cause
+   proven, see "Re-run of 2026-10-22 on code G"): remove the frame pump between pointer down and up
+   in `E2eApp.tap`. Then re-run s01–s04 and s18 in one batch on Pixel_API_29_2GB (fresh install,
+   `-feature GLESDynamicVersion`), and s18 on API 29 and API 35.
 2. **QA-05 Android half, see `QA-05-soak.md` §A0:**
    - Android lane: the D10 residual (run a, op #262: a seek right after a reverse acked frame 0) and
      the run a1 SIGSEGV during an export cancel (classed as an emulator codec crash, not proven).
@@ -1290,6 +1287,5 @@ the new code for the re-run items, d680bd3 and 88469c0 for the earlier certified
 owner's s13 emulator-limitation decision. If the fixes change code that other scenarios use, the lead
 decides whether a wider re-run is needed.
 
-**Android-lane items open in QA-02's own scenarios:** the s18 close stall on the 2 GB AVD (034a0d3,
-cause not proven). The `debugCaptureFrame` fix (ae6cda2) passed s18 in the batch on API 35 and API 29
+**Android-lane items open in QA-02's own scenarios:** none (s18 is FIX M-24, QA-00 harness). The `debugCaptureFrame` fix (ae6cda2) passed s18 in the batch on API 35 and API 29
 (88469c0 and d680bd3) and on the 2 GB AVD (d680bd3, and 034a0d3 batch 2).
