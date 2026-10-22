@@ -133,7 +133,8 @@ final class CallbackImportPicker implements ImportPicker {
 }
 
 /// Copies [ImportSourceKind.nativeUri] sources through the plugin's streamed copy. Native progress
-/// rows are the checkpoints (the copy fsyncs at its end; a resume truncates to `bytes_done`).
+/// rows are the checkpoints (the Apple copy fsyncs before each report; a resume truncates to
+/// `bytes_done`).
 final class NativeImportCopier implements ImportCopier {
   /// A copier over [pickers] (the default engine's when null).
   NativeImportCopier({NativePickers? pickers}) : _pickers = pickers ?? NativePickers();

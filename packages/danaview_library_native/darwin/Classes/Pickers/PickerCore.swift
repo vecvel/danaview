@@ -196,7 +196,8 @@ enum PickerCore {
 
   /// Copies [source] (opened read-only) into the file at [destination], appending from
   /// [resumeFrom] after truncating the destination to it (0: a fresh file). Calls [progress] with
-  /// the bytes in the destination every [progressEvery] bytes and at the end; stops with
+  /// the bytes in the destination (fsynced first, so each report is a durable checkpoint) every
+  /// [progressEvery] bytes and at the end; stops with
   /// `cancelled` when [isCancelled] turns true. The destination is fsynced before returning.
   /// Returns the bytes in the destination and the source size.
   static func streamCopy(
@@ -234,6 +235,10 @@ enum PickerCore {
     guard let out = OutputStream(toFileAtPath: destination, append: true) else { throw PickerFailure.io("destination can't be opened") }
     out.open()
     defer { out.close() }
+    // A read-only descriptor of the destination for fsync: every progress report is a durable
+    // checkpoint (the import stores it as `bytes_done`), so the bytes are on disk before it.
+    let syncFd = open(destination, O_RDONLY)
+    defer { if syncFd >= 0 { close(syncFd) } }
 
     do {
       try seekHandle(reader, to: UInt64(offset))
@@ -266,16 +271,12 @@ enum PickerCore {
       sinceProgress += Int64(written)
       if sinceProgress >= progressEvery {
         sinceProgress = 0
+        if syncFd >= 0 { fsync(syncFd) }
         progress(copied, total)
       }
     }
     out.close()
-    // fsync through a read-only descriptor of the destination.
-    let fd = open(destination, O_RDONLY)
-    if fd >= 0 {
-      fsync(fd)
-      close(fd)
-    }
+    if syncFd >= 0 { fsync(syncFd) }
     progress(copied, total)
     return (copied, total ?? copied)
   }

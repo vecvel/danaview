@@ -171,20 +171,26 @@ final class ThumbnailCoreTests: XCTestCase {
   }
 
   /// The miss budget is ≤ 120 ms for a 12 MP HEIC on the mid-tier device (recorded on the lab
-  /// iPhone 12); here the time on this host is printed for the report and only a loose bound is
-  /// asserted so a busy CI machine does not flake.
-  func testTwelveMegapixelHeicMissTime() throws {
+  /// iPhone 12). Here XCTest's `measure` reports this host's miss times in the test log ("measured
+  /// … values: […]", the first value is the cold miss) without a log call (ARCH rule 30), and only
+  /// a loose per-miss bound is asserted so a busy CI machine does not flake.
+  func testTwelveMegapixelHeicMissTimeQuickLook() throws { try measureHeicMiss(quickLook: true) }
+
+  func testTwelveMegapixelHeicMissTimeImageIO() throws { try measureHeicMiss(quickLook: false) }
+
+  private func measureHeicMiss(quickLook ql: Bool) throws {
     let src = try photo("12mp.heic", type: "public.heic", w: 4032, h: 3024)
-    for ql in [true, false] {
-      var times: [Double] = []
-      for i in 0..<3 {
-        let start = Date()
+    var i = 0
+    measure {
+      i += 1
+      let start = Date()
+      do {
         let o = try thumb(src, box: 384, format: .heic, quickLook: ql, name: "12mp-\(ql)-\(i)")
-        times.append(Date().timeIntervalSince(start) * 1000)
         XCTAssertEqual([o.widthPx, o.heightPx], [384, 384])
+      } catch {
+        XCTFail("12 MP HEIC thumbnail failed: \(error)")
       }
-      print("HOM-04 12MP HEIC -> M thumbnail miss (quickLook=\(ql)): first \(Int(times[0].rounded())) ms, best \(Int(times.min()!.rounded())) ms")
-      XCTAssertLessThan(times[0], 2000)
+      XCTAssertLessThan(Date().timeIntervalSince(start) * 1000, 2000)
     }
   }
 

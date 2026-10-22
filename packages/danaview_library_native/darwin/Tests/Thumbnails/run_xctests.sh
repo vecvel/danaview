@@ -79,7 +79,7 @@ let package = Package(
 )
 EOF
   (cd "$work" && swift test -j 2 2>&1) > "$work/test.log" || true
-  grep -E "Test Case.*(passed|failed|skipped)|error:|Executed|HOM-04 " "$work/test.log" || tail -40 "$work/test.log"
+  grep -E "Test Case.*(passed|failed|skipped|measured)|error:|Executed" "$work/test.log" || tail -40 "$work/test.log"
   if grep -q "with 0 failures" "$work/test.log" && ! grep -q "error:" "$work/test.log"; then exit 0; fi
   tail -40 "$work/test.log"
   exit 1
@@ -105,7 +105,7 @@ if [ "$mode" = "ios" ]; then
   tcc_db="$HOME/Library/Developer/CoreSimulator/Devices/$udid/data/Library/TCC/TCC.db"
   sqlite3 "$tcc_db" "update access set auth_version = 2 where service = 'kTCCServicePhotos' and client = 'com.vecvel.danaview.librarytests'"
   (xcodebuild test-without-building "${common[@]}" -parallel-testing-enabled NO 2>&1) > "$work/test.log" || true
-  grep -E "Test Case.*(passed|failed|skipped)|error:|Executed|TEST (EXECUTE )?(SUCCEEDED|FAILED)" "$work/test.log" || true
+  grep -E "Test Case.*(passed|failed|skipped|measured)|error:|Executed|TEST (EXECUTE )?(SUCCEEDED|FAILED)" "$work/test.log" || true
   xcrun simctl uninstall "$udid" com.vecvel.danaview.librarytests || true
   if grep -qE "TEST (EXECUTE )?SUCCEEDED" "$work/test.log"; then exit 0; fi
   tail -60 "$work/test.log"
