@@ -1,6 +1,8 @@
 # iOS release lanes. Run from the ios/ folder:  fastlane ios <lane>
 # Credentials are read from ios/fastlane/.env (git-ignored); see .env.example.
 
+require "open3"
+
 default_platform(:ios)
 
 ROOT = File.expand_path("../..", __dir__)
@@ -34,11 +36,42 @@ platform :ios do
     1
   end
 
+  # The danaview_whisper pod is linked into every iOS build, whatever the editor --dart-defines say
+  # (they only gate Dart code), so these checks apply to flags-off release builds as well.
+  RELEASE_APP = File.join(ROOT, "build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app")
+
+  # V-A1 / ARCH §23 item 3: no Mach-O in the app may reference Accelerate's NEWLAPACK interface
+  # (iOS 16.4+, strongly bound, so the app would not launch on the 15.0 floor). check_ios_min_os.sh
+  # does not probe `$NEWLAPACK` names, so they are looked for here with `nm -um`.
+  def check_no_newlapack!(app)
+    binaries = [File.join(app, File.basename(app, ".app"))] +
+               Dir[File.join(app, "Frameworks", "*.framework")].map { |fw| File.join(fw, File.basename(fw, ".framework")) } +
+               Dir[File.join(app, "Frameworks", "*.dylib")]
+    binaries.select! { |b| File.file?(b) }
+    UI.user_error!("No binaries found in #{app}") if binaries.empty?
+    offenders = binaries.select do |bin|
+      out, status = Open3.capture2e("xcrun", "nm", "-um", bin)
+      UI.user_error!("nm -um failed on #{bin}: #{out.lines.last(3).join.strip}") unless status.success?
+      out.include?("NEWLAPACK")
+    end
+    unless offenders.empty?
+      UI.user_error!("NEWLAPACK symbols are referenced by: #{offenders.map { |b| b.sub("#{app}/", '') }.join(', ')}")
+    end
+    UI.success("nm -um: no NEWLAPACK references in #{binaries.length} binaries")
+  end
+
   def flutter_ipa(build_number)
     Dir.chdir(ROOT) do
+      # WhisperCore.xcframework is git-ignored and the whisper podspec stops `pod install` without it.
+      # --if-missing is a no-op when its stamp matches (AI-05); it needs CMake >= 3.28 (brew install cmake).
+      sh("packages/danaview_whisper/tool/build_ios_xcframework.sh", "--if-missing")
       sh("flutter", "build", "ipa", "--release",
          "--export-options-plist=ios/ExportOptions.plist",
          "--build-number=#{build_number}")
+      # D-41: nothing in the app may need more than iOS 15.0 at load time.
+      UI.user_error!("Release app not found at #{RELEASE_APP}") unless File.directory?(RELEASE_APP)
+      sh("bash", "scripts/ci/editor/check_ios_min_os.sh", "--min", "15.0", RELEASE_APP)
+      check_no_newlapack!(RELEASE_APP)
     end
     Dir[File.join(IPA_DIR, "*.ipa")].max_by { |f| File.mtime(f) } || File.join(IPA_DIR, "danaview.ipa")
   end

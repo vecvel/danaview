@@ -18,19 +18,32 @@ platform :android do
     (codes.max || 0) + 1
   end
 
+  # ARCH §23 item 4 / D-43(b): the whisper libraries are exactly arm64-v8a + x86_64, 16 KB aligned,
+  # export only dv_*, <= 3 MB each. danaview_whisper is linked into every Android build whatever the
+  # editor --dart-defines say (they only gate Dart code), so flags-off AABs are checked the same way.
+  # Needs the Android NDK (llvm-readelf) and a JDK (jar); the script finds both itself.
+  def check_native_libs!(aab)
+    Dir.chdir(ROOT) do
+      sh("bash", "scripts/ci/editor/check_native_libs.sh", aab)
+    end
+  end
+
   def flutter_aab(version_code)
     if ENV["AAB"] && File.exist?(ENV["AAB"])
       UI.message("Using pre-built AAB from ENV['AAB']: #{ENV['AAB']}")
+      check_native_libs!(ENV["AAB"])
       return ENV["AAB"]
     end
     if File.exist?(AAB)
       UI.message("Using existing pre-built AAB: #{AAB}")
+      check_native_libs!(AAB)
       return AAB
     end
     UI.user_error!("android/key.properties is missing; release builds would be debug-signed") unless File.exist?(File.join(ROOT, "android/key.properties"))
     Dir.chdir(ROOT) do
       sh("flutter", "build", "appbundle", "--release", "--build-number=#{version_code}")
     end
+    check_native_libs!(AAB)
     AAB
   end
 
