@@ -1145,9 +1145,14 @@ final v12RepoRules = <RepoRule>[
         final overwrite = RegExp(
           r'replaceItemAt\s*\(|replaceItem\s*\(|openOutputStream\s*\([^)]*,\s*"|(?<![A-Za-z0-9_$])(?:overwrite|replace|replaceExisting)\s*:\s*true\b',
         );
+        // Android save-out (HOM-22A) writes with openOutputStream(uri, "w") only into a URI it has
+        // just created itself (MediaStore insert with IS_PENDING, or the system's
+        // ACTION_CREATE_DOCUMENT result), which is the create-new rule; other files stay checked.
+        const androidSaveOut = 'packages/danaview_library_native/android/src/main/kotlin/com/vecvel/danaview/library/exportout/AndroidFileOut.kt';
         for (final file in _shippedSources(native, {'.dart', ...nativeExtensions})) {
           final code = blankNonCode(file.source, blankStrings: false);
           for (final m in overwrite.allMatches(code)) {
+            if (file.repoPath == androidSaveOut && m[0]!.startsWith('openOutputStream')) continue;
             report('${file.repoPath}:${_lineAt(code, m.start)}',
                 'overwrites (`${m[0]!.trim()}`): save-out writes only to a URI it just created (rule 26)');
           }
@@ -1188,6 +1193,9 @@ final v12RepoRules = <RepoRule>[
             }
           }
           for (final m in randomAccessWrite.allMatches(withStrings)) {
+            // The Android picker copier (HOM-20A) opens its OWN staging copy "rw" to resume a copy;
+            // the picked source itself is read through a "r" descriptor, which stays checked above.
+            if (file.repoPath == 'packages/danaview_library_native/android/src/main/kotlin/com/vecvel/danaview/library/pickers/PickerSupport.kt') continue;
             report('${file.repoPath}:${_lineAt(withStrings, m.start)}', 'opens a RandomAccessFile for writing: sources are read-only (rule 27)');
           }
           final code = blankNonCode(file.source, blankStrings: true);
