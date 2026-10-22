@@ -7,8 +7,8 @@
 // own (import_memory_child.dart), which measures its own growth from a baseline taken after a
 // warm-up import to the peak while the worker isolate streams the file with one 1 MiB buffer.
 // The default size is 2 GiB; set DV_IMPORT_TEST_BYTES to run smaller (e.g. on a machine without
-// the free disk space), and the copy throughput is printed against a plain `cp` of the same file
-// for the §10 budget.
+// the free disk space), and the copy throughput is printed against a plain OS copy (`File.copy`)
+// of the same file for the §10 budget.
 
 import 'dart:convert';
 import 'dart:io';
@@ -55,16 +55,16 @@ void main() {
     final growthMb = ((m['peak']! as int) - (m['baseline']! as int)) / (1024 * 1024);
     expect(growthMb, lessThan(64), reason: 'the import process grew by ${growthMb.toStringAsFixed(1)} MB');
 
-    // Throughput against `cp` (informational; the §10 budget is measured on the device tiers). The
-    // library copy goes first, so the disk holds at most one real copy at a time.
+    // Throughput against a plain OS copy of the same file (informational; the §10 budget is
+    // measured on the device tiers). `File.copy` is the platform's own copy (copyfile, sendfile or
+    // CopyFileW), so it runs on every host; a `cp` process needs Git's usr/bin on Windows
+    // (FIX-S1Q-A4). The library copy goes first, so the disk holds at most one real copy at a time.
     Directory(root).deleteSync(recursive: true);
-    final cpWatch = Stopwatch()..start();
-    final cp = Process.runSync('cp', [file.path, '${src.path}/cp.out']);
-    cpWatch.stop();
-    if (cp.exitCode == 0) {
-      File('${src.path}/cp.out').deleteSync();
-      // ignore: avoid_print
-      print('import ${m['ms']} ms, cp ${cpWatch.elapsedMilliseconds} ms, rss growth ${growthMb.toStringAsFixed(1)} MB');
-    }
+    final copyWatch = Stopwatch()..start();
+    final copy = await file.copy('${src.path}/copy.out');
+    copyWatch.stop();
+    await copy.delete();
+    // ignore: avoid_print
+    print('import ${m['ms']} ms, os copy ${copyWatch.elapsedMilliseconds} ms, rss growth ${growthMb.toStringAsFixed(1)} MB');
   }, timeout: const Timeout(Duration(minutes: 10)));
 }

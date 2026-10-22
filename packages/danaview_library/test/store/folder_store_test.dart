@@ -23,9 +23,11 @@ void main() {
     root = tempRoot();
     clock = FakeLibraryClock(t0);
     store = await openStore(root, clock);
+    // The store a test reopened (by hand) is closed too, and before the temp root goes: a group
+    // `tearDown` would run after `tempRoot`'s deletion, which Windows refuses while library.db is
+    // open (FIX-S1Q-A5).
+    addTearDown(() => store.close());
   });
-
-  tearDown(() => store.close());
 
   FolderId imported() => store.reader.systemFolder(FolderSystemRole.imported)!.id;
 

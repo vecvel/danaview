@@ -155,11 +155,17 @@ final class _InProcessHost implements _WriterHost {
 }
 
 final class _IsolateHost implements _WriterHost {
-  _IsolateHost._(this._isolate, this._commands, this._replies, this.report);
+  _IsolateHost._(this._isolate, this._commands, this._replies, this._exited, this.report);
+
+  /// How long [close] waits for the writer isolate to dispose library.db and exit before it kills it.
+  static const Duration closeTimeout = Duration(seconds: 10);
 
   final Isolate _isolate;
   final SendPort _commands;
   final ReceivePort _replies;
+
+  /// Completes when the writer isolate has exited (and so let go of library.db).
+  final Future<void> _exited;
 
   @override
   final LibraryOpenReport report;
@@ -170,7 +176,16 @@ final class _IsolateHost implements _WriterHost {
 
   static Future<_IsolateHost> spawn(String root, DateTime now, Random? random) async {
     final replies = ReceivePort();
-    final isolate = await Isolate.spawn(_writerMain, (replies.sendPort, root, now, random), debugName: 'library-writer');
+    final exit = ReceivePort();
+    final exited = exit.first;
+    final Isolate isolate;
+    try {
+      isolate = await Isolate.spawn(_writerMain, (replies.sendPort, root, now, random), debugName: 'library-writer', onExit: exit.sendPort);
+    } catch (_) {
+      replies.close();
+      exit.close();
+      rethrow;
+    }
     final ready = Completer<(SendPort, LibraryOpenReport)>();
     late final _IsolateHost host;
     replies.listen((Object? message) {
@@ -190,7 +205,7 @@ final class _IsolateHost implements _WriterHost {
     });
     try {
       final (port, report) = await ready.future;
-      return host = _IsolateHost._(isolate, port, replies, report);
+      return host = _IsolateHost._(isolate, port, replies, exited, report);
     } catch (_) {
       replies.close();
       isolate.kill();
@@ -246,6 +261,9 @@ final class _IsolateHost implements _WriterHost {
       c.completeError(StateError('library store is closed'));
     }
     _pending.clear();
+    // The writer disposes library.db, closes its port and exits. Wait for that, so a closed store
+    // no longer holds the file: Windows refuses to delete or move an open file (FIX-S1Q-A5).
+    await _exited.timeout(closeTimeout, onTimeout: () => _isolate.kill(priority: Isolate.immediate));
   }
 
   @override

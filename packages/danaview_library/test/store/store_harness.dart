@@ -21,9 +21,14 @@ String tempRoot() {
   return dir.path;
 }
 
-/// Opens an in-process store.
-Future<LibraryStore> openStore(String root, FakeLibraryClock clock, {LibraryFaults faults = LibraryFaults.none, int? seed}) =>
-    LibraryStore.open(root: root, clock: clock.call, background: false, faults: faults, random: seed == null ? null : Random(seed));
+/// Opens an in-process store and closes it after the test. The close is registered after the
+/// temp root's deletion, so it runs first: Windows refuses to delete a folder while library.db in
+/// it is open (FIX-S1Q-A5). Closing twice, or after `abandon`, does nothing.
+Future<LibraryStore> openStore(String root, FakeLibraryClock clock, {LibraryFaults faults = LibraryFaults.none, int? seed}) async {
+  final store = await LibraryStore.open(root: root, clock: clock.call, background: false, faults: faults, random: seed == null ? null : Random(seed));
+  addTearDown(store.close);
+  return store;
+}
 
 /// Imports [bytes] as [name] into [folder] (Imported when null) through a part file.
 FileEntry importBytes(LibraryWriter w, DateTime now, String name, List<int> bytes, {FolderId? folder}) {
