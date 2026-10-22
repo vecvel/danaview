@@ -84,9 +84,11 @@ kotlin {
 }
 
 dependencies {
-    // EXIF basics from a content stream (assetDetail). androidx.core (FileProvider, HOM-22A) and
-    // androidx.activity (PickVisualMedia, HOM-20A) come with their tickets.
+    // EXIF basics from a content stream (assetDetail). androidx.core (FileProvider, HOM-22A) comes
+    // with its ticket.
     implementation("androidx.exifinterface:exifinterface:1.3.6")
+    // PickVisualMedia / PickMultipleVisualMedia contracts (HOM-20A), the editor engine's version.
+    implementation("androidx.activity:activity:1.10.1")
 
     testImplementation("junit:junit:4.13.2")
 
@@ -95,4 +97,6 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:rules:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    // Answers the system Photo Picker / DocumentsUI in the picker tests (HOM-20A), the editor engine's version.
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 }
