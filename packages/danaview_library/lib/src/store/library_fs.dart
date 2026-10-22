@@ -6,6 +6,10 @@
 // Every multi-step change is a sequence of single atomic renames, so a crash between steps leaves
 // something the store's open-time reconcile can roll forward or back. Calls are synchronous: the
 // writer runs on its own isolate. Nothing here logs a path (rule 30).
+//
+// Part files are renamed and deleted through [retryOnSharingViolation]: on Windows a file another
+// handle still holds open (an antivirus scanner or the search indexer reading a fresh part) can't be
+// renamed or deleted for a moment (ERROR_SHARING_VIOLATION). Elsewhere the call runs once.
 
 import 'dart:io';
 
@@ -14,6 +18,44 @@ import 'package:path/path.dart' as p;
 import '../model/ids.dart';
 import 'library_faults.dart';
 import 'library_paths.dart';
+
+/// The waits between the attempts of [retryOnSharingViolation] (about 1.5 s in all).
+const List<Duration> sharingViolationBackoff = [
+  Duration(milliseconds: 20),
+  Duration(milliseconds: 50),
+  Duration(milliseconds: 100),
+  Duration(milliseconds: 200),
+  Duration(milliseconds: 400),
+  Duration(milliseconds: 800),
+];
+
+/// True when [e] is Windows' "the file is in use" (ERROR_SHARING_VIOLATION 32, ERROR_LOCK_VIOLATION
+/// 33). [windows] overrides the host check (tests); on other hosts errno 32 is EPIPE and never
+/// counts.
+bool isSharingViolation(FileSystemException e, {bool? windows}) {
+  if (!(windows ?? Platform.isWindows)) return false;
+  final code = e.osError?.errorCode;
+  return code == 32 || code == 33;
+}
+
+/// Runs [op]; when it throws a sharing violation ([isSharingViolation]) it is run again after each
+/// wait of [backoff], and the last failure is rethrown. Any other error is rethrown at once, and on
+/// a host other than Windows [op] runs exactly once. [windows] and [sleep] are for tests.
+T retryOnSharingViolation<T>(
+  T Function() op, {
+  bool? windows,
+  void Function(Duration wait) sleep = sleep,
+  List<Duration> backoff = sharingViolationBackoff,
+}) {
+  for (var attempt = 0;; attempt++) {
+    try {
+      return op();
+    } on FileSystemException catch (e) {
+      if (attempt >= backoff.length || !isSharingViolation(e, windows: windows)) rethrow;
+      sleep(backoff[attempt]);
+    }
+  }
+}
 
 /// File operations under one library root.
 final class LibraryFs {
@@ -82,7 +124,9 @@ final class LibraryFs {
 
   /// Moves the import part file [relativePart] into `files/<id>/<name>` (one atomic rename).
   void movePartIntoEntry(String relativePart, EntryId id, String name) {
-    File(paths.resolve(relativePart)).renameSync(paths.entryFile(id, name));
+    final part = File(paths.resolve(relativePart));
+    final target = paths.entryFile(id, name);
+    retryOnSharingViolation(() => part.renameSync(target));
     faults.hit('fs.movePart');
   }
 
@@ -109,7 +153,9 @@ final class LibraryFs {
   /// Deletes the part file [relativePart] when present.
   void deletePart(String relativePart) {
     final f = File(paths.resolve(relativePart));
-    if (f.existsSync()) f.deleteSync();
+    retryOnSharingViolation(() {
+      if (f.existsSync()) f.deleteSync();
+    });
   }
 
   /// Every part file name in `imports/`.

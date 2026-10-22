@@ -1,0 +1,8 @@
+# OWNER: INT-101
+#
+# `benchmark`: timing tests (HOM-17 page queries, HOM-19 name search). They pass in a plain
+# `dart test`; CI runs them on their own, one at a time, after the rest
+# (scripts/ci/v12/library.sh: `dart test -x benchmark`, then `dart test -t benchmark -j 1`), so
+# the parallel runner's load doesn't skew the timings.
+tags:
+  benchmark:

@@ -24,6 +24,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:meta/meta.dart';
+import 'package:path/path.dart' as p;
 
 import '../classify/classifier.dart';
 import '../db/library_reader.dart';
@@ -594,7 +595,9 @@ final class ImportService {
   }
 }
 
-String _norm(String path) => File(path).absolute.path;
+// One spelling per file, so a stored source matches what a directory listing returns: on Windows
+// `C:\staging/a.jpg` (a `/` from a joined path) and `c:\Staging\a.jpg` are the same file.
+String _norm(String path) => p.canonicalize(path);
 
 final RegExp _badNameChars = RegExp(r'[/\\\x00-\x1F\x7F]');
 

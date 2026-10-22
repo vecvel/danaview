@@ -5,6 +5,7 @@
 // are suffixed and same-content files kept or skipped as chosen (or asked); cancel, unreadable and
 // changed sources, staged picker copies, the writer on its own isolate, and the stored source.
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -260,6 +261,7 @@ void main() {
     await service.cancel(id);
     final item = await service.result(id);
     expect(item.state, ImportItemState.cancelled);
+    expect(item.failure, ImportFailure.cancelled);
     expect(store.reader.importJobs(), isEmpty);
     expect(Directory(store.paths.importsDir).listSync(), isEmpty);
     expect(store.reader.countEntries(const EntryQuery()), 0);
@@ -309,6 +311,25 @@ void main() {
     expect(pending.existsSync(), isTrue);
   });
 
+  test('sweepStaging matches a pending source however its path is spelled', () async {
+    // On Windows the picker's path may carry a `/` from a join (`C:\staging/a.jpg`) while the
+    // listing says `C:\staging\a.jpg`; here `./` and `x/..` stand in for the different spelling.
+    final staging = tempDir('hom20_staging_');
+    final orphan = sourceFile(staging, 'orphan.jpg', [1]);
+    final pending = sourceFile(staging, 'pending.jpg', bytesOf(4096));
+    final queued = sourceFile(staging, 'queued.jpg', bytesOf(10));
+    final halting = HaltingCopier(1000);
+    final service = ImportService(store: store, copiers: [halting]);
+    service.enqueue(ImportSource.file('${staging.path}/./pending.jpg', stagedCopy: true));
+    service.enqueue(ImportSource.file('${staging.path}/x/../queued.jpg', stagedCopy: true));
+    await halting.halted.future;
+    await eventually(() => store.reader.importJobs().isNotEmpty);
+    expect(await service.sweepStaging(staging.path), 1);
+    expect(orphan.existsSync(), isFalse);
+    expect(pending.existsSync(), isTrue, reason: 'its stored job still reads it');
+    expect(queued.existsSync(), isTrue, reason: 'a queued item still reads it');
+  });
+
   test('a platform URI without a native copier fails as unsupported', () async {
     const s = ImportSource(kind: ImportSourceKind.nativeUri, location: 'content://media/1', displayName: 'a.jpg');
     final item = (await ImportService(store: store).importAll([s])).single;
@@ -350,6 +371,13 @@ void main() {
     await eventually(() => service.items.single.bytesDone > 0);
     await service.dispose();
     expect(store.reader.importJobs(), hasLength(1));
+    // The partial part stays for the resume, closed: Windows could neither append to it from the
+    // next worker's rename-free reopen nor commit it while the stopped copy held it.
+    final part = store.paths.resolve(store.reader.importJobs().single.partPath);
+    expect(File(part).existsSync(), isTrue);
+    expect(isOpenInThisProcess(part), isNot(isTrue), reason: 'dispose closed the part');
+    File(part).renameSync('$part.moved');
+    File('$part.moved').renameSync(part);
     final next = ImportService(store: store);
     final item = await next.result((await next.resumePending()).single);
     expect(item.state, ImportItemState.done);
@@ -421,5 +449,78 @@ void main() {
     expect(part.readAsBytesSync(), bytes);
     expect(checkpoints.last, bytes.length);
     expect(checkpoints, hasLength(greaterThanOrEqualTo(2)));
+  });
+
+  group('the copy worker closes its files before it answers (Windows locks open files)', () {
+    // A killed isolate keeps its files open on Windows, so the part could be neither renamed into
+    // the library nor deleted (errno 32). These check that cancel and done come only after close.
+    final strict = Platform.isMacOS || Platform.isLinux;
+
+    void expectClosedAndMovable(String path) {
+      if (strict) expect(isOpenInThisProcess(path), isFalse, reason: 'no handle on the part is left');
+      // No retries here: on Windows an open handle fails this rename at once.
+      File(path).renameSync('$path.moved');
+      File('$path.moved').deleteSync();
+    }
+
+    test('cancel returns once the part is closed; the bytes so far stay', () async {
+      final f = sourceFile(src, 'big.bin', Uint8List(64 * 1024 * 1024));
+      final part = '${tempDir('hom20_part_').path}/c.part';
+      final started = Completer<void>();
+      final run = const FileImportCopier(checkpointBytes: 1024 * 1024).start(
+        source: ImportSource.file(f.path),
+        partPath: part,
+        resumeFrom: 0,
+        hash: true,
+        onProgress: (_) {
+          if (!started.isCompleted) started.complete();
+        },
+        onCheckpoint: (_) {},
+      );
+      final outcome = expectLater(run.done, throwsA(isA<ImportException>().having((e) => e.failure, 'failure', ImportFailure.cancelled)));
+      await started.future;
+      await run.cancel();
+      await outcome;
+      final kept = File(part).lengthSync();
+      expect(kept, inExclusiveRange(0, 64 * 1024 * 1024), reason: 'stopped mid-copy, the partial part stays');
+      expectClosedAndMovable(part);
+    });
+
+    test('a cancel before the worker runs stops it before it opens anything', () async {
+      final f = sourceFile(src, 'early.bin', bytesOf(4 * 1024 * 1024));
+      final part = '${tempDir('hom20_part_').path}/e.part';
+      final run = const FileImportCopier().start(
+          source: ImportSource.file(f.path), partPath: part, resumeFrom: 0, hash: false, onProgress: (_) {}, onCheckpoint: (_) {});
+      final outcome = expectLater(run.done, throwsA(isA<ImportException>().having((e) => e.failure, 'failure', ImportFailure.cancelled)));
+      await run.cancel();
+      await outcome;
+      if (File(part).existsSync()) expectClosedAndMovable(part);
+    });
+
+    test('done completes after the part and the source were closed', () async {
+      final bytes = bytesOf(3 * 1024 * 1024 + 1);
+      final f = sourceFile(src, 'small.bin', bytes);
+      final part = '${tempDir('hom20_part_').path}/d.part';
+      final out = await const FileImportCopier(checkpointBytes: 1024 * 1024)
+          .start(source: ImportSource.file(f.path), partPath: part, resumeFrom: 0, hash: true, onProgress: (_) {}, onCheckpoint: (_) {})
+          .done;
+      expect(out.bytes, bytes.length);
+      if (strict) expect(isOpenInThisProcess(f.path), isFalse, reason: 'the source was closed');
+      expectClosedAndMovable(part);
+    });
+
+    test('a cancel during the re-hash of a resumed prefix closes every file', () async {
+      final bytes = bytesOf(8 * 1024 * 1024);
+      final f = sourceFile(src, 'resume.bin', bytes);
+      final part = File('${tempDir('hom20_part_').path}/r.part')..writeAsBytesSync(bytes.sublist(0, 6 * 1024 * 1024));
+      final run = const FileImportCopier().start(
+          source: ImportSource.file(f.path), partPath: part.path, resumeFrom: 6 * 1024 * 1024, hash: true, onProgress: (_) {}, onCheckpoint: (_) {});
+      final outcome = run.done.then<Object?>((o) => o, onError: (Object e) => e);
+      await run.cancel();
+      final result = await outcome;
+      expect(result, anyOf(isA<ImportException>(), isA<CopyOutcome>()));
+      if (strict) expect(isOpenInThisProcess(f.path), isFalse);
+      expectClosedAndMovable(part.path);
+    });
   });
 }
