@@ -273,6 +273,7 @@ void main() {
     HttpOverrides.global = spy;
     addTearDown(() => HttpOverrides.global = null);
     final world = await _boot();
+    final softFailures = <String>[];
     final photoSrc = File('$_mediaDir/$_photoName');
     final videoSrc = File('$_mediaDir/$_videoName');
     expect(photoSrc.existsSync() && videoSrc.existsSync(), isTrue, reason: 'make_s2_media.sh output in $_mediaDir');
@@ -358,9 +359,21 @@ void main() {
     expect((tester.widget<Text>(_key('photo-viewer-name'))).data, _photoName);
     await E2eApp.tapKey(tester, 'photo-viewer-info');
     await E2eApp.waitKey(tester, 'photo-info-rows', timeout: const Duration(seconds: 20));
-    final camera = find.descendant(of: _key('photo-info-camera'), matching: find.textContaining('S2 Test Cam'));
-    expect(camera, findsOneWidget, reason: 'EXIF camera line');
-    expect(find.descendant(of: _key('photo-info-taken'), matching: find.textContaining('21 October 2026')), findsOneWidget, reason: 'EXIF date taken');
+    final infoKeys = [
+      for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('photo-info-')).evaluate())
+        (e.widget.key! as ValueKey<String>).value,
+    ];
+    _report('info rows: $infoKeys');
+    // Checked softly (the rest of the scenario still runs) and failed at the end: FIX-S2Q-3.
+    if (find.descendant(of: _key('photo-info-camera'), matching: find.textContaining('S2 Test Cam')).evaluate().isEmpty) {
+      softFailures.add('EXIF camera line missing from File info');
+    }
+    if (find.descendant(of: _key('photo-info-taken'), matching: find.textContaining('21 October 2026')).evaluate().isEmpty) {
+      softFailures.add('EXIF date taken missing from File info');
+    }
+    if (find.byKey(const ValueKey('photo-info-dimensions')).evaluate().isEmpty) {
+      softFailures.add('pixel dimensions missing from File info');
+    }
     await E2eApp.screenshot(tester, 's2-05-photo-info');
     await _dismissSheet(tester);
     await E2eApp.tapKey(tester, 'photo-viewer-share');
@@ -368,7 +381,7 @@ void main() {
     final sharedPhoto = world.out.shared.single;
     expect(sharedPhoto.displayName, _photoName);
     expect(File(sharedPhoto.path).readAsBytesSync(), photoBytes);
-    _report('viewer: EXIF camera and date shown; Share handed over $_photoName (${sharedPhoto.mime})');
+    _report('viewer: opened; Share handed over $_photoName (${sharedPhoto.mime})');
     await E2eApp.tapKey(tester, 'photo-viewer-close');
 
     await _tab(tester, HomeTab.all);
@@ -435,7 +448,7 @@ void main() {
     expect(reopened.reader.entry(photo.id)!.folderId, japan, reason: 'entries persist');
     expect(reopened.reader.entry(video.id)!.isTrashed, isTrue, reason: 'Recently deleted persists');
     expect(reopened.reader.recentlyDeleted().map((t) => t.name), contains(_videoName));
-    expect(reopened.reader.recents().map((e) => e.id), contains(video.id), reason: 'Recents persist');
+    expect(reopened.reader.recents().map((e) => e.id), contains(photo.id), reason: 'Recents persist (a deleted entry leaves Recents)');
     await _tab(tester, HomeTab.folders);
     await E2eApp.tapKey(tester, 'recently-deleted-row');
     final videoTrashRow = find.ancestor(
@@ -461,5 +474,6 @@ void main() {
     _report('reopen: folders, entries, Recents and Recently deleted persisted; video restored to Trips; entry files present; originals unchanged');
 
     await world.close(tester);
+    expect(softFailures, isEmpty, reason: 'checks that failed while the scenario went on');
   });
 }
