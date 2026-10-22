@@ -251,8 +251,10 @@ abstract final class E2eApp {
       throw TestFailure('${what ?? finder} disappeared before the tap\n${describeScreen()}');
     }
     final gesture = await tester.startGesture(tester.getCenter(target));
+    // No pump while the pointer is down: on a device a pump waits for a real frame, and a slow one
+    // (GC, a loaded emulator) held the press past the 500 ms long-press timeout, so a tooltip's long
+    // press took the tap (FIX M-24, s18 on the 2 GB AVD).
     await Future<void>.delayed(const Duration(milliseconds: 100));
-    await tester.pump();
     await gesture.up();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
