@@ -148,7 +148,7 @@ Status: **final** (no owner input needed), **owner 2026-10-15/16** (decided), **
 | V2-120 | D-98g | Viewers native first (PDFKit, `PdfRenderer`, Quick Look) | owner 2026-10-16 | §8.1, §8.2 |
 | V2-121 | D-98h | Android Office files: file card + Open in another app; text/CSV in-app; no paid SDK | owner 2026-10-16 | — |
 | V2-122 | D-98i | No Office editing | owner 2026-10-16 | §1.3 |
-| V2-123 | D-98j | PDF tools via one `danaview_pdf` plugin; results as new files; Android platform/Jetpack APIs first, PdfBox-Android or PDFium only if HOM-27 shows text turning into pictures | owner 2026-10-16; **[VERIFY: HOM-27]** | §8.1 |
+| V2-123 | D-98j | PDF tools via one `danaview_pdf` plugin; results as new files; Android platform/Jetpack APIs first, PdfBox-Android or PDFium only if HOM-27 shows text turning into pictures | owner 2026-10-16; **HOM-27 decided 2026-10-22: route (b) PdfBox-Android 2.0.27.0** (Apache-2.0, with BouncyCastle 1.72) is the single Android write engine for every PDF tool (HOM-28A…31A); platform `PdfRenderer` stays the viewer (HOM-25). Route (a) fails (no page-level write API; rasterising loses text). +2.0 MB per APK after R8, pure Java. Report: `files-media-home/spikes/HOM-27-android-pdf-write.md` | §8.1 |
 | V2-124 | D-98k | Desktop documents: macOS = iOS paths; Windows/Linux viewers and tools wait for 1.3.0 | owner 2026-10-16 | V2-30 |
 
 #### AI Studio and rich subtitles (AIS plan §2, §7)
@@ -902,7 +902,7 @@ Test media are generated locally (ffmpeg, code) or come from v1.1 ENG-05; PDFs a
 | V2-V3 | ImageIO has no WebP encoder on iOS/macOS; HEIC thumbnails on iOS 17+ | HOM-04, VED-29 |
 | V2-V4 | libmpv displays images in a playlist with `image-display-duration` on every platform | HOM-12 |
 | V2-V5 | `PdfRenderer` text search/selection and password support per Android version; `androidx.pdf` availability | HOM-25 |
-| V2-V6 | Android PDF write route (a/b/c), text preservation, size, min API, 200-page timings, licence | HOM-27 |
+| V2-V6 | Android PDF write route (a/b/c), text preservation, size, min API, 200-page timings, licence | HOM-27 — **closed 2026-10-22**: route (b) PdfBox-Android 2.0.27.0; text kept (203/203 tokens on merge); 200-page operations 41–398 ms on API 28–37; +2.0 MB; minSdk 14 (lowest run API 28); Apache-2.0 + BouncyCastle (MIT-style) |
 | V2-V7 | PDFKit stamp burn-in and compression write options (iOS 16+, macOS 13+) | HOM-30, HOM-31 |
 | V2-V8 | Share Extension memory limit with streamed copies of a 2 GB video | HOM-21 |
 | V2-V9 | SQLite FTS5 availability per platform with `sqlite3` (system vs bundled), CJK tokenization | HOM-17, AIS-50 |

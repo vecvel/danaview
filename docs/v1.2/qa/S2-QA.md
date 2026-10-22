@@ -177,7 +177,7 @@ info with camera, date taken and dimensions, and the full v1.1 iOS suite passes 
 `DANAVIEW_FILES_HOME=true` on the wired library** (§3 batch 2, 20 of 20) as it does with the flags off.
 With the flag, `test/v12` has the same 9 flag-off-only assertions that don't skip themselves (N-2, not
 product defects). D-2 / FIX-S2Q-4 are fixed; D-3, D-4, D-6, D-7 and the legal items stay with S2-R
-and their owners. **Android half: pending: Windows** (§7), so the S2-Q gate as a whole is not closed
+and their owners. **Android half: **green** (Windows, `f125f8c`, 2026-10-22)** (§7), so the S2-Q gate as a whole is not closed
 until that half reports.
 
 ### 1. S2 packages and suites
@@ -723,4 +723,4 @@ grows 2.3 MB on disk / 0.84 MB zipped over S1, and smokes green on the iPhone 16
 import with EXIF in File info, Danaview folders, Recently deleted, player, editor and the Privacy
 toggle. **It is not ready to upload until FIX-S2R-1 lands** (privacy manifest). Signing, upload, the
 effective date, the wording review and the store answers are the owner's; the Android candidate is
-pending: Windows.
+done on Windows (`f125f8c`).
