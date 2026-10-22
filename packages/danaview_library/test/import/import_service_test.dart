@@ -25,10 +25,9 @@ void main() {
     src = tempDir('hom20_src_');
     root = tempDir('hom20_lib_').path;
     store = await openStore(root);
-  });
-
-  tearDown(() async {
-    await store.close();
+    // Also closes a store the test reopened, before the temp folders go (a group `tearDown` would
+    // run after their deletion, which Windows refuses while library.db is open; FIX-S1Q-A5).
+    addTearDown(() => store.close());
   });
 
   test('an import copies into Imported; the source bytes and timestamps are unchanged', () async {

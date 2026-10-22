@@ -4,6 +4,8 @@
 // library files, read-only files (linked folders: no rename, move or delete) and system-library
 // assets; Merge into PDF only for PDFs and photos; the platform capabilities of HOM plan §8.3.
 
+import 'dart:io' show Platform;
+
 import 'package:danaview_library/danaview_library.dart';
 import 'package:test/test.dart';
 
@@ -60,7 +62,16 @@ void main() {
   test('a linked-folder file is read-only: no copy, move, rename, favourite or delete', () {
     final linked = _doc('lk:root/a.txt', DocumentKind.text, uri: 'file:///Users/me/Docs/a.txt');
     expect(_menu(linked), [FileAction.share, FileAction.info, FileAction.openIn, FileAction.saveOut]);
-    expect(FileActionTarget.of(linked).localPath, '/Users/me/Docs/a.txt');
+    // `file://` URIs become host paths: a rooted path without a drive on Windows (FIX-S1Q-A5).
+    expect(FileActionTarget.of(linked).localPath, Platform.isWindows ? r'\Users\me\Docs\a.txt' : '/Users/me/Docs/a.txt');
+  });
+
+  test('a file:// URI becomes a path of the host style, on either host', () {
+    expect(localPathOf('file:///Users/me/Docs/a.txt', windows: false), '/Users/me/Docs/a.txt');
+    expect(localPathOf('file:///Users/me/Docs/a.txt', windows: true), r'\Users\me\Docs\a.txt');
+    expect(localPathOf('file:///C:/Users/me/My%20Docs/a.pdf', windows: true), r'C:\Users\me\My Docs\a.pdf');
+    expect(localPathOf('file://server/share/a.pdf', windows: true), r'\\server\share\a.pdf');
+    expect(localPathOf('file:///C:/Users/me/a.pdf', windows: false), '/C:/Users/me/a.pdf');
   });
 
   test('a system-library asset without a path offers File info only', () {

@@ -454,7 +454,8 @@ void main() {
       var siteCalls = 0;
       for (final dir in dirs.where((d) => d.existsSync())) {
         for (final file in dir.listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart'))) {
-          final rel = file.path.substring(root.length + 1);
+          // Repo-relative with '/' on every host: on Windows `file.path` carries backslashes (FIX-S1Q-A1).
+          final rel = file.path.substring(root.length + 1).replaceAll(Platform.pathSeparator, '/');
           final code = file
               .readAsStringSync()
               .split('\n')

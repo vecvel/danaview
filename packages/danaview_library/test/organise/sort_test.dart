@@ -147,6 +147,7 @@ void main() {
     test('a Danaview folder keeps its sort in library.db across a reopen; folders are independent', () async {
       final root = tempRoot();
       var store = await LibraryStore.open(root: root, clock: FakeLibraryClock(t0).call, background: false);
+      addTearDown(() => store.close()); // whichever store is open when the test ends (FIX-S1Q-A5)
       final a = await folderNamed(store, 'A');
       final b = await folderNamed(store, 'B');
       var org = LibraryOrganiser(store);
