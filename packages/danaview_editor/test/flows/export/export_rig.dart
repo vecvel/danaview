@@ -255,7 +255,7 @@ class ExportRig {
         platform = platform {
     id = (project ?? exportProject)(repo).id;
     mem = MemoryStoreFs();
-    for (final d in [rigRoots.support, rigRoots.cache, rigRoots.documents, rigRoots.workDir]) {
+    for (final d in [rigRoots.support, rigRoots.cache, rigRoots.documents, rigRoots.editorCache, rigRoots.workDir, rigRoots.exportsDir]) {
       mem.mkdirs(d);
     }
     env = ExportEnvironment(
@@ -354,7 +354,7 @@ class ExportRig {
   List<FakeExportJob> get started => fake.exporter.started;
 
   /// The work folder.
-  String get workDir => rigRoots.workDir;
+  String get workDir => rigRoots.exportsDir;
 
   /// Puts a fake output at [path] (the engine wrote it).
   void writeOutput(String path, {int bytes = 1234}) => mem.putFile(path, Uint8List(bytes));

@@ -290,6 +290,7 @@ abstract final class EditorBootstrap {
       debugPrint('[EditorBootstrap] The engine access takes no Documents root');
     }
     final capabilities = await _capabilitiesOf(engine);
+    await prepareWorkFolders(roots, fs: fs, access: engine.access);
     final deleter = OwnedFileDeleter(roots, fs: fs);
     final relinker = MediaRelinkService(
       access: engine.access,
@@ -408,6 +409,30 @@ abstract final class EditorBootstrap {
               ),
       ),
     ];
+  }
+
+  /// QA-05 D8: creates the exports folder (`StoreRoots.exportsDir`, under Application Support /
+  /// `files/`, so a low-storage purge of the cache cannot delete a running export) and excludes it
+  /// from backups, and recreates the cache's `work/` folders the system may have purged. Never
+  /// throws; each user creates its folder again before use.
+  ///
+  /// Nothing is moved from the old `<cache>/danaview/editor/work/export-*` location: the engines'
+  /// job records hold those absolute paths (a running, kept or detached export), so a move would
+  /// break them, and anything else there is a purgeable leftover the cache cleanup removes.
+  static Future<void> prepareWorkFolders(StoreRoots roots, {StoreFs fs = const LocalStoreFs(), MediaAccessPort? access}) async {
+    for (final dir in [roots.exportsDir, roots.workDir]) {
+      try {
+        await fs.createDirectory(dir);
+      } on Object catch (e) {
+        debugPrint('[EditorBootstrap] Could not create ${p.basename(dir)}/: ${e.runtimeType}');
+      }
+    }
+    if (access == null) return;
+    try {
+      await access.excludeFromBackup(roots.exportsDir);
+    } on Object catch (e) {
+      debugPrint('[EditorBootstrap] Could not exclude exports/ from backups: ${e.runtimeType}');
+    }
   }
 
   static Future<EditorCapabilities?> _capabilitiesOf(EditorEngine engine) async {

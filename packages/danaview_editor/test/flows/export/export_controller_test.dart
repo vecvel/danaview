@@ -10,12 +10,14 @@ import 'dart:async';
 import 'package:flutter/painting.dart' show Size;
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:danaview_editor/src/app/editor_messages.dart';
 import 'package:danaview_editor/src/app/strings/export_strings.dart';
 import 'package:danaview_editor/src/editor/flows/export/export_controller.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
 import 'package:danaview_editor_core/formats.dart';
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/plan.dart';
+import 'package:danaview_editor_core/store.dart' show StoreEntityType;
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' hide MediaAccessFailure;
 
 import 'export_rig.dart';
@@ -774,6 +776,51 @@ void main() {
         expect((c.state as ExportUiFailed).failure, ExportFailed(e.value), reason: e.key.name);
         expect(rig.wakelock, [true, false]);
       }
+    });
+
+    // QA-05 D8: under low storage Android purged the editor cache mid-export, and the engine's
+    // ENOENT on a generated image reached the user as exportFailed.unknown.
+    test('D8: a vanished file in the engine detail is the storage failure with its message', () async {
+      final (rig, c, job) = await running();
+      job.fail(EngineFailure.of(EngineErrorCode.io, debugDetail: 'ERROR_CODE_IO_UNSPECIFIED ImageAssetLoader FileDataSourceException (ENOENT)'));
+      await rig.settle();
+      final failure = (c.state as ExportUiFailed).failure;
+      expect(failure, const ExportFailed(ExportFailureKind.diskFull));
+      expect(editorFailureMessage(failure).title, 'Not enough space to export');
+      expect(editorFailureMessage(failure).action, EditorMessageAction.freeUpSpace);
+      expect(rig.wakelock, [true, false]);
+    });
+
+    test('D8: a purged editor cache or exports folder turns an unknown failure into the storage failure', () async {
+      for (final gone in [rigRoots.editorCache, rigRoots.exportsDir]) {
+        final (rig, c, job) = await running();
+        await rig.mem.delete(gone, recursive: true);
+        job.fail(EngineFailure.of(EngineErrorCode.encodingFailed));
+        await rig.settle();
+        expect((c.state as ExportUiFailed).failure, const ExportFailed(ExportFailureKind.diskFull), reason: gone);
+      }
+    });
+
+    test('D8: free space below the estimate after a failure is the storage failure; with room it stays unknown', () async {
+      var (rig, c, job) = await running();
+      job.fail(EngineFailure.of(EngineErrorCode.decodeFailed));
+      await rig.settle();
+      expect((c.state as ExportUiFailed).failure, const ExportFailed(ExportFailureKind.unknown));
+      (rig, c, job) = await running();
+      rig.fake.freeBytesValue = 1024;
+      job.fail(EngineFailure.of(EngineErrorCode.decodeFailed));
+      await rig.settle();
+      expect((c.state as ExportUiFailed).failure, const ExportFailed(ExportFailureKind.diskFull));
+    });
+
+    test('D8: the exports folder is recreated before the start and lives under support, not the cache', () async {
+      final rig = ExportRig();
+      await rig.mem.delete(rigRoots.exportsDir, recursive: true);
+      await rig.harness.prefs.markExportBackgroundNoticeShown();
+      final c = await _ready(rig);
+      final job = await _run(rig, c);
+      expect(job.outputPath, startsWith('${rigRoots.support}/danaview/editor/exports/'));
+      expect((await rig.mem.stat(rigRoots.exportsDir)).type, StoreEntityType.directory);
     });
 
     test('"Copy details" carries the failure code and the settings, never paths', () async {

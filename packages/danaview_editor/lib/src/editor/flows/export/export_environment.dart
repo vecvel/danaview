@@ -249,8 +249,19 @@ final class ExportEnvironment {
   /// The platform in effect.
   TargetPlatform get targetPlatform => platform ?? defaultTargetPlatform;
 
-  /// `<cache>/danaview/editor/work` (engine outputs).
-  String get workDir => roots.workDir;
+  /// `<support>/danaview/editor/exports` (export outputs and their caption side files). Not the
+  /// purgeable cache: the system emptied that mid-export under low storage (QA-05 D8).
+  String get workDir => roots.exportsDir;
+
+  /// Creates [workDir] when it is missing (first use, or removed behind the app's back). Never
+  /// throws: a directory that cannot be made fails the job that needs it with a proper error.
+  Future<void> ensureWorkDir() async {
+    try {
+      await fs.createDirectory(workDir);
+    } on Object catch (e) {
+      debugPrint('[Export] Could not create the exports folder: ${e.runtimeType}');
+    }
+  }
 
   /// `<cache>/danaview/editor/sprites`.
   String get spritesDir => SpritePrepass.spritesDirOf(roots.editorCache);
