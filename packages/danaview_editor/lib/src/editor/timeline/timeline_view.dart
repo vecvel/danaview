@@ -666,12 +666,28 @@ class TimelineViewState extends ConsumerState<TimelineView> with TickerProviderS
         final model = _snapshot.item(hit.item);
         if (model == null) return;
         final name = model.label.isEmpty ? TimelineCanvasStrings.kindName(model.kind) : model.label;
-        _hover.value = _HoverPill(hit.item, local, TimelineViewStrings.hover(name, model.duration));
+        _hover.value = _HoverPill(hit.item, local, TimelineViewStrings.hover(name, model.duration), model.start, model.duration);
       });
     } else {
       _hideHover();
     }
   }
+
+  /// Hides the pill when the clip it describes was removed or changed (split, trimmed, moved,
+  /// deleted) while the mouse stood still; the next mouse move shows a fresh one.
+  void _dropStalePill(TimelineSnapshot snapshot) {
+    final pill = _hover.value;
+    if (pill == null) return;
+    final model = snapshot.item(pill.item);
+    if (model != null && model.start == pill.start && model.duration == pill.duration) return;
+    // Not during build: the pill's ValueListenableBuilder rebuilds on the change.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(_hover.value, pill)) _hideHover();
+    });
+  }
+
+  /// The hover pill shown (tests).
+  String? get hoverPillText => _hover.value?.text;
 
   void _hideHover() {
     _hoverTimer?.cancel();
@@ -716,6 +732,7 @@ class TimelineViewState extends ConsumerState<TimelineView> with TickerProviderS
     if (_geometry == null || !identical(snapshot, _snapshot) || metrics != _metrics || !identical(_geometry!.viewport, viewport)) {
       _geometry = TimelineCanvasGeometry(snapshot: snapshot, metrics: metrics, viewport: viewport);
     }
+    if (!identical(snapshot, _snapshot)) _dropStalePill(snapshot);
     _snapshot = snapshot;
     _metrics = metrics;
     final style = widget.style ?? TimelineStyle.standard;
@@ -907,11 +924,15 @@ final class _MenuRequest {
 
 @immutable
 final class _HoverPill {
-  const _HoverPill(this.item, this.position, this.text);
+  const _HoverPill(this.item, this.position, this.text, this.start, this.duration);
 
   final ItemId item;
   final Offset position;
   final String text;
+
+  /// The clip's range when the pill was made; a change makes the pill stale.
+  final TimeUs start;
+  final TimeUs duration;
 }
 
 class _HoverPillView extends StatelessWidget {
