@@ -139,3 +139,189 @@ prompt — are **deferred: no device available** to S2-Q / S2-R. S2-W ran widget
 | D-6 | The features barrel exports none of the Files & Media Home surfaces, so `lib/wiring/files_home_wiring.dart` imports `package:danaview_features/src/...` under `ignore_for_file: implementation_imports`. A public entry (for example `package:danaview_features/files_home.dart`) would remove that | INT-101 (barrel) | open, low |
 | D-7 | Android SQLite for `library.db` (`sqlite3` 2.x needs a `libsqlite3.so` on Android, V-S21): if it is missing the wiring leaves the store out and the Home runs without Danaview folders. To be confirmed on the emulator | HOM-17 / Windows lane | open (deferred: no device available) |
 | — | `legalEffectiveDate`, the owner's review of the S2 wording, regenerating the hosted privacy page **from a build with the flag** (the S2 text exists only there), the Play photo-permission declaration | S2-R with the owner | open |
+
+## Slice QA
+
+Ticket **S2-Q**, Mac half, on `v1.2-wip`, 2026-10-22, 07:20–08:50 (tree at `5b1ebe8`, then the
+backup commits `16f79b9` and later that only added S2-Q's own files). QA changed no product code;
+every defect below is a FIX ticket that blocks the gate. The Android Emulator half runs on the
+Windows laptop.
+
+**Gate verdict (Mac half): red** until FIX-S2Q-1, FIX-S2Q-3 and D-5 land (FIX-S2Q-2 and FIX-S2Q-4
+are low; D-2 still blocks S2-R). The full v1.1 iOS suite is 20/20 in both batches, HOM-15 is green
+and bites, the matrix, the persistence checks and the network guard are green, and the S2 E2E
+passes every step except the photo details (FIX-S2Q-3).
+
+### 1. S2 packages and suites
+
+| Package / suite | Command | Analyze | Tests |
+|---|---|---|---|
+| `danaview_library` (HOM-16, HOM-17, HOM-19, HOM-20, HOM-22 Dart), `danaview_search`, core photo tests | `scripts/ci/v12/library.sh` | clean | 266 + 4 + 14 pass |
+| `danaview_library_native` (HOM-02, HOM-04, HOM-20, HOM-22 Dart side) | `flutter analyze --fatal-infos && flutter test -j 2` | clean | 21 pass, **1 fail** (`surface_test` placeholder list, FIX-S2Q-1) |
+| `danaview_library_native` XCTests, macOS runner | `darwin/Tests/<X>/run_xctests.sh macos` | — | Thumbnails 9 + 33 (5 skipped: PhotoKit, no TCC for a CLI runner), Pickers 5 + 20, ExportOut 4 + 24 pass; **PhotoLibrary: 6 pass, then `LibraryGlueTests.testEveryPlaceholderAnswersNotSupportedOnDevice` fails and hangs in a real `NSSavePanel`** (killed after 10 min, FIX-S2Q-1) |
+| `danaview_features` | `flutter analyze --fatal-infos` | clean | (tests live in root `test/v12`) |
+| Root analyze | `flutter analyze --fatal-infos lib test/v12 test/architecture integration_test/v12` | clean | — |
+| Root `test/architecture` + `test/v12`, flags off | `flutter test -j 2 test/architecture test/v12` | — | 1152 pass, 2 skip, **1 fail: rule 30** on HOM-04's `ThumbnailCoreTests.swift:186` (D-5, still open) |
+| Root `test/v12`, `DANAVIEW_FILES_HOME=true` | `flutter test -j 2 --dart-define=DANAVIEW_FILES_HOME=true test/v12` | — | 1050 pass, 1 skip, 9 fail, all of them flags-off assertions (`int101/flags_off_test.dart` 6, `wiring/s1_wiring_test.dart` 3) that don't skip themselves when built with the flag (not product defects; see note N-2) |
+| S2-Q's own tests (`test/v12/s2_qa/`, below) | `flutter test -j 1 test/v12/s2_qa` | clean | 10 + 4 pass |
+| HOM-15 preservation suite (merge gate) | `scripts/ci/v12/home_preservation.sh -j 1`; again with `--dart-define=DANAVIEW_FILES_HOME=true` | — | 401 pass; 401 pass |
+| HOM-15 gate bites | `scripts/ci/v12/home_preservation.sh --self-check -j 1` (scratch copy, planted "Continue Watching") | — | OK: the planted regression fails 18 tests |
+| v1.1 root tests that S2 touches | `flutter test -j 1 test/widget_test.dart test/home_screen_test.dart test/settings_account_test.dart test/editor_routes_test.dart test/editor_wiring_test.dart test/privacy_policy_host_test.dart test/editor_entry/legal_texts_test.dart test/network_tools_test.dart` | — | flags off: 174 pass. With the flag: 161 pass, 13 fail in `widget_test` / `home_screen_test` (duplicate "Folders"/"Playlists" texts from the tab strip, a second `EditableText` (search), the pinned header 107 px instead of 47): these are 1.1 layout tests of the flag-off Home; the flag-on Home is HOM-15's job (N-2) |
+
+### 2. S2 E2E on the iOS Simulator (new scenarios)
+
+`integration_test/v12/s2/s2_files_home_test.dart` (new, `// OWNER: S2-Q`), media generated locally by
+`integration_test/v12/s2/tool/make_s2_media.sh` into `build/e2e/s2_media/` (Pillow: a 2400 × 1600 JPEG
+with EXIF make/model/lens/date/exposure/aperture/focal length/ISO; ffmpeg: a 4 s 1280 × 720 H.264 + AAC
+clip). Nothing downloaded. Run:
+
+```text
+integration_test/v12/s2/tool/make_s2_media.sh
+DV_E2E_IPHONE="iPhone 16" DV_E2E_IPHONE_RUNTIME="iOS 26.5" \
+DV_E2E_EXTRA_DEFINES="DANAVIEW_FILES_HOME=true DV_S2_MEDIA=$PWD/build/e2e/s2_media" \
+  scripts/ci/editor/e2e_ios.sh --target integration_test/v12/s2/s2_files_home_test.dart iphone
+```
+
+The scenario boots the app as `lib/main.dart` does, **including `filesHomeOverrides`** (real HOM-17
+store under `Application Support/DanaviewLibrary` with the writer on its own isolate, HOM-04
+thumbnails, HOM-20 import service, HOM-22 actions). Only the system UI an integration test can't
+drive is replaced at the app's own seams: the import picker stages copies into the app's staging
+directory exactly as PHPicker / UIDocumentPicker do (`stagedCopy`), and the file-out port records
+what the app hands to the share sheet, Save to Files and Save to Photos. Final run 08:46–08:49:
+
+| Step | Result |
+|---|---|
+| Home with the flag: tabs Home, All, Videos, Photos, Playlists, Folders; no Documents; the 1.1 quick actions and sections, Import and search | pass (screenshot `s2-01-home`) |
+| Nested Danaview folders: Folders › New folder "Trips" › open › New folder "Japan"; path Trips › Japan | pass |
+| Import: photo "From Photos" into Japan (sheet's Save to chooser), video "From Files" into Imported; library copies byte-equal to the originals; staged copies deleted | pass (86 741 B, 1 646 405 B) |
+| Organise: All › video › Move to… › Trips | pass |
+| Viewer: Photos tab › tap the photo opens the viewer with its name | pass |
+| **Viewer File info shows the EXIF** (camera, date taken, dimensions) | **fail**: rows are only Name, Size, Format, Source, Added from, Added, Modified (FIX-S2Q-3; checked softly so the scenario goes on, failed at the end) |
+| Share from the viewer hands over the library photo (`image/jpeg`, bytes equal) | pass |
+| Video opens from All in the player and plays (duration 4021 ms, position advances) | pass |
+| Selection bar: long press › Save to Files (toast "Saved a copy"), long press › Save to Photos (toast); the library file unchanged | pass |
+| Delete photo and video (All › Delete › confirm); Recently deleted lists both; Restore the photo → back in Trips › Japan | pass |
+| Library closed and reopened (the store half of a restart): folders, entries, Recents, Recently deleted persist; restore the video → Trips; every live entry's file present | pass |
+| Originals: bytes and timestamps unchanged | pass |
+| Network: HttpOverrides spy for the whole scenario, no `HttpClient` created | pass |
+
+Result: **1 file, fails only on FIX-S2Q-3.** Evidence: `build/e2e/ios/6663101E-6BE7-47D4-B3B8-055700BF2E02/s2q_evidence/`
+(9 screenshots, the test log with the `DV_E2E_REPORT s2:` lines).
+
+Real Save to Photos was also tried (`DV_S2_REAL_PHOTOS=true` after `simctl privacy grant
+photos-add`): `flutter test` reinstalls the app, the grant is gone, and iOS shows the add-only prompt,
+which a Flutter test can't answer; the run timed out at that prompt (screenshot
+`s2-save-to-photos-prompt.png`). The prompt itself shows the 1.1 usage string "Danaview saves the
+videos you export to your photo library." (FIX-S2Q-4). The real share sheet, UIDocumentPicker export
+and PHPicker need a person: deferred: no device available (manual simulator check for S2-R).
+
+Not driven in E2E, covered by widget tests: Recently deleted expiry (fake clock, §4), the photo
+library permission flow ("Show my photo library" would hit D-2), favourites and search UI (HOM-19).
+
+### 3. Full v1.1 suite on the iOS Simulator, flags off and on
+
+`scripts/ci/editor/e2e_ios.sh iphone`, `DV_E2E_IPHONE="iPhone 16"`, `DV_E2E_IPHONE_RUNTIME="iOS 26.5"`,
+models read in place from `/Users/besaoct/danaview-models` (nothing downloaded). The script passes the
+v1.1 release defines `DANAVIEW_EDITOR=true`, `DANAVIEW_AUTO_CAPTIONS=true`.
+
+| Batch | 1.2.0 defines | Started / ended | Result |
+|---|---|---|---|
+| 1 · every 1.2.0 flag off | none | 07:25 / 07:58 | **20 of 20 files pass** (s01–s18, `x_android_api28`, `x_ios_background_export`; `x_android_export_background` skipped on iOS as designed) |
+| 2 · S2 flag set | `DANAVIEW_FILES_HOME=true` (via `DV_E2E_EXTRA_DEFINES`, confirmed on the running `flutter test` command line) | 08:14 / 08:42 | **20 of 20 files pass** |
+
+Simulator realities, reported not failed (both batches): HEVC/MOV not offered (`hevcEncode false`);
+`pausedInBackground observed: false`; s13 start latency 267 / 233 ms (device budget 100 ms). s07 burned
+cues 341 and 324 changed samples; s08 3 cues; s15 head -14.6 dBFS, body -9.0 dBFS. Logs and summary:
+`build/e2e/ios/6663101E-6BE7-47D4-B3B8-055700BF2E02/`. The iPhone 16 simulator was already booted
+(not by this ticket) and was left as found.
+
+Note for batch 2: QA-00's `E2eApp._boot` mirrors `lib/main.dart` step by step but not S2-W's
+`filesHomeOverrides`, so in the flag-on batch the Home is the Files & Media Home **without** a library
+store (tabs present, library tabs empty). It proves the 1.1 flows survive the new Home shell; the
+wired library is covered by §2 (FIX-S2Q-5, low).
+
+### 4. Persistence (QA-106 scope for S2)
+
+`test/v12/s2_qa/s2_persistence_test.dart` (new, 4 tests, green) opens the library the way the app
+does (`filesHomeOverrides` → `LibraryStore.open` with the isolate writer under `libraryRootIn(<support>)`):
+
+- nested folders, a folder's sort, imported files (bytes), favourites, Recents and Recently deleted
+  (days left 27 after 3 days) survive a close and reopen; restore after the restart returns to the
+  folder; the original is unchanged (bytes and timestamp);
+- Recently deleted expiry across restarts with a fake clock: still there after 29 days (1 day left),
+  purged by the launch sweep after 31 days (row and files gone);
+- a corrupt `library.db` is quarantined at the next start and the library rebuilt from the files
+  (same entry id);
+- backup classes: `library.db`, `files/` included; `imports/` excluded.
+
+On the simulator the S2 E2E's reopen step passed (§2). Plus HOM-17's own crash, recovery, property and
+expiry tests in `danaview_library` (§1). Named sorts live in SharedPreferences
+(`PrefsSortPreferenceStore`, HOM-19 tests). iOS device backup / restore and Android device-to-device
+transfer of Danaview folders: deferred: no device available.
+
+### 5. Overflow and accessibility (QA-105 scope for S2)
+
+`test/v12/s2_qa/s2_matrix_test.dart` (new, 10 tests, green) boots `DanaviewApp` with the app router and
+the S2 wiring over a HOM-17 fixture library with very long names, nested folders, a trashed file, a
+favourite and a recent, and visits: Overview (Import, search, Recent photos, Favourites, Recents),
+import sheet, its folder chooser, All, an All row menu, a document's file menu, File info, Videos,
+Photos, the Photos selection bar, the photo viewer, its info sheet, Folders root, a nested folder with
+breadcrumbs, Recently deleted.
+
+| Check | Sizes | Result |
+|---|---|---|
+| No exception (overflow) on every surface | 280, 375, 768, 1280 px × text scale 0.85, 1.35 | pass (8 runs) |
+| `iOSTapTargetGuideline` (44 pt), `labeledTapTargetGuideline`, `textContrastGuideline` on every surface | 375 px × 1.0, 1280 px × 1.35 | pass (2 runs) |
+
+The per-ticket matrices (HOM-05…HOM-13, HOM-18…HOM-20, HOM-22, HOM-17 Settings) and S2-W's composed
+matrix are green inside the §1 counts. Custom components only (rule 31) is enforced by the
+architecture test (green except rule 30). VoiceOver pass on the Home tabs and folder operations:
+deferred: no device available (simulator VoiceOver not scripted).
+
+### 6. Network guard (QA-103 scope for S2)
+
+- S2 adds **no host**. Static scan of `danaview_library/lib`, `danaview_library_native/lib` and
+  `darwin/Classes`, `danaview_features/lib/src/library`, `lib/wiring` for `HttpClient`, `package:http`,
+  sockets, `URLSession`, `NSURLConnection`, `Uri.http(s)` and URLs: only Pigeon's generated comment and
+  the 1.1 Open link hint.
+- PhotoKit requests set `isNetworkAccessAllowed = false` everywhere (PhotoLibraryService, thumbnailer):
+  iCloud-only originals are never downloaded (ARCH §9.1).
+- HttpOverrides spies: none created in the S2 E2E on the simulator (§2) nor in the matrix flows (§5).
+- Rule 21 (no sockets in library/native code) is in the green part of the architecture test.
+- Device-level spy (QA-103's `integration_test/v12/network_spy/`): not built yet; deferred to QA-103.
+
+### 7. Android Emulator half
+
+pending: Windows
+
+### 8. Defects (FIX tickets, block the gate unless marked low)
+
+| Id | Owner | Defect | Evidence | Fix direction |
+|---|---|---|---|---|
+| **FIX-S2Q-1** | HOM-02 (its surface tests), with HOM-04 / HOM-20 / HOM-22 | The frozen-surface tests still list implemented classes as placeholders. Dart: `test/photo_library/surface_test.dart` "every placeholder … answers notSupportedOnDevice" fails on `darwin/Classes/Pickers/PickerHostApiImpl.swift` (0 of 8). Swift: `Tests/PhotoLibrary/Glue/LibraryGlueTests.testEveryPlaceholderAnswersNotSupportedOnDevice` fails for pickers (`copyToFile`, `cancelCopy`, `release`) and thumbnails (`mediaThumbnail`, `cancel`, `updateCaching`) and then **hangs**: it calls `ExportOutHostApiImpl.saveOut`, which now opens a real `NSSavePanel` (sampled stack). `PhotoLibrary/run_xctests.sh macos` never finishes | §1; `sample` of the xctest process: `LibraryGlueTests.testEveryPlaceholderAnswersNotSupportedOnDevice → ExportOutHostApiImpl.saveToFiles → NSSavePanel` | Drop the implemented APIs (Pickers, Thumbnails, ExportOut, Share, OpenIn) from both placeholder lists; keep the list for the S3 classes (Quick Look, Inbox, Incoming) |
+| **FIX-S2Q-3** | HOM-20 (import) with HOM-11 (viewer) | Danaview-folder photos never get their photo facts: nothing writes `entry_meta` on import (`LibraryWriter.setMeta` has no caller; `ImportService` commits without `meta`; no import hook reads EXIF), and HOM-11's File info reads only `EntryMeta` for Danaview photos. So imported photos show no Taken, Camera, Lens, exposure or Dimensions, and the Photos grid groups them by file date with width/height 0. The S2 result "photo grid and viewer with EXIF" (§1A) is not met for imported photos | §2 row "Viewer File info", log line `info rows: [name, size, format, source, imported, added, modified]` for a JPEG with full EXIF | An import hook (or the copier) reads EXIF and dimensions after the copy (ImageIO / `ExifInterface` through the native plugin, or a Dart EXIF reader) and calls `setMeta`; HOM-11 test with a real EXIF JPEG through the import path |
+| FIX-S2Q-2 (low) | HOM-17 | `LibraryStore.checkInvariants()` throws with the isolate writer the app uses: its op closure captures `this` (`unavailable`), which holds the `ReceivePort` (`Illegal argument in isolate message: object is unsendable`). Only the in-process writer of the tests can run it, so the app and on-device QA can't check invariants | `s2_persistence_test` first draft; stack `LibraryStore.checkInvariants → _IsolateHost.run` | Copy `unavailable` into a local before building the closure (and add a test with `background: true`) |
+| FIX-S2Q-4 (low) | INT-104 (`ios/Runner/Info.plist`) | `NSPhotoLibraryAddUsageDescription` is still the 1.1 text "Danaview saves the videos you export to your photo library.", but S2's Save to Photos saves photos and videos from Danaview folders | Simulator prompt screenshot (§2) | Reword (for example "Danaview saves copies of your photos and videos to your photo library when you choose Save to Photos.") together with D-2's `NSPhotoLibraryUsageDescription` |
+| FIX-S2Q-5 (low) | QA-00 (`integration_test/editor/support/e2e_app.dart`) | `E2eApp._boot` does not add S2-W's `filesHomeOverrides`, so the v1.1 suite with `DANAVIEW_FILES_HOME=true` runs the new Home without the library | §3 note | Add `...(await filesHomeOverrides(prefs: prefs)).overrides` to the boot (nothing with the flag off) |
+| D-5 (from §Wiring) | HOM-04 | Rule 30 still fails on `ThumbnailCoreTests.swift:186` | §1 | as §Wiring |
+| D-2 (from §Wiring) | INT-104 | No `NSPhotoLibraryUsageDescription`: "Show my photo library" terminates the app (not exercised in E2E for that reason) | §Wiring | blocks S2-R |
+
+Notes (not defects):
+
+- N-1: `Recents` drops an entry while it is in Recently deleted and shows it again after a restore
+  (by design of `LibraryReader.recents()`).
+- N-2: the v1.1 root widget tests, INT-101's `flags_off_test.dart` and S1-W's `s1_wiring_test.dart`
+  assert the flag-off app and fail when the whole file is built with `DANAVIEW_FILES_HOME=true`; the
+  flag-on Home is certified by HOM-15 (401 green with the define), S2-W's wiring test and §2/§5. Making
+  those files skip themselves under the define (as S2-W's test does) would let a flag-on CI job run
+  `test/` whole.
+
+### Files added by S2-Q
+
+| File | Purpose |
+|---|---|
+| `integration_test/v12/s2/s2_files_home_test.dart` | S2 E2E scenario (§2) |
+| `integration_test/v12/s2/tool/make_s2_media.sh` | Local test media (Pillow, ffmpeg) |
+| `test/v12/s2_qa/s2_matrix_test.dart` | Composed overflow / a11y matrix and HttpOverrides guard (§5, §6) |
+| `test/v12/s2_qa/s2_persistence_test.dart` | Persistence across restarts (§4) |
+| `docs/v1.2/qa/S2-QA.md` | This section |
