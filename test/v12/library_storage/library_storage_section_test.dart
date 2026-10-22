@@ -2,7 +2,7 @@
 //
 // Settings › Library storage (BUILD_PLAN HOM-17; ARCH v1.2 §5.2, V2-V1): library size and Recently
 // deleted size from the store, updated after every write; the Apple backup note and the plain
-// Android 25 MB Auto Backup note; no store (DANAVIEW_FILES_HOME off) shows zeros without errors; the
+// Android note (imported files are not in the cloud backup, owner 2026-10-22); no store (DANAVIEW_FILES_HOME off) shows zeros without errors; the
 // layout matrix 280–1280 px × text scale 0.85–1.35 with 44 px rows and semantics labels.
 
 import 'dart:io';
@@ -46,13 +46,14 @@ void main() {
     await env.dispose();
   });
 
-  testWidgets('on Android it says plainly that cloud Auto Backup stops at 25 MB', (tester) async {
+  testWidgets("on Android it says plainly that imported files aren't in the cloud backup", (tester) async {
     useSurface(tester, librarySurfaces[2]);
     final env = await LibraryTestEnv.create();
     await tester.pumpWidget(_app(env, platform: TargetPlatform.android, usage: _big));
     await pumpFrames(tester);
     expect(find.text(LibraryStorageSettingsSection.androidNote), findsOneWidget);
-    expect(LibraryStorageSettingsSection.androidNote, contains('25 MB'));
+    expect(LibraryStorageSettingsSection.androidNote, contains("aren't in Google's cloud backup"));
+    expect(LibraryStorageSettingsSection.androidNote, contains('phone-to-phone transfer'));
     expect(find.text(LibraryStorageSettingsSection.appleNote), findsNothing);
     await env.dispose();
   });

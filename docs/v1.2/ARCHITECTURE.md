@@ -140,7 +140,7 @@ Status: **final** (no owner input needed), **owner 2026-10-15/16** (decided), **
 | V2-112 | D-97 | Sort and group: date groups, folder; location grouping only from existing EXIF place names (V2-22) | final, narrowed | — |
 | V2-113 | D-98 | Owner UI rules | final (= §1.4) | §1.4 |
 | V2-114 | D-98a | Filters `All`/`Videos`/`Photos`/`Documents`; document sub-filters `PDF`, `Word`, `Excel`, `PowerPoint`, `Text/CSV`, `Other`; UTType / MIME / extension classifier table | owner 2026-10-16 | §5.1 |
-| V2-115 | D-98b | Danaview folders app-private, nested, mixed types, included in backups; Recently deleted 30 days; not shown in the iOS Files app in 1.2.0 | owner 2026-10-16; Android backup limit **[VERIFY: HOM-17]** | V2-06, V2-08, §5.2 |
+| V2-115 | D-98b | Danaview folders app-private, nested, mixed types, included in backups; Recently deleted 30 days; not shown in the iOS Files app in 1.2.0 | owner 2026-10-16; Android backup: **owner decision 2026-10-22: `filesDir/library/` is excluded from Google cloud backup and kept in device-to-device transfer** (one app over the 25 MB quota loses its whole cloud backup, player data included); iOS/macOS unchanged | V2-06, V2-08, §5.2 |
 | V2-116 | D-98c | Import is a copy; sources never changed; Photos/Gallery, Files, "Open with Danaview", iOS Share Extension | owner 2026-10-16 | §5.6, §8.3 |
 | V2-117 | D-98d | Getting files out: Save to Files, Save to Downloads, share sheet, Open in another app | owner 2026-10-16 | §8.4 |
 | V2-118 | D-98e | File actions and multi-select bar | owner 2026-10-16 | — |

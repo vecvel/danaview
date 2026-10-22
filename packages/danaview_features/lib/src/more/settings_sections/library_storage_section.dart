@@ -29,9 +29,10 @@ class LibraryStorageSettingsSection extends ConsumerWidget {
   static const String trashSubtitle = 'Kept for 30 days, still uses space';
   static const String appleNote =
       'Danaview folders stay on this device and are included in your device and iCloud backups.';
-  static const String androidNote = "Danaview folders are included in Android backups. Google's cloud backup "
-      'holds up to 25 MB per app, so a larger library is not in the cloud backup; it moves to a new phone '
-      'only with a direct phone-to-phone transfer.';
+  // Owner decision 2026-10-22: library/ is out of Google's cloud backup (one app over its 25 MB
+  // quota loses its whole cloud backup, player data included) and stays in device transfer.
+  static const String androidNote = "Files you import into Danaview folders aren't in Google's cloud backup. "
+      'To move them to a new phone, use a phone-to-phone transfer or save them out first.';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

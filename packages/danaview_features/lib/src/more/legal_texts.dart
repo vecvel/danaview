@@ -96,9 +96,9 @@ const List<LegalBullet> filesHomeStoredBullets = [
 const String filesHomeBackupText =
     'Backups: on iPhone, iPad and Mac, Danaview folders, Recently deleted and the library database are '
     'included in your device and iCloud backups; an import that has not finished yet is not. On Android they '
-    "are included in device backups, but Google's cloud backup holds at most 25 MB per app: when Danaview's "
-    'data is larger, Android skips its cloud backup, and the library moves to a new phone only with a direct '
-    'phone-to-phone transfer. '
+    "are not in Google's cloud backup, which holds at most 25 MB per app (a larger app would lose its whole "
+    'cloud backup, your player data included); they move to a new phone with a direct phone-to-phone '
+    'transfer, or you can save them out first. '
     "On computers they are kept in the app's data folder and are part of any backup you make of it.";
 
 /// Photo library access and getting files out ("Files and permissions").
