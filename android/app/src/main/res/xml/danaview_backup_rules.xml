@@ -8,4 +8,8 @@
 <full-backup-content>
     <exclude domain="file" path="danaview/editor" />
     <exclude domain="file" path="danaview/speech" />
+    <!-- EXTENDED: D-3, Windows lane (ARCH V2-115, owner 2026-10-22). Auto Backup on API <= 30 can't
+         tell cloud backup from device transfer, so the Danaview library (files/library: library.db,
+         files/, imports/) is left out entirely here. -->
+    <exclude domain="file" path="library" />
 </full-backup-content>
