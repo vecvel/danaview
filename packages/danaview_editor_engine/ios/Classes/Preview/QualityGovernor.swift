@@ -8,6 +8,10 @@
 // - `PreviewQuality.auto` (default) adapts: during playback it steps down one level after more
 //   than 10% of the frames of the last 2 s were missed, and back up one level after 10 s of
 //   playback without a missed frame. Thermal `.serious` or worse caps auto at ½ until it eases.
+// - When playback really stops (pause, end of the plan, export suspension), auto goes straight back
+//   to the requested level (full, or ½ while thermally capped), so a paused preview, and the
+//   paused seeks after it, are never left at a lowered quality (QA-05 D11); the next playback
+//   starts there and may step down again.
 // - `full`, `half` and `quarter` are pinned: the governor never changes a pinned quality (neither
 //   miss statistics nor thermal state move it, owner decision 2026-10-11).
 // - Only playback is measured: paused, scrub and exact seek frames never count.
@@ -98,8 +102,22 @@ final class QualityGovernor {
         resetStats(at: t)
     }
 
-    /// Playback stopped.
-    func playbackStopped() {
+    /// Playback stopped. Auto returns to the requested level (full, or ½ while thermally capped;
+    /// QA-05 D11); pinned qualities never change. Returns the new level when it changed.
+    @discardableResult
+    func playbackStopped() -> Level? {
+        clearStats()
+        guard isAuto else { return nil }
+        return change(to: thermalCapped ? .half : .full)
+    }
+
+    /// Playback is interrupted but resumes at once (a rebuild while playing): only the statistics
+    /// are cleared, the level stays.
+    func playbackInterrupted() {
+        clearStats()
+    }
+
+    private func clearStats() {
         samples.removeAll()
         windowStart = nil
         cleanSince = nil

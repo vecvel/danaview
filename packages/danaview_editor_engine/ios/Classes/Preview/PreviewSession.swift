@@ -28,7 +28,11 @@
 //   one seek in flight). `displayedFrameTime = timeOfFrame(displayedFrame)`.
 // Quality: QualityGovernor (render scale 1, ½, ¼ capped by `maxPreviewLongSide`); a step changes
 //   the item's video composition render size, emits `frameSize` and `degraded(q)` (`recovered`
-//   when auto is back at full) and, while paused, re-composes the current frame.
+//   when auto is back at full) and, while paused, re-composes the current frame. When playback
+//   stops for good (pause, end of the plan) auto returns to the requested level at once, reports
+//   it as such a step and rebuilds the paused frame at that size; a paused seek does the same if
+//   it still finds a lowered level, so the paused frame is never left at a lowered quality
+//   (QA-05 D11).
 // Decoder budget (D-43(e)): when more media layers overlap than the tier's live decode budget
 //   (`maxConcurrentVideoLayers`), playback runs a composition whose excess slots are `hold`
 //   stills of their exact frame at the play position (PlaybackStills); paused, scrub and exact
@@ -564,6 +568,7 @@ final class PreviewSession {
         if CompositionBuilder.frameTotal(compositionPlan) == 0 {
             // Nothing to play: an empty timeline shows its background only.
             stopPlayback()
+            if resetQualityOnStop() { renderSize = currentLevelSize() }
             player.replaceCurrentItem(with: nil)
             item = nil
             built?.releaseMedia()
@@ -829,17 +834,27 @@ final class PreviewSession {
             stopPlayback()
             if let k = bridge.lastComposed?.k { currentFrame = clampFrame(k) }
         }
+        // Also when a rebuild in flight had stopped the playback being paused here.
+        let requalified = !playing && resetQualityOnStop()
         reply(.success(mySeq))
         emitClock()
-        guard wasPlaying else { return }
-        // Settle on an exact frame: the compositor may have composed ahead, and paused edits
-        // redraw the compositor's last request. Stills and rendered-range playback go back to the
-        // full composition.
-        if playingStills || renderedPlan != nil {
+        guard wasPlaying || requalified else { return }
+        settleAfterStop(requalified: requalified)
+    }
+
+    /// Settles the stopped preview on an exact frame at `currentFrame`: the compositor may have
+    /// composed ahead, and paused edits redraw the compositor's last request. Stills and
+    /// rendered-range playback go back to the full composition. After a quality reset the frame is
+    /// composed again at the new render size by a rebuild at the current frame (a render-size swap
+    /// on the item that just stopped does not reliably compose a new frame; the rebuild keeps the
+    /// old frame on screen until the first new one).
+    private func settleAfterStop(requalified: Bool) {
+        if requalified || playingStills || renderedPlan != nil {
+            // The rebuild builds at `renderSize`.
+            if requalified { renderSize = currentLevelSize() }
             rebuild(frame: currentFrame, resume: false) { _ in }
         } else {
-            let k = currentFrame
-            seeks.exact(k) { [weak self] o in
+            seeks.exact(currentFrame) { [weak self] o in
                 guard let self, !self.playing else { return }
                 self.currentFrame = o.frame
             }
@@ -869,10 +884,14 @@ final class PreviewSession {
                 return done(SeekController.Outcome(frame: k, reached: true, ms: 0))
             }
             if self.playing { self.tick.setMinFrame(min(k, self.currentFrame)) }
-            if self.playingStills {
+            // A paused seek renders at the requested quality (QA-05 D11): rebuilt at k.
+            let requalified = !self.playing && !self.wantsPlaying && self.resetQualityOnStop()
+            if requalified { self.renderSize = self.currentLevelSize() }
+            if self.playingStills || requalified {
                 // Stills are anchored at the play position: re-anchor them at k (exact for every layer).
+                // After a quality reset the paused frame is rebuilt at k at the new size.
                 self.currentFrame = k
-                self.rebuild(frame: k, resume: true) { [weak self] _ in
+                self.rebuild(frame: k, resume: !requalified) { [weak self] _ in
                     guard let self else { return }
                     done(SeekController.Outcome(frame: self.currentFrame, reached: true, ms: 0))
                 }
@@ -908,7 +927,18 @@ final class PreviewSession {
         clockTimer?.cancel()
         clockTimer = nil
         removeBoundaryObserver()
-        governor.playbackStopped()
+        // Statistics run only while playing; whether the level returns to the requested one is the
+        // caller's (resetQualityOnStop: a pause or the end, not a rebuild that resumes playing).
+        governor.playbackInterrupted()
+    }
+
+    /// Playback stopped for good: auto goes back to the requested level (QA-05 D11) and reports it
+    /// like a governor step (`degraded(q)`, plus `recovered` at full). The caller re-composes the
+    /// paused frame at the new size. Returns whether the level changed.
+    private func resetQualityOnStop() -> Bool {
+        guard !disposed, let level = governor.playbackStopped() else { return false }
+        reportQualityStep(level)
+        return true
     }
 
     private func clearSourceFrame() {
@@ -956,9 +986,13 @@ final class PreviewSession {
     }
 
     private func governorStepped(to level: QualityGovernor.Level) {
+        reportQualityStep(level)
+        applyRenderSize(nil)
+    }
+
+    private func reportQualityStep(_ level: QualityGovernor.Level) {
         deps.events.emitPreviewEvent(sessionId: id, PreviewEventMsg(kind: .degraded, quality: level.msg))
         if level == .full { deps.events.emitPreviewEvent(sessionId: id, PreviewEventMsg(kind: .recovered)) }
-        applyRenderSize(nil)
     }
 
     // MARK: Clock
@@ -1070,16 +1104,10 @@ final class PreviewSession {
         // the end frame.
         let last = clampFrame(frameCount - 1)
         currentFrame = last
+        let requalified = resetQualityOnStop()
         emitClock()
-        if playingStills || renderedPlan != nil {
-            // Ended on a stills or rendered composition: paused edits and seeks need the full one.
-            rebuild(frame: currentFrame, resume: false) { _ in }
-        } else {
-            seeks.exact(last) { [weak self] o in
-                guard let self, !self.playing else { return }
-                self.currentFrame = o.frame
-            }
-        }
+        // Ended on a stills or rendered composition: paused edits and seeks need the full one.
+        settleAfterStop(requalified: requalified)
     }
 
     // MARK: Quality and proxies
@@ -1109,14 +1137,7 @@ final class PreviewSession {
         renderSize = size
         let apply = { [weak self] in
             guard let self else { return }
-            guard let built = self.built, let item = self.item,
-                  let vc = built.videoComposition.mutableCopy() as? AVMutableVideoComposition else {
-                completion?()
-                return
-            }
-            vc.renderSize = size
-            item.videoComposition = vc
-            if self.playing {
+            guard self.setItemRenderSize(size), !self.playing else {
                 completion?()
                 return
             }
@@ -1128,6 +1149,16 @@ final class PreviewSession {
             }
         }
         whenSettled(apply)
+    }
+
+    /// Sets the item's video composition render size; false without an item.
+    private func setItemRenderSize(_ size: CGSize) -> Bool {
+        guard let built, let item, let vc = built.videoComposition.mutableCopy() as? AVMutableVideoComposition else {
+            return false
+        }
+        vc.renderSize = size
+        item.videoComposition = vc
+        return true
     }
 
     func setUseProxies(_ on: Bool, reply: @escaping EngineReply<Void>) {
