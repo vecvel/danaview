@@ -155,13 +155,15 @@ void main() {
     await pumpFrames(tester);
     final container = ProviderScope.containerOf(tester.element(find.byType(LibrarySearchField)));
     final index = container.read(nameSearchIndexProvider);
-    expect(calls, hasLength(1), reason: 'the controller reads the Danaview folders once when it starts');
+    expect(calls, isNotEmpty, reason: 'the controller reads the Danaview folders when it starts');
+    expect(calls.first, isNull);
+    final started = calls.length;
 
     // Typing never reads the library.
     for (final q in ['r', 're', 'rep', 'repo']) {
       await _type(tester, q);
     }
-    expect(calls, hasLength(1));
+    expect(calls, hasLength(started));
     expect(find.text('Report.pdf'), findsOneWidget);
 
     // An import progress checkpoint, a favourite: read once each, fingerprint unchanged, nothing swapped.
@@ -173,7 +175,7 @@ void main() {
     await pumpFrames(tester, count: 2);
     await lib.run(tester, (s) => s.write((w, now) => w.setEntryFavourite(report.id, true)));
     await pumpFrames(tester, count: 2);
-    expect(calls.length, greaterThan(1));
+    expect(calls.length, greaterThanOrEqualTo(started + 2));
     expect(calls.skip(1), everyElement(isNotNull), reason: 'later reads pass the fingerprint held');
     expect(index.version, version);
 

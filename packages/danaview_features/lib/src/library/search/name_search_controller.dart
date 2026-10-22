@@ -29,7 +29,7 @@ import '../files/library_store_providers.dart';
 import '../library_providers.dart';
 
 export 'package:danaview_library/danaview_library.dart'
-    show NameIndex, NameSearchBackend, SearchBackend, SearchHit, SearchItem, SearchMatch, SearchOrigin, SearchQuery, SearchResults;
+    show DanaviewSearchSnapshot, NameIndex, NameSearchBackend, readDanaviewSearchSnapshot, SearchBackend, SearchHit, SearchItem, SearchMatch, SearchOrigin, SearchQuery, SearchResults;
 
 /// The source id of the linked folders in the name index.
 const String linkedSearchSourceId = 'linked';
@@ -167,7 +167,7 @@ final class NameSearchController extends StateNotifier<NameSearchState> {
 
   /// Completes when no Danaview read is pending (tests).
   Future<void> get danaviewSettled async {
-    while (_danaviewLoad case final load?) {
+    for (var load = _danaviewLoad; load != null; load = _danaviewLoad) {
       await load;
     }
   }

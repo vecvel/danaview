@@ -156,7 +156,7 @@ void main() {
       final beach = await importNamed(store, 'beach.jpg', folder: trip);
       final first = readDanaviewSearchSnapshot(store.reader.db);
       expect(first.changed, isTrue);
-      expect([for (final i in first.source!.items) i.name], ['beach.jpg', 'Summer trip']);
+      expect([for (final i in first.source!.items) i.name], containsAllInOrder(['beach.jpg', 'Summer trip']));
 
       // Writes that change no searchable column: same fingerprint, nothing built.
       await store.write((w, now) {

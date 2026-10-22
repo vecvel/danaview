@@ -9,9 +9,12 @@
 //
 //   flutter run -d <ios-26.5-iphone-16-udid> -t test/v12/thumbs/heic_decode_ios_check.dart
 //
-// Verdict `DV_HEIC_CHECK verdict=pass` means HEIC was written and decoded; only then may
-// `thumbnailFormatFor(TargetPlatform.iOS)` return HEIC again (record the run in
-// docs/v1.2/BUILD_STATE.md / the S2 QA report). Nothing here prints paths (rule 30).
+// Verdict `DV_HEIC_CHECK verdict=pass` means HEIC was written and decoded; it is what lets
+// `thumbnailFormatFor(TargetPlatform.iOS)` request HEIC. Prints go to the device log (read them
+// with `xcrun simctl spawn <udid> log show --predicate 'eventMessage CONTAINS "DV_HEIC_CHECK"'`;
+// `flutter run` may lose the debug connection when the app exits). Recorded run, 2026-10-22, iOS
+// 26.5 iPhone 16, Flutter 3.44: jpeg written=jpeg decoded=384x384; heic written=heic (2873 bytes)
+// decoded=384x384; verdict=pass (twice). Nothing here prints paths (rule 30).
 // ignore_for_file: depend_on_referenced_packages, avoid_print
 
 import 'dart:io';

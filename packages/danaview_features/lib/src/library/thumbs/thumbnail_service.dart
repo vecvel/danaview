@@ -57,15 +57,17 @@ final class UiThumbDecoder implements ThumbDecoder {
   }
 }
 
-/// The format the disk cache stores on [platform] (V2-28): WebP on Android, JPEG on Apple and
-/// elsewhere.
+/// The format the disk cache stores on [platform] (V2-28): WebP on Android, HEIC on iOS (the
+/// platform writes JPEG before iOS 17), JPEG elsewhere.
 ///
-/// iOS requests JPEG, not HEIC: ARCH V2-28's "HEIC on iOS 17+" is **[VERIFY: HOM-04]** and stays
-/// off until `test/v12/thumbs/heic_decode_ios_test.dart` (a hosted iOS Simulator check that
-/// decodes a native HEIC output through [UiThumbDecoder]) has passed and is recorded. Even with
-/// HEIC requested, [ThumbnailService] falls back to JPEG when the engine cannot decode it.
+/// V2-28's [VERIFY: HOM-04] for iOS: `test/v12/thumbs/heic_decode_ios_check.dart` asks the real
+/// Apple thumbnailer for a HEIC and decodes it through [UiThumbDecoder] on a hosted iOS Simulator;
+/// it passed on iOS 26.5 (iPhone 16, Flutter 3.44, 2026-10-22: HEIC written, decoded 384 x 384).
+/// Should an engine still fail to read a HEIC, [ThumbnailService] regenerates it as JPEG and asks
+/// JPEG for the rest of the session instead of failing the thumbnail.
 NativeThumbnailFormat thumbnailFormatFor(TargetPlatform platform) => switch (platform) {
       TargetPlatform.android => NativeThumbnailFormat.webp,
+      TargetPlatform.iOS => NativeThumbnailFormat.heic,
       _ => NativeThumbnailFormat.jpeg,
     };
 
