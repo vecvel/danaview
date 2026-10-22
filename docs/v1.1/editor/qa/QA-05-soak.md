@@ -13,12 +13,17 @@ The acceptance criteria are:
 - the project always reopens valid
 
 **Status (2026-10-17 10:27 IST): iOS side green.** The seeded soak (seed 5150) and the process-death
-chain both pass on the FIX-IOS-D7 code (§2). D1–D7 are all fixed. **Android side (D11 re-run, 2026-10-22, code d2600495, API 35 emulator):
+chain both pass on the FIX-IOS-D7 code (§2). D1–D7 are all fixed. **Android side: certified (2026-10-22, code 0fa78966, API 35 emulator),
+with the 1 h runs and the device-only steps deferred, as on iOS** (§A0000). The selftest passes,
+the process-death chain passes 7/7, and both seeded runs (seed 5150, 15 min) pass with 0 failures,
+0 framework errors, every reopen valid, one app pid, no ANR, fatal signal or OOM, and memory −3.0 %
+(run a) and +1.1 % (run b). D11 and D12 are closed: D12 (the `danaview-pcm` SIGSEGV) is fixed in
+0fa78966 and did not recur. **Previous Android status (D11 re-run, 2026-10-22, code d2600495):
 not certified** (§A000). D11 is fixed: the selftest passes, the death chain passes 7/7, and seeded
 run a passes with 0 failures (441 ops, +0.8 % memory, every offline and call op green, #26 and
 #271 included). But seeded run b crashed the app at 17:59:35 with a SIGSEGV on the `danaview-pcm`
 thread while the reverse job closed its `PcmStream` (**D12**, Android lane, native crash, §A000.4).
-A fix agent (Android lane) is working on D12; both seeded soaks run again on the fix code. A
+D12 was then fixed in 0fa78966 (§A0000). A
 re-run of b was voided because the laptop left mains power and went into standby mid-run.
 **Previous Android status (final 1.1 re-run, 2026-10-22, code 8725e25c): not certified** (§A00). The selftest passes (30
 checks, W4b included), and the process-death chain passes 7/7 with `soak_host.py` unmodified and
@@ -102,6 +107,94 @@ Every in-app event prints a `DV_SOAK <kind> …` line. The kinds are `op`, `fail
 | captions | 60 s of speech (6 clips, "Selected clips", Fast tier), killed past 50 % (after the first checkpoint). | `resumableFor(project)` keeps the record. The editor shows "Auto captions were interrupted" once. After Discard, a reopen shows no notice and the record is gone. |
 
 For every job, the project is then opened straight from the store and validated.
+
+## A0000. Android half, D12 re-run (Windows lane, 2026-10-22, code 0fa78966)
+
+**Code 0fa78966** (`editor-android`) is d2600495 plus the D12 fix (0fa78966, "fix(editor): AND-04
+PCM decoder teardown raced its input callback") and the D11 session tests from cbefb080 (c5a458d7,
+test only), with the d2600495 report commit (14ce5bbe, docs only) between them. Every run below is
+on that exact commit, clean checkout; only this report commit follows it.
+
+All QA-05 runs used the **Pixel_9_Pro_XL_API_35 emulator** (`emulator-5554`, `-port 5554`,
+audio, cold boot with `-no-snapshot-load`, booted 19:03), a debug build from the main checkout.
+Zygote heap 576m, equal to `ro.boot.dalvik.vm.heapsize`, so no boot race; the guest was idle
+after boot (`guest_top_boot.txt`). Commands as in §A00, `soak_host.py` unmodified, no wrapper, no
+manual folder step; before each soak `adb uninstall`, then `e2e_host.sh stage` and `stage-models
+C:/dev/models`. Everything ran 19:04–19:49 IST on mains power (Win32_Battery status 2 checked
+before and after each step, `prep.log` in each run folder), with **no other emulator running** and
+the `emulator`, `emulator2` and `soak` lock dirs held. Evidence of the d2600495 round is in
+`build/soak/android/_before_0fa78966/`; everything below is under
+`build/soak/android/emulator-5554/` (`CODE_VERSION.txt`).
+
+**Verdict: the Android half is certified** (2026-10-22) for the 15 min seeded soak and the death
+chain on the API 35 emulator. The 1 h runs and the device-only steps stay deferred, as on iOS (§6).
+D11 and D12 are closed.
+
+### A0000.1 Selftest
+
+**pass**: `selftest: PASS`, exit 0, 30 `ok` checks (`selftest/selftest.log`).
+
+### A0000.2 Process death per job type
+
+19:04–19:14, exit 0, **7/7 pass**: autosave (journal restored, `SOAK AUTOSAVE 0`), proxy killed at
+8.9 % and resumed to `ready`, reverse killed at 2 % and resumed to `ready`, freeze not running at
+the kill (allowed caveat, already ready on reopen), export killed at 60 % with `ExportInterrupted`
+once and nothing on reopen, captions killed at 56 % with the 60 s WAV (notice once, gone after
+Discard), verify. Evidence: `death_chain/` (`death-results.txt`, `death_runner.log`,
+`logcat_death.txt`, `logs/`, `files/soak-death.json`). The logcat has no ANR, fatal signal or
+OutOfMemory line.
+
+### A0000.3 Random soak, 15 min, seed 5150
+
+Both runs from a fresh install on the same cold boot. Evidence: `soak_run_a/` and `soak_run_b/`
+(`prep.log`, `soak_runner.log`, `logs/soak_test-soak.log`, `files/soak-summary.json`,
+`memory-host.csv`, `logcat_soak.txt`).
+
+| Run | Time | Ops | Projects | Reopens | Failures | Memory (baseline → end, peak) | Growth |
+|---|---|---|---|---|---|---|---|
+| a | 19:15–19:31, 908 s | 334 | 2 | 14 of 14 valid | **0** | 662.0 → 642.2 MB, peak 726.0 MB (304 samples) | −3.0 % |
+| b | 19:32–19:48, 916 s | 262 | 2 | 11 of 11 valid | **0** | 639.2 → 646.2 MB, peak 729.0 MB (232 samples) | +1.1 % |
+
+| Criterion | Run a | Run b |
+|---|---|---|
+| No crash | **pass**. One app pid (18910) in 31 host samples (PSS 403–698 MB). No ANR, fatal signal or OOM. | **pass**. One app pid (15775) in 31 host samples (PSS 441–703 MB after a 356 MB first sample at launch). No ANR, fatal signal or OOM. |
+| No unhandled exception | **pass**: 0 framework errors | **pass**: 0 framework errors |
+| Nothing hangs, every op works | **pass**: 0 failed ops | **pass**: 0 failed ops |
+| Memory ≤ +10 % | **pass**: −3.0 % | **pass**: +1.1 % |
+| Interrupted jobs recover or report once | **pass**: exports 3 completed (#49, #166, #259 after background), 5 cancelled (#22, #95, #153, #237, #331); low storage #29 and #306 cancelled, #75 completed after background, #274 a clean "storage failure after background (low storage)"; the save saved every time | **pass**: exports 3 completed (#49, #166, #259 after background), 4 cancelled (#22, #95, #153, #237); low storage #29 cancelled, #75 a clean storage failure after background; the save saved every time |
+| Project always reopens valid | **pass**: 14 of 14, 0 reopen problems | **pass**: 11 of 11, 0 reopen problems |
+
+**D12 is fixed.** No `danaview-pcm` crash anywhere in this round (death chain and both soaks), and
+`/data/tombstones` has no new tombstone after the D12 crash of 17:59 (`tombstone_08`;
+`tombstones_listing_after_soaks.txt`). Run b passed op #261, the reverse right after #260 where the
+app died on d2600495 (40.9 s, completed; run a 25.7 s), and every reverse and captions op
+in both runs. The decoder still logs "MediaCodec discarded an unknown buffer" when a stream closes
+(967 lines in run a); that is the codec's own stop message, now harmless because the teardown runs
+on the callback thread.
+
+**D11 stays fixed.** Every call (#26, #112, #180, #238) and offline (#28, #240, #271, #284) op passes
+in run a, and every one that run b reached (#26, #28, #112, #180, #238, #240). Op #262 stays fixed
+(run a: #262 freeze 4.0 s after the #261 reverse). 0 "codec handover timed out" in both runs (D9
+stays fixed); "Handler on a dead thread" warnings 62 (a) and 76 (b). audioRoute is skipped as a
+device step. Run b did fewer ops in its 15 min than run a (262 vs 334: its exports and the #261
+reverse ran slower on the emulator), with no failure or stall. Emulator debug-build numbers, not
+device numbers.
+
+**The 034a0d3 a1 crash** (`ExoPlayer:Playback`, §A0.3) is explained in 0fa78966: 250 ms before it
+the emulator's vendor codec service crashed (`c2.goldfish.h264.decoder`, null deref in
+`C2GoldfishAvcDec::process`, `tombstone_04`), and the app's input buffers were unmapped while
+Media3's playback thread was filling one. That is an emulator HAL crash, not our code, and it did not
+recur in this round.
+
+### A0000.4 Defects closed
+
+- **D11** (preview left at quarter quality while paused): closed. Fixed on both engines (iOS/Dart
+  5ac2cf8, Android d2600495, session tests c5a458d7); green in d2600495 run a and in both seeded runs
+  on 0fa78966.
+- **D12** (native SIGSEGV on `danaview-pcm`, `PcmStream.close()` stopping the codec under the input
+  callback): closed. Fixed in 0fa78966 (the whole teardown runs on the callback thread; new
+  `PcmTeardownStressTest` crashes the old code and passes on the new); no recurrence in the death
+  chain or either seeded soak.
 
 ## A000. Android half, D11 re-run (Windows lane, 2026-10-22, code d2600495)
 
@@ -1017,7 +1110,7 @@ The fix belongs in the editor's open path. Either the editor screen or session (
 | Item | Status | How to run it |
 |---|---|---|
 | 1 h soak on a physical iPhone (plus calls, Siri, a wired or Bluetooth audio route change, and real low storage) | **deferred: no device available** | `flutter test integration_test/editor_soak/soak_test.dart -d <iphone> --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true --dart-define=DV_SOAK_MINUTES=60 --dart-define=DV_E2E_MODELS=<on-device dir>`. During the hour: place two calls to the phone, invoke Siri twice, plug and unplug headphones (or connect and disconnect a Bluetooth headset) during playback, and fill storage to less than 300 MB free with a large file. Then run the death phases with `soak_host.py` adapted to `xcrun devicectl` (kill: `devicectl device process terminate`). Record the summary JSON and Xcode's memory gauge. |
-| 1 h soak on the Android emulator (API 35) with GSM calls, low storage and process death | **deferred: the 15 min run is not green yet on 034a0d3 (§A0: D10 residual, the a1 SIGSEGV), and `soak_host.py` needs W4b on Android** | After those land: `python -I -B integration_test/editor_soak/tool/soak_host.py -p android -d emulator-5554 all --minutes 60` from Git Bash (after the `e2e_host.sh stage` and `stage-models` steps above). W1–W7 landed in 5912db4, so no wrapper is needed. Until W4b lands, open the shared folders to the app first (§A0.1). |
+| 1 h soak on the Android emulator (API 35) with GSM calls, low storage and process death | **deferred, as on iOS** (the 15 min seeded runs and the death chain are green on 0fa78966, §A0000) | `python -I -B integration_test/editor_soak/tool/soak_host.py -p android -d emulator-5554 all --minutes 60` from Git Bash (after the `e2e_host.sh stage` and `stage-models` steps above). W1–W7 (5912db4) and W4b (befb981) have landed, so no wrapper and no manual folder step are needed. |
 | Freeze resume after process death on Android | **not exercised** | In both Android chains the freeze finished before the kill (the allowed caveat), so the resume of a pending still was not seen on Android. A longer freeze source, or a kill timed on the task's start, would exercise it. |
 | 1 h soak on a physical Android device (audio route via headset, real calls, low storage) | **deferred: Windows lane / no device available** | `python3 -I integration_test/editor_soak/tool/soak_host.py -p android -d <serial> all --minutes 60`. `call` and `lowStorage` are emulator-only in the host, so on a device do them by hand during the hour, as for the iPhone. |
 | Audio route change | **deferred: no device available** | Neither the simulator nor the emulator can change the audio route from a script. The host answers `audioRoute` with ok=false, and the soak records it under `unavailable`. |
