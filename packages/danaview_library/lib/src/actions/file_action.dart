@@ -92,11 +92,13 @@ final class FileActionTarget {
 }
 
 /// The local path of [uri] (an absolute path, a Windows drive path or a `file://` URI), or null.
-String? localPathOf(String uri) {
+/// A `file://` URI becomes a path of the host's style (backslashes on Windows); [windows] picks the
+/// style instead (tests).
+String? localPathOf(String uri, {bool? windows}) {
   if (uri.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(uri)) return uri;
   if (uri.startsWith('file://')) {
     try {
-      return Uri.parse(uri).toFilePath();
+      return Uri.parse(uri).toFilePath(windows: windows);
     } on UnsupportedError {
       return null;
     } on FormatException {

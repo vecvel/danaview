@@ -13,6 +13,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:danaview_library/testing.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/sqlite_open.dart';
@@ -176,7 +177,9 @@ void main() {
     final c = await _import(store, 'Bin.jpg');
     File(actions.pathOf(b)).deleteSync();
     await actions.delete([c.id]);
-    final linked = File('${_tempRoot()}/linked.txt')..writeAsStringSync('x');
+    // Joined with the host separator: the linked item's `file://` URI comes back as a host path
+    // (backslashes on Windows), so a '/'-joined path would differ there (FIX-S1Q-A5).
+    final linked = File(p.join(_tempRoot(), 'linked.txt'))..writeAsStringSync('x');
     final targets = [
       FileActionTarget.of(_itemOf(a)),
       FileActionTarget.of(_itemOf(b)),

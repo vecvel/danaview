@@ -26,6 +26,13 @@ const _quick = SpeedTestConfig(
   stallTimeout: Duration(milliseconds: 600),
 );
 
+/// Windows retries a refused loopback connect for about 2 s before it reports the refusal (Linux,
+/// macOS and Android refuse at once), so the "nothing listening" cases give every deadline (request,
+/// health, stall and phase length) room above that retry. Below it the refusal would arrive after
+/// the deadline and read as `stalled`, which is right for the product but not what these cases pin
+/// (FIX-S1Q-A2). On a host that refuses at once the case still ends at once.
+const _refusalDeadline = Duration(seconds: 6);
+
 final _ticket = OpenNetworkConsent.accepted(DateTime.utc(2026, 10, 22));
 
 Matcher _failure(SpeedFailureKind kind, SpeedTestPhase phase, {int? status}) => isA<SpeedProviderFailure>()
@@ -196,7 +203,8 @@ void main() {
       await closed.close();
       final p = MLabNdt7Provider(
         consent: () => _ticket,
-        config: _quick,
+        config: const SpeedTestConfig(latencySamples: 3, requestTimeout: _refusalDeadline, stallTimeout: _refusalDeadline),
+        healthTimeout: _refusalDeadline,
         locate: MLabLocateClient(endpoint: Uri.parse('http://127.0.0.1:$port/v2/nearest/ndt/ndt7')),
       );
       await expectLater(

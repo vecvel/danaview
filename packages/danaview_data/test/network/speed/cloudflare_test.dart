@@ -25,6 +25,24 @@ const _quick = SpeedTestConfig(
   stallTimeout: Duration(seconds: 1),
 );
 
+/// Windows retries a refused loopback connect for about 2 s before it reports the refusal (Linux,
+/// macOS and Android refuse at once), so the "nothing listening" cases give every deadline (request,
+/// health, stall and phase length) room above that retry. Below it the refusal would arrive after
+/// the deadline and read as `stalled`, which is right for the product but not what these cases pin
+/// (FIX-S1Q-A2). On a host that refuses at once the case still ends at once.
+const _refusalDeadline = Duration(seconds: 6);
+
+const _refusal = SpeedTestConfig(
+  latencySamples: 3,
+  connections: 2,
+  downloadDuration: _refusalDeadline,
+  uploadDuration: _refusalDeadline,
+  warmUp: Duration(milliseconds: 200),
+  sampleInterval: Duration(milliseconds: 50),
+  requestTimeout: _refusalDeadline,
+  stallTimeout: _refusalDeadline,
+);
+
 class _Fake {
   _Fake._(this._server);
 
@@ -278,7 +296,7 @@ void main() {
       final closed = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final port = closed.port;
       await closed.close(force: true);
-      final p = CloudflareSpeedProvider(base: Uri.parse('http://127.0.0.1:$port'), config: _quick);
+      final p = CloudflareSpeedProvider(base: Uri.parse('http://127.0.0.1:$port'), config: _refusal, healthTimeout: _refusalDeadline);
       await expectLater(p.latency(cancel: NetworkCancelToken()), throwsA(_failure(SpeedFailureKind.unreachable, SpeedTestPhase.latency)));
       await expectLater(p.download(cancel: NetworkCancelToken()), throwsA(_failure(SpeedFailureKind.unreachable, SpeedTestPhase.download)));
       await expectLater(p.upload(cancel: NetworkCancelToken()), throwsA(_failure(SpeedFailureKind.unreachable, SpeedTestPhase.upload)));

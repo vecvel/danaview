@@ -555,7 +555,11 @@ void main() {
       await server.close(force: true);
       final dead = CloudflareSpeedProvider(
         base: Uri.parse('http://127.0.0.1:$port'),
-        config: const SpeedTestConfig(latencySamples: 2, requestTimeout: Duration(seconds: 2)),
+        // Windows retries a refused loopback connect for about 2 s (Linux, macOS and Android refuse at
+        // once): both deadlines sit above that so the refusal, not the deadline, ends the health
+        // check on every host (FIX-S1Q-A2).
+        config: const SpeedTestConfig(latencySamples: 2, requestTimeout: Duration(seconds: 6)),
+        healthTimeout: const Duration(seconds: 6),
       );
       final ml = _FakeProvider('mlab', consent: () => _ticket);
       final out = await _collect(coordinator([dead, ml]).run());

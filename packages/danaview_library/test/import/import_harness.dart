@@ -41,9 +41,15 @@ File sourceFile(Directory dir, String name, List<int> bytes) {
   return f;
 }
 
-/// Opens an in-process store at [root].
-Future<LibraryStore> openStore(String root, {FakeLibraryClock? clock, bool background = false}) =>
-    LibraryStore.open(root: root, clock: (clock ?? FakeLibraryClock(t0)).call, background: background);
+/// Opens a store at [root] (in-process unless [background]) and closes it after the test. The
+/// close is registered after the temp folder's deletion, so it runs first: Windows refuses to
+/// delete a folder while library.db in it is open (FIX-S1Q-A5). Closing twice, or after
+/// `abandon`, does nothing.
+Future<LibraryStore> openStore(String root, {FakeLibraryClock? clock, bool background = false}) async {
+  final store = await LibraryStore.open(root: root, clock: (clock ?? FakeLibraryClock(t0)).call, background: background);
+  addTearDown(store.close);
+  return store;
+}
 
 /// Waits until [condition] holds (polling), failing after [timeout].
 Future<void> eventually(bool Function() condition, {Duration timeout = const Duration(seconds: 20)}) async {

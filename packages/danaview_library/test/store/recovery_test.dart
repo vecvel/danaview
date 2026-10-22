@@ -105,6 +105,7 @@ void main() {
 
   test('the writer runs on a background isolate', () async {
     final store = await LibraryStore.open(root: root, clock: clock.call);
+    addTearDown(store.close); // before the temp root goes, also when the test fails (FIX-S1Q-A5)
     final folder = await store.write((w, now) => w.createFolder('Iso', now: now));
     final e = await store.write((w, now) => importBytes(w, now, 'a.txt', 'abc'.codeUnits, folder: folder));
     expect(store.reader.entry(e.id)!.folderId, folder, reason: 'the UI-isolate reader sees committed writes');

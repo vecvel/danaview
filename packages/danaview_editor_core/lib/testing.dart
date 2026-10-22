@@ -18,11 +18,20 @@ import 'store.dart';
 
 /// A file system held in memory (no symbolic links). Modification times strictly increase with
 /// every write so "newest copy" decisions are deterministic.
+///
+/// Paths are kept in POSIX form. The product builds its paths with the host's `package:path`
+/// context ([StoreRoots] uses `p.join`), so on a Windows host they arrive as
+/// `/fake/support\danaview\editor`; those backslashes are read as separators (FIX-S1Q-A3), and
+/// [list] returns POSIX paths, which the host context's `basename`/`join` accept as well.
 final class MemoryStoreFs implements StoreFs {
-  /// Creates an empty file system (only `/` exists).
-  MemoryStoreFs({DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
+  /// Creates an empty file system (only `/` exists). [pathContext] is the context the callers
+  /// build paths with (the host's by default); tests pass `p.windows` to simulate a Windows host.
+  MemoryStoreFs({DateTime Function()? clock, p.Context? pathContext})
+      : _clock = clock ?? DateTime.now,
+        _backslashSeparates = (pathContext ?? p.context).style == p.Style.windows;
 
   final DateTime Function() _clock;
+  final bool _backslashSeparates;
   final Map<String, _MemFile> _files = {};
   final Map<String, DateTime> _dirs = {'/': DateTime.utc(2026)};
   DateTime _last = DateTime.utc(2026);
@@ -33,7 +42,7 @@ final class MemoryStoreFs implements StoreFs {
     return _last = t;
   }
 
-  static String _n(String path) => p.posix.normalize(path);
+  String _n(String path) => p.posix.normalize(_backslashSeparates ? path.replaceAll(r'\', '/') : path);
 
   /// Every file path (sorted), for assertions.
   List<String> get filePaths => _files.keys.toList()..sort();
@@ -187,7 +196,10 @@ final class MemoryStoreFs implements StoreFs {
   }
 
   @override
-  Future<String> canonicalize(String path) async => _n(p.posix.isAbsolute(path) ? path : '/$path');
+  Future<String> canonicalize(String path) async {
+    final n = _n(path);
+    return p.posix.isAbsolute(n) ? n : _n('/$n');
+  }
 }
 
 final class _MemFile {
