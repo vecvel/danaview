@@ -59,7 +59,7 @@ const String mediaRootLabel = 'Media';
 const List<String> rootVideos = ['Clip 1.mp4', 'Clip 2.mkv', 'Clip 10.mp4'];
 
 /// The subfolders of the tree root, in natural order (the hidden folder skipped).
-const List<String> rootFolders = ['Disc 2', 'Disc 10'];
+const List<String> rootFolders = ['Disc 2', 'Disc 10', 'Only Folders'];
 
 /// The videos directly in `Disc 2`, in natural order.
 const List<String> disc2Videos = ['Part 1.mp4', 'Part 2.mp4', 'Part 10.mp4'];
@@ -149,8 +149,13 @@ class FolderCalls {
 }
 
 /// Real-time wait so disk reads started by the widgets finish.
+/// Real disk I/O completes outside the fake clock, one step at a time, so this alternates real
+/// waits with frames until each chained read has finished.
 Future<void> settleDisk(WidgetTester tester, {int ms = 150}) async {
-  await tester.runAsync(() => Future<void>.delayed(Duration(milliseconds: ms)));
+  for (var i = 0; i < 10; i++) {
+    await tester.runAsync(() => Future<void>.delayed(Duration(milliseconds: ms ~/ 10 + 1)));
+    await tester.pump(const Duration(milliseconds: 50));
+  }
   await pumpFrames(tester);
 }
 
@@ -174,10 +179,11 @@ Future<void> pumpFoldersHome(
       textScale: surface.textScale,
       platform: platform,
     ));
-    await Future<void>.delayed(const Duration(milliseconds: 100));
   });
-  await pumpFrames(tester);
+  await settleDisk(tester);
   if (host.tab case final tab? when tab != HomeTab.home) {
+    await tester.ensureVisible(find.byKey(homeTabKey(tab)));
+    await tester.pump();
     await tester.tap(find.byKey(homeTabKey(tab)));
     await pumpFrames(tester);
   }
@@ -266,9 +272,8 @@ Future<void> pumpFolderScreen(
       textScale: surface.textScale,
       platform: platform,
     ));
-    await Future<void>.delayed(const Duration(milliseconds: 200));
   });
-  await pumpFrames(tester);
+  await settleDisk(tester);
   expect(tester.takeException(), isNull);
 }
 

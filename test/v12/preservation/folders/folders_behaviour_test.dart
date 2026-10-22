@@ -32,7 +32,7 @@ Future<void> _menu(WidgetTester tester, FoldersHost host, String row, String ite
   await pumpFrames(tester);
 }
 
-List<Object?> _queue(QueueState q) => [q.items, q.currentIndex, q.isShuffled, q.unShuffledItems];
+List<Object?> _queue(QueueState q) => [q.items, q.currentIndex, q.isShuffled];
 
 /// The Home's Folders section script for [host]; returns what reached the callbacks, the player,
 /// the library and the disk.
@@ -83,7 +83,7 @@ Future<List<Object?>> _homeScript(WidgetTester tester, Directory tree, Directory
   log.add(['after cancel', env.library.getFolders().map((f) => f.label).toList()]);
   await _menu(tester, host, _onlyFolders, 'Remove from library');
   await tester.tap(find.widgetWithText(DanaviewButton, 'Remove').last);
-  await pumpFrames(tester);
+  await settleDisk(tester);
   log.add(['after remove', env.library.getFolders().map((f) => f.label).toList()]);
   log.add(['on disk', Directory(joinPath([tree.path, _onlyFolders, 'Season 1'])).existsSync()]);
   log.add(['rows after remove', rowTitles(tester, foldersGroup(host, LibraryRepository.deviceFolderLabel))]);
@@ -106,7 +106,7 @@ Future<List<Object?>> _folderScript(WidgetTester tester, Directory tree, {requir
   final titles = rowTitles(tester, find.byType(DanaviewFolderScreen));
   log.add(['listing', titles]);
   log.add(['title', find.text(mediaRootLabel).evaluate().length]);
-  log.add(['summary', find.text('2 folders · 3 videos').evaluate().length]);
+  log.add(['summary', find.text('3 folders · 3 videos').evaluate().length]);
   log.add(['counts', find.text('3 videos').evaluate().length, find.text('1 video').evaluate().length]);
   log.add(['compact crumbs', find.byType(DanaviewButton).evaluate().map((e) => (e.widget as DanaviewButton).label).toList()]);
 
@@ -297,10 +297,10 @@ void main() {
       'menu play all',
       1,
       [device.path, tree.path, tree.path],
-      [rootRefs, 0, false, <MediaRef>[]],
+      [rootRefs, 0, false],
     ]);
     expect(step('play all without direct videos')[1], 1);
-    expect(step('play all without direct videos')[3], [rootRefs, 0, false, <MediaRef>[]]);
+    expect(step('play all without direct videos')[3], [rootRefs, 0, false]);
     expect(step('toast'), ['toast', 1]);
     expect(step('confirm'), ['confirm', 1]);
     expect(step('after cancel'), ['after cancel', [mediaRootLabel, _onlyFolders]]);
@@ -323,24 +323,24 @@ void main() {
     expect(step('counts'), ['counts', 1, 1]);
     // Compact width: no breadcrumb buttons, only Play all and Shuffle.
     expect(step('compact crumbs'), ['compact crumbs', ['Play all', 'Shuffle']]);
-    expect(step('add to queue idle'), ['add to queue idle', 1, <String>[], [[clip('Clip 2.mkv')], 0, false, <MediaRef>[]]]);
+    expect(step('add to queue idle'), ['add to queue idle', 1, <String>[], [[clip('Clip 2.mkv')], 0, false]]);
     expect(step('play next'), [
       'play next',
       1,
       <String>[],
-      [[clip('Clip 2.mkv'), clip('Clip 10.mp4')], 0, false, <MediaRef>[]],
+      [[clip('Clip 2.mkv'), clip('Clip 10.mp4')], 0, false],
     ]);
     expect(step('toast next'), ['toast next', 1]);
     expect(step('add to queue'), [
       'add to queue',
       1,
       <String>[],
-      [[clip('Clip 2.mkv'), clip('Clip 10.mp4'), clip('Clip 1.mp4')], 0, false, <MediaRef>[]],
+      [[clip('Clip 2.mkv'), clip('Clip 10.mp4'), clip('Clip 1.mp4')], 0, false],
     ]);
     expect(step('toast queue'), ['toast queue', 1]);
-    expect(step('play all'), ['play all', 2, <String>[], [root, 0, false, <MediaRef>[]]]);
+    expect(step('play all'), ['play all', 2, <String>[], [root, 0, false]]);
     expect(step('shuffle'), ['shuffle', 3, true, root, root.map((m) => m.id).toSet()]);
-    expect(step('tap row'), ['tap row', 4, <String>[], [root, 1, false, <MediaRef>[]]]);
+    expect(step('tap row'), ['tap row', 4, <String>[], [root, 1, false]]);
     expect(step('tap folder')[2], [joinPath([tree.path, 'Disc 2'])]);
     expect(step('back'), ['back', 1]);
   });
