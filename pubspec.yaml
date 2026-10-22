@@ -40,6 +40,12 @@ dependencies:
     path: packages/danaview_transcription
   danaview_whisper:
     path: packages/danaview_whisper
+  # Files & Media Home (S2-W, ARCH v1.2 §4.1): the app root opens the library store and adapts the
+  # native plugin's backup flag (lib/wiring/files_home_wiring.dart).
+  danaview_library:
+    path: packages/danaview_library
+  danaview_library_native:
+    path: packages/danaview_library_native
 
   # Native Playback Engine Bindings
   media_kit: ^1.1.10

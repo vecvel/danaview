@@ -166,14 +166,14 @@ packages:
     source: path
     version: "1.0.0"
   danaview_library:
-    dependency: transitive
+    dependency: "direct main"
     description:
       path: "packages/danaview_library"
       relative: true
     source: path
     version: "1.2.0"
   danaview_library_native:
-    dependency: transitive
+    dependency: "direct main"
     description:
       path: "packages/danaview_library_native"
       relative: true

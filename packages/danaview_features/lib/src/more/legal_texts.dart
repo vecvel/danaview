@@ -1,7 +1,13 @@
+// EXTENDED: S2-W (slice S2 share of INT-106: the Files & Media Home text, shown only in builds with
+// DANAVIEW_FILES_HOME, BUILD_PLAN v1.2 §1A)
+
 /// The Privacy Policy and Terms of Use as structured data, rendered by the legal screen.
 ///
-/// Edited in order UX-42 (v1.1) → ST-05 (speed-test providers, V2-406) → AIS-36 → INT-106 (ARCH §9.5).
+/// Edited in order UX-42 (v1.1) → ST-05 (speed-test providers, V2-406) → S2-W (Files & Media Home)
+/// → AIS-36 → INT-106 (ARCH §9.5).
 library;
+
+import '../flags.dart';
 
 /// Where the app shows the third-party licences (the Auto captions terms point here, ARCH §20.3).
 const String openSourceLicencesLocation = 'Settings › About › Open-source licences';
@@ -54,6 +60,93 @@ class LegalDocumentText {
   final String contactPrompt;
 }
 
+// ---- Files & Media Home (S2-W; ARCH v1.2 §5.2–§5.4, §9.4, §9.5) ----
+//
+// The bullets below join the policy and the terms only in builds with DANAVIEW_FILES_HOME (the S2
+// release candidate and later), so a build without the Home never describes it. INT-106 folds them
+// into the final 1.2.0 text.
+
+/// What the Files & Media Home stores ("What Danaview stores on your device").
+const List<LegalBullet> filesHomeStoredBullets = [
+  LegalBullet(
+    lead: 'Danaview folders',
+    'Photos, videos, documents and other files you import into Danaview folders, from your photo library, '
+    'your files or other apps. Every import is a copy: the original is never changed, moved or deleted. '
+    "Danaview folders live in Danaview's own storage on this device and are not shown in other apps.",
+  ),
+  LegalBullet(
+    lead: 'Library database',
+    'A small database on your device that lists your Danaview folders and files: names, sizes, dates, '
+    'favourites, the last 50 files you opened, how you sort each folder, and photo details read from the '
+    'files themselves, such as the date taken, camera and size in pixels.',
+  ),
+  LegalBullet(
+    lead: 'Recently deleted',
+    'Files and folders you delete from Danaview folders are kept in Recently deleted for 30 days so you can '
+    'restore them, and are then removed for good. Until then they still use storage on your device.',
+  ),
+  LegalBullet(
+    lead: 'Thumbnails',
+    'Small previews of your photos, videos and files, kept in the app\'s cache so the Home scrolls smoothly. '
+    'They are not included in backups and are made again when needed.',
+  ),
+];
+
+/// What backups include (its own paragraph after the stored-data list).
+const String filesHomeBackupText =
+    'Backups: on iPhone, iPad and Mac, Danaview folders, Recently deleted and the library database are '
+    'included in your device and iCloud backups; an import that has not finished yet is not. On Android they '
+    "are included in device backups, but Google's cloud backup holds at most 25 MB per app: when Danaview's "
+    'data is larger, Android skips its cloud backup, and the library moves to a new phone only with a direct '
+    'phone-to-phone transfer. '
+    "On computers they are kept in the app's data folder and are part of any backup you make of it.";
+
+/// Photo library access and getting files out ("Files and permissions").
+const List<LegalBullet> filesHomePermissionBullets = [
+  LegalBullet(
+    lead: 'Photo library on the Home',
+    'Only if you choose "Show my photo library" in the Photos tab, Danaview asks to see your photo library '
+    'and shows its photos there. On iPhone and iPad you can allow only selected photos, and on Android 14 '
+    'and later only selected photos and videos. Danaview only reads your photo library; it never changes or '
+    'deletes anything in it. Importing with the photo picker needs no access: Danaview receives only the '
+    'items you pick.',
+  ),
+  LegalBullet(
+    lead: 'Pictures folders on computers',
+    'On Mac, Windows and Linux, the Photos tab can also list the pictures in your Pictures folder and on '
+    'connected drives once you choose to show them. Danaview only reads these files.',
+  ),
+  LegalBullet(
+    lead: 'Saving and sharing files',
+    'Save to Files, Save to Downloads, Save to Photos, Share and Open in another app always hand over a copy; '
+    'a copy made for sharing is temporary and removed afterwards, and saving to your photo library adds the '
+    'copy without reading the rest of the library.',
+  ),
+];
+
+/// The Files & Media Home choices ("Your choices").
+const List<LegalBullet> filesHomeChoiceBullets = [
+  LegalBullet(
+    'Restore files or remove them for good in Home › Folders › Recently deleted (Empty now), and see how much '
+    'space Danaview folders and Recently deleted use in Settings › Library storage.',
+  ),
+  LegalBullet('Clear the list of files you opened recently with Clear under Recents on Home.'),
+  LegalBullet("Allow or remove Danaview's access to your photo library at any time in your device's settings."),
+  LegalBullet(
+    'Danaview folders are stored inside the app: uninstalling Danaview, or on Android clearing its storage, '
+    'deletes them and everything in them. Save the files you want to keep somewhere else first.',
+  ),
+];
+
+/// The Terms of Use section of the Files & Media Home.
+const LegalSection filesHomeTermsSection = LegalSection('Danaview folders', [
+  LegalBlock.paragraph(
+    "Files you import are copies kept in Danaview's own storage on your device. Removing a file from "
+    'Recently deleted, with Empty now or after 30 days, is permanent, and uninstalling the app removes '
+    'Danaview folders and everything in them. Keep your own backups of files you care about.',
+  ),
+]);
+
 const LegalDocumentText privacyPolicyText = LegalDocumentText(
   title: 'Privacy Policy',
   summary: 'Danaview keeps everything on your device. There are no accounts, no analytics, no ads and no '
@@ -100,7 +193,9 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
           'transcribed from your videos so captions can be adjusted later without transcribing again. They are '
           'never uploaded.',
         ),
+        if (FeatureFlags.filesHome) ...filesHomeStoredBullets,
       ]),
+      if (FeatureFlags.filesHome) LegalBlock.paragraph(filesHomeBackupText),
       LegalBlock.paragraph(
         'This information stays on your device. It is not uploaded, synced or shared, and we cannot see it.',
       ),
@@ -184,6 +279,7 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
           lead: 'Notifications (Android)',
           'Used only to show export and caption progress while Danaview is in the background, if you allow it.',
         ),
+        if (FeatureFlags.filesHome) ...filesHomePermissionBullets,
       ]),
     ]),
     LegalSection('Your choices', [
@@ -210,6 +306,7 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
           'On computers, uninstalling may leave its saved settings behind. Clear your profile in Settings › '
           'Profile and your history in Settings › Storage & history first.',
         ),
+        if (FeatureFlags.filesHome) ...filesHomeChoiceBullets,
       ]),
     ]),
     LegalSection("Children's privacy", [
@@ -270,6 +367,7 @@ const LegalDocumentText termsOfUseText = LegalDocumentText(
         'Instagram or TikTok are conveniences and are not made or endorsed by those services.',
       ),
     ]),
+    if (FeatureFlags.filesHome) filesHomeTermsSection,
     LegalSection('Auto captions', [
       LegalBlock.paragraph(
         'On iPhone, iPad and Android, automatically created captions may contain mistakes. Review them before you '

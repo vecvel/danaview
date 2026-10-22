@@ -1,6 +1,9 @@
 // EXTENDED: S1-W (S1 wiring: Settings › Privacy, the speed test's open-network toggle from ST-04,
 // in the privacy settings slot of INT-101; BUILD_PLAN v1.2 §1A. The speed test itself and its
 // one-time consent prompt are reached through the 1.0 `/settings/speed-test` route unchanged.)
+// EXTENDED: S2-W (S2 wiring: the Files & Media Home and Settings › Library storage behind
+// DANAVIEW_FILES_HOME, through lib/wiring/files_home_wiring.dart; with the flag off the Home and
+// Settings are built exactly as in S1.)
 
 import 'dart:async';
 
@@ -12,6 +15,8 @@ import 'package:danaview_editor/danaview_editor.dart';
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/licenses.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewToast, DanaviewToastKind;
+
+import '../wiring/files_home_wiring.dart' show appHomeScreen, appSettingsSectionsFor;
 
 String folderLocation(String path) => '/folder?path=${Uri.encodeQueryComponent(path)}';
 
@@ -169,9 +174,10 @@ Widget _settingsPage(BuildContext context, SettingsDestination destination) {
 }
 
 /// The 1.2.0 Settings sections the app shows (INT-101 slots). S1 adds Settings › Privacy (ST-04,
-/// no flag: the open-network speed test is consent-gated); library storage (HOM-17, S2) and the
-/// search index (INT-103, S7) join with their slices.
-const SettingsSections appSettingsSections = SettingsSections(privacy: buildPrivacySettingsSection);
+/// no flag: the open-network speed test is consent-gated); S2 adds Library storage (HOM-17) with
+/// DANAVIEW_FILES_HOME on; the search index (INT-103, S7) joins with its slice.
+SettingsSections get appSettingsSections =>
+    appSettingsSectionsFor(const SettingsSections(privacy: buildPrivacySettingsSection));
 
 /// Pages are nested under Home so Back always has somewhere to go, even after a deep link.
 GoRouter createAppRouter() => GoRouter(
@@ -183,12 +189,14 @@ GoRouter createAppRouter() => GoRouter(
         GoRoute(
           path: '/',
           name: 'home',
-          builder: (context, state) => DanaviewHomeScreen(
+          // DANAVIEW_FILES_HOME off: the 1.1 DanaviewHomeScreen with these same arguments (S2-W).
+          builder: (context, state) => appHomeScreen(
             onOpenPlayer: () => context.push('/player'),
             onOpenFolder: (path) => context.push(folderLocation(path)),
             onOpenPlaylist: (name) => context.push(playlistLocation(name)),
             onOpenSettings: () => context.push('/settings'),
             onOpenEditor: editorReachable(context) ? () => openProjects(context) : null,
+            onOpenProjects: editorReachable(context) ? () => openProjects(context) : null,
           ),
           routes: [
             GoRoute(
