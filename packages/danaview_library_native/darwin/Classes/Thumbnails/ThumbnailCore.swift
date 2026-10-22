@@ -270,6 +270,7 @@ final class FileThumbnailer {
       throw ThumbnailFailure.notFound("no such file")
     }
     guard FileManager.default.isReadableFile(atPath: url.path) else { throw ThumbnailFailure.permission("file not readable") }
+    if token.isCancelled { throw ThumbnailFailure.cancelled() }
     let video = FileThumbnailer.isVideo(url)
     let pixelSize = video ? nil : FileThumbnailer.imagePixelSize(url)
     let want = ThumbnailGeometry.requestSize(source: pixelSize, box: box, fit: fit)

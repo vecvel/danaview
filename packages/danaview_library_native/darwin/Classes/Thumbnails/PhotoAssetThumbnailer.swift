@@ -69,6 +69,7 @@ final class PhotoAssetThumbnailer {
     guard let id = PhotoAssetThumbnailer.localIdentifier(source) else { throw ThumbnailFailure.invalid("not a ph: source") }
     guard PhotoAssetThumbnailer.canRead() else { throw ThumbnailFailure.permission("photo library access not granted") }
     guard let asset = assets([id]).first else { throw ThumbnailFailure.notFound("no such asset") }
+    if token.isCancelled { throw ThumbnailFailure.cancelled() }
     // `.aspectFill` covers the box and `.aspectFit` fits it, so the box itself is the target (the
     // same size the prefetch window caches); ThumbnailCore crops and scales to the exact output.
     let target = box
