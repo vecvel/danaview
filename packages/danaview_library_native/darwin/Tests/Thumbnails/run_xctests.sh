@@ -79,7 +79,7 @@ let package = Package(
 )
 EOF
   (cd "$work" && swift test -j 2 2>&1) > "$work/test.log" || true
-  grep -E "Test Case.*(passed|failed|skipped)|error:|Executed" "$work/test.log" || tail -40 "$work/test.log"
+  grep -E "Test Case.*(passed|failed|skipped)|error:|Executed|HOM-04 " "$work/test.log" || tail -40 "$work/test.log"
   if grep -q "with 0 failures" "$work/test.log" && ! grep -q "error:" "$work/test.log"; then exit 0; fi
   tail -40 "$work/test.log"
   exit 1
