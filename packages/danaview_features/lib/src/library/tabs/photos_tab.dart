@@ -58,6 +58,7 @@ const double _pinchStep = 1.25;
 
 class _PhotosTabState extends ConsumerState<PhotosTab> {
   late final ScrollController _scroll;
+  final FocusNode _focus = FocusNode(debugLabel: 'Photos tab');
   final GlobalKey _gridKey = GlobalKey();
   final Map<int, Offset> _pointers = {};
   double? _pinchBaseline;
@@ -85,6 +86,7 @@ class _PhotosTabState extends ConsumerState<PhotosTab> {
   void dispose() {
     _scroll.removeListener(_onScrolled);
     _scroll.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -323,6 +325,8 @@ class _PhotosTabState extends ConsumerState<PhotosTab> {
         const SingleActivator(LogicalKeyboardKey.minus, meta: true): () => _changeDensity(1),
       },
       child: Focus(
+        key: const ValueKey('photos-tab-focus'),
+        focusNode: _focus,
         child: ColoredBox(
           color: DanaviewColors.background,
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

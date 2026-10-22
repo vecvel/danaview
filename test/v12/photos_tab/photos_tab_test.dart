@@ -39,11 +39,10 @@ final DateTime _now = DateTime(2026, 10, 22, 20);
 
 /// A fake system library of [assets] (newest first) and [albums].
 class _FakeLibrary implements SystemPhotoLibrary {
-  _FakeLibrary(this.assets, {this.status = PhotoLibraryAuthorization.notDetermined, this.grant = PhotoLibraryAuthorization.authorized, this.albums = const []});
+  _FakeLibrary(this.assets, {this.status = PhotoLibraryAuthorization.notDetermined, this.albums = const []});
 
   final List<SystemPhotoAsset> assets;
   PhotoLibraryAuthorization status;
-  final PhotoLibraryAuthorization grant;
   final List<SystemPhotoAlbum> albums;
   int requests = 0;
   int settingsCalls = 0;
@@ -58,7 +57,7 @@ class _FakeLibrary implements SystemPhotoLibrary {
   @override
   Future<PhotoLibraryAuthorization> requestAuthorization() async {
     requests++;
-    if (status == PhotoLibraryAuthorization.notDetermined) status = grant;
+    if (status == PhotoLibraryAuthorization.notDetermined) status = PhotoLibraryAuthorization.authorized;
     return status;
   }
 
@@ -221,7 +220,7 @@ RenderSliverPhotoMasonry _sliver(WidgetTester tester) => tester.renderObject<Ren
 
 void main() {
   testWidgets('Danaview photos group by date; a tap opens the viewer at that photo', (tester) async {
-    useSurface(tester, librarySurfaces[2]);
+    useSurface(tester, librarySurfaces[4]);
     final env = await LibraryTestEnv.create();
     final lib = await _Lib.open(tester);
     await lib.addPhoto(tester, 'today.jpg', DateTime(2026, 10, 22, 9));
@@ -278,11 +277,13 @@ void main() {
     expect(find.byType(PhotoGridCell), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp(r'^Photo a\.jpg')), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(ValueKey('photos-album-${trips.value}')));
     await tester.tap(find.byKey(ValueKey('photos-album-${trips.value}')));
     await pumpFrames(tester, count: 2);
     expect(find.byType(PhotoGridCell), findsNWidgets(2));
     expect(find.bySemanticsLabel(RegExp(r'^Photo a\.jpg')), findsNothing);
 
+    await tester.ensureVisible(find.byKey(const ValueKey('photos-album-all')));
     await tester.tap(find.byKey(const ValueKey('photos-album-all')));
     await pumpFrames(tester, count: 2);
     expect(find.byType(PhotoGridCell), findsNWidgets(3));
@@ -332,11 +333,13 @@ void main() {
       expect(find.byKey(const ValueKey('photos-album-system-FAV')), findsOneWidget);
       expect(find.text('Bursts'), findsNothing, reason: 'empty albums are left out');
 
+      await tester.ensureVisible(find.byKey(const ValueKey('photos-album-system-FAV')));
       await tester.tap(find.byKey(const ValueKey('photos-album-system-FAV')));
       await pumpFrames(tester, count: 4);
       expect(fake.albumFetches.last, 'FAV');
       expect(find.byType(PhotoGridCell), findsNWidgets(2));
 
+      await tester.ensureVisible(find.byKey(const ValueKey('photos-album-all')));
       await tester.tap(find.byKey(const ValueKey('photos-album-all')));
       await pumpFrames(tester, count: 4);
       expect(fake.albumFetches.last, isNull);
@@ -385,7 +388,7 @@ void main() {
     await tester.pumpWidget(_app(env, const PhotosTab(), photos: photos));
     await pumpFrames(tester, count: 2);
     expect(tester.takeException(), isNull);
-    final built = find.byType(PhotoGridCell).evaluate().length;
+    final built = find.byType(PhotoGridCell, skipOffstage: false).evaluate().length;
     expect(built, greaterThan(10));
     expect(built, lessThan(150), reason: 'only the viewport and its cache extent');
     final position = _gridPosition(tester);
@@ -395,7 +398,7 @@ void main() {
     await tester.pump();
     sw.stop();
     expect(tester.takeException(), isNull);
-    expect(find.byType(PhotoGridCell).evaluate().length, lessThan(150));
+    expect(find.byType(PhotoGridCell, skipOffstage: false).evaluate().length, lessThan(150));
     expect(find.bySemanticsLabel(RegExp('^Photo IMG_49999\\.jpg')), findsOneWidget);
     // ignore: avoid_print
     print('HOM-10 50k jump-to-end frame: ${sw.elapsedMicroseconds} µs (test mode)');
@@ -403,7 +406,7 @@ void main() {
     await tester.fling(find.byKey(const ValueKey('photos-grid')), const Offset(0, 3000), 6000);
     for (var i = 0; i < 20; i++) {
       await tester.pump(const Duration(milliseconds: 16));
-      expect(find.byType(PhotoGridCell).evaluate().length, lessThan(150));
+      expect(find.byType(PhotoGridCell, skipOffstage: false).evaluate().length, lessThan(150));
     }
     expect(tester.takeException(), isNull);
     await env.dispose();
@@ -496,18 +499,28 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('photos-density-smaller')));
       await pumpFrames(tester, count: 1);
     }
+    int density() => ProviderScope.containerOf(tester.element(find.byType(PhotosTab))).read(photosTabMemoryProvider).density;
+    expect(density(), photoGridDensityTargets.length - 1);
+    expect(find.byKey(const ValueKey('photos-density-smaller')), findsOneWidget);
     final densest = _sliver(tester).masonry.columns;
     expect(densest, photoGridColumnsFor(402 - 2 * 12, photoGridDensityTargets.length - 1));
 
     // Ctrl + = enlarges again (desktop).
-    await tester.tap(find.byType(PhotoGridCell).first, warnIfMissed: false);
-    Focus.of(tester.element(find.byType(CustomScrollView))).requestFocus();
+    tester.widget<Focus>(find.byKey(const ValueKey('photos-tab-focus'))).focusNode!.requestFocus();
     await tester.pump();
+    for (var i = 0; i < 2; i++) {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyEvent(LogicalKeyboardKey.equal);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await pumpFrames(tester, count: 2);
+    }
+    expect(density(), photoGridDensityTargets.length - 3);
+    expect(_sliver(tester).masonry.columns, lessThan(densest));
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
-    await tester.sendKeyEvent(LogicalKeyboardKey.equal);
+    await tester.sendKeyEvent(LogicalKeyboardKey.minus);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
     await pumpFrames(tester, count: 2);
-    expect(_sliver(tester).masonry.columns, lessThan(densest));
+    expect(density(), photoGridDensityTargets.length - 2);
     expect(tester.takeException(), isNull);
     await env.dispose();
   });

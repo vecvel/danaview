@@ -185,7 +185,7 @@ void main() {
       expect(l.visibleRange(0, 600), isNull);
     });
 
-    test('columns follow the width and the density; cells stay ≥ 80 px so 16:9 cells are ≥ 44 px tall', () {
+    test('columns follow the width and the density; cells stay ≥ 79 px so 16:9 cells are ≥ 44 px tall', () {
       for (final width in [256.0, 296.0, 351.0, 744.0, 850.0, 1256.0]) {
         var previous = 0;
         for (var d = 0; d < photoGridDensityTargets.length; d++) {

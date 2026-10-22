@@ -1,3 +1,6 @@
+// EXTENDED: HOM-06 (hub preservation: Now Playing return-to-player, Show all / Show less, Open link
+// protocols of P-7; the flag-off/flag-on suite lives in test/v12/preservation/hub/)
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -752,6 +755,79 @@ void main() {
       expect(find.text('NOW PLAYING'), findsNothing);
 
       await engine.dispose();
+      await _finish(tester, env);
+    });
+
+    testWidgets('tapping the Now Playing card returns to the player (HOM-06, P-1)', (tester) async {
+      useSurface(tester, librarySurfaces[2]);
+      final env = await LibraryTestEnv.create();
+      var opened = 0;
+      await tester.pumpWidget(libraryTestApp(
+        env,
+        DanaviewHomeScreen(onOpenPlayer: () => opened++, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+      ));
+      await pumpFrames(tester);
+      final item = remoteRef('https://example.com/stream.m3u8');
+      final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewHomeScreen)));
+      await container.read(queueControllerProvider.notifier).playFrom([item]);
+      await pumpFrames(tester);
+      await tester.tap(find.text('NOW PLAYING'));
+      await pumpFrames(tester);
+      expect(opened, 1);
+      expect(container.read(queueControllerProvider).items, [item]);
+      await _finish(tester, env);
+    });
+
+    testWidgets('Show all N expands Continue watching and Show less collapses it (HOM-06, P-2)', (tester) async {
+      useSurface(tester, librarySurfaces[2]);
+      final env = await LibraryTestEnv.create();
+      await seedLibrary(env, existingDir: tree.path);
+      await tester.pumpWidget(libraryTestApp(
+        env,
+        DanaviewHomeScreen(onOpenPlayer: () {}, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+      ));
+      await pumpFrames(tester);
+      expect(find.textContaining('Missing Movie'), findsNothing);
+      await _tapShowAll(tester);
+      await tester.scrollUntilVisible(find.textContaining('Missing Movie'), 300, scrollable: find.byType(Scrollable).first);
+      expect(find.textContaining('Missing Movie'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Show less'), 300, scrollable: find.byType(Scrollable).first);
+      await tester.tap(find.text('Show less'));
+      await pumpFrames(tester);
+      expect(find.text('Show all 11'), findsOneWidget);
+      expect(find.textContaining('Missing Movie'), findsNothing);
+      await _finish(tester, env);
+    });
+
+    testWidgets('Open link plays every network protocol (HOM-06, P-7)', (tester) async {
+      useSurface(tester, librarySurfaces[2]);
+      final env = await LibraryTestEnv.create();
+      var opened = 0;
+      await tester.pumpWidget(libraryTestApp(
+        env,
+        DanaviewHomeScreen(onOpenPlayer: () => opened++, onOpenFolder: (_) {}, onOpenPlaylist: (_) {}),
+      ));
+      await pumpFrames(tester);
+      final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewHomeScreen)));
+      const links = [
+        'http://media.example.com/feature.mp4',
+        'https://cdn.example.com/live/master.m3u8',
+        'rtsp://camera.example.com:554/stream1',
+        'rtmp://live.example.com/app/key',
+        'srt://ingest.example.com:9000',
+        'udp://239.0.0.1:1234',
+        'rtp://239.0.0.2:5004',
+        'mms://broadcast.example.com/live',
+      ];
+      for (final link in links) {
+        await tester.tap(find.text('Open link'));
+        await pumpFrames(tester);
+        await tester.enterText(find.byType(EditableText), link);
+        await tester.tap(find.widgetWithText(DanaviewButton, 'Play'));
+        await pumpFrames(tester);
+        expect(container.read(queueControllerProvider).items, [MediaUrl.tryParse(link)!], reason: link);
+      }
+      expect(opened, links.length);
       await _finish(tester, env);
     });
   });

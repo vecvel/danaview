@@ -23,13 +23,13 @@ import 'photo_date_groups.dart';
 import 'photo_grid_item.dart';
 
 /// Density levels of the grid, densest last: the target cell width in logical pixels.
-const List<double> photoGridDensityTargets = [200, 140, 104, 80];
+const List<double> photoGridDensityTargets = [180, 120, 92, 79];
 
 /// The default density level (index into [photoGridDensityTargets]).
 const int photoGridDefaultDensity = 1;
 
 /// The smallest cell width, so the shortest bucket (16:9) stays a ≥ 44 px target.
-const double photoGridMinCellWidth = 80;
+const double photoGridMinCellWidth = 79;
 
 /// Column count for [width] at [density] (at least 2, at most 12, cells ≥ [photoGridMinCellWidth]
 /// wide whenever two columns fit).
