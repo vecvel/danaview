@@ -148,7 +148,7 @@ void main() {
       testWidgets('$platform: Home edit button opens Projects; storage lists the editor contributors', (tester) async {
         final app = await _pumpApp(tester, platform: platform, flag: true);
         try {
-          expect(app.container.read(storageContributorsProvider).map((c) => c.id), ['editor.projects', 'editor.cache']);
+          expect(app.container.read(storageContributorsProvider).map((c) => c.id), ['editor.projects', 'editor.cache', 'editor.exports']);
 
           final button = find.byTooltip(_editorTooltip);
           expect(button, findsOneWidget);

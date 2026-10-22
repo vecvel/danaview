@@ -26,6 +26,9 @@
 //    failure code and the settings, never paths.
 // 6. `reattach()` after a relaunch or reopen: running -> progress, resumable -> "Resume export",
 //    interrupted -> a one-shot notice, completed while detached -> a one-shot card (D-39).
+// 7. FIX-QA05-D8-2: the files in use (running output, completion card's video and side files, a
+//    finished-while-away file) are held in `ExportEnvironment.outputLeases`, so the export sweep
+//    keeps them, and `ExportEnvironment.onJobEnded` runs the sweep after every job's terminal state.
 //
 // Editing is blocked while exporting (D-24) because the sheet is modal and not dismissible while the
 // export runs; the controller itself never touches the project.
@@ -152,6 +155,7 @@ class ExportController extends StateNotifier<ExportUiState> {
   String? _resumableJobId;
   bool _wakelockOn = false;
   bool _cleaned = false;
+  String? _runOutput;
 
   /// The preferences key of the remembered settings of [id].
   static String draftKey(ProjectId id) => 'editor.export.last.${id.value}';
@@ -638,6 +642,8 @@ class ExportController extends StateNotifier<ExportUiState> {
     final token = _e.newToken();
     await _e.ensureWorkDir();
     final outputPath = p.join(_e.workDir, 'export-$token.$ext');
+    _runOutput = outputPath;
+    _syncLeases();
     final title = project?.name ?? 'Danaview export';
     final job = await _engine.exporter.start(
       ready.plan,
@@ -714,10 +720,12 @@ class ExportController extends StateNotifier<ExportUiState> {
     unawaited(_progressSub?.cancel());
     _progressSub = null;
     if (!mounted) {
-      unawaited(_deleteQuietly(result.path));
+      await _deleteQuietly(result.path);
+      _jobEnded();
       return;
     }
     await _complete(result);
+    _jobEnded();
   }
 
   void _onJobError(Object e) {
@@ -727,6 +735,7 @@ class ExportController extends StateNotifier<ExportUiState> {
     _setWakelock(false);
     unawaited(_progressSub?.cancel());
     _progressSub = null;
+    _jobEnded();
     if (!mounted || job == null) return;
     if (e is EngineCancelled || (e is EngineFailure && e.code == EngineErrorCode.cancelled)) {
       _set(const ExportUiCancelled());
@@ -1049,6 +1058,7 @@ class ExportController extends StateNotifier<ExportUiState> {
     for (final side in s.sideFiles) {
       await _deleteQuietly(side.path);
     }
+    _syncLeases();
   }
 
   Future<void> _deleteQuietly(String path) async {
@@ -1191,6 +1201,42 @@ class ExportController extends StateNotifier<ExportUiState> {
   void _set(ExportUiState next) {
     if (!mounted) return;
     state = next;
+    _syncLeases();
+  }
+
+  /// The export files this controller uses now (FIX-QA05-D8-2): the running job's output, the
+  /// completion card's video and caption side files until they are cleaned up, and the file of a
+  /// finished-while-away card. The export sweep never deletes them.
+  Set<String> get _usedPaths {
+    final s = state;
+    final running = _job != null || s is ExportUiPreparing || s is ExportUiRunning || s is ExportUiCancelling;
+    return {
+      if (running && _runOutput != null) _runOutput!,
+      if (s is ExportUiCompleted && !_cleaned) ...[s.result.path, for (final side in s.sideFiles) side.path],
+      if (s is ExportUiFinishedAway && s.result != null) s.result!.path,
+    };
+  }
+
+  void _syncLeases() {
+    try {
+      final paths = _usedPaths;
+      if (paths.isEmpty) {
+        _env?.outputLeases?.release(this);
+      } else {
+        _e.outputLeases?.hold(this, paths);
+      }
+    } on Object catch (e) {
+      debugPrint('[Export] Could not update the export file leases: ${e.runtimeType}');
+    }
+  }
+
+  /// An export job reached a terminal state: the runtime sweeps orphaned export files.
+  void _jobEnded() {
+    try {
+      _env?.onJobEnded?.call();
+    } on Object catch (e) {
+      debugPrint('[Export] The export sweep hook failed: ${e.runtimeType}');
+    }
   }
 
   void _fail(EditorFailure failure) {
@@ -1263,6 +1309,7 @@ class ExportController extends StateNotifier<ExportUiState> {
       _cleaned = true;
       unawaited(_disposeCleanup(env, s));
     }
+    env?.outputLeases?.release(this);
     super.dispose();
   }
 

@@ -16,6 +16,7 @@ export 'src/app/editor_launcher.dart';
 export 'src/app/editor_prefs.dart';
 export 'src/app/editor_providers.dart';
 export 'src/app/editor_storage_contributor.dart';
+export 'src/app/export_output_sweeper.dart';
 export 'src/app/speech_storage_contributor.dart';
 export 'src/editor/editor_screen.dart';
 // The app's Settings > About > Open-source licences screen registers the content-font OFL texts

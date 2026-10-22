@@ -982,4 +982,58 @@ void main() {
       expect(await c.reattach(), ExportReattach.resumable);
     });
   });
+
+  group('export sweep hooks (FIX-QA05-D8-2)', () {
+    Future<(ExportRig, ExportController, FakeExportJob)> running({List<SideFileFormat> sides = const []}) async {
+      final rig = ExportRig();
+      await rig.harness.prefs.markExportBackgroundNoticeShown();
+      final c = await _ready(rig);
+      for (final f in sides) {
+        c.setSideFile(f, true);
+      }
+      final job = await _run(rig, c);
+      return (rig, c, job);
+    }
+
+    test('the running output and the completion card files are held until Done; the job end runs the sweep', () async {
+      final (rig, c, job) = await running(sides: const [SideFileFormat.srt]);
+      expect(rig.leases.paths, {job.outputPath});
+      expect(rig.jobEnded, 0);
+      await rig.finish(job);
+      final done = c.state as ExportUiCompleted;
+      expect(rig.jobEnded, 1);
+      expect(rig.leases.paths, {job.outputPath, ...done.sideFiles.map((f) => f.path)});
+      expect(done.sideFiles, isNotEmpty);
+      await c.done();
+      expect(rig.leases.paths, isEmpty);
+    });
+
+    test('a cancelled job releases its output and runs the sweep', () async {
+      final (rig, c, _) = await running();
+      await c.cancel();
+      await _until<ExportUiCancelled>(rig, c);
+      expect(rig.jobEnded, 1);
+      expect(rig.leases.paths, isEmpty);
+    });
+
+    test('a failed job releases its output and runs the sweep', () async {
+      final (rig, c, job) = await running();
+      job.fail(EngineFailure.of(EngineErrorCode.encodingFailed));
+      await _until<ExportUiFailed>(rig, c);
+      expect(rig.jobEnded, 1);
+      expect(rig.leases.paths, isEmpty);
+    });
+
+    test('a finished-while-away file is held while its card is shown', () async {
+      final rig = ExportRig();
+      final c = await _ready(rig);
+      const kept = '/mem/support/danaview/editor/exports/export-away.mp4';
+      rig.exporter.records.add(const ExportCompletedWhileDetached('export-9',
+          result: ExportResult(path: kept, bytes: 1, duration: 1, videoEncoderName: 'x', hardwareEncoder: true)));
+      await c.reattach();
+      expect(rig.leases.paths, {kept});
+      rig.disposeContainers();
+      expect(rig.leases.paths, isEmpty, reason: 'released with the controller');
+    });
+  });
 }
