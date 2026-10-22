@@ -1,13 +1,13 @@
 # Danaview 1.2.0 build state
 
 Delivery by release slice (BUILD_PLAN §1A). Branch `v1.2-wip`; Android lane `origin/v1.2-android`.
-Last update: 2026-10-22.
+Last update: 2026-10-22 (S2 Mac half complete).
 
 | Slice | State | Notes |
 |---|---|---|
 | **S1** Foundations + speed test | **Built; gate W done, Q Mac half green, R pending** | AIS-01, HOM-01, HOM-16, ST-01…ST-05, S1-W done. INT-101 partial: `BeautyInspector` can't join the sealed `InspectorRoute` without editing UX-16's exhaustive switches; moved to VED-26 (S9) as an [INTEGRATION] amendment. Review findings fixed: rule 28 false positive (FIX-S1Q-1), checks for rules 16/18/19 (FIX-S1Q-2), the VED action ids behind their flags. S1-Q: full v1.1 iOS suite 20/20 in both batches (flags off; S1 flag set); Android half pending Windows. Report: `qa/S1-QA.md` |
-| S2 Photos & Files Home | Next | Mac tickets building; `A` tickets on Windows |
-| S3–S9 | Not started | |
+| **S2** Photos & Files Home | **Mac half complete; Android half pending (Windows)** | HOM-02, HOM-03, HOM-04, HOM-05…HOM-13, HOM-15, HOM-17…HOM-20, HOM-22, S2-W done. S2-Q Mac half green (S2 E2E on iPhone 16, full v1.1 suite 20/20 with flags off and with `DANAVIEW_FILES_HOME=true`, HOM-15 preservation 406/406 both ways). S2-R Mac half: iOS release build at 1.0.0+1 with S1+S2 flags, min-OS and NEWLAPACK checks OK, 25.1 MB zipped (+0.84 MB vs S1), simulator smoke 10/10; FIX-S2R-1 (privacy manifest) fixed. D-7 fixed (bundled SQLite, sqlite3_flutter_libs 0.5.42). Open: D-3 (Android manifest/backup rules), HOM-02A/04A/20A/22A, S2-Q/S2-R Android halves (Windows); FIX-S1R-1 (fastlane dart-defines) for AIS-41; D-4 Home placement of Import/search (owner/HOM-05), N-R2 thumbnail in Recently deleted (low). Report: `qa/S2-QA.md` |
+| S3–S9 | **On hold** (owner 2026-10-22) until v1.1 is certified and S1+S2 are finished on Android | |
 
 ## Spikes
 
