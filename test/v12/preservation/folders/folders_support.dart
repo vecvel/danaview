@@ -15,6 +15,7 @@ import 'package:danaview_domain/danaview_domain.dart';
 import 'package:danaview_engine/danaview_engine.dart';
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/library/library_widgets.dart' show DanaviewLibraryRow;
+import 'package:danaview_features/src/library/tabs/folders_tab.dart' show FoldersTab;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,8 +36,13 @@ enum FoldersHost {
   /// DANAVIEW_FILES_HOME on: the `Home` tab (Overview).
   homeTab('flag on (Home tab)'),
 
-  /// DANAVIEW_FILES_HOME on: the `Folders` tab ("Linked folders", HOM plan §5.2).
-  foldersTab('flag on (Folders tab)');
+  /// DANAVIEW_FILES_HOME on: the `Folders` tab with no body slot (the shell's 1.1 fallback).
+  foldersTab('flag on (Folders tab)'),
+
+  /// DANAVIEW_FILES_HOME on: the `Folders` tab with HOM-18's [FoldersTab] in its slot, as the app
+  /// wires it (`lib/wiring/files_home_wiring.dart`); the 1.1 rows sit under "Linked folders"
+  /// (HOM plan §5.2).
+  linkedFolders('flag on (Folders tab, Linked folders)');
 
   const FoldersHost(this.label);
 
@@ -48,8 +54,18 @@ enum FoldersHost {
   HomeTab? get tab => switch (this) {
         FoldersHost.flagOff => null,
         FoldersHost.homeTab => HomeTab.home,
-        FoldersHost.foldersTab => HomeTab.folders,
+        FoldersHost.foldersTab || FoldersHost.linkedFolders => HomeTab.folders,
       };
+
+  /// The header title this host draws over the 1.1 rows.
+  String get headerTitle => this == FoldersHost.linkedFolders ? 'Linked folders' : 'Folders';
+
+  /// The tab bodies this host installs; [calls] receives what the real Folders tab hands out.
+  HomeTabSlots slots(FolderCalls calls) => this == FoldersHost.linkedFolders
+      ? HomeTabSlots(
+          folders: (_) => FoldersTab(onOpenFolder: calls.folders.add, onOpenPlayer: () => calls.playerOpens++),
+        )
+      : HomeTabSlots.none;
 }
 
 /// The label the library root of [createFolderTree] is added under (never the temp path).
@@ -116,9 +132,7 @@ List<MediaRef> refsIn(Directory root, List<String> parts, List<String> names) =>
 /// A library with mobile storage over [device] (so the device root shows first) when [device] is
 /// set, desktop storage otherwise.
 Future<LibraryTestEnv> createFoldersEnv({Directory? device}) => LibraryTestEnv.create(
-      storage: device == null
-          ? null
-          : LibraryStorage(isMobile: true, documentsDirectory: () async => device),
+      storage: device == null ? null : LibraryStorage(isMobile: true, documentsDirectory: () async => device),
     );
 
 /// Adds the tree root as [mediaRootLabel] and its `Only Folders` subfolder as a second root.
@@ -159,8 +173,8 @@ Future<void> settleDisk(WidgetTester tester, {int ms = 150}) async {
   await pumpFrames(tester);
 }
 
-/// Installs the Home for [host] over [env] and opens the host's tab. [tabSlots] lets the merge
-/// gate (HOM-15) pass the real `Folders` tab body once HOM-18 supplies it.
+/// Installs the Home for [host] over [env] and opens the host's tab. [tabSlots] overrides the
+/// host's own slots ([FoldersHost.slots]) when set.
 Future<void> pumpFoldersHome(
   WidgetTester tester,
   LibraryTestEnv env, {
@@ -168,14 +182,15 @@ Future<void> pumpFoldersHome(
   FolderCalls? calls,
   TestSurface surface = const TestSurface(Size(402, 1600), 1.0, padding: EdgeInsets.only(top: 47, bottom: 34)),
   TargetPlatform platform = TargetPlatform.iOS,
-  HomeTabSlots tabSlots = HomeTabSlots.none,
+  HomeTabSlots? tabSlots,
 }) async {
+  final recorder = calls ?? FolderCalls();
   useFilesHome(host.filesHome);
   useSurface(tester, surface);
   await tester.runAsync(() async {
     await tester.pumpWidget(libraryTestApp(
       env,
-      (calls ?? FolderCalls()).home(tabSlots: tabSlots),
+      recorder.home(tabSlots: tabSlots ?? host.slots(recorder)),
       textScale: surface.textScale,
       platform: platform,
     ));

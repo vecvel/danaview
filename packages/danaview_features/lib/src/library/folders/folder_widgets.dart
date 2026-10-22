@@ -313,7 +313,9 @@ class _LinkedFoldersGroupState extends ConsumerState<LinkedFoldersGroup> {
                 : null,
           )
         else
-          DanaviewLibraryGroup(children: [for (final folder in roots) _row(folder)]),
+          // Its own layer, as the 1.1 Home's sliver list gives it, so the rows rasterize
+          // pixel-equal to 1.1 wherever the group sits (HOM-08 goldens, P-5).
+          RepaintBoundary(child: DanaviewLibraryGroup(children: [for (final folder in roots) _row(folder)])),
       ],
     );
   }

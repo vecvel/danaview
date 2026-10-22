@@ -3,10 +3,12 @@
 // Player and library regression suite, the merge gate of ARCH v1.2 V2-32 (BUILD_PLAN HOM-15;
 // FILES_MEDIA_HOME_PLAN P-1…P-8). One entry point that runs, in one isolate:
 //
-// * the 1.1 Home tests (`test/home_screen_test.dart`) with DANAVIEW_FILES_HOME off. They pin the
-//   1.1 widget tree (the first Scrollable is the Home list, "Folders" occurs once, the status-bar
-//   backdrop offset), so they are by design flag-off only; with the flag on the same sections live
-//   in the `Home` tab and are pinned, behaviour and pixels, by HOM-06…HOM-08 below;
+// * the 1.1 Home tests (`test/home_screen_test.dart`, plus the app-level Home tests of
+//   `test/widget_test.dart`: Playlists, Folders, Open link, then Now Playing and Continue watching
+//   after playback) with DANAVIEW_FILES_HOME off. They pin the 1.1 widget tree (the first
+//   Scrollable is the Home list, "Folders" occurs once, the status-bar backdrop offset), so they
+//   are by design flag-off only; with the flag on the same sections live in the `Home` tab and are
+//   pinned, behaviour and pixels, by HOM-06…HOM-08 below;
 // * the 1.1 player, queue, library and incoming-media tests with the flag off and again with it
 //   on (the flag must not change any of them);
 // * the HOM-06 (hub), HOM-07 (playlists) and HOM-08 (folders) preservation tests, once: each of
@@ -23,6 +25,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../home_screen_test.dart' as home_1_1;
+import '../../widget_test.dart' as app_home_1_1;
 import '../../incoming_media_test.dart' as incoming_media_1_1;
 import '../../library_controller_test.dart' as library_controller_1_1;
 import '../../library_repository_test.dart' as library_repository_1_1;
@@ -82,6 +85,7 @@ void _goldensBesides(String file, void Function() body) {
 
 void main() {
   group('1.1 Home, flag off', () => _withFlag(false, home_1_1.main));
+  group('1.1 app Home, flag off', () => _withFlag(false, app_home_1_1.main));
 
   for (final on in [false, true]) {
     group('flag ${on ? 'on' : 'off'}', () {
