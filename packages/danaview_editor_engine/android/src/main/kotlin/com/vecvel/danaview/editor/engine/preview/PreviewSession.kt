@@ -720,6 +720,8 @@ class PreviewSession internal constructor(
         val (w, h) = targetRenderSize()
         if (change != null && change.reason != QualityGovernor.Reason.REQUEST) {
             ctx.events.preview(sessionId, PreviewEventMsg(PreviewEventKindMsg.DEGRADED, quality = change.to.msg))
+            // Back at full: also report the recovery, as iOS does (QA-05 D11).
+            if (change.to == QualityLevel.FULL) ctx.events.preview(sessionId, PreviewEventMsg(PreviewEventKindMsg.RECOVERED))
         }
         if (w == surfaceW && h == surfaceH) {
             done?.succeed(Unit)

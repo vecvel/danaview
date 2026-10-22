@@ -13,8 +13,14 @@ The acceptance criteria are:
 - the project always reopens valid
 
 **Status (2026-10-17 10:27 IST): iOS side green.** The seeded soak (seed 5150) and the process-death
-chain both pass on the FIX-IOS-D7 code (§2). D1–D7 are all fixed. **Android side (2026-10-22 re-run,
-034a0d3, API 35 emulator): not certified** (§A0). The process-death chain passes 7/7, and seeded run
+chain both pass on the FIX-IOS-D7 code (§2). D1–D7 are all fixed. **Android side (final 1.1 re-run,
+2026-10-22, code 8725e25c, API 35 emulator): not certified** (§A00). The selftest passes (30
+checks, W4b included), and the process-death chain passes 7/7 with `soak_host.py` unmodified and
+opening the shared folders itself. Op #262 is fixed (f11d4abc). But both seeded soak runs (seed
+5150) fail: the editor stays in "preview degraded" ("Preview ¼") and the next ready-wait times out,
+at op #271 offline in runs a and b and at op #26 call in run a (D11: the governor stays at quarter
+while paused and `waitReady` needs `ready`; Mac decision, §A00.4). Every other criterion is green in both runs.
+**Previous Android status (034a0d3): not certified** (§A0). The process-death chain passes 7/7, and seeded run
 b passes (0 failures, −1.5 % memory). D8 and D9 are confirmed fixed, and W1–W7 work. But seeded run
 a fails one op: #262, a seek right after a reverse acked frame 0 (a D10 residual, Android lane). An
 earlier run on the same code (a1) crashed with SIGSEGV during an export cancel, and the cause is not
@@ -90,6 +96,133 @@ Every in-app event prints a `DV_SOAK <kind> …` line. The kinds are `op`, `fail
 | captions | 60 s of speech (6 clips, "Selected clips", Fast tier), killed past 50 % (after the first checkpoint). | `resumableFor(project)` keeps the record. The editor shows "Auto captions were interrupted" once. After Discard, a reopen shows no notice and the record is gone. |
 
 For every job, the project is then opened straight from the store and validated.
+
+## A00. Android half, final 1.1 re-run (Windows lane, 2026-10-22, code 8725e25c)
+
+**Code 8725e25c** (`editor-android`) is 034a0d3 plus the Android-lane op #262 fix (f11d4abc: a
+superseded plan build in `MultiPlayerEngine` waits for the newest one), the AND-14 test change
+(9eebbff0) and `origin/editor-wip` merged again, which brings FIX M-24 (562ccb1) and W4b (befb981:
+`soak_host.py` opens the shared folders itself after its own uninstall).
+
+All device runs used the **Pixel_9_Pro_XL_API_35 emulator** (`emulator-5554`, `-port 5554`, audio,
+cold boot with `-no-snapshot-load`), a debug build from the main checkout, the laptop on mains
+power, 13:10–13:58 IST. Zygote heap 576m, equal to `ro.boot.dalvik.vm.heapsize`, so no boot race.
+The guest was idle at boot (`guest_top_boot.txt`), and per-minute `top` samples during run b show
+only the app busy (111–176 %), no system service pegged. `emulator-5556` was not running.
+`soak_host.py` ran **unmodified, with no wrapper and no manual folder step**:
+
+```sh
+python -I -B integration_test/editor_soak/tool/soak_host.py -p android -d SELFTEST selftest
+python -I -B integration_test/editor_soak/tool/soak_host.py -p android -d emulator-5554 -m C:/dev/models death
+python -I -B integration_test/editor_soak/tool/soak_host.py -p android -d emulator-5554 -m C:/dev/models soak --minutes 15 --seed 5150
+```
+
+Before each soak: `adb -s emulator-5554 uninstall com.vecvel.danaview`, then `e2e_host.sh -p android
+-d emulator-5554 stage` and `stage-models C:/dev/models` (in Git Bash this needs
+`MSYS2_ARG_CONV_EXCL=/sdcard`). No `__pycache__` was written and git status stayed clean. The
+evidence of earlier rounds was moved to `build/soak/android/_before_8725e25c/emulator-5554/`.
+Everything below is under `build/soak/android/emulator-5554/` (with `CODE_VERSION.txt`).
+
+**Verdict: not certified.** Selftest and death chain green; both seeded runs fail (D11).
+
+### A00.1 Selftest
+
+**pass**: `selftest: PASS`, exit 0, 30 `ok` checks, including W1–W7 and the five W4b checks
+(folders created with one `mkdir -p` after the uninstall, `chmod 2777` on every shell-owned folder,
+opened before the first push, owner checked with `stat -c %u`, no `run-as`). Evidence:
+`selftest/selftest.log`.
+
+### A00.2 Process death per job type
+
+13:12–13:20, exit 0. The script opened the shared folders itself (W4b works on the device too).
+Evidence: `death_chain/` (`death-results.txt`, `death_runner.log`, `logcat_death.txt`, `logs/`,
+`files/soak-death.json`, `soak_speech_60s.wav`).
+
+| Job | Result | Evidence |
+|---|---|---|
+| autosave | **pass** | The journal was restored; reopened valid with `SOAK AUTOSAVE 0`. |
+| proxy | **pass** | Killed while running (8.9 %), `pending` on reopen, resumed to `ready`. |
+| reverse | **pass** | Killed while running (2 %), `pending` on reopen, resumed to `ready`. |
+| freeze | **pass** (allowed caveat) | Not running at the kill; the still was already ready on reopen. |
+| export | **pass** | Killed at 59 %. `ExportInterrupted` once, nothing on reopen. |
+| captions | **pass** | Killed at 56 % with the 60 s WAV. Record at 0 %, notice once, gone after Discard. |
+| verify | **pass** | Every job's project opened from the store and validated. |
+
+The logcat has no ANR, fatal signal or OutOfMemory line.
+
+### A00.3 Random soak, 15 min, seed 5150
+
+Both runs from a fresh install on the same cold boot. Evidence: `soak_run_a/` and `soak_run_b/`
+(`soak_runner.log`, `logs/soak_test-soak.log`, `files/soak-summary.json`,
+`files/soak-summary-log.json`, `memory-host.csv`, `logcat_soak.txt`; run b also
+`guest_top_during_b.txt`).
+
+| Run | Time | Ops | Projects | Reopens | Failures | Memory (baseline → end, peak) | Growth |
+|---|---|---|---|---|---|---|---|
+| a | 13:21–13:38, 921 s | 336 | 2 | 14 of 14 valid | **2**: #26 call, #271 offline (D11) | 631.6 → 641.2 MB, peak 716.7 MB (306 samples) | +1.5 % |
+| b | 13:41–13:57, 908 s | 330 | 2 | 14 of 14 valid | **1**: #271 offline (D11) | 667.2 → 664.9 MB, peak 730.8 MB (300 samples) | −0.3 % |
+
+| Criterion | Run a | Run b |
+|---|---|---|
+| No crash | **pass**. One app pid (17678) in 31 host samples (PSS 445–652 MB). No ANR, fatal signal or OOM. | **pass**. One pid (15154) in 31 samples (about 488–590 MB after a 33 MB first sample at launch). No ANR, fatal signal or OOM. |
+| No unhandled exception | **pass**: 0 framework errors | **pass**: 0 framework errors |
+| Nothing hangs, every op works | **FAIL**: #26 call and #271 offline (D11) | **FAIL**: #271 offline (D11) |
+| Memory ≤ +10 % | **pass**: +1.5 % | **pass**: −0.3 % |
+| Interrupted jobs recover or report once | **pass**: exports 3 completed (#49, #166, #259 after background), 5 cancelled; #75 and #274 end as a clean "storage failure after background (low storage)" with the save saved | **pass**: exports 3 completed, 4 cancelled; #75 clean storage failure with the save saved; #274 completed after background |
+| Project always reopens valid | **pass**: 14 of 14, 0 reopen problems | **pass**: 14 of 14, 0 reopen problems |
+
+Other checks, both runs: **op #262 is fixed** (#261 reverse completed in 14.1 s and 16.4 s, #262
+freeze completed in 3.7 s and 4.6 s, no stale-frame seek). 0 "codec handover timed out" (D9 stays
+fixed); "Handler on a dead thread" warnings 100 (a) and 182 (b), scattered. audioRoute skipped 4
+times per run (device step). Emulator debug-build numbers, not device numbers. The a1 SIGSEGV of
+the 034a0d3 round (§A0.3) did not recur in this round (death chain and both soaks: no fatal
+signal); its cause is still not proven.
+
+### A00.4 D11: a preview left at quarter quality while paused never reads as ready
+
+**Symptom.** Both failures read: "stuck: Timed out after 60 s waiting for the editor to be ready
+[editor ready, preview degraded, preview session open]", with the "Preview ¼" badge on screen.
+#271 (offline) failed in runs a and b, so it repeats on a healthy emulator from a fresh install;
+#26 (call) failed in run a and passed in run b (5586 ms). The app did not hang: the following ops
+ran normally and the later seeks showed the right frames.
+
+**Cause (code read; confirmed by the badge).** During playback under load (media offline, or the
+GSM call), the quality governor stepped the preview down to quarter. Playback then stopped. The
+badge reads "¼", which `PreviewStatusStrings.degraded` shows only for quarter, so no step back up
+had happened by the time the wait ran out.
+
+- The governor steps back up only after 10 s of clean *playback* (`QualityGovernor.onFrame`, fed
+  only by frames shown while playing). A paused preview at quarter stays at quarter, and the
+  phase stays `degraded`. iOS behaves the same (`QualityGovernor.playbackStopped` only clears its
+  stats), so this is the shared ARCH §13.2 design, not an Android-only fault.
+- Dart: `EditorController._onPreviewEvent` sets `PreviewPhase.degraded` for any `PreviewDegraded`;
+  only `PreviewRecovered` sets `ready`.
+- QA-00: `e2e_editor.waitReady` requires `PreviewPhase.ready`, so it times out after 60 s. The soak's
+  own `_recover` already counts `degraded` as a live preview (FIX-QA05-D5), but `_offline` ends with
+  `ed.waitReady()`, which does not.
+
+**Secondary parity gap, fixed on the Android lane.** Android reported an automatic step back up to
+full only as `DEGRADED(full)` and never sent `RECOVERED`; iOS sends `RECOVERED` too. The Android
+engine now does the same (`PreviewSession.applyQuality`, commit "fix(editor): AND-10 a step back to
+full preview quality reports RECOVERED"). This does not fix #26 or #271 (they never stepped up).
+
+On 034a0d3 op #271 passed (4194 ms in run a). Whether the step down happens depends on frame drops
+on the emulator during the op's playback, so it is load-dependent; no code change between 034a0d3
+and 8725e25c is shown to cause it.
+
+**FIX request (Mac, QA-00 / soak):** should `waitReady` (or the soak's `_offline`) accept
+`PreviewPhase.degraded` with a live session, as `_recover` does? The alternative is a contract
+change on both engines: reset the governor to the requested level when playback stops (or on the
+next paused render) and send `RECOVERED`. If the Mac picks that, the Android lane does its half.
+
+### A00.5 What is needed to certify the Android half
+
+1. D11 resolved (Mac decision: `waitReady` accepts a degraded live preview, or both engines reset
+   the governor when playback stops; the Android lane does its half if that is chosen).
+2. Then the two seeded soaks (seed 5150, 15 min) again on one code version, with the host
+   unmodified, and the death chain if the fix touches it.
+
+The 1 h runs and the device-only steps stay deferred, as on iOS (§6).
 
 ## A0. Android half, re-run (Windows lane, 2026-10-22, code 034a0d3)
 
