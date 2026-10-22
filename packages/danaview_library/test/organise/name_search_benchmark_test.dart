@@ -11,6 +11,10 @@
 // never runs on the UI isolate), and what the UI isolate does — a keystroke while that read is in
 // flight, then the O(1) swap plus the first full search over the new snapshot — must stay inside
 // 50 ms. A write that changes no searchable row (an import progress checkpoint) builds nothing.
+// Tagged `benchmark` (dart_test.yaml): CI runs it alone, after the rest.
+
+@Tags(['benchmark'])
+library;
 
 import 'dart:isolate';
 import 'dart:math';

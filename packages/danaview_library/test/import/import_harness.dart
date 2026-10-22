@@ -141,3 +141,38 @@ final class RecordingCopier implements ImportCopier {
 
 /// The bytes of [entry] in the library.
 Uint8List libraryBytes(LibraryStore store, FileEntry entry) => File(store.paths.entryFile(entry.id, entry.displayName)).readAsBytesSync();
+
+/// True when this process holds [path] open, false when it doesn't, null when the host can't tell.
+/// Linux reads `/proc/self/fd`, macOS asks `lsof`. On Windows the caller's rename or delete of
+/// [path] is the check itself (it fails with errno 32 while a handle is open).
+bool? isOpenInThisProcess(String path) {
+  final file = File(path);
+  if (!file.existsSync()) return false;
+  final target = file.resolveSymbolicLinksSync();
+  if (Platform.isLinux) {
+    for (final fd in Directory('/proc/self/fd').listSync(followLinks: false)) {
+      try {
+        if (Link(fd.path).targetSync() == target) return true;
+      } on FileSystemException {
+        // Closed while listing.
+      }
+    }
+    return false;
+  }
+  if (Platform.isMacOS) {
+    final ProcessResult r;
+    try {
+      r = Process.runSync('lsof', ['-n', '-P', '-p', '$pid', '-Fn']);
+    } on ProcessException {
+      return null;
+    }
+    // lsof exits 1 when it lists nothing; any listing names at least the executable.
+    final names = [
+      for (final line in (r.stdout as String).split('\n'))
+        if (line.startsWith('n')) line.substring(1),
+    ];
+    if (names.isEmpty) return null;
+    return names.contains(target);
+  }
+  return null;
+}

@@ -8,6 +8,7 @@
 import 'dart:io';
 
 import 'package:danaview_library/testing.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/sqlite_open.dart';
@@ -51,8 +52,17 @@ void main() {
     });
 
     test('the root follows ARCH §5.2 per platform', () {
-      expect(libraryRootIn('/support', LibraryRootStyle.appSupport), '/support/DanaviewLibrary');
-      expect(libraryRootIn('/data/files', LibraryRootStyle.android), '/data/files/library');
+      // The host's separator by default (a backslash on Windows).
+      expect(libraryRootIn('/support', LibraryRootStyle.appSupport), p.join('/support', 'DanaviewLibrary'));
+      expect(libraryRootIn('/data/files', LibraryRootStyle.android), p.join('/data/files', 'library'));
+      // iOS, macOS, Linux and Android.
+      expect(libraryRootIn('/support', LibraryRootStyle.appSupport, context: p.posix), '/support/DanaviewLibrary');
+      expect(libraryRootIn('/data/files', LibraryRootStyle.android, context: p.posix), '/data/files/library');
+      // Windows.
+      expect(
+        libraryRootIn(r'C:\Users\a\AppData\Roaming\Danaview', LibraryRootStyle.appSupport, context: p.windows),
+        r'C:\Users\a\AppData\Roaming\Danaview\DanaviewLibrary',
+      );
     });
 
     test('only imports/ is excluded from backups', () async {

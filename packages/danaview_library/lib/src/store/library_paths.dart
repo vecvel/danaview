@@ -19,9 +19,10 @@ enum LibraryRootStyle {
   android,
 }
 
-/// The library root under [supportDir] for [style] (ARCH §5.2).
-String libraryRootIn(String supportDir, LibraryRootStyle style) =>
-    p.join(supportDir, style == LibraryRootStyle.android ? 'library' : 'DanaviewLibrary');
+/// The library root under [supportDir] for [style] (ARCH §5.2), joined with the host's separator
+/// (a backslash on Windows); [context] picks another path style instead (tests).
+String libraryRootIn(String supportDir, LibraryRootStyle style, {p.Context? context}) =>
+    (context ?? p.context).join(supportDir, style == LibraryRootStyle.android ? 'library' : 'DanaviewLibrary');
 
 /// Paths under one library root.
 final class LibraryPaths {

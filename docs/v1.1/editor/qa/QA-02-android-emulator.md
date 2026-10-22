@@ -7,7 +7,18 @@ Emulators on the Windows laptop (BUILD_PLAN QA-02). It also holds the API 28 bel
 Android export extra on API 34 and API 35, the tablet run of scenario 12, and the manual tablet
 steps for the owner (hardware keyboard, mouse, drag from Files and Photos).
 
-**Status (2026-10-22, 14:00 IST, code H `editor-android` 8725e25c): not certified, because the
+**Status (2026-10-22, 18:40 IST, code I `editor-android` d2600495, the D11 fix): not certified,
+because the QA-05 Android half is still not green.** QA-02's own item for this round passes:
+**s18 on Pixel_API_29_2GB (tier MINIMAL) passes on d2600495** (139 s, fresh install, audio, 0
+emulator restarts; "Re-run on d2600495 (D11)" below). On the QA-05 side, D11 is fixed: the
+selftest and the death chain (7/7) pass, and seeded run a passes with 0 failures. But seeded run b
+crashed the app with a native SIGSEGV in our audio decoder's callback thread (`danaview-pcm`) while
+a reverse job closed its `PcmStream` (QA-05 **D12**, Android lane; `QA-05-soak.md` §A000). A fix
+agent (Android lane) is working on D12. Both seeded soaks then run again on the fix code. The
+lead's rule is not to certify QA-02 or the QA-05 Android half this round. Open: D12, its soak
+re-run, and the owner's M1–M4.
+
+**Previous status (2026-10-22, 14:00 IST, code H `editor-android` 8725e25c): not certified, because the
 QA-05 Android half is not green.** This was the final 1.1 re-run, on one code version and on mains
 power. **Every QA-02 re-run item passes on 8725e25c, first try, fresh install, audio on**:
 
@@ -314,6 +325,30 @@ Earlier labels, used only in the history note:
   2026-10-16/17.
 
 ## Results matrix
+
+### Re-run on d2600495 (D11)
+
+**Code I = d2600495** (`editor-android`): code H plus the D11 fix in both engines (Mac iOS + Dart
+5ac2cf8, Android d2600495). The Mac lead (97ec109e, cbefb080) said that D11 does not touch the
+QA-02 paths, so no full re-run is needed: only s18 once on the 2 GB AVD as a smoke check.
+
+| Item | Device | Result |
+|---|---|---|
+| s18 | Pixel_API_29_2GB (MINIMAL), `emulator-5558`, alone | **pass** (139 s), 0 failed, 0 emulator restarts |
+
+The command was `DANAVIEW_E2E_ONLY="s18" DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1
+DANAVIEW_E2E_MODELS=C:/dev/models scripts/ci/editor/e2e_android.sh emulator-5558`, run from `C:/dev/dv2`
+(`CODE_VERSION.txt`: d2600495, refreshed 15:12). The AVD was booted by hand with `-port 5558
+-feature GLESDynamicVersion -no-snapshot-save` and audio, 17:03–17:06 IST, on mains power. Zygote
+heap 512m (not the boot race). Capabilities line: `tier=MINIMAL api=29 ram=2089222144
+gles3=true`. **It ran alongside the S1 agent's `emulator-5556`** (Pixel_API_34; its builds ran in
+`C:/dev/v12`, not `dv2`). The lead approved this to save time: s18 is a functional check, and it
+has passed in parallel runs before. The QA-05 soaks ran alone. Evidence:
+`build/e2e/android/emulator-5558_Pixel_API_29_2GB/d2600495/` (`summary.txt`, `runner_console.log`,
+`CODE_VERSION.txt`, `README.txt`, `logs/` with `batch-s18.logcat.txt`, `screens/`, `files/`).
+
+The QA-05 Android half on d2600495 is in `QA-05-soak.md` §A000. D11 is fixed (run a: 441 ops, 0
+failures), but a new native crash, D12, ended run b. So QA-02 is not certified this round.
 
 ### Re-run of 2026-10-22 on code H (8725e25c), mains power (final 1.1 re-run)
 
@@ -1296,7 +1331,28 @@ The owner's rule for this round (2026-10-22): the re-run items run on d680bd3 an
 clean pass stands on 88469c0. If every re-run item passes and nothing else is open except the
 manual M1–M4, QA-02 is certified with that exception.
 
-**Verdict (2026-10-22, final 1.1 re-run on 8725e25c): QA-02 is NOT certified yet.** The Mac lead's
+**Verdict (2026-10-22, D11 re-run on d2600495): QA-02 is NOT certified yet.**
+
+- **QA-02's own item: green.** s18 passes on Pixel_API_29_2GB on d2600495. The 8725e25c items
+  below still stand, because D11 does not touch the QA-02 paths (Mac lead, 97ec109e).
+- **QA-05 Android half: not green** (`QA-05-soak.md` §A000). D11 is fixed: the selftest and the
+  death chain (7/7) pass, and seeded run a passes (441 ops, 0 failures, +0.8 % memory). But seeded
+  run b crashed the app (D12: SIGSEGV on `danaview-pcm` while `PcmStream.close()` stops the codec
+  under the input callback).
+
+**Still open after d2600495 (this list replaces the 8725e25c list below):**
+
+1. **Android lane: QA-05 D12** (a fix agent is working on it). Then both seeded soaks (seed 5150,
+   15 min) run again on the fix code, alone and on mains power. The death chain runs again if the
+   fix touches the job paths, and s18 on the 2 GB AVD runs again if the lead asks.
+2. **Owner (manual): M1–M4 on the tablet.**
+
+When item 1 is green, the status becomes "QA-02 certified (<date>), except the owner's manual tablet
+checklist M1–M4". It names the D12 fix code for the soaks, d2600495 for s18 on the 2 GB AVD,
+8725e25c for the other final re-run items, d680bd3 and 88469c0 for the earlier certified parts, and
+the owner's s13 emulator-limitation decision.
+
+**Earlier verdict (2026-10-22, final 1.1 re-run on 8725e25c): QA-02 is NOT certified yet.** The Mac lead's
 rule (addde25, a5c4c4de, owner-approved): s01–s04 + s18 in one batch on Pixel_API_29_2GB, s18 on
 API 29 and API 35, and the QA-05 Android half (selftest, death chain, two seeded soaks); certify if
 all green.
