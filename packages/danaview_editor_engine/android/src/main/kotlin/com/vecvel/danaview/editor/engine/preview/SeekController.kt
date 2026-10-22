@@ -125,7 +125,11 @@ class SeekController(
         if (!r.exact || k == r.target) complete(r, k, timedOut = false)
     }
 
-    /** Forgets the displayed frame (a new plan or surface: nothing valid is on screen yet). */
+    /**
+     * Sets the frame on screen without acking anything: -1 forgets it (a new plan or surface), a
+     * frame index records one drawn by someone other than the backend (the paused renderer), so a
+     * seek acked at its timeout reports what is actually shown (QA-05 D10).
+     */
     fun resetDisplayed(k: Long = -1) {
         displayed = k
     }

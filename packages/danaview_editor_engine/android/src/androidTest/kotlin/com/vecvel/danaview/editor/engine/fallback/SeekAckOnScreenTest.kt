@@ -10,7 +10,10 @@
 // (the Surface is replaced) and nothing. The second test runs the storm again after cancelled
 // reverse and freeze jobs and an export suspension (what a cancelled export does to the preview).
 // For every seek: the ack is the exact target, debugCaptureFrame shows its barcode, and the last
-// frame the producer received shows it too, also a while after the ack. Emulator numbers (AND16).
+// frame the producer received shows it too, also a while after the ack. The third test drives the
+// backend alone: a seek frame composed while the Surface is detached (a hand-over or a quality
+// step's resize) is reported and shown on the next attach, under its own timestamp. Emulator
+// numbers (AND16).
 
 package com.vecvel.danaview.editor.engine.fallback
 
@@ -35,6 +38,7 @@ import com.vecvel.danaview.editor.engine.preview.PreviewPlans
 import com.vecvel.danaview.editor.engine.preview.fallback.ContingencyPreviewBackend
 import com.vecvel.danaview.editor.engine.support.FrameBarcode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -201,6 +205,44 @@ class SeekAckOnScreenTest {
             Log.i(AND16_TAG, "D10 after cancelled jobs (emulator): ${storm.seeks} seeks, ${Timings(storm.latencies)}; problems ${storm.problems.size}")
             assertTrue("seeks: ${storm.seeks}", storm.seeks >= 40)
             assertEquals("seeks that acked or showed another frame:\n" + storm.problems.joinToString("\n"), emptyList<String>(), storm.problems)
+        }
+    }
+
+    @Test
+    fun aSeekFrameComposedWithoutAWindowIsReportedAndShownOnTheNextAttach() {
+        val fps = 24
+        val plan = FallbackPlans.plan(fps, 96, listOf(FallbackPlans.mainLayer(fps, 96)))
+        BackendHarness("d10_detach", plan, emptyList()).use { b ->
+            assertTrue("first seek", b.seekExact(5) >= 0)
+            var held = 0
+            for (i in 0 until 6) {
+                val k = 20L + i * 13
+                val before = b.host.displayed.size
+                val composed = b.stats().composed
+                // The seek, then the Surface goes away, in this order on danaview-preview.
+                await<Unit> { cb -> b.onPreview { b.backend.seek(k, true) { }; b.backend.detachSurface(cb) } }
+                val deadline = System.currentTimeMillis() + 10_000
+                while (b.stats().composed == composed && System.currentTimeMillis() < deadline) Thread.sleep(5)
+                assertTrue("seek $k composed", b.stats().composed > composed)
+                Thread.sleep(100)
+                if (b.host.displayed.drop(before).contains(k)) {
+                    // Composed and presented before the detach ran: nothing held this time.
+                    await<Unit> { cb -> b.onPreview { b.backend.attachSurface(b.sink.reader.surface, plan.canvas.w, plan.canvas.h, cb) } }
+                    continue
+                }
+                held++
+                assertFalse("not reported while detached", b.host.displayed.drop(before).contains(k))
+                b.sink.clear()
+                await<Unit> { cb -> b.onPreview { b.backend.attachSurface(b.sink.reader.surface, plan.canvas.w, plan.canvas.h, cb) } }
+                val reportBy = System.currentTimeMillis() + 5_000
+                while (!b.host.displayed.drop(before).contains(k) && System.currentTimeMillis() < reportBy) Thread.sleep(5)
+                assertTrue("seek $k reported after the attach: ${b.host.displayed.drop(before)}", b.host.displayed.drop(before).contains(k))
+                val f = b.sink.awaitK(k, 5_000)
+                assertEquals("frame $k on the Surface under its own timestamp", (10 + k).toInt(), f.full)
+            }
+            Log.i(AND16_TAG, "D10 detached seeks (emulator): $held of 6 composed while detached")
+            assertTrue("at least one seek frame was composed while detached ($held)", held >= 1)
+            assertTrue("no failures: ${b.host.failures}", b.host.failures.isEmpty())
         }
     }
 }

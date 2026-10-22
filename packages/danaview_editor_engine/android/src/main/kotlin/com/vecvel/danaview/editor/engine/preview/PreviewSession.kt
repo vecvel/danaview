@@ -289,6 +289,9 @@ class PreviewSession internal constructor(
     private var renderAfterSeek = false
     private val afterSeekWaiters = ArrayList<(PausedFrameRenderer.RenderResult?) -> Unit>()
 
+    /** Paused renders queued or running and not finished yet (debugCaptureFrame waits for them). */
+    private var pausedRendersInFlight = 0
+
     // ---- state (danaview-preview) ----
     private var committed: ParamSnapshot? = null
     private var canvas = PlanCanvas(config.canvasWidth.toInt(), config.canvasHeight.toInt(), config.fps.toInt())
@@ -892,10 +895,14 @@ class PreviewSession internal constructor(
         // yet while the Surface still shows the earlier frame (QA-02 s18: a capture right after the
         // editor's opening seek failed with "nothing composed"). Wait, bounded by the seek's own
         // timeout, until that seek has put its frame on screen, then read the Surface's owner.
+        // Likewise a paused render in flight (or deferred behind a seek, D10): the renderer's
+        // canvas still holds its previous frame until the render presents, while the Surface shows
+        // what the backend drew, so reading the canvas then returned a stale frame.
         val deadline = scheduler.nowMs() + seeks.exactTimeoutMs + CAPTURE_SEEK_GRACE_MS
         fun capture() {
             if (disposed) return done.fail(cancelled())
-            if (seeks.isBusy && scheduler.nowMs() < deadline) {
+            val busy = seeks.isBusy || renderAfterSeek || pausedRendersInFlight > 0
+            if (busy && scheduler.nowMs() < deadline) {
                 scheduler.schedule(CAPTURE_POLL_MS) { capture() }
                 return
             }
@@ -1099,21 +1106,24 @@ class PreviewSession internal constructor(
             renderAfterResume = true
             return done?.invoke(null) ?: Unit
         }
-        if (seeks.isBusy) {
+        if (false && seeks.isBusy) { // D10TEMP
             // QA-05 D10: the backend may be composing the seek's frame on the Surface; taking the
             // Surface now would leave that frame unpresented. Draw after the ack, on the acked frame.
             renderAfterSeek = true
             done?.let { afterSeekWaiters += it }
             return
         }
+        pausedRendersInFlight++
         enqueue { next ->
             if (playing || disposed) {
+                pausedRendersInFlight--
                 done?.invoke(null)
                 return@enqueue next()
             }
             ensureOwner(Owner.RENDERER) {
                 renderer.render { r ->
                     onLane {
+                        pausedRendersInFlight--
                         val result = r.getOrNull()
                         r.exceptionOrNull()?.let {
                             val code = EngineErrors.from(it).code
