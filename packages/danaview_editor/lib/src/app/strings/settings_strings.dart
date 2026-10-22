@@ -137,4 +137,36 @@ abstract final class StorageStrings {
         EditorCacheUse.captionsRunning => 'Auto captions are running. Clear the cache when they finish.',
         EditorCacheUse.jobRunning => 'The editor is still preparing media. Try again in a moment.',
       };
+
+  /// Export files contributor title (FIX-QA05-D8-2).
+  static const String exportsTitle = 'Export files';
+
+  /// Export files contributor explanation.
+  static const String exportsSubtitle = 'Exports are written here before they are saved. Files left by stopped or '
+      'unfinished exports can be cleared; videos you saved to Photos, Gallery or Files stay.';
+
+  /// Export files clear row and confirmation title.
+  static const String clearExports = 'Clear export files';
+
+  /// Export files clear confirmation message.
+  static const String clearExportsMessage = 'Export files that no export still needs are deleted. Exports that are '
+      'running or waiting to be saved stay, and so do your projects and saved videos.';
+
+  /// Export files cleared with nothing to free.
+  static const String exportsAlreadyEmpty = 'There are no export files to clear';
+
+  /// The export records could not be read, so nothing was cleared.
+  static const String exportsUnreadable = 'Export files could not be checked. Try again in a moment.';
+
+  /// `1 file`, `3 files`.
+  static String exportFileCount(int count) => count == 1 ? '1 file' : '$count files';
+
+  /// Why the export files can't be cleared right now.
+  static String exportsBlocked(EditorCacheUse use) => switch (use) {
+        EditorCacheUse.none => '',
+        EditorCacheUse.projectOpen => 'Close the video editor to clear export files.',
+        EditorCacheUse.exportRunning => 'An export is running. Clear export files when it finishes.',
+        EditorCacheUse.captionsRunning => 'Auto captions are running. Clear export files when they finish.',
+        EditorCacheUse.jobRunning => 'The editor is still preparing media. Try again in a moment.',
+      };
 }

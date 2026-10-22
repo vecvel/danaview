@@ -10,12 +10,14 @@ import 'dart:async';
 import 'package:flutter/painting.dart' show Size;
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:danaview_editor/src/app/editor_messages.dart';
 import 'package:danaview_editor/src/app/strings/export_strings.dart';
 import 'package:danaview_editor/src/editor/flows/export/export_controller.dart';
 import 'package:danaview_editor/src/editor/state/editor_state.dart';
 import 'package:danaview_editor_core/formats.dart';
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/plan.dart';
+import 'package:danaview_editor_core/store.dart' show StoreEntityType;
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart' hide MediaAccessFailure;
 
 import 'export_rig.dart';
@@ -776,6 +778,51 @@ void main() {
       }
     });
 
+    // QA-05 D8: under low storage Android purged the editor cache mid-export, and the engine's
+    // ENOENT on a generated image reached the user as exportFailed.unknown.
+    test('D8: a vanished file in the engine detail is the storage failure with its message', () async {
+      final (rig, c, job) = await running();
+      job.fail(EngineFailure.of(EngineErrorCode.io, debugDetail: 'ERROR_CODE_IO_UNSPECIFIED ImageAssetLoader FileDataSourceException (ENOENT)'));
+      await rig.settle();
+      final failure = (c.state as ExportUiFailed).failure;
+      expect(failure, const ExportFailed(ExportFailureKind.diskFull));
+      expect(editorFailureMessage(failure).title, 'Not enough space to export');
+      expect(editorFailureMessage(failure).action, EditorMessageAction.freeUpSpace);
+      expect(rig.wakelock, [true, false]);
+    });
+
+    test('D8: a purged editor cache or exports folder turns an unknown failure into the storage failure', () async {
+      for (final gone in [rigRoots.editorCache, rigRoots.exportsDir]) {
+        final (rig, c, job) = await running();
+        await rig.mem.delete(gone, recursive: true);
+        job.fail(EngineFailure.of(EngineErrorCode.encodingFailed));
+        await rig.settle();
+        expect((c.state as ExportUiFailed).failure, const ExportFailed(ExportFailureKind.diskFull), reason: gone);
+      }
+    });
+
+    test('D8: free space below the estimate after a failure is the storage failure; with room it stays unknown', () async {
+      var (rig, c, job) = await running();
+      job.fail(EngineFailure.of(EngineErrorCode.decodeFailed));
+      await rig.settle();
+      expect((c.state as ExportUiFailed).failure, const ExportFailed(ExportFailureKind.unknown));
+      (rig, c, job) = await running();
+      rig.fake.freeBytesValue = 1024;
+      job.fail(EngineFailure.of(EngineErrorCode.decodeFailed));
+      await rig.settle();
+      expect((c.state as ExportUiFailed).failure, const ExportFailed(ExportFailureKind.diskFull));
+    });
+
+    test('D8: the exports folder is recreated before the start and lives under support, not the cache', () async {
+      final rig = ExportRig();
+      await rig.mem.delete(rigRoots.exportsDir, recursive: true);
+      await rig.harness.prefs.markExportBackgroundNoticeShown();
+      final c = await _ready(rig);
+      final job = await _run(rig, c);
+      expect(job.outputPath, startsWith('${rigRoots.support}/danaview/editor/exports/'));
+      expect((await rig.mem.stat(rigRoots.exportsDir)).type, StoreEntityType.directory);
+    });
+
     test('"Copy details" carries the failure code and the settings, never paths', () async {
       final (rig, c, job) = await running();
       job.fail(EngineFailure.of(EngineErrorCode.encoderUnavailable));
@@ -933,6 +980,60 @@ void main() {
         ..add(const ExportCompletedWhileDetached('b', savedToGallery: true))
         ..add(const ExportResumable('c', doneFraction: 0.2));
       expect(await c.reattach(), ExportReattach.resumable);
+    });
+  });
+
+  group('export sweep hooks (FIX-QA05-D8-2)', () {
+    Future<(ExportRig, ExportController, FakeExportJob)> running({List<SideFileFormat> sides = const []}) async {
+      final rig = ExportRig();
+      await rig.harness.prefs.markExportBackgroundNoticeShown();
+      final c = await _ready(rig);
+      for (final f in sides) {
+        c.setSideFile(f, true);
+      }
+      final job = await _run(rig, c);
+      return (rig, c, job);
+    }
+
+    test('the running output and the completion card files are held until Done; the job end runs the sweep', () async {
+      final (rig, c, job) = await running(sides: const [SideFileFormat.srt]);
+      expect(rig.leases.paths, {job.outputPath});
+      expect(rig.jobEnded, 0);
+      await rig.finish(job);
+      final done = c.state as ExportUiCompleted;
+      expect(rig.jobEnded, 1);
+      expect(rig.leases.paths, {job.outputPath, ...done.sideFiles.map((f) => f.path)});
+      expect(done.sideFiles, isNotEmpty);
+      await c.done();
+      expect(rig.leases.paths, isEmpty);
+    });
+
+    test('a cancelled job releases its output and runs the sweep', () async {
+      final (rig, c, _) = await running();
+      await c.cancel();
+      await _until<ExportUiCancelled>(rig, c);
+      expect(rig.jobEnded, 1);
+      expect(rig.leases.paths, isEmpty);
+    });
+
+    test('a failed job releases its output and runs the sweep', () async {
+      final (rig, c, job) = await running();
+      job.fail(EngineFailure.of(EngineErrorCode.encodingFailed));
+      await _until<ExportUiFailed>(rig, c);
+      expect(rig.jobEnded, 1);
+      expect(rig.leases.paths, isEmpty);
+    });
+
+    test('a finished-while-away file is held while its card is shown', () async {
+      final rig = ExportRig();
+      final c = await _ready(rig);
+      const kept = '/mem/support/danaview/editor/exports/export-away.mp4';
+      rig.exporter.records.add(const ExportCompletedWhileDetached('export-9',
+          result: ExportResult(path: kept, bytes: 1, duration: 1, videoEncoderName: 'x', hardwareEncoder: true)));
+      await c.reattach();
+      expect(rig.leases.paths, {kept});
+      rig.disposeContainers();
+      expect(rig.leases.paths, isEmpty, reason: 'released with the controller');
     });
   });
 }

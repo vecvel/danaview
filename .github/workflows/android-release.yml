@@ -118,6 +118,23 @@ jobs:
         if: github.event_name == 'push' || inputs.build_type == 'both' || inputs.build_type == 'apk'
         run: flutter build apk --release --split-per-abi
 
+      # ARCH §23 item 4 / D-43(b): whisper libraries exactly arm64-v8a + x86_64, 16 KB LOAD alignment,
+      # only dv_* exported, <= 3 MB each. danaview_whisper is linked whatever the editor --dart-defines
+      # say, so this holds for flags-off builds too. llvm-readelf comes from the runner's Android NDK
+      # (the script looks in ANDROID_NDK_HOME, then ANDROID_HOME/ndk). Archives the chosen build_type
+      # didn't build are skipped.
+      - name: Check native libraries (ABIs, 16 KB pages, exports, size)
+        run: |
+          # $1 stays unquoted on purpose: it is empty or "--abis <abi>".
+          check() { if [ -f "$2" ]; then bash scripts/ci/editor/check_native_libs.sh $1 "$2"; else echo "not built: $2"; fi; }
+          OUT=build/app/outputs
+          check "" $OUT/bundle/release/app-release.aab
+          check "" $OUT/flutter-apk/app-release.apk
+          check "--abis arm64-v8a" $OUT/flutter-apk/app-arm64-v8a-release.apk
+          check "--abis x86_64" $OUT/flutter-apk/app-x86_64-release.apk
+          # armeabi-v7a carries no whisper library at all (D-43(b)); the check fails if one appears.
+          check "--abis=" $OUT/flutter-apk/app-armeabi-v7a-release.apk
+
       - name: Prepare Release Artifacts
         run: |
           mkdir -p release-artifacts

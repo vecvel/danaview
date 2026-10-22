@@ -24,6 +24,9 @@
 //   playing, an exact seek first shows the nearest decoded frames (CLOSEST_SYNC, not reported), then
 //   refines to the exact frame (D-43(e): +30% allowed). Scrubs: one seek in flight, latest wins.
 //   A stuck deck (BUFFERING 3 s without its frame) is re-seeked alternating ms − 1 and ms.
+//   A seek frame composed while no window is attached (the session is handing the Surface over or
+//   resizing it) is not on screen, so it is neither reported nor the end of the seek: the next
+//   [attachSurface] composes it again and presents it (QA-05 D10).
 // - Structural re-plan by slot diff: setMediaItems on the changed slots' decks only.
 // Never logs media paths or plan content.
 
@@ -194,6 +197,9 @@ internal class MultiPlayerEngine(
     private var pendingScrub: Long? = null
     private var resumeAfterSeek = false
     private var seekTarget: Long? = null
+    /** An exact seek's frame composed without a window, and the seek's token (QA-05 D10); -1: none. */
+    private var unpresentedSeek = -1L
+    private var unpresentedToken = 0
     private var prerollTarget: Long? = null
     private var ticks = 0
 
@@ -395,6 +401,16 @@ internal class MultiPlayerEngine(
         dbg("attach ${w}x$h mode=$mode")
         val g = ensureGl()
         g.attachWindow(surface, w, h)
+        val held = unpresentedSeek
+        unpresentedSeek = -1L
+        if (held >= 0 && unpresentedToken == token && mode == Mode.SEEKING) {
+            // The seek's frame was composed while the window was away: compose it again at this
+            // size, present it and report it now (the canvas still holds it, under another frame's
+            // timestamp, so presenting lastShown here would label it wrongly).
+            dbg("attach: presenting the held seek frame $held")
+            pollExact(held, token)
+            return
+        }
         if (lastShown >= 0 && g.canvasSize != null) {
             // A recovered, resized or re-handed Surface shows the last frame again at once (scaled
             // to the new size); playback replaces it with its next frame.
@@ -528,13 +544,26 @@ internal class MultiPlayerEngine(
     private fun startExact(k: Long, my: Int) {
         seekTarget = k
         positionFor(k, SeekParameters.EXACT)
+        pollExact(k, my)
+    }
+
+    /** Composites exact frame [k] once every layer shows it; the seek ends when it is on screen. */
+    private fun pollExact(k: Long, my: Int) {
         val started = SystemClock.uptimeMillis()
         var lastWatch = started
         fun poll() {
             if (my != token) return
             when (composite(k, Purpose.EXACT)) {
-                Outcome.DRAWN, Outcome.NOT_PRESENTED -> {
+                Outcome.DRAWN -> {
                     finishSeek(k, my)
+                    return
+                }
+                Outcome.NOT_PRESENTED -> {
+                    // No window: the frame is not on screen, so it is not reported (QA-05 D10: the
+                    // seek used to end here unreported and the session acked the previous frame at
+                    // its timeout). The seek stays in flight until attachSurface shows the frame.
+                    unpresentedSeek = k
+                    unpresentedToken = my
                     return
                 }
                 else -> Unit

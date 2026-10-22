@@ -23,6 +23,10 @@
 // * `DefaultPlanCompiler` for `planCompilerPortProvider`, the editor prefs, the capabilities, and the
 //   Settings › Storage contributors (`EditorStorageContributor.all`) when the router supplies the
 //   Projects navigation.
+// * The export sweep (FIX-QA05-D8-2): `ExportOutputSweeper` over `StoreRoots.exportsDir` deletes
+//   unreferenced export outputs older than 24 h, first `exportSweepDelay` after wiring (with
+//   `startGc`, through the timer factory, unawaited), after every export job's end (the export
+//   environment's `onJobEnded`) and, without the age limit, from the "Export files" storage row.
 // * The render-preview cache (D-45): `IndexRenderPreviewStore` over CORE-37's `RenderCacheIndex`
 //   in `<cache>/danaview/editor/renders/`, LRU-bounded by the device tier
 //   (`RenderCacheIndex.limitForTier`), for `renderPreviewStoreProvider`.
@@ -52,6 +56,7 @@ import 'editor_prefs.dart';
 import 'editor_providers.dart';
 import 'editor_storage_contributor.dart';
 import 'editor_tier_defaults.dart';
+import 'export_output_sweeper.dart';
 import 'strings/export_strings.dart';
 
 /// Whether the GC may sweep now: false while an export runs or waits to be resumed (ARCH §9.4).
@@ -104,6 +109,8 @@ final class EditorRuntime {
     required this.gcScheduler,
     required this.exportGate,
     required this.renderPreview,
+    required this.exportLeases,
+    required this.exportSweeper,
   });
 
   /// The platform engine.
@@ -141,6 +148,14 @@ final class EditorRuntime {
 
   /// The render-preview cache (D-45), bounded by the device tier.
   final IndexRenderPreviewStore renderPreview;
+
+  /// Export outputs the export flow holds in this process (FIX-QA05-D8-2).
+  final ExportOutputLeases exportLeases;
+
+  /// Sweeps orphaned export outputs from the exports folder (FIX-QA05-D8-2): first
+  /// [EditorBootstrap.exportSweepDelay] after wiring, after every export job's end, and from
+  /// Settings › Storage.
+  final ExportOutputSweeper exportSweeper;
 
   AppLifecycleListener? _lifecycle;
   bool _disposed = false;
@@ -185,6 +200,9 @@ final editorRuntimeProvider = Provider<EditorRuntime?>((ref) => null, name: 'edi
 abstract final class EditorBootstrap {
   /// How long [create] waits for `engine.capabilities()` before wiring without them.
   static const Duration capabilitiesTimeout = Duration(seconds: 3);
+
+  /// How long after wiring the first export sweep runs (FIX-QA05-D8-2; off the startup path).
+  static const Duration exportSweepDelay = Duration(seconds: 20);
 
   /// The app roots on this device: Application Support and Caches (danaview_data `AppStorage`) and the
   /// "On This Device" Documents folder (ARCH §8.1).
@@ -290,6 +308,7 @@ abstract final class EditorBootstrap {
       debugPrint('[EditorBootstrap] The engine access takes no Documents root');
     }
     final capabilities = await _capabilitiesOf(engine);
+    await prepareWorkFolders(roots, fs: fs, access: engine.access);
     final deleter = OwnedFileDeleter(roots, fs: fs);
     final relinker = MediaRelinkService(
       access: engine.access,
@@ -310,6 +329,8 @@ abstract final class EditorBootstrap {
       materialize: engine.access.materializePick,
     );
     final exportGate = EditorExportGate(engine.exporter);
+    final exportLeases = ExportOutputLeases();
+    final exportSweeper = ExportOutputSweeper(roots: roots, exporter: engine.exporter, leases: exportLeases, fs: fs, deleter: deleter);
     late final GcScheduler gcScheduler;
     late final FileProjectRepository repository;
     final allow2160 = capabilities != null && capabilities.maxExportSize.shortestSide >= 2160;
@@ -373,8 +394,14 @@ abstract final class EditorBootstrap {
           ),
         ),
       ),
+      exportLeases: exportLeases,
+      exportSweeper: exportSweeper,
     );
-    if (startGc) gcScheduler.start();
+    if (startGc) {
+      gcScheduler.start();
+      // FIX-QA05-D8-2: unawaited and off the startup path; sweepSoon swallows and counts errors.
+      makeTimer(exportSweepDelay, exportSweeper.sweepSoon);
+    }
     if (listenToLifecycle) runtime._listenToLifecycle();
     return runtime;
   }
@@ -405,9 +432,34 @@ abstract final class EditorBootstrap {
                 ),
                 cacheUse: editorCacheUseOf(openProjects: () => repository.openIds, exporter: engine.exporter),
                 onOpenProjects: onOpenProjects,
+                exports: runtime.exportSweeper,
               ),
       ),
     ];
+  }
+
+  /// QA-05 D8: creates the exports folder (`StoreRoots.exportsDir`, under Application Support /
+  /// `files/`, so a low-storage purge of the cache cannot delete a running export) and excludes it
+  /// from backups, and recreates the cache's `work/` folders the system may have purged. Never
+  /// throws; each user creates its folder again before use.
+  ///
+  /// Nothing is moved from the old `<cache>/danaview/editor/work/export-*` location: the engines'
+  /// job records hold those absolute paths (a running, kept or detached export), so a move would
+  /// break them, and anything else there is a purgeable leftover the cache cleanup removes.
+  static Future<void> prepareWorkFolders(StoreRoots roots, {StoreFs fs = const LocalStoreFs(), MediaAccessPort? access}) async {
+    for (final dir in [roots.exportsDir, roots.workDir]) {
+      try {
+        await fs.createDirectory(dir);
+      } on Object catch (e) {
+        debugPrint('[EditorBootstrap] Could not create ${p.basename(dir)}/: ${e.runtimeType}');
+      }
+    }
+    if (access == null) return;
+    try {
+      await access.excludeFromBackup(roots.exportsDir);
+    } on Object catch (e) {
+      debugPrint('[EditorBootstrap] Could not exclude exports/ from backups: ${e.runtimeType}');
+    }
   }
 
   static Future<EditorCapabilities?> _capabilitiesOf(EditorEngine engine) async {

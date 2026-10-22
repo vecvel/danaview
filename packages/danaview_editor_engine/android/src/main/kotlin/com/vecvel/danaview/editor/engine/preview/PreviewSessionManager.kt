@@ -131,10 +131,20 @@ class PreviewSessionManager(private val ctx: EngineContext) {
      * An export [jobId] started (AND-11): on minimal, low and mid tiers every session pauses and
      * releases its decoders until the last export ends. Thread-safe.
      */
-    fun suspendForExport(jobId: String) {
+    fun suspendForExport(jobId: String, released: (() -> Unit)? = null) {
         val first = synchronized(exportJobs) { exportJobs.add(jobId) && exportJobs.size == 1 }
-        if (!first || !suspends()) return
-        ctx.threads.preview.execute { for (s in sessions.values) s.suspendForExport() }
+        if (!first || !suspends()) {
+            released?.invoke()
+            return
+        }
+        ctx.threads.preview.execute {
+            // QA-05 D9: [released] once every session's backend has released its decoders.
+            val targets = sessions.values.toList()
+            val left = java.util.concurrent.atomic.AtomicInteger(targets.size + 1)
+            val one = { if (left.decrementAndGet() == 0) released?.invoke() }
+            eachGuarded(targets, "export suspension") { it.suspendForExport(one) }
+            one()
+        }
     }
 
     /** Export [jobId] ended (done, failed or cancelled); the sessions resume after the last one. Thread-safe. */

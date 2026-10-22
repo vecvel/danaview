@@ -235,6 +235,8 @@ class ReverseJob(private val ctx: EngineContext) {
             return GeneratedAssetMsg(path = output.absolutePath, sizeBytes = output.length(), durationUs = durationUs)
         } finally {
             looper.quitSafely()
+            // QA-05 D9: the Transformers' looper is gone before the job reports its end.
+            ProxyJob.joinQuietly(looper)
             part.delete()
             work.deleteRecursively()
             DiskCache.unmarkActive(work)

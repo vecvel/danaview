@@ -255,6 +255,50 @@ class JobRegistryTest {
     }
 
     @Test
+    fun heldJobsStoppedWaitsForThePausedJobsToReturnFromTheirBodies() {
+        // QA-05 D9: an export starts its codecs only after the jobs it paused have stopped.
+        val jobs = registry(concurrency = 3)
+        val coordinator = FakeExportCoordinator(jobs)
+        val proxy = jobs.enqueue(body("proxy", JobKindMsg.PROXY, key = "proxy-fp", proxy = "fp"), JobPriorityMsg.NORMAL)
+        jobs.enqueue(body("wave"), JobPriorityMsg.BACKGROUND)
+        val ui = jobs.enqueue(body("ui"), JobPriorityMsg.INTERACTIVE)
+        assertEquals(3, jobs.runningCount)
+        coordinator.startExport()
+        var released = 0
+        jobs.whenHeldJobsStopped { released++ }
+        assertEquals("the paused jobs still run their bodies", 0, released)
+        executor.runNext() // proxy stops (pre-empted)
+        assertEquals(JobRegistry.State.QUEUED, jobs.state(proxy))
+        assertEquals("the background job still runs", 0, released)
+        executor.runNext() // wave stops
+        assertEquals(1, released)
+        // The interactive job is not paused by an export and never held the waiter.
+        assertEquals(JobRegistry.State.RUNNING, jobs.state(ui))
+        executor.runAll()
+        assertEquals("the waiter runs once", 1, released)
+        // Nothing paused running: at once.
+        var now = 0
+        jobs.whenHeldJobsStopped { now++ }
+        assertEquals(1, now)
+    }
+
+    @Test
+    fun heldJobsStoppedWaitersAreReleasedWhenTheExportEnds() {
+        val jobs = registry(concurrency = 1)
+        val coordinator = FakeExportCoordinator(jobs)
+        jobs.enqueue(body("wave"), JobPriorityMsg.BACKGROUND)
+        val export = coordinator.startExport()
+        var released = 0
+        jobs.whenHeldJobsStopped { released++ }
+        assertEquals(0, released)
+        // The export ends before the job noticed the pause: nothing is held any more.
+        coordinator.finishExport(export)
+        assertEquals(1, released)
+        executor.runAll()
+        assertEquals(1, released)
+    }
+
+    @Test
     fun exportPausesBackgroundAndProxyJobsAndResumesThemAfterwards() {
         val jobs = registry(concurrency = 2)
         val coordinator = FakeExportCoordinator(jobs)

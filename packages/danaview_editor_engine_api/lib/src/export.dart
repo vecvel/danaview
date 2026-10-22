@@ -312,7 +312,7 @@ abstract interface class ExportService {
   /// Checks the plan and settings on this device.
   Future<ExportPreflight> preflight(RenderPlan plan, EncodeSettings settings);
 
-  /// Starts an export to [outputPath] (`<cache>/danaview/editor/work/export-<jobId>.<ext>`).
+  /// Starts an export to [outputPath] (`<support>/danaview/editor/exports/export-<token>.<ext>`, QA-05 D8).
   /// [notificationTexts] (INT-07) replace the engine-wide notification texts from this job on;
   /// null keeps them.
   Future<ExportJob> start(

@@ -13,8 +13,12 @@ The acceptance criteria are:
 - the project always reopens valid
 
 **Status (2026-10-17 10:27 IST): iOS side green.** The seeded soak (seed 5150) and the process-death
-chain both pass on the FIX-IOS-D7 code (§2). D1–D7 are all fixed. Still deferred: the Android soak and
-death chain (Windows lane), the 1 h runs, and the device-only steps (§6).
+chain both pass on the FIX-IOS-D7 code (§2). D1–D7 are all fixed. **Android side (2026-10-22, d680bd3,
+API 35 emulator): not green** (§A). The process-death chain passes, but the seeded soak (seed 5150)
+fails: a low-storage export breaks when Android purges the app's cache (D8, Mac), an export
+deadlocks in the platform codec code (D9, Android lane), and a re-run shows stale preview frames
+after seeks (D10). `soak_host.py` needs W1–W7 to run on Windows/Android. Still deferred: the 1 h
+runs and the device-only steps (§6).
 
 ## 1. Suite
 
@@ -84,6 +88,207 @@ Every in-app event prints a `DV_SOAK <kind> …` line. The kinds are `op`, `fail
 | captions | 60 s of speech (6 clips, "Selected clips", Fast tier), killed past 50 % (after the first checkpoint). | `resumableFor(project)` keeps the record. The editor shows "Auto captions were interrupted" once. After Discard, a reopen shows no notice and the record is gone. |
 
 For every job, the project is then opened straight from the store and validated.
+
+## A. Android half (Windows lane, 2026-10-22, code d680bd3)
+
+All runs used the **Pixel_9_Pro_XL_API_35 emulator** (`emulator-5554`, x86_64, `google_apis`,
+SwiftShader GLES 3.0, software codecs), on the Windows laptop on mains power, with Flutter 3.44 and
+a debug build of `editor-android` **d680bd3** from the main checkout. The run was on 2026-10-22, from
+01:03 to 02:59 IST. The fixtures and models were staged first with QA-00's
+`e2e_host.sh -p android -d emulator-5554 stage` and `stage-models C:/dev/models` (the models stay
+outside the repo).
+
+**Verdict: not green.** The process-death chain passes: all 7 phases come back `ok`. The seeded soak
+(seed 5150, 15 min) does not. Run a failed one op: a low-storage export broke because Android
+purged the app's cache folder mid-export (D8). The solo re-run b failed the same op, then five seeks
+showed stale frames (D10) and an export deadlocked inside the platform codec code, which hung the
+soak (D9). Neither run crashed, and every reopen was valid. Run a's memory growth was +7.1 %. Both
+the soak and the death chain ran only through a scratch Windows wrapper around `soak_host.py`,
+because the host does not run unmodified on Windows/Android (W1–W7 below).
+
+### A.1 The host on Windows
+
+`python -I integration_test/editor_soak/tool/soak_host.py -p android -d emulator-5554 death`, run
+unmodified from Git Bash, uninstalled the app and then stopped. Its `host.log` ends at the first
+phase's command line. The run agent saw `FileNotFoundError [WinError 2]` there: Python's
+`subprocess` cannot start the bare name `flutter`, because on Windows it is `flutter.bat`.
+Evidence: `build/soak/android/emulator-5554/unmodified_attempt/`.
+
+Every run below used a scratch wrapper, `build/soak/android/emulator-5554/soak_host_win_SHIM.py`.
+It imports `soak_host.py` without editing it and patches only the points that fail on Windows or
+Android. Each patch is a FIX request for the Mac (`soak_host.py` is Mac-owned):
+
+| # | What fails | What the wrapper does |
+|---|---|---|
+| W1 | `subprocess.Popen(["flutter", …])` raises `FileNotFoundError` on Windows (`flutter.bat`) | starts `flutter.bat` by its full path |
+| W2 | `stop()` calls `os.killpg`, which does not exist on Windows (`AttributeError`, not caught as `OSError`); `start_new_session` does not make a process group there | `CREATE_NEW_PROCESS_GROUP`, then `taskkill /F /T /PID` |
+| W3 | on Android, `flutter test` uninstalls the app at the end of each phase, which deletes the staged fixtures and models and the state the next death phase reads | adds `--no-uninstall` to `flutter test` |
+| W4 | `death()` starts with `adb uninstall`, which deletes `Android/data/<app>/files` (the staged fixtures and models) | stages the fixtures and models again after the uninstall |
+| W5 | no `grantNotifications` action; `E2eExport.start` asks the host for it on Android | answers it with `pm grant … POST_NOTIFICATIONS` |
+| W6 | the soak's own export op does not ask for the grant, so the first export on a fresh install waits behind the POST_NOTIFICATIONS system dialog | grants POST_NOTIFICATIONS from the host once the app is installed |
+| W7 | no 60 s speech source on Android: `speech_60s()` uses macOS `afconvert`, and `defines()` passes `DV_SOAK_SPEECH60` on iOS only | builds the 60 s WAV with ffmpeg, pushes it to `e2e_fixtures/` on the device and passes `DV_SOAK_SPEECH60` with the device path |
+
+Commands, from Git Bash after `source ~/danaview_env.sh` at the repo root:
+
+```sh
+integration_test/editor/tool/e2e_host.sh -p android -d emulator-5554 stage
+integration_test/editor/tool/e2e_host.sh -p android -d emulator-5554 stage-models C:/dev/models
+python -I -X utf8 build/soak/android/emulator-5554/soak_host_win_SHIM.py -p android -d emulator-5554 death
+python -I -X utf8 build/soak/android/emulator-5554/soak_host_win_SHIM.py -p android -d emulator-5554 soak --minutes 15 --seed 5150
+```
+
+### A.2 Process death per job type
+
+The full chain ran twice. The second run (01:49–02:05) came back with all 7 phases `ok`. Evidence is
+in `build/soak/android/emulator-5554/death_full_chain2/` (`death_runner2.log`, `death-results.txt`,
+`soak-death.json` and one log per phase).
+
+| Job | Result | Evidence |
+|---|---|---|
+| autosave | **pass** | The journal was restored, and the project reopened valid holding `SOAK AUTOSAVE 0`. |
+| proxy | **pass** | Killed while running (8.9 %). The asset was `pending` on reopen and resumed to `ready` with no user action. |
+| reverse | **pass** | Killed while running (2 %). The rendition was `pending` on reopen, resumed and became `ready`. |
+| freeze | **pass** (allowed caveat) | The task had already finished at the kill (`task running: false`), so the still was "already ready" on reopen. §1.2 allows this when the project is valid, and it was. The same happened in both full chains, so the freeze resume was not exercised on Android. |
+| export | **pass** | Killed at 40 % (30 % in the first chain). Exactly one `ExportInterrupted`, reported once, and nothing on reopen. |
+| captions | **pass** (with W7) | Killed at 56 %. The record was kept at 0 % (only checkpointed ranges count), the notice showed once, and the record was gone after Discard. |
+| verify | **pass** | Every job's project opened straight from the store and validated. |
+
+**Captions without W7 failed twice.** In the first full chain (01:11–01:39, `death_full_chain/`) and
+in a solo captions run (01:43, `death_captions_solo1/`), the job was "killed at 95 %", and then
+there was "no resumable captions record after the kill". Without a 60 s source, the phase puts six
+copies of the 10 s clip on the lane, and on Android that made one 10 s transcription unit, which
+finished before the kill landed. With the 60 s WAV (W7) it passed at 56 % in a solo run
+(`death_captions_solo2_speech60/`) and in the second full chain. This is a host gap (W7), not an
+app defect. The other five phases passed in the first chain too.
+
+### A.3 Random soak, 15 min, seed 5150
+
+`python -I -X utf8 build/soak/android/emulator-5554/soak_host_win_SHIM.py -p android -d emulator-5554 soak --minutes 15 --seed 5150`
+ran twice: run a from 02:06 to 02:23, and run b (a solo re-run on a fresh install) from 02:25 until
+it was stopped at 02:59. Evidence is in `build/soak/android/emulator-5554/soak_run_a/` (the log,
+`soak-summary.json`, `soak-summary-log.json`, `memory-host.csv`, the host log and the full logcat
+`soak_logcat_after.txt`) and `soak_run_b/` (the log, `soak-stall-166.json`, `memory-host.csv`, the
+thread dump in `stall_b_bugreport/FS/data/anr/trace_11` and `stall_b_bugreport.zip`).
+
+| Run | Ops | Projects | Reopens | Failures | Memory (baseline → end, peak) | Growth |
+|---|---|---|---|---|---|---|
+| a | 190 | 1 | 8 of 8 valid | **1**: op #75 lowStorage, `ExportFailed(exportFailed.unknown)` (D8) | 633.8 → 678.9 MB, peak 757.4 MB | +7.1 % |
+| b | 166 (the last one hung) | 1 | 6 of 6 valid | **7**: #75 (D8, again); #121, #123, #145, #155, #162 stale preview frames (D10); #166 export stalled at 0 % "Preparing…" (D9), then the soak's recovery hung for over 17 min | no summary, because the run was stopped. The host saw 368–618 MB over 64 samples. | n/a |
+
+The emulator ran 190 ops in 15 min, where the iOS Simulator ran 965 (§2.1). One project was enough
+for the whole run, so project rotation and delete were not exercised.
+
+Run a, criterion by criterion:
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| No crash | **pass** | One app pid (26836) across all 31 outside samples (PSS 377–597 MB), and the flutter connection survived. No ANR for the app in the logcat. Run b: one pid (13464) across 64 samples. |
+| No unhandled exception | **pass** | 0 framework errors and 0 uncaught zone errors. The only failure was the op failure below. |
+| Project always reopens valid | **pass** | 8 of 8 reopens were valid, with 0 reopen problems (run b: 6 of 6 before it was stopped). |
+| Memory growth ≤ 10 % | **pass** | +7.1 %: the in-app verdict is "baseline 633.8 MB, end 678.9 MB, peak 757.4 MB, growth 7.1 % (limit 10 %, 160 samples)", from 190 samples. Emulator debug-build numbers, not device numbers. |
+| Nothing hangs, every op works | **FAIL** | Run a: 1 failed op, #75 (D8). Run b: #75 again, 5 stale-frame seeks (D10), and an export deadlock that hung the run (D9). |
+
+Ops in run a (ran/skipped/failed):
+
+- seek 12, scrub 3, play 14, frameStep 11
+- split 15, undo 17, redo 10, copyPaste 8, duplicate 6, delete 9
+- dragMove 9, dragTrim 5
+- text 4, marker 6, speed 4, transition 6, zoom 6, selectAll 4
+- reverse 6, freeze 5, proxy 2, export 5 (2 completed, 3 cancelled), captions 1
+- background 2, inactive 2, call 3 (real GSM calls on the emulator), offline 1
+- audioRoute 0/4: no scriptable route change (a device step)
+- lowStorage 1/0/1 (the warm-up op #29 passed: export cancelled, save saved)
+- reopen 8
+
+**D8 · Under low storage, Android purges the app's cache folder mid-export, and the export fails as
+`unknown` (Mac FIX request; the soak's own check also has a gap).** Op #75 asks the host to fill the
+emulator to 199 MB free, then edits, saves and exports. At 02:15:10, `installd` was asked for
+1,048,576,000 bytes (the requester is not in the log) and purged app caches to make room. That
+included the whole of `/data/data/com.vecvel.danaview/cache/danaview/editor/`:
+`work/export-*.mp4` (the running export's output), `export-jobs.json`, `engine/dv_opaque_*.png` and
+`dv_transparent_*.png` (the generated images the composition references), `proxies/`, `renders/`,
+`sprites/` and `thumbs/`. Five seconds later the engine logged
+`export ex_34b4199b766747ca: failure … ERROR_CODE_IO_UNSPECIFIED … ImageAssetLoader … FileDataSourceException`
+(ENOENT on a generated PNG), which Dart reports as `exportFailed.unknown`. Run b failed the same op
+the same way, so it is deterministic with this seed.
+
+This is how Android really behaves when storage runs out (cache files are the first to go), not an
+emulator artefact. Two things follow:
+
+1. **Product (Mac, store roots and export job store; the lead decides).** Files a running job needs,
+   and the export job records (`export-jobs.json`), live under the cache root, which the system may
+   delete at any time under storage pressure. Proposed: keep the running jobs' work files, the job
+   records and the engine's generated images under `files/` (or `noBackupFilesDir`), not `cache/`,
+   or regenerate them and report a storage failure ("not enough space") instead of `unknown`. The
+   Android lane can make the engine regenerate missing generated images and map ENOENT during low
+   storage to the storage code, if the lead wants that half.
+2. **Soak (Mac, `soak_test.dart` around line 633).** In the `background` branch of `_export`, the
+   second wait accepts only `ExportUiCompleted` or `ExportUiInterrupted`, while the first wait also
+   accepts `ExportUiFailed` when `_lowStorage` is set. So a failure under low storage counts as an op
+   failure only when the export was backgrounded. Make the two waits agree. Whether a clean storage
+   failure under low storage is accepted is the Mac's call; an `unknown` failure should stay a
+   failure.
+
+**D9 · An export deadlocks while creating its audio encoder (Android lane, candidate, not fixed).**
+In run b, op #166's export stayed at 0 % "Preparing…" (0/870 frames) for 120 s, and the soak's
+recovery then waited for more than 17 minutes. It was stopped at 02:59, so there is no app summary.
+The app's thread dump (SIGQUIT at 02:56, read from a bugreport) shows:
+
+- thread 108 (`pool-93-thread-1`), in `ImageAssetLoader` → `TransformerInternal…onOutputFormat` →
+  `DefaultEncoderFactory.createForAudioEncoding` → `MediaCodec.createByCodecName` →
+  `BpResourceManagerService::reclaimResourcesFromClientsPendingRemoval` →
+  `ResourceManagerClient::reclaimResource` → `MediaCodec::reclaim`, waiting for an answer that never
+  comes;
+- it holds the Transformer listener lock (`<0x02ad7b7d>`), and 10 other threads are blocked on it.
+- two preview-player threads (`ExoPlayer:Playback`, tids 78 and 82) are blocked in the same
+  `MediaCodec::reclaim` path while creating codecs, and the app holds about 15 live ExoPlayer playback
+  threads and about 17 codec loopers at the stall. So the triage starts with codec lifetime across both
+  the export path and the preview session's players (AND-16 decks, AND-10 session), not the export alone.
+
+The reclaim targets a codec in our own process. Run a's logcat shows `MediaCodec$EventHandler …
+sending message to a Handler on a dead thread` 57 times in the soak's app process (and in the
+death phases' processes). The run agent saw them after cancelled reverse and export jobs; that was
+not checked op by op. Taken together, this points to codecs left without
+a proper release when an engine job is cancelled, so a later encoder creation tries to reclaim a
+codec whose looper is gone. That is a hypothesis, not proven. In run a, the same op #166 export did
+complete, but took 191 s. The owner is the Android engine's export and job code
+(`packages/danaview_editor_engine/android/`). It was not fixed in this round: it is not a small,
+safe change, and the 20-minute budget per root cause ran out. Next step for the Android lane:
+replay seed 5150 to op #166, check that every cancelled reverse, export and proxy job stops and
+releases its `Transformer` and codecs on the thread that owns them, and keep a thread dump at the
+first stall.
+
+**D10 · After a seek, the preview showed an older frame (run b only, cause unproven).** Five ops
+failed as "stuck" with the preview phase `ready` (once `degraded`) and a live session: #121 (seek to
+frame 664, the engine showed 58), #123 (473, showed 440), #145 copyPaste (144, showed 301, preview
+degraded), #155 split (72, showed 249) and #162 split (335, showed 249). Run a, with the same seed,
+had none. The frames are tens to hundreds of frames off, so this is not the emulator's software
+decoder stale-frame signature (1–5 frames near a stream end, QA-02 "Emulator realities"). They came
+after #75 and before the D9 deadlock, so they may share D9's codec state, but that is not shown.
+Run b's logcat before 02:56 was lost (see below), so there is no engine trace for these ops. Owner:
+the Android lane (preview session) to triage together with D9.
+
+**Emulator realities on Android:**
+
+- **Throughput.** 190 ops in 15 min against 965 on the iOS Simulator: SwiftShader GL, software
+  codecs and a debug build. Op times are not performance numbers.
+- **Memory.** The in-app RSS baseline is about 634 MB (the iOS Simulator's was about 340 MB); the
+  host's PSS stayed at 377–597 MB in run a. Both are emulator debug-build numbers.
+- **audioRoute** cannot be changed from a script on the emulator (4 skips per run); it is a device
+  step (§6).
+- **Real GSM calls** work on the emulator (`call`, 3 per run), unlike the iOS Simulator.
+- **lowStorage is real on Android.** The host can fill the emulator's `/data`, so this op runs here
+  (it is refused on the iOS Simulator), and it exposed D8.
+
+**Limits of this evidence.** Run b's logcat before 02:56 was lost: the runner cleared it
+(`logcat -c`) during the stall. Its test log, host log, memory samples and thread dump are kept. Run
+a's full logcat is kept. The first wrapper attempt (`attempt1_shim_restage_bug/`) failed in its own
+restage step (MSYS path conversion) and is not a result.
+
+**What stays deferred on Android:** the 1 h emulator run (after D8 and D9 are fixed, and W1–W7
+land in `soak_host.py`), the physical-device run with a real audio route change, real calls and real
+low storage, and the freeze resume after process death, which both chains skipped because the
+freeze finished before the kill (§6).
 
 ## 2. Third re-run, after FIX-IOS-D7 (QA-05-RERUN)
 
@@ -392,7 +597,8 @@ The fix belongs in the editor's open path. Either the editor screen or session (
 | Item | Status | How to run it |
 |---|---|---|
 | 1 h soak on a physical iPhone (plus calls, Siri, a wired or Bluetooth audio route change, and real low storage) | **deferred: no device available** | `flutter test integration_test/editor_soak/soak_test.dart -d <iphone> --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true --dart-define=DV_SOAK_MINUTES=60 --dart-define=DV_E2E_MODELS=<on-device dir>`. During the hour: place two calls to the phone, invoke Siri twice, plug and unplug headphones (or connect and disconnect a Bluetooth headset) during playback, and fill storage to less than 300 MB free with a large file. Then run the death phases with `soak_host.py` adapted to `xcrun devicectl` (kill: `devicectl device process terminate`). Record the summary JSON and Xcode's memory gauge. |
-| 1 h soak on the Android emulator (API 35) with GSM calls, low storage and process death | **deferred: Windows lane** | `python3 -I integration_test/editor_soak/tool/soak_host.py -p android -d emulator-5554 all --minutes 60` (after the `e2e_host.sh stage` and `stage-models` steps above). |
+| 1 h soak on the Android emulator (API 35) with GSM calls, low storage and process death | **deferred: the 15 min run is not green yet (§A: D8, D9, D10), and `soak_host.py` needs W1–W7 on Windows** | After those land: `python -I integration_test/editor_soak/tool/soak_host.py -p android -d emulator-5554 all --minutes 60` from Git Bash (after the `e2e_host.sh stage` and `stage-models` steps above). Until W1–W7 land, the §A wrapper runs it. |
+| Freeze resume after process death on Android | **not exercised** | In both Android chains the freeze finished before the kill (the allowed caveat), so the resume of a pending still was not seen on Android. A longer freeze source, or a kill timed on the task's start, would exercise it. |
 | 1 h soak on a physical Android device (audio route via headset, real calls, low storage) | **deferred: Windows lane / no device available** | `python3 -I integration_test/editor_soak/tool/soak_host.py -p android -d <serial> all --minutes 60`. `call` and `lowStorage` are emulator-only in the host, so on a device do them by hand during the hour, as for the iPhone. |
 | Audio route change | **deferred: no device available** | Neither the simulator nor the emulator can change the audio route from a script. The host answers `audioRoute` with ok=false, and the soak records it under `unavailable`. |
 | Low storage on iOS | **deferred: no device available** | The iOS Simulator's data container is on the Mac's own disk, so the host refuses to fill it. |
