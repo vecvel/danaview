@@ -356,11 +356,24 @@ deferred: no device available (simulator VoiceOver not scripted).
 
 ### 7. Android Emulator half
 
-In progress (Windows lane, branch `v1.2-android`). Done so far:
+Windows / Android lane, branch `v1.2-android`, 2026-10-22, 21:32–23:25. **Tree: `89b75ad`**
+(= `origin/v1.2-wip` `231e06d` merged as `6d87965`, plus an empty report commit; it carries D-3
+`e4efa6d`, HOM-02A `74ce560`, HOM-04A `05f3ff5`, HOM-20A `86ea8f6`, HOM-22A `ad425e7`), clean
+working tree, version `1.0.0+1` untouched. Host: Windows 11, Flutter 3.44.8 (Dart 3.12.2), JBR
+21.0.10. Emulators on `emulator-5554` only, one at a time: **Pixel_9_Pro_XL_API_35** (API 35,
+google_apis x86_64) for everything below, **Pixel_API_29** (API 29) for the D-3 `fullBackupContent`
+check and a launch check. QA changed no product code and committed no test change. Evidence (not
+committed): `build/s2_android/` and `build/e2e/android/emulator-5554/` in the worktree `C:/dev/v12`.
 
-**D-7 check (bundled SQLite on Android): pass.** Tree: `v1.2-android` = S2 candidate 071cfe4 (via
-origin/v1.2-wip 09909b0) + D-3 (e4efa6d) + HOM-02A (74ce560); debug APK built with
-`--dart-define=DANAVIEW_FILES_HOME=true` (other flags off), `--target-platform android-x64`.
+**Gate verdict (Android half): green, with two low QA-tooling FIX requests (FIX-S2Q-A1, A2).** The
+full v1.1 suite passes with `DANAVIEW_FILES_HOME=true` on the wired library (17 of 18 + 7 of 7
+Android phases; s13 is the owner-accepted emulator-microphone limitation), the S2 E2E passes every
+step on Android once its iOS-only "Save to Files" expectation is relaxed locally (the unmodified
+file stops at that step, FIX-S2Q-A1), `danaview_library` is green on the Windows host, and the
+`bmgr` checks confirm D-3 on API 35 (cloud backup and device transfer) and API 29.
+
+**D-7 check (bundled SQLite on Android): pass** (first round, `742b647`; tree then: S2 candidate
+071cfe4 via 09909b0 + D-3 + HOM-02A; debug APK, `DANAVIEW_FILES_HOME=true`, other flags off):
 
 | Check | API 35 (Pixel_9_Pro_XL) | API 29 (Pixel_API_29) |
 |---|---|---|
@@ -370,12 +383,127 @@ origin/v1.2-wip 09909b0) + D-3 (e4efa6d) + HOM-02A (74ce560); debug APK built wi
 | Folders tab: Danaview folders | Imported ("kept by Danaview") and Recently deleted shown | same |
 | Photos tab (HOM-02A) | "Show my photo library" opens the system dialog (Allow limited access / Allow all / Don't allow); after Allow all a photo pushed to the device appears in the grid live | not run |
 
-No silent fallback: the store opened on both levels. Evidence (not committed):
-`build/s2_android/d7/` (screenshots) and `build/s2_android/hom02a/` (instrumented test results) in
-the Windows worktree.
+The release candidate repeats these on `89b75ad` with the release APK (§Release candidate, Android
+candidate).
 
-Still open on Android: HOM-04A, HOM-20A, HOM-22A, the S2 E2E and full v1.1 suite, persistence
-(`bmgr` check of `library/` for D-3), and S2-R.
+#### 7.1 S2 packages on the Windows host
+
+| Package / suite | Command | Result |
+|---|---|---|
+| `danaview_library`, `danaview_search`, core photo tests | `scripts/ci/v12/library.sh` (Git Bash) | **exit 0** (1 min 48 s): analyze clean; `dart test -x benchmark` **292 pass, 3 skip** (two "links need POSIX permissions", one "chmod is POSIX"), `-t benchmark -j 1` 3 pass (HOM-19: 50,000 names, mean 4.09 ms, worst 16 ms per keystroke); search 4, core 14 pass |
+| `danaview_library` import tests, flake check | `dart test test/import`, three times | 46 / 46 / 46 pass |
+| `import_memory_test.dart` without a Unix `cp` | `dart test` from PowerShell | pass (import 1841 ms, OS copy 720 ms, RSS +4.0 MB): FIX-S1Q-A4 closed by the child-process rewrite |
+
+All six Windows-host failures of `33b3b8d` are gone after `ba9e576` (report commit `89b75ad`), so
+FIX-S1Q-A4 and FIX-S1Q-A5 can close. The HOM-02A/04A/20A/22A module tests (JVM, and instrumented on
+API 35 / 29 / 28) are recorded in those commits and were not repeated here.
+
+#### 7.2 S2 E2E on the Android Emulator
+
+`integration_test/v12/s2/s2_files_home_test.dart` on API 35, driven by `e2e_host.sh` directly
+(`e2e_android.sh` has no extra-define pass-through yet, FIX-S2Q-A2):
+
+```text
+integration_test/v12/s2/tool/make_s2_media.sh        # Pillow 12.3.0 + ffmpeg 7.1.1, nothing downloaded
+# shared folders as e2e_android.sh's prepare_shared (files/, e2e_handshake, ..., s2_media: 2777), then
+adb -s emulator-5554 push build/e2e/s2_media/. /sdcard/Android/data/com.vecvel.danaview/files/s2_media/
+MSYS2_ARG_CONV_EXCL="/sdcard;/storage;/data/local;--dart-define=DV_S2_MEDIA" \
+  integration_test/editor/tool/e2e_host.sh -p android -d emulator-5554 -D DANAVIEW_FILES_HOME=true \
+  -D DV_S2_MEDIA=/sdcard/Android/data/com.vecvel.danaview/files/s2_media \
+  run integration_test/v12/s2/s2_files_home_test.dart
+```
+
+On Git Bash the `DV_S2_MEDIA` define must be excluded from MSYS path conversion, or the app gets
+`C:/Program Files/Git/sdcard/...`. The **unmodified file fails at step 5** (21:43–21:46): after the
+selection bar's save action it waits for `SaveOutTarget.files`, but on Android the primary save
+target of a photo is `SaveOutTarget.downloads` (`file_out.dart` `primarySaveTarget`; the action ran
+and the selection bar closed): FIX-S2Q-A1. With that one expectation widened to `files ||
+downloads` in an untracked local copy (deleted after the run), the scenario **passes, 1 of 1**
+(21:46–21:48):
+
+| Step | Result |
+|---|---|
+| Home with the flag: tabs, no Documents; library at `files/library` | pass |
+| Nested Danaview folders Trips › Japan | pass |
+| Import: photo "From Photos" into Japan, video "From Files" into Imported; copies byte-equal; staged copies removed | pass (86 741 B, 1 643 193 B) |
+| Viewer File info with EXIF (Taken, Camera, Lens, Exposure, Dimensions, …) | pass: "21 October 2026, 09:05", "Danaview QA S2 Test Cam", "2400 × 1600 · 3.8 MP" (screenshot `s2-05-photo-info`); exposure as the fixture writes it (N-3) |
+| Share from the viewer hands over the library photo (`image/jpeg`) | pass |
+| Video plays from All (duration 4021 ms, position advances) | pass |
+| Selection bar: save out (Save to Downloads on Android), Save to Photos (both recorded at the file-out port); library file unchanged | pass with the local widening (FIX-S2Q-A1) |
+| Delete both, Recently deleted lists them, photo restored to Trips › Japan | pass |
+| Library closed and reopened: folders, entries, Recents, Recently deleted persist; video restored; files present; originals unchanged | pass |
+| Network: no `HttpClient` created | pass |
+
+Evidence: `build/s2_android/e2e_s2/` (9 screenshots, both test logs). The real Save to Downloads,
+share chooser and open-in ran in the release smoke (§Release candidate). The S2 Home stress probe
+(§2a) was not run on Android (HOM-14 owns the frame verdict on devices; a debug JIT build on the
+emulator adds no verdict).
+
+#### 7.3 Full v1.1 suite on the Android Emulator, `DANAVIEW_FILES_HOME=true`
+
+`DANAVIEW_E2E_MODELS=C:/dev/models DANAVIEW_E2E_FRESH=1 scripts/ci/editor/e2e_android.sh emulator-5554`
+(headless, `-no-audio`, API 35), 22:01–23:01, on the wired library (`E2eApp._boot` adds
+`filesHomeOverrides`, FIX-S2Q-5). `e2e_android.sh` cannot pass extra defines yet (FIX-S2Q-A2), so a
+`flutter` wrapper first on `PATH` (scratch, outside the repo) inserted
+`--dart-define=DANAVIEW_FILES_HOME=true` into every `flutter test`; its marker line is in **26 of
+26** test logs, next to the script's `DANAVIEW_EDITOR=true DANAVIEW_AUTO_CAPTIONS=true`. The other
+1.2.0 flags stayed off (the S2 flag set). The flags-off batch was not repeated on Android (S1-Q
+§6.3 ran it on `f865874`).
+
+| Batch | Result |
+|---|---|
+| s01–s12, s14–s18 | **17 of 18 pass**, no harness retry, no emulator restart |
+| s13 | fail: voiceover level in the export -91.0 dBFS (needs > -60): the emulator microphone feeds silence (owner-accepted emulator limitation, as in QA-02 and S1-Q). Start latency 1100 ms (device budget 100 ms) |
+| `x_android_export_background` fgs, fgs-check, cancel, swipe, swipe-check, death, death-check | **7 of 7 phases pass** |
+
+Evidence: s07 burned cues 313 / 293 changed samples (needs > 180), HEVC/MOV not offered (`hevcEncode
+false`, reported); s08 3 cues from the tiny model; s15 head -15.1 dBFS, body -9.0 dBFS; no "Library
+unavailable" line. Summary and logs: `build/e2e/android/emulator-5554/` (`summary.txt`) and
+`build/s2_android/v11_suite_flag_run2.log`. A first attempt at 21:49 was discarded: a stopped
+driver kept running beside the new one on the same emulator; the numbers above are the clean rerun.
+
+#### 7.4 Persistence and the D-3 backup rules (`bmgr`)
+
+Procedure of `packages/danaview_editor_core/test/store/gc/README.md` (V-A7) with the **release** APK
+of §Release candidate, after the smoke had imported a photo, a video and a PDF (1.73 MB in
+`files/library/files/`): `adb root`, `bmgr enable true`, transport
+`com.android.localtransport/.LocalTransport`, `bmgr backupnow com.vecvel.danaview`, the full-backup
+tar pulled and listed. Afterwards the transport parameters were deleted, the GMS transport
+re-selected, Backup Manager disabled again (as found) and `adb unroot`.
+
+| Check | Result |
+|---|---|
+| API 35, cloud backup (LocalTransport default) | `Success`; the tar holds `sp/` (FlutterSharedPreferences, danaview_library_native), `f/fonts`, profile files, `f/danaview` (empty dir); **no `f/library` entry** |
+| API 35, device transfer (`backup_local_transport_parameters is_device_transfer=true`) | `Success`; the tar holds **`f/library/library.db` (+ `-wal`, `-shm`) and the three library files** (`s2_doc.pdf` 4 727 B, the video 1 643 193 B, the photo 86 741 B); no `f/library/imports` (it was empty, so that exclusion is shown only statically by the D-3 tests); `f/danaview` empty dir |
+| API 29, `fullBackupContent` | `Success` on a freshly launched release install (`library.db`, `files/`, `imports/` present): **no `f/library` entry**; Folders shows Imported and Recently deleted, no "Library unavailable" |
+| Library across process and emulator restarts | pass: after two emulator restarts (OBS-S2A-2) the three entries, the delete and the restore were intact |
+
+D-3 is verified on the emulator as answered (a5c4c4d answer 7). A real phone-to-phone transfer and a
+`bmgr restore` round trip stay with the device check (deferred: no device available). Listings:
+`build/s2_android/bmgr/`.
+
+#### 7.5 Observations (not defects yet)
+
+- **OBS-S2A-1 (HOM-20A / HOM-20, owner decision).** Android's Photo Picker hands out URIs whose
+  `OpenableColumns.DISPLAY_NAME` is the media id, so photos imported "From Photos" are named
+  `1000000704.jpg`, `1000000705.mp4` in the library (iOS keeps `s2_photo.jpeg`). "From Files" (SAF)
+  keeps the real name (`s2_doc.pdf`). The E2E uses the staging picker and cannot see this. Options:
+  keep (the picker hides names by design), or name picker imports from the capture date.
+- **OBS-S2A-2 (emulator).** With the release APK the API 35 emulator process exited silently twice:
+  once as playback of the imported clip started, once right after leaving the player (no emulator
+  crash report, no app tombstone; library intact). Booted with `-gpu host`, the rest of the smoke ran
+  without a restart. Same family as the 1.1 tablet emulator deaths at media_kit video start and
+  OBS-S1A-1; the device smoke (checklist item 6) confirms.
+- **OBS-S2A-3 (HOM-10 / HOM-02A, low).** With the photo library shown, the Photos tab's album chips
+  include `Danaview` and `Movies` (buckets holding only videos on this emulator) while the grid shows
+  only photos. Say if video-only buckets should be hidden there.
+
+#### 7.6 FIX requests from the Android half
+
+| Id | Owner | Defect | Evidence | Fix direction |
+|---|---|---|---|---|
+| **FIX-S2Q-A1** (low, QA tooling) | S2-Q (`integration_test/v12/s2/s2_files_home_test.dart:407`) | Step 5 waits for `SaveOutTarget.files`, but on Android the selection bar's save action uses the primary target `SaveOutTarget.downloads`; the unmodified scenario times out there ("Timed out after 30 s waiting for Save to Files") although the app did the right thing | §7.2, `build/s2_android/e2e_s2/s2_files_home_test.log` | Expect the platform's primary save target (or `files || downloads`) and report which one; with that change the scenario passes on Android |
+| **FIX-S2Q-A2** (low, QA tooling) | QA-00 / INT-101 (`scripts/ci/editor/e2e_android.sh`) | No `DV_E2E_EXTRA_DEFINES` / `--target` pass-through (a5c4c4d answer 3), so the flag-on suite needed a `flutter` wrapper and the S2 scenario needs `e2e_host.sh` by hand plus the shared-folder and media preparation | §7.2, §7.3 | Pass `-D` from `DV_E2E_EXTRA_DEFINES` to `e2e_host.sh` and `extra_phase`, accept `--target <file>`, create and open `s2_media` in `prepare_shared` and push the host media there, exclude the define from MSYS conversion. The Windows lane can do it if the lead hands the file over |
 
 ### 8. Defects (FIX tickets, block the gate unless marked low)
 
@@ -493,21 +621,77 @@ deferred: no device available.
 
 ### Android candidate
 
-pending: Windows (`flutter build appbundle --release --build-name=1.0.0 --build-number=1` with the same
-defines, `check_native_libs.sh`, install and smoke on the API 35 emulator, D-7's `libsqlite3.so`, the
-photo permissions of D-3 and the Play photo-permission declaration).
+Windows / Android lane, 2026-10-22, 23:02–23:25, on the tree of §7 (`89b75ad`, clean, version
+`1.0.0+1` already in the tree: no revert). Nothing was signed, uploaded or changed in the signing
+settings; there is no `android/key.properties`. Built alone (no `flutter test` in the tree at the
+same time, the S1 lesson).
+
+```text
+flutter build appbundle --release --build-name=1.0.0 --build-number=1 \
+  --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true \
+  --dart-define=DANAVIEW_FILES_HOME=true --dart-define=DANAVIEW_PHOTO_EDITOR=false \
+  --dart-define=DANAVIEW_BEAUTY=false --dart-define=DANAVIEW_AI_STUDIO=false
+# then `flutter build apk --release` with the same arguments, for the smoke
+```
+
+| Check | Result |
+|---|---|
+| Build | **pass**: AAB 241 s (warm Gradle), fat APK 40 s; `build/app/outputs/bundle/release/app-release.aab` (copies in `build/s2_android/release/`) |
+| Signing | debug key (`CN=Android Debug`), as expected without `key.properties` |
+| `check_native_libs.sh` on the AAB | **all checks passed**: 16 KB LOAD alignment of every `.so` incl. `libsqlite3.so`, Whisper libraries exactly `arm64-v8a/libdanaview_whisper{,_v82}.so` + `x86_64/libdanaview_whisper.so`, 24 `dv_*` exports each, no `libc++_shared.so`, sizes ≤ 3 MB |
+| D-7 `libsqlite3.so` | in the AAB for arm64-v8a, armeabi-v7a, x86_64 |
+| Version (`aapt2 dump badging` of the APK) | `versionName 1.0.0`, `versionCode 1`, `com.vecvel.danaview`, minSdk 24, targetSdk 36, compileSdk 36; native code arm64-v8a, armeabi-v7a, x86_64 |
+| Permissions (D-3, a5c4c4d answers 8, 17) | adds **`READ_MEDIA_IMAGES`** and **`READ_MEDIA_VISUAL_USER_SELECTED`** to the S1 set; no `ACCESS_MEDIA_LOCATION`. `WRITE_EXTERNAL_STORAGE maxSdkVersion=28` is still merged from `danaview_editor_engine`'s plugin manifest (ENG-08; never requested at runtime, HOM-22A question 1) |
+
+**Size** (debug-signed; Play's per-device sizes come from the console after upload, checklist item 14):
+
+| Measure | S1 candidate | S2 candidate | Delta |
+|---|---|---|---|
+| `app-release.aab` | 95.4 MB (100 061 654 B) | **101.0 MB (105 869 493 B)** | +5.5 MB (+5.8 %) |
+| Native libraries per ABI in the AAB (uncompressed) | arm64-v8a 38.8, armeabi-v7a 32.8, x86_64 42.1 MB | arm64-v8a 41.3, armeabi-v7a 35.5, x86_64 44.7 MB | about +2.6 MB per ABI (`libsqlite3.so`, S2 Dart in `libapp.so`) |
+| Fat release APK (smoke only) | 120.1 MB | 128.0 MB (134 243 927 B) | +7.9 MB |
+
+**Install and smoke** of the release APK (same tree and defines) on Pixel_9_Pro_XL_API_35, app
+uninstalled first; a photo, a clip (from `make_s2_media.sh`) and a 3-page PDF (`spikes/android_pdf/
+fixtures/merge_partner_3p.pdf` as `s2_doc.pdf`) pushed to Pictures/, Movies/, Download/ and
+media-scanned; `POST_NOTIFICATIONS` pre-granted. Driven with `adb input` + `uiautomator dump`, every
+system UI real (permission dialog, Photo Picker, DocumentsUI, share chooser, Print, Drive PDF
+viewer). Screenshots `build/s2_android/smoke/r01…r23`.
+
+| Step | Result |
+|---|---|
+| Launch, Home | pass: tabs Home, All, Videos, Photos, Playlists, Folders, Projects; 1.1 quick actions (Open file / folder / link), Import, Playlists, Folders; editor and settings buttons; no permission prompt at launch |
+| Photos tab asks only when opted in | pass: opening the tab shows "Show my photo library" (off) and "No photos yet", **no prompt**; turning it on shows the system dialog (Allow limited access / Allow all / Don't allow); after Allow all the device photo is listed under "Today" **with its thumbnail** (HOM-04A `ms:`) |
+| Import "From Photos" (Photo Picker, multi-select) | pass: photo + clip, "Imported" for both into Imported. Names are the picker's media ids (`1000000704.jpg`, `1000000705.mp4`): OBS-S2A-1 |
+| Import "From Files" (DocumentsUI) | pass: `s2_doc.pdf` imported with its name |
+| Thumbnails | pass: All tab rows show the PDF's page 1, a video frame and the photo |
+| Viewer File info | pass: Taken 21 October 2026, 09:05; Camera "Danaview QA S2 Test Cam"; Lens; Exposure (N-3); Dimensions 2400 × 1600 · 3.8 MP; Size 86.7 KB; Format JPEG; Source "Danaview folder · Imported"; Added from Photos |
+| Save to Downloads (PDF file menu) | pass: `Download/Danaview/s2_doc.pdf`, SHA-256 equal to the original (`fe76aa8c…`), no storage permission |
+| Share (PDF) | pass: system chooser "Sharing 1 file" with Quick Share, Messages, Print, Drive, Bluetooth; Print rendered all 3 pages from the copy in `cache/danaview-out/<UUID>/` (`-r--------`) |
+| Open in another app (PDF) | pass: Drive's `PdfViewerActivity` opened the read-only copy (3 pages) |
+| Player | pass with OBS-S2A-2: the imported clip opened and played to the end (00:03 / 00:04, replay shown; video surface black under emulator software rendering). The emulator process exited twice around playback; after a restart with `-gpu host` the rest ran clean |
+| Delete and restore | pass: viewer › Delete › "It stays in Recently deleted for 30 days"; Folders › Recently deleted "1 item · 85 KB", 30 days left; Restore → back in Imported |
+| Danaview folders | pass: Folders shows Danaview folders (Imported "kept by Danaview", Recently deleted) and Linked folders (On This Device) |
+| Settings | pass: Library storage after Privacy: "Files you import into Danaview folders aren't in Google's cloud backup. To move them to a new phone, use a phone-to-phone transfer or save them out first."; Danaview folders 1.73 MB, 3 files; Recently deleted 0 bytes; About "Version 1.0.0" |
+| Rule 30 | pass: the app's logcat for the session (219 lines) names none of the imported files |
+| D-3 backup rules | pass on API 35 and API 29 (§7.4) |
+
+Not done: `bundletool build-apks` from the AAB itself (the APK of the same tree stood in), the
+editor round trip in release (covered by the debug suite, §7.3), API 34 / 28 smoke, and the device
+smoke of a signed build (owner / lab). The Play Photo and Video Permissions declaration for
+`READ_MEDIA_IMAGES` stays with the owner (checklist item 12).
 
 ### Release checklist (S2)
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | Gate: S2-W done; S2-Q Mac half green (§Slice QA); Android half of S2-Q | Windows | open (Android pending) |
+| 1 | Gate: S2-W done; S2-Q Mac half green (§Slice QA); Android half of S2-Q | Windows | Android half **green** (§7, `89b75ad`; FIX-S2Q-A1/A2 low, QA tooling) |
 | 2 | Version `1.0.0+1` in `pubspec.yaml` and `app_info.dart` (never bumped) | S2-R | **done** (in the tree, no revert needed) |
 | 3 | iOS release build with the S1 + S2 flag set, Info.plist, min-OS check, `NEWLAPACK` check, size | S2-R | **done** (above) |
 | 4 | Simulator install and smoke | S2-R | **done** (debug build; release impossible on simulator) |
 | 5 | **Privacy manifest: FIX-S2R-1** (File timestamp reason for `danaview_library_native`) | HOM-02 (or INT-104) | **open, blocks upload** |
 | 6 | Device smoke of the signed build, incl. the first photo prompt and limited access on iOS 15–17 | owner / lab | deferred: no device available |
-| 7 | Android release build, native-lib check, emulator smoke | Windows lane | pending: Windows |
+| 7 | Android release build, native-lib check, emulator smoke | Windows lane | **done** (debug-signed AAB of `89b75ad`, native-lib checks pass, smoke on API 35 green with OBS-S2A-1/2, D-3 `bmgr` on API 35 and 29; see "Android candidate") |
 | 8 | **Signing** from a clean checkout of the candidate commit with the exact commands of S1 §Signing step 2 / 3, with `--dart-define=DANAVIEW_FILES_HOME=true` and **without** the `sed` version revert. fastlane lanes still blocked by FIX-S1R-1 (no defines in `flutter_ipa` / `flutter_aab`, build number from `BUILD_NUMBER` or 1) | **owner** (after FIX-S2R-1; fastlane after FIX-S1R-1) | open, blocked |
 | 9 | **Upload** to TestFlight / Play internal testing (internal until the owner's go) | **owner** | open |
 | 10 | **`legalEffectiveDate`** (still `11 October 2026`) to the release date; regenerate the hosted privacy page **from a build with `DANAVIEW_FILES_HOME=true`** (the S2 text exists only there) | **owner** (date), then the release integration ticket | open |
