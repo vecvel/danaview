@@ -9,7 +9,8 @@
 // - seq rules and clock samples; scrub coalescing (one seek in flight, latest wins);
 // - param patch, transient (visible within 2 frames) and structural patch while paused, with the
 //   old frame kept until the first new one; planOutOfSync;
-// - quality: pinned and auto, degraded/recovered events, frame size; thermal cap;
+// - quality: pinned and auto, degraded/recovered events, frame size; thermal cap; a pause, the
+//   end of the plan or a paused seek return auto to the requested quality once (QA-05 D11);
 // - playback over the live decode budget uses stills; paused and exact seeks stay exact;
 // - rendered-range hook called at range boundaries (test double);
 // - background/foreground keeps a non-black frame; dispose releases the texture and restores the
@@ -294,6 +295,116 @@ final class PreviewSessionTests: XCTestCase {
         h.queue.sync { h.session.handleThermal(.serious) }
         _ = await PreviewHarness.wait(2) { CVPixelBufferGetWidth((h.session.bridge.current?.buffer)!) == 480 }
         XCTAssertEqual(h.onQueue { $0.renderSize }, CGSize(width: 480, height: 270))
+    }
+
+    // MARK: Quality reset on stop (QA-05 D11)
+
+    /// Quality events from index [from] on.
+    private func qualityEvents(_ h: PreviewHarness, from: Int) -> [PreviewEventMsg] {
+        Array(h.previewEvents.dropFirst(from)).filter { $0.kind == .degraded || $0.kind == .recovered }
+    }
+
+    /// Steps auto down twice (to a quarter) with injected missed playback frames, in one queue turn.
+    private func degradeToQuarter(_ h: PreviewHarness) {
+        h.queue.sync {
+            let t0 = CACurrentMediaTime()
+            for i in 0...60 { h.session.governorSample(missed: i % 4 == 0, at: t0 + Double(i) / 30) }
+            for i in 0...60 { h.session.governorSample(missed: i % 4 == 0, at: t0 + 2.1 + Double(i) / 30) }
+        }
+    }
+
+    func testPauseAfterDegradedPlaybackRestoresRequestedQualityOnce() async throws {
+        let h = try await open(quality: .auto)
+        _ = try await h.play()
+        _ = await PreviewHarness.wait(2) { (h.session.bridge.current?.k ?? 0) >= 5 }
+        degradeToQuarter(h)
+        XCTAssertEqual(h.onQueue { $0.governor.level }, .quarter)
+        XCTAssertEqual(h.onQueue { $0.renderSize }, CGSize(width: 240, height: 136))
+        // Events are delivered asynchronously: mark after the step to a quarter has arrived.
+        let stepped = await PreviewHarness.wait(2) { h.previewEvents.contains { $0.kind == .degraded && $0.quality == .quarter } }
+        XCTAssertTrue(stepped)
+        let mark = h.previewEvents.count
+        let rebuilds = h.onQueue { $0.rebuildCount }
+
+        _ = try await h.pause()
+        XCTAssertEqual(h.onQueue { $0.governor.level }, .full)
+        XCTAssertEqual(h.onQueue { $0.renderSize }, CGSize(width: 960, height: 540))
+        let full = await PreviewHarness.wait(3) { h.session.bridge.current.map { CVPixelBufferGetWidth($0.buffer) } == 960 }
+        XCTAssertTrue(full, "the paused frame is composed again at the requested quality")
+        // Steps while playing never re-reported the frame size, so none is due here (still 960).
+        XCTAssertFalse(h.previewEvents.dropFirst(mark).contains { $0.kind == .frameSize && $0.width != 960 })
+        let settled = await PreviewHarness.wait(3) { h.onQueue { !$0.rebuilding } }
+        XCTAssertTrue(settled)
+        XCTAssertEqual(h.onQueue { $0.rebuildCount }, rebuilds + 1, "one redraw (rebuild at the paused frame)")
+        _ = await PreviewHarness.wait(1) { false }
+        let k = h.onQueue { $0.currentFrame }
+        XCTAssertEqual(try PreviewHarness.check(frame(h), k: k, plan: plan), [], "exact paused frame \(k)")
+        let events = qualityEvents(h, from: mark)
+        print("IOS D11 pause after degraded: events \(events.map { "\($0.kind)\($0.quality.map { "(\($0))" } ?? "")" })")
+        XCTAssertEqual(events.filter { $0.kind == .recovered }.count, 1, "exactly one recovered")
+        XCTAssertEqual(events.filter { $0.kind == .degraded }.map(\.quality), [.full], "reported as the step to full")
+
+        // Play again: starts at the requested quality; repeated pause/play adds no events.
+        let mark2 = h.previewEvents.count
+        for _ in 0..<3 {
+            _ = try await h.play()
+            XCTAssertEqual(h.onQueue { $0.governor.level }, .full)
+            XCTAssertEqual(h.onQueue { $0.renderSize }, CGSize(width: 960, height: 540))
+            _ = await PreviewHarness.wait(0.4) { false }
+            _ = try await h.pause()
+        }
+        _ = await PreviewHarness.wait(0.5) { false }
+        XCTAssertEqual(qualityEvents(h, from: mark2).count, 0, "\(qualityEvents(h, from: mark2).map(\.kind))")
+        XCTAssertEqual(h.onQueue { $0.renderSize }, CGSize(width: 960, height: 540))
+    }
+
+    func testPauseWhenNotDegradedSendsNoQualityEvent() async throws {
+        let h = try await open(quality: .auto)
+        let mark = h.previewEvents.count
+        // Short plays (under one 2 s window): the governor cannot step.
+        for _ in 0..<2 {
+            _ = try await h.play()
+            _ = await PreviewHarness.wait(0.5) { false }
+            _ = try await h.pause()
+        }
+        _ = await PreviewHarness.wait(0.5) { false }
+        XCTAssertEqual(qualityEvents(h, from: mark).count, 0)
+        XCTAssertEqual(h.onQueue { $0.renderSize }, CGSize(width: 960, height: 540))
+    }
+
+    func testEndOfPlanAfterDegradedPlaybackRestoresRequestedQuality() async throws {
+        let h = try await open(quality: .auto)
+        _ = try await h.seek(frame: 60)
+        _ = try await h.play()
+        _ = await PreviewHarness.wait(2) { (h.session.bridge.current?.k ?? 0) >= 62 }
+        XCTAssertTrue(h.onQueue { $0.playing })
+        degradeToQuarter(h)
+        _ = await PreviewHarness.wait(2) { h.previewEvents.contains { $0.kind == .degraded && $0.quality == .quarter } }
+        let mark = h.previewEvents.count
+        let ended = await PreviewHarness.wait(4) { h.onQueue { !$0.playing } }
+        XCTAssertTrue(ended)
+        XCTAssertEqual(h.onQueue { $0.governor.level }, .full)
+        let full = await PreviewHarness.wait(3) { h.session.bridge.current.map { CVPixelBufferGetWidth($0.buffer) } == 960 }
+        XCTAssertTrue(full)
+        _ = await PreviewHarness.wait(0.5) { false }
+        XCTAssertEqual(qualityEvents(h, from: mark).filter { $0.kind == .recovered }.count, 1)
+        XCTAssertEqual(try PreviewHarness.check(frame(h), k: 89, plan: plan), [], "holds the last frame")
+    }
+
+    func testPausedSeekRendersAtTheRequestedQuality() async throws {
+        let h = try await open(quality: .auto)
+        // A lowered level found while paused (injected).
+        let t0 = CACurrentMediaTime()
+        h.queue.sync { for i in 0...60 { h.session.governorSample(missed: i % 4 == 0, at: t0 + Double(i) / 30) } }
+        _ = await PreviewHarness.wait(2) { h.session.bridge.current.map { CVPixelBufferGetWidth($0.buffer) } == 480 }
+        let mark = h.previewEvents.count
+        let ack = try await h.seek(frame: 40)
+        XCTAssertEqual(ack.displayedFrame, 40)
+        XCTAssertEqual(h.onQueue { $0.governor.level }, .full)
+        XCTAssertEqual(CVPixelBufferGetWidth(try frame(h)), 960)
+        XCTAssertEqual(try PreviewHarness.check(frame(h), k: 40, plan: plan), [])
+        _ = try await h.seek(frame: 20)
+        XCTAssertEqual(qualityEvents(h, from: mark).filter { $0.kind == .recovered }.count, 1)
     }
 
     // MARK: Decoder budget, rendered ranges
