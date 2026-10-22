@@ -31,7 +31,30 @@ class PlayerController extends StateNotifier<PlayerState> {
   /// Whether position and duration describe [PlayerState.currentMediaRef] yet.
   bool _mediaLoaded = false;
 
+  /// FIX M-23 (QA-02): the position held across an unexplained reset to 0 while paused.
+  ///
+  /// While the player is paused by a command, its position only moves through this controller's
+  /// own commands (seek, frame step, open, stop, play). mpv can still report `time-pos` 0 after a
+  /// landed seek, for example when media_kit's `open` rewrites `playlist-pos` and the file restarts
+  /// late on a slow cold first launch. Such a report must not become the Edit handoff position,
+  /// so [currentPosition] keeps the last real position until the engine reports a non-zero one.
+  Duration? _heldPosition;
+
+  /// Whether the last command can legitimately take the position to 0 (see [_heldPosition]).
+  bool _zeroExplained = true;
+
+  /// Whether [pause] was asked for since the last command that may start playback.
+  bool _pauseRequested = false;
+
+  /// Positions within this of 0 count as "at the start" for [_zeroExplained].
+  static const Duration _nearStart = Duration(milliseconds: 50);
+
   HwdecMode get hwdecMode => _hwdecMode;
+
+  /// The player's real current position: [PlayerState.position], except across an unexplained
+  /// reset to 0 while paused (FIX M-23), when it is the position before that reset. The editor
+  /// handoff and resume points use this.
+  Duration get currentPosition => _heldPosition ?? state.position;
 
   PlayerController(this._engine, this._sessionRepo, this._libraryRepo, this._ref)
       : super(const PlayerState()) {
@@ -63,6 +86,7 @@ class PlayerController extends StateNotifier<PlayerState> {
       _mediaLoaded = true;
     }
     if (s.status == PlaybackStatus.playing) _playedSinceOpen = true;
+    _trackHeldPosition(s);
     final wasEnded = state.status == PlaybackStatus.ended;
     final nextStatus = state.status == PlaybackStatus.error && state.error != null
         ? PlaybackStatus.error
@@ -103,6 +127,43 @@ class PlayerController extends StateNotifier<PlayerState> {
     }
   }
 
+  /// FIX M-23: see [_heldPosition].
+  void _trackHeldPosition(PlayerSnapshot s) {
+    final steady = _mediaLoaded &&
+        _pauseRequested &&
+        s.status != PlaybackStatus.playing &&
+        s.status != PlaybackStatus.loading &&
+        s.status != PlaybackStatus.idle &&
+        s.status != PlaybackStatus.ended;
+    if (!steady) {
+      _heldPosition = null;
+      return;
+    }
+    if (s.position > Duration.zero) {
+      _heldPosition = null;
+      _zeroExplained = false;
+      return;
+    }
+    final before = currentPosition;
+    if (_zeroExplained || before <= Duration.zero || _heldPosition != null) return;
+    _heldPosition = before;
+    if (kDebugMode) {
+      debugPrint('[PlayerController] Unexplained position reset to 0 while paused; holding ${before.inMicroseconds} us');
+    }
+  }
+
+  /// A command that may move the position anywhere, 0 included.
+  void _positionMayReset() {
+    _zeroExplained = true;
+    _heldPosition = null;
+  }
+
+  /// A seek towards [target]: only a target near the start explains a later 0.
+  void _seekingTo(Duration target) {
+    _heldPosition = null;
+    _zeroExplained = target <= _nearStart;
+  }
+
   void _handleError(PlayerError err) {
     if (err is PlaybackWarning) return;
     // Unclassified mpv errors after playback started (e.g. an undecodable extra track) don't stop the video.
@@ -136,7 +197,7 @@ class PlayerController extends StateNotifier<PlayerState> {
   void _saveCurrentResume() {
     final ref = state.currentMediaRef;
     if (ref != null && _mediaLoaded && state.duration > Duration.zero) {
-      _sessionRepo.saveResumePosition(ref.id, state.position, state.duration);
+      _sessionRepo.saveResumePosition(ref.id, currentPosition, state.duration);
     }
   }
 
@@ -146,6 +207,8 @@ class PlayerController extends StateNotifier<PlayerState> {
   Future<void> openMedia(MediaRef media, {Duration? startAt}) async {
     final token = ++_openToken;
     _saveCurrentResume();
+    _positionMayReset();
+    _pauseRequested = false;
     _playedSinceOpen = false;
     _sawLoadSinceOpen = false;
     _mediaLoaded = false;
@@ -186,6 +249,8 @@ class PlayerController extends StateNotifier<PlayerState> {
   }
 
   Future<void> togglePlay() {
+    _pauseRequested = false;
+    _positionMayReset();
     if (state.status == PlaybackStatus.error && state.currentMediaRef != null) {
       return openMedia(state.currentMediaRef!);
     }
@@ -193,18 +258,28 @@ class PlayerController extends StateNotifier<PlayerState> {
   }
 
   Future<void> play() {
+    _pauseRequested = false;
+    _positionMayReset();
     if (state.status == PlaybackStatus.error && state.currentMediaRef != null) {
       return openMedia(state.currentMediaRef!);
     }
     return _engine.play();
   }
 
-  Future<void> pause() => _engine.pause();
-  Future<void> stop() => _engine.stop();
+  Future<void> pause() {
+    _pauseRequested = true;
+    return _engine.pause();
+  }
+
+  Future<void> stop() {
+    _positionMayReset();
+    return _engine.stop();
+  }
 
   Future<void> stopAndClear() async {
     _openToken++;
     _saveCurrentResume();
+    _positionMayReset();
     await _engine.stop();
     PlatformBridge.setSleepInhibited(false);
     state = state.copyWith(
@@ -217,11 +292,25 @@ class PlayerController extends StateNotifier<PlayerState> {
     );
   }
 
-  Future<void> seek(Duration pos, {SeekMode mode = SeekMode.keyframe}) =>
-      _engine.seek(pos, mode: mode);
+  Future<void> seek(Duration pos, {SeekMode mode = SeekMode.keyframe}) {
+    _seekingTo(pos);
+    return _engine.seek(pos, mode: mode);
+  }
 
-  Future<void> seekBy(Duration delta) => _engine.seekBy(delta);
-  Future<void> frameStep(int direction) => _engine.frameStep(direction);
+  /// Relative to [currentPosition], so a held position (FIX M-23) is the base, not a stray 0.
+  Future<void> seekBy(Duration delta) {
+    final target = currentPosition + delta;
+    return seek(target < Duration.zero ? Duration.zero : target);
+  }
+
+  Future<void> frameStep(int direction) {
+    if (direction < 0) {
+      _seekingTo(currentPosition - _nearStart);
+    } else {
+      _seekingTo(currentPosition + _nearStart * 2);
+    }
+    return _engine.frameStep(direction);
+  }
 
   Future<void> setVolume(double vol) async {
     await _engine.setVolume(vol);
@@ -321,7 +410,7 @@ class PlayerController extends StateNotifier<PlayerState> {
     final media = state.currentMediaRef;
     if (media == null) return null;
     final wasPlaying = state.isPlaying;
-    final at = position ?? state.position;
+    final at = position ?? currentPosition;
     await pause();
     _saveCurrentResume();
     final release = mode == PlayerHandoffMode.release;

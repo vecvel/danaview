@@ -208,7 +208,13 @@ class _DanaviewPlayerScreenState extends ConsumerState<DanaviewPlayerScreen> {
       _showSettings = false;
       _showQueue = false;
     });
-    onEdit(PlayerEditRequest(media: state.currentMediaRef!, position: state.position, wasPlaying: state.isPlaying));
+    // FIX M-23 (QA-02): the controller's current position, not the raw snapshot, which can read 0
+    // after a landed seek while paused (a late reset from the engine on a cold first launch).
+    final position = _playerCtrl.currentPosition;
+    if (kDebugMode) {
+      debugPrint('[Player] Edit: state.position ${state.position.inMicroseconds} us, handing over ${position.inMicroseconds} us');
+    }
+    onEdit(PlayerEditRequest(media: state.currentMediaRef!, position: position, wasPlaying: state.isPlaying));
   }
 
   void _cycleSubtitles() {
