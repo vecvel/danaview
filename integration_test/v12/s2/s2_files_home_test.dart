@@ -404,7 +404,10 @@ void main() {
     await E2eApp.waitKey(tester, 'home-selection-bar');
     await E2eApp.screenshot(tester, 's2-07-selection');
     await E2eApp.tapKey(tester, 'selection-action-file-save-out');
-    await E2eApp.pumpUntil(tester, () => world.out.saved.any((s) => s.$2 == SaveOutTarget.files), what: 'Save to Files');
+    // The platform's primary save target: Files on Apple, Downloads on Android (FIX-S2Q-A1).
+    await E2eApp.pumpUntil(
+        tester, () => world.out.saved.any((s) => s.$2 == SaveOutTarget.files || s.$2 == SaveOutTarget.downloads),
+        what: 'Save out');
     await E2eApp.pumpUntil(tester, () => find.textContaining('Saved a copy').evaluate().isNotEmpty, what: 'the saved toast');
     await _longPress(tester, find.byKey(ValueKey<String>(photo.id.value)), what: 'photo cell');
     await E2eApp.waitKey(tester, 'home-selection-bar');
