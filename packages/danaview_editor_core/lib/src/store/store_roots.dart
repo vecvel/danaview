@@ -49,7 +49,14 @@ final class StoreRoots {
   /// `<support>/danaview/editor/trash` (staged deletes).
   String get trashDir => p.join(editorSupport, 'trash');
 
-  /// `<cache>/danaview/editor/work` (temporary job outputs, picks, drops).
+  /// `<support>/danaview/editor/exports`: running and kept export outputs (`export-<token>.mp4`)
+  /// and their caption side files (QA-05 D8). Not under the cache root, because the system purges
+  /// that under low storage while a job still writes there. Backup-excluded (Android rules cover
+  /// `files/danaview/editor`; iOS through `MediaAccessPort.excludeFromBackup`).
+  String get exportsDir => p.join(editorSupport, 'exports');
+
+  /// `<cache>/danaview/editor/work` (picks, drops and the engines' own temporary job files; the
+  /// engines require `materializePick` targets inside it). Purgeable: recreate it before use.
   String get workDir => p.join(editorCache, 'work');
 
   /// `<cache>/danaview/editor/work/picks`: native clones of picker results (ARCH §9.1).

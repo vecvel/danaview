@@ -463,7 +463,7 @@ class ExportController extends StateNotifier<ExportUiState> {
       }
       await _prepareAndStart(setup.copyWith(checkingStorage: false), epoch);
     } on Object catch (e) {
-      if (_live(epoch)) _fail(EditorFailures.fromError(e, context: EngineFailureContext.export));
+      if (_live(epoch)) await _failExport(e, live: () => _live(epoch));
     }
   }
 
@@ -474,6 +474,7 @@ class ExportController extends StateNotifier<ExportUiState> {
     var needed = setup.resolved.estimatedBytes + extraBytes;
     if (_platform == TargetPlatform.iOS) needed += (encode.videoBitrate * 10 / 8).round(); // one 10 s segment (§14.2)
     final int free;
+    await _e.ensureWorkDir();
     try {
       free = await _engine.freeBytes(_e.workDir);
     } on Object {
@@ -508,7 +509,7 @@ class ExportController extends StateNotifier<ExportUiState> {
     try {
       await _prepareAndStart(s.setup, epoch);
     } on Object catch (e) {
-      if (_live(epoch)) _fail(EditorFailures.fromError(e, context: EngineFailureContext.export));
+      if (_live(epoch)) await _failExport(e, live: () => _live(epoch));
     }
   }
 
@@ -626,7 +627,7 @@ class ExportController extends StateNotifier<ExportUiState> {
     try {
       await _startJob(ready, s.setup, epoch);
     } on Object catch (e) {
-      if (_live(epoch)) _fail(EditorFailures.fromError(e, context: EngineFailureContext.export));
+      if (_live(epoch)) await _failExport(e, live: () => _live(epoch));
     }
   }
 
@@ -635,6 +636,7 @@ class ExportController extends StateNotifier<ExportUiState> {
     final draft = setup.draft;
     final ext = ready.encode.container == ExportContainer.mov ? 'mov' : 'mp4';
     final token = _e.newToken();
+    await _e.ensureWorkDir();
     final outputPath = p.join(_e.workDir, 'export-$token.$ext');
     final title = project?.name ?? 'Danaview export';
     final job = await _engine.exporter.start(
@@ -730,7 +732,7 @@ class ExportController extends StateNotifier<ExportUiState> {
       _set(const ExportUiCancelled());
       return;
     }
-    _fail(EditorFailures.fromError(e, context: EngineFailureContext.export));
+    unawaited(_failExport(e));
   }
 
   // -----------------------------------------------------------------------------------------------
@@ -778,7 +780,7 @@ class ExportController extends StateNotifier<ExportUiState> {
       _loadRunContext();
       _attach(job);
     } on Object catch (e) {
-      if (_live(epoch)) _fail(EditorFailures.fromError(e, context: EngineFailureContext.export));
+      if (_live(epoch)) await _failExport(e, live: () => _live(epoch));
     }
   }
 
@@ -947,6 +949,7 @@ class ExportController extends StateNotifier<ExportUiState> {
 
   /// Writes the SRT / VTT side files of the run's project into the work folder.
   Future<List<ExportSideFile>> _writeSideFiles(ExportSettings settings, String exportPath) async {
+    await _e.ensureWorkDir();
     final project = _runProject;
     if (project == null || settings.sideFiles.isEmpty) return const [];
     final out = <ExportSideFile>[];
@@ -1192,6 +1195,44 @@ class ExportController extends StateNotifier<ExportUiState> {
 
   void _fail(EditorFailure failure) {
     _set(ExportUiFailed(failure, details: detailsOf(failure)));
+  }
+
+  /// Fails with the mapping of [e], except that an otherwise `unknown` export failure caused by
+  /// storage is the storage failure ("Not enough space to export", Free up space; QA-05 D8): the
+  /// engine's detail names a vanished file or a full disk, the editor cache or exports folder
+  /// vanished (the system purges the cache under low storage), or the free space no longer covers
+  /// the export. [live] (default: the controller is mounted) is checked again after the checks.
+  Future<void> _failExport(Object e, {bool Function()? live}) async {
+    final mapped = EditorFailures.fromError(e, context: EngineFailureContext.export);
+    final before = state;
+    var failure = mapped;
+    if (mapped is ExportFailed && mapped.kind == ExportFailureKind.unknown) {
+      try {
+        if (await _storageCaused(e)) {
+          debugPrint('[Export] ${mapped.code} came from storage (a vanished file or a full disk); reporting exportFailed.diskFull');
+          failure = const ExportFailed(ExportFailureKind.diskFull);
+        }
+      } on Object catch (x) {
+        debugPrint('[Export] Storage check after a failure failed: ${x.runtimeType}');
+      }
+    }
+    if (!mounted || !(live?.call() ?? true) || !identical(state, before)) return;
+    _fail(failure);
+  }
+
+  /// Engine details that mean a file vanished or the disk is full.
+  static final RegExp storageFailureDetail = RegExp(
+    r'ENOENT|ENOSPC|EDQUOT|No such file|No space left|not enough space|disk full|FileNotFound|FileDataSourceException',
+    caseSensitive: false,
+  );
+
+  Future<bool> _storageCaused(Object e) async {
+    if (e is EngineFailure && storageFailureDetail.hasMatch(e.debugDetail)) return true;
+    for (final dir in [_e.roots.editorCache, _e.workDir]) {
+      if (!(await _e.fs.stat(dir)).exists) return true;
+    }
+    final setup = _lastSetup;
+    return setup != null && await _storageIssue(setup) != null;
   }
 
   void _setWakelock(bool on) {

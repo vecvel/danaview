@@ -253,6 +253,22 @@ void main() {
       expect(c.read(editorPrefsProvider), same(runtime.prefs));
     });
 
+    test('QA-05 D8: wiring creates the exports folder under support (backup-excluded) and the cache work folder', () async {
+      containerOf(await create());
+      expect(_roots.exportsDir, '/fake/support/danaview/editor/exports');
+      expect((await fs.stat(_roots.exportsDir)).type, StoreEntityType.directory);
+      expect((await fs.stat(_roots.workDir)).type, StoreEntityType.directory);
+      expect(engine.access.excluded, contains(_roots.exportsDir));
+    });
+
+    test('QA-05 D8: work folders purged behind the app are made again; a failing exclusion never stops wiring', () async {
+      await EditorBootstrap.prepareWorkFolders(_roots, fs: fs, access: engine.access);
+      await fs.delete(_roots.editorCache, recursive: true);
+      await EditorBootstrap.prepareWorkFolders(_roots, fs: fs, access: FakeMediaAccess(editorRoots: const []));  // refuses: the exclusion throws
+      expect((await fs.stat(_roots.workDir)).type, StoreEntityType.directory);
+      expect((await fs.stat(_roots.exportsDir)).type, StoreEntityType.directory);
+    });
+
     test('the repository lists, creates and opens projects through the wired store', () async {
       final c = containerOf(await create());
       final repo = c.read(projectRepositoryProvider);
@@ -410,3 +426,4 @@ void main() {
     });
   });
 }
+

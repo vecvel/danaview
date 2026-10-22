@@ -241,6 +241,70 @@ void main() {
       await _finish(tester, player);
     });
 
+    // FIX M-23 (QA-02 s02 on the 2 GB AVD after `pm clear`): the test read the player at
+    // 5,333,333 us, then the engine reported 0 while paused before the Edit tap, and the editor
+    // opened at frame 0.
+    testWidgets('FIX M-23: a reset to 0 after a landed seek while paused does not reach the handoff', (tester) async {
+      final player = await _pump(tester);
+      await player.controller.pause();
+      await player.controller.seek(const Duration(microseconds: 5333334), mode: SeekMode.exact);
+      await _settle(tester, frames: 2);
+      expect(player.state.position, const Duration(microseconds: 5333334));
+      // The late reset (e.g. media_kit's open restarting the file at `playlist-pos`).
+      player.engine.emitMockSnapshot(const PlayerSnapshot(status: PlaybackStatus.buffering, position: Duration.zero, duration: Duration(minutes: 10)));
+      player.engine.emitMockSnapshot(const PlayerSnapshot(status: PlaybackStatus.paused, position: Duration.zero, duration: Duration(minutes: 10)));
+      await _settle(tester, frames: 2);
+      expect(player.state.position, Duration.zero, reason: 'the raw snapshot did drop to 0');
+      expect(player.controller.currentPosition, const Duration(microseconds: 5333334));
+      await tester.tap(find.byKey(_editKey));
+      await _settle(tester, frames: 2);
+      expect(player.requests.single.position, const Duration(microseconds: 5333334));
+      final token = await player.controller.suspendForEditor(PlayerHandoffMode.pause);
+      expect(token!.position, const Duration(microseconds: 5333334));
+      await _finish(tester, player);
+    });
+
+    testWidgets('FIX M-23: the held position ends with the next real report, a seek or play', (tester) async {
+      final player = await _pump(tester);
+      await player.controller.pause();
+      await player.controller.seek(const Duration(seconds: 20), mode: SeekMode.exact);
+      await _settle(tester, frames: 1);
+      player.engine.emitMockSnapshot(const PlayerSnapshot(status: PlaybackStatus.paused, position: Duration.zero, duration: Duration(minutes: 10)));
+      await _settle(tester, frames: 1);
+      expect(player.controller.currentPosition, const Duration(seconds: 20));
+      // A real report replaces it.
+      player.engine.emitMockSnapshot(const PlayerSnapshot(status: PlaybackStatus.paused, position: Duration(seconds: 21), duration: Duration(minutes: 10)));
+      await _settle(tester, frames: 1);
+      expect(player.controller.currentPosition, const Duration(seconds: 21));
+      // A relative seek uses the held position as its base.
+      player.engine.emitMockSnapshot(const PlayerSnapshot(status: PlaybackStatus.paused, position: Duration.zero, duration: Duration(minutes: 10)));
+      await _settle(tester, frames: 1);
+      expect(player.controller.currentPosition, const Duration(seconds: 21));
+      await player.controller.seekBy(const Duration(seconds: 5));
+      await _settle(tester, frames: 1);
+      expect(player.state.position, const Duration(seconds: 26));
+      // Playing from there: a reset is real playback, not held.
+      await player.controller.play();
+      player.engine.emitMockSnapshot(const PlayerSnapshot(status: PlaybackStatus.playing, position: Duration.zero, duration: Duration(minutes: 10)));
+      await _settle(tester, frames: 1);
+      expect(player.controller.currentPosition, Duration.zero);
+      await _finish(tester, player);
+    });
+
+    testWidgets('FIX M-23: a seek to the start while paused hands over 0', (tester) async {
+      final player = await _pump(tester);
+      await player.controller.pause();
+      await player.controller.seek(const Duration(seconds: 9), mode: SeekMode.exact);
+      await _settle(tester, frames: 1);
+      await player.controller.seek(Duration.zero, mode: SeekMode.exact);
+      await _settle(tester, frames: 2);
+      expect(player.controller.currentPosition, Duration.zero);
+      await tester.tap(find.byKey(_editKey));
+      await _settle(tester, frames: 2);
+      expect(player.requests.single.position, Duration.zero);
+      await _finish(tester, player);
+    });
+
     testWidgets('the Playback sheet row sits above Queue and closes the sheet first', (tester) async {
       final player = await _pump(tester, size: const Size(280, 560), textScale: 1.35);
       await _pausedAt(tester, player, const Duration(seconds: 42));

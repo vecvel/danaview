@@ -23,7 +23,7 @@ void main() {
     final repo = FakeProjectRepository();
     final project = exportProject(repo);
     final mem = MemoryStoreFs();
-    for (final d in [rigRoots.support, rigRoots.cache, rigRoots.documents, rigRoots.workDir]) {
+    for (final d in [rigRoots.support, rigRoots.cache, rigRoots.documents, rigRoots.editorCache, rigRoots.workDir, rigRoots.exportsDir]) {
       mem.mkdirs(d);
     }
     final env = ExportEnvironment.local(rigRoots, fs: mem);
