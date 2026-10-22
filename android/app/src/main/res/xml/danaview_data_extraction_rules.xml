@@ -15,9 +15,16 @@
     <cloud-backup>
         <exclude domain="file" path="danaview/editor" />
         <exclude domain="file" path="danaview/speech" />
+        <!-- EXTENDED: D-3, Windows lane (ARCH V2-115, owner 2026-10-22). The Danaview library
+             (files/library) is not in Google's cloud backup: one app over the 25 MB quota loses its
+             whole cloud backup, player data included. -->
+        <exclude domain="file" path="library" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="danaview/editor" />
         <exclude domain="file" path="danaview/speech" />
+        <!-- EXTENDED: D-3, Windows lane (ARCH §5.2). The library moves with device-to-device
+             transfer; only its unfinished import part files (files/library/imports) stay behind. -->
+        <exclude domain="file" path="library/imports" />
     </device-transfer>
 </data-extraction-rules>

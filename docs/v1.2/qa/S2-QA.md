@@ -356,7 +356,26 @@ deferred: no device available (simulator VoiceOver not scripted).
 
 ### 7. Android Emulator half
 
-pending: Windows
+In progress (Windows lane, branch `v1.2-android`). Done so far:
+
+**D-7 check (bundled SQLite on Android): pass.** Tree: `v1.2-android` = S2 candidate 071cfe4 (via
+origin/v1.2-wip 09909b0) + D-3 (e4efa6d) + HOM-02A (74ce560); debug APK built with
+`--dart-define=DANAVIEW_FILES_HOME=true` (other flags off), `--target-platform android-x64`.
+
+| Check | API 35 (Pixel_9_Pro_XL) | API 29 (Pixel_API_29) |
+|---|---|---|
+| `libsqlite3.so` in the APK | arm64-v8a, armeabi-v7a, x86_64 (from `sqlite3_flutter_libs`) | same APK |
+| `files/library/` after first launch | `library.db` (+ `-wal`, `-shm`), `files/`, `imports/` | same |
+| `[files-home] Library unavailable` in logcat | absent | absent |
+| Folders tab: Danaview folders | Imported ("kept by Danaview") and Recently deleted shown | same |
+| Photos tab (HOM-02A) | "Show my photo library" opens the system dialog (Allow limited access / Allow all / Don't allow); after Allow all a photo pushed to the device appears in the grid live | not run |
+
+No silent fallback: the store opened on both levels. Evidence (not committed):
+`build/s2_android/d7/` (screenshots) and `build/s2_android/hom02a/` (instrumented test results) in
+the Windows worktree.
+
+Still open on Android: HOM-04A, HOM-20A, HOM-22A, the S2 E2E and full v1.1 suite, persistence
+(`bmgr` check of `library/` for D-3), and S2-R.
 
 ### 8. Defects (FIX tickets, block the gate unless marked low)
 

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- OWNER: HOM-02A
-     Placeholder (D-33) created by INT-101. HOM-02A replaces this file: the plugin manifest of
-     danaview_library_native. It declares no permission, provider or component yet. -->
+<!-- OWNER: HOM-02A (HOM-22A adds the FileProvider)
+     Plugin manifest of danaview_library_native. It declares no permission: the photo permissions
+     (READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, READ_MEDIA_VISUAL_USER_SELECTED, READ_EXTERNAL_STORAGE up
+     to API 32) are the app's (D-3, android/app/src/main/AndroidManifest.xml); a second declaration
+     with another maxSdkVersion would be a merge error. No ACCESS_MEDIA_LOCATION (owner). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" />

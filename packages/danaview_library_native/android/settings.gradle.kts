@@ -1,3 +1,4 @@
 // OWNER: HOM-02A
-// Placeholder created by INT-101 (native stub of a new plugin package); HOM-02A replaces it.
+// Standalone settings of the plugin's Android project (the app's Gradle build includes it as
+// :danaview_library_native).
 rootProject.name = "danaview_library_native"
