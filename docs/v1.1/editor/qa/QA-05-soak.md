@@ -18,8 +18,8 @@ chain both pass on the FIX-IOS-D7 code (§2). D1–D7 are all fixed. **Android s
 checks, W4b included), and the process-death chain passes 7/7 with `soak_host.py` unmodified and
 opening the shared folders itself. Op #262 is fixed (f11d4abc). But both seeded soak runs (seed
 5150) fail: the editor stays in "preview degraded" ("Preview ¼") and the next ready-wait times out,
-at op #271 offline in runs a and b and at op #26 call in run a (D11: Mac contract decision, and
-possibly an Android-lane engine change). Every other criterion is green in both runs.
+at op #271 offline in runs a and b and at op #26 call in run a (D11: the governor stays at quarter
+while paused and `waitReady` needs `ready`; Mac decision, §A00.4). Every other criterion is green in both runs.
 **Previous Android status (034a0d3): not certified** (§A0). The process-death chain passes 7/7, and seeded run
 b passes (0 failures, −1.5 % memory). D8 and D9 are confirmed fixed, and W1–W7 work. But seeded run
 a fails one op: #262, a seek right after a reverse acked frame 0 (a D10 residual, Android lane). An
@@ -178,7 +178,7 @@ times per run (device step). Emulator debug-build numbers, not device numbers. T
 the 034a0d3 round (§A0.3) did not recur in this round (death chain and both soaks: no fatal
 signal); its cause is still not proven.
 
-### A00.4 D11: the preview stays "degraded" after a quality step back up
+### A00.4 D11: a preview left at quarter quality while paused never reads as ready
 
 **Symptom.** Both failures read: "stuck: Timed out after 60 s waiting for the editor to be ready
 [editor ready, preview degraded, preview session open]", with the "Preview ¼" badge on screen.
@@ -186,29 +186,39 @@ signal); its cause is still not proven.
 #26 (call) failed in run a and passed in run b (5586 ms). The app did not hang: the following ops
 ran normally and the later seeks showed the right frames.
 
-**Cause (code read; the step sequence is a hypothesis to confirm).** Under load (playback with the
-media offline, or the GSM call), the preview's quality governor steps down to quarter quality.
+**Cause (code read; confirmed by the badge).** During playback under load (media offline, or the
+GSM call), the quality governor stepped the preview down to quarter. Playback then stopped. The
+badge reads "¼", which `PreviewStatusStrings.degraded` shows only for quarter, so no step back up
+had happened by the time the wait ran out.
 
-- Android engine: `PreviewSession.applyQuality` reports every automatic step, down **or up**, as
-  `DEGRADED` with the new quality. `RECOVERED` is sent only after a stall recovers or a surface
-  comes back.
-- Dart: `EditorController._onPreviewEvent` sets `PreviewPhase.degraded` for any `PreviewDegraded`,
-  including quality full, and only `PreviewRecovered` sets `ready`.
-- QA-00: `e2e_editor.waitReady` requires `PreviewPhase.ready`, so it times out after 60 s.
+- The governor steps back up only after 10 s of clean *playback* (`QualityGovernor.onFrame`, fed
+  only by frames shown while playing). A paused preview at quarter stays at quarter, and the
+  phase stays `degraded`. iOS behaves the same (`QualityGovernor.playbackStopped` only clears its
+  stats), so this is the shared ARCH §13.2 design, not an Android-only fault.
+- Dart: `EditorController._onPreviewEvent` sets `PreviewPhase.degraded` for any `PreviewDegraded`;
+  only `PreviewRecovered` sets `ready`.
+- QA-00: `e2e_editor.waitReady` requires `PreviewPhase.ready`, so it times out after 60 s. The soak's
+  own `_recover` already counts `degraded` as a live preview (FIX-QA05-D5), but `_offline` ends with
+  `ed.waitReady()`, which does not.
 
-On 034a0d3 op #271 passed (4194 ms in run a), and "degraded" showed up only on the contended or
-degraded emulators. f11d4abc changed `MultiPlayerEngine`, the contingency backend this preview runs
-on ("open contingency 1920x1080@30"), so a regression from it is possible but not proven.
+**Secondary parity gap, fixed on the Android lane.** Android reported an automatic step back up to
+full only as `DEGRADED(full)` and never sent `RECOVERED`; iOS sends `RECOVERED` too. The Android
+engine now does the same (`PreviewSession.applyQuality`, commit "fix(editor): AND-10 a step back to
+full preview quality reports RECOVERED"). This does not fix #26 or #271 (they never stepped up).
 
-**FIX request (Mac decision; the Android lane may follow):** decide the contract. Either
-`PreviewDegraded(full)` means `ready` on the Dart side, or the engine sends `RECOVERED` when the
-governor is back at full (Android lane). Also decide whether `waitReady` should accept a degraded
-but working preview. The Android lane will look at why playback with the media offline steps the
-contingency preview down to quarter.
+On 034a0d3 op #271 passed (4194 ms in run a). Whether the step down happens depends on frame drops
+on the emulator during the op's playback, so it is load-dependent; no code change between 034a0d3
+and 8725e25c is shown to cause it.
+
+**FIX request (Mac, QA-00 / soak):** should `waitReady` (or the soak's `_offline`) accept
+`PreviewPhase.degraded` with a live session, as `_recover` does? The alternative is a contract
+change on both engines: reset the governor to the requested level when playback stops (or on the
+next paused render) and send `RECOVERED`. If the Mac picks that, the Android lane does its half.
 
 ### A00.5 What is needed to certify the Android half
 
-1. D11 resolved (Mac contract decision, plus the Android-lane change if the engine side is chosen).
+1. D11 resolved (Mac decision: `waitReady` accepts a degraded live preview, or both engines reset
+   the governor when playback stops; the Android lane does its half if that is chosen).
 2. Then the two seeded soaks (seed 5150, 15 min) again on one code version, with the host
    unmodified, and the death chain if the fix touches it.
 

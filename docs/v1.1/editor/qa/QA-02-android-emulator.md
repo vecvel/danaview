@@ -19,8 +19,8 @@ power. **Every QA-02 re-run item passes on 8725e25c, first try, fresh install, a
 The owner's rule certifies QA-02 only if the QA-05 Android half is also green. **It is not:** on
 8725e25c the selftest and the death chain (7/7) pass, but both seeded soak runs (seed 5150) fail
 with "preview degraded" timeouts: op #271 offline in runs a and b, and op #26 call in run a
-(`QA-05-soak.md` §A00, QA-05 D11). So the only open items are D11 (a Mac contract decision, plus
-a possible Android-lane engine change), the QA-05 seeded re-run after it, and the owner's manual
+(`QA-05-soak.md` §A00, QA-05 D11). So the only open items are D11 (a Mac decision on `waitReady`
+or the governor contract), the QA-05 seeded re-run after it, and the owner's manual
 M1–M4. Details: "Re-run of 2026-10-22 on code H" below.
 
 **Previous status (2026-10-22, 12:00 IST): not certified.** The re-run on code G (`editor-android`
@@ -1310,8 +1310,10 @@ all green.
 
 **Still open after 8725e25c (this list replaces the one further down):**
 
-1. **QA-05 D11 (Mac decision, then possibly the Android lane):** the preview phase never returns from
-   `degraded` to `ready` after an automatic quality step back up (details in `QA-05-soak.md` §A00).
+1. **QA-05 D11 (Mac decision, then possibly the Android lane):** the governor steps the preview
+   down to quarter during playback under load and, once paused, never steps back up, so the phase
+   stays `degraded` and `waitReady` (which needs `ready`) times out (details in `QA-05-soak.md`
+   §A00.4).
    Then the two seeded soaks (seed 5150, 15 min) run again; the death chain too if the fix touches
    it. If the fix changes code QA-02's scenarios use, the lead decides whether s01–s04 + s18 run
    again.
