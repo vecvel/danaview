@@ -12,7 +12,7 @@ Tickets: 162 of 166 done; open are QA-01, QA-02, QA-05 and INT-05 ([BUILD_STATE]
 
 **Windows (Android lane):**
 1. Merge `editor-wip` (it carries FIX M-23 `8fb43c2`, D8 Dart `2c09282`, W1–W7 `5912db4`, FIX-QA05-D8-2 `911110f`).
-2. Fix QA-05 D9 (export deadlock creating the audio encoder; codec release on cancelled jobs), D10 (stale preview frames after seeks) and the D8 engine half (regenerate missing `engine/dv_opaque_*.png` / `dv_transparent_*.png`, map ENOENT/ENOSPC in `ImageAssetLoader` to `diskFull`, move `export-jobs.json` and the running export's work files off `cacheRoot`).
+2. ~~Fix QA-05 D9, D10 and the D8 engine half~~ done on the Android lane (`c90819a` D8 engine half, `92623ff` D9, `74392c9` D10; merged at `b7c4a8c`).
 3. QA-02 certification re-run on mains power: s01–s04 + s18 in one batch on Pixel_API_29_2GB, and s02 on API 29.
 4. QA-05 Android half with the unmodified `soak_host.py`: seeded soak (seed 5150, 15 min) and the death chain, then the 1 h emulator run.
 5. Android runs the reports still list as Windows-lane: QA-07 on the emulator (default phase and job-kill/job-resume), QA-03, QA-04 Android rows, QA-10 and its `bmgr`/URI-grant checks, QA-11.
@@ -116,7 +116,7 @@ The app ships once, after the internal 1.3 dev milestone completes (owner, 2026-
 
 1. Finish the open QA items (§1.2, status 2026-10-22; FIX-LICENSES, §8 defect 1, has landed):
    - QA-02 (Windows): after merging `editor-wip`, s01–s04 + s18 in one batch on Pixel_API_29_2GB and s02 on API 29; then QA-02 is certified except the owner's tablet M1–M4.
-   - QA-05 Android half (Windows): fix D9, D10 and the D8 engine half, then the seeded soak (seed 5150, 15 min) and the death chain with the unmodified `soak_host.py`, then the 1 h run.
+   - QA-05 Android half (Windows): D9, D10 and the D8 engine half are fixed (`b7c4a8c`); run the seeded soak (seed 5150, 15 min) and the death chain with the unmodified `soak_host.py`, then the 1 h run.
    - QA-01 (owner): the manual iPad-simulator steps with screenshots.
    - QA-07: the Android Emulator run (default phase, job-kill/job-resume) and one iOS and one Android device row, before the Auto captions flag ships (§3.3).
    - QA-09 (Mac): a green full nightly matrix on the release commit.
