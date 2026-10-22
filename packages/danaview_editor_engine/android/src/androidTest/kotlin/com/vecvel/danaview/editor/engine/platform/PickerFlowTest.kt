@@ -9,6 +9,10 @@
 // - photoPickerMultiPickPersistsGrants: MediaPicker → Photo Picker (multi select, image + video) →
 //   two content:// items (origin photos, names, sizes) → persistUriGrant for both → listed in
 //   persistedUriPermissions, the budget drops by two → stat and quickHash equal the inserted bytes.
+//   The test taps the first two grid items, and the grid lists the newest first (date taken, else
+//   date modified), so its two items are made the newest of the gallery: the video's MP4 creation
+//   time (its date taken) and the image file's modification time are set one minute past the
+//   newest item already there (QA-02's exports sorted first and the test picked them, AND-14).
 // - safPickerReturnsCubeLut: MediaPicker (files, LUT) → DocumentsUI → the .cube from Downloads →
 //   persisted, hashed, released.
 // - V-D2 across a relaunch: with `-e danaviewRelaunchPhase pick` the photo test keeps its grants and
@@ -109,6 +113,87 @@ class PickerFlowTest {
         return uri
     }
 
+    /** The newest date (date taken, else modified or added) of the gallery's images and videos, and never before now. */
+    private fun newestGalleryDateMs(): Long {
+        var newest = System.currentTimeMillis()
+        val columns = arrayOf(MediaStore.Images.ImageColumns.DATE_TAKEN, MediaStore.MediaColumns.DATE_MODIFIED, MediaStore.MediaColumns.DATE_ADDED)
+        for (collection in listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)) {
+            resolver.query(collection, columns, null, null, null)?.use { c ->
+                while (c.moveToNext()) {
+                    if (!c.isNull(0)) newest = maxOf(newest, c.getLong(0))
+                    if (!c.isNull(1)) newest = maxOf(newest, c.getLong(1) * 1000)
+                    if (!c.isNull(2)) newest = maxOf(newest, c.getLong(2) * 1000)
+                }
+            }
+        }
+        return newest
+    }
+
+    /** The date the Photo Picker sorts [uri] by: date taken, else date modified (ms). */
+    private fun dateOf(uri: Uri): Long {
+        val columns = arrayOf(MediaStore.Images.ImageColumns.DATE_TAKEN, MediaStore.MediaColumns.DATE_MODIFIED)
+        return resolver.query(uri, columns, null, null, null)!!.use { c ->
+            check(c.moveToFirst()) { "inserted item not found" }
+            if (!c.isNull(0)) c.getLong(0) else c.getLong(1) * 1000
+        }
+    }
+
+    /**
+     * Dates the inserted image (a PNG has no date taken; MediaStore clears one set by the app when the
+     * item is published) by its file's modification time: the app owns the file, sets the time and
+     * MediaStore rescans it.
+     */
+    @Suppress("DEPRECATION")
+    private fun setModifiedAndRescan(uri: Uri, ms: Long) {
+        val path = resolver.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)!!.use { c ->
+            check(c.moveToFirst()) { "inserted item not found" }
+            c.getString(0)
+        }
+        assertTrue("modification time of the test image set", File(path).setLastModified(ms))
+        val scanned = java.util.concurrent.CountDownLatch(1)
+        android.media.MediaScannerConnection.scanFile(app, arrayOf(path), null) { _, _ -> scanned.countDown() }
+        assertTrue("test image rescanned", scanned.await(15, java.util.concurrent.TimeUnit.SECONDS))
+    }
+
+    /**
+     * [mp4] with its movie header's creation and modification times set to [epochSeconds] (MediaStore
+     * reads the video's date taken from them); every other byte is unchanged.
+     */
+    private fun withMp4CreationTime(mp4: ByteArray, epochSeconds: Long): ByteArray {
+        val out = mp4.copyOf()
+        val mp4Seconds = epochSeconds + 2_082_844_800L // since 1904-01-01
+        fun u32(at: Int) = ((out[at].toLong() and 0xFF) shl 24) or ((out[at + 1].toLong() and 0xFF) shl 16) or
+            ((out[at + 2].toLong() and 0xFF) shl 8) or (out[at + 3].toLong() and 0xFF)
+        fun put(at: Int, value: Long, bytes: Int) {
+            for (i in 0 until bytes) out[at + i] = (value ushr (8 * (bytes - 1 - i))).toByte()
+        }
+        fun find(type: String, from: Int, to: Int): Int {
+            var at = from
+            while (at + 8 <= to) {
+                val size = when (val s = u32(at)) {
+                    1L -> (u32(at + 8) shl 32) or u32(at + 12) // 64-bit largesize
+                    0L -> (to - at).toLong() // to the end
+                    else -> s
+                }
+                if (String(out, at + 4, 4, Charsets.US_ASCII) == type) return at
+                check(size >= 8) { "unsupported MP4 box size at $at" }
+                at += size.toInt()
+            }
+            error("no $type box")
+        }
+        val moov = find("moov", 0, out.size)
+        val mvhd = find("mvhd", moov + 8, moov + u32(moov).toInt())
+        val version = out[mvhd + 8].toInt()
+        if (version == 1) {
+            put(mvhd + 12, mp4Seconds, 8)
+            put(mvhd + 20, mp4Seconds, 8)
+        } else {
+            put(mvhd + 12, mp4Seconds, 4)
+            put(mvhd + 16, mp4Seconds, 4)
+        }
+        return out
+    }
+
     private fun hashOfBytes(bytes: ByteArray) = bytes.inputStream().use(MediaAccess::hashStream)
 
     private fun hash(uri: String) = awaitResult<String> { access.quickHash(MediaRefMsg(uri), it) }.getOrThrow()
@@ -122,11 +207,17 @@ class PickerFlowTest {
         assumeTrue("relaunch verify phase runs the other test", phase != "verify")
         val stamp = System.currentTimeMillis()
         val png = TestFixtures.open(FixtureTree.ENGINE, "media/alpha.png").use { it.readBytes() }
-        val mp4 = TestFixtures.open(FixtureTree.ENGINE, "media/frame_counter_720p24.mp4").use { it.readBytes() }
         val photoPicker = ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(app)
+        // The Photo Picker shows the newest first: the test's own items get the newest dates.
+        val newestMs = if (photoPicker) newestGalleryDateMs() + 60_000 else 0L
+        val fixtureMp4 = TestFixtures.open(FixtureTree.ENGINE, "media/frame_counter_720p24.mp4").use { it.readBytes() }
+        val mp4 = if (photoPicker) withMp4CreationTime(fixtureMp4, newestMs / 1000) else fixtureMp4
         if (photoPicker) {
-            insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "dv_pick_$stamp.png", "image/png", "Pictures/DanaviewTest", png)
-            insert(MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "dv_pick_$stamp.mp4", "video/mp4", "Movies/DanaviewTest", mp4)
+            val image = insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "dv_pick_$stamp.png", "image/png", "Pictures/DanaviewTest", png)
+            val video = insert(MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), "dv_pick_$stamp.mp4", "video/mp4", "Movies/DanaviewTest", mp4)
+            setModifiedAndRescan(image, newestMs)
+            assertTrue("the video is dated after every other gallery item", dateOf(video) >= newestMs - 1_000)
+            assertTrue("the image is dated after every other gallery item", dateOf(image) >= newestMs - 1_000)
         } else {
             // DocumentsUI's Recent hides the app's own media: both go to Downloads, one folder.
             val downloads = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
