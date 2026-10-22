@@ -7,7 +7,23 @@ Emulators on the Windows laptop (BUILD_PLAN QA-02). It also holds the API 28 bel
 Android export extra on API 34 and API 35, the tablet run of scenario 12, and the manual tablet
 steps for the owner (hardware keyboard, mouse, drag from Files and Photos).
 
-**Status (2026-10-22, 12:00 IST): not certified.** The re-run on code G (`editor-android`
+**Status (2026-10-22, 14:00 IST, code H `editor-android` 8725e25c): not certified, because the
+QA-05 Android half is not green.** This was the final 1.1 re-run, on one code version and on mains
+power. **Every QA-02 re-run item passes on 8725e25c, first try, fresh install, audio on**:
+
+- **API 29 2 GB (tier MINIMAL):** s01, s02, s03, s04 and s18 all pass in one batch (217, 74, 97,
+  82 and 79 s), with 0 emulator restarts. FIX M-24 is confirmed on the AVD where s18 failed.
+- **s18 on API 29 (tier LOW):** pass (78 s).
+- **s18 on API 35:** pass (146 s).
+
+The owner's rule certifies QA-02 only if the QA-05 Android half is also green. **It is not:** on
+8725e25c the selftest and the death chain (7/7) pass, but both seeded soak runs (seed 5150) fail
+with "preview degraded" timeouts: op #271 offline in runs a and b, and op #26 call in run a
+(`QA-05-soak.md` §A00, QA-05 D11). So the only open items are D11 (a Mac contract decision, plus
+a possible Android-lane engine change), the QA-05 seeded re-run after it, and the owner's manual
+M1–M4. Details: "Re-run of 2026-10-22 on code H" below.
+
+**Previous status (2026-10-22, 12:00 IST): not certified.** The re-run on code G (`editor-android`
 **034a0d3**) ran on mains power on 2026-10-22. Code G carries FIX M-23 (8fb43c2), the Dart half of
 QA-05 D8 (2c09282), the `soak_host.py` fixes W1–W7 (5912db4) and the Android-lane fixes D8 engine
 half (c90819a), D9 (92623ff) and D10 (74392c9). The owner's rule was to certify only if everything
@@ -241,7 +257,18 @@ API 35 images the emulator raises the 3072 MB of `config.ini` to 4096 MB, which 
 
 ## Code versions
 
-**This round: G = 034a0d3** (`editor-android`, 2026-10-22). This is code F with `origin/editor-wip`
+**Final re-run: H = 8725e25c** (`editor-android`, 2026-10-22). This is code G plus the Android-lane
+op #262 fix (f11d4abc: a superseded plan build in `MultiPlayerEngine` waits for the newest one),
+the AND-14 test change (9eebbff0) and `origin/editor-wip` merged again, which brings FIX M-24
+(562ccb1: `E2eApp.tap` no longer pumps while the pointer is down) and W4b (befb981: `soak_host.py`
+opens the shared folders itself).
+
+| Where | Code as run |
+|---|---|
+| API 35 phone, main checkout `C:/dev/danaview`, `emulator-5554`, 12:55–12:57 | 8725e25c, clean checkout |
+| API 29 2 GB and API 29, copy `C:/dev/dv2`, `emulator-5556`, 12:55–13:09 | 8725e25c. `dv2` was refreshed from the main checkout's tracked files (tar copy; `build/media_kit_libs_android_video` kept), and no stale files were found in `lib`, `integration_test`, `packages` or `scripts`. `C:/dev/dv2/CODE_VERSION.txt` and each device folder's `CODE_VERSION.txt` say 8725e25c. |
+
+**Previous round: G = 034a0d3** (`editor-android`, 2026-10-22). This is code F with `origin/editor-wip`
 merged again. It brings the Mac's FIX M-23 (8fb43c2), the Dart half of QA-05 D8 (2c09282, including
 the soak's low-storage wait) and the `soak_host.py` fixes W1–W7 (5912db4). It also brings the
 Android-lane fixes D8 engine half (c90819a), D9 (92623ff) and D10 (74392c9).
@@ -287,6 +314,37 @@ Earlier labels, used only in the history note:
   2026-10-16/17.
 
 ## Results matrix
+
+### Re-run of 2026-10-22 on code H (8725e25c), mains power (final 1.1 re-run)
+
+The Mac lead's rule (addde25, a5c4c4de; owner-approved): s01–s04 and s18 in one batch on
+Pixel_API_29_2GB, and s18 on API 29 and API 35, then the QA-05 Android half; certify if all green.
+Every run used `DANAVIEW_E2E_FRESH=1 DANAVIEW_E2E_AUDIO=1 DANAVIEW_E2E_MODELS=C:/dev/models` and
+`scripts/ci/editor/e2e_android.sh <serial>`. Each emulator was booted by hand with its own `-port`
+(the API 29 AVDs with `-feature GLESDynamicVersion`) and its serial passed to the runner. Zygote
+heap after boot: 512m (2 GB AVD), 576m (API 29, equal to `ro.kernel.qemu.dalvik.vm.heapsize`) and
+576m (API 35, equal to `ro.boot.dalvik.vm.heapsize`); none is the 16 MB boot-race value, so no
+reboot was needed. Old evidence was moved to `build/e2e/android/_before_8725e25c/`.
+
+| Item | Device | Result |
+|---|---|---|
+| s01 | API 29 2 GB (MINIMAL), `emulator-5556`, one batch | **pass** (217 s) |
+| s02 | same batch | **pass** (74 s) |
+| s03 | same batch | **pass** (97 s) |
+| s04 | same batch | **pass** (82 s) |
+| s18 | same batch | **pass** (79 s) |
+| s18 | API 29 (LOW), `emulator-5556`, alone | **pass** (78 s) |
+| s18 | API 35 (Pixel_9_Pro_XL_API_35), `emulator-5554`, alone | **pass** (146 s, "All tests passed!") |
+
+Every summary says "0 failed or timed out, 0 pending, emulator restarts: 0", and no logcat has an
+OutOfMemory line. Capabilities lines: `tier=MINIMAL api=29 ram=2089222144` (2 GB) and `tier=LOW
+api=29 ram=3143041024` (API 29). Every item passed on its first run, so nothing was re-run.
+**FIX M-24 is confirmed**: s18 passes in the 2 GB batch.
+
+Evidence: `emulator-5556_Pixel_API_29_2GB/8725e25c/`, `emulator-5556_Pixel_API_29/8725e25c/` (each
+with `summary.txt`, `runner_console.log`, `CODE_VERSION.txt`, `README.txt`, `logs/`, `screens/`)
+and `emulator-5554/` (`summary.txt`, `runner.log`, `logs/batch-s18.log`,
+`logs/s18_close_reopen_test.log`, `logs/batch-s18.logcat.txt`).
 
 ### Re-run of 2026-10-22 on code G (034a0d3), mains power
 
@@ -922,6 +980,12 @@ host for `grantNotifications` and the export started. None waited at "Preparing�
 |---|---|
 | M-23, s02 handoff at position 0 (fixed by 8fb43c2) | s02 passes in both API 29 2 GB batches (109 s and 135 s) and on API 29 (136 s), all on 034a0d3 |
 
+**Closed by the 8725e25c re-run (2026-10-22):**
+
+| Request | Proof |
+|---|---|
+| M-24, s18 close tap swallowed by the Tooltip long press (fixed by 562ccb1) | s18 passes in the API 29 2 GB batch (79 s), on API 29 (78 s) and on API 35 (146 s), all on 8725e25c, first try |
+
 **M-14 (s08 close past "export interrupted")** is fixed in `E2eEditor.close` (FIX-QA00-R7). The
 clean pass did not exercise it, because every batch starts from cleared data.
 
@@ -1232,7 +1296,32 @@ The owner's rule for this round (2026-10-22): the re-run items run on d680bd3 an
 clean pass stands on 88469c0. If every re-run item passes and nothing else is open except the
 manual M1–M4, QA-02 is certified with that exception.
 
-**Verdict (2026-10-22, 034a0d3): QA-02 is NOT certified.** The rule for this round (owner, relayed
+**Verdict (2026-10-22, final 1.1 re-run on 8725e25c): QA-02 is NOT certified yet.** The Mac lead's
+rule (addde25, a5c4c4de, owner-approved): s01–s04 + s18 in one batch on Pixel_API_29_2GB, s18 on
+API 29 and API 35, and the QA-05 Android half (selftest, death chain, two seeded soaks); certify if
+all green.
+
+- **QA-02's own items: all green on 8725e25c.** The 2 GB batch (s01, s02, s03, s04, s18), s18 on
+  API 29 and s18 on API 35 all pass, first try, fresh install, 0 emulator restarts. FIX M-24 is
+  confirmed.
+- **QA-05 Android half: not green** (`QA-05-soak.md` §A00). The selftest and the death chain (7/7)
+  pass. Both seeded soaks (seed 5150) fail with the editor stuck in "preview degraded" ("Preview ¼"):
+  op #271 offline in runs a and b, and op #26 call in run a (QA-05 D11).
+
+**Still open after 8725e25c (this list replaces the one further down):**
+
+1. **QA-05 D11 (Mac decision, then possibly the Android lane):** the preview phase never returns from
+   `degraded` to `ready` after an automatic quality step back up (details in `QA-05-soak.md` §A00).
+   Then the two seeded soaks (seed 5150, 15 min) run again; the death chain too if the fix touches
+   it. If the fix changes code QA-02's scenarios use, the lead decides whether s01–s04 + s18 run
+   again.
+2. **Owner (manual): M1–M4 on the tablet.**
+
+When item 1 is green, the status becomes "QA-02 certified (<date>), except the owner's manual tablet
+checklist M1–M4", naming: 8725e25c (or the fix code) for the final re-run items, d680bd3 and
+88469c0 for the earlier certified parts, and the owner's s13 emulator-limitation decision.
+
+**Earlier verdict (2026-10-22, 034a0d3): QA-02 is NOT certified.** The rule for this round (owner, relayed
 from the lead): re-run s01–s04 and s18 in one 2 GB batch plus s02 on API 29 on 034a0d3, run the
 QA-05 Android half, and certify if everything is green. Two things are not green:
 
@@ -1245,6 +1334,9 @@ The earlier verdict on d680bd3 failed on s02 (M-23, now fixed) and on the QA-05 
 
 **Done:**
 
+- **On 8725e25c (mains power, final re-run):**
+  - API 29 2 GB: s01, s02, s03, s04 and s18 pass in one batch (FIX M-24 confirmed);
+  - s18 passes on API 29 and API 35.
 - **On 034a0d3 (mains power):**
   - FIX M-23: s02 passes in both API 29 2 GB batches and on API 29;
   - API 29 2 GB: s01, s03 and s04 pass in both batches; s18 passes alone and in batch 2 (not
@@ -1267,7 +1359,8 @@ The earlier verdict on d680bd3 failed on s02 (M-23, now fixed) and on the QA-05 
 - **Android lane:** no defect found in QA-02's own scenarios. The s18 failure on 034a0d3 is the QA-00
   harness (FIX M-24, below).
 
-**Still open, by owner:**
+**Still open, by owner (as of 034a0d3; superseded by the 8725e25c list above: item 1 is fixed, and
+item 2's D10 residual, W4b and seeded re-run are done, with D11 found):**
 
 1. **Mac (QA-00 harness): FIX M-24, the s18 close tap** (034a0d3, 1 failure in 3 runs; root cause
    proven, see "Re-run of 2026-10-22 on code G"): remove the frame pump between pointer down and up
