@@ -13,8 +13,14 @@ The acceptance criteria are:
 - the project always reopens valid
 
 **Status (2026-10-17 10:27 IST): iOS side green.** The seeded soak (seed 5150) and the process-death
-chain both pass on the FIX-IOS-D7 code (§2). D1–D7 are all fixed. **Android side (final 1.1 re-run,
-2026-10-22, code 8725e25c, API 35 emulator): not certified** (§A00). The selftest passes (30
+chain both pass on the FIX-IOS-D7 code (§2). D1–D7 are all fixed. **Android side (D11 re-run, 2026-10-22, code d2600495, API 35 emulator):
+not certified** (§A000). D11 is fixed: the selftest passes, the death chain passes 7/7, and seeded
+run a passes with 0 failures (441 ops, +0.8 % memory, every offline and call op green, #26 and
+#271 included). But seeded run b crashed the app at 17:59:35 with a SIGSEGV on the `danaview-pcm`
+thread while the reverse job closed its `PcmStream` (**D12**, Android lane, native crash, §A000.4).
+A fix agent (Android lane) is working on D12; both seeded soaks run again on the fix code. A
+re-run of b was voided because the laptop left mains power and went into standby mid-run.
+**Previous Android status (final 1.1 re-run, 2026-10-22, code 8725e25c): not certified** (§A00). The selftest passes (30
 checks, W4b included), and the process-death chain passes 7/7 with `soak_host.py` unmodified and
 opening the shared folders itself. Op #262 is fixed (f11d4abc). But both seeded soak runs (seed
 5150) fail: the editor stays in "preview degraded" ("Preview ¼") and the next ready-wait times out,
@@ -96,6 +102,133 @@ Every in-app event prints a `DV_SOAK <kind> …` line. The kinds are `op`, `fail
 | captions | 60 s of speech (6 clips, "Selected clips", Fast tier), killed past 50 % (after the first checkpoint). | `resumableFor(project)` keeps the record. The editor shows "Auto captions were interrupted" once. After Discard, a reopen shows no notice and the record is gone. |
 
 For every job, the project is then opened straight from the store and validated.
+
+## A000. Android half, D11 re-run (Windows lane, 2026-10-22, code d2600495)
+
+**Code d2600495** (`editor-android`) is 8725e25c plus both halves of the D11 fix: the Mac's iOS +
+Dart half (5ac2cf8, merged from `origin/editor-wip`) and the Android half (d2600495, "fix(editor):
+AND-10 the preview returns to the requested quality when playback stops (QA-05 D11, Android)"),
+following the semantics in 97ec109e and cbefb080. Every run below is on that exact commit, clean
+checkout; only this report commit follows it.
+
+All device runs used the **Pixel_9_Pro_XL_API_35 emulator** (`emulator-5554`, `-port 5554`,
+audio, cold boot with `-no-snapshot-load`), a debug build from the main checkout. Zygote heap
+576m, equal to `ro.boot.dalvik.vm.heapsize`, so no boot race; the guest was idle after boot
+(`guest_top_boot.txt`, `guest_top_boot_soaks.txt`). Commands as in §A00, `soak_host.py`
+unmodified, no wrapper, no manual folder step; before each soak `adb uninstall`, then
+`e2e_host.sh stage` and `stage-models C:/dev/models`. The selftest and the death chain ran
+15:10–15:30 IST; the laptop then went onto battery, so the soaks waited and ran 17:28–17:59 on
+mains power (Win32_Battery status 2 checked before each), with **no other emulator running**
+(`emulator-5556` was off; both lock dirs held). Evidence of the 8725e25c round is in
+`build/soak/android/_before_d2600495/`; everything below is under
+`build/soak/android/emulator-5554/` (`CODE_VERSION.txt`, and a `README.txt` in `soak_run_b/` and
+`soak_run_b_rerun_INVALID/`).
+
+**Verdict: not certified.** D11 is fixed, but run b found a native crash in our audio decoder (D12).
+
+### A000.1 Selftest
+
+**pass**: `selftest: PASS`, 30 `ok` checks (`selftest/selftest.log`).
+
+### A000.2 Process death per job type
+
+15:11–15:30, **7/7 pass** (autosave, proxy killed at 17.8 %, reverse at 2 %, freeze not running at
+the kill (allowed caveat), export killed at 40 % with `ExportInterrupted` once, captions at 56 % with
+the 60 s WAV, verify). Evidence: `death_chain/`. The logcat has one ANR, in Google Messages
+(`com.google.android.apps.messaging`, 15:11:13, boot settling), none in our app, and no fatal
+signal or OutOfMemory line.
+
+### A000.3 Random soak, 15 min, seed 5150
+
+Evidence: `soak_run_a/`, `soak_run_b/` (`soak_runner.log`, `logs/soak_test-soak.log`,
+`files/soak-summary.json` (run a only), `memory-host.csv`, `logcat_soak.txt`; run b also
+`tombstones/` and `bugreport_after_crash.zip`).
+
+| Run | Time | Ops | Projects | Reopens | Failures | Memory (baseline → end, peak) | Growth |
+|---|---|---|---|---|---|---|---|
+| a | 17:30–17:46, 916 s | 441 | 3 | 18 of 18 valid | **0** | 651.4 → 656.6 MB, peak 723.4 MB (411 samples) | +0.8 % |
+| b | 17:47–17:59 | 260, then the app died | 2 | 10 of 10 valid before the crash | **app crash** after op #260 (D12) | no summary (the app died); host PSS 441–564 MB, one pid | n/a |
+
+| Criterion | Run a | Run b |
+|---|---|---|
+| No crash | **pass**. One app pid (3915) in 30 host samples (PSS 437–593 MB). No ANR, fatal signal or OOM. | **FAIL**: SIGSEGV on `danaview-pcm` at 17:59:35.718 (D12). |
+| No unhandled exception | **pass**: 0 framework errors | n/a (crash) |
+| Nothing hangs, every op works | **pass**: 0 failed ops | ops #1–#260 all passed |
+| Memory ≤ +10 % | **pass**: +0.8 % | n/a |
+| Interrupted jobs recover or report once | **pass**: exports 3 completed (#49, #166, #259 after background), 6 cancelled; low storage #29 and #306 cancelled, #75, #274 and #335 a clean "storage failure after background (low storage)", save saved every time | **pass** up to the crash (#49, #166, #259 completed; #22, #95, #153, #237 cancelled; #29 and #75 as in run a) |
+| Project always reopens valid | **pass**: 18 of 18, 0 reopen problems | **pass** before the crash: 10 of 10 |
+
+**D11 is fixed.** Every op that failed on 8725e25c passes in run a: #26 call (5896 ms) and #271
+offline (7581 ms), and also every other call (#112, #180, #238) and offline (#28, #240, #284, #430)
+op. Run b passed #26 call (5804 ms) and the call/offline ops before the crash (#28, #112, #180,
+#238, #240). Op #262 stays fixed (run a: #261 reverse 14.1 s, #262 freeze 3.5 s). 0 "codec handover
+timed out" in both runs (D9 stays fixed); "Handler on a dead thread" warnings 122 (a) and 48 (b).
+audioRoute skipped 4 times per run (device step). Emulator debug-build numbers.
+
+**Re-run of b: void (environment), not a result.** The one allowed re-run of b (fresh cold boot,
+18:03–18:32) started just as the laptop left mains power (Kernel-Power 105 at 18:03:58), and the lid
+closed at 18:20:21: Modern Standby until 18:32:13 (Kernel-Power 506/507). It recorded 241 ops in
+922 s (run a: 441) and one failure (#240 offline: a seek timed out across the standby). The laptop
+was still on battery at 18:33, so no further run was started. Evidence:
+`soak_run_b_rerun_INVALID/`.
+
+### A000.4 D12: native crash in `PcmStream.close()` racing the decoder's input callback (Android lane)
+
+**Symptom.** Run b, after op #260 (selectAll); op #261 is a reverse (in run a it completed in
+14.1 s). The app (pid 2729) died:
+
+```
+17:59:35.717 CCodecBufferChannel: [c2.android.aac.decoder#791] MediaCodec discarded an unknown buffer   (x7)
+17:59:35.718 F libc: Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x754a66581000
+             in tid 23747 (danaview-pcm), pid 2729 (vecvel.danaview)
+backtrace:
+  #00 libc.so (memcpy+827)
+  #02 libart.so (art::JNI<true>::GetByteArrayRegion(...)+821)
+  #04 libart.so (art::CheckJNI::GetPrimitiveArrayRegion(...)+945)
+```
+
+The faulting address is the destination of the copy (`rdi` = `rax` = fault address).
+`tombstone_08` shows the other side: thread `danaview-job-5` (the reverse job, the same tid that
+logged "reverse intermediate"/"reverse: frames of a chunk were not decoded" from 17:59:22) is in
+`com.vecvel.danaview.editor.engine.media.PcmStream.close` → `Thread.join`, so `codec.stop()` and
+`codec.release()` have already returned.
+
+**Cause (hypothesis, strongly supported).** `PcmDecoder` (AND-04) runs MediaCodec in async mode
+with its callbacks on the `danaview-pcm` HandlerThread. `onInputBufferAvailable` calls
+`extractor.readSampleData(buffer, 0)`, which copies a Java `byte[]` into the codec's direct input
+buffer (`GetByteArrayRegion` into native memory). The consumer thread's `PcmStream.close()` calls
+`codec.stop()` and `codec.release()` **first** and only then quits and joins the callback thread.
+Feeding runs ahead of the output (up to `end + encoderDelay + preroll`), so when the reader reaches
+the range end and closes, the callback can still be inside `readSampleData`. The stop/release
+discards and unmaps the input buffers (the seven "discarded an unknown buffer" lines 1 ms before),
+and the copy faults. Reverse, `SpeechAudioExtractor` (captions) and `WaveformService` all use
+`PcmDecoder`, so any of them can hit it.
+
+**It recurs.** The same emulator's `/data/tombstones` also has `tombstone_01` (2026-10-14 19:40)
+and `tombstone_03` (2026-10-15 15:16): the same `danaview-pcm` thread crashing in
+`com.vecvel.danaview.editor.engine.test` (the engine instrumentation tests). The a1 crash of the
+034a0d3 round (§A0.3, `tombstone_05`) has the same native signature (`memcpy` ←
+`GetByteArrayRegion` writing into a codec buffer) on an `ExoPlayer:Playback` thread during an export
+cancel, so it is probably the same class of race (a writer into a codec buffer after the codec is
+stopped). It is no longer treated as an emulator-only crash. The goldfish H.264 decoder service
+crash at 17:50:57 (`tombstone_07`, pid 423, `C2Block2D::handle`) is a separate, earlier emulator
+crash. The app survived it.
+
+**FIX (Android lane, in progress).** A fix agent is working on it. Make `PcmStream.close()`
+(and the failure paths in `PcmStream.open`) stop the feeding before the codec goes. One way: a
+`closed` flag and a lock that `onInputBufferAvailable` holds while it touches the input buffer.
+Another: quit and join the callback thread before `codec.stop()`/`release()`. Add an engine test
+that closes mid-feed many times. Also check the export path's buffer writers for the a1 signature.
+Then run both seeded soaks (seed 5150, 15 min) again on the fix code, alone, on mains power. Run
+the death chain too if the fix touches the job paths.
+
+### A000.5 What is needed to certify the Android half
+
+1. D12 fixed (Android lane) and its test green.
+2. Both seeded soaks (seed 5150, 15 min) again on the fix code, on mains power, with no other
+   emulator running, plus the death chain if the fix touches the job paths.
+
+The 1 h runs and the device-only steps stay deferred, as on iOS (§6).
 
 ## A00. Android half, final 1.1 re-run (Windows lane, 2026-10-22, code 8725e25c)
 
