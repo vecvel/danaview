@@ -14,6 +14,10 @@
 // - Names (OBS-S2A-1): media-id names ("1000000777.jpg") become IMG_yyyyMMdd_HHmmss.<ext> from
 //   DATE_TAKEN, else DATE_ADDED, real names stay, clashes inside one pick are "Name (2).ext"; the
 //   system Photo Picker's own items come back with such names.
+// - Clean-up: the system Photo Picker path seeds into the fixed folders Pictures/DanaviewTest and
+//   Movies/DanaviewTest; deleting the rows leaves the folders behind (on disk and as MediaStore
+//   folder rows the test APK cannot see), so every test removes both through the shell user before
+//   it starts (an aborted earlier run's) and after it ends.
 
 package com.vecvel.danaview.library.pickers
 
@@ -25,6 +29,7 @@ import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -61,6 +66,7 @@ class AndroidPickersTest {
     fun setUp() {
         dir = File(context.cacheDir, "picker-test-$stamp").apply { mkdirs() }
         RecordingProvider.modes.clear()
+        removeSeedFolders()
     }
 
     @After
@@ -70,8 +76,22 @@ class AndroidPickersTest {
             it.finish()
         }
         inserted.forEach { runCatching { resolver.delete(it, null, null) } }
+        removeSeedFolders()
         dir.deleteRecursively()
         RecordingProvider.dir(context).deleteRecursively()
+    }
+
+    /** Removes Pictures/DanaviewTest and Movies/DanaviewTest (disk + MediaStore rows); API 29+ only seeds there. */
+    @Suppress("DEPRECATION")
+    private fun removeSeedFolders() {
+        if (Build.VERSION.SDK_INT < 29) return
+        val root = Environment.getExternalStorageDirectory()
+        for (folder in SEED_FOLDERS) SeededMedia.removeShared(File(root, folder).absolutePath)
+    }
+
+    private companion object {
+        /** Fixed-name folders the system Photo Picker path seeds into. */
+        val SEED_FOLDERS = listOf("${Environment.DIRECTORY_PICTURES}/DanaviewTest", "${Environment.DIRECTORY_MOVIES}/DanaviewTest")
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -303,8 +323,8 @@ class AndroidPickersTest {
             // The Photo Picker lists the newest first: the test's items get the newest dates.
             val newestMs = newestGalleryDateMs() + 60_000
             video = withMp4CreationTime(mp4Bytes(), newestMs / 1000)
-            val image = insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, names[0], "image/jpeg", "Pictures/DanaviewTest", photo)
-            val clip = insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, names[1], "video/mp4", "Movies/DanaviewTest", video)
+            val image = insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, names[0], "image/jpeg", "${SEED_FOLDERS[0]}/", photo)
+            val clip = insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, names[1], "video/mp4", "${SEED_FOLDERS[1]}/", video)
             setModifiedAndRescan(image, newestMs)
             rows = listOf(image, clip)
         } else {
@@ -352,7 +372,7 @@ class AndroidPickersTest {
         val name = "dv_one_$stamp.jpg"
         val photo = jpegBytes(Color.MAGENTA)
         if (system) {
-            val image = insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, name, "image/jpeg", "Pictures/DanaviewTest", photo)
+            val image = insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, name, "image/jpeg", "${SEED_FOLDERS[0]}/", photo)
             setModifiedAndRescan(image, newestGalleryDateMs() + 60_000)
         } else {
             insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, name, "image/jpeg", "Download/", photo)
