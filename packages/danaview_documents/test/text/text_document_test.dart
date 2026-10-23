@@ -88,7 +88,9 @@ void main() {
     final dir = docTempDir();
     expect(
       () => TextDocument.loadSync('${dir.path}/gone.txt'),
-      throwsA(isA<TextLoadException>().having((e) => e.missing, 'missing', isTrue).having((e) => e.toString(), 'text', isNot(contains('gone')))),
+      throwsA(isA<TextLoadException>()
+          .having((e) => e.missing, 'missing', isTrue)
+          .having((e) => e.toString(), 'text', isNot(contains('gone')))),
     );
   });
 
