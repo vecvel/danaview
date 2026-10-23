@@ -113,7 +113,7 @@ class IncomingHostApiImpl(private val context: LibraryPluginContext) : IncomingH
             val batch = try {
                 intents.describe(route, persistable, System.currentTimeMillis()) { kept.add(it) }
             } catch (e: RuntimeException) {
-                Log.w(TAG, "incoming: describing failed (${e.javaClass.simpleName})")
+                Log.w(TAG, "incoming: describing a shared item failed") // rule 30: string literals only
                 null
             }
             context.main.post {
@@ -128,7 +128,7 @@ class IncomingHostApiImpl(private val context: LibraryPluginContext) : IncomingH
                 }
                 if (kept.isNotEmpty()) grants[batch.batchId] = kept
                 queue.add(batch)
-                Log.i(TAG, "incoming: ${route.action.name.lowercase()} batch, ${batch.items.size} item(s), ${route.dropped} dropped")
+                Log.i(TAG, "incoming: batch queued") // rule 30: string literals only
                 context.events.emit(LibraryEventMsg(kind = LibraryEventKindMsg.INCOMING, incoming = batch))
             }
         }

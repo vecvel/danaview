@@ -141,7 +141,12 @@ final class IncomingIntentImporter {
   void start({bool observeLifecycle = true}) {
     if (_started) return;
     _started = true;
-    _subscription = port.batches.listen((batch) => _chain = _chain.then((_) => _handleQuietly(batch)));
+    // A platform without the native incoming channel (desktop, tests) errors the stream with a
+    // MissingPluginException: nothing arrives there, so the error is dropped, not thrown.
+    _subscription = port.batches.listen(
+      (batch) => _chain = _chain.then((_) => _handleQuietly(batch)),
+      onError: (Object _) {},
+    );
     if (observeLifecycle) _lifecycle = AppLifecycleListener(onResume: () => unawaited(takePending()));
     unawaited(takePending());
   }
