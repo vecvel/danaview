@@ -135,10 +135,67 @@ void main() {
       expect(failed, 1);
     });
 
-    test('iOS open-in copies are recognised as app-owned', () {
-      expect(isSystemOpenInCopy('/var/mobile/Containers/Data/Application/X/Documents/Inbox/a.pdf'), isTrue);
-      expect(isSystemOpenInCopy('/private/var/mobile/Containers/Data/Application/X/tmp/com.vecvel.danaview-Inbox/a.pdf'), isTrue);
-      expect(isSystemOpenInCopy('/Users/me/Documents/a.pdf'), isFalse);
+    test('only copies under the app container on iOS are app-owned; never a user Inbox folder', () {
+      addTearDown(SystemOpenInCopyRoots.reset);
+      const app = '/var/mobile/Containers/Data/Application/X';
+      final ios = SystemOpenInCopyRoots.ios(documentsDirectory: '$app/Documents', temporaryDirectory: '$app/tmp', bundleId: 'com.vecvel.danaview');
+      expect(ios.contains('$app/Documents/Inbox/a.pdf'), isTrue);
+      expect(ios.contains('/private$app/tmp/com.vecvel.danaview-Inbox/a.pdf'), isTrue);
+      expect(ios.contains('$app/tmp/other-Inbox/a.pdf'), isFalse);
+      expect(ios.contains('$app/Documents/Inbox/../Lease.pdf'), isFalse);
+      expect(ios.contains('$app/Documents/a.pdf'), isFalse);
+      expect(ios.contains('/var/mobile/Containers/Data/Application/Y/Documents/Inbox/a.pdf'), isFalse, reason: 'another container');
+      expect(ios.contains('/Users/me/Documents/Inbox/a.pdf'), isFalse);
+
+      // Off iOS nothing is app-owned, whatever the wiring passes.
+      SystemOpenInCopyRoots.configure(ios, onIos: false);
+      expect(isSystemOpenInCopy('$app/Documents/Inbox/a.pdf'), isFalse);
+      expect(isSystemOpenInCopy('/Users/me/Documents/Inbox/report.pdf'), isFalse);
+      expect(isSystemOpenInCopy(r'C:\Users\x\Documents\Inbox\a.jpg'), isFalse);
+      expect(isSystemOpenInCopy('C:/Users/x/Documents/Inbox/a.jpg'), isFalse);
+      expect(isSystemOpenInCopy('/tmp/com.vecvel.danaview-Inbox/a.pdf'), isFalse);
+      SystemOpenInCopyRoots.reset();
+      if (!Platform.isIOS) expect(isSystemOpenInCopy('/Users/me/Documents/Inbox/report.pdf'), isFalse);
+    });
+
+    test("a file in the user's own Documents/Inbox folder is imported and kept", () async {
+      addTearDown(SystemOpenInCopyRoots.reset);
+      final lib = await _Lib.open();
+      addTearDown(lib.close);
+      final inbox = Directory('${lib.src.path}/Documents/Inbox')..createSync(recursive: true);
+      final pdf = File('${inbox.path}/report.pdf')..writeAsBytesSync(List<int>.generate(4000, (i) => (i * 3 + 1) % 251));
+      final jpg = File('${inbox.path}/a.jpg')..writeAsBytesSync(List<int>.generate(4000, (i) => (i * 5 + 2) % 251));
+      final opened = <FileEntry>[];
+      expect(await openIncomingForViewing(pdf.path, imports: lib.service, openEntry: opened.add), isTrue);
+      expect(await openIncomingForViewing(Uri.file(jpg.path).toString(), imports: lib.service, openEntry: opened.add), isTrue);
+      expect(opened, hasLength(2));
+      expect(pdf.existsSync(), isTrue, reason: "the user's file is only read (rule 27)");
+      expect(jpg.existsSync(), isTrue);
+      // A duplicate skip keeps it too.
+      expect(await openIncomingForViewing(pdf.path, imports: lib.service, openEntry: opened.add), isTrue);
+      expect(pdf.existsSync(), isTrue);
+    });
+
+    test('an iOS open-in copy under the configured app container is removed after its import', () async {
+      addTearDown(SystemOpenInCopyRoots.reset);
+      final lib = await _Lib.open();
+      addTearDown(lib.close);
+      final docs = Directory('${lib.src.path}/Documents');
+      final tmp = Directory('${lib.src.path}/tmp');
+      final copyDir = Directory('${docs.path}/Inbox')..createSync(recursive: true);
+      tmp.createSync();
+      SystemOpenInCopyRoots.configure(
+        SystemOpenInCopyRoots.ios(documentsDirectory: docs.path, temporaryDirectory: tmp.path, bundleId: 'com.vecvel.danaview'),
+        onIos: true,
+      );
+      final copy = File('${copyDir.path}/Lease.pdf')..writeAsBytesSync(List<int>.generate(4000, (i) => (i * 7 + 3) % 251));
+      final own = File('${docs.path}/Mine.pdf')..writeAsBytesSync(List<int>.generate(4000, (i) => (i * 11 + 5) % 251));
+      final opened = <FileEntry>[];
+      expect(await openIncomingForViewing(copy.path, imports: lib.service, openEntry: opened.add), isTrue);
+      expect(await openIncomingForViewing(own.path, imports: lib.service, openEntry: opened.add), isTrue);
+      expect(opened, hasLength(2));
+      expect(copy.existsSync(), isFalse, reason: 'the system copy is app-owned');
+      expect(own.existsSync(), isTrue);
     });
   });
 
@@ -171,11 +228,60 @@ void main() {
       expect(first.sourceHint, SourceHint.player);
       expect(find.text('Saved to Danaview folders'), findsOneWidget);
 
+      final item = saveToDanaviewFolderMenuItem(ctx, ref)!;
+      expect(item.label, 'Save to Danaview folder');
+
       final again = (await tester.runAsync(() => saveToDanaviewFolder(ctx, ref)))!;
       await pumpFrames(tester);
       expect(again.id, first.id);
       expect(find.text('Already in Danaview folders'), findsOneWidget);
       expect(lib.store.reader.allEntries(), hasLength(1));
+      expect(File(video).existsSync(), isTrue);
+
+      DanaviewToast.dismiss();
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(lib.close);
+      await env.dispose();
+    });
+
+    testWidgets('the menu entry is hidden without a library and imports the playing file when tapped', (tester) async {
+      useSurface(tester, librarySurfaces[1]);
+      final env = await LibraryTestEnv.create();
+      final lib = (await tester.runAsync(_Lib.open))!;
+      final video = lib.file('Trip.mov', 5000);
+      late WidgetRef ref;
+      late BuildContext ctx;
+      Widget host() => Consumer(builder: (context, r, _) {
+            ref = r;
+            ctx = context;
+            return const SizedBox.expand();
+          });
+      await tester.pumpWidget(libraryTestApp(env, host()));
+      await pumpFrames(tester);
+      await tester.runAsync(() => ref.read(queueControllerProvider.notifier).playFrom([LibraryRepository.mediaRefForFile(video)]));
+      await pumpFrames(tester);
+      expect(saveToDanaviewFolderMenuItem(ctx, ref), isNull, reason: 'flag off: no library');
+      await tester.pumpWidget(const SizedBox());
+
+      await tester.pumpWidget(libraryTestApp(
+        env,
+        host(),
+        overrides: [libraryStoreProvider.overrideWithValue(lib.store), importServiceProvider.overrideWithValue(lib.service)],
+      ));
+      await pumpFrames(tester);
+      await tester.runAsync(() => ref.read(queueControllerProvider.notifier).playFrom([LibraryRepository.mediaRefForFile(video)]));
+      await pumpFrames(tester);
+      var closed = false;
+      final item = saveToDanaviewFolderMenuItem(ctx, ref, beforeSave: () => closed = true)!;
+      await tester.runAsync(() async {
+        item.onTap!();
+        for (var i = 0; i < 50 && lib.store.reader.allEntries().isEmpty; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      });
+      await pumpFrames(tester);
+      expect(closed, isTrue);
+      expect(lib.store.reader.allEntries().single.sourceHint, SourceHint.player);
       expect(File(video).existsSync(), isTrue);
 
       DanaviewToast.dismiss();
@@ -196,6 +302,7 @@ void main() {
       await pumpFrames(tester);
       expect(saveableCurrentMedia(ref), isNull);
       expect(canSaveToDanaviewFolder(ref), isFalse);
+      expect(saveToDanaviewFolderMenuItem(tester.element(find.byType(Consumer).first), ref), isNull, reason: 'a stream');
       await tester.pumpWidget(const SizedBox());
       await env.dispose();
     });

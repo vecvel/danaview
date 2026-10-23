@@ -224,6 +224,7 @@ final class PdfDocumentStore {
   private let lock = NSLock()
   private var entries: [Int64: Entry] = [:]
   private var nextHandle: Int64 = 1
+  private var closeObservers: [(Int64) -> Void] = []
 
   /// Number of open handles (tests).
   var count: Int {
@@ -277,10 +278,27 @@ final class PdfDocumentStore {
     return twin
   }
 
+  /// Whether [handle] is open.
+  func contains(_ handle: Int64) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return entries[handle] != nil
+  }
+
+  /// Calls [observer] with each handle after it is closed (drops per-handle caches such as the
+  /// thumbnail twins). Called on the thread that closes the handle.
+  func onClose(_ observer: @escaping (Int64) -> Void) {
+    lock.lock()
+    closeObservers.append(observer)
+    lock.unlock()
+  }
+
   /// Releases [handle]; views keep their own reference to the document.
   func close(_ handle: Int64) {
     lock.lock()
-    entries[handle] = nil
+    let existed = entries.removeValue(forKey: handle) != nil
+    let observers = closeObservers
     lock.unlock()
+    if existed { observers.forEach { $0(handle) } }
   }
 }

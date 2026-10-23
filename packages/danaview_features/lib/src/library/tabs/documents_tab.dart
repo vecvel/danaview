@@ -55,6 +55,7 @@ class _DocumentsTabState extends ConsumerState<DocumentsTab> {
       onRename: widget.actions?.onRename,
       onMove: widget.actions?.onMove,
       onDelete: widget.actions?.onDelete,
+      onMore: widget.actions?.onMore,
     );
     return LayoutBuilder(
       builder: (context, constraints) {

@@ -65,6 +65,7 @@ import 'package:danaview_features/src/flags.dart';
 import 'package:danaview_features/src/library/file_actions/file_actions.dart';
 import 'package:danaview_features/src/library/import/import_pickers.dart';
 import 'package:danaview_features/src/library/import/import_providers.dart';
+import 'package:danaview_features/src/player/danaview_player_actions.dart' show isSystemOpenInCopy;
 import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_platform/danaview_platform.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -408,6 +409,7 @@ void main() {
 
   testWidgets('S3: import documents, view each in its viewer, Quick Look, Open with, Share Extension inbox, share out, reopen',
       (tester) async {
+    final blocking = <String>[];
     final spy = _HttpSpy();
     HttpOverrides.global = spy;
     addTearDown(() => HttpOverrides.global = null);
@@ -472,17 +474,34 @@ void main() {
     await E2eApp.tapKey(tester, 'documents-sub-all');
     await tester.pump(const Duration(milliseconds: 300));
     await _reveal(tester, _entryRow(imported[_pdf]!.id), what: 'the PDF row');
-    // Product gap check: Share / Save to Files for a document (HOM-22's file menu in S2).
+    // FIX-S3Q-1 (re-check): the row menu offers "More actions…", HOM-22's single-file menu.
     await E2eApp.tap(tester, find.descendant(of: _entryRow(imported[_pdf]!.id), matching: find.byTooltip('More')).hitTestable(),
         what: 'More of the PDF row');
-    final rowMenu = ['Open', 'Rename…', 'Move to…', 'Delete', 'Share', 'Save to Files', 'File info', 'Favourite', 'Copy to…', 'Open in another app']
+    final rowMenu = ['Open', 'Rename…', 'Move to…', 'More actions…', 'Delete']
         .where((t) => find.text(t).hitTestable().evaluate().isNotEmpty)
         .toList();
     _report('Documents row menu: $rowMenu');
-    if (!rowMenu.contains('Share')) _report('FINDING no Share / Save to Files / File info / Favourite for a document (row menu $rowMenu)');
+    expect(rowMenu, contains('More actions…'), reason: 'FIX-S3Q-1: the row menu reaches the file menu');
     await E2eApp.screenshot(tester, 's3-04-document-row-menu');
-    await tester.tapAt(const Offset(4, 300));
-    await tester.pump(const Duration(milliseconds: 400));
+    await E2eApp.tap(tester, find.text('More actions…').hitTestable().last, what: 'More actions…');
+    await E2eApp.pumpUntil(tester, () => _key('file-share').evaluate().isNotEmpty, what: 'the file menu');
+    final fileMenu = [
+      for (final id in ['file-share', 'file-open-in', 'file-save-out', 'file-copy-to', 'file-move-to', 'file-rename', 'file-favourite', 'file-info', 'file-delete'])
+        if (_key(id).evaluate().isNotEmpty) id,
+    ];
+    _report('Documents file menu: $fileMenu');
+    for (final id in ['file-share', 'file-save-out', 'file-info']) {
+      expect(fileMenu, contains(id), reason: 'FIX-S3Q-1: $id for a Danaview-folder document');
+    }
+    await E2eApp.screenshot(tester, 's3-04b-document-file-menu');
+    await tester.ensureVisible(_key('file-info'));
+    await tester.pump(const Duration(milliseconds: 200));
+    await E2eApp.tap(tester, _key('file-info').hitTestable(), what: 'File info');
+    await E2eApp.pumpUntil(tester, () => _key('file-info-sheet').evaluate().isNotEmpty, what: 'the File info sheet');
+    await E2eApp.screenshot(tester, 's3-04c-document-file-info');
+    await tester.tapAt(const Offset(4, 60));
+    await tester.pump(const Duration(milliseconds: 600));
+    await E2eApp.pumpUntil(tester, () => _key('file-info-sheet').evaluate().isEmpty, what: 'File info to close');
 
     // ---- 3. The PDF in PDFKit ----
     final sw = Stopwatch()..start();
@@ -519,6 +538,19 @@ void main() {
     expect(world.out.openedIn.last.displayName, imported[_pdf]!.displayName);
     expect(File(world.out.openedIn.last.path).readAsBytesSync(), bytes[_pdf], reason: 'the other app gets the library file');
     _report('PDF: Open in another app handed over ${world.out.openedIn.last.mime}');
+    await tester.pump(const Duration(milliseconds: 500));
+    // FIX-S3Q-1 (re-check): the viewer's top bar "File actions" offers Share, Save out, File info.
+    await E2eApp.tap(tester, _key('viewer-file-menu').hitTestable(), what: 'File actions of the viewer');
+    await E2eApp.pumpUntil(tester, () => _key('file-share').evaluate().isNotEmpty, what: "the viewer's file menu");
+    for (final id in ['file-share', 'file-save-out', 'file-info']) {
+      expect(_key(id), findsOneWidget, reason: "FIX-S3Q-1: $id in the viewer's file menu");
+    }
+    await E2eApp.screenshot(tester, 's3-07b-pdf-viewer-file-menu');
+    final sharedBefore = world.out.shared.length;
+    await E2eApp.tap(tester, _key('file-share').hitTestable(), what: 'Share from the viewer');
+    await E2eApp.pumpUntil(tester, () => world.out.shared.length > sharedBefore, what: 'the share hand-off from the viewer');
+    expect(File(world.out.shared.last.path).readAsBytesSync(), bytes[_pdf], reason: 'Share from the viewer hands over the library file');
+    _report('PDF viewer: File actions → Share handed over the library file');
     await tester.pump(const Duration(milliseconds: 500));
     await _viewerBack(tester);
 
@@ -565,7 +597,7 @@ void main() {
     await E2eApp.pumpUntil(tester, () => find.byType(FileCard).evaluate().isNotEmpty, what: 'the file card');
     await E2eApp.screenshot(tester, 's3-11-file-card');
     await E2eApp.tap(tester, find.text('Share').hitTestable().last, what: 'Share');
-    await E2eApp.pumpUntil(tester, () => world.out.shared.isNotEmpty, what: 'the share hand-off');
+    await E2eApp.pumpUntil(tester, () => world.out.shared.length > 1, what: 'the share hand-off');
     expect(File(world.out.shared.last.path).readAsBytesSync(), bytes[_zip]);
     await E2eApp.tap(tester, find.text('Open in another app').hitTestable().last, what: 'Open in another app');
     await E2eApp.pumpUntil(tester, () => world.out.openedIn.length >= 2, what: 'the Open in hand-off');
@@ -578,8 +610,12 @@ void main() {
 
     // ---- 5. Open with Danaview ----
     // The app container's Documents folder (iOS puts an "Open in" copy into Documents/Inbox).
+    // On the simulator the container itself sits under the Mac's ~/Library, so cut at the last
+    // `/Library/` (the container's own), never the first.
     final root = store.paths.root;
-    final docs = Directory('${root.substring(0, root.indexOf('/Library/'))}/Documents');
+    final container = root.substring(0, root.lastIndexOf('/Library/'));
+    expect(container, contains('/Containers/Data/Application/'), reason: 'the app container');
+    final docs = Directory('$container/Documents');
     final inboxCopy = File('${docs.path}/Inbox/$_openWith');
     inboxCopy.parent.createSync(recursive: true);
     originals[_openWith]!.copySync(inboxCopy.path);
@@ -592,10 +628,22 @@ void main() {
     expect(opened.folderId, importedFolder);
     expect(opened.sourceHint, SourceHint.openWith);
     expect(File(store.paths.entryFile(opened.id, opened.displayName)).readAsBytesSync(), bytes[_openWith]);
-    await E2eApp.pumpUntil(tester, () => !inboxCopy.existsSync(), what: "iOS's Documents/Inbox copy removed");
+    // The app-owned copy must go (rule 27 keeps every other path). Reported and checked at the end
+    // so the rest of the scenario still runs when it stays (FIX-S3Q-7).
+    for (var i = 0; i < 20 && inboxCopy.existsSync(); i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    if (inboxCopy.existsSync()) {
+      blocking.add("Open with: iOS's Documents/Inbox copy not removed after the import "
+          '(isSystemOpenInCopy ${isSystemOpenInCopy(inboxCopy.path)}, HOME set ${(Platform.environment['HOME'] ?? '').isNotEmpty})');
+      _report('FINDING ${blocking.last}');
+      inboxCopy.deleteSync();
+    }
     await tester.pump(const Duration(seconds: 1));
     await E2eApp.screenshot(tester, 's3-12-open-with');
-    _report('Open with: imported into Imported (sourceHint openWith), opened in the PDF viewer, Documents/Inbox copy removed');
+    _report('Open with: imported into Imported (sourceHint openWith), opened in the PDF viewer'
+        '${blocking.isEmpty ? ', Documents/Inbox copy removed' : ''}');
     await _viewerBack(tester);
     // The same file again, from outside the app: the entry already there opens; no copy is added.
     final countBefore = store.reader.allEntries(includeTrashed: true).length;
@@ -687,5 +735,6 @@ void main() {
     expect(spy.created, isEmpty, reason: 'S3 adds no host: ${spy.created}');
     _report('network: no HttpClient created');
     await world.close(tester);
+    expect(blocking, isEmpty, reason: blocking.join('\n'));
   });
 }

@@ -19,6 +19,7 @@
 // The root package reaches the library through danaview_features in its fixtures.
 // ignore_for_file: depend_on_referenced_packages, implementation_imports
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:danaview/app.dart';
@@ -171,8 +172,27 @@ void main() {
       for (final platform in TargetPlatform.values) {
         expect(documentsOverrides(platform: platform, support: '/s'), isEmpty, reason: platform.name);
       }
-      expect(installIncomingDocumentOpen(appNavigatorKey, openEntry: (_, __, ___) async {}), isFalse);
-      expect(IncomingMediaBridge.interceptor, isNull);
+      for (final platform in [TargetPlatform.android, TargetPlatform.windows, TargetPlatform.linux]) {
+        expect(installIncomingDocumentOpen(appNavigatorKey, openEntry: (_, __, ___) async {}, platform: platform), isFalse);
+        expect(IncomingMediaBridge.interceptor, isNull, reason: platform.name);
+      }
+    });
+
+    test('iOS and macOS: photos and documents opened with Danaview are claimed, not imported or played', () async {
+      FeatureFlags.debugFilesHomeOverride = false;
+      for (final platform in [TargetPlatform.iOS, TargetPlatform.macOS]) {
+        IncomingMediaBridge.interceptor = null;
+        var opened = 0;
+        expect(installIncomingDocumentOpen(appNavigatorKey, openEntry: (_, __, ___) async => opened++, platform: platform), isFalse);
+        final claim = IncomingMediaBridge.interceptor!;
+        for (final doc in ['/tmp/Guide.pdf', 'file:///tmp/Notes.docx', '/tmp/a.txt', '/tmp/IMG_1.jpg']) {
+          expect(await claim(doc), isTrue, reason: '$doc on ${platform.name}');
+        }
+        for (final media in ['/tmp/clip.mp4', 'https://example.com/live.m3u8', 'danaview://open?url=https://e.com/a.mp4']) {
+          expect(await claim(media), isFalse, reason: '$media keeps the 1.1 path on ${platform.name}');
+        }
+        expect(opened, 0);
+      }
     });
   });
 
@@ -251,6 +271,16 @@ void main() {
       for (final rel in ['Lease.pdf', 'Budget.xlsx', 'Clip.mp4', 'Photo.jpg', '.Secret.pdf', 'Sub/Notes.txt', 'Documents/Inbox/Copy.pdf', '.hidden/Deep.pdf']) {
         touch(rel);
       }
+      // Off iOS a `Documents/Inbox` folder is the user's own (HOM-21): its files are listed.
+      SystemOpenInCopyRoots.reset();
+      addTearDown(SystemOpenInCopyRoots.reset);
+      final desktop = await walkLinkedDocuments([root.path]);
+      expect(desktop.map((d) => d.name).toSet(), {'Lease.pdf', 'Budget.xlsx', 'Notes.txt', 'Copy.pdf'});
+      // On iOS the copies the system made for "Open in" (the app's own Documents/Inbox) are not.
+      SystemOpenInCopyRoots.configure(
+        SystemOpenInCopyRoots.ios(documentsDirectory: '${root.path}/Documents', temporaryDirectory: '${root.path}/tmp'),
+        onIos: true,
+      );
       final docs = await walkLinkedDocuments([root.path]);
       expect(docs.map((d) => d.name).toSet(), {'Lease.pdf', 'Budget.xlsx', 'Notes.txt'});
       final lease = docs.firstWhere((d) => d.name == 'Lease.pdf');
@@ -359,6 +389,110 @@ void main() {
       expect(claimed, isTrue);
       expect(opened.single.displayName, 'Lease.pdf');
       expect(pdf.existsSync(), isTrue, reason: 'the source is only read (rule 27)');
+      await app.dispose();
+    });
+  });
+
+  group('flag on: review fixes', () {
+    testWidgets('the viewer route gives every text the kit style (no fallback underline, FIX-S3Q-2)', (tester) async {
+      useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
+      final app = await _pumpApp(tester);
+      await app.tab(HomeTab.all);
+      await tester.tap(_row('Archive.zip'));
+      await pumpFrames(tester, count: 8);
+      expect(find.byKey(const ValueKey(ViewerKind.fileCard)), findsOneWidget);
+      final texts = find.descendant(of: find.byType(DocumentViewer), matching: find.byType(RichText)).evaluate().toList();
+      expect(texts, isNotEmpty);
+      for (final e in texts) {
+        final style = (e.widget as RichText).text.style;
+        expect(style?.decoration == TextDecoration.underline && style?.decorationStyle == TextDecorationStyle.double, isFalse,
+            reason: 'a viewer text has the fallback debug style');
+      }
+      expect(find.ancestor(of: find.byType(DocumentViewer), matching: find.byType(Material)), findsWidgets);
+      final resolved = DefaultTextStyle.of(tester.element(find.byType(DocumentViewer))).style;
+      expect(resolved.fontFamily, contains('Figtree'), reason: 'the kit text style');
+      expect(resolved.fontSize, DanaviewTextStyles.body.fontSize);
+      expect(resolved.decoration, TextDecoration.none);
+      await app.dispose();
+    });
+
+    testWidgets("Open with: a failed import shows \"Couldn't open this file.\" from the root navigator", (tester) async {
+      useSurface(tester, const TestSurface(Size(390, 844), 1.0));
+      final app = await _pumpApp(tester);
+      final opened = <FileEntry>[];
+      expect(installIncomingDocumentOpen(appNavigatorKey, openEntry: (context, read, entry) async => opened.add(entry)), isTrue);
+      final claim = IncomingMediaBridge.interceptor!;
+      final src = Directory.systemTemp.createTempSync('s3-open-with-fail');
+      addTearDown(() => src.deleteSync(recursive: true));
+      // A PDF that is gone by the time the import reads it: the import fails.
+      final missing = '${src.path}/Gone.pdf';
+      final claimed = await tester.runAsync(() => claim(Uri.file(missing).toString()));
+      for (var i = 0; i < 50 && find.text(incomingOpenFailedMessage).evaluate().isEmpty; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump();
+      }
+      expect(claimed, isTrue);
+      expect(opened, isEmpty);
+      expect(find.text(incomingOpenFailedMessage), findsOneWidget);
+      await app.dispose();
+    });
+
+    testWidgets("a document entry reaches HOM-22's Share and File info through the file menu (FIX-S3Q-1)", (tester) async {
+      useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
+      final app = await _pumpApp(tester);
+      await app.tab(HomeTab.documents);
+      final ref = tester.element(find.byType(InboxImportHost)) as WidgetRef;
+      final context = tester.element(_row('Notes.docx'));
+      unawaited(showLibraryEntryFileMenu(context, ref, app.entries['Notes.docx']!));
+      await pumpFrames(tester, count: 8);
+      expect(find.byKey(const ValueKey('file-share')), findsOneWidget);
+      expect(find.byKey(const ValueKey('file-favourite')), findsOneWidget);
+      expect(find.byKey(const ValueKey('file-copy-to')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const ValueKey('file-info')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('file-info')));
+      await pumpFrames(tester, count: 8);
+      expect(find.text('Notes.docx'), findsWidgets);
+      expect(tester.takeException(), isNull);
+      await app.dispose();
+    });
+  });
+
+  group('flag on: file actions for documents (FIX-S3Q-1)', () {
+    testWidgets('the row menu offers Open and "More actions…", which opens the file menu', (tester) async {
+      useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
+      final app = await _pumpApp(tester);
+      await app.tab(HomeTab.documents);
+      final row = find.byKey(ValueKey('library-entry-${app.entries['Notes.docx']!.id.value}'));
+      await tester.tap(find.descendant(of: row, matching: find.byTooltip('More')));
+      await pumpFrames(tester, count: 6);
+      expect(find.text('Open'), findsOneWidget);
+      await tester.tap(find.text('More actions…'));
+      await pumpFrames(tester, count: 8);
+      for (final id in ['file-share', 'file-favourite', 'file-copy-to', 'file-info']) {
+        expect(find.byKey(ValueKey(id)), findsOneWidget, reason: id);
+      }
+      expect(tester.takeException(), isNull);
+      await app.dispose();
+    });
+
+    testWidgets("the viewer's top bar opens Share, Save out and File info", (tester) async {
+      useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
+      final app = await _pumpApp(tester);
+      await app.tab(HomeTab.all);
+      await tester.tap(_row('Archive.zip'));
+      await pumpFrames(tester, count: 8);
+      expect(find.byKey(const ValueKey(ViewerKind.fileCard)), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('viewer-file-menu')));
+      await pumpFrames(tester, count: 8);
+      expect(find.byKey(const ValueKey('file-share')), findsOneWidget);
+      expect(find.byKey(const ValueKey('file-info')), findsOneWidget);
+      expect(find.byKey(const ValueKey('file-delete')), findsNothing, reason: 'Delete stays in the row menu');
+      expect(find.byKey(const ValueKey('file-move-to')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('file-info')));
+      await pumpFrames(tester, count: 8);
+      expect(find.text('Archive.zip'), findsWidgets);
+      expect(tester.takeException(), isNull);
       await app.dispose();
     });
   });

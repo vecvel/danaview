@@ -53,8 +53,21 @@ montage (INT-105, S8), Search with AI (S7).
   pass no dart-defines) still applies, so the manual commands of `S1-QA.md` §Signing are used.
 - The S3 candidate embeds the `DanaviewShare` extension (INT-104): signing needs both App IDs with
   the App Group `group.com.vecvel.danaview` (`ios/fastlane/SHARE_EXTENSION.md`).
-- With the flag off the app is the S1 app (S3 test "flag off", S2 test "flag off", INT-101's
-  `flags_off_test.dart`).
+- With the flag off the **Dart side** is the S1 app (S3 test "flag off", S2 test "flag off",
+  INT-101's `flags_off_test.dart`): no documents overrides, no Open-with interceptor, no inbox
+  host. The **native side is gated per build** (INT-104 fixer): the source `Info.plist`s keep the
+  image, PDF, Office and text `CFBundleDocumentTypes` (rank Alternate), and a "Gate Files Home
+  declarations" run-script phase on the Runner target of `ios/Runner.xcodeproj` and of
+  `macos/Runner.xcodeproj` decodes `DART_DEFINES` after Info.plist processing. Unless
+  `DANAVIEW_FILES_HOME=true` it deletes every rank-Alternate document type from the built
+  `Info.plist` (only the 1.1 "Video Media" type is left, so neither the Files app nor Finder offers
+  Danaview for photos or documents) and, on iOS, removes the embedded `DanaviewShare.appex` (no
+  share-sheet entry, no App Group batches). Each build re-copies the types from the source plist
+  first, so an incremental flag flip does not keep stale types; a flag-on iOS build fails if the
+  appex is missing. The 1.1 video path is unchanged. The phases were checked by running the script
+  against `macos/Runner/Info.plist` with the flag off (Video Media only) and on (all five types);
+  the simulator/device check is the gate phase's. Android stays the Windows lane (4173f44). The
+  Dart-side guard FIX-S3Q-6 offered is no longer needed for the OS paths.
 
 ### Privacy policy, terms and licences
 
@@ -95,7 +108,7 @@ montage (INT-105, S8), Search with AI (S7).
 
 ### Tests (S3-W)
 
-`test/v12/wiring/s3_wiring_test.dart` (18 tests, green plain and with
+`test/v12/wiring/s3_wiring_test.dart` (21 tests, green plain and with
 `--dart-define=DANAVIEW_FILES_HOME=true`), booting `DanaviewApp` with the real router over an
 in-process HOM-17 fixture library (Report.pdf, Notes.docx, Archive.zip, Song.mp3), a stand-in PDF
 viewer registered like HOM-24's, and one linked document:
@@ -135,6 +148,23 @@ extension, Open with from Files, the `PdfRenderer` viewer on the emulator (HOM-2
 `flutter build ios --no-codesign` with the extension embedded (not run here: the dependency change
 adds no plugin, and the 8 GB machine was shared with other builders).
 
+### Fix round after S3-Q (S3-W, 2026-10-23)
+
+S3-W's share of the S3-Q defects, in S3-W's files only:
+
+| Item | Change | Test |
+|---|---|---|
+| FIX-S3Q-2 | `openDocumentViewer`'s route puts the viewer host in a `Material` (kit background) under `DefaultTextStyle.merge(DanaviewTextStyles.body, no decoration)`, as the photo viewer's scaffold does, so no viewer text falls back to Flutter's debug style | `s3_wiring_test` "the viewer route gives every text the kit style"; S3-Q's matrix with `--dart-define=S3Q_CHECK_TEXT_STYLE=true`: **11 of 11 pass** (was 11 surfaces failing) |
+| Open with failure toast | `installIncomingDocumentOpen`'s `onFailed` showed the toast from the navigator's context, which is above its Overlay, so `DanaviewToast` found no overlay and dropped "Couldn't open this file." silently. It now shows it from a context inside one of the overlay's entries (shallow breadth-first search, `Overlay.maybeOf` resolves); the message is the constant `incomingOpenFailedMessage` | `s3_wiring_test` "Open with: a failed import shows …" (a PDF that is gone when the import reads it) |
+| FIX-S3Q-1 | `showLibraryEntryFileMenu(context, ref, entry)` opens HOM-22's single-file menu (Share, Open in another app, Save out, Copy to, Move to, Rename, Favourite, File info, Delete). Second round: HOM-18's `LibraryEntryActions` gains `onMore`, a "More actions…" item in the Danaview row menu (All, Documents and Folders tabs pass it; `FoldersTab.onMoreEntry`), and `_rowActions` / the Folders slot pass `showLibraryEntryFileMenu`. `openDocumentViewer(…, fileMenuItem:)` puts a "File actions" button (`viewer-file-menu`) at the end of every viewer's top bar through HOM-23's new `DocumentHostActions` (`viewer_bar.dart`): Share, Open in another app, Save out, Copy to, Favourite, File info (`viewerFileActions`; Move, Rename and Delete stay in the row menu). Favourites and Recents rows reach the same actions through the viewer's button | `s3_wiring_test` "a document entry reaches HOM-22's Share and File info…", "the row menu offers Open and \"More actions…\"…", "the viewer's top bar opens Share, Save out and File info" |
+| Flags off | `installIncomingDocumentOpen` with the flag off installs, on iOS and macOS only (where S3's `CFBundleDocumentTypes` ship in every build), a guard that claims photos and documents opened with Danaview (`routeIncoming` = import-and-view) and shows "Danaview can't open this kind of file." instead of handing them to the 1.1 player; nothing is imported or shown. Videos, streams, `danaview://` links and the other platforms keep the 1.1 path. Still open: the Share Extension is embedded in every iOS build, and with the flag off its App Group batches are not imported or cleaned up (S3-Q / owner) | `s3_wiring_test` flag off: no interceptor on Android, Windows, Linux; iOS and macOS claim PDF, docx, txt, jpg and pass mp4, https and `danaview://` |
+| Linked-walk test | The walk test pins both columns of HOM-21's `SystemOpenInCopyRoots`: off iOS a `Documents/Inbox` folder in a linked root is the user's own and is listed; on iOS the app's own "Open in" copies are skipped | `s3_wiring_test` linked-document walk |
+
+Run green after the round: `test/v12/wiring/s3_wiring_test.dart`, `test/v12/wiring/s2_wiring_test.dart`,
+`test/v12/legal/s3_documents_text_test.dart` (54 plain; 53 + 1 skip with `DANAVIEW_FILES_HOME=true`),
+`test/v12/s3_qa/s3_matrix_test.dart` with the text-style check on (11 pass); `flutter analyze
+--fatal-infos lib test/v12/wiring test/v12/legal packages/danaview_features/lib/src/more`: no issues.
+
 ### Defects and open items
 
 | # | Item | Owner | Status |
@@ -143,20 +173,21 @@ adds no plugin, and the 8 GB machine was shared with other builders).
 | D-S3W-2 | HOM-21's "Save to Danaview folder" (`canSaveToDanaviewFolder`, `saveToDanaviewFolder` in `danaview_player_actions.dart`) is not offered by any player menu (`danaview_player_screen.dart` / the controls overlay do not call it) | HOM-21 | open |
 | D-S3W-3 | `test/v12/s2_qa/s2_matrix_test.dart` (S2-Q) walks "document file menu → File info" by tapping a document row; from S3 that opens the viewer router (10 matrix tests fail at `tapKey('file-info')`). The step should open File info from the file card or the row menu, or move to S3-Q's matrix | S2-Q / S3-Q | defect (test only) |
 | D-S3W-4 | HOM-18's `documentsFilterShown` stays `false` and its tests pin it; the app shows Documents through `s3DocumentsShown`. HOM-18 may flip its constant (and `filters_test.dart`) so the package default matches the shipped app | HOM-18 | open, low |
+| D-S3W-5 | FIX-S3Q-1's row hook (`LibraryEntryActions.onMore`, "More actions…") is in HOM-18's `entry_widgets.dart`, `all_tab.dart`, `documents_tab.dart`, `folders_tab.dart` (S3-W fix round 2, for FIX-S3Q-1) | HOM-18 | fixed |
 | D-6 (S2) | The features barrel still exports none of the Files & Media Home surfaces; both wiring files use `implementation_imports` | INT-101 (barrel) | open, low |
 | — | `legalEffectiveDate`, the owner's review of the S3 wording, regenerating the hosted privacy page from a build with the flag, App Group on both App IDs before signing | S3-R with the owner | open |
 
 ## Slice QA
 
-Ticket **S3-Q**, Mac half, on `v1.2-wip`, 2026-10-23, 12:10–(see §3). Tree: `c326ea60` and the
+Ticket **S3-Q**, Mac half, on `v1.2-wip`, 2026-10-23, 12:10–14:05. Tree: `c326ea60` and the
 backup commits after it up to `8bff0378`, which add only S3-W's and S3-Q's files and the refreshed
 `ios/Podfile.lock` (N-S3-2); product code identical to `c326ea60`. QA changed no product code; every
 defect below is a FIX ticket. The Android Emulator half runs on the Windows laptop (**pending:
 Windows**).
 
 **Gate verdict (Mac half): red.** The S3 packages, the native XCTests, the architecture test,
-HOM-15, the composed overflow / accessibility matrix and the S3 E2E on the iOS 26.5 iPhone 16 are
-green, and the real Share Extension (Files and Photos) and Open with Danaview from Files work on the
+HOM-15, the composed overflow / accessibility matrix, the S3 E2E on the iOS 26.5 iPhone 16 and the
+v1.1 iOS suite with `DANAVIEW_FILES_HOME=true` (20 of 20) are green, and the real Share Extension (Files and Photos) and Open with Danaview from Files work on the
 simulator. Two blocking defects were found on the simulator: every document viewer draws its text
 with Flutter's fallback style (yellow double underline, FIX-S3Q-2), and a Danaview-folder document
 can no longer be shared, saved out, favourited, copied or shown in File info, because S3 routes the
@@ -249,7 +280,26 @@ log, 3 manual screenshots).
 
 ### 3. v1.1 iOS suite with `DANAVIEW_FILES_HOME=true`
 
-V11_RESULT_PLACEHOLDER
+`DV_E2E_IPHONE="iPhone 16" DV_E2E_IPHONE_RUNTIME="iOS 26.5" DV_E2E_MODELS=/Users/besaoct/danaview-models
+DV_E2E_EXTRA_DEFINES="DANAVIEW_FILES_HOME=true" scripts/ci/editor/e2e_ios.sh iphone` (plus
+`DV_E2E_SKIP_PODS=1 DV_E2E_SKIP_WHISPER=1`: pods had just been installed and WhisperCore is current),
+13:06–13:57, one batch, models read in place from `/Users/besaoct/danaview-models` (nothing
+downloaded). The define reaches `flutter test` through `e2e_host.sh -D`, the same path that carried
+it to the S3 E2E, which refuses to start without it. `E2eApp._boot` adds `filesHomeOverrides`, so the
+suite runs on the wired library **with S3-W's `documentsOverrides`** (viewers, linked-document scan,
+App Group inbox and its host); it does not install the Open-with interceptor (FIX-S3Q-5, low).
+
+| Batch | Result |
+|---|---|
+| S3 flag set (`DANAVIEW_FILES_HOME=true`, plus the script's `DANAVIEW_EDITOR`, `DANAVIEW_AUTO_CAPTIONS`) | **20 of 20 files pass** (s01–s18, `x_android_api28`, `x_ios_background_export`; `x_android_export_background` skipped on iOS as designed). s05 hit the known harness hiccup once ("No tests ran." after the build, the 900 s watchdog) and passed on the script's automatic re-run |
+| Flags off | not re-run: S3 changes nothing outside the flag (S3-W's flag-off tests, §1), so S2-Q's flag-off batch stands |
+
+Simulator realities, reported not failed: HEVC/MOV not offered (`hevcEncode false`);
+`pausedInBackground observed: false`; s13 start latency 500 ms (device budget 100 ms), voiceover
+-40.9 dBFS; s07 burned cues 341 / 324 changed samples; s08 3 cues; s15 head -14.6 dBFS, body
+-9.0 dBFS. The simulator was booted for the S3 E2E (12:21) and kept for the manual checks and this
+batch; S3-Q shut it down at 13:58. The iPad Pro 13 was not touched. Logs and summary:
+`build/e2e/ios/6663101E-6BE7-47D4-B3B8-055700BF2E02/` (`summary.txt`, `logs/`).
 
 ### 4. Persistence (QA-106 scope for S3)
 
@@ -331,3 +381,198 @@ Notes (not defects):
 | `integration_test/v12/s3/tool/make_s3_docs.sh` | Local test documents (fixtures, Python, Pillow) |
 | `test/v12/s3_qa/s3_matrix_test.dart` | Composed overflow / a11y / text-style matrix and HttpOverrides guard (§5, §6) |
 | `docs/v1.2/qa/S3-QA.md` | This section |
+| `test/v12/s3_qa/s3_flag_off_incoming_test.dart` | Flag-off Open with guard on iOS and macOS (FIX-S3Q-6), runs by default since the re-check |
+| `test/v12/s3_qa/s3_documents_scroll_test.dart` | Documents tab with 5,000 generated documents (S3's share of HOM-14 / HOM-32) |
+
+## Re-check (2026-10-23)
+
+S3-Q targeted re-check, Mac half, 15:00–15:25, on `v1.2-wip` after the HOM-21, HOM-23, HOM-24 and
+S3-W fix rounds (tree `2ae2b294`). Not a full re-run: analyze, the tests of the fixed files, the
+architecture test, HOM-15 (a fixer touched `danaview_player_actions.dart`, outside the document
+paths), the S3 E2E once on the iOS 26.5 iPhone 16 (shut down afterwards) and the screenshots. QA
+changed only S3-Q's files.
+
+### Results
+
+| Check | Result |
+|---|---|
+| `flutter analyze --fatal-infos lib integration_test`; `danaview_documents`, `danaview_pdf`, `danaview_library_native`, `danaview_features`; `dart analyze --fatal-infos` `danaview_library` | clean |
+| `danaview_documents`: `test/pdf/viewer`, `test/text`, `test/card` | 106 pass |
+| PDF XCTests (`danaview_pdf/darwin/Tests/Viewer/run_xctests.sh macos`, Swift changed: main-thread replies) | core 11, glue 8: **19 pass** |
+| `test/architecture` | 93 pass, 2 skip |
+| `test/v12/wiring/s3_wiring_test.dart` / `s2_wiring_test.dart` / `filters/filters_test.dart` / `incoming/player_incoming_actions_test.dart` | 24 / 28 / 24 / 11 pass |
+| `test/v12/s3_qa` (matrix incl. the unskipped text-style check, flag-off guard, 5k scroll), flags off | **22 pass, 0 skip** (the text-style check: 0 fallback texts) |
+| `test/v12/wiring/s3_wiring_test.dart test/v12/s3_qa` with `DANAVIEW_FILES_HOME=true` | 35 pass, 5 skip (flag-off tests) |
+| `test/v12/s2_qa/s2_matrix_test.dart` | 10 fail at `tapKey('file-info')`: FIX-S3Q-3 still open (low, test only) |
+| HOM-15 (`scripts/ci/v12/home_preservation.sh -j 1`) | **406 pass** |
+| S3 E2E (`integration_test/v12/s3/s3_documents_test.dart`, as §2) | every step passes, incl. the new FIX-S3Q-1 steps; **the run fails at the end on FIX-S3Q-7** (below) |
+
+FIX-S3Q-1 on the simulator: the Documents row menu is Open, Rename…, Move to…, **More actions…**,
+Delete (`s3-04`); More actions… opens HOM-22's menu with Share, Open in another app, Save out
+(Save to Files), Copy to, Move to, Rename, Favourite, File info, Delete (`s3-04b`); File info
+opens (`s3-04c`); the PDF viewer's top-bar "File actions" offers Share, Copy to, File info, Open in
+another app, Favourite, Save to Files, and its Share hands over the library file, byte-equal
+(`s3-07b`). **Fixed.**
+
+FIX-S3Q-2 on the simulator: the PDF chrome, text viewer, CSV grid, file card and the menus draw in
+Figtree with the kit weights; no yellow underline anywhere (`s3-05`, `s3-09`, `s3-10`, `s3-11`).
+**Fixed.**
+
+FIX-S3Q-6: S3-W's flag-off guard (iOS and macOS) now has a default-on check in
+`s3_flag_off_incoming_test.dart` (10 pass: per OS, videos play, PDF / JPEG / docx / txt show
+"Danaview can't open this kind of file." and never reach the player). **Fixed for the Dart path**;
+Share Extension batches with the flag off stay as S3-W noted (owner).
+
+5,000-document scroll (`s3_documents_scroll_test.dart`, 375 × 812): rows built stay under 60 at the
+top, after a jump to the end and through a fling; the PDF sub-filter narrows to a fifth; no
+exceptions. Jumping straight to the end takes ~5 s in test mode, because `SliverList.builder`
+without an item extent lays out every row on the way (N-S3-5).
+
+### New defects
+
+| Id | Owner | Defect | Evidence | Fix direction |
+|---|---|---|---|---|
+| **FIX-S3Q-7** | S3-W (`lib/wiring/documents_wiring.dart`) with HOM-21 (`SystemOpenInCopyRoots`, `danaview_player_actions.dart`) | Regression since the first run: an Open with copy in `Documents/Inbox` is no longer removed after the import. The HOM-21 fix round made `SystemOpenInCopyRoots.current` default to `$HOME/Documents` on iOS, but `HOME` is empty in the app's Dart environment and nothing calls `SystemOpenInCopyRoots.configure`, so every path counts as the user's and iOS's copies pile up in the container | E2E: "Open with: iOS's Documents/Inbox copy not removed after the import (isSystemOpenInCopy false, HOME set false)" | At boot (flag on, iOS) call `SystemOpenInCopyRoots.configure(SystemOpenInCopyRoots.ios(documentsDirectory: getApplicationDocumentsDirectory(), temporaryDirectory: getTemporaryDirectory(), bundleId: …))`; also in `E2eApp._boot`; S3-Q re-runs the E2E |
+| **FIX-S3Q-8** | HOM-23 (`danaview_documents/lib/src/text/csv_viewer.dart` / `csv_table.dart`) | The CSV grid leaves a gap the height of the status bar between the header row and row 1 (owner rule: no big gaps); the rows' list seems to pick up `MediaQuery.padding.top` | `s3-10-csv-viewer` (≈ 60 pt empty band under the header) | Give the row list an explicit `EdgeInsets.zero` padding (or `MediaQuery.removePadding(removeTop: true)`); add a test that row 1 sits right under the header |
+
+Notes: N-S3-5 (low, HOM-18): for scrollbar or scroll-to-top jumps over thousands of rows, give the
+Documents (and All / Folders) row lists a `SliverPrototypeExtentList` or `itemExtentBuilder`.
+N-S3-6 (low, S3-W): `lib/main.dart`'s comment "Nothing with the flag off" above
+`installIncomingDocumentOpen` is stale since the flag-off guard.
+
+### Document test-pass checklist (manual, per platform)
+
+1. Import from Files: PDF, docx, xlsx, pptx, txt, csv, zip; each lands in Imported, kind document / other.
+2. Documents tab: sub-filters narrow; rows show size · date (· pages for PDF); no overflow at 280 px × 1.35.
+3. Row menu: Open, Rename…, Move to…, More actions…, Delete; More actions… → Share, Save out, Copy to, Favourite, File info, Open in another app all work.
+4. PDF: first page, search, page thumbnails, annotations visible; top bar File actions → Share, Save out, File info.
+5. Text / CSV / Office: Quick Look (Apple) or the in-app viewer; UTF-8 and non-Latin text; CSV quoted commas and newlines; no gap under the header.
+6. Unknown file: file card with Share and Open in another app.
+7. All viewers: Figtree, no yellow underline, no hover/press effects, Back returns to the list.
+8. Open with Danaview from Files: imported once, viewer shown, the system Inbox copy removed; the same file again opens the existing entry.
+9. Share Extension (iOS) / `ACTION_SEND` (Android): items land in the chosen folder, toast, interrupted batch ignored.
+10. Flag off: documents and photos opened with Danaview show the neutral toast; videos play as in 1.1.
+11. Relaunch: entries, favourites and Recents persist; originals unchanged; no network.
+
+### Verdict (Mac half, re-check)
+
+**Red.** Both original blockers are fixed (FIX-S3Q-1, FIX-S3Q-2), FIX-S3Q-6 is fixed for the Dart
+path, and every suite above passes, but the S3 E2E fails on the new regression FIX-S3Q-7 and the
+screenshots show FIX-S3Q-8. Still open, low: FIX-S3Q-3, FIX-S3Q-4, FIX-S3Q-5, D-S3W-1, D-S3W-2.
+Android half: **pending: Windows**.
+
+## Release candidate
+
+Ticket **S3-R**, Mac half, on `v1.2-wip`, 2026-10-23, 15:22–15:35. Build tree: `2ae2b294`, code clean
+(only this report modified). Nothing was signed, uploaded or changed in the signing settings; the
+version files were not touched (`pubspec.yaml` `1.0.0+1`). **The candidate carries the open S3-Q
+re-check defects FIX-S3Q-7 and FIX-S3Q-8** (§Re-check, verdict Red): it is a build and packaging check,
+not a release go; rebuild on the commit that closes them.
+
+### iOS release build
+
+```text
+LANG=en_US.UTF-8 flutter build ipa --release --no-codesign --build-name=1.0.0 --build-number=1 \
+  --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true \
+  --dart-define=DANAVIEW_FILES_HOME=true --dart-define=DANAVIEW_PHOTO_EDITOR=false \
+  --dart-define=DANAVIEW_BEAUTY=false --dart-define=DANAVIEW_AI_STUDIO=false
+```
+
+The S2-R flag set (S3 adds no flag). `WhisperCore.xcframework` `--status` = up-to-date, used as is;
+nothing rebuilt or downloaded.
+
+| Check | Result |
+|---|---|
+| Build | **pass**, archive 224 s: `build/ios/archive/Runner.xcarchive` (264.0 MB with dSYMs; S2 253.5 MB); `--no-codesign` skips the IPA export |
+| Info.plist (archived `Runner.app`) | `1.0.0` / `1`, `MinimumOSVersion 15.0`, `com.vecvel.danaview`; `NSPhotoLibraryUsageDescription` and `NSPhotoLibraryAddUsageDescription` the S2 texts; `LSSupportsOpeningDocumentsInPlace true` |
+| Document types (flag on, after the "Gate Files Home declarations" phase) | all five: Video Media **Owner**; Image, PDF Document, Office Document (16 UTIs), Text Document (plain text, CSV, TSV, JSON, Markdown, log) **Alternate** |
+| Share Extension | `PlugIns/DanaviewShare.appex` embedded (172 KB): `com.vecvel.danaview.share`, `1.0.0` / `1`, min 15.0, `com.apple.share-services`, activation rule images, movies, PDF, Office/iWork, text, delimited text, JSON |
+| App Group entitlement | not in the unsigned bundle (`--no-codesign` embeds none); the sources both targets sign with declare `group.com.vecvel.danaview`: Runner `CODE_SIGN_ENTITLEMENTS` → `Runner/Runner.entitlements` (`DANAVIEW_BG_GPU_ENTITLEMENT = NO`; the GPU variant carries the group too), extension `DanaviewShare/DanaviewShare.entitlements`; `InboxWriter.swift` uses the same id. Confirm on the signed archive (`codesign -d --entitlements -`, checklist item 8) |
+| `check_ios_min_os.sh --min 15.0` on the archived `Runner.app` | **OK**: 30 binaries (S2 28), 1524 strongly bound symbols probed (S2 1458), weak allowlist BackgroundTasks |
+| `nm -um` `NEWLAPACK` on `Runner`, `Frameworks/*` and the appex | none |
+| Privacy manifests | app and `DanaviewShare.appex` (both FileTimestamp `C617.1`, DiskSpace `E174.1`, no tracking, no collected data), `danaview_library_native` (S2 fix), Flutter, danaview_whisper, danaview_editor_engine, file_selector, shared_preferences, wakelock_plus, package_info_plus. **`danaview_pdf` ships none**: its binary and sources reference no required-reason API (`nm -um` and source grep: no file timestamps, disk space, user defaults, uptime), so none is required; `danaview_documents` is Dart only (no pod). The appex references `NSURLVolumeAvailableCapacityForImportantUsageKey`, covered by its `E174.1` |
+| Flutter warning | launch image is the default placeholder (as in S1/S2; owner asset) |
+
+**Size** (unsigned, archive's `Runner.app`, same method as S2):
+
+| Measure | S2 candidate | S3 candidate | Delta |
+|---|---|---|---|
+| `Runner.app` on disk | 63.8 MB (65 324 KB) | **66.1 MB (67 736 KB)** | +2.4 MB (+3.7 %) |
+| `Payload/Runner.app` zipped (`zip -9`) | 25.1 MB (25 076 450 B) | **26.1 MB (26 066 864 B)** | +0.99 MB (+3.9 %) |
+| S3 parts | App 23.0 MB, `danaview_pdf` 92 KB | App 23.3 MB, `danaview_pdf` 732 KB, `DanaviewShare.appex` 172 KB | App +0.3 MB, native +0.8 MB |
+
+### Install and smoke on the iOS Simulator (iPhone 16, iOS 26.5)
+
+Debug simulator build of the same tree, version and defines (`flutter build ios --simulator --debug`,
+84 s; release can't run on a simulator), fresh install; `s3_report.pdf`, `s3_shared.pdf` and
+`s3_table.csv` from `build/e2e/s3_docs/` (`make_s3_docs.sh`, local) copied into Files › On My iPhone.
+Driven by hand, every system sheet real:
+
+| Step | Result |
+|---|---|
+| Launch | pass: Home with Home, All, Videos, Photos, **Documents**, Playlists, Folders; no prompt |
+| Import a PDF and a CSV | pass: Import › From Files (system picker, multi-select) › both "Imported" |
+| Documents tab | pass: sub-filters All documents, PDF, Word, Excel, PowerPoint, Text/CSV, Other; rows `s3_table.csv 14 KB · 23 Oct 2026`, `s3_report.pdf 274 KB · 23 Oct 2026` with a page thumbnail. No page count on the PDF row (N-S3R-1) |
+| Open the PDF | pass: PDFKit viewer, "Page 1 of 200", search, thumbnails and the file-actions buttons in the top bar; Back returns to the list |
+| Open the CSV | pass: "Showing the preview." then Quick Look (about 2 s): header row, `Zürich`, `São Paulo`, quoted `has, comma` and the multi-line cell in one cell; closing returns to the app |
+| Share Extension from Files | pass: Files › long-press `s3_shared` › Share › **Danaview** › "Save to Danaview · 1 item · choose a folder" (Imported checked) › Save; back in Danaview the Documents tab lists `s3_shared.pdf 6.4 KB`, and the App Group holds only `folder-snapshot.json` afterwards (the batch was moved and removed). The picker's folder list leaves a large empty panel under a single row (N-S3R-2) |
+| Rule 30 | pass: of the session's 2 168 log lines, the 10 naming a test file are iOS's own (file coordination, DocumentManager, Quick Look); none from Flutter or the extension's code |
+
+The simulator was booted for this step and shut down after it. Device smoke of the signed build
+(iPhone 12, iPhone 7 iOS 15.8, iPhone 8 iOS 16.7): deferred: no device available.
+
+### Release checklist (S3)
+
+| # | Item | Owner | Status |
+|---|---|---|---|
+| 1 | Gate: S3-Q Mac half green; Android half | S3-W / HOM-21 / HOM-23, Windows | **open**: re-check Red on FIX-S3Q-7, FIX-S3Q-8; Android pending |
+| 2 | Version `1.0.0+1` (never bumped) | S3-R | **done** (in the tree) |
+| 3 | iOS release build with the S1–S3 flag set, Info.plist, document types, appex, min-OS, `NEWLAPACK`, privacy manifests, size | S3-R | **done** (above) |
+| 4 | Simulator install and smoke | S3-R | **done** (debug build) |
+| 5 | Rebuild and re-smoke on the commit that closes FIX-S3Q-7/8 (the Inbox-copy cleanup is visible only after Open with, not covered by this smoke) | S3-R | open |
+| 6 | Signing: **two App IDs with the App Group `group.com.vecvel.danaview`** (`com.vecvel.danaview`, `com.vecvel.danaview.share`; `ios/fastlane/SHARE_EXTENSION.md`), S1 §Signing commands with `DANAVIEW_FILES_HOME=true`; check both signed entitlements; fastlane still blocked by FIX-S1R-1 | **owner** | open |
+| 7 | Device smoke incl. the Share Extension under the extension memory limit, Open with from Files and Mail, iOS 15–17 | owner / lab | deferred: no device available |
+| 8 | Upload (internal until the owner's go); privacy report from the signed archive (app + extension: FileTimestamp, DiskSpace; no data collected) | **owner** | open |
+| 9 | `legalEffectiveDate`; hosted privacy page regenerated from a flag-on build (the S3 blocks exist only there); owner review of the S3 wording | **owner** | open |
+| 10 | Store answers: App Privacy unchanged, the App Review note for the share sheet and documents (§Wiring "Store-answer deltas") | **owner** | open |
+| 11 | Android release build and emulator smoke | Windows lane | pending |
+
+### Notes (S3-R)
+
+- N-S3R-1 (low, HOM-18 / HOM-23): the Documents row of a PDF shows `size · date` without the page
+  count the test-pass checklist (item 2) expects; say if pages should show there.
+- N-S3R-2 (low, INT-104, owner rule "no big gaps"): the extension's folder picker draws a full-height
+  bordered panel even with one folder; size the list to its rows.
+
+**S3-R Mac verdict:** the iOS candidate (`2ae2b294`, `1.0.0+1`, S1–S3 flags) builds in release with all
+five document types, the embedded Share Extension and both privacy manifests, passes the 15.0 min-OS and
+`NEWLAPACK` checks, grows 2.4 MB on disk / 0.99 MB zipped over S2, and smokes green on the iPhone 16 /
+iOS 26.5 simulator (Documents tab, PDF, CSV via Quick Look, Share Extension from Files). **Not a
+release candidate yet**: the S3 gate is Red (FIX-S3Q-7, FIX-S3Q-8); rebuild after those close. Signing
+with the App Group, upload and the store answers are the owner's; Android is the Windows lane.
+
+## Final Mac-half verdict (2026-10-23, lead)
+
+**Green.** FIX-S3Q-7 (iOS Open-in copies not cleaned up) and FIX-S3Q-8 (status-bar-tall gap under
+the CSV header) fixed in `2351545`. The S3 E2E
+(`integration_test/v12/s3/s3_documents_test.dart`, iPhone 16 / iOS 26.5) passes 1/1 end to end,
+including reopen, originals unchanged (8 files) and no HttpClient. The CSV screenshot shows the
+rows right under the header in Figtree. One earlier run failed mid-run at a list scroll
+(`_reveal`, "No element" while the list rebuilt); it passed on the clean re-run, so it's recorded
+as a flaky harness step (low).
+
+**Release candidate (Mac half), rebuilt on `ab252f2` (the fixed tree):**
+- `flutter build ipa --release --no-codesign` with DANAVIEW_EDITOR, DANAVIEW_AUTO_CAPTIONS and
+  DANAVIEW_FILES_HOME true (PHOTO_EDITOR, BEAUTY, AI_STUDIO false): archive 264.0 MB, zipped app
+  26.06 MB (S2: 25.08 MB, +0.98 MB).
+- Version 1.0.0 (1), minimum iOS 15.0; DanaviewShare.appex embedded.
+- check_ios_min_os: OK. NEWLAPACK: none.
+- Not signed or uploaded. The App Group entitlement is checked on the owner's signed archive.
+
+**Android half:** HOM-25 and HOM-21A (with the flag-gated activity-alias) merged into v1.2-wip.
+The S3-Q and S3-R Android halves are pending on Windows.
+
+Still open, low: FIX-S3Q-3..5, N-S3-5/6, N-S3R-1 (no PDF page count on its row), N-S3R-2
+(the Share Extension folder picker's empty panel), D-S3W-2 (the player menu "Save to Danaview
+folder" item needs its one-line hook in danaview_controls_overlay.dart). Recommended for S4's
+first round.

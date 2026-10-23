@@ -226,7 +226,11 @@ class _CsvViewerState extends State<CsvViewer> {
                     ),
                   ),
                   Expanded(
+                    // No inherited safe-area padding: the header row already sits below the top
+                    // bar, so a ListView picking up MediaQuery.padding.top left a status-bar-tall gap
+                    // under the header (FIX-S3Q-8).
                     child: ListView.builder(
+                      padding: EdgeInsets.zero,
                       key: const ValueKey('csv-viewer-rows'),
                       controller: _vertical,
                       itemExtent: rowExtent,

@@ -5,8 +5,10 @@
 // installs the interceptor; with the flag off the player behaves as in 1.1.)
 
 import 'dart:async';
+import 'dart:io' show Directory, FileSystemEntity, FileSystemEntityType, Platform;
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_domain/danaview_domain.dart';
 import 'package:danaview_library/danaview_library.dart';
@@ -168,13 +170,125 @@ Future<FileEntry?> saveToDanaviewFolder(BuildContext context, WidgetRef ref, {Fo
   return item.entry ?? item.duplicateOf;
 }
 
-/// True for a copy iOS made for the app when another app opened a file with Danaview
-/// (`Documents/Inbox/`, or a `<bundle id>-Inbox` folder under `tmp/`): it is app-owned, so the
-/// import removes it afterwards. Any other path is the user's file and is only read.
-bool isSystemOpenInCopy(String path) {
-  final p = path.replaceAll(r'\', '/');
-  return p.contains('/Documents/Inbox/') || RegExp(r'/tmp/[^/]+-Inbox/').hasMatch(p);
+/// The player menu's "Save to Danaview folder" entry, or null when [canSaveToDanaviewFolder] is
+/// false (flag off / no library, nothing playing, or a stream). [beforeSave] runs first, e.g. to
+/// close the menu or sheet. A player menu adds it with `if (saveToDanaviewFolderMenuItem(...)
+/// case final item?) item`.
+DanaviewMenuItem? saveToDanaviewFolderMenuItem(BuildContext context, WidgetRef ref, {VoidCallback? beforeSave, FolderId? target}) {
+  if (!canSaveToDanaviewFolder(ref)) return null;
+  return DanaviewMenuItem(
+    label: 'Save to Danaview folder',
+    icon: Icons.drive_folder_upload_outlined,
+    onTap: () {
+      beforeSave?.call();
+      unawaited(saveToDanaviewFolder(context, ref, target: target));
+    },
+  );
 }
+
+/// Where iOS puts the copies it makes for the app when another app opens a file with Danaview:
+/// `<app Documents>/Inbox/` and `<app tmp>/<bundle id>-Inbox/`. Only files under these two
+/// folders of the app's own container are app-owned (the import removes them afterwards); every
+/// other path is the user's file and is only read (rule 27). Off iOS there are none.
+final class SystemOpenInCopyRoots {
+  /// Roots for an iOS app whose container has [documentsDirectory] (`getApplicationDocumentsDirectory()`)
+  /// and [temporaryDirectory] (`NSTemporaryDirectory()`). With [bundleId] null any `<x>-Inbox`
+  /// folder directly in the app's own tmp counts.
+  SystemOpenInCopyRoots.ios({required String documentsDirectory, required String temporaryDirectory, String? bundleId})
+      : _inboxRoot = _join(_canonical(documentsDirectory), 'Inbox'),
+        _tmpRoot = _canonical(temporaryDirectory),
+        _bundleId = bundleId;
+
+  /// No app-owned roots: every path is the user's.
+  const SystemOpenInCopyRoots.none()
+      : _inboxRoot = null,
+        _tmpRoot = null,
+        _bundleId = null;
+
+  final String? _inboxRoot;
+  final String? _tmpRoot;
+  final String? _bundleId;
+
+  /// The roots this app uses: the ones [configure] set, else (iOS only) the app's own container
+  /// (`$HOME/Documents`, [Directory.systemTemp]); [SystemOpenInCopyRoots.none] elsewhere.
+  static SystemOpenInCopyRoots get current => _configured ??= _platformDefault();
+  static SystemOpenInCopyRoots? _configured;
+
+  /// Sets the roots the wiring resolved (iOS: documents and temporary directory, bundle id). On
+  /// any other platform this keeps [SystemOpenInCopyRoots.none] unless [onIos] says otherwise
+  /// (tests).
+  static void configure(SystemOpenInCopyRoots roots, {bool? onIos}) {
+    _configured = (onIos ?? Platform.isIOS) ? roots : const SystemOpenInCopyRoots.none();
+  }
+
+  /// Back to the platform default (tests).
+  @visibleForTesting
+  static void reset() => _configured = null;
+
+  static SystemOpenInCopyRoots _platformDefault() {
+    if (!Platform.isIOS) return const SystemOpenInCopyRoots.none();
+    final home = Platform.environment['HOME'];
+    if (home == null || home.isEmpty) return const SystemOpenInCopyRoots.none();
+    return SystemOpenInCopyRoots.ios(documentsDirectory: _join(home, 'Documents'), temporaryDirectory: Directory.systemTemp.path);
+  }
+
+  /// Whether [path] is a file directly or below one of the roots.
+  bool contains(String path) {
+    final inbox = _inboxRoot;
+    final tmp = _tmpRoot;
+    if (inbox == null || tmp == null) return false;
+    final p = _canonical(path);
+    if (_isBelow(p, inbox)) return true;
+    if (!_isBelow(p, tmp)) return false;
+    final first = p.substring(tmp.length + 1).split('/').first;
+    final bundle = _bundleId;
+    return bundle == null ? (first.length > '-Inbox'.length && first.endsWith('-Inbox')) : first == '$bundle-Inbox';
+  }
+
+  static bool _isBelow(String path, String root) => path.length > root.length + 1 && path.startsWith('$root/');
+
+  static String _join(String a, String b) => a.endsWith('/') || a.endsWith(r'\') ? '$a$b' : '$a/$b';
+
+  /// Forward slashes, no `.`/`..`/empty segments, symlinks of the deepest existing folder resolved,
+  /// and iOS's `/private/var` spelled `/var`.
+  static String _canonical(String path) {
+    var p = path.replaceAll(r'\', '/');
+    if (p.startsWith('file://')) p = Uri.tryParse(p)?.toFilePath() ?? p;
+    final parts = <String>[];
+    for (final s in p.split('/')) {
+      if (s.isEmpty || s == '.') continue;
+      if (s == '..') {
+        if (parts.isNotEmpty) parts.removeLast();
+        continue;
+      }
+      parts.add(s);
+    }
+    var out = '/${parts.join('/')}';
+    // Resolve symlinks on the longest existing prefix.
+    for (var i = parts.length; i > 0; i--) {
+      final prefix = '/${parts.take(i).join('/')}';
+      try {
+        if (FileSystemEntity.typeSync(prefix, followLinks: false) == FileSystemEntityType.notFound) continue;
+        final resolved = Directory(prefix).resolveSymbolicLinksSync().replaceAll(r'\', '/');
+        final rest = parts.skip(i).join('/');
+        out = rest.isEmpty ? resolved : _join(resolved, rest);
+      } on Object {
+        // Keep the lexical form.
+      }
+      break;
+    }
+    if (out.startsWith('/private/var/')) out = out.substring('/private'.length);
+    while (out.length > 1 && out.endsWith('/')) {
+      out = out.substring(0, out.length - 1);
+    }
+    return out;
+  }
+}
+
+/// True for a copy iOS made for the app when another app opened a file with Danaview (see
+/// [SystemOpenInCopyRoots]); false for every other path and on every other platform, so the
+/// user's own `Documents/Inbox` folder on a desktop is only read, never removed.
+bool isSystemOpenInCopy(String path) => SystemOpenInCopyRoots.current.contains(path);
 
 /// Opens [media] for viewing when it is a photo or a document: imports it into `Imported`
 /// (`sourceHint = openWith`) and calls [openEntry] with the new entry, or with the entry already
