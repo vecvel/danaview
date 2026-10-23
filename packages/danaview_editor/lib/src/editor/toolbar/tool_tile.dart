@@ -5,7 +5,10 @@
 // semantics).
 //
 // * Width `clamp(measuredLabel + 16, 64, 112)` measured at the current text scale (ux.md §6.7 rule
-//   3); icon-only tiles are 52 wide. The strip scrolls and never wraps.
+//   3); icon-only tiles are 52 wide. The strip scrolls and never wraps. A tile given a narrower
+//   width (the 76 px rail) scales its label down to fit: full names, never an ellipsis.
+// * Every tile carries its full name (plus the shortcut) as the tooltip, shown on a pointer hover
+//   through DanaviewPressable's hover path, also when the label is visible.
 // * A disabled tile stays visible at 40 % opacity and stays tappable: the tap explains why it is
 //   disabled (the toolbar shows the registry's reason in a toast). Semantics: button + label + hint
 //   (the reason when disabled, else the shortcut).
@@ -108,6 +111,9 @@ class ToolTile extends StatelessWidget {
   /// Icon size.
   static const double iconSize = 22;
 
+  /// Inset of the icon and label from the tile's sides.
+  static const double horizontalPadding = 4;
+
   /// Label style (Figtree).
   static final TextStyle labelStyle = DanaviewTextStyles.micro.copyWith(fontFamily: DanaviewFonts.family, height: 1.2);
 
@@ -132,7 +138,9 @@ class ToolTile extends StatelessWidget {
       onTap: data.onTap,
       selected: data.selected,
       semanticLabel: data.label,
-      tooltip: showLabel && tooltip == data.label ? null : tooltip,
+      // Always the full name (and shortcut): on a pointer hover the kit's pressable shows it after
+      // the theme's wait, also when the label is visible (QA-01 step 4: the rail showed none).
+      tooltip: tooltip,
       builder: (context, state) {
         final fill = data.selected
             ? DanaviewColors.primaryTonal
@@ -149,7 +157,7 @@ class ToolTile extends StatelessWidget {
             borderRadius: DanaviewRadius.mdAll,
             border: state.focused ? Border.fromBorderSide(DanaviewBorders.focus) : null,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
           child: Opacity(
             opacity: data.enabled ? 1 : DanaviewColors.disabledOpacity,
             child: Column(
@@ -158,15 +166,20 @@ class ToolTile extends StatelessWidget {
                 Icon(data.icon, size: iconSize, color: fg),
                 if (showLabel) ...[
                   const SizedBox(height: 4),
+                  // The full name always shows: a label wider than the tile (the fixed-width rail at
+                  // large text scales, "Transitions" at 1.35) scales down to fit, never ellipsizes.
                   ExcludeSemantics(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
                       child: Text(
-                    data.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: labelStyle.copyWith(color: data.selected ? DanaviewColors.primaryLight : DanaviewColors.textSecondary),
-                  )),
+                        data.label,
+                        maxLines: 1,
+                        softWrap: false,
+                        textAlign: TextAlign.center,
+                        style: labelStyle.copyWith(color: data.selected ? DanaviewColors.primaryLight : DanaviewColors.textSecondary),
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),

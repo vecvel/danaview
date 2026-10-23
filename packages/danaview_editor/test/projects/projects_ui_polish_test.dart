@@ -2,8 +2,8 @@
 //
 // Owner UI polish of the Projects screen: the recovery box has no warning outline (same dark card
 // surface and hairline as the project cards), several recoverable projects are a wrapping grid of
-// equal-height cards with "Show all (N)" past four, and the search field sits left with the Sort
-// control right next to it (an icon button below 480 px). Plus the surface matrix.
+// equal-height cards with "Show all (N)" past four, and the search field takes all the width but
+// the Sort control right next to it (an icon button below 480 px). Plus the surface matrix.
 
 import 'package:flutter/material.dart' show Scaffold;
 import 'package:flutter/widgets.dart';
@@ -171,17 +171,24 @@ void main() {
   });
 
   group('search and sort row', () {
-    testWidgets('wide: search first (capped at 480 px) and Sort 12 px right of it, left-aligned', (tester) async {
-      await _pumpProjects(tester, count: 9);
-      final search = tester.getRect(find.byKey(const ValueKey('projects-search')));
-      final sort = tester.getRect(find.byKey(const ValueKey('projects-sort')));
-      final firstCard = tester.getRect(find.byType(ProjectCard).first);
-      expect(search.left, moreOrLessEquals(firstCard.left), reason: 'search starts at the content edge');
-      expect(search.width, lessThanOrEqualTo(projectsSearchMaxWidth));
-      expect(search.width, greaterThan(projectsSearchMaxWidth - 1));
-      expect(sort.left - search.right, moreOrLessEquals(DanaviewSpacing.md));
-      expect(sort.center.dy, moreOrLessEquals(search.center.dy, epsilon: 1));
-    });
+    for (final surface in [_ipad, const EditorSurface(Size(834, 1194), platform: TargetPlatform.iOS), const EditorSurface(Size(1280, 800))]) {
+      testWidgets('wide: search takes all the width but Sort, Sort 12 px right of it (${surface.size})', (tester) async {
+        await _pumpProjects(tester, count: 9, surface: surface);
+        expect(find.byKey(const ValueKey('projects-toolbar')), findsOneWidget);
+        final search = tester.getRect(find.byKey(const ValueKey('projects-search')));
+        final sort = tester.getRect(find.byKey(const ValueKey('projects-sort')));
+        final cards = [for (final e in find.byType(ProjectCard).evaluate()) tester.getRect(find.byWidget(e.widget))];
+        final contentLeft = cards.map((r) => r.left).reduce((a, b) => a < b ? a : b);
+        final contentRight = cards.map((r) => r.right).reduce((a, b) => a > b ? a : b);
+        expect(search.left, moreOrLessEquals(contentLeft), reason: 'search starts at the content edge');
+        expect(sort.right, moreOrLessEquals(contentRight, epsilon: 1), reason: 'Sort ends at the content edge');
+        expect(sort.left - search.right, moreOrLessEquals(DanaviewSpacing.md));
+        expect(search.width, moreOrLessEquals(contentRight - contentLeft - DanaviewSpacing.md - sort.width, epsilon: 1),
+            reason: 'no cap: the search is flexible');
+        expect(search.width, greaterThan(480), reason: 'the old 480 px cap is gone');
+        expect(sort.center.dy, moreOrLessEquals(search.center.dy, epsilon: 1));
+      });
+    }
 
     testWidgets('narrow: search fills and Sort is a 44 px icon button with the same menu', (tester) async {
       await _pumpProjects(tester, count: 9, surface: const EditorSurface(Size(390, 844)));
