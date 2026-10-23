@@ -68,6 +68,14 @@ abstract final class DanaviewSpacing {
   static const double xl = 24;
   static const double xxl = 32;
   static const double minTapTarget = 44;
+
+  /// Side margin of a full-width page or panel at [width]: 16 below 600, 24 below 1024,
+  /// 32 from 1024. Content is never width-capped; it spans [width] minus this gutter
+  /// on each side.
+  static double pageGutter(double width) => width < 600 ? lg : (width < 1024 ? xl : xxl);
+
+  /// Symmetric horizontal padding of [pageGutter] at [width].
+  static EdgeInsets pageInsets(double width) => EdgeInsets.symmetric(horizontal: pageGutter(width));
 }
 
 abstract final class DanaviewBreakpoints {

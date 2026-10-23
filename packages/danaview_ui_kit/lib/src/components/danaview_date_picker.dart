@@ -46,7 +46,6 @@ Future<DateTime?> showDanaviewDatePicker(
   return showDanaviewSheet<DateTime>(
     context,
     title: title ?? 'Choose a date',
-    maxWidth: 520,
     builder: (context) => _DanaviewDatePickerSheet(initialDate: initial, firstDate: first, lastDate: last),
   );
 }

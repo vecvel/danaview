@@ -38,6 +38,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:danaview_data/danaview_data.dart' show AppStorage, LibraryRepository;
 import 'package:danaview_domain/danaview_domain.dart' show MediaRef;
@@ -744,7 +745,8 @@ class FilesHomePhotosPane extends StatelessWidget {
   }
 }
 
-/// The Overview's library row: Import (HOM-20) and the name search (HOM-19) with its hits.
+/// The Overview's library row (D-4): the name search (HOM-19) with its hits, taking all the free
+/// width, and Import (HOM-20) right beside it; below [compactWidth] Import is a 44 pt icon button.
 class FilesHomeToolsRow extends ConsumerWidget {
   /// The row; [onOpenHit] opens a search hit.
   const FilesHomeToolsRow({super.key, required this.onOpenHit});
@@ -755,31 +757,56 @@ class FilesHomeToolsRow extends ConsumerWidget {
   /// The Import button's label.
   static const String importLabel = 'Import';
 
+  /// Below this row width Import shows only its icon.
+  static const double compactWidth = 480;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final canImport = ref.watch(importServiceProvider) != null;
+    final search = LibrarySearchField(key: const ValueKey('s2-search'), onOpen: onOpenHit);
     return Padding(
       padding: const EdgeInsets.only(top: DanaviewSpacing.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (canImport)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: DanaviewButton.secondary(
-                key: const ValueKey('s2-import'),
-                label: importLabel,
-                icon: Icons.add_rounded,
-                onPressed: () => unawaited(showImportSheet(context)),
-              ),
+      child: !canImport
+          ? search
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                void open() => unawaited(showImportSheet(context));
+                final import = constraints.maxWidth < compactWidth
+                    ? DanaviewIconButton(
+                        key: const ValueKey('s2-import'),
+                        icon: Icons.add_rounded,
+                        variant: DanaviewIconButtonVariant.primary,
+                        size: DanaviewSpacing.minTapTarget,
+                        tooltip: importLabel,
+                        semanticLabel: importLabel,
+                        onPressed: open,
+                      )
+                    : DanaviewButton.primary(
+                        key: const ValueKey('s2-import'),
+                        label: importLabel,
+                        icon: Icons.add_rounded,
+                        size: DanaviewButtonSize.sm,
+                        onPressed: open,
+                      );
+                return Row(
+                  // The hits open below the field; Import stays level with the field.
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: search),
+                    const SizedBox(width: DanaviewSpacing.md),
+                    SizedBox(height: _fieldHeight(context), child: Center(child: import)),
+                  ],
+                );
+              },
             ),
-          if (canImport) const SizedBox(height: DanaviewSpacing.md),
-          LibrarySearchField(key: const ValueKey('s2-search'), onOpen: onOpenHit),
-        ],
-      ),
     );
   }
+
+  /// The search field's height at the current text scale (its line plus padding), at least 44.
+  static double _fieldHeight(BuildContext context) => math.max(
+        DanaviewSpacing.minTapTarget,
+        MediaQuery.textScalerOf(context).scale(15) * 1.3 + 2 * DanaviewSpacing.md,
+      );
 }
 
 /// HOM-18's package default for the Documents tab (false); the app shows it from S3 on through

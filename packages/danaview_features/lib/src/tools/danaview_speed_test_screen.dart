@@ -123,7 +123,7 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
         topBar: DanaviewLibraryTopBar(title: 'Speed test', subtitle: 'Download, upload and ping', onBack: widget.onBack),
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final insets = danaviewLibraryInsets(constraints.maxWidth);
+            final insets = DanaviewSpacing.pageInsets(constraints.maxWidth);
             final contentWidth = constraints.maxWidth - insets.horizontal;
             // Small enough that Start stays on screen in a short landscape window.
             final dialSize = math.min(_dialMaxSize, math.max(_dialMinSize, constraints.maxHeight - 170));
@@ -163,12 +163,9 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
           builder: (context, constraints) => Center(child: _gauge(math.min(constraints.maxWidth, maxSize))),
         ),
         const SizedBox(height: DanaviewSpacing.md),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 320),
-          child: _PhaseSteps(update: update, running: _status == _TestStatus.running),
-        ),
+        _PhaseSteps(update: update, running: _status == _TestStatus.running),
         const SizedBox(height: DanaviewSpacing.lg),
-        ConstrainedBox(constraints: const BoxConstraints(maxWidth: 320), child: _actionButton()),
+        _actionButton(),
         if (server != null || _status == _TestStatus.running) ...[
           const SizedBox(height: DanaviewSpacing.sm),
           Text(

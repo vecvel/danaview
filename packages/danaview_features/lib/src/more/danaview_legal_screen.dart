@@ -16,8 +16,6 @@ class DanaviewLegalScreen extends ConsumerWidget {
   final LegalDocument document;
   final VoidCallback onBack;
 
-  static const double _readingWidth = 680;
-
   static const TextStyle _paragraphStyle = TextStyle(
     fontSize: 15,
     height: 1.55,
@@ -38,29 +36,27 @@ class DanaviewLegalScreen extends ConsumerWidget {
         topBar: DanaviewLibraryTopBar(title: text.title, onBack: onBack),
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final insets = danaviewLibraryInsets(constraints.maxWidth);
+            final insets = DanaviewSpacing.pageInsets(constraints.maxWidth);
             return ListView(
               padding: insets.copyWith(
                 top: DanaviewSpacing.xl,
                 bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
               ),
               children: [
-                _readable(
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text('Effective $legalEffectiveDate', style: DanaviewTextStyles.caption),
-                      const SizedBox(height: DanaviewSpacing.lg),
-                      if (document == LegalDocument.privacy)
-                        _Summary(text.summary, icon: Icons.verified_user_rounded, color: DanaviewColors.success)
-                      else
-                        _Summary(text.summary, icon: Icons.gavel_rounded, color: DanaviewColors.primaryLight),
-                      for (final section in text.sections) _section(section),
-                      if (email != null) _section(_contact(text, email)),
-                      const SizedBox(height: DanaviewSpacing.xxl),
-                      const Text(danaviewCopyright, style: DanaviewTextStyles.caption),
-                    ],
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('Effective $legalEffectiveDate', style: DanaviewTextStyles.caption),
+                    const SizedBox(height: DanaviewSpacing.lg),
+                    if (document == LegalDocument.privacy)
+                      _Summary(text.summary, icon: Icons.verified_user_rounded, color: DanaviewColors.success)
+                    else
+                      _Summary(text.summary, icon: Icons.gavel_rounded, color: DanaviewColors.primaryLight),
+                    for (final section in text.sections) _section(section),
+                    if (email != null) _section(_contact(text, email)),
+                    const SizedBox(height: DanaviewSpacing.xxl),
+                    const Text(danaviewCopyright, style: DanaviewTextStyles.caption),
+                  ],
                 ),
               ],
             );
@@ -72,13 +68,6 @@ class DanaviewLegalScreen extends ConsumerWidget {
 
   static LegalSection _contact(LegalDocumentText text, String email) =>
       LegalSection('Contact', [LegalBlock.paragraph('${text.contactPrompt} Email $email.')]);
-
-  Widget _readable(Widget child) {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: _readingWidth), child: child),
-    );
-  }
 
   Widget _section(LegalSection section) {
     return Padding(

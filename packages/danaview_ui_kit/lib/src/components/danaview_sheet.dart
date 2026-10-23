@@ -18,7 +18,6 @@ Future<T?> showDanaviewSheet<T>(
   bool showDragHandle = true,
   bool useRootNavigator = false,
   double maxHeightFactor = 0.85,
-  double maxWidth = 640,
   EdgeInsetsGeometry padding = const EdgeInsets.fromLTRB(16, 4, 16, 16),
 }) {
   final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
@@ -32,7 +31,6 @@ Future<T?> showDanaviewSheet<T>(
       dismissible: isDismissible,
       showDragHandle: showDragHandle,
       maxHeightFactor: maxHeightFactor,
-      maxWidth: maxWidth,
       padding: padding,
       capturedThemes: InheritedTheme.capture(from: context, to: navigator.context),
     ),
@@ -47,7 +45,6 @@ class _DanaviewSheetRoute<T> extends PopupRoute<T> {
     required this.dismissible,
     required this.showDragHandle,
     required this.maxHeightFactor,
-    required this.maxWidth,
     required this.padding,
     required this.capturedThemes,
   });
@@ -58,7 +55,6 @@ class _DanaviewSheetRoute<T> extends PopupRoute<T> {
   final bool dismissible;
   final bool showDragHandle;
   final double maxHeightFactor;
-  final double maxWidth;
   final EdgeInsetsGeometry padding;
   final CapturedThemes capturedThemes;
 
@@ -95,7 +91,6 @@ class _DanaviewSheetRoute<T> extends PopupRoute<T> {
         dismissible: dismissible,
         showDragHandle: showDragHandle,
         maxHeightFactor: maxHeightFactor,
-        maxWidth: maxWidth,
         padding: padding,
       ),
     );
@@ -117,7 +112,6 @@ class _DanaviewSheet extends StatefulWidget {
     required this.dismissible,
     required this.showDragHandle,
     required this.maxHeightFactor,
-    required this.maxWidth,
     required this.padding,
   });
 
@@ -128,7 +122,6 @@ class _DanaviewSheet extends StatefulWidget {
   final bool dismissible;
   final bool showDragHandle;
   final double maxHeightFactor;
-  final double maxWidth;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -191,9 +184,10 @@ class _DanaviewSheetState extends State<_DanaviewSheet> with SingleTickerProvide
       ),
     );
     final content = widget.builder(context);
-    // Centred and narrower than a landscape phone, the sheet only needs the part of a side inset
-    // (notch, rounded corners) it actually reaches; a full-width sheet still clears all of it.
-    final sideGap = math.max(0.0, (media.size.width - widget.maxWidth) / 2);
+    // No width cap: a phone sheet spans the screen; from 600 px it spans the screen minus the
+    // page gutters. It only needs the part of a side inset (notch, rounded corners) it reaches.
+    final screenWidth = media.size.width;
+    final sideGap = screenWidth < 600 ? 0.0 : DanaviewSpacing.pageGutter(screenWidth);
     final sideInsets = EdgeInsets.only(
       left: math.max(0.0, media.padding.left - sideGap),
       right: math.max(0.0, media.padding.right - sideGap),
@@ -286,7 +280,7 @@ class _DanaviewSheetState extends State<_DanaviewSheet> with SingleTickerProvide
         child: Padding(
           padding: EdgeInsets.only(bottom: keyboard),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: widget.maxWidth, maxHeight: maxHeight),
+            constraints: BoxConstraints(maxWidth: math.max(0.0, screenWidth - 2 * sideGap), maxHeight: maxHeight),
             child: FadeTransition(
               opacity: _fade,
               child: SlideTransition(

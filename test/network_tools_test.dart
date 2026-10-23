@@ -8,6 +8,7 @@ import 'package:danaview_data/danaview_data.dart';
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
+import 'full_width_test_utils.dart';
 import 'library_test_utils.dart';
 
 /// The library surfaces plus the narrowest phone width.
@@ -376,6 +377,40 @@ void main() {
       expect(fake.cancelled, isTrue);
       await env.dispose();
     });
+  });
+
+  group('full width (no max-width cap)', () {
+    for (final (size, scale) in [(const Size(1280, 800), 1.0), (const Size(600, 900), 1.0), (const Size(375, 812), 1.35)]) {
+      testWidgets('speed test and stream check span the page at ${size.width.toInt()} px @$scale', (tester) async {
+        useSurface(tester, TestSurface(size, scale));
+        final env = await LibraryTestEnv.create();
+        await tester.pumpWidget(libraryTestApp(
+          env,
+          DanaviewSpeedTestScreen(onBack: () {}),
+          textScale: scale,
+          overrides: [speedTestServiceProvider.overrideWithValue(_FakeSpeedTest())],
+        ));
+        await pumpFrames(tester);
+        expect(tester.takeException(), isNull);
+        expectReachesPageGutters(tester);
+        final gutter = DanaviewSpacing.pageGutter(size.width);
+        if (size.width - 2 * gutter < 640) {
+          // Single column: Start spans the page (it used to stop at 320 px).
+          expect(tester.getSize(find.widgetWithText(DanaviewButton, 'Start test')).width, size.width - 2 * gutter);
+        }
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpWidget(libraryTestApp(
+          env,
+          DanaviewStreamCheckScreen(onBack: () {}, onOpenPlayer: () {}),
+          textScale: scale,
+          overrides: [streamProbeProvider.overrideWithValue(_FakeProbe(_probeResults))],
+        ));
+        await pumpFrames(tester);
+        expect(tester.takeException(), isNull);
+        expectReachesPageGutters(tester);
+        await _finish(tester, env);
+      });
+    }
   });
 
   group('stream link check', () {

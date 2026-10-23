@@ -1,14 +1,14 @@
-# Editor CI scripts
+# Danaview CI scripts (editor jobs)
 
 <!-- OWNER: INT-01 -->
 
-`.github/workflows/editor-ci.yml` (ARCH §22) runs one job per script in this directory. Each job checks out the repo, looks for its script and runs it with `bash`. If the script doesn't exist yet, the job prints a skip notice and passes. The ticket that owns a script creates it. Every script also runs locally with the same command.
+`.github/workflows/danaview-ci.yml` (ARCH §22) runs one job per script in this directory. Each job checks out the repo, looks for its script and runs it with `bash`. If the script doesn't exist yet, the job prints a skip notice and passes. The ticket that owns a script creates it. Every script also runs locally with the same command.
 
 ## Jobs, scripts and owners
 
 | Job | Runner | Script | Owner | Runs on |
 |---|---|---|---|---|
-| `workflow-lint` | ubuntu-latest | (inline) actionlint 1.7.7 + shellcheck on `editor-ci.yml` | INT-01 | PR, push |
+| `workflow-lint` | ubuntu-latest | (inline) actionlint 1.7.7 + shellcheck on `danaview-ci.yml` | INT-01 | PR, push |
 | `dart-core` | ubuntu-latest | `core.sh` | CORE-01 | PR, push |
 | `flutter-packages` | ubuntu-latest | `flutter_packages.sh` | INT-01 | PR, push |
 | `whisper-host` | ubuntu-latest (plain, TSan, ASan) + self-hosted macOS | `whisper_host.sh` | AI-03 | PR, push |

@@ -43,7 +43,7 @@ class DanaviewAboutScreen extends ConsumerWidget {
         topBar: DanaviewLibraryTopBar(title: 'About', onBack: onBack),
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final insets = danaviewLibraryInsets(constraints.maxWidth);
+            final insets = DanaviewSpacing.pageInsets(constraints.maxWidth);
             return ListView(
               padding: insets.copyWith(
                 top: DanaviewSpacing.xxl,
@@ -131,14 +131,11 @@ class _Identity extends StatelessWidget {
           style: DanaviewTextStyles.caption,
         ),
         const SizedBox(height: DanaviewSpacing.lg),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Text(
-            'A fast video player for the files on your device and the streams you open. Danaview plays '
-            'almost any format, remembers where you left off, and keeps your library, history and '
-            'settings on your device.',
-            style: DanaviewTextStyles.bodySecondary.copyWith(height: 1.45),
-          ),
+        Text(
+          'A fast video player for the files on your device and the streams you open. Danaview plays '
+          'almost any format, remembers where you left off, and keeps your library, history and '
+          'settings on your device.',
+          style: DanaviewTextStyles.bodySecondary.copyWith(height: 1.5),
         ),
       ],
     );

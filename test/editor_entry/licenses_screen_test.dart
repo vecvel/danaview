@@ -19,6 +19,7 @@ import 'package:danaview_features/licenses.dart';
 import 'package:danaview_features/src/more/legal_texts.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
+import '../full_width_test_utils.dart';
 import '../library_test_utils.dart';
 
 /// A registry entry for a package, as Flutter's NOTICES would give it.
@@ -326,6 +327,21 @@ void main() {
         await _finish(tester, env);
       });
     }
+  });
+
+  group('full width (no reading-width cap)', () {
+    testWidgets('1280 px: the list spans the width minus the 32 px gutters; 375 px: no overflow', (tester) async {
+      var env = await _pump(tester, surface: const TestSurface(Size(1280, 800), 1.0));
+      expectSpansPageWidth(tester, leaves: find.byType(MergeSemantics));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await env.dispose();
+      env = await _pump(tester, surface: const TestSurface(Size(375, 812), 1.35));
+      expectSpansPageWidth(tester, leaves: find.byType(MergeSemantics));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await env.dispose();
+    });
   });
 
   group('no overflow', () {

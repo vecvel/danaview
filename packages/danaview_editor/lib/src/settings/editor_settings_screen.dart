@@ -45,7 +45,7 @@ class EditorSettingsScreen extends ConsumerWidget {
               final proxyMode = defaults.effectiveProxyMedia(prefs);
               return ListView(
                 key: const ValueKey('editor-settings-list'),
-                padding: danaviewLibraryInsets(constraints.maxWidth).copyWith(
+                padding: DanaviewSpacing.pageInsets(constraints.maxWidth).copyWith(
                   top: DanaviewSpacing.sm,
                   bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
                 ),

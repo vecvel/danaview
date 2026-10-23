@@ -446,6 +446,41 @@ void main() {
     });
   });
 
+  group('flag on: the search and Import row (D-4, owner 2026-10-23)', () {
+    final field = find.byKey(const ValueKey('library-search-field'));
+    final import = find.byKey(const ValueKey('s2-import'));
+
+    testWidgets('1280 px: the field takes the free width, Import sits 12 pt to its right, level with it', (tester) async {
+      useSurface(tester, const TestSurface(Size(1280, 800), 1.0));
+      final app = await _pumpApp(tester, filesHome: true);
+      final f = tester.getRect(field);
+      final i = tester.getRect(import);
+      expect(find.descendant(of: import, matching: find.text(FilesHomeToolsRow.importLabel)), findsOneWidget);
+      expect(i.left - f.right, moreOrLessEquals(DanaviewSpacing.md, epsilon: 0.5));
+      expect(i.right, moreOrLessEquals(1280 - DanaviewSpacing.xxl, epsilon: 0.5), reason: 'no max-width cap');
+      expect(f.left, moreOrLessEquals(DanaviewSpacing.xxl, epsilon: 0.5));
+      expect(i.center.dy, moreOrLessEquals(f.center.dy, epsilon: 1));
+      await app.dispose();
+    });
+
+    testWidgets('375 px: Import is a 44 pt icon button with a tooltip and an "Import" label', (tester) async {
+      useSurface(tester, const TestSurface(Size(375, 812), 1.0, padding: EdgeInsets.only(top: 47, bottom: 34)));
+      final app = await _pumpApp(tester, filesHome: true);
+      final f = tester.getRect(field);
+      final i = tester.getRect(import);
+      expect(find.descendant(of: import, matching: find.text(FilesHomeToolsRow.importLabel)), findsNothing);
+      expect(find.descendant(of: import, matching: find.byType(Tooltip)), findsOneWidget);
+      final label = find.bySemanticsLabel(FilesHomeToolsRow.importLabel);
+      expect(label, findsOneWidget);
+      expect(tester.getRect(label).center, i.center);
+      expect(i.size, const Size(44, 44));
+      expect(i.left - f.right, moreOrLessEquals(DanaviewSpacing.md, epsilon: 0.5));
+      expect(i.right, moreOrLessEquals(375 - DanaviewSpacing.lg, epsilon: 0.5));
+      expect(i.center.dy, moreOrLessEquals(f.center.dy, epsilon: 1));
+      await app.dispose();
+    });
+  });
+
   group('flag on: no overflow', () {
     for (final width in [280.0, 375.0, 1280.0]) {
       for (final scale in [0.85, 1.35]) {
