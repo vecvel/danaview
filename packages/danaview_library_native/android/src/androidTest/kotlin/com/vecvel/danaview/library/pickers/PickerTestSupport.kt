@@ -139,15 +139,87 @@ object SystemUi {
     /** Multi-selects [names] in DocumentsUI's Downloads (long press, tap, Select). */
     fun selectSeveralInDocumentsUi(names: List<String>) {
         openDownloadsIfNeeded(names[0])
-        val first = waitAny(10_000, byText(Pattern.quote(names[0]))) ?: error("${names[0]} not listed:\n" + dump())
+        val first = listed(names[0], 10_000) ?: error("${names[0]} not listed:\n" + dump())
         first.longClick()
         Thread.sleep(600)
         for (name in names.drop(1)) {
-            (waitAny(5_000, byText(Pattern.quote(name))) ?: error("$name not listed:\n" + dump())).click()
+            (listed(name, 5_000) ?: error("$name not listed:\n" + dump())).click()
             Thread.sleep(400)
         }
         val select = waitAny(5_000, byRes(".*:id/action_menu_select"), byText("(?i)^select$")) ?: error("no Select action:\n" + dump())
         select.click()
+    }
+
+    /**
+     * [name] in the current DocumentsUI list, scrolling to it when other Download contents
+     * (folders sort first; other apps' files or an earlier run's leftovers) push it below the fold.
+     */
+    fun listed(name: String, timeoutMs: Long, vararg more: () -> UiObject2?): UiObject2? {
+        val selectors = arrayOf(byText(Pattern.quote(name)), *more)
+        val found = waitAny(timeoutMs, *selectors) ?: return scrollTo(name, *more)
+        return settle(found, selectors)
+    }
+
+    /**
+     * Scrolls the list to the top, then down until [name] (or one of [more]) shows, and settles it
+     * clear of the list's edges; null if it never shows. Slow swipes (not flings) and "nothing
+     * changed" as the end, since UiObject2.scroll misreports the end of DocumentsUI's grid.
+     */
+    fun scrollTo(name: String, vararg more: () -> UiObject2?): UiObject2? {
+        val selectors = arrayOf(byText(Pattern.quote(name)), *more)
+        val find = { selectors.firstNotNullOfOrNull { s -> runCatching { s() }.getOrNull() } }
+        val b = listBounds() ?: return find()
+        val x = b.centerX()
+        val upper = b.top + b.height() * 3 / 10
+        val lower = b.top + b.height() * 8 / 10
+        var last = snapshot()
+        for (i in 0 until 30) {
+            device.swipe(x, upper, x, lower, 40)
+            Thread.sleep(500)
+            val now = snapshot()
+            if (now == last) break
+            last = now
+        }
+        for (i in 0 until 40) {
+            find()?.let { return settle(it, selectors) }
+            device.swipe(x, lower, x, upper, 40)
+            Thread.sleep(500)
+            val now = snapshot()
+            if (now == last) return find()?.let { settle(it, selectors) }
+            last = now
+        }
+        return null
+    }
+
+    /** DocumentsUI's file list (dir_list), else the largest scrollable (its search chips scroll too). */
+    private fun listBounds(): android.graphics.Rect? = runCatching {
+        (device.findObject(By.res(Pattern.compile(".*:id/dir_list")))
+            ?: device.findObjects(By.scrollable(true)).maxByOrNull { it.visibleBounds.width() * it.visibleBounds.height() })?.visibleBounds
+    }.getOrNull()
+
+    /** The texts shown in the list: unchanged after a swipe means its end. */
+    private fun snapshot(): List<String> {
+        val b = listBounds() ?: return emptyList()
+        return device.findObjects(By.text(Pattern.compile("(?s).+"))).mapNotNull { o ->
+            runCatching { if (b.contains(o.visibleBounds.centerX(), o.visibleBounds.centerY())) o.text + "@" + o.visibleBounds.top else null }.getOrNull()
+        }
+    }
+
+    /**
+     * Brings [found] clear of the list's edges before it is tapped: an item half under the app bar
+     * or the navigation bar reports a centre the tap misses.
+     */
+    private fun settle(found: UiObject2, selectors: Array<() -> UiObject2?>): UiObject2 {
+        val b = listBounds() ?: return found
+        val y = runCatching { found.visibleBounds.centerY() }.getOrNull() ?: return found
+        val safeTop = b.top + b.height() / 4
+        val safeBottom = b.bottom - b.height() / 6
+        if (y in safeTop..safeBottom) return found
+        val mid = (b.top + b.bottom) / 2
+        val shift = (y - mid).coerceIn(-(b.height() * 4 / 10), b.height() * 4 / 10)
+        device.swipe(b.centerX(), mid, b.centerX(), mid - shift, 40)
+        Thread.sleep(600)
+        return selectors.firstNotNullOfOrNull { s -> runCatching { s() }.getOrNull() } ?: found
     }
 }
 
