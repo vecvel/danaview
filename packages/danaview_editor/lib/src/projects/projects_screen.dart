@@ -343,12 +343,9 @@ class _ProjectsTopBar extends StatelessWidget {
 /// Below this toolbar width the Sort control collapses to a 44 px icon button next to the search.
 const double projectsToolbarCompactWidth = 480;
 
-/// Widest the search field grows on wide screens.
-const double projectsSearchMaxWidth = 480;
-
-/// The search field (with more than 8 projects) and the Sort control right next to it, both
-/// left-aligned in one row. Narrower than [projectsToolbarCompactWidth] the search fills the row
-/// and Sort is an icon button opening the same menu.
+/// The search field (with more than 8 projects) and the Sort control right next to it in one row:
+/// the search takes all the width Sort leaves (12 px gap, Sort ends at the content edge). Narrower
+/// than [projectsToolbarCompactWidth] Sort is an icon button opening the same menu.
 class _Toolbar extends StatelessWidget {
   const _Toolbar({required this.sort, required this.searchable, required this.query, required this.onSort, required this.onQuery});
 
@@ -410,12 +407,7 @@ class _Toolbar extends StatelessWidget {
         return Row(
           key: const ValueKey('projects-toolbar'),
           children: [
-            Flexible(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: projectsSearchMaxWidth),
-                child: SizedBox(width: double.infinity, child: search),
-              ),
-            ),
+            Expanded(child: search),
             const SizedBox(width: DanaviewSpacing.md),
             dropdown,
           ],

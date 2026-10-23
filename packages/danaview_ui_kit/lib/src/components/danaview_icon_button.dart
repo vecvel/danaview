@@ -70,7 +70,6 @@ class DanaviewIconButton extends StatelessWidget {
       tooltip: tooltip,
       semanticLabel: semanticLabel ?? tooltip,
       selected: selected ? true : null,
-      pressedScale: 0.96,
       builder: (context, state) {
         final circle = AnimatedContainer(
           duration: DanaviewMotion.fast,

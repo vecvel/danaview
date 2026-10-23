@@ -9,9 +9,6 @@ const Color _hairline = Color(0x14FFFFFF);
 const Color _textSecondary = Color(0xFFA0A6BC);
 const Color _primary = Color(0xFF5E60EE);
 const Color _primaryLight = Color(0xFF818CF8);
-const Color _hoverFill = Color(0x0FFFFFFF);
-const Color _pressedFill = Color(0x1AFFFFFF);
-const Color _closeHover = Color(0x29EF4444);
 
 class DanaviewTitleBar extends StatelessWidget {
   static const double height = 38;
@@ -106,7 +103,6 @@ class DanaviewTitleBar extends StatelessWidget {
                 _TitleBarButton(
                   icon: Icons.close_rounded,
                   tooltip: 'Close',
-                  hoverColor: _closeHover,
                   onPressed: () => windowManager.close(),
                 ),
               ],
@@ -118,61 +114,40 @@ class DanaviewTitleBar extends StatelessWidget {
   }
 }
 
-/// Small circular icon button with hover and press tints (no ripple).
-class _TitleBarButton extends StatefulWidget {
+/// Small circular icon button. Owner rule: no hover or press effect (no tint, no ripple); the
+/// tooltip and the click cursor stay.
+class _TitleBarButton extends StatelessWidget {
   const _TitleBarButton({
     required this.icon,
     required this.tooltip,
     required this.onPressed,
     this.color = _textSecondary,
-    this.hoverColor = _hoverFill,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onPressed;
   final Color color;
-  final Color hoverColor;
-
-  @override
-  State<_TitleBarButton> createState() => _TitleBarButtonState();
-}
-
-class _TitleBarButtonState extends State<_TitleBarButton> {
-  bool _hovered = false;
-  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final fill = _pressed
-        ? _pressedFill
-        : _hovered
-            ? widget.hoverColor
-            : const Color(0x00FFFFFF);
     return Tooltip(
-      message: widget.tooltip,
+      message: tooltip,
       child: Semantics(
         button: true,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() => _hovered = false),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTapDown: (_) => setState(() => _pressed = true),
-            onTapCancel: () => setState(() => _pressed = false),
-            onTapUp: (_) => setState(() => _pressed = false),
-            onTap: widget.onPressed,
+            onTap: onPressed,
             child: SizedBox(
               width: 34,
               height: DanaviewTitleBar.height,
               child: Center(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
+                child: SizedBox(
                   width: 28,
                   height: 28,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: fill),
-                  child: Icon(widget.icon, size: 16, color: widget.color),
+                  child: Icon(icon, size: 16, color: color),
                 ),
               ),
             ),
@@ -180,4 +155,5 @@ class _TitleBarButtonState extends State<_TitleBarButton> {
         ),
       ),
     );
-  }}
+  }
+}

@@ -8,17 +8,13 @@ import '../components/danaview_pressable.dart';
 import '../theme/danaview_theme.dart';
 import '../theme/danaview_tokens.dart';
 
-// Brighter fills (primary, accents) darken on interaction so their white labels keep >= 4.5:1;
-// dark surfaces lighten, which only increases contrast.
+// Owner rule: hover and press paint nothing on controls. Only hardware-keyboard focus
+// (onShowFocusHighlight) tints the fill. Brighter fills (primary, accents) darken so their white
+// labels keep >= 4.5:1; dark surfaces lighten, which only increases contrast.
 Color danaviewInteractiveFill(Color base, DanaviewPressState state) {
+  if (!state.focused) return base;
   final darken = Color.alphaBlend(base, DanaviewColors.background).computeLuminance() > 0.1;
-  if (state.pressed) {
-    return Color.alphaBlend(darken ? const Color(0x29000000) : DanaviewColors.pressed, base);
-  }
-  if (state.hovered || state.focused) {
-    return Color.alphaBlend(darken ? const Color(0x1A000000) : DanaviewColors.hover, base);
-  }
-  return base;
+  return Color.alphaBlend(darken ? const Color(0x1A000000) : DanaviewColors.hover, base);
 }
 
 /// Grows the layout to the 44pt minimum height on touch platforms; the visual stays centered.

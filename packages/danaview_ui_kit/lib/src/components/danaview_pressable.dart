@@ -33,9 +33,6 @@ class DanaviewPressable extends StatefulWidget {
     this.enabled = true,
     this.semanticLabel,
     this.tooltip,
-    this.pressedScale = 0.97,
-    this.pressedOpacity = 0.85,
-    this.hoverColor = DanaviewColors.hover,
     this.borderRadius,
     this.circle = false,
     this.focusNode,
@@ -54,8 +51,6 @@ class DanaviewPressable extends StatefulWidget {
     this.enabled = true,
     this.semanticLabel,
     this.tooltip,
-    this.pressedScale = 0.97,
-    this.pressedOpacity = 1.0,
     this.focusNode,
     this.autofocus = false,
     this.isButton = true,
@@ -63,7 +58,6 @@ class DanaviewPressable extends StatefulWidget {
     this.toggled,
     this.behavior = HitTestBehavior.opaque,
   })  : child = null,
-        hoverColor = DanaviewColors.hover,
         borderRadius = null,
         circle = false;
 
@@ -74,9 +68,6 @@ class DanaviewPressable extends StatefulWidget {
   final bool enabled;
   final String? semanticLabel;
   final String? tooltip;
-  final double pressedScale;
-  final double pressedOpacity;
-  final Color hoverColor;
   final BorderRadius? borderRadius;
   final bool circle;
   final FocusNode? focusNode;
@@ -179,12 +170,10 @@ class _DanaviewPressableState extends State<DanaviewPressable> {
     if (!_active) _pressed = false;
   }
 
+  // Owner rule: no hover or press effect on controls. Only hardware-keyboard focus
+  // (onShowFocusHighlight) paints, as the focus ring and its soft fill.
   Widget _decorate(Widget child, DanaviewPressState state) {
-    final overlay = state.focused
-        ? DanaviewColors.primarySoft
-        : state.hovered
-            ? widget.hoverColor
-            : widget.hoverColor.withValues(alpha: 0);
+    final overlay = state.focused ? DanaviewColors.primarySoft : DanaviewColors.primarySoft.withValues(alpha: 0);
     return AnimatedContainer(
       duration: DanaviewMotion.fast,
       curve: DanaviewMotion.curve,
@@ -210,20 +199,9 @@ class _DanaviewPressableState extends State<DanaviewPressable> {
       enabled: active,
     );
 
+    // No press scale or press opacity (owner rule). [state] still reports hovered and pressed for
+    // builders that need them for logic; the kit's controls do not paint them.
     Widget content = widget.builder?.call(context, state) ?? _decorate(widget.child!, state);
-
-    content = AnimatedOpacity(
-      opacity: state.pressed ? widget.pressedOpacity : 1.0,
-      duration: DanaviewMotion.press,
-      curve: DanaviewMotion.curve,
-      child: content,
-    );
-    content = AnimatedScale(
-      scale: state.pressed ? widget.pressedScale : 1.0,
-      duration: DanaviewMotion.press,
-      curve: DanaviewMotion.curve,
-      child: content,
-    );
 
     content = GestureDetector(
       behavior: widget.behavior,
