@@ -365,7 +365,7 @@ class AndroidPickersTest {
             // An image-only pick opens DocumentsUI in grid view, where items carry only a description.
             val quoted = java.util.regex.Pattern.quote(name)
             if (SystemUi.waitAny(6_000, SystemUi.byText(quoted), SystemUi.byDesc("^$quoted.*")) == null) SystemUi.openDownloadsIfNeeded(name)
-            (SystemUi.waitAny(10_000, SystemUi.byText(quoted), SystemUi.byDesc("^$quoted.*")) ?: error("not listed:\n" + SystemUi.dump())).click()
+            (SystemUi.listed(name, 10_000, SystemUi.byDesc("^$quoted.*")) ?: error("not listed:\n" + SystemUi.dump())).click()
         }
         val uris = result()
         assertEquals(1, uris.size)

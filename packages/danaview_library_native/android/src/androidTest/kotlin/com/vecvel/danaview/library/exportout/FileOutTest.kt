@@ -14,6 +14,11 @@
 //   completed + the chosen package are reported; Back = not completed.
 // - Open in: ACTION_VIEW resolves to ShareTargetActivity (read grant only); an unknown type -> false.
 // - The FileProvider serves only danaview-out/, never the library.
+// - Clean-up: every test removes what it put in shared storage (MediaStore rows, documents, and the
+//   Download/Danaview-<stamp>/ and Download/dv_tree_<stamp>/ folders, which API 29 leaves behind on
+//   disk and as MediaStore folder rows that DocumentsUI keeps listing), and setUp sweeps such folders
+//   left by an aborted earlier run, so DocumentsUI's Downloads (where the picker tests seed their
+//   files) doesn't fill up with folders.
 
 package com.vecvel.danaview.library.exportout
 
@@ -23,6 +28,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -65,11 +71,14 @@ class FileOutTest {
     private val stamp = UUID.randomUUID().toString().take(8)
     private lateinit var lib: File
     private val created = ArrayList<Uri>()
+    /** Folders this test made under Download/ (names only). */
+    private val downloadFolders = ArrayList<String>()
     private var relay: FragmentLauncher? = null
 
     @Before
     fun setUp() {
         lib = File(context.filesDir, "library-test-$stamp").apply { mkdirs() }
+        sweepLeftovers()
         ShareTargetActivity.received.clear()
         assertEquals("no storage write permission", PackageManager.PERMISSION_DENIED, context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE))
     }
@@ -82,6 +91,13 @@ class FileOutTest {
             SystemUi.device.pressBack()
             it.finish()
         }
+        // Deleting the rows leaves their folders behind (on API 29, also as MediaStore rows): remove them too.
+        downloadFolders.forEach { removeFromDownloads(it) }
+        // The product's Photos folders only if the saves above left them empty (rmdir never deletes content).
+        listOf(Environment.DIRECTORY_PICTURES, Environment.DIRECTORY_MOVIES).forEach { dir ->
+            @Suppress("DEPRECATION")
+            shell("rmdir ${File(Environment.getExternalStoragePublicDirectory(dir), "Danaview").absolutePath}")
+        }
         lib.deleteRecursively()
         out.store.batches().forEach { out.store.remove(TempBatch(it, emptyList())) }
         worker.shutdown()
@@ -89,6 +105,41 @@ class FileOutTest {
 
     // ---------------------------------------------------------------------------------------------
     // Helpers
+
+    @Suppress("DEPRECATION")
+    private val downloads: File get() = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+
+    /**
+     * Runs [command] as the shell user, which can change shared storage on every API level without
+     * the test APK holding a storage permission (arguments are split on spaces: no globs or quotes).
+     */
+    private fun shell(command: String): String = runCatching { SystemUi.device.executeShellCommand(command) }.getOrDefault("")
+
+    /**
+     * Removes a folder (or file) this test made in Download/: from disk, and its MediaStore row.
+     * On API 29 deleting the rows inside a folder leaves both the folder and MediaStore's own row
+     * for it (format 0x3001, no owner, so the test APK can't see or delete it); DocumentsUI's
+     * Downloads root lists such rows as folders even once the directory is gone from disk.
+     */
+    private fun removeFromDownloads(name: String) {
+        val path = File(downloads, name).absolutePath
+        shell("rm -r $path")
+        shell("content delete --uri content://media/external/file --where _data='$path'")
+    }
+
+    /**
+     * Removes what an earlier, aborted run of this class left in Download/ (only names it creates),
+     * on disk and as stale MediaStore folder rows.
+     */
+    private fun sweepLeftovers() {
+        val ours = Regex("^(Danaview-[0-9a-f]{8}|dv_tree_[0-9a-f]{8}|dv_saveas_[0-9a-f]{8}.*\\.txt)$")
+        val onDisk = shell("ls -1 ${downloads.absolutePath}").lineSequence().map { it.trim() }
+        val prefix = downloads.absolutePath + "/"
+        val folderRows = shell("content query --uri content://media/external/file --projection _data --where format=12289")
+            .lineSequence().mapNotNull { Regex("_data=(.*)$").find(it.trim())?.groupValues?.get(1) }
+            .filter { it.startsWith(prefix) }.map { it.removePrefix(prefix) }
+        (onDisk + folderRows).filter { ours.matches(it) }.toSet().forEach { removeFromDownloads(it) }
+    }
 
     private fun libFile(name: String, bytes: ByteArray) = File(lib, name).apply { writeBytes(bytes) }
 
@@ -144,6 +195,7 @@ class FileOutTest {
     @Test
     fun saveToDownloadsCreatesNewItemsWithTheBytes() {
         assumeTrue("MediaStore Downloads is API 29+ (24-28: save as, tested below)", sdk >= 29)
+        downloadFolders += "Danaview-$stamp"
         val a = libFile("Report.pdf", bytes(5000, 1))
         val b = libFile("clip.mp4", bytes(7000, 2))
         val r = save(listOf(item(a, mime = "application/pdf"), item(b)), SaveOutDestinationMsg.DOWNLOADS).await()
@@ -223,6 +275,7 @@ class FileOutTest {
         assumeTrue("the test folder is seeded through MediaStore (API 29+)", sdk >= 29)
         // Android 11+ refuses the Download root as a tree: seed a sub-folder to choose.
         val folder = "dv_tree_$stamp"
+        downloadFolders += folder
         val seedValues = android.content.ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, "seed.txt")
             put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
