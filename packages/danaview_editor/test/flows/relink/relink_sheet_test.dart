@@ -16,7 +16,7 @@ import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart' show DeleteItems;
 import 'package:danaview_editor_core/store.dart';
 import 'package:danaview_features/storage.dart' show formatDataSize;
-import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewButton, DanaviewSwitch;
+import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewButton, DanaviewColors, DanaviewSurface, DanaviewSwitch;
 
 import '../../support/support.dart';
 import 'relink_support.dart';
@@ -94,8 +94,15 @@ void main() {
       await _report(tester, rig, _missing(['md_1', 'md_2']));
       expect(find.text('2 files are missing'), findsOneWidget);
       expect(find.text('Relink'), findsOneWidget);
+      expectNeutralBorders(tester, of: _key('missing-media-banner'));
       await _report(tester, rig, {'md_1': MediaAvailability.missing, 'md_2': MediaAvailability.accessLost, 'md_3': MediaAvailability.changed});
       expect(find.text('3 files need attention'), findsOneWidget);
+      expect(
+        tester.widget<DanaviewSurface>(find.descendant(of: _key('missing-media-banner'), matching: find.byType(DanaviewSurface)).first).borderColor,
+        DanaviewColors.hairline,
+        reason: 'no warning-coloured outline around the banner',
+      );
+      expectNeutralBorders(tester, of: _key('missing-media-banner'));
       await _report(tester, rig, _missing(['md_1']));
       expect(find.text('1 file is missing'), findsOneWidget);
       expectNoOverflow(tester);
@@ -323,6 +330,20 @@ void main() {
       expect(find.textContaining('Nothing was changed'), findsOneWidget);
       expect(rig.editor.state.history.canUndo, isFalse);
       expect(find.text('Relink 1 file'), findsOneWidget, reason: 'the staged file is still there to try again');
+    });
+
+    testWidgets('the failure message is outlined by the neutral hairline; the error reads from icon and text', (tester) async {
+      final rig = _rig(_three());
+      await _pumpHost(tester, rig);
+      await _report(tester, rig, _missing(['md_1']));
+      await _openSheet(tester);
+      await _locate(tester, rig, 'md_1', _pick('a.mov'));
+      rig.pool.rejectRelink = true;
+      await _tap(tester, _key('relink-apply'));
+      final message = find.ancestor(of: find.text("Couldn't relink these files"), matching: find.byType(DanaviewSurface)).first;
+      expect(tester.widget<DanaviewSurface>(message).borderColor, DanaviewColors.hairline);
+      expect(tester.widget<Icon>(find.descendant(of: message, matching: find.byIcon(Icons.error_outline_rounded))).color, DanaviewColors.errorLight);
+      expectNeutralBorders(tester, of: _key('relink-sheet'));
     });
   });
 

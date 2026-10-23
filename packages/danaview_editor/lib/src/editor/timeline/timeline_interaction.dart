@@ -734,7 +734,7 @@ class TimelineInteractionLayer extends StatelessWidget {
     final guide = interaction.snapGuide;
     if (guide != null) {
       out.add(_pill(size, viewport.xOf(guide.time), 2, EditStrings.timePill(guide.time, rate),
-          key: const ValueKey('snap-pill'), accent: layer.style.snapGuide));
+          key: const ValueKey('snap-pill')));
     }
     final text = interaction.pill;
     final last = interaction.active;
@@ -748,7 +748,7 @@ class TimelineInteractionLayer extends StatelessWidget {
     if (ghost != null && ghost.placements.values.any((p) => p.onNewTrack)) {
       final first = ghost.placements.values.firstWhere((p) => p.onNewTrack);
       out.add(_pill(size, viewport.xOf(first.range.start), _newLaneTop() + ruler - 28, EditStrings.newTrack,
-          key: const ValueKey('new-track-pill'), accent: layer.style.selection));
+          key: const ValueKey('new-track-pill')));
     }
     return out;
   }
@@ -765,7 +765,7 @@ class TimelineInteractionLayer extends StatelessWidget {
 
   double _newLaneTop() => math.max(0, interaction.pointer?.dy ?? 0);
 
-  Widget _pill(Size size, double x, double top, String text, {Key? key, Color? accent}) {
+  Widget _pill(Size size, double x, double top, String text, {Key? key}) {
     final width = math.min(pillMaxWidth, size.width);
     final left = (x - width / 2).clamp(0.0, math.max(0.0, size.width - width)).toDouble();
     final y = top.clamp(0.0, math.max(0.0, size.height - 24)).toDouble();
@@ -780,7 +780,6 @@ class TimelineInteractionLayer extends StatelessWidget {
           color: DanaviewColors.surfaceElevatedHigher,
           borderRadius: DanaviewRadius.smAll,
           shadow: DanaviewShadow.soft,
-          borderColor: accent == null ? DanaviewColors.hairline : accent.withValues(alpha: 0.6),
           padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: 2),
           child: Text(
             text,

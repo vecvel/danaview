@@ -360,4 +360,73 @@ void main() {
       }, variant: TargetPlatformVariant.only(target));
     }
   });
+
+  group('cold start before the first real size (QA-02 tablet observation)', () {
+    void zeroSize(WidgetTester tester) {
+      tester.view.physicalSize = Size.zero;
+      tester.view.devicePixelRatio = 2.0;
+      tester.view.display.size = Size.zero;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.view.display.reset);
+    }
+
+    for (final target in [TargetPlatform.android, TargetPlatform.iOS]) {
+      testWidgets('a 0x0 view locks nothing; the tablet size that follows stays free', (tester) async {
+        zeroSize(tester);
+        final platform = _Platform(tester);
+        expect(ScreenOrientationPolicy.phoneOrUnknown(), isNull);
+        await PlayerOrientation.applyAppDefault();
+        expect(platform.calls, isEmpty, reason: 'no portrait lock from a 0x0 view');
+        expect(ScreenOrientationPolicy.waitingForSize, isTrue);
+
+        tester.view.physicalSize = const Size(2560, 1600); // Pixel Tablet, 1280x800 logical
+        await tester.pump();
+        expect(platform.calls, [_any]);
+        expect(ScreenOrientationPolicy.waitingForSize, isFalse);
+      }, variant: TargetPlatformVariant.only(target));
+
+      testWidgets('a 0x0 view then a phone size locks portrait as before', (tester) async {
+        zeroSize(tester);
+        final platform = _Platform(tester);
+        await PlayerOrientation.applyAppDefault();
+        expect(platform.calls, isEmpty);
+
+        tester.view.physicalSize = const Size(804, 1748); // 402x874 logical
+        await tester.pump();
+        expect(platform.calls, [_portrait]);
+      }, variant: TargetPlatformVariant.only(target));
+    }
+
+    testWidgets('an iPad size is never locked (iOS)', (tester) async {
+      _useSize(tester, _tablet);
+      final platform = _Platform(tester);
+      await PlayerOrientation.applyAppDefault();
+      expect(platform.calls, [_any]);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('with a 0x0 view the display size decides', (tester) async {
+      zeroSize(tester);
+      tester.view.display.size = const Size(2560, 1600);
+      final platform = _Platform(tester);
+      await PlayerOrientation.applyAppDefault();
+      expect(platform.calls, [_any]);
+      expect(ScreenOrientationPolicy.waitingForSize, isFalse);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('an owner that entered before the size arrived keeps its orientation', (tester) async {
+      zeroSize(tester);
+      final platform = _Platform(tester);
+      await PlayerOrientation.applyAppDefault();
+      final editor = Object();
+      await ScreenOrientationPolicy.enter(editor, OrientationMode.free);
+      expect(platform.calls, [_any]);
+
+      tester.view.physicalSize = const Size(804, 1748);
+      await tester.pump();
+      expect(platform.calls, [_any], reason: 'the late size does not put the app default over the editor');
+
+      await ScreenOrientationPolicy.release(editor);
+      expect(platform.last, _portrait);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  });
 }

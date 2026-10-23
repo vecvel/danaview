@@ -31,10 +31,13 @@ void main() {
     expect(_fill(frame), DanaviewColors.fieldActive);
     expect(DanaviewColors.contrastRatio(hint, _fill(frame)), greaterThanOrEqualTo(4.5));
     expect(_borderColor(frame).a, lessThanOrEqualTo(0.3));
+    expect(_borderColor(frame), DanaviewColors.hairline, reason: 'focus shows as the fill, not a primary outline');
 
     await pumpKit(tester, _phone, DanaviewTextField(focusNode: focus, hint: 'Search', errorText: 'Required'));
     await tester.pumpAndSettle();
     expect(_borderColor(_frame(tester, DanaviewTextField)).a, lessThanOrEqualTo(0.4));
+    expect(_borderColor(_frame(tester, DanaviewTextField)), DanaviewColors.hairline, reason: 'no red outline; the message says it');
+    expect(tester.widget<Text>(find.text('Required')).style!.color, DanaviewColors.errorLight);
     expectNoErrors(tester);
   });
 
@@ -56,8 +59,31 @@ void main() {
       find.ancestor(of: find.text('One').first, matching: find.byType(AnimatedContainer)).first,
     );
     expect(_borderColor(frame).a, lessThanOrEqualTo(0.3));
+    expect(_borderColor(frame), DanaviewColors.hairline, reason: 'open shows as the tinted fill, not a primary outline');
     expect(_fill(frame), DanaviewColors.fieldActive);
     expectNoErrors(tester);
+  });
+
+  testWidgets('number field keeps the hairline when focused', (tester) async {
+    await pumpKit(tester, _phone, Center(child: SizedBox(width: 200, child: DanaviewNumberField(value: 1, min: 0, max: 10, onChanged: (_) {}))));
+    AnimatedContainer frame() => tester.widget<AnimatedContainer>(find.descendant(
+          of: find.byType(DanaviewNumberField),
+          matching: find.byWidgetPredicate((w) => w is AnimatedContainer && w.constraints?.minHeight == 40),
+        ));
+    Border border() => (frame().foregroundDecoration! as BoxDecoration).border! as Border;
+    expect(border(), const Border.fromBorderSide(DanaviewBorders.hairline));
+    await tester.tap(find.byType(EditableText));
+    await tester.pumpAndSettle();
+    expect(_fill(frame()), DanaviewColors.fieldActive, reason: 'the field is focused');
+    expect(border(), const Border.fromBorderSide(DanaviewBorders.hairline), reason: 'focus shows as the fill, not a primary outline');
+    expectNoErrors(tester);
+  });
+
+  testWidgets('the theme\'s input outlines stay the hairline when focused or in error', (tester) async {
+    final theme = DanaviewTheme.darkTheme.inputDecorationTheme;
+    for (final border in [theme.border, theme.enabledBorder, theme.focusedBorder, theme.errorBorder, theme.focusedErrorBorder]) {
+      expect((border! as OutlineInputBorder).borderSide, DanaviewBorders.hairline);
+    }
   });
 
   testWidgets('toast bottomOffset lifts it above a bottom control bar', (tester) async {

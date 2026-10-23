@@ -60,6 +60,40 @@ void main() {
     });
   });
 
+  group('expectNeutralBorders', () {
+    Widget box(Color color, {Key? key}) => Container(
+          key: key,
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(border: Border.all(color: color, width: DanaviewBorders.width)),
+        );
+
+    testWidgets('fails on accent, warning, error and opaque outlines', (tester) async {
+      await tester.pumpWidget(_plainHost(Column(mainAxisSize: MainAxisSize.min, children: [
+        box(DanaviewColors.primaryLight),
+        box(DanaviewColors.warning.withValues(alpha: 0.45)),
+        box(DanaviewColors.error.withValues(alpha: 0.5)),
+        box(DanaviewColors.textPrimary),
+      ])));
+      expect(neutralBorderViolations(tester), hasLength(4));
+      expect(() => expectNeutralBorders(tester), throwsA(isA<TestFailure>()));
+    });
+
+    testWidgets('passes the hairline tokens, transparent sides and DanaviewSurface defaults; scopes with of/skip', (tester) async {
+      await tester.pumpWidget(_plainHost(Column(mainAxisSize: MainAxisSize.min, children: [
+        box(DanaviewColors.hairline),
+        box(DanaviewColors.hairlineSubtle),
+        box(DanaviewColors.border),
+        box(const Color(0x006366F1)),
+        const DanaviewSurface(child: SizedBox.square(dimension: 20)),
+        box(DanaviewColors.primaryLight, key: const ValueKey('selected-ring')),
+      ])));
+      expect(neutralBorderViolations(tester), hasLength(1));
+      expectNeutralBorders(tester, skip: find.byKey(const ValueKey('selected-ring')));
+      expectNeutralBorders(tester, of: find.byType(DanaviewSurface));
+    });
+  });
+
   group('expectOwnerUiRules', () {
     testWidgets('fails on a round text button (circle: true)', (tester) async {
       await tester.pumpWidget(_plainHost(DanaviewPressable(circle: true, onTap: () {}, child: const Text('OK'))));

@@ -35,6 +35,47 @@ void main() {
     expectNoErrors(tester);
   });
 
+  testWidgets('Esc closes an open menu even when focus is outside it; the next Esc goes on (FIX-QA02-M2-2)', (tester) async {
+    final outside = FocusNode(debugLabel: 'outside');
+    addTearDown(outside.dispose);
+    var outsideEsc = 0;
+    await pumpKit(
+      tester,
+      surfaces[2],
+      Focus(
+        focusNode: outside,
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) outsideEsc++;
+          return KeyEventResult.handled;
+        },
+        child: Center(
+          child: DanaviewMenuIconTrigger(
+            icon: Icons.more_horiz,
+            entries: [DanaviewMenuItem(label: 'Split', onTap: () {})],
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    expect(find.text('Split'), findsOneWidget);
+    expect(DanaviewMenuAnchor.anyOpen, isTrue);
+    // Focus leaves the menu's scope (as on the Android tablet): Esc must still close the menu.
+    outside.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Split'), findsNothing);
+    expect(DanaviewMenuAnchor.anyOpen, isFalse);
+    expect(outsideEsc, 0, reason: 'the Esc that closed the menu reaches nothing behind it');
+    expect(FocusManager.instance.primaryFocus, outside);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(outsideEsc, 1, reason: 'with the menu closed, Esc does what it did before');
+    expectNoErrors(tester);
+  });
+
   for (final surface in surfaces) {
     group('$surface', () {
       testWidgets('dropdown menus near screen edges stay on screen and select', (tester) async {
