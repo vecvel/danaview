@@ -29,6 +29,7 @@ android {
         targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -58,4 +59,11 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Instrumented tests (src/androidTest): FocusHighlightTest (FIX-QA02-POLISH-1). Versions match
+    // what a plugin already puts on the app's runtime classpath (Gradle consistent resolution).
+    androidTestImplementation("junit:junit:4.12")
+    androidTestImplementation("androidx.test:runner:1.3.0")
 }
