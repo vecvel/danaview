@@ -87,11 +87,11 @@ TEST(Vad, rms_fallback_finds_first_speech) {
 
 TEST(Vad, model_load_rejects_missing_and_non_ggml_files) {
   dv::VadModel m;
-  EXPECT_EQ(m.load(temp_path("no-such-vad.bin"), 2), DV_ERR_VAD_MODEL);
+  EXPECT_EQ(m.load(temp_path("no-such-vad.bin")), DV_ERR_VAD_MODEL);
   const std::string junk = temp_path("junk-vad.bin");
   ASSERT_TRUE(write_file(junk, std::vector<uint8_t>(4096, 0x42)));
-  EXPECT_EQ(m.load(junk, 2), DV_ERR_VAD_MODEL);
-  EXPECT_EQ(m.load("", 2), DV_ERR_VAD_MODEL);
+  EXPECT_EQ(m.load(junk), DV_ERR_VAD_MODEL);
+  EXPECT_EQ(m.load(""), DV_ERR_VAD_MODEL);
   EXPECT_FALSE(m.loaded());
   std::vector<dv::SpeechSpan> spans;
   float x = 0.0f;
@@ -100,7 +100,7 @@ TEST(Vad, model_load_rejects_missing_and_non_ggml_files) {
 
 TEST(Vad, fixture_model_detects_tone_bursts) {
   dv::VadModel m;
-  ASSERT_EQ(m.load(fixture_vad_model(), 2), DV_OK);
+  ASSERT_EQ(m.load(fixture_vad_model()), DV_OK);
   ASSERT_TRUE(m.loaded());
   const auto f = to_float(two_bursts());
   std::vector<dv::SpeechSpan> spans;
