@@ -337,13 +337,21 @@ Future<void> _viewerBack(WidgetTester tester) async {
   await E2eApp.pumpUntil(tester, () => find.byType(DocumentViewer).evaluate().isEmpty, what: 'the viewer to close');
 }
 
+/// Scrolls the visible tab's list until [target] is built and hit-testable (rows build lazily;
+/// a used install has rows of earlier runs).
+Future<void> _reveal(WidgetTester tester, Finder target, {required String what}) async {
+  if (target.hitTestable().evaluate().isNotEmpty) return;
+  final lists = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down);
+  await E2eApp.pumpUntil(tester, () => lists.evaluate().isNotEmpty, what: 'the list for $what');
+  await tester.scrollUntilVisible(target, 160, scrollable: lists.last, maxScrolls: 200);
+  await tester.pump(const Duration(milliseconds: 200));
+}
+
 /// Opens [entry] from the Documents tab (or All for other files) and waits for the viewer host.
 Future<void> _openRow(WidgetTester tester, FileEntry entry, {HomeTab tab = HomeTab.documents}) async {
   await _tab(tester, tab);
   final row = _entryRow(entry.id);
-  await E2eApp.pumpUntil(tester, () => row.evaluate().isNotEmpty, what: 'the row of ${entry.displayName}');
-  await tester.ensureVisible(row);
-  await tester.pump();
+  await _reveal(tester, row, what: 'the row of ${entry.displayName}');
   await E2eApp.tap(tester, row, what: 'row ${entry.displayName}');
   await E2eApp.pumpUntil(tester, () => find.byType(DocumentViewer).evaluate().isNotEmpty, what: 'the viewer host');
 }
@@ -454,15 +462,16 @@ void main() {
     // The Documents tab lists the documents and filters by type.
     await _tab(tester, HomeTab.documents);
     for (final n in [_pdf, _txt, _csv, _docx]) {
-      await E2eApp.pumpUntil(tester, () => _entryRow(imported[n]!.id).evaluate().isNotEmpty, what: 'Documents row $n');
+      await _reveal(tester, _entryRow(imported[n]!.id), what: 'Documents row $n');
     }
     await E2eApp.screenshot(tester, 's3-03-documents-tab');
     await E2eApp.tapKey(tester, 'documents-sub-pdf');
     await tester.pump(const Duration(milliseconds: 300));
-    expect(_entryRow(imported[_pdf]!.id), findsOneWidget);
+    await _reveal(tester, _entryRow(imported[_pdf]!.id), what: 'the PDF under the PDF sub-filter');
     expect(_entryRow(imported[_txt]!.id), findsNothing, reason: 'PDF sub-filter');
     await E2eApp.tapKey(tester, 'documents-sub-all');
     await tester.pump(const Duration(milliseconds: 300));
+    await _reveal(tester, _entryRow(imported[_pdf]!.id), what: 'the PDF row');
     // Product gap check: Share / Save to Files for a document (HOM-22's file menu in S2).
     await E2eApp.tap(tester, find.descendant(of: _entryRow(imported[_pdf]!.id), matching: find.byTooltip('More')).hitTestable(),
         what: 'More of the PDF row');
@@ -552,7 +561,7 @@ void main() {
     _report('Quick Look unavailable → text viewer and CSV grid shown (fallback)');
 
     // The zip: file card with Share and Open in another app.
-    await _openRow(tester, imported[_zip]!, tab: imported[_zip]!.kind == FileKind.document ? HomeTab.documents : HomeTab.all);
+    await _openRow(tester, imported[_zip]!, tab: HomeTab.all);
     await E2eApp.pumpUntil(tester, () => find.byType(FileCard).evaluate().isNotEmpty, what: 'the file card');
     await E2eApp.screenshot(tester, 's3-11-file-card');
     await E2eApp.tap(tester, find.text('Share').hitTestable().last, what: 'Share');
