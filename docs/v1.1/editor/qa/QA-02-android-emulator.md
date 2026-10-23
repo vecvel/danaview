@@ -1259,6 +1259,58 @@ reality above.
 
 Screenshots and files are in `build/e2e/android/manual/` (gitignored, local to the laptop).
 
+### Re-check of 2026-10-23 after 63e95cfb (Windows lane, last 1.1 pass)
+
+The Mac asked (63e95cfb) for one pass on the merged code: RE-CHECK A (M2 row 2 and the tablet
+cold start, the QA-02 gate) and RE-CHECK B (the owner's UI polish, below).
+
+- **Code:** `editor-android` **e07e388c** = 6af2f66a + merge of `origin/editor-wip` at 63e95cfb
+  (adds 1278d1f7 rail tooltips / full names / search width, c781a857 no hover or press effects,
+  eb15b238). Debug APK rebuilt on that code (`DANAVIEW_EDITOR=true DANAVIEW_AUTO_CAPTIONS=true`),
+  `adb install -r`.
+- **Device / harness:** Pixel_Tablet_API_35, `-port 5558 -gpu host -no-snapshot-load
+  -no-snapshot-save -no-window -no-audio`, lock `emulator3`, mains power, 10 GB free RAM,
+  `spikes/qa02_manual` `Inject` (hardware KeyEvents, `SOURCE_MOUSE` events, touch).
+
+| # | Check | Result |
+|---|---|---|
+| A1 | M2 row 2: right-click a clip → menu; Esc → menu closes; second Esc → selection cleared | **pass**. Right-click on the second `frame_counter_1080p30.mp4` clip opened the clip menu at the pointer and selected the clip (`m2_mouse_context_menu_esc.png`); the first Esc closed only the menu, clip still selected (`_esc_1.png`); the second Esc cleared the selection (Media panel back) (`_esc_2.png`). These overwrite the 948aee76 re-check's files of the same names |
+| A2 | Cold start: kill, launch from the launcher; rotate | **pass**. `am force-stop`, touch tap on the launcher icon: Home fills 2560×1600 landscape, `requestedOrientation=SCREEN_ORIENTATION_UNSPECIFIED`, `areBoundsLetterboxed=false` (`a_tablet_cold_start.png`); `user_rotation 1` → ROTATION_90, Home full-screen portrait (`a_tablet_cold_start_rotated.png`); back to landscape (`a_tablet_cold_start_back.png`) |
+
+**Verdict A: pass. QA-02's gate items are closed on 63e95cf.**
+
+Harness notes (not counted): the first-editor-session key quirk came back after the cold start:
+the first right-click/Esc/Esc and a Space did nothing (menu stayed open) until a touch tap on the
+empty timeline area; after that the row passed as above. Separately, the emulator turned
+auto-rotate (`accelerometer_rotation`) back on after app relaunches, so a `user_rotation` change
+was ignored until auto-rotate was switched off again.
+
+### Owner UI polish re-check (2026-10-23)
+
+RE-CHECK B from 63e95cfb, same build and device. Projects: 9 projects (7 made with Duplicate so the
+search field shows) and 5 unsaved sessions (an edit, then `am force-stop`).
+
+| # | Check | Result |
+|---|---|---|
+| B3 | Projects: unsaved-changes box, cards, Show all; search and Sort | **pass**. "5 projects have unsaved changes": box border is the same neutral hairline as the project cards (RGB 34,36,42), no amber; only the clock tile is warning-coloured. Wrapping grid of equal-height cards, 3 columns in landscape (each about 355 dp: the grid stretches cards that are at least 280 dp), 2 in portrait; 4 shown, then "Show all (5)" / "Show fewer". Search fills the row with Sort at its right, landscape and portrait (`b3_projects_landscape.png`, `b3_projects_cards_landscape.png`, `b3_projects_cards_show_all_landscape.png`, `b3_projects_cards_portrait.png`) |
+| B4 | Rail switching: Captions, Audio, Text, Filters, Media; lit only while open | **pass**. Landscape: Captions → Audio → Text → Media, then Filters → Audio → Filters → Captions → Audio: each showed its own panel, Audio never left Captions on screen, and only the open tool was lit (`b4_rail_*_landscape.png`). Portrait (tools grid in the side panel): Captions, back, Audio, close, Filters: same (`b4_tools_grid_portrait.png`, `b4_rail_*_portrait.png`) |
+| B5 | "Transitions" in full; rail tile tooltip on hover | **pass**. The rail reads "Transitions" with no ellipsis (landscape rail and portrait grid) (`b5_rail_scrolled_landscape.png`); a mouse hover on the Filters tile showed the "Filters" tooltip after about 1 s, with no hover highlight on the tile (`b5_rail_tooltip_landscape.png`) |
+| B6 | Filters > Looks ring and strip | **pass**. The Teal & Orange ring is drawn outside the tile with smooth, uncut corners; the scrolled strip is clipped at the panel edges, never drawn over the rail or the video, landscape and portrait (`b6_looks_ring_*.png`, `b6_looks_strip_scrolled_*.png`) |
+| B7 | No hover or press effects | **pass**. Pixel diff of a ±70 px box around each control, idle vs mouse hover: Export, Gallery, the Video chip, the Text rail tile, Zoom in, Undo; idle vs a 2.5 s touch hold: Zoom in, the Video chip, the Audio rail tile. The only changed pixels were the tooltips; no fill, tint or scale change on any control (`b7_idle.png`, `b7_hover_*.png`, `b7_press_*.png`). Selected states (lit rail tool, "All" chip, segmented controls) still show; the HD button kept a keyboard-focus fill after the Esc presses, as decided (keyboard-only focus) |
+| B8 | Leftover coloured or opaque decorative borders | **pass with one finding**. Editor panels, Home, Settings and Settings > Video editor: neutral hairlines only (`b8_home_landscape.png`, `b8_settings_landscape.png`, `b8_settings_video_editor_landscape.png`; the focused text field and the marker colour sheet were also neutral on the pre-merge 3ddfefe build this morning). Finding: after any hardware key event a 2–3 px **green frame** (RGB 128,171,2) is drawn around the whole Danaview window, status bar included, and stays after touches; it is absent on the launcher and before the first key. FIX-QA02-POLISH-1 below (`b8_green_window_frame.png`) |
+
+**Verdict B: pass (3–8), one finding filed (FIX-QA02-POLISH-1).**
+
+**FIX-QA02-POLISH-1 (Android, not Dart; not a QA-02 blocker).** The green window frame looks like
+Android's default focus highlight on the `FlutterView` (API 26+), drawn once a key event takes the
+window out of touch mode. `android/app` sets no `defaultFocusHighlightEnabled`. Likely fix:
+`<item name="android:defaultFocusHighlightEnabled">false</item>` in the launch/normal themes
+(`res/values*/styles.xml`, API 26+), or `setDefaultFocusHighlightEnabled(false)` on the
+FlutterView. Flutter's own keyboard-only focus rings stay as they are. The Android lane can take
+it; it was not changed in this pass.
+
+Screenshots for both sections are in `build/e2e/android/manual/` (gitignored, local to the laptop).
+
 Use **Git Bash**. Start each new window with:
 
 ```bash
