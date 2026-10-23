@@ -2,8 +2,9 @@
 //
 // The pure, Flutter-free and Android-free helpers of the Android import pickers (ARCH v1.2 §5.6,
 // V2-116, rule 27; BUILD_PLAN HOM-20A), JVM-tested (src/test/.../pickers/): the picker's media
-// filter and selection limit, the SAF document type list, display-name fallbacks, the copy
-// registry (busy ids, cancel flags) and the streamed, resumable copy into the import's part file
+// filter and selection limit, the SAF document type list, display-name fallbacks and import names
+// (OBS-S2A-1: the provider's DISPLAY_NAME, else IMG_yyyyMMdd_HHmmss from the capture date, clashes
+// numbered "Name (2).ext" as on Apple), the copy registry (busy ids, cancel flags) and the streamed, resumable copy into the import's part file
 // (the same contract as HOM-20's PickerCore.streamCopy on Apple: truncate the destination to the
 // resume offset, append, fsync before every progress report so each report is a durable
 // checkpoint, at most 4 reports a second). Nothing here logs (rule 30) or opens a socket (rule 21).
@@ -17,6 +18,10 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.RandomAccessFile
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -88,6 +93,66 @@ object PickerRequests {
         val safe = base.replace('/', '_').replace('\\', '_').replace("\u0000", "")
         val hasExt = safe.substringAfterLast('.', "").let { it.isNotEmpty() && it.length <= 10 && safe.lastIndexOf('.') > 0 }
         return if (!hasExt && !extension.isNullOrEmpty()) "$safe.$extension" else safe
+    }
+
+    /**
+     * Whether [reported] is no real name but the picked item's media id: the system Photo Picker
+     * answers DISPLAY_NAME as "<media id>.<ext>" (e.g. "1000000428.mp4") without a library
+     * permission. A digits-only base counts as an id for photo-picker items, and for any item
+     * when it equals the URI's last segment (the id the URI ends with).
+     */
+    fun isMediaIdName(reported: String, lastSegment: String?, fromPhotos: Boolean): Boolean {
+        val name = reported.trim()
+        val base = if (name.lastIndexOf('.') > 0) name.substringBeforeLast('.') else name
+        if (base.isEmpty() || !base.all { it in '0'..'9' }) return false
+        return fromPhotos || base == lastSegment?.substringAfterLast('/')?.substringAfterLast(':')
+    }
+
+    /**
+     * The name an import of a picked item gets (OBS-S2A-1): the provider's [reported] DISPLAY_NAME
+     * when it gives a real one; else "IMG_yyyyMMdd_HHmmss.<ext>" from the capture date ([dates]:
+     * DATE_TAKEN, else DATE_ADDED, both in ms; asked only when needed) in [zone], with the
+     * extension of the reported name or else [extension] (from the MIME type); else the
+     * [displayName] fallbacks. Clashes inside one pick are numbered by [uniqueNames].
+     */
+    fun importName(
+        reported: String?,
+        lastSegment: String?,
+        extension: String?,
+        fromPhotos: Boolean,
+        zone: TimeZone = TimeZone.getDefault(),
+        dates: () -> Pair<Long?, Long?>,
+    ): String {
+        val name = reported?.trim()?.takeIf { it.isNotEmpty() }
+        if (name != null && !isMediaIdName(name, lastSegment, fromPhotos)) return displayName(name, lastSegment, extension)
+        val (taken, added) = dates()
+        val stamp = taken?.takeIf { it > 0 } ?: added?.takeIf { it > 0 }
+            ?: return displayName(name, lastSegment, extension)
+        val ext = name?.let { n -> n.substringAfterLast('.', "").takeIf { it.isNotEmpty() && it.length <= 10 && n.lastIndexOf('.') > 0 } }
+            ?: extension?.takeIf { it.isNotEmpty() }
+        val format = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).apply { timeZone = zone }
+        val base = "IMG_" + format.format(Date(stamp))
+        return if (ext != null) "$base.${ext.lowercase(Locale.US)}" else base
+    }
+
+    /** "Name (n).ext" ("Name (n)" without an extension), as Apple's PickerCore.uniqueURL. */
+    fun numbered(name: String, n: Int): String {
+        val dot = name.lastIndexOf('.')
+        return if (dot > 0) "${name.substring(0, dot)} ($n)${name.substring(dot)}" else "$name ($n)"
+    }
+
+    /**
+     * [names] with clashes inside one pick numbered: the first keeps its name, later ones become
+     * "Name (2).ext", "Name (3).ext", … (compared ignoring case, as on APFS).
+     */
+    fun uniqueNames(names: List<String>): List<String> {
+        val taken = HashSet<String>()
+        return names.map { name ->
+            var candidate = name
+            var n = 1
+            while (!taken.add(candidate.lowercase(Locale.ROOT))) candidate = numbered(name, ++n)
+            candidate
+        }
     }
 }
 

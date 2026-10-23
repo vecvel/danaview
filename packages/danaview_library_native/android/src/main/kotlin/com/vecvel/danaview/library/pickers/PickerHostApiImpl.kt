@@ -70,7 +70,7 @@ class PickerHostApiImpl(private val context: LibraryPluginContext) : PickerHostA
         if (uris.isEmpty()) return callback(Result.success(emptyList()))
         try {
             metadata.execute {
-                val items = runCatching { uris.map { pickers.describe(it, source) } }
+                val items = runCatching { pickers.describeAll(uris, source) }
                 context.main.post { callback(items.fold({ Result.success(it) }, { Result.failure(failure(it, "picker")) })) }
             }
         } catch (e: RejectedExecutionException) {

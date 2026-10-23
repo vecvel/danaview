@@ -153,7 +153,7 @@ object SystemUi {
 
 /**
  * Serves `content://<test package>.recording/<name>` from `<files>/recording/` and records every
- * open mode. Declared in src/androidTest/AndroidManifest.xml.
+ * open mode; answers `datetaken` / `date_added` from [dates] (the Photo Picker's media-id names). Declared in src/androidTest/AndroidManifest.xml.
  */
 class RecordingProvider : ContentProvider() {
     override fun onCreate(): Boolean = true
@@ -171,7 +171,20 @@ class RecordingProvider : ContentProvider() {
         val f = file(uri)
         val cols = projection ?: arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
         val cursor = MatrixCursor(cols)
-        if (f.isFile) cursor.addRow(cols.map { c -> when (c) { OpenableColumns.DISPLAY_NAME -> f.name; OpenableColumns.SIZE -> f.length(); else -> null } })
+        val (taken, addedSeconds) = dates[f.name] ?: (null to null)
+        if (f.isFile) {
+            cursor.addRow(
+                cols.map { c ->
+                    when (c) {
+                        OpenableColumns.DISPLAY_NAME -> f.name
+                        OpenableColumns.SIZE -> f.length()
+                        "datetaken" -> taken // ms, as MediaStore / PickerMediaColumns
+                        "date_added" -> addedSeconds // s, as MediaStore
+                        else -> null
+                    }
+                },
+            )
+        }
         return cursor
     }
 
@@ -191,6 +204,9 @@ class RecordingProvider : ContentProvider() {
     companion object {
         /** Every mode any test opened a recording URI with. */
         val modes: MutableList<String> = Collections.synchronizedList(ArrayList())
+
+        /** Capture dates served for a file name: (DATE_TAKEN in ms, DATE_ADDED in s), each optional. */
+        val dates: MutableMap<String, Pair<Long?, Long?>> = java.util.concurrent.ConcurrentHashMap()
 
         fun dir(context: android.content.Context) = File(context.filesDir, "recording").apply { mkdirs() }
 

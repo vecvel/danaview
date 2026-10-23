@@ -85,6 +85,53 @@ class PickerSupportTest {
     }
 
     @Test
+    fun importNamesUseTheRealDisplayNameElseTheCaptureDate() {
+        val utc = java.util.TimeZone.getTimeZone("UTC")
+        val taken = 1_729_501_500_000L // 2024-10-21 09:05:00 UTC
+        val added = 1_700_000_000_000L // 2023-11-14 22:13:20 UTC
+        var asked = 0
+        val dates = { asked++; taken to added }
+        // A real DISPLAY_NAME wins; the dates are not even asked.
+        assertEquals("Holiday.jpg", PickerRequests.importName("Holiday.jpg", "1000000428", "jpg", true, utc, dates))
+        assertEquals("2024.pdf", PickerRequests.importName("2024.pdf", "primary:Download/2024.pdf", "pdf", false, utc, dates))
+        assertEquals(0, asked)
+        // The Photo Picker's media-id name: IMG_ from DATE_TAKEN, the reported extension kept.
+        assertEquals("IMG_20241021_090500.mp4", PickerRequests.importName("1000000428.mp4", "1000000428", "mp4", true, utc, dates))
+        assertEquals("IMG_20241021_090500.jpg", PickerRequests.importName("1000000429.JPG", "1000000429", "jpg", true, utc, dates))
+        // No DATE_TAKEN: DATE_ADDED.
+        assertEquals("IMG_20231114_221320.jpg", PickerRequests.importName("1000000430.jpg", "1000000430", "jpg", true, utc) { null to added })
+        // No name at all: the date, with the MIME type's extension.
+        assertEquals("IMG_20241021_090500.heic", PickerRequests.importName(null, "77", "heic", true, utc, dates))
+        // A digits-only file name from the files picker stays, unless it is the URI's own id.
+        assertEquals("12345.jpg", PickerRequests.importName("12345.jpg", "primary:DCIM/12345.jpg", "jpg", false, utc, dates))
+        assertEquals("IMG_20241021_090500.jpg", PickerRequests.importName("1000000431.jpg", "1000000431", "jpg", false, utc, dates))
+        // No dates either: the old fallbacks (the reported name, else the URI segment).
+        assertEquals("1000000432.jpg", PickerRequests.importName("1000000432.jpg", "1000000432", "jpg", true, utc) { null to null })
+        assertEquals("1000000433.png", PickerRequests.importName(null, "1000000433", "png", true, utc) { null to 0L })
+        // The capture time is local time in the given zone.
+        assertEquals("IMG_20241021_143500.jpg", PickerRequests.importName("1.jpg", "1", "jpg", true, java.util.TimeZone.getTimeZone("GMT+05:30"), dates))
+        assertTrue(PickerRequests.isMediaIdName("1000000428.mp4", null, true))
+        assertFalse(PickerRequests.isMediaIdName("IMG_0001.jpg", "1000000428", true))
+        assertFalse(PickerRequests.isMediaIdName("12.jpg", "msf:13", false))
+        assertTrue(PickerRequests.isMediaIdName("13.jpg", "msf:13", false))
+    }
+
+    @Test
+    fun clashesInsideOnePickAreNumberedAsOnApple() {
+        assertEquals("Trip (2).jpg", PickerRequests.numbered("Trip.jpg", 2))
+        assertEquals("notes (3)", PickerRequests.numbered("notes", 3))
+        assertEquals(".hidden (2)", PickerRequests.numbered(".hidden", 2))
+        assertEquals(
+            listOf("IMG_20241021_090500.jpg", "IMG_20241021_090500 (2).jpg", "IMG_20241021_090500.mp4", "IMG_20241021_090500 (3).jpg", "a.pdf", "A (2).PDF"),
+            PickerRequests.uniqueNames(
+                listOf("IMG_20241021_090500.jpg", "IMG_20241021_090500.jpg", "IMG_20241021_090500.mp4", "IMG_20241021_090500.jpg", "a.pdf", "A.PDF"),
+            ),
+        )
+        // A generated number that is itself taken moves on.
+        assertEquals(listOf("x.jpg", "x (2).jpg", "x (3).jpg"), PickerRequests.uniqueNames(listOf("x.jpg", "x (2).jpg", "x.jpg")))
+    }
+
+    @Test
     fun registry() {
         val r = CopyRegistry()
         assertTrue(r.start("a"))

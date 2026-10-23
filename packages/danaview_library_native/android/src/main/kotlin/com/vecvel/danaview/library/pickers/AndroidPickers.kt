@@ -16,6 +16,9 @@
 // * copy: the source is opened with openFileDescriptor(uri, "r") (openAssetFileDescriptor "r" for
 //   providers that only serve asset descriptors), or a read-only FileInputStream for a file path;
 //   it is never opened for writing. The destination is the one part file named by the request.
+// * Names (OBS-S2A-1): the provider's DISPLAY_NAME, unless it is the Photo Picker's media id
+//   ("1000000428.mp4"); then IMG_yyyyMMdd_HHmmss.<ext> from DATE_TAKEN, else DATE_ADDED. Clashes
+//   inside one pick become "Name (2).ext", as on Apple.
 //
 // The Activity is reached through [ResultLauncher] so tests can supply their own. Nothing is
 // logged (rule 30).
@@ -157,7 +160,7 @@ class AndroidPickers(context: Context) {
         return PickedItemMsg(
             uri = uri.toString(),
             path = null,
-            displayName = PickerRequests.displayName(name, uri.lastPathSegment, ext),
+            displayName = PickerRequests.importName(name, uri.lastPathSegment, ext, source == PickedSourceMsg.PHOTO_LIBRARY) { captureDates(uri) },
             uti = null,
             mimeType = mime,
             sizeBytes = size,
@@ -166,6 +169,35 @@ class AndroidPickers(context: Context) {
             source = source,
             needsCopy = true,
         )
+    }
+
+    /**
+     * Describes every picked URI (in order) and numbers name clashes inside the pick ("Name (2).ext",
+     * OBS-S2A-1), as Apple's staging does.
+     */
+    fun describeAll(uris: List<Uri>, source: PickedSourceMsg): List<PickedItemMsg> {
+        val items = uris.map { describe(it, source) }
+        val names = PickerRequests.uniqueNames(items.map { it.displayName })
+        return items.mapIndexed { i, item -> if (item.displayName == names[i]) item else item.copy(displayName = names[i]) }
+    }
+
+    /**
+     * (DATE_TAKEN, DATE_ADDED) of a picked item in ms, each null when the provider has none. The
+     * Photo Picker's URIs answer DATE_TAKEN (PickerMediaColumns); MediaStore rows both. Each column
+     * is asked on its own: providers reject projections they don't know.
+     */
+    private fun captureDates(uri: Uri): Pair<Long?, Long?> {
+        fun column(name: String): Long? = try {
+            resolver.query(uri, arrayOf(name), null, null, null)?.use { c ->
+                if (c.moveToFirst() && c.columnCount > 0 && !c.isNull(0)) c.getLong(0) else null
+            }?.takeIf { it > 0 }
+        } catch (e: RuntimeException) {
+            null
+        }
+        val taken = column(MediaStore.Images.ImageColumns.DATE_TAKEN) // "datetaken" (API 16 name of the 29+ column)
+        // DATE_ADDED is in seconds.
+        val added = if (taken == null) column(MediaStore.MediaColumns.DATE_ADDED)?.let { it * 1000 } else null
+        return taken to added
     }
 
     private fun lastModified(uri: Uri): Long? {
