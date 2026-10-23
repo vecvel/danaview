@@ -156,6 +156,24 @@ void main() {
     expect(twice!.imported, hasLength(1), reason: 'a share keeps both copies');
   });
 
+  test('text shares with the same name clash against the library as "Name (2).txt", "Name (3).txt" (0dc39697)', () async {
+    const name = 'Shared text 2026-10-23 1712.txt';
+    write(name, 5, seed: 1);
+    final names = <String>[];
+    for (var i = 1; i <= 3; i++) {
+      if (i == 3) write(name, 9, seed: 2); // different text, same name
+      final r = await importer.handle(IncomingBatch(
+        batchId: 't$i',
+        action: IncomingAction.send,
+        items: [IncomingItem(uri: 'content://test/$name', displayName: name, mimeType: 'text/plain')],
+      ));
+      expect(r!.imported, hasLength(1));
+      names.add(r.imported.single.displayName);
+    }
+    expect(names, [name, 'Shared text 2026-10-23 1712 (2).txt', 'Shared text 2026-10-23 1712 (3).txt']);
+    expect(port.acknowledged, ['t1', 't2', 't3']);
+  });
+
   test('start takes the pending batches and reports each once; warm batches follow', () async {
     write('Notes.txt', 100);
     write('Doc.pdf', 500, seed: 9);

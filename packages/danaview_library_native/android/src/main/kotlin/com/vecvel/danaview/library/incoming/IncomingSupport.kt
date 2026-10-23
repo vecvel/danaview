@@ -273,21 +273,46 @@ object IncomingRouting {
         }
     }
 
+    /** The most UTF-8 bytes of a shared text's name before ".txt" (as CopyNaming's 200 cap; the
+     * library's 255-byte entry limit leaves room for " (999).txt"). */
+    const val TEXT_NAME_MAX_BYTES = 200
+
     /**
-     * The file name of a shared text: the sender's subject (made safe, at most 80 characters),
-     * else "Shared text yyyyMMdd_HHmmss", with ".txt".
+     * The file name of a shared text (0dc39697): the sender's subject made safe for a file name
+     * (characters invalid on Android, Windows or macOS - / \ : * ? " < > | and control characters -
+     * become spaces, whitespace collapsed, leading/trailing dots and spaces trimmed, at most
+     * [TEXT_NAME_MAX_BYTES] UTF-8 bytes cut on a character boundary), else
+     * "Shared text yyyy-MM-dd HHmm" in local time ([zone]); always ending in ".txt". Clashes with the
+     * library's names become "Name (2).txt" when the import commits (uniqueName).
      */
     fun textFileName(subject: String?, nowMs: Long, zone: TimeZone = TimeZone.getDefault()): String {
-        val cleaned = subject
-            ?.replace(Regex("[\\u0000-\\u001f/\\\\:*?\"<>|]"), " ")
-            ?.replace(Regex("\\s+"), " ")
-            ?.trim()
-            ?.trim('.')
-            ?.take(80)
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
-        val base = cleaned ?: ("Shared text " + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).apply { timeZone = zone }.format(Date(nowMs)))
+        val cleaned = subject?.let { safeTextBase(it) }
+        val base = cleaned ?: ("Shared text " + SimpleDateFormat("yyyy-MM-dd HHmm", Locale.US).apply { timeZone = zone }.format(Date(nowMs)))
         return if (base.lowercase(Locale.ROOT).endsWith(".txt")) base else "$base.txt"
+    }
+
+    /** [subject] as a safe base name, or null when nothing usable is left. */
+    internal fun safeTextBase(subject: String): String? {
+        var s = subject
+            .replace(Regex("[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029/\\\\:*?\"<>|]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim(' ', '.')
+        s = cutUtf8(s, TEXT_NAME_MAX_BYTES).trim(' ', '.')
+        return s.takeIf { it.isNotEmpty() }
+    }
+
+    /** The longest prefix of [s] of at most [maxBytes] UTF-8 bytes, never splitting a code point. */
+    internal fun cutUtf8(s: String, maxBytes: Int): String {
+        var bytes = 0
+        var i = 0
+        while (i < s.length) {
+            val cp = s.codePointAt(i)
+            val n = if (cp < 0x80) 1 else if (cp < 0x800) 2 else if (cp < 0x10000) 3 else 4
+            if (bytes + n > maxBytes) break
+            bytes += n
+            i += Character.charCount(cp)
+        }
+        return s.substring(0, i)
     }
 
     /**

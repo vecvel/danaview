@@ -258,6 +258,40 @@ android_destroy_activity() { # <seq> <action>
   return 1
 }
 
+# EXTENDED: S3-Q (Android half). Sends a real ACTION_VIEW / ACTION_SEND to the app with `am start`,
+# as another app would (S3 E2E, integration_test/v12/s3; `am` has no Uri-list extra, so no
+# ACTION_SEND_MULTIPLE). Only the app's own
+# FileProvider URIs (<cacheDir>/danaview-out/, which the app can read without a grant) and a fixed
+# set of components are accepted, so a request file can't make the host start anything else.
+# Args: intent (VIEW|SEND), type, uris ("|"-separated; VIEW and SEND take one), subject, text, component.
+android_send_intent() { # <body>
+  local body="$1" intent type uris subject text component args u list="" parts=()
+  intent="$(json_arg "$body" intent)"; type="$(json_arg "$body" type)"; uris="$(json_arg "$body" uris)"
+  subject="$(json_arg "$body" subject)"; text="$(json_arg "$body" text)"; component="$(json_arg "$body" component)"
+  case "$intent" in VIEW | SEND) ;; *) echo "bad intent (VIEW or SEND)"; return 1 ;; esac
+  [[ "$type" =~ ^[a-z*]+/[a-zA-Z0-9.*+-]+$ ]] || { echo "bad type"; return 1; }
+  case "$component" in "" | .MainActivity | .IncomingDocumentsAlias) ;; *) echo "bad component"; return 1 ;; esac
+  [[ -z "$subject$text" || "$subject$text" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "bad text"; return 1; }
+  IFS='|' read -r -a parts <<< "$uris"
+  for u in ${parts[@]+"${parts[@]}"}; do
+    [[ "$u" =~ ^content://$APP_ID\.danaview\.library\.files/danaview_out/[A-Za-z0-9_./-]+$ && "$u" != *..* ]] || { echo "bad uri"; return 1; }
+    list="${list:+$list,}$u"
+  done
+  args="am start -W -a android.intent.action.$intent -t '$type'"
+  case "$intent" in
+    VIEW) [[ -n "$list" && "$list" != *,* ]] || { echo "VIEW takes one uri"; return 1; }; args="$args -d '$list'" ;;
+    SEND) [[ "$list" != *,* ]] || { echo "SEND takes one uri"; return 1; }
+      [[ -z "$list" ]] || args="$args --eu android.intent.extra.STREAM '$list'" ;;
+  esac
+  [[ -z "$subject" ]] || args="$args --es android.intent.extra.SUBJECT '$subject'"
+  [[ -z "$text" ]] || args="$args --es android.intent.extra.TEXT '$text'"
+  if [[ -n "$component" ]]; then args="$args -n $APP_ID/$component"; else args="$args -p $APP_ID"; fi
+  local out; out="$(adb -s "$DEVICE" shell "$args" 2>&1 | tr -d '\r')"
+  log "sendIntent: $args -> $(echo "$out" | tr '\n' ' ')"
+  if echo "$out" | grep -qiE 'Error|Exception|does not exist|unable to resolve'; then echo "am start: $(echo "$out" | grep -iE 'Error|Exception|exist|resolve' | head -1 | tr -d '"\')"; return 1; fi
+  echo "sent $intent ($type) to ${component:-the package}"
+}
+
 screenshot() { # <name>
   local f; f="$OUT/screens/$(date +%H%M%S)-$1.png"
   if [[ "$PLATFORM" == ios ]]; then xcrun simctl io "$DEVICE" screenshot "$f" >/dev/null 2>&1
@@ -312,6 +346,10 @@ serve_one() {
       elif android_destroy_activity "$seq" "$action"; then died=true; detail="activity finished"
       else ok=false; detail="an ActivityRecord of $APP_ID is still listed"; fi ;;
     relaunch) app_foreground ;;
+    sendIntent)
+      if [[ "$PLATFORM" != android ]]; then ok=false; detail="android only"
+      elif detail="$(android_send_intent "$body")"; then :
+      else ok=false; fi ;;
     *) ok=false; detail="unknown action $action" ;;
   esac
   # Actions that end the app are acked only once confirmed (for the record; the app may be gone);
