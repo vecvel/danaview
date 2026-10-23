@@ -1,4 +1,8 @@
 // OWNER: S2-W
+// EXTENDED: S3-W (slice S3 "Documents: view and share-in": the Documents tab shown, documents and
+// other files opened through HOM-23's viewer router with the native viewers, audio in the player,
+// the S3 overrides of lib/wiring/documents_wiring.dart and the Share Extension inbox host. Still
+// nothing with DANAVIEW_FILES_HOME off.)
 //
 // S2 wiring (BUILD_PLAN v1.2 §1A, slice S2 "Photos & Files Home"; the slice's share of INT-103):
 // the Files & Media Home behind DANAVIEW_FILES_HOME. With the flag off (the default, never flipped
@@ -17,14 +21,14 @@
 //   share hook (HOM-11 over HOM-22's port) and, on Windows and Linux, the save-dialog file-out port;
 // * fills the Home's tab slots: All, Videos, Folders (HOM-18), Photos (HOM-10), the Overview's
 //   Import and search row (HOM-20, HOM-19), Recent photos tray (HOM-09), favourites and recents
-//   (HOM-19) and the selection bar (HOM-12, HOM-22). Documents stays hidden until S3
-//   (`documentsFilterShown`, HOM-18);
-// * shows Settings › Library storage (HOM-17) after Settings › Privacy.
+//   (HOM-19) and the selection bar (HOM-12, HOM-22); from S3 also the Documents tab (HOM-18,
+//   [s3DocumentsShown]);
+// * shows Settings › Library storage (HOM-17) after Settings › Privacy;
+// * (S3) opens documents and other files in HOM-23's viewer router and adds the S3 overrides
+//   (viewers, linked documents, Share Extension inbox; documents_wiring.dart).
 //
-// Not wired in S2 (later slices): Edit photo, Batch edit and Make video montage (INT-105, the
-// editor bridges), the viewer router and document viewers (HOM-23, S3), Open with and the Share
-// Extension (HOM-21, INT-104, S3), Search with AI (S7). Without a viewer a document, audio or other
-// file opens its file menu (Open in another app, Share, Save out, File info).
+// Not wired yet (later slices): Edit photo, Batch edit and Make video montage (INT-105, the
+// editor bridges), Search with AI (S7), the PDF tools (S4).
 //
 // Nothing here logs a name or a path (ARCH v1.2 rule 30).
 
@@ -58,6 +62,7 @@ import 'package:danaview_features/src/library/search/library_search_field.dart';
 import 'package:danaview_features/src/library/sources/desktop_photos_source.dart' show desktopPlatformFor;
 import 'package:danaview_features/src/library/selection/selection_bar.dart';
 import 'package:danaview_features/src/library/tabs/all_tab.dart';
+import 'package:danaview_features/src/library/tabs/documents_tab.dart';
 import 'package:danaview_features/src/library/tabs/folders_tab.dart';
 import 'package:danaview_features/src/library/tabs/photos_tab.dart';
 import 'package:danaview_features/src/library/tabs/videos_tab.dart';
@@ -73,6 +78,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart' show applyWorkaroundToOpenSqlite3OnOldAndroidVersions;
+
+import 'documents_wiring.dart';
 
 /// Whether this build wires the Files & Media Home (`DANAVIEW_FILES_HOME`, default false).
 bool get filesHomeWired => FeatureFlags.filesHomeEnabled;
@@ -309,6 +316,9 @@ Future<FilesHomeRuntime> filesHomeOverrides({
       if (port == null || !port.capabilities.canShare) return PhotoViewerHooks.none;
       return PhotoViewerHooks(share: (context, entry) => sharePhoto(context, port, entry));
     }),
+    // S3: viewers, linked documents, the Share Extension inbox (iOS). Test runs (no lifecycle)
+    // don't create the inbox staging folder.
+    ...documentsOverrides(platform: target, support: dirs.support, excludeStagingFromBackup: observeLifecycle),
   ];
   return FilesHomeRuntime._(store, thumbnails, overrides, observers);
 }
@@ -415,11 +425,15 @@ MediaItem mediaItemOfEntry(FileEntry entry, String path) => switch (entry.kind) 
 
 MediaRef _fileRef(String path) => LibraryRepository.mediaRefForFile(path);
 
-/// Opens a Danaview library [entry] (S2 has no viewer router yet, HOM-23): a photo in the photo
-/// viewer among the library's photos, a video in the player, anything else in its file menu.
-/// Records the open in Recents (HOM-19).
-Future<void> openLibraryEntry(BuildContext context, WidgetRef ref, FileEntry entry, {required VoidCallback onOpenPlayer}) async {
-  final store = ref.read(libraryStoreProvider);
+/// Opens a Danaview library [entry]: a photo in the photo viewer among the library's photos, a
+/// video or audio file in the player, anything else through the viewer router (HOM-23, S3: PDF,
+/// Quick Look, text and CSV, or the file card). Records the open in Recents (HOM-19).
+Future<void> openLibraryEntry(BuildContext context, WidgetRef ref, FileEntry entry, {required VoidCallback onOpenPlayer}) =>
+    openLibraryEntryWith(context, ref.read, entry, onOpenPlayer: onOpenPlayer);
+
+/// [openLibraryEntry] with any provider reader (the incoming-file path has no [WidgetRef]).
+Future<void> openLibraryEntryWith(BuildContext context, ProviderRead read, FileEntry entry, {required VoidCallback onOpenPlayer}) async {
+  final store = read(libraryStoreProvider);
   if (store == null) return;
   final path = store.paths.entryFile(entry.id, entry.displayName);
   switch (entry.kind) {
@@ -429,14 +443,14 @@ Future<void> openLibraryEntry(BuildContext context, WidgetRef ref, FileEntry ent
       final index = photos.indexWhere((p) => p.id == entry.id);
       if (index < 0) return;
       await openPhotoViewer(context, photos, index);
-    case FileKind.video:
-      unawaited(ref.read(recordLibraryOpenProvider)(entry.id).catchError((Object _) {}));
-      await ref.read(queueControllerProvider.notifier).playFrom([_fileRef(path)]);
+    case FileKind.video || FileKind.audio:
+      unawaited(read(recordLibraryOpenProvider)(entry.id).catchError((Object _) {}));
+      await read(queueControllerProvider.notifier).playFrom([_fileRef(path)]);
       onOpenPlayer();
-    default:
-      unawaited(ref.read(recordLibraryOpenProvider)(entry.id).catchError((Object _) {}));
+    case FileKind.document || FileKind.other:
+      // The viewer host records the open (Recents).
       if (!context.mounted) return;
-      await showFileActionsMenu(context, ref, mediaItemOfEntry(entry, path));
+      await openDocumentViewer(context, read, viewerFileOfEntry(entry, path));
   }
 }
 
@@ -521,6 +535,9 @@ class FilesHomeState extends State<FilesHome> {
   void _openEntry(BuildContext context, WidgetRef ref, FileEntry entry) =>
       unawaited(openLibraryEntry(context, ref, entry, onOpenPlayer: widget.onOpenPlayer));
 
+  void _openLinkedDocument(BuildContext context, WidgetRef ref, DocumentItem document) =>
+      unawaited(openDocumentViewer(context, ref.read, viewerFileOfLinked(document)));
+
   void _openPhotos(BuildContext context, List<PhotoGridItem> photos, int index) =>
       unawaited(openPhotoViewer(context, photos, index));
 
@@ -579,8 +596,14 @@ class FilesHomeState extends State<FilesHome> {
   static HomeSlotBuilder _consumer(Widget Function(BuildContext context, WidgetRef ref) build) =>
       (context) => Consumer(builder: (context, ref, _) => build(context, ref));
 
-  /// The S2 slots of the Home (BUILD_PLAN §1A S2; Documents hidden until S3).
+  /// The slots of the Home: S2's, plus the Documents tab of S3 (BUILD_PLAN §1A).
   HomeTabSlots get slots => libraryFilterTabSlots(
+        showDocuments: s3DocumentsShown,
+        documents: _consumer((context, ref) => DocumentsTab(
+              onOpenEntry: (e) => _openEntry(context, ref, e),
+              onOpenLinked: (d) => _openLinkedDocument(context, ref, d),
+              actions: _rowActions(context, ref),
+            )),
         base: HomeTabSlots(
           photos: _consumer((context, ref) => FilesHomePhotosPane(
                 photos: PhotosTab(
@@ -635,14 +658,17 @@ class FilesHomeState extends State<FilesHome> {
 
   @override
   Widget build(BuildContext context) {
-    return DanaviewHomeScreen(
-      onOpenPlayer: widget.onOpenPlayer,
-      onOpenFolder: widget.onOpenFolder,
-      onOpenPlaylist: widget.onOpenPlaylist,
-      onOpenSettings: widget.onOpenSettings,
-      onOpenEditor: widget.onOpenEditor,
-      callbacks: HomeCallbacks(onOpenProjects: widget.onOpenProjects),
-      tabSlots: slots,
+    // The Share Extension inbox runs while the Home is mounted (it stays under every route).
+    return InboxImportHost(
+      child: DanaviewHomeScreen(
+        onOpenPlayer: widget.onOpenPlayer,
+        onOpenFolder: widget.onOpenFolder,
+        onOpenPlaylist: widget.onOpenPlaylist,
+        onOpenSettings: widget.onOpenSettings,
+        onOpenEditor: widget.onOpenEditor,
+        callbacks: HomeCallbacks(onOpenProjects: widget.onOpenProjects),
+        tabSlots: slots,
+      ),
     );
   }
 }
@@ -742,5 +768,6 @@ class FilesHomeToolsRow extends ConsumerWidget {
   }
 }
 
-/// Re-exported for the router and tests: the S2 Documents switch (false until S3).
+/// HOM-18's package default for the Documents tab (false); the app shows it from S3 on through
+/// [s3DocumentsShown].
 const bool s2DocumentsShown = documentsFilterShown;

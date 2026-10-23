@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  OWNER: HOM-21 (placeholder created by INT-104 so the DanaviewShare target builds)
+  OWNER: HOM-21 (the file was a placeholder of INT-104, which created the DanaviewShare target)
 
   Share Extension "Share → Danaview" (FILES_MEDIA_HOME_PLAN §8.2, ARCH v1.2 §5.6, §8). Shown for
   photos, videos, PDFs, Office files and text, matching danaview_library's type table (photo,
