@@ -194,7 +194,6 @@ class EditorTopBar extends StatelessWidget {
         enabled: onTap != null,
         isButton: false,
         borderRadius: DanaviewRadius.smAll,
-        pressedScale: 1,
         // A full 44 px tap target (also keeps the standard corners from reading as a pill).
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: titleMinHeight),

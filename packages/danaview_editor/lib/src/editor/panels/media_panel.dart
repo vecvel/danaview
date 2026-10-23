@@ -840,7 +840,6 @@ class _MediaCard extends StatelessWidget {
         onTap: onTap,
         isButton: false,
         borderRadius: DanaviewRadius.mdAll,
-        pressedScale: 0.98,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

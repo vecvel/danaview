@@ -497,7 +497,6 @@ class _DateOfBirthField extends StatelessWidget {
     final field = DanaviewPressable.builder(
       onTap: onTap,
       semanticLabel: date == null ? 'Date of birth, not set. Choose a date' : 'Date of birth, $text. Change',
-      pressedScale: 1,
       builder: (context, state) {
         return AnimatedContainer(
           duration: DanaviewMotion.fast,
@@ -505,7 +504,8 @@ class _DateOfBirthField extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: DanaviewSpacing.minTapTarget),
           padding: EdgeInsetsDirectional.only(start: 10, end: date == null ? 12 : 2),
           decoration: BoxDecoration(
-            color: state.focused || state.pressed ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevatedHigher,
+            // Owner rule: no press fill; only hardware-keyboard focus lifts the field.
+            color: state.focused ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevatedHigher,
             borderRadius: DanaviewRadius.mdAll,
           ),
           foregroundDecoration: BoxDecoration(

@@ -796,10 +796,7 @@ class _LookTile extends StatelessWidget {
         selected: selected,
         semanticLabel: ColorStrings.lookTile(label, selected: selected),
         borderRadius: _ringRadius,
-        // Owner rule: no press or hover feedback; the ring is the selected state only.
-        pressedScale: 1,
-        pressedOpacity: 1,
-        hoverColor: const Color(0x00000000),
+        // Owner rule: no press or hover feedback (the kit paints none); the ring is the selected state only.
         child: SizedBox(
           width: _tileWidth,
           child: Column(

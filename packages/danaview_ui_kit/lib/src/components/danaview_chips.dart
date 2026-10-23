@@ -32,7 +32,6 @@ class DanaviewChoiceChip extends StatelessWidget {
     return DanaviewPressable.builder(
       onTap: active ? onTap : null,
       selected: selected,
-      pressedScale: 0.97,
       builder: (context, state) {
         final visual = AnimatedContainer(
           duration: DanaviewMotion.fast,
@@ -253,9 +252,9 @@ class _Segment<T> extends StatelessWidget {
       onTap: onTap,
       selected: selected,
       semanticLabel: option.label,
-      pressedScale: 0.97,
       builder: (context, state) {
-        final tint = !selected && (state.hovered || state.pressed || state.focused);
+        // Owner rule: no hover or press tint; only hardware-keyboard focus tints.
+        final tint = !selected && state.focused;
         final inner = AnimatedContainer(
           duration: DanaviewMotion.fast,
           curve: DanaviewMotion.curve,

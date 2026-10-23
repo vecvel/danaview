@@ -136,7 +136,6 @@ class DanaviewButton extends StatelessWidget {
       onTap: onPressed,
       tooltip: tooltip,
       semanticLabel: semanticLabel,
-      pressedScale: 0.97,
       builder: (context, state) {
         Widget visual = AnimatedContainer(
           duration: DanaviewMotion.fast,
