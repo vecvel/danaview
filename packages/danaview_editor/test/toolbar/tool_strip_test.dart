@@ -164,6 +164,11 @@ void main() {
       await tap(tester, 'tool.text');
       expect(bindings.calls, [(EditorActionId.addText, EditorActionSource.toolTile)]);
       expect(rig.state.tool, ToolId.text);
+      // The fake binding opens no panel, so the tile does not read as active yet: a panel tool is
+      // lit only while a panel is open (the pane shows it).
+      expect((await data(tester, 'tool.text')).selected, isFalse);
+      rig.editor.openInspector(const MediaInspector());
+      await tester.pump();
       expect((await data(tester, 'tool.text')).selected, isTrue);
     });
 

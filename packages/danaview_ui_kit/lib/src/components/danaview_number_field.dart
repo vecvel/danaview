@@ -390,26 +390,34 @@ class _DanaviewNumberFieldState extends State<DanaviewNumberField> {
         color: focused ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevatedHigher,
         borderRadius: DanaviewRadius.mdAll,
       ),
-      foregroundDecoration: BoxDecoration(
+      foregroundDecoration: const BoxDecoration(
         borderRadius: DanaviewRadius.mdAll,
-        border: Border.fromBorderSide(focused ? DanaviewBorders.focus : DanaviewBorders.hairline),
+        border: Border.fromBorderSide(DanaviewBorders.hairline),
       ),
-      child: Row(
-        children: [
-          Expanded(child: input),
-          if (unit != null) ...[
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                unit,
-                maxLines: 1,
-                overflow: TextOverflow.fade,
-                softWrap: false,
-                style: style.copyWith(color: DanaviewColors.textSecondary),
-              ),
-            ),
-          ],
-        ],
+      child: LayoutBuilder(
+        builder: (context, box) {
+          // The unit takes its own width, at most a third of the box; an equal-flex Flexible here
+          // used to take half the box and clip the value ("3.( s").
+          final unitMaxWidth = box.maxWidth.isFinite ? box.maxWidth / 3 : double.infinity;
+          return Row(
+            children: [
+              Expanded(child: input),
+              if (unit != null) ...[
+                const SizedBox(width: 4),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: unitMaxWidth),
+                  child: Text(
+                    unit,
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
+                    style: style.copyWith(color: DanaviewColors.textSecondary),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }

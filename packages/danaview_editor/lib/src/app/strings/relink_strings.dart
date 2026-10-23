@@ -328,6 +328,12 @@ abstract final class RelinkStrings {
   /// The banner's discard button.
   static const String bannerDiscard = 'Discard';
 
+  /// Expands the banner's list when it holds more projects than it shows.
+  static String bannerShowAll(int count) => 'Show all ($count)';
+
+  /// Collapses the expanded banner list.
+  static const String bannerShowFewer = 'Show fewer';
+
   /// Spoken label of a row's restore button.
   static String restoreSemantics(String project) => 'Restore unsaved changes to $project';
 

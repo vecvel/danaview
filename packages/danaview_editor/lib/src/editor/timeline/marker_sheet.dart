@@ -680,7 +680,7 @@ class _Swatch extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: style.markerColor(index),
-              border: Border.all(color: selected ? DanaviewColors.textPrimary : const Color(0x33FFFFFF), width: selected ? 2 : 1),
+              border: Border.all(color: selected ? DanaviewColors.textPrimary : DanaviewColors.border, width: selected ? 2 : 1),
             ),
             child: selected ? Icon(Icons.check_rounded, size: 18, color: style.markerForeground(index)) : null,
           ),

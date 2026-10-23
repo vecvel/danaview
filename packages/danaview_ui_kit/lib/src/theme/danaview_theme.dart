@@ -242,13 +242,10 @@ abstract final class DanaviewTheme {
         border: outline,
         enabledBorder: outline,
         disabledBorder: outline.copyWith(borderSide: DanaviewBorders.subtle),
-        focusedBorder: outline.copyWith(borderSide: DanaviewBorders.focus),
-        errorBorder: outline.copyWith(
-          borderSide: const BorderSide(color: Color(0x61EF4444), width: 1),
-        ),
-        focusedErrorBorder: outline.copyWith(
-          borderSide: const BorderSide(color: Color(0x61EF4444), width: 1),
-        ),
+        // Outlines stay a neutral hairline in every state; errors read from errorStyle.
+        focusedBorder: outline,
+        errorBorder: outline,
+        focusedErrorBorder: outline,
       ),
       pageTransitionsTheme: PageTransitionsTheme(
         builders: <TargetPlatform, PageTransitionsBuilder>{
