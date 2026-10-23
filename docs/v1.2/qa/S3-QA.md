@@ -381,3 +381,82 @@ Notes (not defects):
 | `integration_test/v12/s3/tool/make_s3_docs.sh` | Local test documents (fixtures, Python, Pillow) |
 | `test/v12/s3_qa/s3_matrix_test.dart` | Composed overflow / a11y / text-style matrix and HttpOverrides guard (§5, §6) |
 | `docs/v1.2/qa/S3-QA.md` | This section |
+| `test/v12/s3_qa/s3_flag_off_incoming_test.dart` | Flag-off Open with guard on iOS and macOS (FIX-S3Q-6), runs by default since the re-check |
+| `test/v12/s3_qa/s3_documents_scroll_test.dart` | Documents tab with 5,000 generated documents (S3's share of HOM-14 / HOM-32) |
+
+## Re-check (2026-10-23)
+
+S3-Q targeted re-check, Mac half, 15:00–15:25, on `v1.2-wip` after the HOM-21, HOM-23, HOM-24 and
+S3-W fix rounds (tree `2ae2b294`). Not a full re-run: analyze, the tests of the fixed files, the
+architecture test, HOM-15 (a fixer touched `danaview_player_actions.dart`, outside the document
+paths), the S3 E2E once on the iOS 26.5 iPhone 16 (shut down afterwards) and the screenshots. QA
+changed only S3-Q's files.
+
+### Results
+
+| Check | Result |
+|---|---|
+| `flutter analyze --fatal-infos lib integration_test`; `danaview_documents`, `danaview_pdf`, `danaview_library_native`, `danaview_features`; `dart analyze --fatal-infos` `danaview_library` | clean |
+| `danaview_documents`: `test/pdf/viewer`, `test/text`, `test/card` | 106 pass |
+| PDF XCTests (`danaview_pdf/darwin/Tests/Viewer/run_xctests.sh macos`, Swift changed: main-thread replies) | core 11, glue 8: **19 pass** |
+| `test/architecture` | 93 pass, 2 skip |
+| `test/v12/wiring/s3_wiring_test.dart` / `s2_wiring_test.dart` / `filters/filters_test.dart` / `incoming/player_incoming_actions_test.dart` | 24 / 28 / 24 / 11 pass |
+| `test/v12/s3_qa` (matrix incl. the unskipped text-style check, flag-off guard, 5k scroll), flags off | **22 pass, 0 skip** (the text-style check: 0 fallback texts) |
+| `test/v12/wiring/s3_wiring_test.dart test/v12/s3_qa` with `DANAVIEW_FILES_HOME=true` | 35 pass, 5 skip (flag-off tests) |
+| `test/v12/s2_qa/s2_matrix_test.dart` | 10 fail at `tapKey('file-info')`: FIX-S3Q-3 still open (low, test only) |
+| HOM-15 (`scripts/ci/v12/home_preservation.sh -j 1`) | **406 pass** |
+| S3 E2E (`integration_test/v12/s3/s3_documents_test.dart`, as §2) | every step passes, incl. the new FIX-S3Q-1 steps; **the run fails at the end on FIX-S3Q-7** (below) |
+
+FIX-S3Q-1 on the simulator: the Documents row menu is Open, Rename…, Move to…, **More actions…**,
+Delete (`s3-04`); More actions… opens HOM-22's menu with Share, Open in another app, Save out
+(Save to Files), Copy to, Move to, Rename, Favourite, File info, Delete (`s3-04b`); File info
+opens (`s3-04c`); the PDF viewer's top-bar "File actions" offers Share, Copy to, File info, Open in
+another app, Favourite, Save to Files, and its Share hands over the library file, byte-equal
+(`s3-07b`). **Fixed.**
+
+FIX-S3Q-2 on the simulator: the PDF chrome, text viewer, CSV grid, file card and the menus draw in
+Figtree with the kit weights; no yellow underline anywhere (`s3-05`, `s3-09`, `s3-10`, `s3-11`).
+**Fixed.**
+
+FIX-S3Q-6: S3-W's flag-off guard (iOS and macOS) now has a default-on check in
+`s3_flag_off_incoming_test.dart` (10 pass: per OS, videos play, PDF / JPEG / docx / txt show
+"Danaview can't open this kind of file." and never reach the player). **Fixed for the Dart path**;
+Share Extension batches with the flag off stay as S3-W noted (owner).
+
+5,000-document scroll (`s3_documents_scroll_test.dart`, 375 × 812): rows built stay under 60 at the
+top, after a jump to the end and through a fling; the PDF sub-filter narrows to a fifth; no
+exceptions. Jumping straight to the end takes ~5 s in test mode, because `SliverList.builder`
+without an item extent lays out every row on the way (N-S3-5).
+
+### New defects
+
+| Id | Owner | Defect | Evidence | Fix direction |
+|---|---|---|---|---|
+| **FIX-S3Q-7** | S3-W (`lib/wiring/documents_wiring.dart`) with HOM-21 (`SystemOpenInCopyRoots`, `danaview_player_actions.dart`) | Regression since the first run: an Open with copy in `Documents/Inbox` is no longer removed after the import. The HOM-21 fix round made `SystemOpenInCopyRoots.current` default to `$HOME/Documents` on iOS, but `HOME` is empty in the app's Dart environment and nothing calls `SystemOpenInCopyRoots.configure`, so every path counts as the user's and iOS's copies pile up in the container | E2E: "Open with: iOS's Documents/Inbox copy not removed after the import (isSystemOpenInCopy false, HOME set false)" | At boot (flag on, iOS) call `SystemOpenInCopyRoots.configure(SystemOpenInCopyRoots.ios(documentsDirectory: getApplicationDocumentsDirectory(), temporaryDirectory: getTemporaryDirectory(), bundleId: …))`; also in `E2eApp._boot`; S3-Q re-runs the E2E |
+| **FIX-S3Q-8** | HOM-23 (`danaview_documents/lib/src/text/csv_viewer.dart` / `csv_table.dart`) | The CSV grid leaves a gap the height of the status bar between the header row and row 1 (owner rule: no big gaps); the rows' list seems to pick up `MediaQuery.padding.top` | `s3-10-csv-viewer` (≈ 60 pt empty band under the header) | Give the row list an explicit `EdgeInsets.zero` padding (or `MediaQuery.removePadding(removeTop: true)`); add a test that row 1 sits right under the header |
+
+Notes: N-S3-5 (low, HOM-18): for scrollbar or scroll-to-top jumps over thousands of rows, give the
+Documents (and All / Folders) row lists a `SliverPrototypeExtentList` or `itemExtentBuilder`.
+N-S3-6 (low, S3-W): `lib/main.dart`'s comment "Nothing with the flag off" above
+`installIncomingDocumentOpen` is stale since the flag-off guard.
+
+### Document test-pass checklist (manual, per platform)
+
+1. Import from Files: PDF, docx, xlsx, pptx, txt, csv, zip; each lands in Imported, kind document / other.
+2. Documents tab: sub-filters narrow; rows show size · date (· pages for PDF); no overflow at 280 px × 1.35.
+3. Row menu: Open, Rename…, Move to…, More actions…, Delete; More actions… → Share, Save out, Copy to, Favourite, File info, Open in another app all work.
+4. PDF: first page, search, page thumbnails, annotations visible; top bar File actions → Share, Save out, File info.
+5. Text / CSV / Office: Quick Look (Apple) or the in-app viewer; UTF-8 and non-Latin text; CSV quoted commas and newlines; no gap under the header.
+6. Unknown file: file card with Share and Open in another app.
+7. All viewers: Figtree, no yellow underline, no hover/press effects, Back returns to the list.
+8. Open with Danaview from Files: imported once, viewer shown, the system Inbox copy removed; the same file again opens the existing entry.
+9. Share Extension (iOS) / `ACTION_SEND` (Android): items land in the chosen folder, toast, interrupted batch ignored.
+10. Flag off: documents and photos opened with Danaview show the neutral toast; videos play as in 1.1.
+11. Relaunch: entries, favourites and Recents persist; originals unchanged; no network.
+
+### Verdict (Mac half, re-check)
+
+**Red.** Both original blockers are fixed (FIX-S3Q-1, FIX-S3Q-2), FIX-S3Q-6 is fixed for the Dart
+path, and every suite above passes, but the S3 E2E fails on the new regression FIX-S3Q-7 and the
+screenshots show FIX-S3Q-8. Still open, low: FIX-S3Q-3, FIX-S3Q-4, FIX-S3Q-5, D-S3W-1, D-S3W-2.
+Android half: **pending: Windows**.
