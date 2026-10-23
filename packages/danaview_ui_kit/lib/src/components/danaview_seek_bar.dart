@@ -57,7 +57,9 @@ class _DanaviewSeekBarState extends State<DanaviewSeekBar> {
         ? (_isDragging ? _dragValue : (widget.position.inMilliseconds / durMs).clamp(0.0, 1.0))
         : 0.0;
     final bufferFraction = durMs > 0 ? (widget.buffer.inMilliseconds / durMs).clamp(0.0, 1.0) : 0.0;
-    final active = _isHovering || _isDragging;
+    // The hover time preview is information and stays; the track and thumb grow only while
+    // dragging (owner rule: no hover effect on controls).
+    final showPreview = _isHovering || _isDragging;
     final height = context.isTouchPlatform ? DanaviewSpacing.minTapTarget : 28.0;
 
     return LayoutBuilder(
@@ -104,12 +106,12 @@ class _DanaviewSeekBarState extends State<DanaviewSeekBar> {
                         chapters: widget.chapters,
                         duration: widget.duration,
                         abLoop: widget.abLoop,
-                        isActive: active,
+                        isActive: _isDragging,
                         thumbRadius: _thumbRadius,
                       ),
                     ),
                   ),
-                  if (active && durMs > 0 && _width > 0)
+                  if (showPreview && durMs > 0 && _width > 0)
                     _TimePreview(
                       label: _formatDuration(_durationAt(previewFraction)),
                       centerX: _thumbRadius + previewFraction * math.max(0, _width - _thumbRadius * 2),

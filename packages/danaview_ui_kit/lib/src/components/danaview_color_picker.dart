@@ -391,7 +391,6 @@ class _Swatch extends StatelessWidget {
       onTap: onTap,
       semanticLabel: 'Color #${DanaviewColorPicker.formatHex(color)}',
       selected: selected,
-      pressedScale: 0.92,
       builder: (context, state) {
         return SizedBox.square(
           dimension: cell,

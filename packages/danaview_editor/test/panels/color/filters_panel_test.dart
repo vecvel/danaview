@@ -511,10 +511,9 @@ void main() {
     testWidgets('tiles have no press or hover effect; selection stays in semantics', (tester) async {
       await pumpFilters(tester);
       final p = tester.widget<DanaviewPressable>(find.descendant(of: tile('look.none'), matching: find.byType(DanaviewPressable)));
-      expect(p.pressedScale, 1);
-      expect(p.pressedOpacity, 1);
-      expect(p.hoverColor.a, 0);
       expect(p.selected, isTrue);
+      await expectNoHoverOrPressEffect(tester, tile('look.warm'), what: 'look tile');
+      await expectNoHoverOrPressEffect(tester, tile('look.none'), what: 'selected look tile');
     });
 
     testWidgets('the strip spans the panel and clips to it, so scrolled tiles never paint over the rail or the preview', (tester) async {

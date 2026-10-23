@@ -67,7 +67,6 @@ class _DecrementIntent extends Intent {
 class _DanaviewSliderState extends State<DanaviewSlider> {
   final GlobalKey _paintKey = GlobalKey();
   bool _dragging = false;
-  bool _hovered = false;
   bool _focused = false;
 
   bool get _enabled => widget.onChanged != null && widget.max > widget.min;
@@ -181,7 +180,8 @@ class _DanaviewSliderState extends State<DanaviewSlider> {
       thumbColor: thumb,
       trackHeight: widget.trackHeight,
       thumbRadius: widget.thumbRadius,
-      emphasis: _dragging ? 2 : (_hovered ? 1 : 0),
+      // Owner rule: hover adds no emphasis; only an active drag (content manipulation) does.
+      emphasis: _dragging ? 2 : 0,
       focused: _focused,
     );
 
@@ -223,9 +223,6 @@ class _DanaviewSliderState extends State<DanaviewSlider> {
           _nudge(-step);
           return null;
         }),
-      },
-      onShowHoverHighlight: (value) {
-        if (_hovered != value) setState(() => _hovered = value);
       },
       onShowFocusHighlight: (value) {
         if (_focused != value) setState(() => _focused = value);

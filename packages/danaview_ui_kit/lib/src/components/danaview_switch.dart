@@ -33,7 +33,6 @@ class DanaviewSwitch extends StatelessWidget {
       isButton: false,
       toggled: value,
       semanticLabel: semanticLabel,
-      pressedScale: 1,
       builder: (context, state) {
         const radius = BorderRadius.all(Radius.circular(_trackHeight / 2));
         final track = AnimatedContainer(
@@ -63,7 +62,8 @@ class DanaviewSwitch extends StatelessWidget {
             child: AnimatedContainer(
               duration: DanaviewMotion.fast,
               curve: DanaviewMotion.curve,
-              width: state.pressed ? _thumb + 5 : _thumb,
+              // Owner rule: no press effect, so the thumb does not stretch while held.
+              width: _thumb,
               height: _thumb,
               decoration: const BoxDecoration(
                 color: Colors.white,

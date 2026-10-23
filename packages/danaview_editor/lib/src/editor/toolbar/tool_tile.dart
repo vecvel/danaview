@@ -142,13 +142,8 @@ class ToolTile extends StatelessWidget {
       // the theme's wait, also when the label is visible (QA-01 step 4: the rail showed none).
       tooltip: tooltip,
       builder: (context, state) {
-        final fill = data.selected
-            ? DanaviewColors.primaryTonal
-            : state.pressed
-                ? DanaviewColors.pressed
-                : state.hovered
-                    ? DanaviewColors.hover
-                    : const Color(0x00000000);
+        // Owner rule: no hover or press fill; only the active tool carries a fill.
+        final fill = data.selected ? DanaviewColors.primaryTonal : const Color(0x00000000);
         return Container(
           width: w,
           height: height,
