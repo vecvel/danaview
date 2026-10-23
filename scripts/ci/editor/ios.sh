@@ -30,6 +30,7 @@
 #   scripts/ci/editor/ios.sh --no-device-build  # skip 4-5 (simulator tests only)
 #   scripts/ci/editor/ios.sh --no-sim-tests     # skip 6-8 (device build + D-41 check only)
 #   scripts/ci/editor/ios.sh --smoke-only       # step 7 runs engine_smoke_test.dart only
+#   scripts/ci/editor/ios.sh --runner-tests-only  # stop after step 6 (RunnerTests)
 #
 # Environment:
 #   DANAVIEW_IOS_SIMULATOR          simulator name or UDID (default: the first available iPhone on
@@ -42,6 +43,9 @@
 #                                the folder with the tiny speech models for scenario 8, and
 #                                DANAVIEW_E2E_TARGET picks the files (e2e_host.sh run target,
 #                                default all)
+#   DANAVIEW_IOS_ONLY_TESTING    xcodebuild -only-testing filter of step 6 (default RunnerTests;
+#                                e.g. RunnerTests/ChannelRoundTripTests). Failure messages of step
+#                                6 are printed from its result bundle (example/build/RunnerTests.xcresult)
 #   DANAVIEW_IOS_DRY_RUN=1       print the step-7/8 commands (and check the inputs) without a
 #                                toolchain, a build or a simulator
 set -euo pipefail
@@ -62,12 +66,14 @@ DRY_RUN="${DANAVIEW_IOS_DRY_RUN:-}"
 
 DEVICE_BUILD=true
 SIM_TESTS=true
+RUNNER_TESTS_ONLY=false
 SUITES="${DANAVIEW_IOS_SUITES:-$ALL_SUITES}"
 for arg in "$@"; do
   case "$arg" in
     --no-device-build) DEVICE_BUILD=false ;;
     --no-sim-tests) SIM_TESTS=false ;;
     --smoke-only) SUITES=smoke ;;
+    --runner-tests-only) RUNNER_TESTS_ONLY=true ;;
     -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *) echo "unknown argument $arg" >&2; exit 2 ;;
   esac
@@ -259,6 +265,22 @@ boot_simulator() {
   [ "$booted" = true ] || die "simulator $UDID did not boot within 180 s"
 }
 
+# Prints every test failure (test, message, source location) of the result bundle $1.
+print_test_failures() {
+  [ -d "$1" ] || { echo "no result bundle at $1"; return 0; }
+  xcrun xcresulttool get test-results summary --path "$1" --format json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    print("xcresulttool printed no summary"); sys.exit(0)
+fails = data.get("testFailures", [])
+print("%d test failure(s):" % len(fails))
+for f in fails:
+    print("FAIL %s: %s" % (f.get("testIdentifierString") or f.get("testName"), f.get("failureText", "").strip()))
+' || true
+}
+
 if [ "$SIM_TESTS" = true ]; then
   group "pick a simulator"
   SIM="${DANAVIEW_IOS_SIMULATOR:-}"
@@ -291,16 +313,27 @@ if best:
 
   group "RunnerTests (xcodebuild test)"
   (cd "$EXAMPLE" && flutter build ios --simulator --debug --config-only)
-  (cd "$EXAMPLE/ios" && xcodebuild test \
+  # -quiet hides the assertion messages, so they are printed from the result bundle on failure.
+  BUNDLE="$EXAMPLE/build/RunnerTests.xcresult"
+  rm -rf "$BUNDLE"
+  if ! (cd "$EXAMPLE/ios" && xcodebuild test \
     -workspace Runner.xcworkspace \
     -scheme Runner \
     -configuration Debug \
     -destination "id=$UDID" \
-    -only-testing:RunnerTests \
+    -only-testing:"${DANAVIEW_IOS_ONLY_TESTING:-RunnerTests}" \
     -parallel-testing-enabled NO \
+    -resultBundlePath "$BUNDLE" \
     CODE_SIGNING_ALLOWED=NO \
-    -quiet)
+    -quiet); then
+    print_test_failures "$BUNDLE"
+    die "RunnerTests failed (failure messages above; result bundle ${BUNDLE#"$ROOT"/})"
+  fi
   endgroup
+  if [ "$RUNNER_TESTS_ONLY" = true ]; then
+    echo "ios: OK (RunnerTests only)"
+    exit 0
+  fi
 
   # --- 7. integration_test suites (one flutter test per file; a failure does not stop the rest) ---
   rm -rf "$SUITE_OUT"

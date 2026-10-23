@@ -70,6 +70,14 @@ on:
         description: 'Also run the nightly job'
         type: boolean
         default: false
+      ios_runner_tests_only:
+        description: 'ios job: stop after RunnerTests (skip the device build and integration suites)'
+        type: boolean
+        default: false
+      ios_only_testing:
+        description: 'ios job: xcodebuild -only-testing filter for RunnerTests (e.g. RunnerTests/ChannelRoundTripTests)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -503,7 +511,14 @@ jobs:
         if: steps.script.outputs.present == 'true'
         env:
           LANG: en_US.UTF-8
-        run: bash scripts/ci/editor/ios.sh
+          DANAVIEW_IOS_ONLY_TESTING: ${{ inputs.ios_only_testing }}
+          RUNNER_TESTS_ONLY: ${{ inputs.ios_runner_tests_only && 'true' || 'false' }}
+        run: |
+          if [ "$RUNNER_TESTS_ONLY" = true ]; then
+            bash scripts/ci/editor/ios.sh --no-device-build --runner-tests-only
+          else
+            bash scripts/ci/editor/ios.sh
+          fi
 
   nightly:
     name: nightly
