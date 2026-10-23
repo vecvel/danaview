@@ -1,0 +1,5 @@
+# actionlint config for the workflow-lint job. actionlint 1.7.7 predates the GitHub-hosted
+# macos-26 image label, so it is declared here to keep the runner-label check passing.
+self-hosted-runner:
+  labels:
+    - macos-26

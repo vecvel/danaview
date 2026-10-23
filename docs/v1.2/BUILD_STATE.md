@@ -21,6 +21,10 @@ Last update: 2026-10-22 (S2 Mac half complete).
 | VED-33 | Waits for VED-33A | |
 
 ## Open follow-ups
+- **CI on hosted macos-26 (2026-10-23):** the self-hosted Mac runner was never registered, so iOS/macOS jobs queued forever; they now run on GitHub's free hosted macOS (golden jobs too: goldens are rendered on macOS). Still red, tickets:
+  - FIX-CI-1 (iOS RunnerTests): `ChannelRoundTripTests.testCapabilitiesRoundTripWithThePlaceholderEngine` and `testPlaceholderServicesFailWithNotSupportedOnDevice` fail on the hosted runner (the cause is hidden by `-quiet`; run without -quiet first).
+  - FIX-CI-2 (whisper VAD on macOS arm64): `Detect.vad_locates_the_first_speech` and `Real.silero_vad_transcription_and_detection` run 300-500x slower than on Linux (204 s vs 0.6 s; 639 s vs 17 s), CPU path, Metal off. Check the macOS test build's optimisation flags and the NEON/Accelerate paths; it may affect iOS Auto captions.
+  - The free plan allows 5 concurrent macOS jobs; a full run uses 6.
 - FIX-S1R-1 (INT-05 / release integration, AIS-41): `ios/fastlane/Fastfile` `flutter_ipa` and `android/fastlane/Fastfile` `flutter_aab` pass no release dart-defines (`DANAVIEW_EDITOR`, `DANAVIEW_AUTO_CAPTIONS`, the slice's 1.2.0 flags) and default the build number to 1 / a timestamp / next TestFlight instead of the pubspec; blocks signing through any lane (manual commands in `qa/S1-QA.md` §Signing). S1 candidate commit: `f865874` signed at `1.0.0+1`.
 - `legalEffectiveDate` to the S1 candidate's date, owner review of the privacy wording (Q-S1) and the store answers for M-Lab: at S1-R.
 - No CI path filter runs `packages/danaview_data` tests (low; review finding).
