@@ -101,7 +101,7 @@ VadModel::~VadModel() {
   if (ctx_ != nullptr) whisper_vad_free(ctx_);
 }
 
-int32_t VadModel::load(const std::string &path, int32_t n_threads) {
+int32_t VadModel::load(const std::string &path) {
   if (ctx_ != nullptr) {
     whisper_vad_free(ctx_);
     ctx_ = nullptr;
@@ -109,7 +109,13 @@ int32_t VadModel::load(const std::string &path, int32_t n_threads) {
   // The magic check keeps garbage away from whisper's loader (GGML_ASSERT would abort the process).
   if (path.empty() || !vad_detail::has_ggml_magic(path)) return DV_ERR_VAD_MODEL;
   whisper_vad_context_params cparams = whisper_vad_default_context_params();
-  cparams.n_threads = std::max(1, n_threads);
+  // One thread, always. Silero computes one tiny ggml graph per 512-sample window (~31 per second of
+  // audio). With n_threads > 1 and no OpenMP, every window spawns and joins a disposable ggml threadpool
+  // and syncs ~a dozen spin barriers: pure overhead for a model this small, and catastrophic when the
+  // threads outnumber the free cores (a spinning waiter holds the core the laggard needs; on the 3-vCPU
+  // macOS CI VM a 4-thread VAD ran ~500x slower than on one thread). Single-threaded it is also faster on
+  // device (no per-window thread churn), and it leaves the cores to whisper.
+  cparams.n_threads = 1;
   cparams.use_gpu = false;
   {
     std::lock_guard<std::mutex> lock(whisper_init_mutex());
