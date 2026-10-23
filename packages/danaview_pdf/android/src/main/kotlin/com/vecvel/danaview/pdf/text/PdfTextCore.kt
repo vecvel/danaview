@@ -7,7 +7,8 @@
 //   HOM-24's PdfTextExtractor.
 // - [PdfSearch.search]: in-document search over an open document's text source, page by page so a
 //   newer search or cancelSearch stops an older one between pages. Page texts are cached per
-//   document for the next query (bounded); hit bounds are read only for pages with hits.
+//   document for the next query (bounded, PageTextCache) and filled ahead by the pre-warm below API
+//   35 (PdfTextPrewarm.kt); hit bounds are read only for pages with hits.
 // - [TextSources]: the platform text layer from API 35, PdfBox before (PageTextSource.kt).
 // Nothing here logs document text or queries (rule 30).
 
@@ -172,25 +173,23 @@ object PdfSearch {
         return doc.textLock.withLock {
             val reader = TextSources.forDocument(doc)
             val n = reader.pageCount
-            val cache = doc.textCache ?: arrayOfNulls<String>(n).also { doc.textCache = it }
+            // Pages the pre-warm (PdfTextPrewarm.kt) or an earlier search cached are not read again.
+            val cache = cacheOf(doc, n)
             val matches = ArrayList<TextMatch>()
             var truncated = false
             var page = 0
             while (page < n && !truncated) {
                 if (token.isCancelled) throw PdfFailure.cancelled()
-                val cached = cache.getOrNull(page)
+                val cached = cache.get(page)
                 if (cached != null) {
                     truncated = collect(q, page, cached, maxHits, matches)
                     page++
                     continue
                 }
-                // Read a window of uncached pages, caching their text.
-                val until = minOf(n, page + 8)
+                // Read a window of uncached pages (up to the next cached one), caching their text.
+                val until = cache.nextCached(page, minOf(n, page + 8))
                 reader.read(page, until, boxes = false, isCancelled = { token.isCancelled }) { p ->
-                    if (doc.textCacheChars + p.text.length <= CACHE_CHARS && p.pageIndex < cache.size) {
-                        cache[p.pageIndex] = p.text
-                        doc.textCacheChars += p.text.length
-                    }
+                    cache.put(p.pageIndex, p.text)
                     truncated = collect(q, p.pageIndex, p.text, maxHits, matches)
                     !truncated
                 }
@@ -209,6 +208,10 @@ object PdfSearch {
         }
     }
 
+    /** [doc]'s page-text cache for [pageCount] pages (call under its textLock). */
+    internal fun cacheOf(doc: OpenPdf, pageCount: Int): PageTextCache =
+        doc.textCache?.takeIf { it.pageCount == pageCount } ?: PageTextCache(pageCount, CACHE_CHARS).also { doc.textCache = it }
+
     /** Adds [text]'s matches up to [maxHits]; true when more exist (truncated). */
     private fun collect(q: TextQuery, pageIndex: Int, text: String, maxHits: Int, into: MutableList<TextMatch>): Boolean {
         val room = maxHits - into.size
@@ -219,5 +222,52 @@ object PdfSearch {
         }
         into += found
         return false
+    }
+}
+
+/**
+ * Page texts of one document by index, up to [budget] UTF-16 units in total (beyond it pages are
+ * read per search). Not thread-safe: the owner's textLock guards it.
+ */
+class PageTextCache(val pageCount: Int, private val budget: Long) {
+    private val pages = arrayOfNulls<String>(maxOf(0, pageCount))
+
+    /** UTF-16 units cached. */
+    var chars = 0L
+        private set
+
+    var cachedPages = 0
+        private set
+
+    /** True once a page didn't fit the budget. */
+    var isFull = false
+        private set
+
+    fun get(index: Int): String? = pages.getOrNull(index)
+
+    /** Caches [text] as page [index]; false when it is out of range or doesn't fit. */
+    fun put(index: Int, text: String): Boolean {
+        if (index !in pages.indices) return false
+        if (pages[index] != null) return true
+        if (chars + text.length > budget) {
+            isFull = true
+            return false
+        }
+        pages[index] = text
+        chars += text.length
+        cachedPages++
+        return true
+    }
+
+    /** The first uncached page at or after [from], or -1. */
+    fun firstMissing(from: Int): Int {
+        for (i in maxOf(0, from) until pages.size) if (pages[i] == null) return i
+        return -1
+    }
+
+    /** The first cached page in `[from, until)`, or [until]. */
+    fun nextCached(from: Int, until: Int): Int {
+        for (i in maxOf(0, from) until minOf(until, pages.size)) if (pages[i] != null) return i
+        return until
     }
 }

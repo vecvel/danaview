@@ -16,6 +16,7 @@ package com.vecvel.danaview.pdf.viewer
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.vecvel.danaview.pdf.glue.PdfErrorCode
 import com.vecvel.danaview.pdf.glue.PdfFailure
+import com.vecvel.danaview.pdf.text.PageTextCache
 import com.vecvel.danaview.pdf.text.PdfBoxSupport
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -44,8 +45,11 @@ class OpenPdf internal constructor(val handle: Long, val file: File) {
     private val refs = AtomicInteger(1)
     private val stateLock = Any()
 
-    /** Guards every use of [text] (PdfBox documents are not thread-safe). */
-    val textLock = ReentrantLock()
+    /**
+     * Guards every use of [text] (PdfBox documents are not thread-safe) and [textCache]. Fair, so a
+     * search waiting behind the text pre-warm gets it after the page being read.
+     */
+    val textLock = ReentrantLock(true)
 
     @Volatile var platform: PlatformPdf? = null
         private set
@@ -56,9 +60,11 @@ class OpenPdf internal constructor(val handle: Long, val file: File) {
     @Volatile var summary: PdfSummary = PdfSummary(handle, 0, false, true, false, false, emptyList(), null)
         private set
 
-    /** Page texts cached by search (index → text), guarded by [textLock]. */
-    internal var textCache: Array<String?>? = null
-    internal var textCacheChars = 0L
+    /** Page texts cached by search and the pre-warm, guarded by [textLock]. */
+    internal var textCache: PageTextCache? = null
+
+    /** Pages whose text is cached (tests). */
+    val cachedTextPages: Int get() = textLock.withLock { textCache?.cachedPages ?: 0 }
 
     @Volatile var closed = false
         private set

@@ -6,12 +6,14 @@
 // display modes other than continuous are accepted and laid out as continuous (the Dart texture
 // layout is one column). Search runs on the text thread over the document's text source (platform
 // text from API 35, PdfBox before; a newer search or cancelSearch cancels the older one between pages); showSearchHit highlights the hit in
-// the texture (Dart scrolls to its page). Selection is not offered on Android: selectedText is
+// the texture (Dart scrolls to its page). Below API 35 a document's first complete frame starts the
+// background pre-warm of its page text (text/PdfTextPrewarm.kt), so a first search finds it ready. Selection is not offered on Android: selectedText is
 // null, copySelection false. Page thumbnails render on the documents pool. Unknown view ids answer
 // notFound. Nothing is logged (rule 30).
 
 package com.vecvel.danaview.pdf.viewer
 
+import android.os.Build
 import com.vecvel.danaview.pdf.glue.PdfErrorCode
 import com.vecvel.danaview.pdf.glue.PdfErrors
 import com.vecvel.danaview.pdf.glue.PdfFailure
@@ -28,8 +30,10 @@ import com.vecvel.danaview.pdf.pigeon.PdfThumbnailRequestMsg
 import com.vecvel.danaview.pdf.pigeon.PdfViewHostApi
 import com.vecvel.danaview.pdf.pigeon.PdfViewStateMsg
 import com.vecvel.danaview.pdf.pigeon.PdfViewportMsg
+import com.vecvel.danaview.pdf.text.OpenPdfPrewarmTarget
 import com.vecvel.danaview.pdf.text.PdfCancelToken
 import com.vecvel.danaview.pdf.text.PdfSearch
+import com.vecvel.danaview.pdf.text.TextPrewarmPolicy
 import io.flutter.view.TextureRegistry
 import java.util.concurrent.atomic.AtomicLong
 
@@ -168,6 +172,12 @@ class PdfViewHostApiImpl(
             val initial = Viewport(w, h, 0.0, layout.topOf(first).coerceIn(0.0, maxY), scale)
             val producer = textures.createSurfaceProducer(TextureRegistry.SurfaceLifecycle.resetInBackground)
             val view = PdfTextureView(nextViewId.getAndIncrement(), doc, producer, threads.render, initial)
+            if (TextPrewarmPolicy.shouldPrewarm(Build.VERSION.SDK_INT, layout.pageCount, doc.text != null)) {
+                // Once the first page is on screen; the prewarmer starts one job per document.
+                view.onFirstCompleteFrame = {
+                    if (!doc.closed) threads.prewarm.schedule(doc.handle, OpenPdfPrewarmTarget(doc))
+                }
+            }
             try {
                 view.start()
             } catch (e: Throwable) {
@@ -198,6 +208,7 @@ class PdfViewHostApiImpl(
 
     /** Disposes every view (plugin detached). */
     fun disposeAll() {
+        threads.prewarm.cancelAll()
         searches.values.forEach { it.cancel() }
         searches.clear()
         views.values.toList().forEach { it.dispose() }
