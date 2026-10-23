@@ -350,15 +350,24 @@ bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required 
       unawaited(openEntry(c, scope.read, entry));
     },
     onFailed: () {
-      // The navigator's own context sits above its Overlay, where a toast finds no overlay and is
-      // dropped: show it from a context inside the overlay.
-      final c = navigator.currentState?.overlay?.context;
+      // The navigator's own context (and the Overlay's) sits above the navigator's Overlay, where
+      // a toast finds no overlay and is dropped: show it from the overlay's first child.
+      final c = _belowOverlayOf(navigator); debugPrint("DBG onFailed ${c?.widget.runtimeType} ${navigator.currentState?.overlay}");
       if (c != null && c.mounted) {
         DanaviewToast.show(c, incomingOpenFailedMessage, kind: DanaviewToastKind.error, icon: Icons.error_outline_rounded);
       }
     },
   );
   return true;
+}
+
+/// A context inside the Overlay of [navigator] (so `Overlay.of` finds it), or null.
+BuildContext? _belowOverlayOf(GlobalKey<NavigatorState> navigator) {
+  final overlay = navigator.currentState?.overlay?.context;
+  if (overlay == null || !overlay.mounted) return null;
+  BuildContext? below;
+  overlay.visitChildElements((child) => below ??= child);
+  return below;
 }
 
 /// Starts the Share Extension inbox import (iOS with the flag on; nothing elsewhere) and shows a

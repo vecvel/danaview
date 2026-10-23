@@ -53,8 +53,15 @@ montage (INT-105, S8), Search with AI (S7).
   pass no dart-defines) still applies, so the manual commands of `S1-QA.md` §Signing are used.
 - The S3 candidate embeds the `DanaviewShare` extension (INT-104): signing needs both App IDs with
   the App Group `group.com.vecvel.danaview` (`ios/fastlane/SHARE_EXTENSION.md`).
-- With the flag off the app is the S1 app (S3 test "flag off", S2 test "flag off", INT-101's
-  `flags_off_test.dart`).
+- With the flag off the **Dart side** is the S1 app (S3 test "flag off", S2 test "flag off",
+  INT-101's `flags_off_test.dart`): no documents overrides, no Open-with interceptor, no inbox
+  host. The **native side is not flag-gated** in the source: `ios/Runner/Info.plist` and
+  `macos/Runner/Info.plist` carry INT-104's image, PDF, Office and text `CFBundleDocumentTypes`
+  (rank Alternate) and `ios/Runner.xcodeproj` embeds `DanaviewShare` in every configuration. In a
+  flag-off build that still ships them, Open with on a photo or document reaches the 1.1
+  `_handleIncomingMedia` path (`lib/app.dart`, imported and queued in the player), and a "Save to
+  Danaview" batch stays in the App Group (nothing imports or cleans it). See S3-Q §3a and
+  FIX-S3Q-6.
 
 ### Privacy policy, terms and licences
 
