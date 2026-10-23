@@ -2,7 +2,7 @@
 
 Generated 2026-10-21 on the Mac from the code, the QA reports and the build runs. The code on `editor-wip` is the ground truth; live detail is in `PRODUCTION_READINESS.md` §0.
 
-**Totals:** 166 done (of 166), 2026-10-23. QA-01 certified at simulator level (owner did step 4). Owner items outside the count: the QA-02 tablet re-check of M2 row 2 and the cold start (Windows, 948aee7), device checks. INT-05 is closed in 1.1 (owner, 2026-10-22): moved into the single 1.0.0 release ticket at the end of 1.3 (widened AIS-41, `docs/v1.2/BUILD_PLAN.md`); its release-pipeline checks are applied (`f8cd585`). The Android lane is complete.
+**Totals:** 166 done (of 166), 2026-10-23. **v1.1 is complete.** QA-01 certified at simulator level; QA-02 fully closed (tablet M1-M4 plus the re-check on e07e388, bd90635); QA-05 certified. Open outside the count: device checks (no devices), FIX-QA02-POLISH-1 (Android focus-highlight frame, Android lane). INT-05 is closed in 1.1 (owner, 2026-10-22): moved into the single 1.0.0 release ticket at the end of 1.3 (widened AIS-41); its release-pipeline checks are applied (`f8cd585`).
 
 "Machine" is who builds the ticket after the split: the Mac does everything except the Android lane; the Windows laptop does the Android lane (see ANDROID_LANE.md). "In progress" means a Mac builder was working on it when this file was generated; its files may be incomplete.
 
@@ -195,7 +195,7 @@ Generated 2026-10-21 on the Mac from the code, the QA reports and the build runs
 | 152 | CORE-35 | Core benchmarks, large-project fixture, README | CORE-26, CORE-32, CORE-34, CORE-33 | ✅ done | Mac |
 | 153 | QA-00 | Shared on-device E2E suite (integration_test/editor) | INT-04, ENG-05, UX-05, UX-06, UX-11, UX-17, UX-20, UX-21, UX-23, UX-24, UX-25, UX-26, UX-27, UX-28, UX-29, UX-30, UX-32, UX-34, UX-35, UX-36, UX-38, UX-39, UX-40, UX-41, UX-42, IOS-13, IOS-14, IOS-15, IOS-16, AND-12, AND-13, AND-14, AND-15 | ✅ done | Mac |
 | 154 | QA-01 | Run and certify the E2E suite on the iOS Simulator | QA-00, INT-03 | ✅ done 2026-10-23 (automated suite + manual iPad steps 1-3 by XCUITest, step 4 by the owner) | Mac |
-| 155 | QA-02 | Run and certify the E2E suite on an Android Emulator | QA-00 | ✅ done 2026-10-22 (Windows; certified on 0fa78966/8725e25c/d680bd3/88469c0; the owner's manual tablet M1–M4 stay open as an owner item) | Windows |
+| 155 | QA-02 | Run and certify the E2E suite on an Android Emulator | QA-00 | ✅ done 2026-10-23 (fully closed: emulator suite, QA-05 Android, tablet M1-M4 24/24 after FIX-QA02-M2-2, re-check bd90635) | Windows |
 | 156 | QA-03 | Frame accuracy, grid-cut, A/V sync and render parity suite | IOS-11, AND-10, IOS-12, AND-11, API-03, ENG-05 | ✅ done | Mac |
 | 157 | QA-11 | Export conformance, preset matrix and audio measurement suite | IOS-13, AND-12, IOS-18, API-03, ENG-05, IOS-20, AND-19, CORE-38 | ✅ done | Mac |
 | 158 | QA-04 | Performance and memory budgets (profile mode, device lab) | INT-04, CORE-35, UX-44, AND-18, IOS-19 | ✅ done | Mac |
