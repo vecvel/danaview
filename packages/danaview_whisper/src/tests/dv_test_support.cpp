@@ -575,7 +575,11 @@ dv_job_params default_job_params(const std::string &wav, const std::string &lang
   p.range_start_ms = 0;
   p.range_end_ms = -1;
   p.language = language.empty() ? nullptr : intern(language);
-  p.n_threads = 4;
+  // ai.md §4.5 uses 4 threads; capped to the host's cores so a 3-vCPU CI runner is not
+  // oversubscribed (whisper's compute threads spin, so 4 on 3 cores runs 20-50x slower).
+  // Tests that set n_threads explicitly keep their own value.
+  const unsigned hw = std::thread::hardware_concurrency();
+  p.n_threads = (hw == 0 || hw >= 4) ? 4 : static_cast<int32_t>(hw);
   p.chunk_target_ms = 180000;
   p.chunk_search_ms = 15000;
   p.chunk_min_ms = 10000;
