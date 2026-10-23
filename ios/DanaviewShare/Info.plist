@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  OWNER: HOM-21 (placeholder created by INT-104 so the DanaviewShare target builds)
+
+  Share Extension "Share → Danaview" (FILES_MEDIA_HOME_PLAN §8.2, ARCH v1.2 §5.6, §8). Shown for
+  photos, videos, PDFs, Office files and text, matching danaview_library's type table (photo,
+  video, pdf, word, excel, powerpoint, text rows). The version strings follow the app's (pubspec)
+  through Flutter/Generated.xcconfig, the target's base configuration.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Danaview</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>NSExtensionActivationRule</key>
+			<string>SUBQUERY (
+  extensionItems,
+  $extensionItem,
+  SUBQUERY (
+    $extensionItem.attachments,
+    $attachment,
+    ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.image"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.movie"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.adobe.pdf"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.microsoft.word.doc"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "org.openxmlformats.wordprocessingml.document"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.microsoft.excel.xls"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "org.openxmlformats.spreadsheetml.sheet"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.microsoft.powerpoint.ppt"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "org.openxmlformats.presentationml.presentation"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "org.oasis-open.opendocument.text"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "org.oasis-open.opendocument.spreadsheet"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "org.oasis-open.opendocument.presentation"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.rtf"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.iwork.pages.pages"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.iwork.pages.sffpages"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.iwork.numbers.numbers"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.iwork.numbers.sffnumbers"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.iwork.keynote.key"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.apple.iwork.keynote.sffkey"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.delimited-values-text"
+    || ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.json"
+  ).@count &gt;= 1
+).@count &gt;= 1</string>
+		</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.share-services</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
+	</dict>
+</dict>
+</plist>

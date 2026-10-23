@@ -1,9 +1,14 @@
 // OWNER: HOM-23
 //
-// Placeholder (D-33) created by INT-101. HOM-23 replaces this file:
-// the public entry of lib/src/text/, the text and CSV viewer. The package barrel exports it; HOM-23 re-exports
-// the public files of its directory from here (barrels never change after INT-101).
-// Until then it declares no public names.
+// The public entry of lib/src/text/ (HOM plan §8.4): the in-app text viewer and the CSV/TSV grid,
+// their encodings, loading and row indexes.
 
 /// The public entry of lib/src/text/: the text and CSV viewer.
 library;
+
+export 'csv_table.dart';
+export 'csv_viewer.dart';
+export 'text_document.dart';
+export 'text_encoding.dart';
+export 'text_viewer.dart';
+export 'viewer_parts.dart';
