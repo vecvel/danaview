@@ -10,7 +10,8 @@
 // - cold start (app stopped) and warm start (app running) VIEW of a PDF -> one batch each;
 // - SEND_MULTIPLE of a PDF, a photo and a video; SEND of text; SEND of one photo -> batches;
 // - VIEW and a single SEND of a video -> no batch: the 1.1 path copies it into cache/open_with
-//   for the player, as before (P-7);
+//   for the player, as before (P-7), and 1.1's LibraryStorage then moves that copy into
+//   app_flutter/Imported (within a second or two), so the check looks in both places;
 // - a malformed SEND (EXTRA_STREAM of the wrong type) and a VIEW of Danaview's own private file
 //   do not crash the app and deliver nothing;
 // - the real Files app: tap a PDF ("Open with" Danaview) and share two items to Danaview.
@@ -47,6 +48,7 @@ class IncomingAppE2eTest {
     private val context: Context = instrumentation.targetContext
     private val outDir get() = File(context.cacheDir, "danaview-out/hom21a-e2e")
     private val seeded = ArrayList<Uri>()
+    private var since = "0.000"
 
     @Before
     fun setUp() {
@@ -60,6 +62,10 @@ class IncomingAppE2eTest {
         File(outDir, "Photo.jpg").writeBytes(ByteArray(4096) { (it * 7).toByte() })
         File(outDir, "Clip.mp4").writeBytes(ByteArray(8192) { (it * 3).toByte() })
         shell("logcat -c")
+        // `logcat -c` from the instrumentation does not always clear (API 29 kept old lines), so
+        // reads start at this test's start time, and lines this test process logs (the plugin's own
+        // instrumented tests run here, with the same tag) are left out.
+        since = shell("date +%s").trim().ifEmpty { "0" } + ".000"
     }
 
     @After
@@ -67,6 +73,7 @@ class IncomingAppE2eTest {
         outDir.deleteRecursively()
         seeded.forEach { runCatching { context.contentResolver.delete(it, null, null) } }
         shell("am force-stop $APP")
+        clearOpenWithCopies()
     }
 
     private fun pdfBytes(): ByteArray = (
@@ -94,7 +101,12 @@ class IncomingAppE2eTest {
     }
 
     private fun incomingLines(): List<String> =
-        shell("logcat -d -s DanaviewIncoming:I").lines().filter { it.contains("incoming:") }
+        shell("logcat -d -T $since -s DanaviewIncoming:I").lines()
+            .filter { it.contains("incoming:") && !isOwnLine(it) }
+
+    /** True for a threadtime line ("date time pid tid ...") logged by this test process. */
+    private fun isOwnLine(line: String): Boolean =
+        line.trim().split(Regex("\\s+")).getOrNull(2) == android.os.Process.myPid().toString()
 
     /** Waits for the [n]th "batch" line and returns it. */
     private fun awaitBatch(n: Int, timeoutMs: Long = 30_000): String {
@@ -118,13 +130,22 @@ class IncomingAppE2eTest {
         error("app not running")
     }
 
+    private fun listed(dir: String): List<String> =
+        shell("run-as $APP ls $dir").lines().map { it.trim() }.filter { it.isNotEmpty() && !it.contains("No such file") }
+
+    /** The 1.1 player copies of Clip.mp4: in cache/open_with, or already moved to app_flutter/Imported. */
     private fun openWithCopies(): List<String> =
-        shell("run-as $APP ls cache/open_with").lines().map { it.trim() }.filter { it.isNotEmpty() && !it.contains("No such file") }
+        (listed("cache/open_with") + listed("app_flutter/Imported")).filter { it.startsWith("Clip") }.distinct()
+
+    private fun clearOpenWithCopies() {
+        shell("run-as $APP rm -rf cache/open_with")
+        shell("run-as $APP rm -f app_flutter/Imported/Clip.mp4")
+    }
 
     @Test
     fun intentsFromAnotherApp() {
         shell("am force-stop $APP")
-        shell("run-as $APP rm -rf cache/open_with")
+        clearOpenWithCopies()
 
         // Cold start: VIEW of a PDF.
         send(Intent(Intent.ACTION_VIEW).setDataAndType(shared("Report.pdf"), "application/pdf"))
@@ -156,7 +177,7 @@ class IncomingAppE2eTest {
         var end = System.currentTimeMillis() + 20_000
         while (openWithCopies().isEmpty() && System.currentTimeMillis() < end) Thread.sleep(300)
         assertEquals(listOf("Clip.mp4"), openWithCopies())
-        shell("run-as $APP rm -rf cache/open_with")
+        clearOpenWithCopies()
         send(Intent(Intent.ACTION_SEND).setType("video/mp4").putExtra(Intent.EXTRA_STREAM, shared("Clip.mp4")))
         end = System.currentTimeMillis() + 20_000
         while (openWithCopies().isEmpty() && System.currentTimeMillis() < end) Thread.sleep(300)
@@ -171,7 +192,7 @@ class IncomingAppE2eTest {
         assertEquals(5, incomingLines().count { it.contains(" batch, ") })
         assertTrue(incomingLines().any { it.contains("refused") })
         assertEquals("the app kept running", pid, pid())
-        assertTrue(shell("logcat -d -b crash").lines().none { it.contains(APP) })
+        assertTrue(shell("logcat -d -T $since -b crash").lines().none { it.contains(APP) })
     }
 
     @Test
@@ -204,13 +225,18 @@ class IncomingAppE2eTest {
         val line = awaitBatch(1, 60_000)
         assertTrue(line, line.contains("send_multiple batch, 2 item(s)"))
 
-        // Open with: tap the PDF in Files (Danaview may be the only PDF handler, else pick it).
+        // Open with: tap the PDF in Files. Danaview may be the only PDF handler (no chooser), one of
+        // a list (pick it, then "Just once"), or the remembered choice ("Open with Danaview" with
+        // "Just once" at once, after an earlier run).
         context.startActivity(files)
         val again = SystemUi.listed(pdf, 15_000) ?: error("$pdf not listed:\n" + SystemUi.dump())
         again.click()
-        SystemUi.waitAny(5_000, SystemUi.byText("^Danaview$"))?.let { choice ->
-            choice.click()
-            SystemUi.waitAny(3_000, SystemUi.byText("(?i)^just once$"))?.click()
+        val justOnce = SystemUi.byText("(?i)^just once$")
+        val danaview = SystemUi.byText("^Danaview$")
+        if (SystemUi.waitAny(5_000, justOnce, danaview) != null) {
+            // API 29 shows a disabled "Just once" until an app is picked: pick Danaview when listed.
+            danaview()?.let { it.click(); Thread.sleep(500) }
+            SystemUi.waitAny(3_000, justOnce)?.click()
         }
         val view = awaitBatch(2, 60_000)
         assertTrue(view, view.contains("view batch, 1 item(s)"))
