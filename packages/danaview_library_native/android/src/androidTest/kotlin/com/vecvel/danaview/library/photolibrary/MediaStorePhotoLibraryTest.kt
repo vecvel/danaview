@@ -71,6 +71,8 @@ class MediaStorePhotoLibraryTest {
     @Before
     fun setUp() {
         assumeTrue("seeding needs MediaStore RELATIVE_PATH (API 29+)", sdk >= 29)
+        // Seed folders an aborted earlier run left behind (tearDown removes this run's).
+        SeededMedia.sweepLeftovers()
         seed = SeededMedia(context)
         library = MediaStorePhotoLibrary(context, events, changeDelayMs = 150)
     }

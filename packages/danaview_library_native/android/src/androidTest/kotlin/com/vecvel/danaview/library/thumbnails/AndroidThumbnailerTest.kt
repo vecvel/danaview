@@ -54,6 +54,8 @@ class AndroidThumbnailerTest {
 
     @Before
     fun setUp() {
+        // DanaviewTest-<stamp> folders an aborted earlier run left in shared storage (each test removes its own).
+        SeededMedia.sweepLeftovers()
         dir = File(context.cacheDir, "thumb-test-${UUID.randomUUID()}").apply { mkdirs() }
         out = File(dir, "out")
     }
@@ -348,8 +350,9 @@ class AndroidThumbnailerTest {
             assertEquals(LibraryErrorCode.notFound, failure { media("ms:999999999", 64, 64) }.code)
         } finally {
             unscan(listOf(photoFile, videoFile))
-            pictures.delete()
-            movies.delete()
+            // The folders too, on disk and as MediaStore folder rows.
+            SeededMedia.removeShared(pictures.absolutePath)
+            SeededMedia.removeShared(movies.absolutePath)
         }
     }
 
