@@ -356,8 +356,10 @@ void main() {
     test('a failed download surfaces as its typed failure', () async {
       h.store.ready.remove(SpeechModelCatalog.balanced.id);
       final download = h.store.beginDownload(SpeechModelCatalog.balanced.id);
-      final job = h.start().$1;
-      await settle();
+      final (job, samples) = h.start();
+      // Fail the download while the job waits on it (a fixed settle() raced the job's prologue on
+      // a slow runner, so the failure landed before the job listened).
+      await until(() => samples.any((s) => s.phase == TranscriptionPhase.downloadingModel));
       download.completer.completeError(const ModelDownloadFailure(ModelDownloadFailureKind.offline));
       await expectLater(job.result, throwsA(isA<ModelDownloadFailure>().having((f) => f.kind, 'kind', ModelDownloadFailureKind.offline)));
     });

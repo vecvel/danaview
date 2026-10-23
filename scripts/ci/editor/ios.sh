@@ -44,7 +44,8 @@
 #                                DANAVIEW_E2E_TARGET picks the files (e2e_host.sh run target,
 #                                default all)
 #   DANAVIEW_IOS_ONLY_TESTING    xcodebuild -only-testing filter of step 6 (default RunnerTests;
-#                                e.g. RunnerTests/ChannelRoundTripTests). Failure messages of step
+#                                e.g. RunnerTests/ChannelRoundTripTests; comma-separated for several,
+#                                e.g. RunnerTests/A,RunnerTests/B). Failure messages of step
 #                                6 are printed from its result bundle (example/build/RunnerTests.xcresult)
 #   DANAVIEW_IOS_DRY_RUN=1       print the step-7/8 commands (and check the inputs) without a
 #                                toolchain, a build or a simulator
@@ -316,12 +317,15 @@ if best:
   # -quiet hides the assertion messages, so they are printed from the result bundle on failure.
   BUNDLE="$EXAMPLE/build/RunnerTests.xcresult"
   rm -rf "$BUNDLE"
+  declare -a ONLY=()
+  IFS=',' read -r -a ONLY_LIST <<< "${DANAVIEW_IOS_ONLY_TESTING:-RunnerTests}"
+  for t in "${ONLY_LIST[@]}"; do ONLY+=("-only-testing:$t"); done
   if ! (cd "$EXAMPLE/ios" && xcodebuild test \
     -workspace Runner.xcworkspace \
     -scheme Runner \
     -configuration Debug \
     -destination "id=$UDID" \
-    -only-testing:"${DANAVIEW_IOS_ONLY_TESTING:-RunnerTests}" \
+    "${ONLY[@]}" \
     -parallel-testing-enabled NO \
     -resultBundlePath "$BUNDLE" \
     CODE_SIGNING_ALLOWED=NO \

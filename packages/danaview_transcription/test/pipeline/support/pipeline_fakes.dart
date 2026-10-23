@@ -208,6 +208,12 @@ final List<RawSegment> fixtureSegments = [
 // ---------------------------------------------------------------------------------------------
 
 final class FakeDownload implements ModelDownload {
+  /// Like ModelDownloadTask, [done] carries a no-op error handler, so a download that fails before
+  /// anyone awaits it is not an unhandled error (the job still sees the failure when it awaits).
+  FakeDownload() {
+    completer.future.then<void>((_) {}, onError: (Object _) {});
+  }
+
   final StreamController<ModelDownloadProgress> controller = StreamController<ModelDownloadProgress>.broadcast(sync: true);
   final Completer<InstalledSpeechModel> completer = Completer<InstalledSpeechModel>();
   bool cancelled = false;
