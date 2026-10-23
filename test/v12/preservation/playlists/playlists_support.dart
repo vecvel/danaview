@@ -203,7 +203,7 @@ Finder playlistsHeader(PlaylistsHost host) => inHost(
 /// P-4: the group of playlist rows.
 Finder playlistsGroup(PlaylistsHost host) => inHost(
       host,
-      find.ancestor(of: find.text('Road Trip'), matching: _private('DanaviewLibraryGroup')),
+      find.ancestor(of: find.text('Road Trip'), matching: _private('DanaviewLibraryCardGrid')),
     ).first;
 
 /// P-4: the empty state shown when there are no playlists.

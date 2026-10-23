@@ -228,7 +228,7 @@ Finder foldersHeader(FoldersHost host) => find
 Finder foldersGroup(FoldersHost host, String rowTitle) => find
     .ancestor(
       of: find.descendant(of: foldersScope(host), matching: find.text(rowTitle)),
-      matching: _private('DanaviewLibraryGroup'),
+      matching: _private('DanaviewLibraryCardGrid'),
     )
     .first;
 
