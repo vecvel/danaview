@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- OWNER: HOM-25
-     Placeholder (D-33) created by INT-101. HOM-25 replaces this file: the plugin manifest of
-     danaview_pdf. It declares no permission, provider or component yet. -->
+     The plugin manifest of danaview_pdf: no permission, provider or component. Documents arrive as
+     local paths the app can already read (rule 27: opened read-only); nothing opens a socket
+     (rule 21). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" />
