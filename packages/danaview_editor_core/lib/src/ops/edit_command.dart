@@ -613,13 +613,26 @@ final class _Draft {
   }
 
   /// [clip] with `sourceIn` pulled back by the few µs its derived source end may overrun the media
-  /// after a grid re-timing (no-op otherwise).
+  /// after a grid re-timing (no-op otherwise). Frames are not all the same length in µs (24 fps:
+  /// 41666/41667), so a clip moved by whole frames can gain a µs of duration and so of source; a
+  /// clip that already starts at (or within those µs of) the media start cannot pull back, so it
+  /// starts at 0 and drops whole frames from its end until its source fits (nightly fuzz I4).
   MediaClip fitSource(MediaClip clip) {
     final asset = assetOf(clip);
     if (asset == null || !_timeBased(asset.kind) || !TransitionBounds.speedValid(clip.speed)) return clip;
-    final over = clip.sourceIn + ClipTimeMap.sourceLengthOf(clip.duration, clip.speed) - asset.probe.duration;
-    if (over <= 0 || over > clip.sourceIn) return clip;
-    return clip.copyWith(sourceIn: clip.sourceIn - over);
+    final mediaEnd = asset.probe.duration;
+    final over = clip.sourceIn + ClipTimeMap.sourceLengthOf(clip.duration, clip.speed) - mediaEnd;
+    if (over <= 0) return clip;
+    if (over <= clip.sourceIn) return clip.copyWith(sourceIn: clip.sourceIn - over);
+    // Only the rounding case: the clip's source would fit if it began at the media start.
+    if (over - clip.sourceIn > ClipTimeMap.sourceLengthOf(timeOf(frameOf(clip.start) + 1) - clip.start, clip.speed)) return clip;
+    final atZero = clip.copyWith(sourceIn: 0);
+    final k0 = frameOf(atZero.start);
+    for (var k = frameOf(atZero.end) - 1; k > k0; k--) {
+      final shorter = trimEnd(atZero, timeOf(k));
+      if (shorter is MediaClip && shorter.sourceIn >= 0 && sourceFits(shorter)) return shorter;
+    }
+    return clip;
   }
 
   // ----- finishing -----
