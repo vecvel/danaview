@@ -301,8 +301,6 @@ class DanaviewLicensesScreen extends StatefulWidget {
 }
 
 class _DanaviewLicensesScreenState extends State<DanaviewLicensesScreen> {
-  static const double _readingWidth = 720;
-
   static final List<LicenseListItem> _bundled = [
     for (final n in danaviewBundledNotices)
       LicenseListItem(name: n.name, subtitle: '${n.licence} · ${n.usedFor}', text: n.text),
@@ -372,20 +370,14 @@ class _DanaviewLicensesScreenState extends State<DanaviewLicensesScreen> {
         topBar: DanaviewLibraryTopBar(title: 'Open-source licences', onBack: widget.onBack),
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final insets = danaviewLibraryInsets(constraints.maxWidth);
+            final insets = DanaviewSpacing.pageInsets(constraints.maxWidth);
             return ListView.builder(
               padding: insets.copyWith(
                 top: DanaviewSpacing.lg,
                 bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
               ),
               itemCount: items.length,
-              itemBuilder: (context, index) => Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: _readingWidth),
-                  child: items[index](),
-                ),
-              ),
+              itemBuilder: (context, index) => items[index](),
             );
           },
         ),
@@ -409,7 +401,7 @@ class _Intro extends StatelessWidget {
       child: Text(
         'Danaview is built with open-source software, fonts and models. Each one is listed here with its '
         'licence. Tap one to read it.',
-        style: DanaviewTextStyles.bodySecondary.copyWith(height: 1.45),
+        style: DanaviewTextStyles.bodySecondary.copyWith(height: 1.5),
       ),
     );
   }

@@ -250,7 +250,7 @@ class _DanaviewProfileScreenState extends ConsumerState<DanaviewProfileScreen> {
     final dobError = ProfileValidation.dateOfBirth(_dateOfBirth);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final insets = danaviewLibraryInsets(constraints.maxWidth);
+        final insets = DanaviewSpacing.pageInsets(constraints.maxWidth);
         // The narrowest phones give the fields the card's padding back.
         final cardPadding = EdgeInsets.all(constraints.maxWidth < 360 ? DanaviewSpacing.md : DanaviewSpacing.lg);
         return ListView(

@@ -4,6 +4,16 @@ import 'package:danaview_ui_kit/src/foundation/danaview_internal.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 void main() {
+  test('pageGutter is 16 below 600, 24 below 1024, 32 from 1024; pageInsets is symmetric', () {
+    expect(DanaviewSpacing.pageGutter(280), 16);
+    expect(DanaviewSpacing.pageGutter(599.9), 16);
+    expect(DanaviewSpacing.pageGutter(600), 24);
+    expect(DanaviewSpacing.pageGutter(1023.9), 24);
+    expect(DanaviewSpacing.pageGutter(1024), 32);
+    expect(DanaviewSpacing.pageGutter(2560), 32);
+    expect(DanaviewSpacing.pageInsets(1280), const EdgeInsets.symmetric(horizontal: 32));
+  });
+
   test('foregroundOn picks the higher-contrast text color', () {
     expect(DanaviewColors.foregroundOn(DanaviewColors.primary), DanaviewColors.textPrimary);
     expect(DanaviewColors.foregroundOn(DanaviewColors.surfaceElevated), DanaviewColors.textPrimary);
