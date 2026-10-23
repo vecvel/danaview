@@ -509,9 +509,15 @@ final class _Repair {
     final mk = asset.kind;
     if (mk != MediaKind.video && mk != MediaKind.audio && mk != MediaKind.recording) return clip;
     final mediaEnd = asset.probe.duration;
-    if (clip.sourceIn + ClipTimeMap.sourceLengthOf(clip.duration, clip.speed) <= mediaEnd) return clip;
+    final over = clip.sourceIn + ClipTimeMap.sourceLengthOf(clip.duration, clip.speed) - mediaEnd;
+    if (over <= 0) return clip;
     fix(RepairCodes.sourceRangeClamped, clip.id);
     final k0 = rate.frameIndexOf(clip.start);
+    // A rounding overshoot (less than one frame of source, e.g. the 1 µs that v1.1 builds could
+    // leave after a split or a move on a 24 fps grid) pulls sourceIn back instead of dropping a frame.
+    if (over <= clip.sourceIn && over < ClipTimeMap.sourceLengthOf(rate.timeOfFrame(k0 + 1) - clip.start, clip.speed)) {
+      return clip.copyWith(sourceIn: clip.sourceIn - over);
+    }
     int sourceOutFor(int frames) =>
         clip.sourceIn + ClipTimeMap.sourceLengthOf(rate.timeOfFrame(k0 + frames) - clip.start, clip.speed);
     // Estimate the frame count that fits, then step down until it does.
