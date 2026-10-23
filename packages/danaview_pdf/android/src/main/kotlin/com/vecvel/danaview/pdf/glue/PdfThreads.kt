@@ -7,7 +7,9 @@
 // - text: extraction and search (PdfBox; one at a time, so a newer search waits for an older one to
 //   see its cancel flag);
 // - render: the texture views' render passes (one thread, shared, so PdfRenderer work stays
-//   serialised and the views never compete with each other).
+//   serialised and the views never compete with each other);
+// - prewarm: the page-text pre-warm below API 35 (text/PdfTextPrewarm.kt; one background-priority
+//   thread that exits when idle).
 //
 // Replies always hop back to the main thread.
 
@@ -17,6 +19,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.os.Process
+import com.vecvel.danaview.pdf.text.TextPrewarmer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -35,6 +38,8 @@ class PdfThreads {
     private val renderThread = HandlerThread("danaview-pdf-render", Process.THREAD_PRIORITY_DISPLAY).apply { start() }
 
     val render = Handler(renderThread.looper)
+
+    val prewarm = TextPrewarmer { Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND) }
 
     /** Runs [work] on [executor] and answers [callback] on the main thread; failures become Pigeon errors. */
     fun <T> submit(executor: ExecutorService, what: String, callback: (Result<T>) -> Unit, work: () -> T) {
@@ -56,6 +61,7 @@ class PdfThreads {
     fun shutdown() {
         documents.shutdown()
         text.shutdown()
+        prewarm.shutdown()
         renderThread.quitSafely()
     }
 }

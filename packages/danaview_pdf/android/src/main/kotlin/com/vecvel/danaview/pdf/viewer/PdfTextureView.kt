@@ -100,6 +100,9 @@ class PdfTextureView(
     /** Called on the render thread after each frame with whether it was complete (tests, timings). */
     @Volatile var onFrame: ((complete: Boolean) -> Unit)? = null
 
+    /** Called once on the render thread when the first complete frame is drawn (text pre-warm). */
+    @Volatile var onFirstCompleteFrame: (() -> Unit)? = null
+
     /** Attaches to the producer and draws the first frame (main thread). */
     fun start() {
         val v = viewport
@@ -318,7 +321,15 @@ class PdfTextureView(
             }
         }
         frames.incrementAndGet()
-        if (complete) completeFrames.incrementAndGet()
+        if (complete) {
+            // Before the count goes up, so whoever sees the first complete frame also sees the
+            // pre-warm it scheduled (render thread only; the callback is cleared after one call).
+            onFirstCompleteFrame?.let {
+                onFirstCompleteFrame = null
+                it()
+            }
+            completeFrames.incrementAndGet()
+        }
         onFrame?.invoke(complete)
     }
 

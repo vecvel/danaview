@@ -62,6 +62,8 @@ class PdfDocumentHostApiImpl(private val store: PdfDocumentStore, private val th
 
     override fun close(handle: Long) {
         val doc = store.remove(handle) ?: return
+        // The text pre-warm stops before its next page (text/PdfTextPrewarm.kt).
+        threads.prewarm.cancel(handle)
         // The last reference closes the files, off the main thread (a render may hold the renderer).
         threads.render.post { doc.release() }
     }
