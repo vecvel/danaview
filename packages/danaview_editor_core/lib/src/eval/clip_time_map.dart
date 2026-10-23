@@ -224,9 +224,11 @@ final class ClipTimeMap {
   /// * constant speed: both halves keep the speed;
   /// * ramp: the left half gets `crop(0, x)` and the right half `crop(x, 1)` where `x` is the
   ///   normalized source position of the cut ([SpeedRamps.crop]);
-  /// * forward clip: the right half starts at `sourceIn + round(pos)`;
+  /// * forward clip: the right half starts at `sourceOut − its own derived length` (≈
+  ///   `sourceIn + round(pos)`), so it ends exactly at `sourceOut`;
   /// * reversed clip: the left half (which plays the end of the source range first) starts at
-  ///   `sourceOut − round(pos)`, the right half keeps `sourceIn`.
+  ///   `sourceOut − its own derived length` (≈ `sourceOut − round(pos)`), the right half keeps
+  ///   `sourceIn`.
   ///
   /// Throws [RangeError] when [at] is not inside the clip.
   ClipSplit splitAt(TimeUs at) {
@@ -234,7 +236,6 @@ final class ClipTimeMap {
       throw RangeError.range(at, start + 1, end - 1, 'at', 'split time must lie strictly inside the clip');
     }
     final pos = _positionAt((at - start).toDouble());
-    final cut = pos.round();
     final SpeedSpec leftSpeed;
     final SpeedSpec rightSpeed;
     if (speed is SpeedRamp) {
@@ -245,11 +246,17 @@ final class ClipTimeMap {
       leftSpeed = speed;
       rightSpeed = speed;
     }
+    // The half that plays the end of the source range starts where its own derived length
+    // (`round(duration / K)` of its cropped speed) ends exactly at this clip's sourceOut. Using
+    // `sourceIn + cut` instead re-rounds the length on the far side of the cut, so a ramp's halves
+    // could end 1 µs past sourceOut, i.e. past the media (nightly fuzz I4).
+    final rightIn = sourceOut - sourceLengthOf(end - at, rightSpeed);
+    final leftInReversed = sourceOut - sourceLengthOf(at - start, leftSpeed);
     return (
       leftSpeed: leftSpeed,
       rightSpeed: rightSpeed,
-      leftSourceIn: reversed ? sourceOut - cut : sourceIn,
-      rightSourceIn: reversed ? sourceIn : sourceIn + cut,
+      leftSourceIn: reversed ? (leftInReversed < sourceIn ? sourceIn : leftInReversed) : sourceIn,
+      rightSourceIn: reversed ? sourceIn : (rightIn < sourceIn ? sourceIn : rightIn),
       leftDuration: at - start,
       rightDuration: end - at,
     );
