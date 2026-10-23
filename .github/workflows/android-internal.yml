@@ -1,0 +1,185 @@
+# Internal Android builds (owner decision 2026-10-23, option A): every push to main builds signed
+# release APKs (split per ABI + universal) with the dart-defines of the FINISHED features and
+# uploads them as a workflow artifact kept for 14 days. No GitHub Release, no Play upload; the app
+# version stays the pubspec's 1.0.0+1 until the single store release after 1.3. The repository is
+# public, so signed-in GitHub users can download these artifacts (accepted by the owner).
+#
+# Signing: the release keystore from the ANDROID_KEYSTORE_* / ANDROID_KEY_* secrets when they exist;
+# otherwise (forks) android/app/build.gradle.kts falls back to the debug key and the run warns.
+name: Android Internal
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-internal-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.44.2'
+  JAVA_VERSION: '17'
+  # Feature flags passed as --dart-define=<NAME>=<value> to every build below. Only FINISHED
+  # features are 'true'; flip a flag here when its slice passes its gates (QA/device checks).
+  # android-release.yml carries the same list (keep the two in sync).
+  #   DANAVIEW_AUTO_CAPTIONS stays false until its device check QA-07 passes.
+  DANAVIEW_EDITOR: 'true'
+  DANAVIEW_FILES_HOME: 'true'
+  DANAVIEW_AUTO_CAPTIONS: 'false'
+  DANAVIEW_PHOTO_EDITOR: 'false'
+  DANAVIEW_BEAUTY: 'false'
+  DANAVIEW_AI_STUDIO: 'false'
+  # The flag names above, in the order the summary lists them.
+  DANAVIEW_FLAG_NAMES: 'DANAVIEW_EDITOR DANAVIEW_FILES_HOME DANAVIEW_AUTO_CAPTIONS DANAVIEW_PHOTO_EDITOR DANAVIEW_BEAUTY DANAVIEW_AI_STUDIO'
+
+jobs:
+  build:
+    name: Build internal APKs
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Decode Android Keystore & Configure Signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::warning title=Debug signing::The ANDROID_KEYSTORE_* / ANDROID_KEY_* secrets are not available (fork or unset). These APKs are signed with the DEBUG key and cannot update a release-signed install."
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.jks
+          cat <<EOF > android/key.properties
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=release.jks
+          EOF
+          echo "mode=release" >> "$GITHUB_OUTPUT"
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Version and dart-defines
+        id: meta
+        run: |
+          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | tr -d '\r')
+          DEFINES=""
+          for name in $DANAVIEW_FLAG_NAMES; do
+            DEFINES="$DEFINES --dart-define=$name=${!name}"
+          done
+          {
+            echo "version=$PUBSPEC_VERSION"
+            echo "version_name=${PUBSPEC_VERSION%%+*}"
+            echo "short_sha=${GITHUB_SHA::7}"
+            echo "defines=${DEFINES# }"
+          } >> "$GITHUB_OUTPUT"
+          echo "Version $PUBSPEC_VERSION (not bumped); defines:${DEFINES}"
+
+      # The split build runs second; it leaves app-release.apk from the universal build in place.
+      - name: Build universal APK
+        env:
+          DEFINES: ${{ steps.meta.outputs.defines }}
+        run: |
+          read -ra DART_DEFINES <<< "$DEFINES"
+          flutter build apk --release "${DART_DEFINES[@]}"
+
+      - name: Build split-per-ABI APKs
+        env:
+          DEFINES: ${{ steps.meta.outputs.defines }}
+        run: |
+          read -ra DART_DEFINES <<< "$DEFINES"
+          flutter build apk --release --split-per-abi "${DART_DEFINES[@]}"
+
+      # Same checks as android-release.yml (ARCH §23 item 4 / D-43(b)).
+      - name: Check native libraries (ABIs, 16 KB pages, exports, size)
+        run: |
+          OUT=build/app/outputs/flutter-apk
+          bash scripts/ci/editor/check_native_libs.sh "$OUT/app-release.apk"
+          bash scripts/ci/editor/check_native_libs.sh --abis arm64-v8a "$OUT/app-arm64-v8a-release.apk"
+          bash scripts/ci/editor/check_native_libs.sh --abis x86_64 "$OUT/app-x86_64-release.apk"
+          # armeabi-v7a carries no whisper library at all (D-43(b)); the check fails if one appears.
+          bash scripts/ci/editor/check_native_libs.sh --abis= "$OUT/app-armeabi-v7a-release.apk"
+
+      - name: Collect APKs
+        env:
+          VER: ${{ steps.meta.outputs.version_name }}
+          SHA: ${{ steps.meta.outputs.short_sha }}
+        run: |
+          OUT=build/app/outputs/flutter-apk
+          mkdir -p internal-apks
+          cp "$OUT/app-release.apk" "internal-apks/danaview-${VER}-internal-${SHA}-universal.apk"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            cp "$OUT/app-${abi}-release.apk" "internal-apks/danaview-${VER}-internal-${SHA}-${abi}.apk"
+          done
+          (cd internal-apks && sha256sum ./*.apk > checksums-sha256.txt)
+          ls -l internal-apks
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: danaview-internal-${{ steps.meta.outputs.short_sha }}
+          path: internal-apks/*
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Job summary
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          SHA: ${{ steps.meta.outputs.short_sha }}
+          SIGNING: ${{ steps.signing.outputs.mode }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          SUBJECT="${COMMIT_MSG%%$'\n'*}"
+          {
+            echo "## Danaview internal Android build"
+            echo ""
+            echo "- Commit: [\`$SHA\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) on \`$GITHUB_REF_NAME\`${SUBJECT:+ - $SUBJECT}"
+            echo "- Version: \`$VERSION\` (not bumped)"
+            echo "- Signing: **$SIGNING** key"
+            echo "- Artifact: \`danaview-internal-$SHA\` (14 days, in this run's Artifacts section)"
+            echo ""
+            echo "### Flags"
+            echo "| Flag | Value |"
+            echo "| --- | --- |"
+            for name in $DANAVIEW_FLAG_NAMES; do echo "| \`$name\` | \`${!name}\` |"; done
+            echo ""
+            echo "### APKs"
+            echo "| File | Size |"
+            echo "| --- | --- |"
+            for f in internal-apks/*.apk; do
+              echo "| \`$(basename "$f")\` | $(numfmt --to=iec-i --suffix=B "$(stat -c %s "$f")") |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove signing material
+        if: always()
+        run: rm -f android/app/release.jks android/key.properties

@@ -37,7 +37,7 @@ Status values: **open** (work or evidence still missing), **ready** (evidence ex
 | Check | Status | Evidence / next step |
 |---|---|---|
 | All tickets merged (BUILD_PLAN §5) | open | 2026-10-22: 163 of 166 done. Open: QA-01 (manual iPad steps), QA-02 (Windows re-runs), QA-05 (Android half). INT-05 closed in 1.1, moved to the 1.0.0 release ticket (widened AIS-41). [handoff/BUILD_STATE.md](handoff/BUILD_STATE.md) (Totals, M6). |
-| `editor-ci.yml` green on `main` | open | Run on the release commit. Link the run here. |
+| `danaview-ci.yml` green on `main` | open | Run on the release commit. Link the run here. |
 | Existing player tests green (`flutter test` at the root) | open | Run on the release commit. Known: `settings_account_test` "app version matches pubspec.yaml" needs `app_info.dart` and `pubspec.yaml` to agree; both stay at 1.0.0 / 1 (§3.1). |
 | App builds for iOS, Android, macOS, Windows, Linux (desktop with the editor hidden) | open | Release workflows and lanes dry-run (§3.4). Desktop builds get **no** editor dart-defines. |
 

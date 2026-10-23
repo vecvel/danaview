@@ -36,7 +36,7 @@ Then start Claude with the first message in README.md. Claude runs the checks in
 | Tool | Version | Notes |
 |---|---|---|
 | Git for Windows | current 2.x (`winget install Git.Git`) | Includes Git Bash and Git Credential Manager. On the installer's line-ending page pick **"Checkout as-is, commit as-is"**. Keep the default PATH option. |
-| Flutter | **3.44.2** stable (Dart 3.12) | The Windows zip from the Flutter SDK archive, extracted to `C:\dev\flutter`. Same version as the Mac and CI (`FLUTTER_VERSION: '3.44.2'` in `.github/workflows/editor-ci.yml`). |
+| Flutter | **3.44.2** stable (Dart 3.12) | The Windows zip from the Flutter SDK archive, extracted to `C:\dev\flutter`. Same version as the Mac and CI (`FLUTTER_VERSION: '3.44.2'` in `.github/workflows/danaview-ci.yml`). |
 | JDK | **21**, for example Eclipse Temurin 21 (`winget install EclipseAdoptium.Temurin.21.JDK`) | The Mac also runs Java 21. CI uses 17. Every module targets Java 17 (`JavaVersion.VERSION_17`, `JvmTarget.JVM_17`), so both work. |
 | Android Studio | current stable (`winget install Google.AndroidStudio`) | Then install the SDK items in A3. |
 | ffmpeg | **7.1.1** full build with libx264 and libx265 (`winget install Gyan.FFmpeg --version 7.1.1`; list versions with `winget show Gyan.FFmpeg --versions`, and take the newest 7.x if 7.1.1 isn't listed) | Dev-only tool for test media and media tests. The Mac has 7.1.1; the engine fixture tests compare ffprobe fields, so stay on 7.x. |
@@ -51,7 +51,7 @@ In Android Studio, open Settings > Languages & Frameworks > Android SDK. Tick **
 | Tab | Item | Why |
 |---|---|---|
 | SDK Platforms | Android 16 ("Baklava") > Android SDK Platform 36 | `compileSdk = 36` in every Android module |
-| SDK Platforms | Android 15 ("VanillaIceCream") > **Google APIs Intel x86_64 Atom System Image** | The emulator image. CI uses API 35, x86_64, `google_apis` (`editor-ci.yml`) |
+| SDK Platforms | Android 15 ("VanillaIceCream") > **Google APIs Intel x86_64 Atom System Image** | The emulator image. CI uses API 35, x86_64, `google_apis` (`danaview-ci.yml`) |
 | SDK Platforms | Android 10 (API 29) and Android 14 (API 34) > Google APIs Intel x86_64 Atom System Image | Needed later: AND-02 checks the editor gate on API 29, and AND-12 runs on 29, 34 and 35 ([ANDROID_LANE.md](ANDROID_LANE.md)) |
 | SDK Tools | Android SDK Build-Tools 36.0.0 | AGP 9.0.1. The Mac also has 35.0.0 |
 | SDK Tools | NDK (Side by side) **28.2.13676358** | `flutter.ndkVersion` in Flutter 3.44.2 (`FlutterExtension.kt`) and `ndkVersion` in `spikes/android_engine/app/build.gradle.kts`. The whisper Android build (AI-04) uses it too |
@@ -368,7 +368,7 @@ Each pitfall has a tag: **Blocker** (fix during setup), **Mac-only**, **Expected
 
 **P13. This emulator isn't the Mac's, CI's or a phone.**
 - **ABI:** x86_64 here, arm64 on the Mac. AI-04's two arm64 libraries (`armv8-a` and `armv8.2-a+fp16+dotprod`) never load here; the x86_64 library does. Record arm64 runtime-selection checks as "deferred: no device available". (The Mac's arm64 AVD has no free `/data` space until the Mac clears it.)
-- **GPU:** the Windows host GPU here, a Metal translator on the Mac, and SwiftShader in CI (`-gpu swiftshader_indirect` in `editor-ci.yml`). GL extensions and decoders can differ from the target row in `docs/v1.1/editor/spikes/AND-01.md`. Probe them again instead of copying the Mac's results. If a GL test disagrees with CI, rerun the emulator with `-gpu swiftshader_indirect`.
+- **GPU:** the Windows host GPU here, a Metal translator on the Mac, and SwiftShader in CI (`-gpu swiftshader_indirect` in `danaview-ci.yml`). GL extensions and decoders can differ from the target row in `docs/v1.1/editor/spikes/AND-01.md`. Probe them again instead of copying the Mac's results. If a GL test disagrees with CI, rerun the emulator with `-gpu swiftshader_indirect`.
 - **Timings:** numbers aren't comparable between machines.
 - **Spike APK:** the spike is arm64-only (`abiFilters += listOf("arm64-v8a")`), so its native code only works here through ARM translation, if at all.
 
