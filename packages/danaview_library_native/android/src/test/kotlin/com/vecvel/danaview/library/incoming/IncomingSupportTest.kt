@@ -198,13 +198,45 @@ class IncomingSupportTest {
     @Test
     fun textFileNames() {
         val utc = TimeZone.getTimeZone("UTC")
-        assertEquals("Shared text 20231114_221320.txt", IncomingRouting.textFileName(null, 1_700_000_000_000, utc))
-        assertEquals("Shared text 20231114_221320.txt", IncomingRouting.textFileName(" \n ", 1_700_000_000_000, utc))
-        assertEquals("Trip notes.txt", IncomingRouting.textFileName("Trip notes", 0, utc))
+        // No subject: "Shared text yyyy-MM-dd HHmm" in the given (local) zone, minutes, no seconds (0dc39697).
+        assertEquals("Shared text 2023-11-14 2213.txt", IncomingRouting.textFileName(null, 1_700_000_000_000, utc))
+        assertEquals("Shared text 2023-11-14 2213.txt", IncomingRouting.textFileName(" \n ", 1_700_000_000_000, utc))
+        assertEquals("Shared text 2023-11-15 0343.txt", IncomingRouting.textFileName(null, 1_700_000_000_000, TimeZone.getTimeZone("Asia/Kolkata")))
+        assertEquals("Shared text 1970-01-01 0000.txt", IncomingRouting.textFileName("", 0, utc))
+        // A subject names it, made safe for a file name.
+        assertEquals("Trip notes.txt", IncomingRouting.textFileName("  Trip notes  ", 0, utc))
+        assertEquals("My note 1 2.txt", IncomingRouting.textFileName("My note: 1/2", 0, utc))
         assertEquals("a b c.txt", IncomingRouting.textFileName("a/b\\c", 0, utc))
+        assertEquals("a b c d e f g.txt", IncomingRouting.textFileName("a*b?c\"d<e>f|g", 0, utc))
+        assertEquals("line one line two.txt", IncomingRouting.textFileName("line one\r\n\tline two\u0000\u007f", 0, utc))
         assertEquals("list.TXT", IncomingRouting.textFileName("list.TXT", 0, utc))
-        assertEquals("Shared text 19700101_000000.txt", IncomingRouting.textFileName("...", 0, utc))
-        assertEquals(84, IncomingRouting.textFileName("y".repeat(300), 0, utc).length)
+        assertEquals("hidden.txt", IncomingRouting.textFileName("..hidden.. ", 0, utc))
+        assertEquals("Party 🎉 café.txt", IncomingRouting.textFileName("Party 🎉 café", 0, utc))
+        // Only invalid characters (or dots/spaces): the date name.
+        assertEquals("Shared text 1970-01-01 0000.txt", IncomingRouting.textFileName("...", 0, utc))
+        assertEquals("Shared text 1970-01-01 0000.txt", IncomingRouting.textFileName("/\\:*?\"<>|", 0, utc))
+        assertEquals("Shared text 1970-01-01 0000.txt", IncomingRouting.textFileName("\u0001\n . / .", 0, utc))
+        // Very long: at most 200 UTF-8 bytes before ".txt", never splitting a character.
+        assertEquals("y".repeat(200) + ".txt", IncomingRouting.textFileName("y".repeat(300), 0, utc))
+        val emoji = IncomingRouting.textFileName("😀".repeat(100), 0, utc) // 4 bytes each
+        assertEquals("😀".repeat(50) + ".txt", emoji)
+        val mixed = IncomingRouting.textFileName("a" + "é".repeat(150), 0, utc) // 1 + 2*n bytes
+        assertEquals("a" + "é".repeat(99) + ".txt", mixed)
+        assertTrue(mixed.toByteArray(Charsets.UTF_8).size <= 204)
+        assertEquals("ab", IncomingRouting.cutUtf8("ab😀", 5))
+        // Cut, then trailing spaces/dots trimmed again.
+        assertEquals("x".repeat(198) + ".txt", IncomingRouting.textFileName("x".repeat(198) + " .zzz", 0, utc))
+    }
+
+    @Test
+    fun textNameClashesInsideABatch() {
+        // Clashes against the library's names are numbered on commit (Dart uniqueName); inside one
+        // batch the native side numbers them the same way.
+        val n = IncomingRouting.textFileName(null, 0, TimeZone.getTimeZone("UTC"))
+        assertEquals(
+            listOf("Shared text 1970-01-01 0000.txt", "Shared text 1970-01-01 0000 (2).txt", "Shared text 1970-01-01 0000 (3).txt"),
+            com.vecvel.danaview.library.pickers.PickerRequests.uniqueNames(listOf(n, n, n)),
+        )
     }
 
     @Test
@@ -252,9 +284,12 @@ class IncomingSupportTest {
         val ns = "http://schemas.android.com/apk/res/android"
         val activities = doc.getElementsByTagName("activity")
         val main = (0 until activities.length).map { activities.item(it) as Element }.single { it.getAttributeNS(ns, "name") == ".MainActivity" }
-        val filters = main.getElementsByTagName("intent-filter")
-        return (0 until filters.length).map { i ->
-            val f = filters.item(i) as Element
+        // The INT-104 filters live on the flag-gated alias of MainActivity (8d8fdf87): both count.
+        val aliases = doc.getElementsByTagName("activity-alias")
+        val owners = listOf(main) + (0 until aliases.length).map { aliases.item(it) as Element }
+            .filter { it.getAttributeNS(ns, "targetActivity") == ".MainActivity" }
+        val filters = owners.flatMap { o -> o.getElementsByTagName("intent-filter").let { l -> (0 until l.length).map { l.item(it) as Element } } }
+        return filters.map { f ->
             fun attrs(tag: String, attr: String): List<String> {
                 val nodes = f.getElementsByTagName(tag)
                 return (0 until nodes.length).mapNotNull { (nodes.item(it) as Element).getAttributeNS(ns, attr).takeIf { a -> a.isNotEmpty() } }
