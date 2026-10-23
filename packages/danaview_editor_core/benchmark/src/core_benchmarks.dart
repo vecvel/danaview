@@ -1,6 +1,6 @@
 // OWNER: CORE-35
 //
-// The core rows of ARCH §18.2, measured on the CI host (AOT, see run.dart):
+// The core rows of ARCH §18.2, measured in AOT and host-normalized (see run.dart):
 //
 // | id                         | what is timed                                                      | p90 budget |
 // |----------------------------|--------------------------------------------------------------------|------------|

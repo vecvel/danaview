@@ -5,8 +5,8 @@
 #
 # Usage: scripts/ci/editor/core.sh [all|test|benchmark]   (default: all)
 #   test       analyze, frame vectors, dart test            (CI job dart-core, macos-26: JSON goldens)
-#   benchmark  dart run benchmark/run.dart --check          (CI job dart-core-benchmark, ubuntu-latest:
-#              the host benchmark/baseline.json is recorded on; see the package README)
+#   benchmark  dart run benchmark/run.dart --check          (CI job dart-core-benchmark, ubuntu-latest;
+#              host-normalized against the dev-Mac baseline, see the package README)
 set -euo pipefail
 MODE="${1:-all}"
 case "$MODE" in all|test|benchmark) ;; *) echo "usage: $0 [all|test|benchmark]" >&2; exit 2 ;; esac

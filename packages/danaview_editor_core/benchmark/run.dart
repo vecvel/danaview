@@ -14,8 +14,12 @@
 // time compilation, which the release app never pays). `scripts/ci/editor/core.sh` runs
 // `--check` in the dart-core job.
 //
-// Regression rule: a row fails when its p90 exceeds `baseline × 1.25` and the difference is more
-// than [noiseFloorUs] (sub-millisecond rows jitter by tens of µs between runs). A failing row is
+// Regression rule: a row fails when its p90 exceeds `baseline × f × 1.25` and the difference is more
+// than [noiseFloorUs] (sub-millisecond rows jitter by tens of µs between runs). Budget rule: a gated
+// row fails when its p90 exceeds `budget × f`. f is the host factor: this run's calibration p50
+// over the baseline run's (src/calibration.dart), so the gate holds the baseline host's numbers and
+// the ARCH §18.2 budgets as met on that host on a slower or faster CI host; on the baseline host
+// f ≈ 1. A baseline without a calibration uses f = 1. A failing row is
 // re-measured up to twice and the best run counts, so a single noisy run does not fail CI.
 
 // ignore_for_file: avoid_print
@@ -29,6 +33,7 @@ import 'package:danaview_editor_core/eval.dart';
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart';
 
+import 'src/calibration.dart';
 import 'src/core_benchmarks.dart';
 import 'src/harness.dart';
 import 'src/large_project.dart';
@@ -117,6 +122,7 @@ Future<int> _run(String root, List<String> args) async {
   final host = _host();
   print('Core benchmarks on ${host['os']} (${host['cpus']} CPUs), Dart ${host['dart']}, ${_aot ? 'AOT' : 'JIT'}');
   print('Fixture: ${shapeOf(large)}');
+  final calibration = calibrationUs(quick: args.contains('--quick'));
 
   final lane = buildOneLaneProject();
   List<MetricResult> runAll() => [
@@ -132,10 +138,17 @@ Future<int> _run(String root, List<String> args) async {
 
   final results = {for (final r in runAll()) r.id: r};
   final baseline = _readBaseline(baselineFile);
+  // The lower of two calibrations (before and after the rows): noise only ever slows a pass down.
+  final calibrationNow = [calibration, calibrationUs(quick: args.contains('--quick'))].reduce((a, b) => a < b ? a : b);
+  final baseCalibration = _readBaselineCalibration(baselineFile);
+  final f = baseCalibration == null || baseCalibration <= 0 ? 1.0 : calibrationNow / baseCalibration;
+  final baselineHost = _readBaselineHost(baselineFile);
+  print('Host factor ${f.toStringAsFixed(2)} (calibration p50 $calibrationNow µs; baseline '
+      '${baseCalibration == null ? 'has no calibration, factor 1' : '$baseCalibration µs on $baselineHost'})');
 
   if (check) {
     for (var attempt = 0; attempt < 2; attempt++) {
-      final failing = results.values.where((r) => _failure(r, baseline[r.id]) != null).map((r) => r.id).toList();
+      final failing = results.values.where((r) => _failure(r, baseline[r.id], f) != null).map((r) => r.id).toList();
       if (failing.isEmpty) break;
       print('Re-measuring ${failing.join(', ')} (attempt ${attempt + 2} of 3)');
       for (final id in failing) {
@@ -149,14 +162,18 @@ Future<int> _run(String root, List<String> args) async {
   print('');
   for (final r in results.values) {
     final base = baseline[r.id];
-    final delta = base == null ? '' : '  (baseline p90 ${(base / 1000).toStringAsFixed(3)} ms, ${(100 * (r.p90 - base) / base).toStringAsFixed(0)}%)';
-    print('${r.describe()}$delta');
+    final delta = base == null
+        ? ''
+        : '  (baseline p90 ${(base / 1000).toStringAsFixed(3)} ms × f = ${(base * f / 1000).toStringAsFixed(3)} ms, '
+            '${(100 * (r.p90 - base * f) / (base * f)).toStringAsFixed(0)}%; budget × f ${(r.budgetUs * f / 1000).toStringAsFixed(3)} ms)';
+    print('${r.describe(hostFactor: f)}$delta');
   }
 
   final jsonOut = _option(args, '--json');
   final report = {
     'host': host,
     'mode': _aot ? 'aot' : 'jit',
+    'calibrationUs': calibrationNow,
     'metrics': {for (final r in results.values) r.id: r.toJson()},
   };
   if (jsonOut != null) File(jsonOut).writeAsStringSync('${const JsonEncoder.withIndent('  ').convert(report)}\n');
@@ -172,10 +189,10 @@ Future<int> _run(String root, List<String> args) async {
 
   if (!check) return 0;
   for (final r in results.values) {
-    final f = _failure(r, baseline[r.id]);
-    if (f != null) failures.add(f);
+    final why = _failure(r, baseline[r.id], f);
+    if (why != null) failures.add(why);
   }
-  if (baseline.isEmpty) failures.add('no baseline: run --update-baseline on the CI host');
+  if (baseline.isEmpty) failures.add('no baseline: run --update-baseline on the dev Mac');
   for (final id in baseline.keys) {
     if (!results.containsKey(id)) failures.add('$id is in the baseline but was not measured');
   }
@@ -187,13 +204,30 @@ Future<int> _run(String root, List<String> args) async {
   return 1;
 }
 
-/// Why [r] fails the gate, or null.
-String? _failure(MetricResult r, int? baselineP90) {
-  if (!r.withinBudget && r.budgetGated) return '${r.id}: p90 ${r.p90} µs is over the ARCH §18.2 budget of ${r.budgetUs} µs';
-  if (baselineP90 != null && r.p90 > baselineP90 * regressionFactor && r.p90 - baselineP90 > noiseFloorUs) {
-    return '${r.id}: p90 ${r.p90} µs regressed more than ${((regressionFactor - 1) * 100).round()}% over the baseline $baselineP90 µs';
+/// Why [r] fails the gate on a host [f] times as slow as the baseline host, or null.
+String? _failure(MetricResult r, int? baselineP90, double f) {
+  if (r.budgetGated && r.p90 > r.budgetUs * f) {
+    return '${r.id}: p90 ${r.p90} µs is over the ARCH §18.2 budget of ${r.budgetUs} µs × host factor ${f.toStringAsFixed(2)}';
+  }
+  if (baselineP90 != null && r.p90 > baselineP90 * f * regressionFactor && r.p90 - baselineP90 * f > noiseFloorUs) {
+    return '${r.id}: p90 ${r.p90} µs regressed more than ${((regressionFactor - 1) * 100).round()}% over the baseline '
+        '$baselineP90 µs × host factor ${f.toStringAsFixed(2)}';
   }
   return null;
+}
+
+/// The baseline run's calibration p50 (µs), or null.
+int? _readBaselineCalibration(File f) {
+  if (!f.existsSync()) return null;
+  final j = jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
+  return (j['calibrationUs'] as num?)?.toInt();
+}
+
+/// The baseline host's description.
+String _readBaselineHost(File f) {
+  if (!f.existsSync()) return '(none)';
+  final host = (jsonDecode(f.readAsStringSync()) as Map<String, Object?>)['host'] as Map<String, Object?>?;
+  return host == null ? '(unknown host)' : '${host['os']} (${host['cpus']} CPUs)';
 }
 
 /// Baseline p90s by metric id (empty when there is no baseline file).

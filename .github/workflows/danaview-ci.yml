@@ -137,9 +137,11 @@ jobs:
   dart-core-benchmark:
     name: dart-core-benchmark
     if: github.event_name != 'schedule'
-    # Linux: the core benchmark gate (CORE-35) compares against benchmark/baseline.json, which is
-    # recorded on this runner (ubuntu-latest, 4 vCPU). The 3-vCPU macos-26 VM that dart-core needs
-    # for its JSON goldens measures 1.6-2.3x slower than any baseline host and is not the gate host.
+    # The core benchmark gate (CORE-35). benchmark/baseline.json is recorded on the dev Mac (Apple M2,
+    # 8 cores); no CI runner matches it, so run.dart scales the baseline and the ARCH §18.2 budgets by
+    # a host factor measured in the same run (benchmark/src/calibration.dart). ubuntu-latest because
+    # its 4 vCPUs time steadily (p90/p50 1.03-1.25); the 3-vCPU macos-26 VM dart-core needs for its
+    # JSON goldens is noisier (p90/p50 up to 1.7).
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
