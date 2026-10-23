@@ -3,8 +3,9 @@
 // XCTests of the Apple glue (BUILD_PLAN HOM-24) linked against FlutterMacOS: the document, view,
 // text and tools host APIs answer through Pigeon types and typed errors, the platform view factory
 // builds a PDFKit viewer that navigates, zooms, finds and highlights fixture strings and copies a
-// selection, the texture calls are Android-only, and every tool stub answers notSupportedOnDevice
-// and ends its job.
+// selection, thumbnails render from an independent open while a view draws the same handle, every
+// async reply arrives on the main thread, the texture calls are Android-only, and every tool stub
+// answers notSupportedOnDevice and ends its job.
 
 import Foundation
 import PDFKit
@@ -21,6 +22,7 @@ final class PdfGlueTests: XCTestCase {
     let done = expectation(description: "reply")
     var out: Result<T, Error>?
     body { result in
+      XCTAssertTrue(Thread.isMainThread, "host replies go out on the platform main thread")
       out = result
       done.fulfill()
     }
@@ -165,6 +167,7 @@ final class PdfGlueTests: XCTestCase {
     let first = expectation(description: "first")
     var firstCode: String?
     views.search(viewId: 7, options: PdfSearchOptionsMsg(query: "e", caseSensitive: false, maxHits: 100000)) {
+      XCTAssertTrue(Thread.isMainThread)
       if case .failure(let e) = $0 { firstCode = (e as? PdfPigeonError)?.code }
       first.fulfill()
     }
@@ -204,6 +207,49 @@ final class PdfGlueTests: XCTestCase {
     XCTAssertThrowsError(try views.disposeTextureView(viewId: 7))
 
     XCTAssertThrowsError(try views.state(viewId: 99)) { XCTAssertEqual(($0 as? PdfPigeonError)?.code, "notFound") }
+  }
+
+  func testThumbnailsRenderFromATwinWhileAViewDrawsTheDocument() throws {
+    let dir = TestPdfs.tempDir(self)
+    let url = TestPdfs.writeTextPdf(to: dir.appendingPathComponent("v.pdf"), pages: 12, prefix: "TWIN")
+    let store = PdfDocumentStore()
+    let registry = PdfViewRegistry()
+    let views = PdfViewHostApiImpl(store: store, registry: registry)
+    let documents = PdfDocumentHostApiImpl(store: store)
+    let summary = try store.open(path: url.path, password: nil)
+    let viewDocument = try store.document(summary.handle)
+    let factory = PdfViewFactory(store: store, registry: registry, events: nil)
+    let controller = factory.makeController(viewId: 11, args: ["handle": NSNumber(value: summary.handle), "displayMode": "continuous"])
+    controller.nativeView?.frame = CGRect(x: 0, y: 0, width: 400, height: 600)
+    controller.nativeView?.layoutSubtreeIfNeeded()
+    XCTAssertTrue(controller.document === viewDocument)
+
+    // Request every page's thumbnail while the main thread keeps moving and zooming the view.
+    var replies = 0
+    let all = expectation(description: "thumbnails")
+    all.expectedFulfillmentCount = 12
+    for page in 0..<12 {
+      views.pageThumbnail(request: PdfThumbnailRequestMsg(handle: summary.handle, pageIndex: Int64(page), maxWidthPx: 90, maxHeightPx: 120)) {
+        XCTAssertTrue(Thread.isMainThread)
+        if case .success(let image) = $0, Array(image.png.data.prefix(4)) == [0x89, 0x50, 0x4E, 0x47] { replies += 1 }
+        all.fulfill()
+      }
+    }
+    for step in 0..<12 {
+      try views.goToPage(viewId: 11, pageIndex: Int64(step))
+      try views.setScale(viewId: 11, scale: step.isMultiple(of: 2) ? 1.5 : 1)
+      controller.nativeView?.display()
+    }
+    wait(for: [all], timeout: 30)
+    XCTAssertEqual(replies, 12)
+    XCTAssertEqual(views.renderTwinCount, 1, "one twin per handle, reused")
+
+    // The outline reads a twin too and replies on main; close drops the thumbnail twin.
+    XCTAssertEqual(try wait { documents.outline(handle: summary.handle, completion: $0) }.get().count, 0)
+    try documents.close(handle: summary.handle)
+    XCTAssertEqual(views.renderTwinCount, 0)
+    XCTAssertEqual(code(wait { views.pageThumbnail(request: PdfThumbnailRequestMsg(handle: summary.handle, pageIndex: 0, maxWidthPx: 90, maxHeightPx: 120), completion: $0) }), "notFound")
+    XCTAssertEqual(try views.state(viewId: 11).pageCount, 12, "the view keeps its document")
   }
 
   func testUnknownHandleGivesAnEmptyViewNotACrash() throws {

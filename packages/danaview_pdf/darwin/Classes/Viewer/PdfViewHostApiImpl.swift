@@ -3,7 +3,10 @@
 // PdfViewHostApi on Apple: routes view calls to the PDFKit viewers (main thread), runs search on a
 // background queue against an independent read-only open of the view's file (a newer search or
 // cancelSearch cancels the older one between pages), and renders page thumbnails off the main
-// thread. The texture view calls are Android's (HOM-25) and answer notSupportedOnDevice here.
+// thread from one independent open per handle (kept on the render queue, dropped on close), so no
+// background draw ever shares the PDFDocument a PDFView draws on the main thread. Every async reply
+// goes out on the main thread. The texture view calls are Android's (HOM-25) and answer
+// notSupportedOnDevice here.
 
 import Foundation
 import PDFKit
@@ -38,10 +41,36 @@ final class PdfViewHostApiImpl: PdfViewHostApi {
   private var searches: [Int64: PdfCancelToken] = [:]
   private let searchQueue = DispatchQueue(label: "com.vecvel.danaview.pdf.search", qos: .userInitiated)
   private let renderQueue = DispatchQueue(label: "com.vecvel.danaview.pdf.render", qos: .userInitiated)
+  /// Thumbnail twins by handle; read and written on renderQueue only.
+  private var renderTwins: [Int64: PDFDocument] = [:]
 
   init(store: PdfDocumentStore, registry: PdfViewRegistry) {
     self.store = store
     self.registry = registry
+    store.onClose { [weak self, queue = renderQueue] handle in
+      queue.async { self?.renderTwins[handle] = nil }
+    }
+  }
+
+  /// Number of cached thumbnail twins (tests; call off renderQueue).
+  var renderTwinCount: Int {
+    renderQueue.sync { renderTwins.count }
+  }
+
+  /// The thumbnail twin of [handle] (on renderQueue).
+  private func renderTwin(_ handle: Int64) throws -> PDFDocument {
+    guard store.contains(handle) else {
+      renderTwins[handle] = nil
+      throw PdfFailure(.notFound, "no such document")
+    }
+    if let twin = renderTwins[handle] { return twin }
+    let twin = try store.twin(handle)
+    renderTwins[handle] = twin
+    return twin
+  }
+
+  private static func reply<T>(_ completion: @escaping (Result<T, Error>) -> Void, _ result: Result<T, Error>) {
+    DispatchQueue.main.async { completion(result) }
   }
 
   private func view(_ viewId: Int64) throws -> PdfViewController {
@@ -114,9 +143,9 @@ final class PdfViewHostApiImpl: PdfViewHostApi {
             snippet: m.snippet, snippetMatchStart: Int64(m.snippetMatchStart), snippetMatchLength: Int64(m.snippetMatchLength),
             bounds: PdfRectMsg(x: Double(m.bounds.minX), y: Double(m.bounds.minY), width: Double(m.bounds.width), height: Double(m.bounds.height)))
         }
-        completion(.success(PdfSearchResultMsg(hits: hits, truncated: outcome.truncated)))
+        PdfViewHostApiImpl.reply(completion, .success(PdfSearchResultMsg(hits: hits, truncated: outcome.truncated)))
       } catch {
-        completion(.failure(PdfErrors.from(error)))
+        PdfViewHostApiImpl.reply(completion, .failure(PdfErrors.from(error)))
       }
     }
   }
@@ -149,15 +178,14 @@ final class PdfViewHostApiImpl: PdfViewHostApi {
   }
 
   func pageThumbnail(request: PdfThumbnailRequestMsg, completion: @escaping (Result<PdfImageMsg, Error>) -> Void) {
-    let store = self.store
-    renderQueue.async {
+    renderQueue.async { [self] in
       do {
         let image = try PdfReader.render(
-          try store.document(request.handle), page: Int(request.pageIndex),
+          try renderTwin(request.handle), page: Int(request.pageIndex),
           maxWidth: Int(request.maxWidthPx), maxHeight: Int(request.maxHeightPx))
-        completion(.success(PdfImageMsg(png: FlutterStandardTypedData(bytes: image.png), widthPx: Int64(image.width), heightPx: Int64(image.height))))
+        PdfViewHostApiImpl.reply(completion, .success(PdfImageMsg(png: FlutterStandardTypedData(bytes: image.png), widthPx: Int64(image.width), heightPx: Int64(image.height))))
       } catch {
-        completion(.failure(PdfErrors.from(error)))
+        PdfViewHostApiImpl.reply(completion, .failure(PdfErrors.from(error)))
       }
     }
   }

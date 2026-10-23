@@ -144,14 +144,23 @@ Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerF
     settings: const RouteSettings(name: 'document-viewer'),
     transitionDuration: disable ? Duration.zero : DanaviewMotion.normal,
     reverseTransitionDuration: disable ? Duration.zero : DanaviewMotion.fast,
-    pageBuilder: (context, _, __) => DocumentViewer(
-      key: const ValueKey('s3-document-viewer'),
-      file: file,
-      viewers: setup.viewers,
-      probes: setup.probes,
-      fileOut: fileOut,
-      onOpened: record,
-      onClose: () => unawaited(Navigator.of(context).maybePop()),
+    // A bare route has no Material above it, so the viewers' texts would fall back to Flutter's
+    // debug style (yellow double underline, FIX-S3Q-2): the kit background and text style here,
+    // as the photo viewer screen has through its scaffold.
+    pageBuilder: (context, _, __) => Material(
+      color: DanaviewColors.background,
+      child: DefaultTextStyle.merge(
+        style: DanaviewTextStyles.body.copyWith(decoration: TextDecoration.none),
+        child: DocumentViewer(
+          key: const ValueKey('s3-document-viewer'),
+          file: file,
+          viewers: setup.viewers,
+          probes: setup.probes,
+          fileOut: fileOut,
+          onOpened: record,
+          onClose: () => unawaited(Navigator.of(context).maybePop()),
+        ),
+      ),
     ),
     transitionsBuilder: (context, animation, _, child) => FadeTransition(opacity: animation, child: child),
   ));
@@ -318,6 +327,9 @@ Future<void> _prepareStaging(String staging) async {
 /// `openLibraryEntryWith` in files_home_wiring.dart. Set by [installIncomingDocumentOpen].
 typedef IncomingEntryOpener = Future<void> Function(BuildContext context, ProviderRead read, FileEntry entry);
 
+/// The toast of an Open with import that failed (HOM-21).
+const String incomingOpenFailedMessage = "Couldn't open this file.";
+
 /// Installs HOM-21's interceptor on [IncomingMediaBridge] (flag on only): photos and documents
 /// another app opens with Danaview are imported into `Imported` and shown by [openEntry] on the
 /// root navigator of [navigator]; everything else plays as in 1.1. Returns whether it installed.
@@ -338,9 +350,11 @@ bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required 
       unawaited(openEntry(c, scope.read, entry));
     },
     onFailed: () {
-      final c = context();
+      // The navigator's own context sits above its Overlay, where a toast finds no overlay and is
+      // dropped: show it from a context inside the overlay.
+      final c = navigator.currentState?.overlay?.context;
       if (c != null && c.mounted) {
-        DanaviewToast.show(c, "Couldn't open this file.", kind: DanaviewToastKind.error, icon: Icons.error_outline_rounded);
+        DanaviewToast.show(c, incomingOpenFailedMessage, kind: DanaviewToastKind.error, icon: Icons.error_outline_rounded);
       }
     },
   );

@@ -148,15 +148,15 @@ adds no plugin, and the 8 GB machine was shared with other builders).
 
 ## Slice QA
 
-Ticket **S3-Q**, Mac half, on `v1.2-wip`, 2026-10-23, 12:10–(see §3). Tree: `c326ea60` and the
+Ticket **S3-Q**, Mac half, on `v1.2-wip`, 2026-10-23, 12:10–14:05. Tree: `c326ea60` and the
 backup commits after it up to `8bff0378`, which add only S3-W's and S3-Q's files and the refreshed
 `ios/Podfile.lock` (N-S3-2); product code identical to `c326ea60`. QA changed no product code; every
 defect below is a FIX ticket. The Android Emulator half runs on the Windows laptop (**pending:
 Windows**).
 
 **Gate verdict (Mac half): red.** The S3 packages, the native XCTests, the architecture test,
-HOM-15, the composed overflow / accessibility matrix and the S3 E2E on the iOS 26.5 iPhone 16 are
-green, and the real Share Extension (Files and Photos) and Open with Danaview from Files work on the
+HOM-15, the composed overflow / accessibility matrix, the S3 E2E on the iOS 26.5 iPhone 16 and the
+v1.1 iOS suite with `DANAVIEW_FILES_HOME=true` (20 of 20) are green, and the real Share Extension (Files and Photos) and Open with Danaview from Files work on the
 simulator. Two blocking defects were found on the simulator: every document viewer draws its text
 with Flutter's fallback style (yellow double underline, FIX-S3Q-2), and a Danaview-folder document
 can no longer be shared, saved out, favourited, copied or shown in File info, because S3 routes the
@@ -249,7 +249,26 @@ log, 3 manual screenshots).
 
 ### 3. v1.1 iOS suite with `DANAVIEW_FILES_HOME=true`
 
-V11_RESULT_PLACEHOLDER
+`DV_E2E_IPHONE="iPhone 16" DV_E2E_IPHONE_RUNTIME="iOS 26.5" DV_E2E_MODELS=/Users/besaoct/danaview-models
+DV_E2E_EXTRA_DEFINES="DANAVIEW_FILES_HOME=true" scripts/ci/editor/e2e_ios.sh iphone` (plus
+`DV_E2E_SKIP_PODS=1 DV_E2E_SKIP_WHISPER=1`: pods had just been installed and WhisperCore is current),
+13:06–13:57, one batch, models read in place from `/Users/besaoct/danaview-models` (nothing
+downloaded). The define reaches `flutter test` through `e2e_host.sh -D`, the same path that carried
+it to the S3 E2E, which refuses to start without it. `E2eApp._boot` adds `filesHomeOverrides`, so the
+suite runs on the wired library **with S3-W's `documentsOverrides`** (viewers, linked-document scan,
+App Group inbox and its host); it does not install the Open-with interceptor (FIX-S3Q-5, low).
+
+| Batch | Result |
+|---|---|
+| S3 flag set (`DANAVIEW_FILES_HOME=true`, plus the script's `DANAVIEW_EDITOR`, `DANAVIEW_AUTO_CAPTIONS`) | **20 of 20 files pass** (s01–s18, `x_android_api28`, `x_ios_background_export`; `x_android_export_background` skipped on iOS as designed). s05 hit the known harness hiccup once ("No tests ran." after the build, the 900 s watchdog) and passed on the script's automatic re-run |
+| Flags off | not re-run: S3 changes nothing outside the flag (S3-W's flag-off tests, §1), so S2-Q's flag-off batch stands |
+
+Simulator realities, reported not failed: HEVC/MOV not offered (`hevcEncode false`);
+`pausedInBackground observed: false`; s13 start latency 500 ms (device budget 100 ms), voiceover
+-40.9 dBFS; s07 burned cues 341 / 324 changed samples; s08 3 cues; s15 head -14.6 dBFS, body
+-9.0 dBFS. The simulator was booted for the S3 E2E (12:21) and kept for the manual checks and this
+batch; S3-Q shut it down at 13:58. The iPad Pro 13 was not touched. Logs and summary:
+`build/e2e/ios/6663101E-6BE7-47D4-B3B8-055700BF2E02/` (`summary.txt`, `logs/`).
 
 ### 4. Persistence (QA-106 scope for S3)
 
