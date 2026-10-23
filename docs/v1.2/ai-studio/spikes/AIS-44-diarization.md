@@ -1,7 +1,7 @@
 # AIS-44 · Spike: on-device diarization with sherpa-onnx (Mac half)
 
 - **Ticket:** AIS-44 (AI_STUDIO_PLAN.md "#### AIS-44"; D-70c, V-S17, V-S18, V-S19, RS17, §7.3)
-- **Status:** Mac half done; Android half **pending: Windows lane**. Real-speech eval set pending an owner decision (§8).
+- **Status:** Mac half done; Android half done (§10, Windows lane, 2026-10-23). Real-speech eval set pending an owner decision (§8).
 - **Host:** `spikes/ais-44-diarization/` (throwaway Dart CLI host, BUILD_PLAN §0.1 rule 8; no product dependency, nothing in any product build)
 - **Machine:** MacBook M2, 8 GB, macOS 26, Dart 3.12.2, `sherpa_onnx` 1.13.8 (pub.dev). Other builders were running (load average 4–5), so the speeds below are conservative.
 - **Date:** 2026-10-22
@@ -15,7 +15,7 @@
 | Embedding model | **Recommend NeMo TitaNet-small** (`nemo_en_titanet_small.onnx`, 40.3 MB). Fallback: WeSpeaker ResNet34-LM (26.5 MB) if TitaNet's licence fails review. **Reject 3D-Speaker CAM++ (en, VoxCeleb)** |
 | V-S18: overlap survives | **Yes, closed.** sherpa-onnx's output keeps overlapping segments from different speakers (overlap recall 86–98%). AIS-46 can use the segment list directly and does not need pyannote's per-frame activity |
 | V-S19 / RS17: install size on iOS | **NO-GO as specified.** There is no way to ship sherpa-onnx + ONNX Runtime on iOS without growing the app: it is native code, iOS can't download code, and on-demand resources can't carry executables. Measured cost: **+26.4 MB installed, about 9.8 MB compressed download** (arm64). Per §7.3 this goes to the owner **before AIS-45 starts**. Options are in §6 |
-| Android install size | pending: Windows lane (package inputs in §6.3) |
+| Android install size | Stock package: +27.0 MB installed / +9.9 MB download (arm64). Zero base growth with Play Feature Delivery, verified locally (§10.5, §10.6) |
 | Accuracy caveat | Clearly different voices score DER 3–5%, with overlaps kept. Two similar female voices (Samantha and Karen) are merged by every model, because the pipeline clusters one embedding per pyannote window-speaker and pyannote does not split those two voices. The voices themselves are separable: on clean segments TitaNet sorts them 100% correctly. A real-speech eval set is needed before the AIS-48 gate |
 
 ## 2. What was run
@@ -148,7 +148,7 @@ The output segment list contains time-overlapping segments for different speaker
 | iOS arm64 (device) | `SherpaOnnxC.framework`, a dynamic framework with ONNX Runtime linked in statically; links CoreML | **26.4 MB** (`__TEXT` 25.3 MB) | **≈ 9.8 MB** |
 | macOS (not shipped) | `libsherpa-onnx-c-api.dylib`, arm64 slice | 27.1 MB | n/a |
 | Android arm64-v8a | `libonnxruntime.so` 22.2 MB + `libsherpa-onnx-c-api.so` 4.5 MB + `libsherpa-onnx-cxx-api.so` 0.4 MB | 27.2 MB | ≈ 10.0 MB |
-| Android, other ABIs | armeabi-v7a, x86, x86_64 packages also pulled in as dependencies | pending: Windows lane | pending: Windows lane |
+| Android, other ABIs | armeabi-v7a, x86, x86_64 packages also pulled in as dependencies | armeabi-v7a 18.8 MB, x86_64 31.0 MB (x86 is not packaged by Flutter); see §10.5 | armeabi-v7a ≈ 9.1 MB, x86_64 ≈ 11.2 MB |
 
 - The `sherpa_onnx` Dart package is all-or-nothing. It depends on every platform package (Android ×4 ABIs, iOS, macOS, Linux, Windows, web), and its binary includes the whole of sherpa-onnx (ASR, TTS, KWS, VAD) plus a full ONNX Runtime.
 
@@ -169,7 +169,7 @@ The owner has to choose one of these:
 | **D. Zero growth: ggml**: run both models on the ggml that whisper.cpp already ships (`WhisperCore.xcframework`) | ≈ 0 (code only) | High effort: hand-port both networks (LSTM, SincNet, ResNet-style blocks) to ggml. Only if C fails |
 
 - My recommendation is **C, with B as the fallback** if Core ML conversion or accuracy fails. A is acceptable only if the owner lifts the rule for iOS. Whatever is picked, the Licences screen gains sherpa-onnx (Apache-2.0) and ONNX Runtime (MIT) under A or B only, plus the model licences under every option.
-- **Android: pending: Windows lane.** For that lane: Play Feature Delivery (an on-demand dynamic feature module carrying `libonnxruntime.so` and the sherpa-onnx `.so` files, ≈ 10 MB download for arm64) keeps the base install unchanged. Downloading `.so` files from our own host would break Google Play's policy on executable code. The Windows lane should verify that the module works with Flutter FFI `DynamicLibrary.open` after a split install, and measure the AAB per-ABI delta.
+- **Android: done by the Windows lane; the feature module is verified with local testing (§10.6).** The original request: Play Feature Delivery (an on-demand dynamic feature module carrying `libonnxruntime.so` and the sherpa-onnx `.so` files, ≈ 10 MB download for arm64) keeps the base install unchanged. Downloading `.so` files from our own host would break Google Play's policy on executable code. The Windows lane should verify that the module works with Flutter FFI `DynamicLibrary.open` after a split install, and measure the AAB per-ABI delta.
 
 ## 7. Recommendations for AIS-45 / AIS-46
 
@@ -191,3 +191,140 @@ The owner has to choose one of these:
 
 - Spike files are under `spikes/ais-44-diarization/`. The generated WAVs over 1 MB and `results/` are meant to be git-ignored. **However, a WIP backup commit made before the `.gitignore` existed already tracks `data/l1_4spk_long.wav` (17.7 MB), the other WAVs and `results/*.json`.** Someone with git rights needs to run `git rm --cached` on `spikes/ais-44-diarization/data/{c3_3spk_turns,c6_2spk_male,l1_4spk_long}.wav` and `spikes/ais-44-diarization/results/`; this spike does not run state-changing git commands.
 - Nothing in any product package references this spike.
+
+## 10. Android half (Windows lane)
+
+- **Machine:** Windows 11 laptop, Intel Core Ultra 7 155H (22 logical CPUs), 31 GB; Dart 3.12.2, Flutter 3.44.8, NDK 28.2.13676358, `sherpa_onnx` 1.13.8 (the Mac's version). Two other emulators and other agents' Gradle builds shared the host for most runs, so every emulator speed below is noisy and host-bound.
+- **Date:** 2026-10-23. **Branch:** `spike-ais44-android` (from `origin/v1.2-android`). Evidence is under `spikes/ais-44-diarization/results/` (git-ignored).
+- **Clips used:** the four tracked clips only (c1_2spk_turns, c2_2spk_overlap, c4_3spk_overlap, c5_2spk_similar); c3, c6 and l1 need macOS `say`. For speed and memory, `android/make_long.py` builds **a1_3spk_long** (574.7 s = (c1, c2, c4, c5) × 5 with 1 s noise-floor gaps; Samantha, Daniel and Karen keep one label across the clip) and **a2_3spk_37min** (2299 s = a1 × 4). They stand in for l1 / l2 but have 3 speakers, not 4, so their DER is not comparable with l1's 38%.
+- **AVDs:** `Pixel_API_34` (API 34 x86_64, 3 GB, 4 cores) and `Pixel_API_29_2GB` (API 29 x86_64, 2 GB, the MINIMAL tier). Both API 35 x86_64 AVDs were running for other agents (emulator-5554 and -5558), and the emulator refuses a second instance of a running AVD, so API 34 replaced API 35. Nothing here depends on an API level above 24.
+
+### 10.1 What was run
+
+| Piece | What it is |
+|---|---|
+| Host reference | `bin/diarize.dart`, AOT-compiled on Windows against `sherpa_onnx_windows` 1.13.8. The four DLLs must sit next to the exe: otherwise Windows loads the system `onnxruntime.dll` (ORT 1.17.1, from Windows ML) and sherpa-onnx crashes with "API version [28] is not available". |
+| `android/probe/diarize_probe.c` | A native CLI over the sherpa-onnx C API (header from tag v1.13.8, `fetch_header.sh`), built with NDK clang against the `.so` files shipped in `sherpa_onnx_android_*` 1.13.8. It prints the same JSON as `diarize.dart`, scored with the unchanged `tool/score.py`. One process per configuration; peak memory is `VmHWM` from `/proc/self/status` (whole process, one float copy of the audio, no Dart VM). `android/run_device.sh` pushes and runs the grid. |
+| `android/size/` | Two throwaway Flutter apps (the `flutter create` template, and the same plus `sherpa_onnx` 1.13.8): release `--split-per-abi` APKs and an AAB each; Play download size from `bundletool get-size total`. The sherpa app also runs one diarization through the **stock Dart package** inside a Flutter release app (FFI smoke). |
+| `android/pfd/` | Play Feature Delivery probe: the `.so` files move out of the base into an on-demand dynamic feature module `:diarization`, installed with `bundletool install-apks --local-testing` (FakeSplitInstallManager); Dart then loads and runs sherpa-onnx. |
+
+### 10.2 Accuracy: identical to the Mac
+
+DER is the same on the Mac, the Windows host, API 34 and API 29, clip by clip. (c2 shows 5.0% on Android against 4.9% on the hosts only because the probe prints segment times to 3 decimals.) Nothing Android-specific changes accuracy.
+
+| Embedding (int8 seg) | Clustering | c1 | c2 | c4 | c5 | Mean of 4 (collar) | Right speaker count |
+|---|---|---|---|---|---|---|---|
+| **TitaNet-small** | threshold 0.5 or 0.7 | 2.9% | 5.0% | 37.7% | 54.9% | **25.1% (18.8%)** | 3/4 |
+| TitaNet-small | oracle k | 2.9% | 5.0% | 37.7% | 54.9% | 25.1% (18.8%) | k forced; c4 still merges Karen |
+| WeSpeaker ResNet34-LM | threshold 0.5 | 2.9% | 5.0% | 37.7% | 58.7% | 26.1% (19.4%) | 2/4 |
+| WeSpeaker ResNet34-LM | threshold 0.7 | 58.0% | 55.6% | 73.3% | 58.7% | 61.4% | 0/4 (one speaker) |
+| CAM++ (en VoxCeleb) | oracle k | 58.0% | 38.2% | 59.4% | 54.9% | 52.6% | n/a |
+
+- The Mac's per-clip TitaNet values (c1 2.9%, c2 4.9%, c4 37.7%, c5 54.9%) are reproduced exactly. On c2, overlap recall is 98% and "both speakers right" 98%: V-S18 holds on Android.
+- Long clip a1 (3 speakers, 9.6 min): TitaNet at 0.5 or 0.7 gives **22.9%** (collar 16.9%), 4 speakers found for 3, overlap recall 91%. WeSpeaker gives 26.8% at 0.5 (Windows host) and falls to 2 speakers / 59.1% at 0.7. a2 (38.3 min), TitaNet at 0.7: 24.0%. Again almost all of the error is the Samantha + Karen merge.
+
+### 10.3 Speed (RTF, 2 threads unless noted)
+
+| Where | TitaNet-small | WeSpeaker ResNet34-LM | WeSpeaker / TitaNet |
+|---|---|---|---|
+| Windows host, a1 | 0.134–0.143 | 0.414–0.466 | 3.1× |
+| API 34 emulator, short clips | 0.23–0.35 | 0.29–0.57 | ≈ 1.4× |
+| API 34 emulator, a1, 1 / 2 / 4 threads | 0.318 / **0.273** / 0.521 | 0.960 / **0.549** / 0.582 | 3.0× / 2.0× / 1.1× |
+| API 34 emulator, a2 (38.3 min) | 0.329 | n/a | |
+| API 29 2 GB emulator, short clips | 0.10–0.58 | 0.21–0.74 | |
+| API 29 2 GB emulator, a1 | **0.183** | **0.382** | 2.1× |
+| API 29 2 GB emulator, a2 (38.3 min) | 0.171 | n/a | |
+| Flutter release app, stock Dart package, c2 (API 34) | 0.125 | n/a | |
+
+- An x86_64 emulator on a shared laptop says nothing about ARM phone tiers: the same config moved between 0.17 and 0.33 with host load, and 4 threads was *slower* than 2 on API 34 because the host was saturated. Only the ratio is useful: **WeSpeaker is 2–3× slower than TitaNet on Android x86_64 too**, as on the Mac. Mid- and low-tier ARM RTF still needs a physical device (AIS-45).
+- Model load: 0.35–1.1 s for TitaNet, 0.3–1.7 s for WeSpeaker (a cold page cache is the high end).
+- Speed is linear in length: a2 (38.3 min) ran at the same RTF as a1.
+
+### 10.4 Peak memory (VmHWM; native probe: no Dart VM, one float copy of the audio)
+
+| Case | API 34 (3 GB) | API 29 (2 GB) |
+|---|---|---|
+| Models loaded, no audio: TitaNet / WeSpeaker / CAM++ | 102 / 88 / 106 MB | 98 / 82 / 94 MB |
+| Short clips (25–31 s): TitaNet / WeSpeaker | 194–258 / 149–179 MB | 198–257 / 147–180 MB |
+| a1, 9.6 min: TitaNet / WeSpeaker | 331 / 234 MB | 323 / 224 MB |
+| **a2, 38.3 min, TitaNet** | **728 MB** | **629 MB, completed (no low-memory kill)** |
+| Whole Flutter release app, c2, stock Dart package | 300 MB | n/a |
+
+- The 38-minute run finished on the 2 GB AVD (about 0.9 GB MemAvailable at the start). Its lower peak there is the kernel reclaiming under pressure, not lower use.
+- At 38 min the audio is only about 147 MB of the 728 MB, so most of the growth is sherpa-onnx's per-window state and clustering, as the Mac found. **Process long media in blocks of about 10 minutes on Android too** (about 330 MB peak per block with TitaNet), link speakers across blocks by centroid cosine (§6.2), and don't hold Dart-list copies of the samples.
+
+### 10.5 Install and download size per ABI (stock `sherpa_onnx` 1.13.8)
+
+Per ABI, the `.so` set is `libonnxruntime.so` + `libsherpa-onnx-c-api.so` + `libsherpa-onnx-cxx-api.so`:
+
+| ABI | Raw | gzip -9 | Release APK (split): template → + sherpa_onnx | Install delta | Play download (bundletool): template → + sherpa_onnx | Download delta |
+|---|---|---|---|---|---|---|
+| **arm64-v8a** | 27,186,552 B | 10,001,372 B | 15,261,722 → 42,277,859 B | **+27.0 MB** | 7,161,222 → 17,090,102 B | **+9.9 MB** |
+| armeabi-v7a | 18,839,444 B | 9,109,945 B | 12,494,122 → 31,123,401 B | +18.6 MB | 6,564,129 → 15,604,057 B | +9.0 MB |
+| x86_64 | 31,007,520 B | 11,154,442 B | 16,670,400 → 47,440,820 B | +30.8 MB | 7,321,896 → 18,439,817 B | +11.1 MB |
+| x86 | 32,045,876 B | 11,412,717 B | not packaged (Flutter builds arm, arm64 and x64 only) | 0 | 0 | 0 |
+
+- The APK delta is about the raw `.so` size because AGP stores native libraries uncompressed (page-aligned). So the **installed** growth on a phone is the raw size (arm64 +27.0 MB), and the Play **download** is the compressed size (+9.9 MB). The AAB grows from 43.7 to 97.6 MB (three ABIs).
+- The Dart side is negligible. The whole cost is ONNX Runtime (22.2 MB arm64) plus sherpa-onnx (4.9 MB arm64); the ASR, TTS, KWS and VAD code comes along because the prebuilt `.so` is all-in-one.
+
+### 10.6 Zero base growth on Android: Play Feature Delivery works (verified locally)
+
+The Mac's §6.4 proposal holds. The three `.so` files go into an on-demand dynamic feature module (`dist:on-demand`, `dist:fusing include="false"`, `hasCode="false"`) and are excluded from the base:
+
+| Module | arm64-v8a | armeabi-v7a | x86_64 |
+|---|---|---|---|
+| base (download) | 7,102,860 B (template 7,161,222 B: **no growth**) | 6,510,800 B | 7,266,952 B |
+| `diarization` module (download, base subtracted) | **10,028,456 B** | 9,133,457 B | 11,209,478 B |
+
+Verified on the 2 GB API 29 AVD with `bundletool install-apks --local-testing` (FakeSplitInstallManager plus SplitCompat):
+
+1. Only `base.apk` and `split_config.x86_64.apk` are installed, and `DynamicLibrary.open('libsherpa-onnx-c-api.so')` **fails**.
+2. `SplitInstallManager.startInstall` installs the module (4.2 s locally). **dlopen still fails** at this point.
+3. Kotlin calls `SplitInstallHelper.loadLibrary(ctx, "onnxruntime")`, then `"sherpa-onnx-c-api"`. After that, the stock Dart package's `initBindings()` opens the library by name, and diarizing c2 returns the same 8 segments as the Mac's §5 table.
+
+Rules for AIS-45 on Android:
+
+1. Ship the `.so` files only in the on-demand module and exclude them from the base (`packaging.jniLibs.excludes`). Module titles must be strings in the base module.
+2. After install, load the libraries from Kotlin with `SplitInstallHelper.loadLibrary` in dependency order (onnxruntime first), then open them from Dart by name. Use `SplitCompatApplication` (or `SplitCompat.install`), plus `SplitCompat.installActivity` in the activity.
+3. This needs `com.google.android.play:feature-delivery` (2.1.0 here, spike-only). That is a **new app dependency** for the owner to approve, and it adds a Play library to the Licences screen.
+4. Still to check on a Play-installed build (internal app sharing): a real split install rather than SplitCompat emulation, uninstall and deferred uninstall, and that "Detect speakers" stays hidden until the module is present. Local testing cannot prove the real Play path.
+
+### 10.7 Model choice: TitaNet-small confirmed on Android
+
+- TitaNet-small is as accurate as WeSpeaker on every tracked clip.
+- It is flat from threshold 0.5 to 0.7, while WeSpeaker falls to one speaker at 0.7.
+- It is 2–3× faster on Android x86_64.
+- Its costs: about 100 MB more peak memory per 10-minute block (331 against 234 MB) and a 14 MB bigger model download. Both fit the MINIMAL tier with 10-minute blocks.
+
+**Keep the Mac's recommendation:** pyannote seg 3.0 int8 plus TitaNet-small, threshold 0.7, 2 threads. WeSpeaker stays the licence fallback; with it, use threshold 0.4–0.5, never 0.7. CAM++ stays rejected.
+
+### 10.8 Verdict (Android)
+
+| Question | Answer |
+|---|---|
+| Engine on Android | **GO.** Stock `sherpa_onnx` 1.13.8 runs on API 29 and API 34 x86_64, from a native probe and from the Dart FFI package in a Flutter release app, with the same output as the Mac and Windows |
+| Model pair | **GO.** pyannote int8 plus TitaNet-small confirmed (§10.7) |
+| MINIMAL tier (2 GB) | **GO with 10-minute blocks** (about 330 MB peak per block). A single 38-minute pass also finished (629 MB), but leaves little headroom |
+| Speed on phones | **[VERIFY on ARM hardware, AIS-45].** Emulator RTF of 0.17–0.33 for TitaNet is host-bound, not a tier figure |
+| Android install size | Stock package in the base: **+27.0 MB installed / +9.9 MB download (arm64)**, +18.6 / +9.0 MB (armeabi-v7a), +30.8 / +11.1 MB (x86_64). With Play Feature Delivery: **base +0**; the on-demand module is a 10.0 MB download and 27.2 MB installed (arm64), only once the user turns the feature on. Recommendation: the feature module (needs the owner to approve `feature-delivery`) |
+
+### 10.9 Downloads made on this machine (owner-approved 2026-10-23)
+
+| What | Source | Bytes | SHA-256 | Where |
+|---|---|---|---|---|
+| Diarization models (4, plus the segmentation tarball) | `docs/v1.2/spikes/WINDOWS_DOWNLOADS.md` §1 (downloaded by the lead) | as listed there | all match the Mac's `SHA256SUMS` | `C:/dev/models/diarization/` |
+| `sherpa_onnx` 1.13.8 and its platform packages (incl. `sherpa_onnx_android_{arm64,armeabi,x86,x86_64}`, `sherpa_onnx_windows`) | pub.dev (`dart pub get`) | arm64 `.so` set 27,186,552 | per-`.so` hashes in the commit message | pub cache |
+| `c-api.h` (sherpa-onnx v1.13.8) | https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.8/sherpa-onnx/c-api/c-api.h | 167,657 | `2a1b95084be8fd1deb3228fcad2fd3f7f0258b64582f7402281ec174c7b7f4ce` | spike `build/` |
+| bundletool 1.17.2 | https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar | 32,519,278 | `2d4ad908faea64047c1cc9cb747e6aa667c6ab192e09607bd16b67246a8cd6ae` | spike `build/tools/` |
+| `com.google.android.play:feature-delivery:2.1.0` (plus `core-common`) | Google Maven (Gradle) | 312,128 (aar) | `085bd4632ccf96ceafcbfb10219ae57d604c5f680a2ea3bf860fe2b289afe5ad` | Gradle cache; spike app only |
+| numpy 2.5.4 (for `tool/score.py`) | PyPI (pip, spike venv) | n/a | n/a | spike `build/venv/` |
+
+Nothing was committed except scripts and this section. To reproduce:
+
+1. `dart pub get`
+2. `android/probe/fetch_header.sh && android/probe/build.sh x86_64`
+3. `python -I -B android/make_long.py`
+4. `android/run_device.sh <serial> <tag> all`
+5. `python -I -B tool/score.py results/android/<tag>/*.json`
+6. `android/size/measure_size.sh`, then `android/size/smoke.sh <serial>`
+7. `android/pfd/build_pfd.sh && android/pfd/run_pfd.sh <serial>`
