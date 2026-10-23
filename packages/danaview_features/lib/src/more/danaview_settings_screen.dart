@@ -48,7 +48,7 @@ class DanaviewSettingsScreen extends StatelessWidget {
         topBar: DanaviewLibraryTopBar(title: 'Settings', onBack: onBack),
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final insets = danaviewLibraryInsets(constraints.maxWidth);
+            final insets = DanaviewSpacing.pageInsets(constraints.maxWidth);
             return ListView(
               padding: insets.copyWith(
                 top: DanaviewSpacing.lg,

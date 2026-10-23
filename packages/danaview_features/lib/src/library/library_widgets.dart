@@ -4,16 +4,124 @@ import 'package:flutter/material.dart';
 import 'package:danaview_platform/danaview_platform.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
-const double danaviewLibraryMaxWidth = 760;
+/// Side margin of library content at [width]: 16 below 600, 24 below 1024, 32 from 1024.
+double danaviewLibraryGutter(double width) => DanaviewSpacing.pageGutter(width);
 
-double danaviewLibraryGutter(double width) =>
-    DanaviewBreakpoints.isCompactWidth(width) ? DanaviewSpacing.lg : DanaviewSpacing.xl;
+/// Side padding of library content: full width minus [danaviewLibraryGutter] each side (no cap).
+EdgeInsets danaviewLibraryInsets(double width) => DanaviewSpacing.pageInsets(width);
 
-/// Side padding that keeps library content at most [danaviewLibraryMaxWidth] wide and centered.
-EdgeInsets danaviewLibraryInsets(double width) {
-  final gutter = danaviewLibraryGutter(width);
-  final extra = math.max(0.0, (width - 2 * gutter - danaviewLibraryMaxWidth) / 2);
-  return EdgeInsets.symmetric(horizontal: gutter + extra);
+/// The narrowest card of a library grid (~280 pt; 264 so a 600 pt window gets two columns).
+const double danaviewLibraryGridMinTileWidth = 264;
+
+/// The gap between library grid cards, both ways.
+const double danaviewLibraryGridGap = DanaviewSpacing.md;
+
+/// The content width from which library lists become card grids: a 600 pt window minus its
+/// 24 pt gutters. Phones keep list rows.
+const double danaviewLibraryGridMinContentWidth = 600 - 2 * DanaviewSpacing.xl;
+
+/// How many grid columns fit [contentWidth] (1 = keep the list rows).
+int danaviewLibraryGridColumns(double contentWidth) {
+  if (contentWidth < danaviewLibraryGridMinContentWidth) return 1;
+  return math.max(
+    1,
+    ((contentWidth + danaviewLibraryGridGap) / (danaviewLibraryGridMinTileWidth + danaviewLibraryGridGap)).floor(),
+  );
+}
+
+/// One opaque card of a library grid (the grid form of a [DanaviewLibraryGroup] row).
+class DanaviewLibraryCard extends StatelessWidget {
+  const DanaviewLibraryCard({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DanaviewSurface(
+      color: DanaviewColors.surface,
+      padding: const EdgeInsets.all(DanaviewSpacing.xs),
+      // Unclipped so a row's keyboard focus ring is never cut off.
+      clip: false,
+      child: child,
+    );
+  }
+}
+
+/// One row of a library grid: [columns] equal-width cells of equal height (the tallest card), the
+/// last row padded with empty cells so cards keep their width.
+class DanaviewLibraryGridRow extends StatelessWidget {
+  const DanaviewLibraryGridRow({super.key, required this.columns, required this.children});
+
+  final int columns;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < columns; i++) ...[
+            if (i > 0) const SizedBox(width: danaviewLibraryGridGap),
+            Expanded(child: i < children.length ? DanaviewLibraryCard(child: children[i]) : const SizedBox.shrink()),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Library rows that wrap into a card grid where [danaviewLibraryGridColumns] fits more than one
+/// column, and stay one [DanaviewLibraryGroup] card (rows split by hairlines) on phones.
+class DanaviewLibraryCardGrid extends StatelessWidget {
+  const DanaviewLibraryCardGrid({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = danaviewLibraryGridColumns(constraints.maxWidth);
+        if (columns == 1) return DanaviewLibraryGroup(children: children);
+        return Column(
+          key: const ValueKey('library-card-grid'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var start = 0; start < children.length; start += columns) ...[
+              if (start > 0) const SizedBox(height: danaviewLibraryGridGap),
+              DanaviewLibraryGridRow(
+                columns: columns,
+                children: children.sublist(start, math.min(start + columns, children.length)),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// A lazy sliver grid of [itemCount] library rows in [columns] columns (see
+/// [danaviewLibraryGridColumns]); callers keep their sliver list when [columns] is 1.
+Widget danaviewLibrarySliverGrid({
+  required int columns,
+  required int itemCount,
+  required IndexedWidgetBuilder itemBuilder,
+}) {
+  final rows = (itemCount + columns - 1) ~/ columns;
+  return SliverList.separated(
+    itemCount: rows,
+    separatorBuilder: (_, __) => const SizedBox(height: danaviewLibraryGridGap),
+    itemBuilder: (context, row) {
+      final start = row * columns;
+      final end = math.min(start + columns, itemCount);
+      return DanaviewLibraryGridRow(
+        columns: columns,
+        children: [for (var i = start; i < end; i++) itemBuilder(context, i)],
+      );
+    },
+  );
 }
 
 /// Thin rounded watched-progress bar.

@@ -30,7 +30,7 @@ class MediaToolPage extends StatelessWidget {
         topBar: DanaviewLibraryTopBar(title: title, subtitle: subtitle, onBack: onBack, actions: actions),
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final insets = danaviewLibraryInsets(constraints.maxWidth);
+            final insets = DanaviewSpacing.pageInsets(constraints.maxWidth);
             return ListView(
               padding: insets.copyWith(
                 top: DanaviewSpacing.lg,

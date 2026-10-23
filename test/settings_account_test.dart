@@ -13,6 +13,7 @@ import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/more/legal_texts.dart' show legalEffectiveDate;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
+import 'full_width_test_utils.dart';
 import 'library_test_utils.dart';
 
 const _longName = 'Maximilian Alexander Konstantin Wolfeschlegelsteinhausen Jr';
@@ -617,6 +618,34 @@ void main() {
       expect(tester.takeException(), isNull);
       await _finish(tester, env);
     });
+  });
+
+  group('full width (no max-width cap)', () {
+    for (final (size, scale) in [(const Size(1280, 800), 1.0), (const Size(375, 812), 1.35)]) {
+      testWidgets('settings, profile, about and legal span the page at ${size.width.toInt()} px @$scale', (tester) async {
+        useSurface(tester, TestSurface(size, scale));
+        final env = await LibraryTestEnv.create();
+        for (final screen in <Widget>[
+          DanaviewSettingsScreen(onBack: () {}, onNavigate: (_) {}),
+          DanaviewProfileScreen(onBack: () {}),
+          DanaviewAboutScreen(onBack: () {}, onOpenPrivacy: () {}, onOpenTerms: () {}),
+          DanaviewLegalScreen(document: LegalDocument.privacy, onBack: () {}),
+          DanaviewLegalScreen(document: LegalDocument.terms, onBack: () {}),
+        ]) {
+          await tester.pumpWidget(const SizedBox());
+          await tester.pumpWidget(libraryTestApp(
+            env,
+            screen,
+            textScale: scale,
+            overrides: [supportEmailProvider.overrideWithValue('help@example.com')],
+          ));
+          await pumpFrames(tester);
+          expect(tester.takeException(), isNull, reason: '${screen.runtimeType}');
+          expectSpansPageWidth(tester);
+        }
+        await _finish(tester, env);
+      });
+    }
   });
 
   group('no overflow', () {

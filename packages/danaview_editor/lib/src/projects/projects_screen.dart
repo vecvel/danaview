@@ -41,25 +41,18 @@ const double _minCardWidth = 160;
 /// Gap between cards.
 const double _cardGap = 12;
 
-/// Widest content area (6 columns of 160 px cards fit).
-const double _maxContentWidth = 1120;
-
 /// Below this window width the list uses one column of horizontal cards (ux.md §5.1).
 const double _rowLayoutBelow = 340;
 
-/// Side padding of the Projects content: the library gutter, centred at most [_maxContentWidth].
-EdgeInsets projectsInsets(double width) {
-  final gutter = DanaviewBreakpoints.isCompactWidth(width) ? DanaviewSpacing.lg : DanaviewSpacing.xl;
-  final extra = math.max(0.0, (width - 2 * gutter - _maxContentWidth) / 2);
-  return EdgeInsets.symmetric(horizontal: gutter + extra);
-}
+/// Side padding of the Projects content: the shared page gutter, no width cap.
+EdgeInsets projectsInsets(double width) => DanaviewSpacing.pageInsets(width);
 
 /// Grid columns for a window [width] (ux.md §5.1): 1 below 340 px, else
-/// `clamp(floor((width - 2·gutter + 12) / (160 + 12)), 2, 6)`.
+/// `clamp(floor((width - 2·gutter + 12) / (160 + 12)), 2, 8)`.
 int projectsColumns(double width) {
   if (width < _rowLayoutBelow) return 1;
   final inner = width - projectsInsets(width).horizontal;
-  return ((inner + _cardGap) / (_minCardWidth + _cardGap)).floor().clamp(2, 6);
+  return ((inner + _cardGap) / (_minCardWidth + _cardGap)).floor().clamp(2, 8);
 }
 
 /// The Projects screen (ARCH §17.1, ux.md §5). Navigation comes from the router (INT-02).
@@ -293,8 +286,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   }
 }
 
-/// The library top bar (back, title with the project count, actions) aligned with the Projects
-/// content, which may be wider than other library pages (up to 6 columns of cards).
+/// The library top bar (back, title with the project count, actions) aligned with the full-width Projects content.
 class _ProjectsTopBar extends StatelessWidget {
   const _ProjectsTopBar({required this.title, required this.subtitle, required this.onBack, required this.actions});
 

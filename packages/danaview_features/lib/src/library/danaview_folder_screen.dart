@@ -135,6 +135,7 @@ class _DanaviewFolderScreenState extends ConsumerState<DanaviewFolderScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final insets = danaviewLibraryInsets(constraints.maxWidth);
+        final columns = danaviewLibraryGridColumns(constraints.maxWidth - insets.horizontal);
         final crumbs =
             DanaviewBreakpoints.isCompactWidth(constraints.maxWidth) ? const <_Crumb>[] : _crumbs(widget.path, root);
         return CustomScrollView(
@@ -184,11 +185,13 @@ class _DanaviewFolderScreenState extends ConsumerState<DanaviewFolderScreen> {
               ),
               SliverPadding(
                 padding: insets,
-                sliver: SliverList.separated(
-                  itemCount: folders.length,
-                  separatorBuilder: (context, _) => const DanaviewRowDivider(),
-                  itemBuilder: (context, index) => _folderRow(folders[index]),
-                ),
+                sliver: columns > 1
+                    ? danaviewLibrarySliverGrid(columns: columns, itemCount: folders.length, itemBuilder: (context, index) => _folderRow(folders[index]))
+                    : SliverList.separated(
+                        itemCount: folders.length,
+                        separatorBuilder: (context, _) => const DanaviewRowDivider(),
+                        itemBuilder: (context, index) => _folderRow(folders[index]),
+                      ),
               ),
             ],
             if (media.isNotEmpty) ...[
@@ -198,11 +201,13 @@ class _DanaviewFolderScreenState extends ConsumerState<DanaviewFolderScreen> {
               ),
               SliverPadding(
                 padding: insets,
-                sliver: SliverList.separated(
-                  itemCount: media.length,
-                  separatorBuilder: (context, _) => const DanaviewRowDivider(),
-                  itemBuilder: (context, index) => _mediaRow(media, index),
-                ),
+                sliver: columns > 1
+                    ? danaviewLibrarySliverGrid(columns: columns, itemCount: media.length, itemBuilder: (context, index) => _mediaRow(media, index))
+                    : SliverList.separated(
+                        itemCount: media.length,
+                        separatorBuilder: (context, _) => const DanaviewRowDivider(),
+                        itemBuilder: (context, index) => _mediaRow(media, index),
+                      ),
               ),
             ],
             SliverToBoxAdapter(child: SizedBox(height: bottomInset + DanaviewSpacing.xxl)),

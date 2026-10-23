@@ -28,7 +28,6 @@ enum SpeedConsentSheetResult { run, notNow }
 Future<SpeedConsentSheetResult?> showSpeedConsentSheet(BuildContext context) {
   return showDanaviewSheet<SpeedConsentSheetResult>(
     context,
-    maxWidth: 520,
     builder: (context) => const SpeedConsentSheet(),
   );
 }

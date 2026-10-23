@@ -77,6 +77,9 @@ class FoldersTab extends ConsumerStatefulWidget {
 class _FoldersTabState extends ConsumerState<FoldersTab> {
   FoldersTabLocation _at = const FoldersRoot();
 
+  // Grid columns of the current width (set each layout; 1 keeps the list rows).
+  int _columns = 1;
+
   void _go(FoldersTabLocation to) => setState(() => _at = to);
 
   void _openFolder(FolderId? id) => _go(id == null ? const FoldersRoot() : FoldersInFolder(id));
@@ -96,6 +99,7 @@ class _FoldersTabState extends ConsumerState<FoldersTab> {
       builder: (context, constraints) {
         final insets = danaviewLibraryInsets(constraints.maxWidth);
         final padding = insets.copyWith(top: DanaviewSpacing.lg, bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl);
+        _columns = danaviewLibraryGridColumns(constraints.maxWidth - padding.horizontal);
         final slivers = switch (at) {
           FoldersRoot() => _root(store),
           FoldersInFolder(:final id) => _folder(store!, id),
@@ -146,7 +150,7 @@ class _FoldersTabState extends ConsumerState<FoldersTab> {
     final folders = ref.watch(libraryChildFoldersProvider(null));
     final trash = ref.watch(recentlyDeletedProvider);
     final usage = ref.watch(libraryStorageUsageProvider) ?? LibraryStorageUsage.empty;
-    return DanaviewLibraryGroup(
+    return DanaviewLibraryCardGrid(
       children: [
         for (final folder in folders) _folderRow(folder),
         RecentlyDeletedEntryRow(itemCount: trash.length, usage: usage, onOpen: () => _go(const FoldersRecentlyDeleted())),
@@ -229,7 +233,7 @@ class _FoldersTabState extends ConsumerState<FoldersTab> {
         ),
       if (subfolders.isNotEmpty)
         SliverToBoxAdapter(
-          child: DanaviewLibraryGroup(
+          child: DanaviewLibraryCardGrid(
             children: [
               for (final sub in subfolders)
                 DanaviewFolderRow(
@@ -243,7 +247,17 @@ class _FoldersTabState extends ConsumerState<FoldersTab> {
           ),
         ),
       if (subfolders.isNotEmpty && entries.length > 0) const SliverToBoxAdapter(child: SizedBox(height: DanaviewSpacing.md)),
-      if (entries.length > 0)
+      if (entries.length > 0 && _columns > 1)
+        danaviewLibrarySliverGrid(
+          columns: _columns,
+          itemCount: entries.length,
+          itemBuilder: (context, i) {
+            final entry = entries.at(i);
+            if (entry == null) return const SizedBox(height: 56);
+            return LibraryEntryRow(entry: entry, actions: entryActions);
+          },
+        )
+      else if (entries.length > 0)
         SliverList.builder(
           itemCount: entries.length,
           itemBuilder: (context, i) {
@@ -310,7 +324,7 @@ class _FoldersTabState extends ConsumerState<FoldersTab> {
         )
       else
         SliverToBoxAdapter(
-          child: DanaviewLibraryGroup(
+          child: DanaviewLibraryCardGrid(
             children: [
               for (final item in items)
                 TrashedItemRow(item: item, now: now, onRestore: writable ? () => _actions.restore(item) : () {}),

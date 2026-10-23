@@ -31,9 +31,27 @@ on:
         required: false
         type: boolean
         default: false
+      auto_captions:
+        description: 'Build with DANAVIEW_AUTO_CAPTIONS=true (only once its device check QA-07 has passed)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+
+env:
+  FLUTTER_VERSION: '3.44.2'
+  # Feature flags passed as --dart-define=<NAME>=<value> to every build below: only FINISHED
+  # features are 'true'. Same list as android-internal.yml (keep the two in sync). Tag pushes build
+  # with DANAVIEW_AUTO_CAPTIONS=false; a manual run can turn it on with the auto_captions input.
+  DANAVIEW_EDITOR: 'true'
+  DANAVIEW_FILES_HOME: 'true'
+  DANAVIEW_AUTO_CAPTIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.auto_captions && 'true' || 'false' }}
+  DANAVIEW_PHOTO_EDITOR: 'false'
+  DANAVIEW_BEAUTY: 'false'
+  DANAVIEW_AI_STUDIO: 'false'
+  DANAVIEW_FLAG_NAMES: 'DANAVIEW_EDITOR DANAVIEW_FILES_HOME DANAVIEW_AUTO_CAPTIONS DANAVIEW_PHOTO_EDITOR DANAVIEW_BEAUTY DANAVIEW_AI_STUDIO'
 
 jobs:
   build:
@@ -42,12 +60,12 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -57,6 +75,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Decode Android Keystore & Configure Signing
@@ -106,17 +125,36 @@ jobs:
           echo "Target Version: $PUBSPEC_VERSION (Name: $VERSION_NAME, Code: $VERSION_CODE)"
           echo "Target Tag: $TAG_NAME"
 
+          DEFINES=""
+          for name in $DANAVIEW_FLAG_NAMES; do
+            DEFINES="$DEFINES --dart-define=$name=${!name}"
+          done
+          echo "defines=${DEFINES# }" >> "$GITHUB_OUTPUT"
+          echo "Dart defines:${DEFINES}"
+
       - name: Build Signed App Bundle (AAB)
         if: github.event_name == 'push' || inputs.build_type == 'both' || inputs.build_type == 'bundle'
-        run: flutter build appbundle --release
+        env:
+          DEFINES: ${{ steps.version.outputs.defines }}
+        run: |
+          read -ra DART_DEFINES <<< "$DEFINES"
+          flutter build appbundle --release "${DART_DEFINES[@]}"
 
       - name: Build Signed Universal APK
         if: github.event_name == 'push' || inputs.build_type == 'both' || inputs.build_type == 'apk'
-        run: flutter build apk --release
+        env:
+          DEFINES: ${{ steps.version.outputs.defines }}
+        run: |
+          read -ra DART_DEFINES <<< "$DEFINES"
+          flutter build apk --release "${DART_DEFINES[@]}"
 
       - name: Build Signed Split-ABI APKs
         if: github.event_name == 'push' || inputs.build_type == 'both' || inputs.build_type == 'apk'
-        run: flutter build apk --release --split-per-abi
+        env:
+          DEFINES: ${{ steps.version.outputs.defines }}
+        run: |
+          read -ra DART_DEFINES <<< "$DEFINES"
+          flutter build apk --release --split-per-abi "${DART_DEFINES[@]}"
 
       # ARCH §23 item 4 / D-43(b): whisper libraries exactly arm64-v8a + x86_64, 16 KB LOAD alignment,
       # only dv_* exported, <= 3 MB each. danaview_whisper is linked whatever the editor --dart-defines
@@ -193,14 +231,14 @@ jobs:
           } > release-notes.md
 
       - name: Upload Artifacts to Actions Run
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: danaview-android-${{ steps.version.outputs.version }}
           path: release-artifacts/*
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.create_release)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "Danaview Android ${{ steps.version.outputs.version }}"

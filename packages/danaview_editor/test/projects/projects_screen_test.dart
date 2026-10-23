@@ -7,6 +7,7 @@
 // the storage footer, the first-paint perf mark, and the surface matrix.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Icons;
@@ -211,11 +212,30 @@ void main() {
       expectNoOverflow(tester);
     });
 
+    for (final width in [1280.0, 375.0]) {
+      testWidgets('$width px: the card grid spans the width minus the page gutters (no cap)', (tester) async {
+        final repo = ProjectsRepository();
+        for (var i = 0; i < 9; i++) {
+          repo.add(projectNamed('P$i', updatedAt: DateTime.utc(2026, 10, 1 + i)));
+        }
+        final h = _harness(repo);
+        await _pump(tester, h, surface: EditorSurface(Size(width, 900)));
+        final gutter = DanaviewSpacing.pageGutter(width);
+        final cards = find.byType(ProjectCard);
+        final rects = [for (final e in cards.evaluate()) tester.getRect(find.byWidget(e.widget))];
+        final top = rects.map((r) => r.top).reduce(math.min);
+        final firstRow = rects.where((r) => r.top == top).toList();
+        expect(firstRow.map((r) => r.left).reduce(math.min), moreOrLessEquals(gutter, epsilon: 0.5));
+        expect(firstRow.map((r) => r.right).reduce(math.max), moreOrLessEquals(width - gutter, epsilon: 0.5));
+        expectNoOverflow(tester);
+      });
+    }
+
     for (final (width, columns, layout) in [
       (280.0, 1, ProjectCardLayout.row),
       (360.0, 2, ProjectCardLayout.grid),
       (834.0, 4, ProjectCardLayout.grid),
-      (1280.0, 6, ProjectCardLayout.grid),
+      (1280.0, 7, ProjectCardLayout.grid),
     ]) {
       testWidgets('$width px: $columns column(s) of ${layout.name} cards', (tester) async {
         expect(projectsColumns(width), columns);

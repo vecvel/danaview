@@ -137,7 +137,7 @@ Finder get continueWatchingHeader =>
     find.ancestor(of: find.text('Continue watching'), matching: _private('DanaviewLibrarySectionHeader'));
 
 Finder get continueWatchingRows => find
-    .ancestor(of: find.textContaining('Show.S01E01'), matching: _private('DanaviewLibraryGroup'))
+    .ancestor(of: find.textContaining('Show.S01E01'), matching: _private('DanaviewLibraryCardGrid'))
     .first;
 
 /// The Show all N / Show less button.

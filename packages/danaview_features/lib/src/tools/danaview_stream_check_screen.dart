@@ -148,7 +148,7 @@ class _DanaviewStreamCheckScreenState extends ConsumerState<DanaviewStreamCheckS
         ),
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final insets = danaviewLibraryInsets(constraints.maxWidth);
+            final insets = DanaviewSpacing.pageInsets(constraints.maxWidth);
             return SingleChildScrollView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: insets.copyWith(

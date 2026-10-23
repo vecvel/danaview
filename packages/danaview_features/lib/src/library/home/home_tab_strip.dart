@@ -54,8 +54,11 @@ class HomeTabStrip extends StatefulWidget {
   /// Space around the row inside the scroll view (the screen's gutters).
   final EdgeInsets padding;
 
-  /// The strip's height: one 44 px target row.
-  static const double height = DanaviewSpacing.minTapTarget;
+  /// The smallest hit height of a tab (an invisible minimum; the strip grows with the text).
+  static const double minTargetHeight = DanaviewSpacing.minTapTarget;
+
+  /// Space above and below the pills.
+  static const double verticalPadding = DanaviewSpacing.sm;
 
   @override
   State<HomeTabStrip> createState() => _HomeTabStripState();
@@ -139,12 +142,13 @@ class _HomeTabStripState extends State<HomeTabStrip> {
         canRequestFocus: false,
         skipTraversal: true,
         onKeyEvent: _onKey,
-        child: SizedBox(
-          height: HomeTabStrip.height,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: HomeTabStrip.verticalPadding),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: widget.padding,
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 for (var i = 0; i < widget.tabs.length; i++) ...[
                   if (i > 0) const SizedBox(width: DanaviewSpacing.xs + 2),
@@ -185,8 +189,6 @@ class _HomeTabPill extends StatelessWidget {
   final FocusNode focusNode;
   final VoidCallback onTap;
 
-  static const double _pillHeight = 36;
-
   @override
   Widget build(BuildContext context) {
     final fg = selected ? HomeTabStripColors.selectedForeground : HomeTabStripColors.idleForeground;
@@ -201,15 +203,18 @@ class _HomeTabPill extends StatelessWidget {
         builder: (context, state) {
           // Keyboard focus only; no hover or press tint (owner rule, c781a85).
           final overlay = state.focused ? DanaviewColors.primarySoft : DanaviewColors.hover.withValues(alpha: 0);
-          // The full strip height is the hit area (≥ 44 px); the pill is drawn inside it.
-          return SizedBox(
-            height: HomeTabStrip.height,
+          // The hit area is at least 44 px high (an invisible minimum); the pill fits its label
+          // and is drawn centred inside it, so the strip grows with the text scale.
+          return ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: HomeTabStrip.minTargetHeight),
             child: Center(
+              widthFactor: 1,
+              heightFactor: 1,
               child: AnimatedContainer(
                 duration: DanaviewMotion.fast,
                 curve: DanaviewMotion.curve,
-                constraints: const BoxConstraints(minHeight: _pillHeight, minWidth: 56),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+                constraints: const BoxConstraints(minWidth: 56),
+                padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.md, vertical: 6),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(color: fill, borderRadius: DanaviewRadius.xlAll),
                 foregroundDecoration: BoxDecoration(
