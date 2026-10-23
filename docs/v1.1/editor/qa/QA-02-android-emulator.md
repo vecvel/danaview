@@ -1203,7 +1203,8 @@ right-click.** Right-click on a clip opens the menu at the pointer (Select multi
 Ctrl+C, Cut Ctrl+X, Duplicate Ctrl+D, Move to track, Clip info, Delete, Ripple delete
 Shift+Delete), but Esc leaves it open: three injected Esc presses and one `adb shell input
 keyboard keyevent ESCAPE` changed nothing, while the same Esc closed the Format panel, the text
-editor and the Keyboard shortcuts sheet in M1. A mouse click outside closes it. Likely cause (not
+editor and the Keyboard shortcuts sheet in M1. **Fixed (031d985); re-checked on the tablet
+2026-10-23 on 3ddfefed: pass** (see the re-check below). A mouse click outside closes it. Likely cause (not
 verified): `DanaviewMenuAnchor` requests focus for its scope in a post-frame callback, and the
 timeline's menu is opened from `TimelineView.showContextMenu` in another post-frame callback, so
 the menu scope may never get focus, or the editor-wide `escape` action (`worksInTextFields`)
@@ -1223,7 +1224,92 @@ looked the same).
 3. **Shift+wheel ignored twice in split screen**, until another key (N twice) was pressed; then it
    worked, and later it worked straight after a touch. Not reproducible on demand.
 
+### Re-check of 2026-10-23 after 948aee76 (Windows lane, same harness)
+
+The Mac asked (948aee76) for a re-check of M2 row 2 and the tablet cold start after FIX-QA02-M2-2
+(031d985), the orientation fix (53670cf), the hover-pill fix (f21d14e) and the tooltip change
+(3c156ec).
+
+- **Code:** `editor-android` **3ddfefed** = ee52fcfb + merge of `origin/editor-wip` (948aee76,
+  plus the v11-ui-polish merge 27eeff48/8dc7b13c that came with it). Debug APK with the same
+  defines (`DANAVIEW_EDITOR=true DANAVIEW_AUTO_CAPTIONS=true`), `adb install -r`.
+- **Device / harness:** as above: Pixel_Tablet_API_35, `-port 5558 -gpu host -no-snapshot-load
+  -no-snapshot-save -no-window -no-audio`, lock `emulator3`, mains power, `spikes/qa02_manual`
+  `Inject` (hardware KeyEvents, `SOURCE_MOUSE` events, touch taps). Project "Manual QA-02".
+
+| # | Check | Result |
+|---|---|---|
+| 1 | M2 row 2: right-click a clip → menu; Esc → menu closes; second Esc → selection cleared | **pass**. Right-click (BUTTON_SECONDARY) on the last `still_4k.jpg` clip opened the clip menu at the pointer and selected the clip (Image panel, transform box) (`m2_mouse_context_menu_esc.png`). The first Esc closed only the menu: the clip stayed selected (`_esc_1.png`). The second Esc cleared the selection (Media panel back, no transform box) (`_esc_2.png`). The project stayed "Saved" (nothing edited) |
+| 2 | Cold start: kill the app, launch from the launcher; rotate | **pass**. `am force-stop`, Home, injected touch tap on the launcher's Danaview icon: Home fills the 2560×1600 landscape screen, no letterbox, no "Double-tap to move this app" hint (`tablet_cold_start.png`); `dumpsys activity`: `requestedOrientation=SCREEN_ORIENTATION_UNSPECIFIED`, `areBoundsLetterboxed=false`. Rotated to portrait (`user_rotation 1`, auto-rotate off): the display went to ROTATION_90 and Home followed full-screen 1600×2560 (`tablet_cold_start_rotated.png`); back to ROTATION_0, landscape again (`tablet_cold_start_back.png`). Projects and the editor also opened full-screen landscape. A second cold start (later) behaved the same. Auto-rotate was restored afterwards |
+| 3a | Hover a toolbar button ~1 s | **pass**. Mouse HOVER_MOVE onto Undo, still for 1.3 s: tooltip "Undo (Ctrl+Z)" under it (`m2_hover_tooltip_undo.png`) |
+| 3b | Hover a clip, split with S, move | **pass**. Pill "still_4k.jpg · 0:03" over the hovered clip (`m2_hover_pill_before_split.png`); S split it at the playhead (0:52:09) and the pill went away (`m2_hover_pill_after_split.png`); the next small mouse move showed a fresh pill "still_4k.jpg · 0:02" for the right half (`m2_hover_pill_after_move.png`). The split was undone with Ctrl+Z |
+
+**Verdict: 1, 2 and 3 pass. FIX-QA02-M2-2 is fixed on the tablet; observations 1 (portrait
+letterbox) and 2 (stale pill) are fixed too.**
+
+Harness note (not counted): in the first editor session after the cold start, injected keys
+(Ctrl+/, Esc, Space) did nothing until the editor got one touch tap; mouse clicks alone did not
+help, though `dumpsys input` showed the Danaview window focused and the keys in the dispatcher's
+queue. That first try is why row 1 was taken twice (the first attempt's menu stayed open for the
+same reason, as Space and Ctrl+/ also did nothing then). It followed the launcher's "Slow-swipe up
+to show the Taskbar" tutorial bubble, dismissed by a tap. A second cold start did not reproduce it:
+Home (go to start) worked after mouse clicks only. Not filed; it looks like the emulator's
+first-boot launcher onboarding, the same family as the split-screen "no focus until a touch"
+reality above.
+
 Screenshots and files are in `build/e2e/android/manual/` (gitignored, local to the laptop).
+
+### Re-check of 2026-10-23 after 63e95cfb (Windows lane, last 1.1 pass)
+
+The Mac asked (63e95cfb) for one pass on the merged code: RE-CHECK A (M2 row 2 and the tablet
+cold start, the QA-02 gate) and RE-CHECK B (the owner's UI polish, below).
+
+- **Code:** `editor-android` **e07e388c** = 6af2f66a + merge of `origin/editor-wip` at 63e95cfb
+  (adds 1278d1f7 rail tooltips / full names / search width, c781a857 no hover or press effects,
+  eb15b238). Debug APK rebuilt on that code (`DANAVIEW_EDITOR=true DANAVIEW_AUTO_CAPTIONS=true`),
+  `adb install -r`.
+- **Device / harness:** Pixel_Tablet_API_35, `-port 5558 -gpu host -no-snapshot-load
+  -no-snapshot-save -no-window -no-audio`, lock `emulator3`, mains power, 10 GB free RAM,
+  `spikes/qa02_manual` `Inject` (hardware KeyEvents, `SOURCE_MOUSE` events, touch).
+
+| # | Check | Result |
+|---|---|---|
+| A1 | M2 row 2: right-click a clip → menu; Esc → menu closes; second Esc → selection cleared | **pass**. Right-click on the second `frame_counter_1080p30.mp4` clip opened the clip menu at the pointer and selected the clip (`m2_mouse_context_menu_esc.png`); the first Esc closed only the menu, clip still selected (`_esc_1.png`); the second Esc cleared the selection (Media panel back) (`_esc_2.png`). These overwrite the 948aee76 re-check's files of the same names |
+| A2 | Cold start: kill, launch from the launcher; rotate | **pass**. `am force-stop`, touch tap on the launcher icon: Home fills 2560×1600 landscape, `requestedOrientation=SCREEN_ORIENTATION_UNSPECIFIED`, `areBoundsLetterboxed=false` (`a_tablet_cold_start.png`); `user_rotation 1` → ROTATION_90, Home full-screen portrait (`a_tablet_cold_start_rotated.png`); back to landscape (`a_tablet_cold_start_back.png`) |
+
+**Verdict A: pass. QA-02's gate items are closed on 63e95cf.**
+
+Harness notes (not counted): the first-editor-session key quirk came back after the cold start:
+the first right-click/Esc/Esc and a Space did nothing (menu stayed open) until a touch tap on the
+empty timeline area; after that the row passed as above. Separately, the emulator turned
+auto-rotate (`accelerometer_rotation`) back on after app relaunches, so a `user_rotation` change
+was ignored until auto-rotate was switched off again.
+
+### Owner UI polish re-check (2026-10-23)
+
+RE-CHECK B from 63e95cfb, same build and device. Projects: 9 projects (7 made with Duplicate so the
+search field shows) and 5 unsaved sessions (an edit, then `am force-stop`).
+
+| # | Check | Result |
+|---|---|---|
+| B3 | Projects: unsaved-changes box, cards, Show all; search and Sort | **pass**. "5 projects have unsaved changes": box border is the same neutral hairline as the project cards (RGB 34,36,42), no amber; only the clock tile is warning-coloured. Wrapping grid of equal-height cards, 3 columns in landscape (each about 355 dp: the grid stretches cards that are at least 280 dp), 2 in portrait; 4 shown, then "Show all (5)" / "Show fewer". Search fills the row with Sort at its right, landscape and portrait (`b3_projects_landscape.png`, `b3_projects_cards_landscape.png`, `b3_projects_cards_show_all_landscape.png`, `b3_projects_cards_portrait.png`) |
+| B4 | Rail switching: Captions, Audio, Text, Filters, Media; lit only while open | **pass**. Landscape: Captions → Audio → Text → Media, then Filters → Audio → Filters → Captions → Audio: each showed its own panel, Audio never left Captions on screen, and only the open tool was lit (`b4_rail_*_landscape.png`). Portrait (tools grid in the side panel): Captions, back, Audio, close, Filters: same (`b4_tools_grid_portrait.png`, `b4_rail_*_portrait.png`) |
+| B5 | "Transitions" in full; rail tile tooltip on hover | **pass**. The rail reads "Transitions" with no ellipsis (landscape rail and portrait grid) (`b5_rail_scrolled_landscape.png`); a mouse hover on the Filters tile showed the "Filters" tooltip after about 1 s, with no hover highlight on the tile (`b5_rail_tooltip_landscape.png`) |
+| B6 | Filters > Looks ring and strip | **pass**. The Teal & Orange ring is drawn outside the tile with smooth, uncut corners; the scrolled strip is clipped at the panel edges, never drawn over the rail or the video, landscape and portrait (`b6_looks_ring_*.png`, `b6_looks_strip_scrolled_*.png`) |
+| B7 | No hover or press effects | **pass**. Pixel diff of a ±70 px box around each control, idle vs mouse hover: Export, Gallery, the Video chip, the Text rail tile, Zoom in, Undo; idle vs a 2.5 s touch hold: Zoom in, the Video chip, the Audio rail tile. The only changed pixels were the tooltips; no fill, tint or scale change on any control (`b7_idle.png`, `b7_hover_*.png`, `b7_press_*.png`). Selected states (lit rail tool, "All" chip, segmented controls) still show; the HD button kept a keyboard-focus fill after the Esc presses, as decided (keyboard-only focus) |
+| B8 | Leftover coloured or opaque decorative borders | **pass with one finding**. Editor panels, Home, Settings and Settings > Video editor: neutral hairlines only (`b8_home_landscape.png`, `b8_settings_landscape.png`, `b8_settings_video_editor_landscape.png`; the focused text field and the marker colour sheet were also neutral on the pre-merge 3ddfefe build this morning). Finding: after any hardware key event a 2–3 px **green frame** (RGB 128,171,2) is drawn around the whole Danaview window, status bar included, and stays after touches; it is absent on the launcher and before the first key. FIX-QA02-POLISH-1 below (`b8_green_window_frame.png`) |
+
+**Verdict B: pass (3–8), one finding filed (FIX-QA02-POLISH-1).**
+
+**FIX-QA02-POLISH-1 (Android, not Dart; not a QA-02 blocker).** The green window frame looks like
+Android's default focus highlight on the `FlutterView` (API 26+), drawn once a key event takes the
+window out of touch mode. `android/app` sets no `defaultFocusHighlightEnabled`. Likely fix:
+`<item name="android:defaultFocusHighlightEnabled">false</item>` in the launch/normal themes
+(`res/values*/styles.xml`, API 26+), or `setDefaultFocusHighlightEnabled(false)` on the
+FlutterView. Flutter's own keyboard-only focus rings stay as they are. The Android lane can take
+it; it was not changed in this pass.
+
+Screenshots for both sections are in `build/e2e/android/manual/` (gitignored, local to the laptop).
 
 Use **Git Bash**. Start each new window with:
 
@@ -1324,7 +1410,7 @@ setup step 3.
 | # | Do | Expected | Screenshot | Result |
 |---|---|---|---|---|
 | 1 | Move the mouse over a clip, do not click | a hover pill shows the clip's name and length; it goes away when the mouse leaves | `m2_mouse_hover_pill.png` | **pass** (HOVER_MOVE path onto the clip, then off it): pill "frame_counter_1080p30.mp4 · 0:05" shown, gone after leaving (`m2_mouse_hover_pill_left.png`). See observation 2 (stale pill) |
-| 2 | Right-click a clip | the clip's context menu opens (Split, Delete, …); Esc closes it | `m2_mouse_context_menu.png` | **FAIL (FIX-QA02-M2-2)**: right-click (BUTTON_SECONDARY) opens the clip menu at the pointer (Select multiple, Split S, Copy, Cut, Duplicate, Move to track, Clip info, Delete, Ripple delete) and selects the clip, but **Esc does not close it** (3 injected Esc + 1 `input keyevent ESCAPE`); a click outside does |
+| 2 | Right-click a clip | the clip's context menu opens (Split, Delete, …); Esc closes it | `m2_mouse_context_menu.png` | **FAIL (FIX-QA02-M2-2)**: right-click (BUTTON_SECONDARY) opens the clip menu at the pointer (Select multiple, Split S, Copy, Cut, Duplicate, Move to track, Clip info, Delete, Ripple delete) and selects the clip, but **Esc does not close it** (3 injected Esc + 1 `input keyevent ESCAPE`); a click outside does. **Re-check 2026-10-23 on 3ddfefed (after 031d985): pass**: first Esc closes the menu, second clears the selection (`m2_mouse_context_menu_esc.png`, `_1`, `_2`) |
 | 3 | Press on an **empty** part of a lane (after the last clip) and drag back over two clips | a marquee shows; on release both clips are selected | `m2_mouse_marquee.png` | **pass** (primary-button mouse drag from the empty Main lane after the last clip back over two clips): marquee rectangle shown during the drag; on release both clips selected ("2 items") (`m2_mouse_marquee_released.png`) |
 | 4 | Wheel over the lanes | the lanes scroll up/down; zoom unchanged | — | **pass** (AXIS_VSCROLL −3 / +3 over the lanes, with 6 lanes so they overflow): lanes scroll down to Main and back; ruler and zoom unchanged (`m2_mouse_wheel_before/after/back.png`) |
 | 5 | Shift+wheel over the lanes | the timeline scrolls in time (left/right) | `m2_mouse_shift_wheel.png` | **pass** (AXIS_VSCROLL −3 with Shift held): time view moves ~3 s right (0:09–0:28 → 0:12–0:31), zoom unchanged. In the default centre-locked mode the playhead moves with it |
