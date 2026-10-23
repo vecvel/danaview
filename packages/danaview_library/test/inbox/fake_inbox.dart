@@ -73,6 +73,8 @@ final class FakeInboxPort implements InboxPort {
     final f = File('${root.path}/$batchId/$relativePath');
     if (!f.existsSync()) throw const FileSystemException('missing');
     final dest = File(destinationPath);
+    // As the native take does: the destination's folder is created, an old file replaced.
+    dest.parent.createSync(recursive: true);
     if (dest.existsSync()) dest.deleteSync();
     f.renameSync(destinationPath);
   }

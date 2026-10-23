@@ -46,6 +46,12 @@ dependencies:
     path: packages/danaview_library
   danaview_library_native:
     path: packages/danaview_library_native
+  # Documents (S3-W, ARCH v1.2 §4.1): the app root registers the native viewers with the viewer
+  # router (lib/wiring/documents_wiring.dart). danaview_features may not import danaview_pdf (rule 23).
+  danaview_documents:
+    path: packages/danaview_documents
+  danaview_pdf:
+    path: packages/danaview_pdf
   # SQLite for library.db (D-7, ARCH v1.2 V-S21): the pure-Dart danaview_library and danaview_search
   # use `sqlite3` 2.x, which loads a native libsqlite3 that Android apps can't take from the OS. The
   # app bundles it here (0.5.x is the line for sqlite3 2.x; 0.6 is end-of-life for sqlite3 3.x).

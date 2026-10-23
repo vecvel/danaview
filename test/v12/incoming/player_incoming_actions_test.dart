@@ -81,8 +81,10 @@ final class _Inbox implements InboxPort {
       ];
 
   @override
-  Future<void> takeFile(String batchId, String relativePath, String destinationPath) async =>
-      File('${dir.path}/$batchId/$relativePath').renameSync(destinationPath);
+  Future<void> takeFile(String batchId, String relativePath, String destinationPath) async {
+    File(destinationPath).parent.createSync(recursive: true);
+    File('${dir.path}/$batchId/$relativePath').renameSync(destinationPath);
+  }
 
   @override
   Future<void> deleteBatch(String batchId) async => batches.remove(batchId);

@@ -143,13 +143,10 @@ final class InboxCoreTests: XCTestCase {
   }
 
   func testLargeCopyIsStreamed() throws {
-    // 64 MB generated sparse-ish file: the copy must not grow resident memory by its size.
+    // A 64 MB generated (sparse) file: the copy must not grow resident memory by its size.
     let big = src.appendingPathComponent("big.mov")
-    FileManager.default.createFile(atPath: big.path, contents: nil)
-    let handle = try FileHandle(forWritingTo: big)
-    let chunk = Data(repeating: 0xAB, count: 1 << 20)
-    for _ in 0..<64 { handle.write(chunk) }
-    try handle.close()
+    FileManager.default.createFile(atPath: big.path, contents: Data([1]))
+    XCTAssertEqual(truncate(big.path, 64 << 20), 0)
     let before = residentBytes()
     let writer = InboxWriter(groupRoot: root, targetFolderId: nil, batchId: "big")
     try writer.begin()

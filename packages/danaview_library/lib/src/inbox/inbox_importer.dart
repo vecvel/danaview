@@ -191,7 +191,6 @@ final class InboxImporter {
 
     try {
       await imports.sweepStaging(stagingDirectory);
-      _removeEmptyDirectories();
     } on Object {
       // Swept on the next run.
     }
@@ -200,18 +199,18 @@ final class InboxImporter {
 
   /// Imports [batch]; null when a disposed import service stopped it (the batch stays).
   Future<_BatchOutcome?> _importBatch(InboxBatch batch) async {
-    final dir = p.join(stagingDirectory, 'batch_${_safe(batch.batchId)}');
+    // Flat names in the staging directory (the native take creates it): `<batch>_<n>_<name>`.
+    final prefix = '${_safe(batch.batchId)}_';
     final pending = _pendingLocations();
     final ids = <String>[];
     var failed = 0;
     for (var i = 0; i < batch.files.length; i++) {
       final file = batch.files[i];
-      final dest = p.join(dir, '${i.toString().padLeft(4, '0')}_${_safe(file.displayName)}');
+      final dest = p.join(stagingDirectory, '$prefix${i.toString().padLeft(4, '0')}_${_safe(file.displayName)}');
       // Copying already (an earlier run was killed mid-copy): the resumed job finishes it.
       if (pending.contains(p.canonicalize(dest))) continue;
       if (!File(dest).existsSync()) {
         try {
-          Directory(dir).createSync(recursive: true);
           await port.takeFile(batch.batchId, file.relativePath, dest);
         } on Object {
           // Gone: an earlier run moved and imported it and was killed before deleting the batch
@@ -265,19 +264,6 @@ final class InboxImporter {
           if (ImportSource.tryDecode(job.sourceDescription) case final s?) p.canonicalize(s.location),
       };
 
-  void _removeEmptyDirectories() {
-    final root = Directory(stagingDirectory);
-    if (!root.existsSync()) return;
-    for (final e in root.listSync(followLinks: false)) {
-      if (e is Directory && e.listSync().isEmpty) {
-        try {
-          e.deleteSync();
-        } on FileSystemException {
-          // In use; the next run retries.
-        }
-      }
-    }
-  }
 }
 
 final class _BatchOutcome {

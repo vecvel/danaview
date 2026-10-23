@@ -1,10 +1,12 @@
 // EXTENDED: S2-W (slice S2 share of INT-106: the Files & Media Home text, shown only in builds with
 // DANAVIEW_FILES_HOME, BUILD_PLAN v1.2 §1A)
+// EXTENDED: S3-W (slice S3 share of INT-106: documents, Open with Danaview and the iOS Share
+// Extension, in the same builds; ARCH v1.2 §5.2, §5.6, §9.3)
 
 /// The Privacy Policy and Terms of Use as structured data, rendered by the legal screen.
 ///
 /// Edited in order UX-42 (v1.1) → ST-05 (speed-test providers, V2-406) → S2-W (Files & Media Home)
-/// → AIS-36 → INT-106 (ARCH §9.5).
+/// → S3-W (documents, share-in) → AIS-36 → INT-106 (ARCH §9.5).
 library;
 
 import '../flags.dart';
@@ -147,6 +149,59 @@ const LegalSection filesHomeTermsSection = LegalSection('Danaview folders', [
   ),
 ]);
 
+// ---- Documents and share-in (S3-W; ARCH v1.2 §3, §5.2, §5.6, §9.3) ----
+//
+// Same builds as the Files & Media Home text above (DANAVIEW_FILES_HOME). INT-106 folds them into
+// the final 1.2.0 text.
+
+/// Files other apps hand to Danaview ("What Danaview stores on your device").
+const List<LegalBullet> documentsStoredBullets = [
+  LegalBullet(
+    lead: 'Files shared with Danaview',
+    'When you open a photo or document with Danaview, or share photos, videos or documents to Danaview from '
+    'another app, Danaview saves a copy in your Danaview folders (in Imported, or in the folder you pick when '
+    'sharing). The original in the other app is never changed.',
+  ),
+  LegalBullet(
+    lead: 'Share extension (iPhone and iPad)',
+    'When you share to Danaview, its share extension first puts the copy in a storage area on your device that '
+    'only Danaview and its extension can use. Danaview moves it into your Danaview folders the next time it '
+    'opens and then removes it from that area; a share that was interrupted is removed after 24 hours. So the '
+    'extension can list your folders, Danaview also keeps the names of your Danaview folders there (no file '
+    'names). This area is not included in backups.',
+  ),
+];
+
+/// Viewing documents ("Files and permissions").
+const List<LegalBullet> documentsPermissionBullets = [
+  LegalBullet(
+    lead: 'Documents',
+    "PDFs, Office files, text and other documents open on your device: PDFs in Danaview's PDF viewer, text "
+    'and spreadsheets in its own viewers, and on iPhone, iPad and Mac other files in the system preview, with '
+    "editing turned off. Viewing never changes the file. A file Danaview can't show goes to another app only "
+    'when you choose Open in another app.',
+  ),
+  LegalBullet(
+    lead: 'Documents in your folders',
+    'The Documents tab also lists the documents in the folders you added to your library. Danaview only reads '
+    'their names, sizes and dates to list them, and opens one only when you do; it never renames, moves or '
+    'deletes them.',
+  ),
+  LegalBullet(
+    lead: 'Opening files with Danaview',
+    'Photos and documents another app opens with Danaview are copied into Imported and shown. Videos, streams '
+    'and links opened with Danaview play as before.',
+  ),
+];
+
+/// The Terms of Use section on documents.
+const LegalSection documentsTermsSection = LegalSection('Documents', [
+  LegalBlock.paragraph(
+    'Danaview shows documents for reading only and never changes them. A document can look different from the '
+    'app that made it; to edit one, use Open in another app.',
+  ),
+]);
+
 const LegalDocumentText privacyPolicyText = LegalDocumentText(
   title: 'Privacy Policy',
   summary: 'Danaview keeps everything on your device. There are no accounts, no analytics, no ads and no '
@@ -194,6 +249,7 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
           'never uploaded.',
         ),
         if (FeatureFlags.filesHome) ...filesHomeStoredBullets,
+        if (FeatureFlags.filesHome) ...documentsStoredBullets,
       ]),
       if (FeatureFlags.filesHome) LegalBlock.paragraph(filesHomeBackupText),
       LegalBlock.paragraph(
@@ -280,6 +336,7 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
           'Used only to show export and caption progress while Danaview is in the background, if you allow it.',
         ),
         if (FeatureFlags.filesHome) ...filesHomePermissionBullets,
+        if (FeatureFlags.filesHome) ...documentsPermissionBullets,
       ]),
     ]),
     LegalSection('Your choices', [
@@ -368,6 +425,7 @@ const LegalDocumentText termsOfUseText = LegalDocumentText(
       ),
     ]),
     if (FeatureFlags.filesHome) filesHomeTermsSection,
+    if (FeatureFlags.filesHome) documentsTermsSection,
     LegalSection('Auto captions', [
       LegalBlock.paragraph(
         'On iPhone, iPad and Android, automatically created captions may contain mistakes. Review them before you '

@@ -119,7 +119,7 @@ void main() {
     final bytes = bytesOf(20 * 1024, seed: 9);
     inbox.addBatch('b1', {'Scan.pdf': bytes, 'Note.txt': bytesOf(300, seed: 10)}, createdAt: t0);
     // The earlier run moved the first file into staging and died.
-    final dest = File('$staging/batch_b1/0000_Scan.pdf')..createSync(recursive: true);
+    final dest = File('$staging/b1_0000_Scan.pdf')..createSync(recursive: true);
     File('${inbox.root.path}/b1/items/0/Scan.pdf').renameSync(dest.path);
 
     final result = await importer().run();
