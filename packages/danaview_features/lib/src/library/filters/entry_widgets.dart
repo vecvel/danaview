@@ -4,9 +4,9 @@
 // a file row (type icon or thumbnail, name, size, date, page count where known) for Danaview
 // entries and for linked-folder documents, and the video grid tile of the Videos tab (HOM-13's
 // MediaBadgeOverlay: duration pill, resolution, frame rate and HDR badges, V2-110). A Danaview entry's menu
-// offers Open, Rename, Move and Delete; a linked-folder file offers Open only: actions that change
-// a file exist only inside Danaview folders (§8.1). Kit components only, ≥ 44 px targets,
-// semantics labels, ellipsised text so nothing overflows at 280 px and text scale 1.35.
+// offers Open, Rename, Move, More actions… (the host's file menu) and Delete; a linked-folder
+// file offers Open only: actions that change a file exist only inside Danaview folders (§8.1).
+// Kit components only, ≥ 44 px targets, semantics labels, ellipsised text so nothing overflows at 280 px and text scale 1.35.
 
 import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -33,7 +33,7 @@ typedef LinkedDocumentOpen = void Function(DocumentItem document);
 @immutable
 class LibraryEntryActions {
   /// Actions; every one optional.
-  const LibraryEntryActions({this.onOpen, this.onRename, this.onMove, this.onDelete});
+  const LibraryEntryActions({this.onOpen, this.onRename, this.onMove, this.onDelete, this.onMore});
 
   /// None: the row only shows.
   static const LibraryEntryActions none = LibraryEntryActions();
@@ -49,6 +49,11 @@ class LibraryEntryActions {
 
   /// Move to Recently deleted.
   final ValueChanged<FileEntry>? onDelete;
+
+  /// "More actions…": the host's full single-file menu (HOM-22: Share, Save out, Copy to,
+  /// Favourite, File info, …). From S3 a document row tap opens the viewer, so this is how a
+  /// document row reaches the file actions (FIX-S3Q-1).
+  final ValueChanged<FileEntry>? onMore;
 }
 
 const List<String> _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -155,6 +160,8 @@ class LibraryEntryRow extends ConsumerWidget {
       if (actions.onRename case final rename?) DanaviewMenuItem(label: 'Rename…', icon: Icons.edit_rounded, onTap: () => rename(entry)),
       if (actions.onMove case final move?)
         DanaviewMenuItem(label: 'Move to…', glyph: DanaviewGlyphKind.folderOpen, onTap: () => move(entry)),
+      if (actions.onMore case final more?)
+        DanaviewMenuItem(label: 'More actions…', icon: Icons.more_horiz_rounded, onTap: () => more(entry)),
       if (actions.onDelete case final delete?) ...[
         const DanaviewMenuDivider(),
         DanaviewMenuItem(label: 'Delete', icon: Icons.delete_outline_rounded, destructive: true, onTap: () => delete(entry)),

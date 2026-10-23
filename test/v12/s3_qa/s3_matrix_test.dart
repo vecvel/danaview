@@ -452,7 +452,7 @@ void main() {
     }
   });
 
-  // FIX-S3Q-2: remove the skip when the viewer host gives its route the kit text style.
+  // FIX-S3Q-2 (fixed by S3-W: the viewer route's Material + DefaultTextStyle.merge).
   testWidgets('S3 surfaces: every text uses the kit text style (no fallback underline)', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     useSurface(tester, const TestSurface(Size(375, 812), 1.0));
@@ -465,7 +465,7 @@ void main() {
     await app.dispose();
     debugDefaultTargetPlatformOverride = null;
     expect(failures, isEmpty, reason: failures.join('\n'));
-  }, skip: !const bool.fromEnvironment('S3Q_CHECK_TEXT_STYLE')); // FIX-S3Q-2 open: --dart-define=S3Q_CHECK_TEXT_STYLE=true
+  });
 
   group('S3 surfaces: targets, labels and contrast', () {
     for (final (width, scale) in [(375.0, 1.0), (1280.0, 1.35)]) {

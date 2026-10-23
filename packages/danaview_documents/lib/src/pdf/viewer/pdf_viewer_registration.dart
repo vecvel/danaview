@@ -17,7 +17,13 @@ Future<bool> Function(ViewerFile file) pdfViewerProbe(PdfDocuments documents) {
   Future<PdfCapabilities>? caps;
   return (file) async {
     try {
-      final c = await (caps ??= documents.capabilities());
+      final PdfCapabilities c;
+      try {
+        c = await (caps ??= documents.capabilities());
+      } on Object {
+        caps = null; // cache only a successful answer, so a transient failure is retried
+        rethrow;
+      }
       if (!c.canView) return false;
       final probe = await documents.probe(file.path);
       return probe.canOpen && (!probe.encrypted || c.passwords);

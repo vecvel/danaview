@@ -69,11 +69,22 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="danaview" />
             </intent-filter>
-            <!-- EXTENDED: INT-104/HOM-21A, Windows lane. Open with / share to Danaview for
-                 documents, text and images (VIEW), and for those plus video (SEND,
-                 SEND_MULTIPLE). The danaview_library_native plugin claims these intents (HOM-21A:
-                 import and viewer through the incoming bridge); a single video or audio item still
-                 takes the 1.1 player path above (P-7). The filters above stay unchanged. -->
+        </activity>
+        <!-- EXTENDED: INT-104/HOM-21A, Windows lane. Open with / share to Danaview for
+             documents, text and images (VIEW), and for those plus video (SEND, SEND_MULTIPLE).
+             The danaview_library_native plugin claims these intents (HOM-21A: import and viewer
+             through the incoming bridge); a single video or audio item still takes the 1.1
+             player path on MainActivity (P-7), whose filters stay unchanged. These are 1.2
+             (DANAVIEW_FILES_HOME) filters, so they live on an alias of MainActivity that is off
+             unless the flag is on: the danaviewFilesHome placeholder comes from the dart-defines in
+             app/build.gradle.kts (enabled right from install), and MainActivity re-applies
+             BuildConfig.DANAVIEW_FILES_HOME at startup with setComponentEnabledSetting, so a
+             state left by an earlier build with the other flag value is corrected. -->
+        <activity-alias
+            android:name=".IncomingDocumentsAlias"
+            android:targetActivity=".MainActivity"
+            android:enabled="${danaviewFilesHome}"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -130,7 +141,7 @@
                 <data android:mimeType="image/*" />
                 <data android:mimeType="video/*" />
             </intent-filter>
-        </activity>
+        </activity-alias>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

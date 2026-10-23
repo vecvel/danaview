@@ -101,6 +101,9 @@ class _PdfViewerState extends State<PdfViewer> {
   int _currentHit = -1;
   int _searchGeneration = 0;
 
+  /// Bumped when the file or documents change and on dispose, so a stale open closes its handle.
+  int _openGeneration = 0;
+
   @override
   void initState() {
     super.initState();
@@ -116,6 +119,7 @@ class _PdfViewerState extends State<PdfViewer> {
       unawaited(_stateSub?.cancel());
       _stateSub = null;
       _searchGeneration++;
+      _openGeneration++;
       setState(() {
         _doc = null;
         _view = null;
@@ -137,22 +141,28 @@ class _PdfViewerState extends State<PdfViewer> {
     unawaited(_stateSub?.cancel());
     _query.dispose();
     _queryFocus.dispose();
+    _openGeneration++;
     final doc = _doc;
     if (doc != null) pdfIgnore(widget.documents.close(doc.handle));
     super.dispose();
   }
 
   Future<void> _open() async {
+    final generation = _openGeneration;
+    final documents = widget.documents;
+    bool stale() => !mounted || generation != _openGeneration;
     try {
-      _caps = widget.capabilities ?? await widget.documents.capabilities();
+      final caps = widget.capabilities ?? await documents.capabilities();
+      if (stale()) return;
+      _caps = caps;
       if (!_caps.canView) return _unavailable();
-      final doc = await widget.documents.open(widget.file.path);
-      if (!mounted) {
-        pdfIgnore(widget.documents.close(doc.handle));
+      final doc = await documents.open(widget.file.path);
+      if (stale()) {
+        pdfIgnore(documents.close(doc.handle));
         return;
       }
       if (doc.locked && !_caps.passwords) {
-        pdfIgnore(widget.documents.close(doc.handle));
+        pdfIgnore(documents.close(doc.handle));
         return _unavailable();
       }
       setState(() {
@@ -165,7 +175,7 @@ class _PdfViewerState extends State<PdfViewer> {
         unawaited(_loadOutline());
       }
     } on PdfException catch (e) {
-      if (!mounted) return;
+      if (stale()) return;
       if (e.code == PdfErrorCode.notFound || e.code == PdfErrorCode.ioError) {
         setState(() => _failed = true);
       } else {

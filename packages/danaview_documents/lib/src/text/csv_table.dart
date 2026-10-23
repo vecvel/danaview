@@ -120,6 +120,9 @@ List<String> parseCsvRecord(String text, CsvDelimiter delimiter) {
   return fields;
 }
 
+/// The width (in characters) of a column that only records past the width sample reach.
+const _defaultColumnChars = 12;
+
 /// A CSV/TSV file indexed by record over a [TextDocument]'s bytes.
 final class CsvTable {
   CsvTable._(this.document, this.delimiter, this._starts, this.recordCount, this.columnCount, this.columnChars);
@@ -145,6 +148,11 @@ final class CsvTable {
     var i = document.bomLength;
     if (i < end) add(i);
     var quoted = false;
+    // The widest record in the whole file (delimiters outside quotes + 1), so a wide record past
+    // the width sample still gets all its columns.
+    var maxFields = count > 0 ? 1 : 0;
+    var fields = 1;
+    final du = d.unit;
     while (i < end) {
       final int c;
       if (unit == 1) {
@@ -155,18 +163,27 @@ final class CsvTable {
       i += unit;
       if (c == 0x22) {
         quoted = !quoted;
-      } else if (c == 0x0A && !quoted && i < end) {
+      } else if (quoted) {
+        continue;
+      } else if (c == du) {
+        if (++fields > maxFields) maxFields = fields;
+      } else if (c == 0x0A && i < end) {
         add(i);
+        fields = 1;
       }
     }
     // A trailing blank record (a final line break followed by nothing) is not a row.
     final table = CsvTable._(document, d, starts, count, 0, const []);
     final sample = <List<String>>[for (var r = 0; r < count && r < 200; r++) table.record(r)];
-    var cols = 0;
+    var cols = maxFields;
     for (final rec in sample) {
       if (rec.length > cols) cols = rec.length;
     }
+    // Columns no sampled record reaches get a default width.
     final chars = List<int>.filled(cols, 1);
+    for (var c = 0; c < cols; c++) {
+      if (!sample.any((rec) => c < rec.length)) chars[c] = _defaultColumnChars;
+    }
     for (final rec in sample) {
       for (var c = 0; c < rec.length; c++) {
         final len = rec[c].length > 60 ? 60 : rec[c].length;
@@ -191,10 +208,11 @@ final class CsvTable {
   /// Records, the header included.
   final int recordCount;
 
-  /// Columns (the widest of the first 200 records).
+  /// Columns (the widest record in the file).
   final int columnCount;
 
-  /// Longest cell per column in the first 200 records, capped at 60 characters (column widths).
+  /// Longest cell per column in the first 200 records, capped at 60 characters (column widths); a
+  /// column only later records reach gets a default width.
   final List<int> columnChars;
 
   /// Body rows (records after the header).

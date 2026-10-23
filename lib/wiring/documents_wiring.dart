@@ -6,7 +6,8 @@
 // INT-103): the Documents tab, the viewers and Open with / the iOS Share Extension, composed at the
 // app root behind DANAVIEW_FILES_HOME (default false, never flipped in code). With the flag off
 // nothing here runs: [documentsOverrides] returns no override and [installIncomingDocumentOpen]
-// leaves the 1.1 incoming-media path untouched.
+// only guards the 1.1 incoming-media path against the photos and documents the shipped native
+// document types can still send (a neutral toast; videos and links play as in 1.1).
 //
 // With the flag on:
 //
@@ -39,7 +40,8 @@ import 'package:danaview_documents/danaview_documents.dart';
 import 'package:danaview_domain/danaview_domain.dart' as domain show LibraryFolder;
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/flags.dart';
-import 'package:danaview_features/src/library/file_actions/file_actions.dart' show fileOutPortProvider;
+import 'package:danaview_features/src/library/file_actions/file_actions.dart'
+    show anchorOf, fileActionIcon, fileActionId, fileActionLabel, fileMenuActions, fileOutPortProvider, libraryFileActionsProvider, runFileAction;
 import 'package:danaview_features/src/library/filters/filter_providers.dart' show linkedDocumentsProvider;
 import 'package:danaview_features/src/library/import/import_providers.dart';
 import 'package:danaview_features/src/library/import/incoming_intents.dart';
@@ -50,6 +52,7 @@ import 'package:danaview_library_native/danaview_library_native.dart' show Incom
 import 'package:danaview_pdf/danaview_pdf.dart' show PdfDocuments, PlatformPdfDocuments;
 import 'package:danaview_platform/danaview_platform.dart' show IncomingMediaBridge;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -138,8 +141,10 @@ ViewerFile viewerFileOfLinked(DocumentItem document) {
 typedef ProviderRead = T Function<T>(ProviderListenable<T> provider);
 
 /// Opens [file] full screen in the viewer the router picks (HOM-23), with this build's native
-/// viewers, the file-out port and Recents (Danaview folder entries only).
-Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerFile file) {
+/// viewers, the file-out port and Recents (Danaview folder entries only). With [fileMenuItem] (a
+/// Danaview folder entry) every viewer's top bar ends with a "File actions" button: HOM-22's
+/// Share, Open in another app, Save out, Copy to, Favourite and File info (FIX-S3Q-1).
+Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerFile file, {MediaItem? fileMenuItem}) {
   final setup = read(documentViewerSetupProvider);
   final fileOut = read(fileOutPortProvider);
   final record = read(recordLibraryOpenProvider);
@@ -149,17 +154,89 @@ Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerF
     settings: const RouteSettings(name: 'document-viewer'),
     transitionDuration: disable ? Duration.zero : DanaviewMotion.normal,
     reverseTransitionDuration: disable ? Duration.zero : DanaviewMotion.fast,
-    pageBuilder: (context, _, __) => DocumentViewer(
-      key: const ValueKey('s3-document-viewer'),
-      file: file,
-      viewers: setup.viewers,
-      probes: setup.probes,
-      fileOut: fileOut,
-      onOpened: record,
-      onClose: () => unawaited(Navigator.of(context).maybePop()),
+    // A bare route has no Material above it, so the viewers' texts would fall back to Flutter's
+    // debug style (yellow double underline, FIX-S3Q-2): the kit background and text style here,
+    // as the photo viewer screen has through its scaffold.
+    pageBuilder: (context, _, __) => Material(
+      color: DanaviewColors.background,
+      child: DefaultTextStyle.merge(
+        style: DanaviewTextStyles.body.copyWith(decoration: TextDecoration.none),
+        child: _withFileMenu(
+          fileMenuItem,
+          DocumentViewer(
+            key: const ValueKey('s3-document-viewer'),
+            file: file,
+            viewers: setup.viewers,
+            probes: setup.probes,
+            fileOut: fileOut,
+            onOpened: record,
+            onClose: () => unawaited(Navigator.of(context).maybePop()),
+          ),
+        ),
+      ),
     ),
     transitionsBuilder: (context, animation, _, child) => FadeTransition(opacity: animation, child: child),
   ));
+}
+
+/// The file actions a viewer's top bar offers: the ones that leave the open file where it is.
+/// Move to, Rename and Delete stay in the row menu.
+const Set<FileAction> viewerFileActions = {
+  FileAction.share,
+  FileAction.openIn,
+  FileAction.saveOut,
+  FileAction.copyTo,
+  FileAction.favourite,
+  FileAction.info,
+};
+
+Widget _withFileMenu(MediaItem? item, Widget viewer) {
+  if (item == null) return viewer;
+  return DocumentHostActions(
+    actions: [
+      Consumer(
+        builder: (context, ref, _) => DanaviewIconButton(
+          key: const ValueKey('viewer-file-menu'),
+          icon: Icons.more_horiz_rounded,
+          size: 44,
+          onPressed: () => unawaited(showViewerFileMenu(context, ref, item)),
+          semanticLabel: 'File actions',
+          tooltip: 'File actions',
+        ),
+      ),
+    ],
+    child: viewer,
+  );
+}
+
+/// HOM-22's single-file menu for the file a viewer shows, limited to [viewerFileActions].
+Future<void> showViewerFileMenu(BuildContext context, WidgetRef ref, MediaItem item) async {
+  final anchor = anchorOf(context);
+  final chosen = await showDanaviewSheet<FileAction>(
+    context,
+    title: item.name,
+    builder: (sheetContext) => Consumer(builder: (context, ref, _) {
+      final port = ref.watch(fileOutPortProvider);
+      final favourite = ref.watch(libraryFileActionsProvider)?.liveEntry(item.id)?.isFavourite ?? false;
+      return SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final action in fileMenuActions(item, port).where(viewerFileActions.contains))
+              DanaviewListTile(
+                key: ValueKey(fileActionId(action)),
+                leading: DanaviewTileIcon(fileActionIcon(action, favourite: favourite), color: DanaviewColors.primaryLight),
+                title: fileActionLabel(action, capabilities: port?.capabilities, favourite: favourite),
+                onTap: () => Navigator.of(sheetContext).pop(action),
+              ),
+          ],
+        ),
+      );
+    }),
+  );
+  if (chosen == null || !context.mounted) return;
+  await runFileAction(context, ref, chosen, [item], anchor: anchor);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -328,11 +405,47 @@ Future<void> _prepareStaging(String staging) async {
 /// `openLibraryEntryWith` in files_home_wiring.dart. Set by [installIncomingDocumentOpen].
 typedef IncomingEntryOpener = Future<void> Function(BuildContext context, ProviderRead read, FileEntry entry);
 
+/// The toast of an Open with import that failed (HOM-21).
+const String incomingOpenFailedMessage = "Couldn't open this file.";
+
+/// The toast for a photo or document opened with Danaview while DANAVIEW_FILES_HOME is off.
+const String incomingNotSupportedMessage = "Danaview can't open this kind of file.";
+
 /// Installs HOM-21's interceptor on [IncomingMediaBridge] (flag on only): photos and documents
 /// another app opens with Danaview are imported into `Imported` and shown by [openEntry] on the
 /// root navigator of [navigator]; everything else plays as in 1.1. Returns whether it installed.
-bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required IncomingEntryOpener openEntry}) {
-  if (!documentsWired) return false;
+///
+/// With the flag off nothing of S3 runs, but on iOS and macOS the native document types S3 adds
+/// (Info.plist) ship in every build, so a photo or document can still arrive: there a guard claims
+/// those (nothing is imported or shown) and says so in a neutral toast instead of handing them to
+/// the 1.1 player. Videos, streams and danaview:// links, and every other platform, keep the 1.1
+/// path unchanged.
+/// Tells HOM-21's cleanup where iOS puts its own "Open in" copies: the app container's
+/// `Documents/Inbox` and `tmp/<x>-Inbox` (FIX-S3Q-7). `$HOME` is empty inside an iOS app, so the
+/// default roots matched nothing and those copies piled up. On iOS the temporary directory is
+/// `<container>/tmp`, so the container's Documents folder is its sibling. No-op elsewhere.
+void configureSystemOpenInCopyRoots() {
+  if (!Platform.isIOS) return;
+  final tmp = Directory.systemTemp.absolute.path;
+  final container = File(tmp.endsWith('/') ? tmp.substring(0, tmp.length - 1) : tmp).parent.path;
+  SystemOpenInCopyRoots.configure(
+    SystemOpenInCopyRoots.ios(documentsDirectory: '$container/Documents', temporaryDirectory: tmp),
+  );
+}
+
+bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required IncomingEntryOpener openEntry, TargetPlatform? platform}) {
+  configureSystemOpenInCopyRoots();
+  if (!documentsWired) {
+    final os = platform ?? defaultTargetPlatform;
+    if (os != TargetPlatform.iOS && os != TargetPlatform.macOS) return false;
+    IncomingMediaBridge.interceptor = (media) async {
+      if (routeIncoming(media) != IncomingRoute.importAndView) return false;
+      final c = _insideOverlayOf(navigator);
+      if (c != null && c.mounted) DanaviewToast.show(c, incomingNotSupportedMessage, icon: Icons.info_outline_rounded);
+      return true;
+    };
+    return false;
+  }
   BuildContext? context() => navigator.currentContext;
   ProviderContainer? container() {
     final c = context();
@@ -351,13 +464,36 @@ bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required 
     imports: () => container()?.read(importServiceProvider),
     openEntry: open,
     onFailed: () {
-      final c = context();
+      // The navigator's own context (and the Overlay's, and its theater's) sits above the
+      // navigator's Overlay, where a toast finds no overlay and is dropped: show it from a
+      // context inside one of the overlay's entries.
+      final c = _insideOverlayOf(navigator);
       if (c != null && c.mounted) {
-        DanaviewToast.show(c, "Couldn't open this file.", kind: DanaviewToastKind.error, icon: Icons.error_outline_rounded);
+        DanaviewToast.show(c, incomingOpenFailedMessage, kind: DanaviewToastKind.error, icon: Icons.error_outline_rounded);
       }
     },
   );
   return true;
+}
+
+/// A context inside the Overlay of [navigator] (one `Overlay.maybeOf` resolves), or null.
+BuildContext? _insideOverlayOf(GlobalKey<NavigatorState> navigator) {
+  final overlay = navigator.currentState?.overlay?.context;
+  if (overlay == null || !overlay.mounted) return null;
+  // Breadth-first and shallow: the first entry's element is a few levels below the Overlay.
+  var level = <Element>[];
+  overlay.visitChildElements(level.add);
+  for (var depth = 0; depth < 8 && level.isNotEmpty; depth++) {
+    for (final e in level) {
+      if (Overlay.maybeOf(e, rootOverlay: true) != null) return e;
+    }
+    final next = <Element>[];
+    for (final e in level) {
+      e.visitChildElements(next.add);
+    }
+    level = next;
+  }
+  return null;
 }
 
 /// Opens an entry Android's Open with imported (HOM-21A); set by [installIncomingDocumentOpen].
