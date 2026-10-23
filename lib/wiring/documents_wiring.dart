@@ -1,4 +1,6 @@
 // OWNER: S3-W
+// EXTENDED: HOM-21A (Android Open with / Share to Danaview: the NativeIncoming batches are
+// imported by IncomingIntentImporter and shown by the same opener and toasts as HOM-21's paths.)
 //
 // S3 wiring (BUILD_PLAN v1.2 §1A, slice S3 "Documents: view and share-in"; the slice's share of
 // INT-103): the Documents tab, the viewers and Open with / the iOS Share Extension, composed at the
@@ -17,6 +19,8 @@
 //   HOM-26). Text and CSV fall back to the in-app viewers, everything else to the file card;
 // * Open with Danaview (HOM-21): incoming photos and documents are imported into `Imported` and
 //   opened in their viewer; videos, streams and `danaview://` links keep the 1.1 play path (P-7);
+// * Android Open with / Share to Danaview (HOM-21A, INT-104): the plugin's incoming batches are
+//   imported into `Imported`; a VIEW opens its entry, a share shows the Share Extension's toast;
 // * the iOS Share Extension inbox (HOM-21, INT-104): the App Group port, its change events and an
 //   app-owned staging folder; the importer runs on start, on every foreground and when the
 //   extension finishes a batch, and keeps the folder-list snapshot the extension's picker reads.
@@ -38,10 +42,11 @@ import 'package:danaview_features/src/flags.dart';
 import 'package:danaview_features/src/library/file_actions/file_actions.dart' show fileOutPortProvider;
 import 'package:danaview_features/src/library/filters/filter_providers.dart' show linkedDocumentsProvider;
 import 'package:danaview_features/src/library/import/import_providers.dart';
+import 'package:danaview_features/src/library/import/incoming_intents.dart';
 import 'package:danaview_features/src/library/organise/organise_providers.dart' show recordLibraryOpenProvider;
 import 'package:danaview_features/src/player/danaview_player_actions.dart';
 import 'package:danaview_library/danaview_library.dart';
-import 'package:danaview_library_native/danaview_library_native.dart' show NativeBackupFlags, NativeInbox;
+import 'package:danaview_library_native/danaview_library_native.dart' show IncomingAction, NativeBackupFlags, NativeInbox;
 import 'package:danaview_pdf/danaview_pdf.dart' show PdfDocuments, PlatformPdfDocuments;
 import 'package:danaview_platform/danaview_platform.dart' show IncomingMediaBridge;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -277,12 +282,14 @@ String inboxStagingIn(String support) => '$support${Platform.pathSeparator}Danav
 /// The S3 overrides of the app root: nothing with DANAVIEW_FILES_HOME off.
 ///
 /// With the flag on: the viewers of [platform], the linked-document scan, and on iOS the Share
-/// Extension inbox ([inbox] is a test seam) with its staging folder under [support].
+/// Extension inbox ([inbox] is a test seam) with its staging folder under [support]; on Android
+/// the incoming intents ([incoming] is a test seam).
 List<Override> documentsOverrides({
   required TargetPlatform platform,
   required String support,
   DocumentViewerSetup? viewers,
   NativeInbox? inbox,
+  IncomingIntentPort? incoming,
   bool excludeStagingFromBackup = true,
 }) {
   if (!documentsWired) return const [];
@@ -298,6 +305,9 @@ List<Override> documentsOverrides({
       inboxChangesProvider.overrideWithValue(appGroup.changes),
       inboxStagingDirectoryProvider.overrideWithValue(staging),
     ],
+    // The plugin's port only on a real Android host (widget tests run as Android on the desktop VM).
+    if (platform == TargetPlatform.android && (incoming != null || Platform.isAndroid))
+      incomingIntentPortProvider.overrideWithValue(incoming ?? NativeIncomingPort()),
   ];
 }
 
@@ -329,14 +339,17 @@ bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required 
     return c == null ? null : ProviderScope.containerOf(c, listen: false);
   }
 
+  void open(FileEntry entry) {
+    final c = context();
+    final scope = container();
+    if (c == null || scope == null) return;
+    unawaited(openEntry(c, scope.read, entry));
+  }
+
+  _incomingOpen = open;
   IncomingMediaBridge.interceptor = incomingDocumentInterceptor(
     imports: () => container()?.read(importServiceProvider),
-    openEntry: (entry) {
-      final c = context();
-      final scope = container();
-      if (c == null || scope == null) return;
-      unawaited(openEntry(c, scope.read, entry));
-    },
+    openEntry: open,
     onFailed: () {
       final c = context();
       if (c != null && c.mounted) {
@@ -347,8 +360,12 @@ bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required 
   return true;
 }
 
-/// Starts the Share Extension inbox import (iOS with the flag on; nothing elsewhere) and shows a
-/// toast after a run that saved or failed something. Wraps the Home, which stays mounted under
+/// Opens an entry Android's Open with imported (HOM-21A); set by [installIncomingDocumentOpen].
+void Function(FileEntry entry)? _incomingOpen;
+
+/// Starts the Share Extension inbox import (iOS with the flag on) and the Android incoming-intent
+/// import (HOM-21A; Android with the flag on) and shows a toast after a run that saved or failed
+/// something; an Android Open with opens its entry. Wraps the Home, which stays mounted under
 /// every route.
 class InboxImportHost extends ConsumerStatefulWidget {
   /// The host around [child].
@@ -363,25 +380,42 @@ class InboxImportHost extends ConsumerStatefulWidget {
 
 class _InboxImportHostState extends ConsumerState<InboxImportHost> {
   StreamSubscription<InboxRunResult>? _results;
+  StreamSubscription<IncomingIntentResult>? _incoming;
 
   @override
   void initState() {
     super.initState();
     final auto = ref.read(inboxAutoImportProvider);
-    _results = auto?.results.listen((result) {
-      final message = inboxResultMessage(result);
-      if (message == null || !mounted) return;
-      DanaviewToast.show(
-        context,
-        message,
-        kind: result.failed > 0 ? DanaviewToastKind.error : DanaviewToastKind.success,
-      );
+    _results = auto?.results.listen(_toast);
+    _incoming = ref.read(incomingIntentImportProvider)?.results.listen((result) {
+      if (result.action == IncomingAction.view) {
+        final entry = result.toOpen;
+        final open = _incomingOpen;
+        if (entry != null && open != null) {
+          open(entry);
+        } else if (mounted) {
+          DanaviewToast.show(context, "Couldn't open this file.", kind: DanaviewToastKind.error, icon: Icons.error_outline_rounded);
+        }
+        return;
+      }
+      _toast(result.asInboxResult);
     });
+  }
+
+  void _toast(InboxRunResult result) {
+    final message = inboxResultMessage(result);
+    if (message == null || !mounted) return;
+    DanaviewToast.show(
+      context,
+      message,
+      kind: result.failed > 0 ? DanaviewToastKind.error : DanaviewToastKind.success,
+    );
   }
 
   @override
   void dispose() {
     unawaited(_results?.cancel());
+    unawaited(_incoming?.cancel());
     super.dispose();
   }
 
