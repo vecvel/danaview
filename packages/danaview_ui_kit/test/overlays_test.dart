@@ -6,6 +6,22 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'test_utils.dart';
 
 void main() {
+  for (final (size, expected) in [(const Size(375, 812), 375.0), (const Size(800, 900), 752.0), (const Size(1280, 800), 1216.0)]) {
+    testWidgets('sheet has no width cap at ${size.width.toInt()} px (full width on phones, gutters beyond)', (tester) async {
+      late BuildContext ctx;
+      await pumpKit(tester, Surface('$size', size, 1.0, TargetPlatform.iOS), Builder(builder: (context) {
+        ctx = context;
+        return const SizedBox.expand();
+      }));
+      showDanaviewSheet<void>(ctx, builder: (context) => const SizedBox(height: 120, child: Text('Wide')));
+      await tester.pumpAndSettle();
+      // Content sits inside the sheet's default 16 px side padding.
+      expect(tester.getSize(find.text('Wide')).width, expected - 32);
+      expect(tester.getCenter(find.text('Wide')).dx, size.width / 2);
+      expectNoErrors(tester);
+    });
+  }
+
   testWidgets('menu is keyboard navigable', (tester) async {
     String? picked;
     await pumpKit(

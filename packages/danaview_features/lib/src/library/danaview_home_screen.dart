@@ -458,7 +458,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
         prominent: true,
         action: DanaviewButton.ghost(label: 'Clear', size: DanaviewButtonSize.sm, onPressed: _clearHistory),
       ),
-      DanaviewLibraryGroup(children: [for (final item in visible) _recentRow(item)]),
+      DanaviewLibraryCardGrid(children: [for (final item in visible) _recentRow(item)]),
       if (recent.length > _recentPreviewCount)
         Padding(
           padding: const EdgeInsets.only(top: DanaviewSpacing.sm),
@@ -539,7 +539,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
           ),
         )
       else
-        DanaviewLibraryGroup(
+        DanaviewLibraryCardGrid(
           children: [
             for (final playlist in playlists)
               DanaviewLibraryRow(
@@ -615,7 +615,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
               : null,
         )
       else
-        DanaviewLibraryGroup(children: [for (final folder in roots) _folderRow(folder)]),
+        DanaviewLibraryCardGrid(children: [for (final folder in roots) _folderRow(folder)]),
     ];
   }
 

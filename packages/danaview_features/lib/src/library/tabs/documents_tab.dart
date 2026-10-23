@@ -62,6 +62,7 @@ class _DocumentsTabState extends ConsumerState<DocumentsTab> {
         final insets = danaviewLibraryInsets(constraints.maxWidth);
         final padding = insets.copyWith(top: DanaviewSpacing.lg, bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl);
         final side = padding.copyWith(top: 0, bottom: 0);
+        final columns = danaviewLibraryGridColumns(constraints.maxWidth - side.horizontal);
         return CustomScrollView(
           key: const PageStorageKey('library-documents-tab'),
           slivers: [
@@ -91,9 +92,10 @@ class _DocumentsTabState extends ConsumerState<DocumentsTab> {
             if (entries.length > 0)
               SliverPadding(
                 padding: side,
-                sliver: SliverList.builder(
-                  itemCount: entries.length,
-                  itemBuilder: (context, i) {
+                sliver: _list(
+                  columns,
+                  entries.length,
+                  (context, i) {
                     final entry = entries.at(i);
                     if (entry == null) return const SizedBox(height: 56);
                     return LibraryEntryRow(entry: entry, actions: rowActions);
@@ -104,9 +106,10 @@ class _DocumentsTabState extends ConsumerState<DocumentsTab> {
               SliverPadding(padding: side, sliver: const SliverToBoxAdapter(child: DanaviewLibrarySectionHeader('In linked folders'))),
               SliverPadding(
                 padding: side,
-                sliver: SliverList.builder(
-                  itemCount: linked.length,
-                  itemBuilder: (context, i) => LinkedDocumentRow(document: linked[i], onOpen: widget.onOpenLinked),
+                sliver: _list(
+                  columns,
+                  linked.length,
+                  (context, i) => LinkedDocumentRow(document: linked[i], onOpen: widget.onOpenLinked),
                 ),
               ),
             ],
@@ -116,4 +119,9 @@ class _DocumentsTabState extends ConsumerState<DocumentsTab> {
       },
     );
   }
+
+  /// List rows on phones, a card grid where more than one column fits.
+  static Widget _list(int columns, int count, IndexedWidgetBuilder builder) => columns > 1
+      ? danaviewLibrarySliverGrid(columns: columns, itemCount: count, itemBuilder: builder)
+      : SliverList.builder(itemCount: count, itemBuilder: builder);
 }

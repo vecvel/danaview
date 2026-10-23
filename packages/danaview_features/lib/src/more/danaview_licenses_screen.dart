@@ -401,7 +401,7 @@ class _Intro extends StatelessWidget {
       child: Text(
         'Danaview is built with open-source software, fonts and models. Each one is listed here with its '
         'licence. Tap one to read it.',
-        style: DanaviewTextStyles.bodySecondary.copyWith(height: 1.5),
+        style: DanaviewTextStyles.bodySecondary.copyWith(height: 1.45),
       ),
     );
   }

@@ -78,6 +78,7 @@ class AllTab extends ConsumerWidget {
       builder: (context, constraints) {
         final insets = danaviewLibraryInsets(constraints.maxWidth);
         final padding = insets.copyWith(top: DanaviewSpacing.lg, bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl);
+        final columns = danaviewLibraryGridColumns(constraints.maxWidth - padding.horizontal);
         return CustomScrollView(
           key: const PageStorageKey('library-all-tab'),
           slivers: [
@@ -85,7 +86,9 @@ class AllTab extends ConsumerWidget {
               padding: padding,
               sliver: entries.isEmpty
                   ? const SliverToBoxAdapter(child: LibraryFilterEmpty(filter: LibraryFilter.all))
-                  : SliverList.builder(
+                  : columns > 1
+                      ? _monthGrid(entries, columns, rowActions)
+                      : SliverList.builder(
                       itemCount: entries.length,
                       itemBuilder: (context, i) {
                         final entry = entries.at(i);
@@ -108,5 +111,65 @@ class AllTab extends ConsumerWidget {
         );
       },
     );
+  }
+
+  /// The timeline as month sections of card rows (wide screens): built lazily in order, a row never
+  /// mixes two months.
+  static Widget _monthGrid(LibraryEntryPages entries, int columns, LibraryEntryActions actions) {
+    final rows = _MonthGridRows(entries, columns);
+    return SliverList.builder(
+      key: const ValueKey('library-all-grid'),
+      itemBuilder: (context, i) {
+        final item = rows.item(i);
+        if (item == null) return null;
+        if (item.header case final month?) return DanaviewLibrarySectionHeader(month, topSpacing: i == 0 ? 0 : 20);
+        final row = DanaviewLibraryGridRow(
+          columns: columns,
+          children: [
+            for (var e = item.start; e < item.end; e++)
+              if (entries.at(e) case final entry?) LibraryEntryRow(entry: entry, actions: actions) else const SizedBox(height: 56),
+          ],
+        );
+        final afterRow = i > 0 && rows.item(i - 1)?.header == null;
+        return afterRow ? Padding(padding: const EdgeInsets.only(top: danaviewLibraryGridGap), child: row) : row;
+      },
+    );
+  }
+}
+
+/// The All grid's items: a month header, or one row of entries [start, end) of that month.
+typedef _MonthGridItem = ({String? header, int start, int end});
+
+class _MonthGridRows {
+  _MonthGridRows(this.entries, this.columns);
+
+  final LibraryEntryPages entries;
+  final int columns;
+  final List<_MonthGridItem> _items = [];
+  int _next = 0;
+  String? _month;
+
+  String? _monthOf(int index) {
+    final entry = entries.at(index);
+    return entry == null ? _month : libraryMonthLabel(entry.addedAt);
+  }
+
+  /// Item [index], or null past the end.
+  _MonthGridItem? item(int index) {
+    while (_items.length <= index && _next < entries.length) {
+      final month = _monthOf(_next);
+      if (month != null && (_items.isEmpty || month != _month)) {
+        _month = month;
+        _items.add((header: month, start: _next, end: _next));
+        continue;
+      }
+      var end = _next + 1;
+      while (end < entries.length && end - _next < columns && _monthOf(end) == _month) {
+        end++;
+      }
+      _items.add((header: null, start: _next, end: end));
+      _next = end;
+    }
+    return index < _items.length ? _items[index] : null;
   }
 }

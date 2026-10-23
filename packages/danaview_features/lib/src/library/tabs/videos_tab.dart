@@ -88,7 +88,7 @@ class _VideosTabState extends ConsumerState<VideosTab> {
           _NowPlayingStrip(onOpen: widget.onOpenPlayer),
           if (recent.isNotEmpty) ...[
             const DanaviewLibrarySectionHeader('Continue watching', topSpacing: 0),
-            DanaviewLibraryGroup(
+            DanaviewLibraryCardGrid(
               children: [
                 for (final item in shownRecent)
                   DanaviewLibraryRow(
@@ -114,7 +114,7 @@ class _VideosTabState extends ConsumerState<VideosTab> {
           ],
           if (state.playlists.isNotEmpty) ...[
             const DanaviewLibrarySectionHeader('Playlists'),
-            DanaviewLibraryGroup(
+            DanaviewLibraryCardGrid(
               children: [
                 for (final p in state.playlists)
                   DanaviewLibraryRow(
@@ -128,7 +128,7 @@ class _VideosTabState extends ConsumerState<VideosTab> {
           ],
           if (folders.isNotEmpty && widget.onOpenFolder != null) ...[
             const DanaviewLibrarySectionHeader('Video folders'),
-            DanaviewLibraryGroup(
+            DanaviewLibraryCardGrid(
               children: [
                 for (final f in folders)
                   DanaviewLibraryRow(
