@@ -6,9 +6,11 @@
 // or macOS hands over reaches the 1.1 incoming path of `lib/app.dart`.
 //
 // - "videos and streams keep the 1.1 path" always runs (regression guard).
-// - "documents and photos never reach the player" states the behaviour FIX-S3Q-6 asks for. It fails
-//   on the S3 tree (each file is queued and the player opens), so it is skipped by default; run it
-//   with --dart-define=S3Q_CHECK_FLAG_OFF_INCOMING=true.
+// - "documents and photos never reach the player" states the Dart-side guard FIX-S3Q-6 offered. iOS
+//   now strips the declarations natively in a flag-off build (Runner's "Gate Files Home
+//   declarations" phase), so the OS never offers Danaview for these types there; macOS has no such
+//   phase yet (FIX-S3Q-6 open for macOS). The Dart path still queues each file in the player, so the
+//   check is skipped by default; run it with --dart-define=S3Q_CHECK_FLAG_OFF_INCOMING=true.
 //
 // Both skip themselves when built with DANAVIEW_FILES_HOME=true (the interceptor's job, covered by
 // test/v12/wiring/s3_wiring_test.dart).

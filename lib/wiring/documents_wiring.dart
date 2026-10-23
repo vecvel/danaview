@@ -350,9 +350,10 @@ bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required 
       unawaited(openEntry(c, scope.read, entry));
     },
     onFailed: () {
-      // The navigator's own context (and the Overlay's) sits above the navigator's Overlay, where
-      // a toast finds no overlay and is dropped: show it from the overlay's first child.
-      final c = _belowOverlayOf(navigator); debugPrint("DBG onFailed ${c?.widget.runtimeType} ${navigator.currentState?.overlay}");
+      // The navigator's own context (and the Overlay's, and its theater's) sits above the
+      // navigator's Overlay, where a toast finds no overlay and is dropped: show it from a
+      // context inside one of the overlay's entries.
+      final c = _insideOverlayOf(navigator);
       if (c != null && c.mounted) {
         DanaviewToast.show(c, incomingOpenFailedMessage, kind: DanaviewToastKind.error, icon: Icons.error_outline_rounded);
       }
@@ -361,13 +362,24 @@ bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required 
   return true;
 }
 
-/// A context inside the Overlay of [navigator] (so `Overlay.of` finds it), or null.
-BuildContext? _belowOverlayOf(GlobalKey<NavigatorState> navigator) {
+/// A context inside the Overlay of [navigator] (one `Overlay.maybeOf` resolves), or null.
+BuildContext? _insideOverlayOf(GlobalKey<NavigatorState> navigator) {
   final overlay = navigator.currentState?.overlay?.context;
   if (overlay == null || !overlay.mounted) return null;
-  BuildContext? below;
-  overlay.visitChildElements((child) => below ??= child);
-  return below;
+  // Breadth-first and shallow: the first entry's element is a few levels below the Overlay.
+  var level = <Element>[];
+  overlay.visitChildElements(level.add);
+  for (var depth = 0; depth < 8 && level.isNotEmpty; depth++) {
+    for (final e in level) {
+      if (Overlay.maybeOf(e, rootOverlay: true) != null) return e;
+    }
+    final next = <Element>[];
+    for (final e in level) {
+      e.visitChildElements(next.add);
+    }
+    level = next;
+  }
+  return null;
 }
 
 /// Starts the Share Extension inbox import (iOS with the flag on; nothing elsewhere) and shows a

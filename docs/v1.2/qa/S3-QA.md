@@ -102,7 +102,7 @@ montage (INT-105, S8), Search with AI (S7).
 
 ### Tests (S3-W)
 
-`test/v12/wiring/s3_wiring_test.dart` (18 tests, green plain and with
+`test/v12/wiring/s3_wiring_test.dart` (21 tests, green plain and with
 `--dart-define=DANAVIEW_FILES_HOME=true`), booting `DanaviewApp` with the real router over an
 in-process HOM-17 fixture library (Report.pdf, Notes.docx, Archive.zip, Song.mp3), a stand-in PDF
 viewer registered like HOM-24's, and one linked document:
@@ -142,6 +142,22 @@ extension, Open with from Files, the `PdfRenderer` viewer on the emulator (HOM-2
 `flutter build ios --no-codesign` with the extension embedded (not run here: the dependency change
 adds no plugin, and the 8 GB machine was shared with other builders).
 
+### Fix round after S3-Q (S3-W, 2026-10-23)
+
+S3-W's share of the S3-Q defects, in S3-W's files only:
+
+| Item | Change | Test |
+|---|---|---|
+| FIX-S3Q-2 | `openDocumentViewer`'s route puts the viewer host in a `Material` (kit background) under `DefaultTextStyle.merge(DanaviewTextStyles.body, no decoration)`, as the photo viewer's scaffold does, so no viewer text falls back to Flutter's debug style | `s3_wiring_test` "the viewer route gives every text the kit style"; S3-Q's matrix with `--dart-define=S3Q_CHECK_TEXT_STYLE=true`: **11 of 11 pass** (was 11 surfaces failing) |
+| Open with failure toast | `installIncomingDocumentOpen`'s `onFailed` showed the toast from the navigator's context, which is above its Overlay, so `DanaviewToast` found no overlay and dropped "Couldn't open this file." silently. It now shows it from a context inside one of the overlay's entries (shallow breadth-first search, `Overlay.maybeOf` resolves); the message is the constant `incomingOpenFailedMessage` | `s3_wiring_test` "Open with: a failed import shows …" (a PDF that is gone when the import reads it) |
+| FIX-S3Q-1 (S3-W half) | `showLibraryEntryFileMenu(context, ref, entry)` in `files_home_wiring.dart` opens HOM-22's single-file menu (Share, Open in another app, Save out, Copy to, Move to, Rename, Favourite, File info, Delete) for any library entry. **Not yet reachable from a row:** HOM-18's `LibraryEntryActions` (`entry_widgets.dart`, HOM-18's file) has only `onOpen`, `onRename`, `onMove`, `onDelete`, so `_rowActions` has no hook to pass it to (D-S3W-5). Once HOM-18 adds the hook (e.g. `onMore`, a "More actions…" item in the row menu), `_rowActions` passes `onMore: (e) => showLibraryEntryFileMenu(context, ref, e)` | `s3_wiring_test` "a document entry reaches HOM-22's Share and File info through the file menu" |
+| Linked-walk test | The walk test pins both columns of HOM-21's `SystemOpenInCopyRoots`: off iOS a `Documents/Inbox` folder in a linked root is the user's own and is listed; on iOS the app's own "Open in" copies are skipped | `s3_wiring_test` linked-document walk |
+
+Run green after the round: `test/v12/wiring/s3_wiring_test.dart`, `test/v12/wiring/s2_wiring_test.dart`,
+`test/v12/legal/s3_documents_text_test.dart` (54 plain; 53 + 1 skip with `DANAVIEW_FILES_HOME=true`),
+`test/v12/s3_qa/s3_matrix_test.dart` with the text-style check on (11 pass); `flutter analyze
+--fatal-infos lib test/v12/wiring test/v12/legal packages/danaview_features/lib/src/more`: no issues.
+
 ### Defects and open items
 
 | # | Item | Owner | Status |
@@ -150,6 +166,7 @@ adds no plugin, and the 8 GB machine was shared with other builders).
 | D-S3W-2 | HOM-21's "Save to Danaview folder" (`canSaveToDanaviewFolder`, `saveToDanaviewFolder` in `danaview_player_actions.dart`) is not offered by any player menu (`danaview_player_screen.dart` / the controls overlay do not call it) | HOM-21 | open |
 | D-S3W-3 | `test/v12/s2_qa/s2_matrix_test.dart` (S2-Q) walks "document file menu → File info" by tapping a document row; from S3 that opens the viewer router (10 matrix tests fail at `tapKey('file-info')`). The step should open File info from the file card or the row menu, or move to S3-Q's matrix | S2-Q / S3-Q | defect (test only) |
 | D-S3W-4 | HOM-18's `documentsFilterShown` stays `false` and its tests pin it; the app shows Documents through `s3DocumentsShown`. HOM-18 may flip its constant (and `filters_test.dart`) so the package default matches the shipped app | HOM-18 | open, low |
+| D-S3W-5 | FIX-S3Q-1 needs a row hook in HOM-18's `LibraryEntryActions` (`packages/danaview_features/lib/src/library/filters/entry_widgets.dart`) and a "More actions…" item in its row menu; S3-W's `showLibraryEntryFileMenu` is ready to be passed to it. Until then Danaview-folder documents still have no Share / Save out / Favourite / File info (FIX-S3Q-1 stays open) | HOM-18 | defect (blocks the gate with FIX-S3Q-1) |
 | D-6 (S2) | The features barrel still exports none of the Files & Media Home surfaces; both wiring files use `implementation_imports` | INT-101 (barrel) | open, low |
 | — | `legalEffectiveDate`, the owner's review of the S3 wording, regenerating the hosted privacy page from a build with the flag, App Group on both App IDs before signing | S3-R with the owner | open |
 
