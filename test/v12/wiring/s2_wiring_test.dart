@@ -1,4 +1,6 @@
 // OWNER: S2-W
+// EXTENDED: S3-W (from S3 the Home also shows Documents and a document opens in the viewer router;
+// test/v12/wiring/s3_wiring_test.dart covers the S3 wiring itself.)
 //
 // BUILD_PLAN v1.2 §1A, S2 gate "Wiring and legal": the S2 features (Photos & Files Home) are
 // reachable in the real app (DanaviewApp with the app router) behind DANAVIEW_FILES_HOME, and the
@@ -20,6 +22,7 @@ import 'dart:io';
 
 import 'package:danaview/app.dart';
 import 'package:danaview/router/app_router.dart';
+import 'package:danaview/wiring/documents_wiring.dart' show s3DocumentsShown;
 import 'package:danaview/wiring/files_home_wiring.dart';
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/flags.dart';
@@ -34,6 +37,7 @@ import 'package:danaview_features/src/library/photo_viewer/photo_viewer_actions.
 import 'package:danaview_features/src/library/selection/selection_bar.dart';
 import 'package:danaview_features/src/library/sources/desktop_photos_source.dart';
 import 'package:danaview_features/src/more/settings_sections/library_storage_section.dart';
+import 'package:danaview_documents/danaview_documents.dart' show DocumentViewer;
 import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
@@ -289,7 +293,7 @@ void main() {
   });
 
   group('flag on: the Home in the app', () {
-    testWidgets('tabs are Home, All, Videos, Photos, Playlists, Folders; Documents waits for S3', (tester) async {
+    testWidgets('tabs are Home, All, Videos, Photos, Playlists, Folders, and Documents from S3', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 844), 1.0, padding: EdgeInsets.only(top: 47, bottom: 34)));
       final app = await _pumpApp(tester, filesHome: true);
       expect(find.byType(FilesHome), findsOneWidget);
@@ -297,9 +301,10 @@ void main() {
       for (final tab in [HomeTab.home, HomeTab.all, HomeTab.videos, HomeTab.photos, HomeTab.playlists, HomeTab.folders]) {
         expect(find.byKey(homeTabKey(tab)), findsOneWidget, reason: tab.name);
       }
-      expect(find.byKey(homeTabKey(HomeTab.documents)), findsNothing);
+      expect(find.byKey(homeTabKey(HomeTab.documents)), findsOneWidget, reason: 'S3-W shows Documents');
       expect(find.byKey(homeTabKey(HomeTab.projects)), findsNothing, reason: 'the editor is not wired in tests');
-      expect(s2DocumentsShown, isFalse);
+      expect(s2DocumentsShown, isFalse, reason: "HOM-18's package default");
+      expect(s3DocumentsShown, isTrue);
       // The 1.1 sections stay on Home, with the Import and search row added.
       expect(find.text('Open file'), findsOneWidget);
       expect(find.byKey(const ValueKey('s2-import')), findsOneWidget);
@@ -307,7 +312,7 @@ void main() {
       await app.dispose();
     });
 
-    testWidgets('the library tabs read the store; a document opens its file menu', (tester) async {
+    testWidgets('the library tabs read the store; a document opens in the viewer (S3)', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
       final app = await _pumpApp(tester, filesHome: true, seed: (lib) => _seedMixed(lib, tester));
       await app.tab(HomeTab.all);
@@ -316,9 +321,7 @@ void main() {
       expect(find.text('Report.pdf'), findsOneWidget);
       await tester.tap(find.text('Report.pdf'));
       await pumpFrames(tester, count: 8);
-      expect(find.byKey(const ValueKey('file-info')), findsOneWidget, reason: 'S2 has no document viewer: the file menu');
-      await tester.tap(find.byKey(const ValueKey('file-info')));
-      await pumpFrames(tester, count: 8);
+      expect(find.byType(DocumentViewer), findsOneWidget, reason: 'S3: the viewer router, not the file menu');
       expect(tester.takeException(), isNull);
       await app.dispose();
     });

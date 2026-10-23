@@ -1,6 +1,8 @@
 package com.vecvel.danaview
 
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -36,7 +38,36 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        syncIncomingDocumentsAlias()
         handleIntent(intent)
+    }
+
+    // EXTENDED: INT-104/HOM-21A, Windows lane. The document/photo/text share filters live on
+    // IncomingDocumentsAlias (AndroidManifest.xml), a 1.2 feature behind DANAVIEW_FILES_HOME. The
+    // manifest already declares it enabled or not from the same flag; this only corrects a state
+    // persisted by an earlier build with the other flag value (component settings survive updates).
+    // Intents delivered through the alias reach this Activity unchanged (only getComponent() names
+    // the alias), so the incoming plugin and handleIntent see them as before.
+    private fun syncIncomingDocumentsAlias() {
+        try {
+            val alias = ComponentName(this, "$packageName.IncomingDocumentsAlias")
+            val want = BuildConfig.DANAVIEW_FILES_HOME
+            val current = when (packageManager.getComponentEnabledSetting(alias)) {
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+                PackageManager.COMPONENT_ENABLED_STATE_DEFAULT ->
+                    packageManager.getActivityInfo(alias, PackageManager.MATCH_DISABLED_COMPONENTS).enabled
+                else -> false
+            }
+            if (current != want) {
+                packageManager.setComponentEnabledSetting(
+                    alias,
+                    if (want) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP,
+                )
+            }
+        } catch (_: Exception) {
+            // Never block startup over the share filters.
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -263,6 +263,7 @@
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				E1040A1B2C3D4E5F60710034 /* Embed Foundation Extensions */,
+				E1040A1B2C3D4E5F60710050 /* Gate Files Home declarations */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				703A4E039868AAA5C3BD797D /* [CP] Embed Pods Frameworks */,
 			);
@@ -463,6 +464,23 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		E1040A1B2C3D4E5F60710050 /* Gate Files Home declarations */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}",
+			);
+			name = "Gate Files Home declarations";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# INT-104: Files & Media Home declarations follow DANAVIEW_FILES_HOME (ARCH §8). Flag off: the built\n# app carries only the 1.1 declarations (no rank-Alternate document types, no Share Extension).\nset -e\nfiles_home=0\nold_ifs=$IFS; IFS=','\nfor define in ${DART_DEFINES:-}; do\n  if [ \"$(printf '%s' \"$define\" | /usr/bin/base64 -D 2>/dev/null)\" = \"DANAVIEW_FILES_HOME=true\" ]; then files_home=1; fi\ndone\nIFS=$old_ifs\nbuilt_plist=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nmkdir -p \"${TARGET_TEMP_DIR}\"\ntypes_xml=\"${TARGET_TEMP_DIR}/danaview-document-types.xml\"\n/usr/bin/plutil -extract CFBundleDocumentTypes xml1 -o \"$types_xml\" \"${SRCROOT}/${INFOPLIST_FILE}\"\n/usr/bin/plutil -replace CFBundleDocumentTypes -xml \"$(cat \"$types_xml\")\" \"$built_plist\"\nrm -f \"$types_xml\"\nif [ \"$files_home\" = 1 ]; then\n  if [ ! -d \"${TARGET_BUILD_DIR}/${PLUGINS_FOLDER_PATH}/DanaviewShare.appex\" ]; then\n    echo \"error: DanaviewShare.appex is not embedded; clean the build folder and build again.\" >&2\n    exit 1\n  fi\n  exit 0\nfi\ncount=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleDocumentTypes\" \"$built_plist\" | grep -c \"LSHandlerRank\" || true)\ni=$((count - 1))\nwhile [ \"$i\" -ge 0 ]; do\n  rank=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleDocumentTypes:$i:LSHandlerRank\" \"$built_plist\" 2>/dev/null || true)\n  if [ \"$rank\" = \"Alternate\" ]; then /usr/libexec/PlistBuddy -c \"Delete :CFBundleDocumentTypes:$i\" \"$built_plist\"; fi\n  i=$((i - 1))\ndone\nrm -rf \"${TARGET_BUILD_DIR}/${PLUGINS_FOLDER_PATH}/DanaviewShare.appex\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */

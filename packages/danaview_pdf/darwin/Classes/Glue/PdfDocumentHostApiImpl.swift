@@ -1,7 +1,9 @@
 // OWNER: HOM-24
 //
 // PdfDocumentHostApi on Apple over the PdfDocumentStore (Viewer/PdfCore.swift): opens run on a
-// background queue and reply from it; sources are opened read-only (rule 27).
+// background queue and reply on the main thread (Flutter's channel threading rule); sources are
+// opened read-only (rule 27). The outline is read from an independent open (`store.twin`), never
+// from the document a PDFView draws on the main thread (PDFKit is not thread-safe).
 
 import Foundation
 
@@ -28,11 +30,13 @@ final class PdfDocumentHostApiImpl: PdfDocumentHostApi {
 
   private func background<T>(_ completion: @escaping (Result<T, Error>) -> Void, _ body: @escaping () throws -> T) {
     queue.async {
+      let result: Result<T, Error>
       do {
-        completion(.success(try body()))
+        result = .success(try body())
       } catch {
-        completion(.failure(PdfErrors.from(error)))
+        result = .failure(PdfErrors.from(error))
       }
+      DispatchQueue.main.async { completion(result) }
     }
   }
 
@@ -57,7 +61,7 @@ final class PdfDocumentHostApiImpl: PdfDocumentHostApi {
 
   func outline(handle: Int64, completion: @escaping (Result<[PdfOutlineItemMsg], Error>) -> Void) {
     background(completion) { [store] in
-      PdfReader.outline(of: try store.document(handle)).map {
+      PdfReader.outline(of: try store.twin(handle)).map {
         PdfOutlineItemMsg(title: $0.title, pageIndex: Int64($0.pageIndex), depth: Int64($0.depth))
       }
     }

@@ -78,6 +78,19 @@ void main() {
       expect(t.row(1), ['4']);
     });
 
+    test('a wide record past the 200-record width sample keeps all its columns', () {
+      final text = StringBuffer('a,b,c\n');
+      for (var i = 0; i < 300; i++) {
+        text.write('$i,x,y\n');
+      }
+      text.write('w,"q,uoted",3,4,5\n');
+      final t = _table(text.toString());
+      expect(t.columnCount, 5);
+      expect(t.columnChars.length, 5);
+      expect(t.columnChars[3], greaterThan(1));
+      expect(t.row(300), ['w', 'q,uoted', '3', '4', '5']);
+    });
+
     test('a forced delimiter overrides sniffing', () {
       final t = _table('a,b;c\n1,2;3\n', delimiter: CsvDelimiter.semicolon);
       expect(t.header, ['a,b', 'c']);

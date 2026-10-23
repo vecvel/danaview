@@ -72,6 +72,7 @@ class AllTab extends ConsumerWidget {
       onRename: actions?.onRename,
       onMove: actions?.onMove,
       onDelete: actions?.onDelete,
+      onMore: actions?.onMore,
     );
     return LayoutBuilder(
       builder: (context, constraints) {

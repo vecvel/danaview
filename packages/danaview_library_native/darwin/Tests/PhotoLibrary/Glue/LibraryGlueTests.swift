@@ -33,18 +33,8 @@ final class LibraryGlueTests: XCTestCase {
   }
 
   func testEveryPlaceholderAnswersNotSupportedOnDevice() {
-    let item = FileItemMsg(path: "/tmp/x", displayName: "x")
-    // Pickers (HOM-20), Thumbnails (HOM-04, except documentThumbnail until HOM-26) and
-    // ExportOut / Share / OpenIn (HOM-22) are implemented; only placeholder answers are checked.
-    let thumbs = ThumbnailHostApiImpl(context: context)
-    assertNotSupported("documentThumbnail") {
-      thumbs.documentThumbnail(request: DocumentThumbnailRequestMsg(requestId: "t", path: "/tmp/x", widthPx: 1, heightPx: 1, scale: 2, format: .jpeg, quality: 0.8, outputPath: "/tmp/t"), completion: $0)
-    }
-
-    let quickLook = QuickLookHostApiImpl(context: context)
-    assertNotSupported("canPreview") { quickLook.canPreview(item: item, completion: $0) }
-    assertNotSupported("present") { quickLook.present(request: QuickLookRequestMsg(items: [item], initialIndex: 0), completion: $0) }
-
+    // Pickers (HOM-20), Thumbnails (HOM-04), ExportOut / Share / OpenIn (HOM-22) and Quick Look with
+    // document thumbnails (HOM-26) are implemented; only placeholder answers are checked.
     let inbox = InboxHostApiImpl(context: context)
     assertThrowsNotSupported("isAvailable") { _ = try inbox.isAvailable() }
     assertNotSupported("listBatches") { inbox.listBatches(completion: $0) }

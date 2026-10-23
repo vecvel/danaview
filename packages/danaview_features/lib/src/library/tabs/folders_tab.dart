@@ -56,7 +56,7 @@ final class FoldersRecentlyDeleted extends FoldersTabLocation {
 class FoldersTab extends ConsumerStatefulWidget {
   /// The tab; [onOpenFolder] opens the 1.1 browser at a linked folder's path, [onOpenEntry] a
   /// Danaview file in its viewer, [onOpenPlayer] the player after a linked folder's Play all.
-  const FoldersTab({super.key, required this.onOpenFolder, this.onOpenEntry, this.onOpenPlayer});
+  const FoldersTab({super.key, required this.onOpenFolder, this.onOpenEntry, this.onOpenPlayer, this.onMoreEntry});
 
   /// Opens the 1.1 folder browser (linked folders).
   final ValueChanged<String> onOpenFolder;
@@ -66,6 +66,9 @@ class FoldersTab extends ConsumerStatefulWidget {
 
   /// Shows the player.
   final VoidCallback? onOpenPlayer;
+
+  /// A Danaview file row's "More actions…" (the host's file menu, FIX-S3Q-1); null hides it.
+  final ValueChanged<FileEntry>? onMoreEntry;
 
   @override
   ConsumerState<FoldersTab> createState() => _FoldersTabState();
@@ -172,6 +175,7 @@ class _FoldersTabState extends ConsumerState<FoldersTab> {
       onRename: writable ? _actions.renameEntry : null,
       onMove: writable ? _actions.moveEntry : null,
       onDelete: writable ? _actions.deleteEntry : null,
+      onMore: widget.onMoreEntry,
     );
     final summary = [
       if (subfolders.isNotEmpty) formatCount(subfolders.length, 'folder'),

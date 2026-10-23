@@ -103,7 +103,7 @@ packages:
     source: path
     version: "1.0.0"
   danaview_documents:
-    dependency: transitive
+    dependency: "direct main"
     description:
       path: "packages/danaview_documents"
       relative: true
@@ -180,7 +180,7 @@ packages:
     source: path
     version: "1.2.0"
   danaview_pdf:
-    dependency: transitive
+    dependency: "direct main"
     description:
       path: "packages/danaview_pdf"
       relative: true

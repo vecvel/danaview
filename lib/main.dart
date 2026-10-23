@@ -1,11 +1,14 @@
 // EXTENDED: S2-W (S2 wiring: the Files & Media Home overrides behind DANAVIEW_FILES_HOME, from
 // lib/wiring/files_home_wiring.dart; none with the flag off.)
+// EXTENDED: S3-W (S3 wiring: Open with Danaview for photos and documents through HOM-21's
+// interceptor, behind DANAVIEW_FILES_HOME; with the flag off incoming media keep the 1.1 path.)
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:danaview_data/danaview_data.dart';
 import 'package:danaview_editor/danaview_editor.dart';
@@ -27,8 +30,9 @@ import 'package:danaview_transcription/danaview_transcription.dart'
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:danaview_whisper/danaview_whisper.dart';
 import 'app.dart';
-import 'router/app_router.dart' show appExportHost, openPrivacyPolicy, openProjects;
-import 'wiring/files_home_wiring.dart' show filesHomeOverrides;
+import 'router/app_router.dart' show appExportHost, appNavigatorKey, openPrivacyPolicy, openProjects;
+import 'wiring/documents_wiring.dart' show installIncomingDocumentOpen;
+import 'wiring/files_home_wiring.dart' show filesHomeOverrides, openLibraryEntryWith;
 
 Future<void> main([List<String> args = const []]) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,6 +61,17 @@ Future<void> main([List<String> args = const []]) async {
   final editorOverrides = await _editorOverrides();
   // Files & Media Home (S2): the library, thumbnails and import; nothing with the flag off.
   final filesHome = await filesHomeOverrides(prefs: prefs);
+  // Open with Danaview (S3): photos and documents are imported and shown in their viewer; videos,
+  // streams and danaview:// links play as in 1.1. Nothing with the flag off.
+  installIncomingDocumentOpen(
+    appNavigatorKey,
+    openEntry: (context, read, entry) => openLibraryEntryWith(
+      context,
+      read,
+      entry,
+      onOpenPlayer: () => unawaited(GoRouter.of(context).push('/player')),
+    ),
+  );
 
   runApp(
     ProviderScope(

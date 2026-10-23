@@ -1,9 +1,23 @@
+// EXTENDED: HOM-21 (ARCH v1.2 §5.6, V2-116: "Save to Danaview folder" for the playing file, Open
+// with Danaview for photos and documents through IncomingMediaBridge.interceptor, and the iOS Share
+// Extension inbox run on launch, on every foreground and when the extension finishes a batch. All
+// of it is inert until the app root (behind DANAVIEW_FILES_HOME) overrides the providers below and
+// installs the interceptor; with the flag off the player behaves as in 1.1.)
+
+import 'dart:async';
+import 'dart:io' show Directory, FileSystemEntity, FileSystemEntityType, Platform;
+
 import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_library/danaview_library.dart';
+import 'package:danaview_library_native/danaview_library_native.dart' show NativeInbox;
 import 'package:danaview_platform/danaview_platform.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import '../controllers/providers.dart';
+import '../library/files/library_store_providers.dart';
+import '../library/import/import_providers.dart';
 import '../library/media_picker.dart';
 import 'screen_orientation_policy.dart';
 
@@ -104,4 +118,361 @@ abstract final class PlayerOrientation {
   /// Restoring the app default also rotates a phone back upright, however the player was held.
   /// Does nothing once [owner] has released.
   static Future<void> release(Object owner) => ScreenOrientationPolicy.release(owner);
+}
+
+// ---------------------------------------------------------------------------------------------
+// HOM-21: Save to Danaview folder, Open with Danaview, the Share Extension inbox.
+// Nothing here logs a name, a path or a link (ARCH v1.2 rule 30).
+// ---------------------------------------------------------------------------------------------
+
+/// The playing queue item when it is a local file that can be saved into a Danaview folder.
+MediaRef? saveableCurrentMedia(WidgetRef ref) {
+  final item = ref.read(queueControllerProvider).currentItem;
+  if (item == null || item.isRemote || item.pathOrUri.isEmpty) return null;
+  final path = incomingLocalPath(item.pathOrUri);
+  return path == null ? null : item;
+}
+
+/// True when the player menu should offer "Save to Danaview folder": a local file is playing and
+/// the library is open (DANAVIEW_FILES_HOME).
+bool canSaveToDanaviewFolder(WidgetRef ref) => ref.read(importServiceProvider) != null && saveableCurrentMedia(ref) != null;
+
+/// Copies the playing file into [target] (`Imported` when null) with `sourceHint = player`. The
+/// file itself is only read (rule 27); a file already in the library is not copied twice. Shows
+/// a toast with the outcome and returns the entry (new or existing), or null.
+Future<FileEntry?> saveToDanaviewFolder(BuildContext context, WidgetRef ref, {FolderId? target}) async {
+  final imports = ref.read(importServiceProvider);
+  final media = saveableCurrentMedia(ref);
+  if (imports == null || media == null) return null;
+  final path = incomingLocalPath(media.pathOrUri)!;
+  final ImportItem item;
+  try {
+    item = await imports.result(imports.enqueue(
+      ImportSource.file(path, sourceHint: SourceHint.player),
+      target: target,
+      duplicates: DuplicatePolicy.skip,
+    ));
+  } on Object {
+    if (context.mounted) showPlayerToast(context, "Couldn't save this video.", kind: DanaviewToastKind.error);
+    return null;
+  }
+  if (!context.mounted) return item.entry ?? item.duplicateOf;
+  switch (item.state) {
+    case ImportItemState.done:
+      showPlayerToast(context, 'Saved to Danaview folders', kind: DanaviewToastKind.success);
+    case ImportItemState.skipped:
+      showPlayerToast(context, 'Already in Danaview folders');
+    case ImportItemState.cancelled:
+      break;
+    case _:
+      showPlayerToast(context, "Couldn't save this video.", kind: DanaviewToastKind.error);
+  }
+  return item.entry ?? item.duplicateOf;
+}
+
+/// The player menu's "Save to Danaview folder" entry, or null when [canSaveToDanaviewFolder] is
+/// false (flag off / no library, nothing playing, or a stream). [beforeSave] runs first, e.g. to
+/// close the menu or sheet. A player menu adds it with `if (saveToDanaviewFolderMenuItem(...)
+/// case final item?) item`.
+DanaviewMenuItem? saveToDanaviewFolderMenuItem(BuildContext context, WidgetRef ref, {VoidCallback? beforeSave, FolderId? target}) {
+  if (!canSaveToDanaviewFolder(ref)) return null;
+  return DanaviewMenuItem(
+    label: 'Save to Danaview folder',
+    icon: Icons.drive_folder_upload_outlined,
+    onTap: () {
+      beforeSave?.call();
+      unawaited(saveToDanaviewFolder(context, ref, target: target));
+    },
+  );
+}
+
+/// Where iOS puts the copies it makes for the app when another app opens a file with Danaview:
+/// `<app Documents>/Inbox/` and `<app tmp>/<bundle id>-Inbox/`. Only files under these two
+/// folders of the app's own container are app-owned (the import removes them afterwards); every
+/// other path is the user's file and is only read (rule 27). Off iOS there are none.
+final class SystemOpenInCopyRoots {
+  /// Roots for an iOS app whose container has [documentsDirectory] (`getApplicationDocumentsDirectory()`)
+  /// and [temporaryDirectory] (`NSTemporaryDirectory()`). With [bundleId] null any `<x>-Inbox`
+  /// folder directly in the app's own tmp counts.
+  SystemOpenInCopyRoots.ios({required String documentsDirectory, required String temporaryDirectory, String? bundleId})
+      : _inboxRoot = _join(_canonical(documentsDirectory), 'Inbox'),
+        _tmpRoot = _canonical(temporaryDirectory),
+        _bundleId = bundleId;
+
+  /// No app-owned roots: every path is the user's.
+  const SystemOpenInCopyRoots.none()
+      : _inboxRoot = null,
+        _tmpRoot = null,
+        _bundleId = null;
+
+  final String? _inboxRoot;
+  final String? _tmpRoot;
+  final String? _bundleId;
+
+  /// The roots this app uses: the ones [configure] set, else (iOS only) the app's own container
+  /// (`$HOME/Documents`, [Directory.systemTemp]); [SystemOpenInCopyRoots.none] elsewhere.
+  static SystemOpenInCopyRoots get current => _configured ??= _platformDefault();
+  static SystemOpenInCopyRoots? _configured;
+
+  /// Sets the roots the wiring resolved (iOS: documents and temporary directory, bundle id). On
+  /// any other platform this keeps [SystemOpenInCopyRoots.none] unless [onIos] says otherwise
+  /// (tests).
+  static void configure(SystemOpenInCopyRoots roots, {bool? onIos}) {
+    _configured = (onIos ?? Platform.isIOS) ? roots : const SystemOpenInCopyRoots.none();
+  }
+
+  /// Back to the platform default (tests).
+  @visibleForTesting
+  static void reset() => _configured = null;
+
+  static SystemOpenInCopyRoots _platformDefault() {
+    if (!Platform.isIOS) return const SystemOpenInCopyRoots.none();
+    final home = Platform.environment['HOME'];
+    if (home == null || home.isEmpty) return const SystemOpenInCopyRoots.none();
+    return SystemOpenInCopyRoots.ios(documentsDirectory: _join(home, 'Documents'), temporaryDirectory: Directory.systemTemp.path);
+  }
+
+  /// Whether [path] is a file directly or below one of the roots.
+  bool contains(String path) {
+    final inbox = _inboxRoot;
+    final tmp = _tmpRoot;
+    if (inbox == null || tmp == null) return false;
+    final p = _canonical(path);
+    if (_isBelow(p, inbox)) return true;
+    if (!_isBelow(p, tmp)) return false;
+    final first = p.substring(tmp.length + 1).split('/').first;
+    final bundle = _bundleId;
+    return bundle == null ? (first.length > '-Inbox'.length && first.endsWith('-Inbox')) : first == '$bundle-Inbox';
+  }
+
+  static bool _isBelow(String path, String root) => path.length > root.length + 1 && path.startsWith('$root/');
+
+  static String _join(String a, String b) => a.endsWith('/') || a.endsWith(r'\') ? '$a$b' : '$a/$b';
+
+  /// Forward slashes, no `.`/`..`/empty segments, symlinks of the deepest existing folder resolved,
+  /// and iOS's `/private/var` spelled `/var`.
+  static String _canonical(String path) {
+    var p = path.replaceAll(r'\', '/');
+    if (p.startsWith('file://')) p = Uri.tryParse(p)?.toFilePath() ?? p;
+    final parts = <String>[];
+    for (final s in p.split('/')) {
+      if (s.isEmpty || s == '.') continue;
+      if (s == '..') {
+        if (parts.isNotEmpty) parts.removeLast();
+        continue;
+      }
+      parts.add(s);
+    }
+    var out = '/${parts.join('/')}';
+    // Resolve symlinks on the longest existing prefix.
+    for (var i = parts.length; i > 0; i--) {
+      final prefix = '/${parts.take(i).join('/')}';
+      try {
+        if (FileSystemEntity.typeSync(prefix, followLinks: false) == FileSystemEntityType.notFound) continue;
+        final resolved = Directory(prefix).resolveSymbolicLinksSync().replaceAll(r'\', '/');
+        final rest = parts.skip(i).join('/');
+        out = rest.isEmpty ? resolved : _join(resolved, rest);
+      } on Object {
+        // Keep the lexical form.
+      }
+      break;
+    }
+    if (out.startsWith('/private/var/')) out = out.substring('/private'.length);
+    while (out.length > 1 && out.endsWith('/')) {
+      out = out.substring(0, out.length - 1);
+    }
+    return out;
+  }
+}
+
+/// True for a copy iOS made for the app when another app opened a file with Danaview (see
+/// [SystemOpenInCopyRoots]); false for every other path and on every other platform, so the
+/// user's own `Documents/Inbox` folder on a desktop is only read, never removed.
+bool isSystemOpenInCopy(String path) => SystemOpenInCopyRoots.current.contains(path);
+
+/// Opens [media] for viewing when it is a photo or a document: imports it into `Imported`
+/// (`sourceHint = openWith`) and calls [openEntry] with the new entry, or with the entry already
+/// in the library for the same content. Returns false (the player takes it, as in 1.1) for
+/// videos, audio, streams, `danaview://` links and unknown types, and when [imports] is null.
+/// [onFailed] runs when a photo or document could not be imported.
+Future<bool> openIncomingForViewing(
+  String media, {
+  required ImportService? imports,
+  required void Function(FileEntry entry) openEntry,
+  bool Function(String path) isAppOwnedCopy = isSystemOpenInCopy,
+  void Function()? onFailed,
+}) async {
+  if (imports == null || routeIncoming(media) != IncomingRoute.importAndView) return false;
+  final IncomingImport? result;
+  try {
+    result = await IncomingOpenImporter(imports: imports, isAppOwnedCopy: isAppOwnedCopy).importForViewing(media);
+  } on Object {
+    onFailed?.call();
+    return true;
+  }
+  final entry = result?.entry;
+  if (entry == null) {
+    onFailed?.call();
+  } else {
+    openEntry(entry);
+  }
+  return true;
+}
+
+/// The interceptor the app root installs on [IncomingMediaBridge.interceptor] (behind
+/// DANAVIEW_FILES_HOME): photos and documents go to [openIncomingForViewing] with the import
+/// service [imports] returns at that moment; everything else plays as in 1.1.
+IncomingMediaInterceptor incomingDocumentInterceptor({
+  required ImportService? Function() imports,
+  required void Function(FileEntry entry) openEntry,
+  void Function()? onFailed,
+}) =>
+    (media) => openIncomingForViewing(media, imports: imports(), openEntry: openEntry, onFailed: onFailed);
+
+/// [InboxPort] over the plugin's [NativeInbox] (the only App Group reader, rule 26).
+final class NativeInboxPort implements InboxPort {
+  /// A port over [inbox].
+  NativeInboxPort([NativeInbox? inbox]) : inbox = inbox ?? NativeInbox();
+
+  /// The plugin wrapper.
+  final NativeInbox inbox;
+
+  @override
+  Future<bool> isAvailable() => inbox.isAvailable();
+
+  @override
+  Future<List<InboxBatch>> listBatches() async => [
+        for (final b in await inbox.listBatches())
+          InboxBatch(
+            batchId: b.batchId,
+            createdAt: b.createdAt,
+            complete: b.complete,
+            targetFolder: b.targetFolderId == null ? null : FolderId.tryParse(b.targetFolderId!),
+            files: [
+              for (final f in b.files)
+                InboxFile(relativePath: f.relativePath, displayName: f.displayName, sizeBytes: f.sizeBytes, uti: f.uti, mimeType: f.mimeType),
+            ],
+          ),
+      ];
+
+  @override
+  Future<void> takeFile(String batchId, String relativePath, String destinationPath) => inbox.takeFile(batchId, relativePath, destinationPath);
+
+  @override
+  Future<void> deleteBatch(String batchId) => inbox.deleteBatch(batchId);
+
+  @override
+  Future<int> deleteStaleBatches(Duration age) => inbox.deleteStaleBatches(age);
+
+  @override
+  Future<void> writeFolderSnapshot(List<int> json) => inbox.writeFolderSnapshot(json);
+}
+
+/// The Share Extension inbox; the app root overrides it with [NativeInboxPort] on iOS (null:
+/// no inbox).
+final inboxPortProvider = Provider<InboxPort?>((ref) => null);
+
+/// Fires when the extension finished a batch while the app runs ([NativeInbox.changes]).
+final inboxChangesProvider = Provider<Stream<void>?>((ref) => null);
+
+/// The app-owned directory inbox files wait in for their import (not the picker staging
+/// directory: each is swept on its own).
+final inboxStagingDirectoryProvider = Provider<String?>((ref) => null);
+
+/// The inbox importer, or null without a library, an inbox or a staging directory.
+final inboxImporterProvider = Provider<InboxImporter?>((ref) {
+  final imports = ref.watch(importServiceProvider);
+  final port = ref.watch(inboxPortProvider);
+  final staging = ref.watch(inboxStagingDirectoryProvider);
+  if (imports == null || port == null || staging == null) return null;
+  return InboxImporter(port: port, imports: imports, stagingDirectory: staging);
+});
+
+/// Runs an [InboxImporter] on start, on every return to the foreground and on every [changes]
+/// event, and refreshes the folder snapshot after library writes.
+final class InboxAutoImport {
+  /// Drives [importer]; [results] reports each run that imported or failed something.
+  InboxAutoImport(this.importer, {Stream<void>? changes, Stream<void>? libraryWrites, this.snapshotDelay = const Duration(milliseconds: 500)})
+      : _changes = changes,
+        _libraryWrites = libraryWrites;
+
+  /// The importer.
+  final InboxImporter importer;
+
+  /// How long library writes settle before the folder snapshot is rewritten.
+  final Duration snapshotDelay;
+
+  final Stream<void>? _changes;
+  final Stream<void>? _libraryWrites;
+  final StreamController<InboxRunResult> _results = StreamController<InboxRunResult>.broadcast();
+  AppLifecycleListener? _lifecycle;
+  final List<StreamSubscription<void>> _subs = [];
+  Timer? _snapshotTimer;
+  bool _started = false;
+
+  /// Runs that imported, skipped or failed something (for a toast).
+  Stream<InboxRunResult> get results => _results.stream;
+
+  /// Starts: one run now, then on resume and on changes. Idempotent.
+  void start() {
+    if (_started) return;
+    _started = true;
+    _lifecycle = AppLifecycleListener(onResume: () => unawaited(runNow()));
+    if (_changes case final changes?) _subs.add(changes.listen((_) => unawaited(runNow())));
+    if (_libraryWrites case final writes?) {
+      _subs.add(writes.listen((_) {
+        _snapshotTimer?.cancel();
+        _snapshotTimer = Timer(snapshotDelay, () => unawaited(importer.refreshFolderSnapshot()));
+      }));
+    }
+    unawaited(runNow());
+  }
+
+  /// One run (joining a run in flight).
+  Future<InboxRunResult> runNow() async {
+    final InboxRunResult result;
+    try {
+      result = await importer.run();
+    } on Object {
+      return const InboxRunResult();
+    }
+    if (!_results.isClosed && (result.imported.isNotEmpty || result.failed > 0 || result.skipped > 0)) _results.add(result);
+    return result;
+  }
+
+  /// Stops listening.
+  void dispose() {
+    _lifecycle?.dispose();
+    _lifecycle = null;
+    for (final s in _subs) {
+      unawaited(s.cancel());
+    }
+    _subs.clear();
+    _snapshotTimer?.cancel();
+    unawaited(_results.close());
+  }
+}
+
+/// The started [InboxAutoImport], or null without an importer. The app root reads it once after
+/// the library opened.
+final inboxAutoImportProvider = Provider<InboxAutoImport?>((ref) {
+  final importer = ref.watch(inboxImporterProvider);
+  if (importer == null) return null;
+  final revisions = StreamController<void>();
+  ref.listen(libraryRevisionProvider, (_, __) => revisions.add(null));
+  final auto = InboxAutoImport(importer, changes: ref.watch(inboxChangesProvider), libraryWrites: revisions.stream)..start();
+  ref.onDispose(() {
+    auto.dispose();
+    unawaited(revisions.close());
+  });
+  return auto;
+});
+
+/// The toast text of an inbox run, or null when there is nothing to say.
+String? inboxResultMessage(InboxRunResult r) {
+  final n = r.imported.length;
+  if (n == 0 && r.failed == 0) return null;
+  final saved = n == 0 ? null : (n == 1 ? '1 shared item saved' : '$n shared items saved');
+  final failed = r.failed == 0 ? null : (r.failed == 1 ? "1 item couldn't be saved" : "${r.failed} items couldn't be saved");
+  return [if (saved != null) saved, if (failed != null) failed].join(' · ');
 }

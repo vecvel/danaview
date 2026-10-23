@@ -7,6 +7,8 @@
 // the viewer host to the file card, and every state stays inside ARCH §1.4's surface matrix
 // (280–1280 px × text scale 0.85–1.35) with 44 px labelled targets.
 
+import 'dart:async';
+
 import 'package:danaview_documents/danaview_documents.dart';
 import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_pdf/danaview_pdf.dart';
@@ -209,6 +211,36 @@ void main() {
     expect(find.text('Open in another app'), findsOneWidget);
   });
 
+  testWidgets('a file swap while an open is pending closes the stale handle and shows the new file', (tester) async {
+    final documents = _GatedOpenDocs();
+    final shown = <int>[];
+    Widget gated(ViewerFile file) => PdfViewer(
+          file: file,
+          documents: documents,
+          onClose: () {},
+          viewBuilder: (context, d, onCreated) {
+            shown.add(d.handle);
+            return FakeNativeView(controller: view, onCreated: onCreated);
+          },
+        );
+    const second = ViewerFile(path: '/tmp/other.pdf', displayName: 'Other.pdf', kind: FileKind.document, docKind: DocumentKind.pdf);
+    await tester.pumpWidget(docApp(gated(_file)));
+    await tester.pump();
+    expect(documents.pending, hasLength(1));
+    await tester.pumpWidget(docApp(gated(second)));
+    await tester.pump();
+    expect(documents.pending, hasLength(2));
+    documents.pending[1].complete(documents.info(2));
+    await tester.pumpAndSettle();
+    documents.pending[0].complete(documents.info(1));
+    await tester.pumpAndSettle();
+    expect(documents.closed, [1]);
+    expect(shown, isNotEmpty);
+    expect(shown.toSet(), {2});
+    await tester.pumpWidget(const SizedBox());
+    expect(documents.closed, [1, 2]);
+  });
+
   group('viewer host registration', () {
     Future<List<ViewerKind>> host(WidgetTester tester, FakePdfDocuments documents) async {
       final shown = <ViewerKind>[];
@@ -245,6 +277,15 @@ void main() {
       expect(await pdfViewerProbe(FakePdfDocuments(password: 'pw', caps: const PdfCapabilities(textureView: true)))(_file), isFalse);
       expect(await pdfViewerProbe(FakePdfDocuments(password: 'pw'))(_file), isTrue);
       expect(await pdfViewerProbe(_ThrowingDocs())(_file), isFalse);
+    });
+
+    test('a failed capabilities call is not cached; the next probe retries it', () async {
+      final documents = _FlakyCapsDocs();
+      final probe = pdfViewerProbe(documents);
+      expect(await probe(_file), isFalse);
+      expect(await probe(_file), isTrue);
+      expect(await probe(_file), isTrue);
+      expect(documents.calls.where((c) => c == 'capabilities'), hasLength(2));
     });
   });
 
@@ -295,4 +336,36 @@ void main() {
 final class _ThrowingDocs extends FakePdfDocuments {
   @override
   Future<PdfProbe> probe(String path) => throw const PdfException(PdfErrorCode.internal, 'x');
+}
+
+final class _FlakyCapsDocs extends FakePdfDocuments {
+  var _failed = false;
+
+  @override
+  Future<PdfCapabilities> capabilities() {
+    if (_failed) return super.capabilities();
+    _failed = true;
+    calls.add('capabilities');
+    return Future.error(const PdfException(PdfErrorCode.internal, 'x'));
+  }
+}
+
+final class _GatedOpenDocs extends FakePdfDocuments {
+  final List<Completer<PdfDocumentInfo>> pending = [];
+
+  PdfDocumentInfo info(int handle) => PdfDocumentInfo(
+        handle: handle,
+        pageCount: 12,
+        encrypted: false,
+        locked: false,
+        pageSizes: [for (var i = 0; i < 12; i++) const PdfPageSize(612, 792, 0)],
+      );
+
+  @override
+  Future<PdfDocumentInfo> open(String path, {String? password}) {
+    calls.add('open');
+    final c = Completer<PdfDocumentInfo>();
+    pending.add(c);
+    return c.future;
+  }
 }
