@@ -1,0 +1,7 @@
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties
+# Evidence and pulled results stay local (VED-33A licence rules: no face data in git).
+results/

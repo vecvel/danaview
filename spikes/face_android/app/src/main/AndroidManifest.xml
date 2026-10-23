@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- VED-33A spike: an instrumentation-only APK, never part of the app. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="VED-33A face spike" android:hasCode="true" />
+    <instrumentation
+        android:name=".FaceBench"
+        android:targetPackage="com.vecvel.danaview.spike.face" />
+</manifest>
