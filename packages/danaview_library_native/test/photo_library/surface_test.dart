@@ -24,10 +24,9 @@ const _hostApis = [
 ];
 
 /// Placeholder classes of later tickets that have not landed yet: file → owner. Pickers (HOM-20),
-/// Thumbnails (HOM-04) and ExportOut / Share / OpenIn (HOM-22) are implemented and left this
-/// list; their own tests cover them.
+/// Thumbnails (HOM-04), ExportOut / Share / OpenIn (HOM-22) and Quick Look with document
+/// thumbnails (HOM-26) are implemented and left this list; their own tests cover them.
 const _placeholders = {
-  'darwin/Classes/QuickLook/QuickLookHostApiImpl.swift': 'HOM-26',
   'darwin/Classes/Inbox/InboxHostApiImpl.swift': 'HOM-21',
 };
 
@@ -86,12 +85,6 @@ void main() {
       expect(methods, greaterThan(0), reason: entry.key);
       expect(answers, methods, reason: '${entry.key}: every method answers notSupportedOnDevice');
     }
-    final thumbs = File('darwin/Classes/Thumbnails/ThumbnailHostApiImpl.swift').readAsStringSync();
-    expect(
-      RegExp(r'func documentThumbnail\([^{]*\{\s*completion\(\.failure\(LibraryErrors\.notSupported\(').hasMatch(thumbs),
-      isTrue,
-      reason: 'documentThumbnail answers notSupportedOnDevice until HOM-26 lands',
-    );
     final incoming = File('darwin/Classes/Glue/IncomingHostApiImpl.swift').readAsStringSync();
     expect(RegExp(r'LibraryErrors\.notSupported\(').allMatches(incoming), hasLength(2), reason: 'Android only');
   });
