@@ -66,13 +66,6 @@ on:
     - cron: '30 2 * * *'
   workflow_dispatch:
     inputs:
-      runner:
-        description: 'macOS runner for the ios and whisper-host (macOS) jobs; macos-15 is the hosted fallback'
-        type: choice
-        default: self-hosted
-        options:
-          - self-hosted
-          - macos-15
       nightly:
         description: 'Also run the nightly job'
         type: boolean
@@ -87,6 +80,9 @@ concurrency:
 
 env:
   FLUTTER_VERSION: '3.44.2'
+  # GitHub-hosted Apple-silicon image for the ios job and the macOS leg of whisper-host (no
+  # self-hosted Mac is registered). macos-26 ships Xcode 26.6 (default) with the iOS 26.5 simulator.
+  XCODE_VERSION: '26.6'
   JAVA_VERSION: '17'
 
 jobs:
@@ -99,7 +95,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: actionlint (with shellcheck) on danaview-ci.yml and android-internal.yml
         run: |
-          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color .github/workflows/danaview-ci.yml .github/workflows/android-internal.yml
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color -config-file scripts/ci/editor/actionlint.yaml .github/workflows/danaview-ci.yml .github/workflows/android-internal.yml
 
   dart-core:
     name: dart-core
@@ -310,9 +306,9 @@ jobs:
   whisper-host:
     name: whisper-host (${{ matrix.name }})
     if: github.event_name != 'schedule'
-    # Linux legs on ubuntu-latest; the macOS leg on the self-hosted Mac unless the dispatch input
-    # `runner` or the repository variable EDITOR_MACOS_RUNNER selects the hosted macos-15 fallback.
-    runs-on: ${{ matrix.host == 'linux' && 'ubuntu-latest' || (inputs.runner == 'macos-15' || vars.EDITOR_MACOS_RUNNER == 'macos-15') && 'macos-15' || fromJSON('["self-hosted", "macOS"]') }}
+    # Linux legs on ubuntu-latest; the macOS leg on the GitHub-hosted macos-26 (Apple silicon). The
+    # real-model tests download the two pinned models (sha256-checked) once and reuse the cache.
+    runs-on: ${{ matrix.host == 'linux' && 'ubuntu-latest' || 'macos-26' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -350,6 +346,9 @@ jobs:
         with:
           path: .ci-cache/whisper
           key: whisper-host-${{ runner.os }}-${{ hashFiles('scripts/ci/editor/whisper_host.sh') }}
+      - name: Select Xcode ${{ env.XCODE_VERSION }} (macOS)
+        if: steps.script.outputs.present == 'true' && matrix.host == 'macos'
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app" && xcodebuild -version
       - name: Run whisper_host.sh (sanitizer ${{ matrix.sanitizer }})
         if: steps.script.outputs.present == 'true'
         run: bash scripts/ci/editor/whisper_host.sh
@@ -438,11 +437,14 @@ jobs:
 
   ios:
     name: ios (Xcode 26.6, iOS 26 simulator)
-    if: github.event_name != 'schedule'
-    # Self-hosted Mac (scripts/ci/editor/README.md) unless the dispatch input `runner` or the
-    # repository variable EDITOR_MACOS_RUNNER selects the hosted macos-15 fallback.
-    runs-on: ${{ (inputs.runner == 'macos-15' || vars.EDITOR_MACOS_RUNNER == 'macos-15') && 'macos-15' || fromJSON('["self-hosted", "macOS"]') }}
-    timeout-minutes: 90
+    # GitHub-hosted macos-26 (Apple silicon, Xcode 26.6, iOS 26.5 simulator). Pull requests run the
+    # quick suites (device build, D-41 check, RunnerTests, engine_smoke and ios_preview); push to
+    # main, manual dispatch and the nightly schedule run every integration_test suite. ios.sh picks
+    # the first iPhone on the newest iOS runtime (override with DANAVIEW_IOS_SIMULATOR).
+    runs-on: macos-26
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 150 }}
+    env:
+      DANAVIEW_IOS_SUITES: ${{ github.event_name == 'pull_request' && 'smoke ios_preview' || 'smoke ios_preview accuracy av_sync parity conformance preset_matrix audio_mix' }}
     steps:
       - uses: actions/checkout@v7
       - name: Look for scripts/ci/editor/ios.sh
@@ -461,17 +463,27 @@ jobs:
             echo "::error title=D-41::scripts/ci/editor/ios.sh must run scripts/ci/editor/check_ios_min_os.sh"
             exit 1
           fi
-      - name: Select Xcode 26.6
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
         if: steps.script.outputs.present == 'true'
         run: |
-          for app in /Applications/Xcode_26.6.app /Applications/Xcode-26.6.app /Applications/Xcode.app; do
-            if [ -d "$app" ] && DEVELOPER_DIR="$app/Contents/Developer" xcodebuild -version | grep -q '^Xcode 26\.6'; then
-              echo "DEVELOPER_DIR=$app/Contents/Developer" >> "$GITHUB_ENV"
-              echo "Using $app"
-              exit 0
-            fi
-          done
-          echo "::warning title=Xcode::Xcode 26.6 not found; using $(xcodebuild -version | head -n 1)"
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          xcodebuild -version
+          xcrun simctl list runtimes available | grep -i ios
+      - name: Cache CocoaPods
+        if: steps.script.outputs.present == 'true'
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            packages/danaview_editor_engine/example/ios/Pods
+          key: ios-pods-${{ runner.os }}-${{ hashFiles('packages/danaview_editor_engine/example/ios/Podfile.lock', 'packages/danaview_editor_engine/example/ios/Podfile', 'packages/*/ios/*.podspec') }}
+          restore-keys: ios-pods-${{ runner.os }}-
+      - name: Cache WhisperCore.xcframework
+        if: steps.script.outputs.present == 'true'
+        uses: actions/cache@v6
+        with:
+          path: packages/danaview_whisper/ios/Frameworks
+          key: whisper-xcframework-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('packages/danaview_whisper/tool/build_ios_xcframework.sh', 'packages/danaview_whisper/src/**', 'packages/danaview_whisper/third_party/**/CMakeLists.txt') }}
       - name: Set up Flutter
         if: steps.script.outputs.present == 'true'
         uses: subosito/flutter-action@v2

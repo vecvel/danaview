@@ -11,10 +11,10 @@
 | `workflow-lint` | ubuntu-latest | (inline) actionlint 1.7.7 + shellcheck on `danaview-ci.yml` | INT-01 | PR, push |
 | `dart-core` | ubuntu-latest | `core.sh` | CORE-01 | PR, push |
 | `flutter-packages` | ubuntu-latest | `flutter_packages.sh` | INT-01 | PR, push |
-| `whisper-host` | ubuntu-latest (plain, TSan, ASan) + self-hosted macOS | `whisper_host.sh` | AI-03 | PR, push |
+| `whisper-host` | ubuntu-latest (plain, TSan, ASan) + GitHub-hosted `macos-26` | `whisper_host.sh` | AI-03 | PR, push |
 | `android-unit` | ubuntu-latest | `android_unit.sh` | ENG-09 | PR, push |
 | `android-emulator` | ubuntu-latest, KVM, API 35 x86_64 (`reactivecircus/android-emulator-runner`) | `android_emulator.sh` | ENG-09 | PR, push |
-| `ios` | self-hosted macOS (fallback `macos-15`) | `ios.sh`, which runs `check_ios_min_os.sh` | ENG-09 | PR, push |
+| `ios` | GitHub-hosted `macos-26` (Xcode 26.6, iOS 26.5 simulator) | `ios.sh`, which runs `check_ios_min_os.sh` | ENG-09 | PR (smoke + ios_preview suites), push, dispatch, nightly (all suites) |
 | `nightly` | ubuntu-latest | `nightly.sh` → every `nightly.d/*.sh` | INT-01 | cron 02:30 UTC, dispatch with `nightly: true` |
 
 Other scripts in this directory and their owners:
@@ -34,7 +34,7 @@ Other scripts in this directory and their owners:
 
 - **Pull requests and pushes to `main`** that touch `packages/danaview_editor*/**`, `packages/danaview_transcription/**`, `packages/danaview_whisper/**`, `test/architecture/**`, `scripts/ci/editor/**` or the workflow itself. `packages/danaview_features/**` and `docs/v1.1/editor/BUILD_PLAN.md` also trigger it, because the architecture test guards `danaview_features` (ARCH §4.2 rule 1, ARCH §1.3 Material scan) and reads the BUILD_PLAN owns lists.
 - **Nightly** (cron `30 2 * * *`): only the `nightly` job runs.
-- **Manual** (`workflow_dispatch`): input `runner` (`self-hosted` or `macos-15`) picks the macOS runner, and input `nightly` adds the nightly job.
+- **Manual** (`workflow_dispatch`): input `nightly` adds the nightly job.
 
 The existing release workflows (`android-release.yml`, `linux-release.yml`, `windows-release.yml`) don't depend on this workflow. INT-05 adds the release dart-defines and the release-lane checks.
 
@@ -90,11 +90,11 @@ DANAVIEW_EMULATOR_DRY_RUN=1 scripts/ci/editor/android_emulator.sh         # prin
 - CMake ≥ 3.28 on macOS (whisper xcframework, AI-05). On Android, SDK CMake 3.22.1 or the version AI-04 pins.
 - iOS deployment target **15.0** (ARCH §3.1, D-29): app, RunnerTests, every pod (lifted by the Podfile `post_install` hook) and the new podspecs.
 
-## Self-hosted macOS runner
+## macOS runner
 
-The `ios` job and the macOS leg of `whisper-host` run on a self-hosted runner with the labels `self-hosted` and `macOS`. To use GitHub's hosted `macos-15` instead, set the repository variable `EDITOR_MACOS_RUNNER` to `macos-15`, or dispatch with `runner: macos-15`. Use this fallback while the self-hosted Mac is offline. The hosted image may not have Xcode 26.6; the job then warns and uses the image's default Xcode.
+The `ios` job and the macOS leg of `whisper-host` run on GitHub's hosted `macos-26` image (Apple silicon; free for this public repository, with a concurrency cap of 5 macOS jobs on the Free plan). Each job selects `/Applications/Xcode_26.6.app` with `xcode-select`; the image's preinstalled CocoaPods and CMake cover the toolchain step, and `ios.sh` picks the first iPhone on the newest iOS runtime (`DANAVIEW_IOS_SIMULATOR` overrides). Pull requests run only the `smoke` and `ios_preview` integration suites; push to `main`, manual dispatch and the nightly schedule run all of them. The QA-00 E2E suite (`DANAVIEW_E2E=1`, staged speech models) stays a manual run on a developer Mac.
 
-Prerequisites on the self-hosted Mac (Apple silicon):
+A self-hosted Mac is no longer required. To bring one back, it needs:
 
 1. A macOS version that runs Xcode 26.6 (the dev Mac runs macOS 26), with **Xcode 26.6** at `/Applications/Xcode_26.6.app` or `/Applications/Xcode.app`. Accept the licence (`sudo xcodebuild -license accept`) and run the first launch (`xcodebuild -runFirstLaunch`).
 2. Simulator runtimes: **iOS 26** (default target, iPhone 17 Pro and iPad Pro) and **iOS 18.2** (QA-01 scenarios 1–3).
