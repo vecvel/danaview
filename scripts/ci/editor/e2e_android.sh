@@ -628,6 +628,10 @@ group "stage"
 if [ "${DANAVIEW_E2E_FRESH:-}" = 1 ]; then
   # Projects, recovery records and copies left by earlier (killed) runs change what Projects shows.
   run_with_timeout 120 "$ADB" -s "$SERIAL" uninstall com.vecvel.danaview >/dev/null 2>&1 || true
+  # EXTENDED: S3-Q (Android half). Folders the shell created under Android/data/<app> (API 30+,
+  # prepare_shared) survive the uninstall, and files the old install wrote there (e2e_handshake/seq,
+  # 0660, the old app uid) are unreadable to the new one ("Permission denied" at the first request).
+  run_with_timeout 60 "$ADB" -s "$SERIAL" shell "rm -rf /sdcard/Android/data/com.vecvel.danaview/files/e2e_handshake /sdcard/Android/data/com.vecvel.danaview/files/e2e_out" >/dev/null 2>&1 || true
   echo "fresh start: app uninstalled (its data and Android/data folder are gone)"
 fi
 setup_device
