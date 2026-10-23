@@ -578,8 +578,12 @@ void main() {
 
     // ---- 5. Open with Danaview ----
     // The app container's Documents folder (iOS puts an "Open in" copy into Documents/Inbox).
+    // On the simulator the container itself sits under the Mac's ~/Library, so cut at the last
+    // `/Library/` (the container's own), never the first.
     final root = store.paths.root;
-    final docs = Directory('${root.substring(0, root.indexOf('/Library/'))}/Documents');
+    final container = root.substring(0, root.lastIndexOf('/Library/'));
+    expect(container, contains('/Containers/Data/Application/'), reason: 'the app container');
+    final docs = Directory('$container/Documents');
     final inboxCopy = File('${docs.path}/Inbox/$_openWith');
     inboxCopy.parent.createSync(recursive: true);
     originals[_openWith]!.copySync(inboxCopy.path);
