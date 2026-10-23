@@ -211,6 +211,19 @@ const List<BundledLicenseNotice> danaviewBundledNotices = [
     text: 'SQLite is in the public domain: its authors have dedicated the code to the public domain. '
         'https://sqlite.org/copyright.html',
   ),
+  // FIX-S3Q-A2: HOM-25 ships PdfBox-Android (and its Bouncy Castle dependency) in the Android app.
+  BundledLicenseNotice(
+    name: 'PdfBox-Android',
+    licence: 'Apache-2.0',
+    usedFor: 'Documents on Android: PDF text and search',
+    text: 'Copyright © The Apache Software Foundation and Tom Roush. https://github.com/TomRoush/PdfBox-Android\n\n$_apacheTerms',
+  ),
+  BundledLicenseNotice(
+    name: 'Bouncy Castle',
+    licence: 'MIT',
+    usedFor: 'Documents on Android: opening protected PDFs (used by PdfBox-Android)',
+    text: 'Copyright © 2000-2026 The Legion of the Bouncy Castle Inc. (https://www.bouncycastle.org)\n\n$_mitPermission',
+  ),
 ];
 
 /// The [LicenseRegistry] package name of the app's own interface font.
