@@ -187,6 +187,8 @@ void main() {
             reason: 'no cap: the search is flexible');
         expect(search.width, greaterThan(480), reason: 'the old 480 px cap is gone');
         expect(sort.center.dy, moreOrLessEquals(search.center.dy, epsilon: 1));
+        expectEqualRowHeights(tester, [find.byKey(const ValueKey('projects-search')), find.byKey(const ValueKey('projects-sort'))],
+            height: DanaviewSpacing.controlHeight);
       });
     }
 
@@ -198,6 +200,7 @@ void main() {
       expect(find.bySemanticsLabel('Sort: Recent'), findsOneWidget);
       final search = tester.getRect(find.byKey(const ValueKey('projects-search')));
       expect(tester.getRect(sort).left - search.right, moreOrLessEquals(DanaviewSpacing.md));
+      expectEqualRowHeights(tester, [find.byKey(const ValueKey('projects-search')), sort], height: DanaviewSpacing.controlHeight);
       await tester.tap(sort);
       await _settle(tester);
       await tester.tap(find.text('Name').last);
@@ -216,7 +219,7 @@ void main() {
       final search = tester.getRect(find.byKey(const ValueKey('projects-search')));
       expect(sort.right, lessThanOrEqualTo(surface.size.width));
       expect(sort.left, greaterThan(search.right));
-      expect(sort.height, greaterThanOrEqualTo(40));
+      expect(sort.height, greaterThanOrEqualTo(DanaviewSpacing.controlHeight));
       expectOwnerUiRules(tester);
     });
   });

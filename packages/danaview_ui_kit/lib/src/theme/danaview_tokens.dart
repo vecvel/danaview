@@ -69,6 +69,11 @@ abstract final class DanaviewSpacing {
   static const double xxl = 32;
   static const double minTapTarget = 44;
 
+  /// Height of every control that sits in a row with an input: text and search fields, the
+  /// field-sized dropdown, [DanaviewButtonSize.field] buttons and icon buttons of this size, so a
+  /// row of field + button + icon button lines up exactly. Equals [minTapTarget].
+  static const double controlHeight = minTapTarget;
+
   /// Side margin of a full-width page or panel at [width]: 16 below 600, 24 below 1024,
   /// 32 from 1024. Content is never width-capped; it spans [width] minus this gutter
   /// on each side.

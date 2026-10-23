@@ -8,7 +8,15 @@ import 'danaview_pressable.dart';
 
 enum DanaviewButtonVariant { primary, secondary, tonal, ghost, destructive }
 
-enum DanaviewButtonSize { sm, md, lg }
+enum DanaviewButtonSize {
+  sm,
+  md,
+  lg,
+
+  /// Matches a text or search field beside it: [DanaviewSpacing.controlHeight] tall with the
+  /// field's corner radius and md typography.
+  field,
+}
 
 class DanaviewButton extends StatelessWidget {
   const DanaviewButton({
@@ -129,6 +137,7 @@ class DanaviewButton extends StatelessWidget {
       DanaviewButtonSize.sm => (32.0, 12.0, 13.0, 16.0, 6.0, DanaviewRadius.smAll),
       DanaviewButtonSize.md => (40.0, 16.0, 14.0, 18.0, 8.0, DanaviewRadius.mdAll),
       DanaviewButtonSize.lg => (48.0, 20.0, 15.0, 20.0, 8.0, DanaviewRadius.mdAll),
+      DanaviewButtonSize.field => (DanaviewSpacing.controlHeight, 16.0, 14.0, 18.0, 8.0, DanaviewRadius.mdAll),
     };
     final fg = colors.foreground;
 
