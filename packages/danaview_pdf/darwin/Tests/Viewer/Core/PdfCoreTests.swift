@@ -30,7 +30,6 @@ final class PdfCoreTests: XCTestCase {
     XCTAssertFalse(summary.locked)
     XCTAssertGreaterThan(image.png.count, 1000)
     XCTAssertLessThanOrEqual(elapsed, 0.5, "first page took \(Int(elapsed * 1000)) ms")
-    print("HOM-24 first page of 200 pages: \(Int(elapsed * 1000)) ms")
   }
 
   func testSummaryAndRotationAwareThumbnail() throws {

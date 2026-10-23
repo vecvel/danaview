@@ -52,25 +52,30 @@ enum TestPdfs {
   }
 
   /// A 3-page text file with a two-level outline (Chapter 1 → page 0 with Section 1.1 → page 1,
-  /// Chapter 2 → page 2).
+  /// Chapter 2 → page 2), written by Core Graphics (`CGPDFContextSetOutline`).
   static func writeOutlinedPdf(in dir: URL) -> URL {
-    let plain = writeTextPdf(to: dir.appendingPathComponent("plain.pdf"), pages: 3, prefix: "OUTL")
-    let document = PDFDocument(url: plain)!
-    let root = PDFOutline()
-    func entry(_ label: String, _ page: Int) -> PDFOutline {
-      let o = PDFOutline()
-      o.label = label
-      o.destination = PDFDestination(page: document.page(at: page)!, at: CGPoint(x: 0, y: 792))
-      return o
+    let url = dir.appendingPathComponent("outlined.pdf")
+    var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+    let context = CGContext(url as CFURL, mediaBox: &box, nil)!
+    let font = CTFontCreateWithName("Helvetica" as CFString, 18, nil)
+    for i in 0..<3 {
+      context.beginPDFPage(nil)
+      let attributed = NSAttributedString(string: token("OUTL", i), attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font])
+      context.textPosition = CGPoint(x: 72, y: 700)
+      CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
+      context.endPDFPage()
     }
-    let c1 = entry("Chapter 1", 0)
-    c1.insertChild(entry("Section 1.1", 1), at: 0)
-    root.insertChild(c1, at: 0)
-    root.insertChild(entry("Chapter 2", 2), at: 1)
-    document.outlineRoot = root
-    let out = dir.appendingPathComponent("outlined.pdf")
-    XCTAssertTrue(document.write(to: out))
-    return out
+    func entry(_ title: String, _ page: Int, _ children: [[String: Any]] = []) -> [String: Any] {
+      var e: [String: Any] = [kCGPDFOutlineTitle as String: title, kCGPDFOutlineDestination as String: page + 1]
+      if !children.isEmpty { e[kCGPDFOutlineChildren as String] = children }
+      return e
+    }
+    let outline: [String: Any] = [
+      kCGPDFOutlineChildren as String: [entry("Chapter 1", 0, [entry("Section 1.1", 1)]), entry("Chapter 2", 2)],
+    ]
+    CGPDFContextSetOutline(context, outline as CFDictionary)
+    context.closePDF()
+    return url
   }
 
   /// A file that starts like a PDF but is garbage.
@@ -78,7 +83,7 @@ enum TestPdfs {
     let url = dir.appendingPathComponent("damaged.pdf")
     var bytes = Data("%PDF-1.7\n".utf8)
     bytes.append(Data((0..<4096).map { UInt8(truncatingIfNeeded: $0 &* 7919) }))
-    try! bytes.write(to: url)
+    XCTAssertTrue(FileManager.default.createFile(atPath: url.path, contents: bytes))
     return url
   }
 

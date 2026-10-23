@@ -4,7 +4,7 @@
 // media file's thumbnail through the Pigeon API (reply on the main thread, result fields, format
 // actually written), validation (box, quality, relative output path, unknown and Android sources),
 // a busy request id, cancel of a running request and of unknown ids, updateCaching without photo
-// access, a corrupt file as a typed ioError, and documentThumbnail still HOM-26's.
+// access, a corrupt file as a typed ioError, and documentThumbnail answered by HOM-26.
 
 import FlutterMacOS
 import XCTest
@@ -141,11 +141,12 @@ final class ThumbnailGlueTests: XCTestCase {
     XCTAssertNoThrow(try api.updateCaching(window: ThumbnailCachingMsg(startSources: [], stopSources: [], widthPx: 64, heightPx: 64, mode: .fit)))
   }
 
-  func testDocumentThumbnailIsStillHom26s() {
+  func testDocumentThumbnailIsHom26sOnTheSameQueue() {
+    // HOM-26 answers documents (Tests/QuickLook/Glue covers them); a bad request is still typed here.
     var got: Result<ThumbnailResultMsg?, Error>?
-    api.documentThumbnail(request: DocumentThumbnailRequestMsg(requestId: "d", path: "/tmp/x.pdf", widthPx: 64, heightPx: 64, scale: 2, format: .jpeg, quality: 0.8, outputPath: "/tmp/d.jpg")) { got = $0 }
+    api.documentThumbnail(request: DocumentThumbnailRequestMsg(requestId: "d", path: "/tmp/x.pdf", widthPx: 64, heightPx: 64, scale: 0, format: .jpeg, quality: 0.8, outputPath: "/tmp/d.jpg")) { got = $0 }
     guard case .failure(let e)? = got else { return XCTFail("documentThumbnail did not fail") }
-    XCTAssertEqual((e as? LibraryPigeonError)?.code, "notSupportedOnDevice")
+    XCTAssertEqual((e as? LibraryPigeonError)?.code, "invalidArgument")
   }
 
   func testFormatAndModeMappingsRoundTrip() {
