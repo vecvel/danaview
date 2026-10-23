@@ -2769,7 +2769,7 @@ class PhotoLibraryHostApi {
     return (pigeonVar_replyValue! as List<Object?>).cast<PhotoAssetMsg>();
   }
 
-  /// System albums and device folders that contain photos or videos.
+  /// System albums and device folders that hold photos, counted by their photos (video-only ones are left out).
   Future<List<PhotoAlbumMsg>> fetchAlbums() async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.danaview_library_native.PhotoLibraryHostApi.fetchAlbums$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(

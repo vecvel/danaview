@@ -1,7 +1,8 @@
 // OWNER: HOM-02
 //
 // Pure tests of the PhotoKit library helpers (no photo library needed): change tokens, page
-// windows, type mapping (V2-V2: HEIC, AVIF, RAW, Live), create-new naming and EXIF parsing.
+// windows, type mapping (V2-V2: HEIC, AVIF, RAW, Live), create-new naming, EXIF parsing and the
+// photo-only album listing (Android 5ee89f2 parity).
 
 import Foundation
 import ImageIO
@@ -128,5 +129,23 @@ final class PhotoLibrarySupportTests: XCTestCase {
     XCTAssertEqual(d.latitude ?? 0, 52.5, accuracy: 0.001)
     XCTAssertEqual(d.longitude ?? 0, -13.4, accuracy: 0.001)
     XCTAssertEqual(d.bitDepth, 8)
+  }
+
+  func testAlbumsListOnlyThoseHoldingPhotosCountedByPhotos() {
+    typealias C = PhotoAlbumListing.Candidate
+    let candidates = [
+      C(albumId: "favs", title: "Favourites", isSmart: true, isCloudShared: false, isExcludedSmart: false, photoCount: 4),
+      C(albumId: "videos", title: "Videos", isSmart: true, isCloudShared: false, isExcludedSmart: false, photoCount: 0),
+      C(albumId: "recents", title: "Recents", isSmart: true, isCloudShared: false, isExcludedSmart: true, photoCount: 9),
+      C(albumId: "trip", title: "Trip", isSmart: false, isCloudShared: false, isExcludedSmart: false, photoCount: 2),
+      C(albumId: "clips", title: "Clips only", isSmart: false, isCloudShared: false, isExcludedSmart: false, photoCount: 0),
+      C(albumId: "family", title: nil, isSmart: false, isCloudShared: true, isExcludedSmart: false, photoCount: 1),
+    ]
+    XCTAssertEqual(PhotoAlbumListing.records(candidates), [
+      PhotoAlbumRecord(albumId: "favs", title: "Favourites", kind: .smart, estimatedCount: 4),
+      PhotoAlbumRecord(albumId: "trip", title: "Trip", kind: .user, estimatedCount: 2),
+      PhotoAlbumRecord(albumId: "family", title: "", kind: .shared, estimatedCount: 1),
+    ])
+    XCTAssertEqual(PhotoAlbumListing.records([]), [])
   }
 }

@@ -2,7 +2,7 @@
 //
 // LibraryThumbnail (BUILD_PLAN HOM-04; ARCH v1.2 V2-28, V2-104, §1.4): without a service (flag
 // off) it shows the dark kit placeholder and asks for nothing; the size class follows the laid-out
-// size and the device pixel ratio; a memory hit paints in the first frame; leaving the tree
+// size and the device pixel ratio (a document cell also asks at that ratio); a memory hit paints in the first frame; leaving the tree
 // cancels the request; a fling over a 10,000-cell grid keeps the memory tier within 64 MB and
 // sends most flung-past cells nowhere; semantics (decorative unless labelled); and no overflow
 // across 280–1280 px × text scale 0.85–1.35.
@@ -54,6 +54,24 @@ void main() {
     disk = MemoryThumbDisk();
     gen = FakeGenerator(disk: disk);
     svc = ThumbnailService(disk: disk, generator: gen, decoder: FakeDecoder(tracker, disk: disk), format: NativeThumbnailFormat.jpeg);
+  });
+
+  testWidgets('a document cell asks at the device pixel ratio; a media cell at 1', (tester) async {
+    await tester.pumpWidget(_host(
+      Column(children: [
+        SizedBox(
+          width: 100,
+          height: 100,
+          child: LibraryThumbnail(itemId: 'fe_000001', source: '/lib/a.pdf', modifiedAt: _t0, kind: ThumbSourceKind.document),
+        ),
+        SizedBox(width: 100, height: 100, child: _cell(2)),
+      ]),
+      service: svc,
+      dpr: 3,
+    ));
+    await tester.pump();
+    expect(gen.scales, [3]);
+    expect(gen.started, containsAll(['/lib/a.pdf', '/lib/item2.jpg']));
   });
 
   testWidgets('without a service (flag off) the placeholder shows and nothing is asked', (tester) async {
