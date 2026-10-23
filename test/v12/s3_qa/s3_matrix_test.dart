@@ -418,6 +418,15 @@ Future<void> _visit(_App app, Future<void> Function(String where) check) async {
   await pumpFrames(tester);
 }
 
+/// The texts on screen drawn with Flutter's fallback style (yellow double underline): a text with
+/// no kit DefaultTextStyle above it (seen on the simulator in every document viewer, FIX-S3Q-2).
+List<String> _fallbackTexts(WidgetTester tester) => [
+      for (final e in find.byType(RichText).evaluate())
+        if ((e.widget as RichText).text.style?.decorationStyle == TextDecorationStyle.double &&
+            (e.widget as RichText).text.style?.decoration == TextDecoration.underline)
+          (e.widget as RichText).text.toPlainText(),
+    ];
+
 void main() {
   tearDown(() {
     FeatureFlags.debugReset();
@@ -442,6 +451,21 @@ void main() {
       }
     }
   });
+
+  // FIX-S3Q-2: remove the skip when the viewer host gives its route the kit text style.
+  testWidgets('S3 surfaces: every text uses the kit text style (no fallback underline)', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    useSurface(tester, const TestSurface(Size(375, 812), 1.0));
+    final app = await _pumpApp(tester, 1.0);
+    final failures = <String>[];
+    await _visit(app, (where) async {
+      final bad = _fallbackTexts(tester);
+      if (bad.isNotEmpty) failures.add('$where: ${bad.length} texts, e.g. "${bad.first.length > 40 ? bad.first.substring(0, 40) : bad.first}"');
+    });
+    await app.dispose();
+    debugDefaultTargetPlatformOverride = null;
+    expect(failures, isEmpty, reason: failures.join('\n'));
+  }, skip: !const bool.fromEnvironment('S3Q_CHECK_TEXT_STYLE')); // FIX-S3Q-2 open: --dart-define=S3Q_CHECK_TEXT_STYLE=true
 
   group('S3 surfaces: targets, labels and contrast', () {
     for (final (width, scale) in [(375.0, 1.0), (1280.0, 1.35)]) {
