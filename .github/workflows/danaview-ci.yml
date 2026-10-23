@@ -127,7 +127,9 @@ jobs:
   flutter-packages:
     name: flutter-packages
     if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
+    # macOS: this job compares goldens, which the Mac lane renders on macOS; CI renders on the
+    # same hosted image so text and antialiasing match pixel for pixel (no tolerance, no Linux goldens).
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -260,7 +262,9 @@ jobs:
     name: v12-flutter (documents, features, face tracking)
     needs: changes
     if: always() && github.event_name != 'schedule' && (github.event_name != 'pull_request' || needs.changes.outputs.v12_flutter == 'true')
-    runs-on: ubuntu-latest
+    # macOS: this job compares goldens, which the Mac lane renders on macOS; CI renders on the
+    # same hosted image so text and antialiasing match pixel for pixel (no tolerance, no Linux goldens).
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -279,7 +283,9 @@ jobs:
     name: home-preservation (HOM-15 merge gate)
     needs: changes
     if: always() && github.event_name != 'schedule' && (github.event_name != 'pull_request' || needs.changes.outputs.home_preservation == 'true')
-    runs-on: ubuntu-latest
+    # macOS: this job compares goldens, which the Mac lane renders on macOS; CI renders on the
+    # same hosted image so text and antialiasing match pixel for pixel (no tolerance, no Linux goldens).
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7

@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | `workflow-lint` | ubuntu-latest | (inline) actionlint 1.7.7 + shellcheck on `danaview-ci.yml` | INT-01 | PR, push |
 | `dart-core` | ubuntu-latest | `core.sh` | CORE-01 | PR, push |
-| `flutter-packages` | ubuntu-latest | `flutter_packages.sh` | INT-01 | PR, push |
+| `flutter-packages` | GitHub-hosted `macos-26` (goldens are rendered on macOS) | `flutter_packages.sh` | INT-01 | PR, push |
 | `whisper-host` | ubuntu-latest (plain, TSan, ASan) + GitHub-hosted `macos-26` | `whisper_host.sh` | AI-03 | PR, push |
 | `android-unit` | ubuntu-latest | `android_unit.sh` | ENG-09 | PR, push |
 | `android-emulator` | ubuntu-latest, KVM, API 35 x86_64 (`reactivecircus/android-emulator-runner`) | `android_emulator.sh` | ENG-09 | PR, push |
