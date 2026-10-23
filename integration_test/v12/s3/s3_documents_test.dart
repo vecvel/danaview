@@ -65,6 +65,7 @@ import 'package:danaview_features/src/flags.dart';
 import 'package:danaview_features/src/library/file_actions/file_actions.dart';
 import 'package:danaview_features/src/library/import/import_pickers.dart';
 import 'package:danaview_features/src/library/import/import_providers.dart';
+import 'package:danaview_features/src/player/danaview_player_actions.dart' show isSystemOpenInCopy;
 import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_platform/danaview_platform.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -408,6 +409,7 @@ void main() {
 
   testWidgets('S3: import documents, view each in its viewer, Quick Look, Open with, Share Extension inbox, share out, reopen',
       (tester) async {
+    final blocking = <String>[];
     final spy = _HttpSpy();
     HttpOverrides.global = spy;
     addTearDown(() => HttpOverrides.global = null);
@@ -596,10 +598,22 @@ void main() {
     expect(opened.folderId, importedFolder);
     expect(opened.sourceHint, SourceHint.openWith);
     expect(File(store.paths.entryFile(opened.id, opened.displayName)).readAsBytesSync(), bytes[_openWith]);
-    await E2eApp.pumpUntil(tester, () => !inboxCopy.existsSync(), what: "iOS's Documents/Inbox copy removed");
+    // The app-owned copy must go (rule 27 keeps every other path). Reported and checked at the end
+    // so the rest of the scenario still runs when it stays (FIX-S3Q-7).
+    for (var i = 0; i < 20 && inboxCopy.existsSync(); i++) {
+      await tester.pump(const Duration(milliseconds: 250));
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    if (inboxCopy.existsSync()) {
+      blocking.add("Open with: iOS's Documents/Inbox copy not removed after the import "
+          '(isSystemOpenInCopy ${isSystemOpenInCopy(inboxCopy.path)}, HOME set ${(Platform.environment['HOME'] ?? '').isNotEmpty})');
+      _report('FINDING ${blocking.last}');
+      inboxCopy.deleteSync();
+    }
     await tester.pump(const Duration(seconds: 1));
     await E2eApp.screenshot(tester, 's3-12-open-with');
-    _report('Open with: imported into Imported (sourceHint openWith), opened in the PDF viewer, Documents/Inbox copy removed');
+    _report('Open with: imported into Imported (sourceHint openWith), opened in the PDF viewer'
+        '${blocking.isEmpty ? ', Documents/Inbox copy removed' : ''}');
     await _viewerBack(tester);
     // The same file again, from outside the app: the entry already there opens; no copy is added.
     final countBefore = store.reader.allEntries(includeTrashed: true).length;
@@ -691,5 +705,6 @@ void main() {
     expect(spy.created, isEmpty, reason: 'S3 adds no host: ${spy.created}');
     _report('network: no HttpClient created');
     await world.close(tester);
+    expect(blocking, isEmpty, reason: blocking.join('\n'));
   });
 }
