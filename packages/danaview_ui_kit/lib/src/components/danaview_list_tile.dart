@@ -59,15 +59,13 @@ class DanaviewListTile extends StatelessWidget {
       selected: selected ? true : null,
       toggled: toggled,
       semanticLabel: semanticLabel,
-      pressedScale: 1,
       builder: (context, state) {
         final background = selected
             ? DanaviewColors.primarySoft
-            : state.pressed
-                ? DanaviewColors.hover
-                : (state.hovered || state.focused)
-                    ? DanaviewColors.hairlineSubtle
-                    : const Color(0x00FFFFFF);
+            // Owner rule: no hover or press fill; only hardware-keyboard focus tints.
+            : state.focused
+                ? DanaviewColors.hairlineSubtle
+                : const Color(0x00FFFFFF);
         return danaviewDimmed(
           enabled,
           AnimatedContainer(

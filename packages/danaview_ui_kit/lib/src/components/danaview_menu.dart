@@ -450,13 +450,9 @@ class _DanaviewMenuItemTile extends StatelessWidget {
             }
           : null,
       selected: item.selected,
-      pressedScale: 1,
       builder: (context, state) {
-        final background = state.pressed
-            ? DanaviewColors.pressed
-            : (state.hovered || state.focused)
-                ? DanaviewColors.hover
-                : const Color(0x00FFFFFF);
+        // Owner rule: no hover or press fill; only hardware-keyboard focus marks the item.
+        final background = state.focused ? DanaviewColors.hover : const Color(0x00FFFFFF);
         return danaviewDimmed(
           item.enabled,
           AnimatedContainer(
@@ -629,7 +625,6 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
       onTap: onTap,
       tooltip: tooltip,
       semanticLabel: label == null ? text : '$label: $text',
-      pressedScale: 0.98,
       builder: (context, state) {
         final highlighted = isOpen || state.focused;
         Widget visual = AnimatedContainer(

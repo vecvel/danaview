@@ -153,7 +153,6 @@ class ProjectCard extends StatelessWidget {
           onLongPress: openMenu,
           semanticLabel: label,
           borderRadius: DanaviewRadius.lgAll,
-          pressedScale: 0.98,
           child: DanaviewSurface(
             color: DanaviewColors.surface,
             shadow: DanaviewShadow.subtle,

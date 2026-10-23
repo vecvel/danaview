@@ -176,8 +176,10 @@ abstract final class DanaviewTheme {
       splashFactory: NoSplash.splashFactory,
       splashColor: Colors.transparent,
       highlightColor: Colors.transparent,
-      hoverColor: DanaviewColors.hover,
-      focusColor: DanaviewColors.primarySoft,
+      // Owner rule: no hover or press effect on any control, Material ones included. Keyboard
+      // focus rings are drawn by the kit's own controls (onShowFocusHighlight), not this colour.
+      hoverColor: Colors.transparent,
+      focusColor: Colors.transparent,
       textTheme: const TextTheme(
         headlineMedium: DanaviewTextStyles.largeTitle,
         titleLarge: TextStyle(

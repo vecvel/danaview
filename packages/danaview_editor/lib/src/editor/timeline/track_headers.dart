@@ -630,11 +630,8 @@ class TrackToggle extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: highlighted
-                  ? DanaviewColors.primaryTonal
-                  : (state.hovered || state.pressed)
-                      ? DanaviewColors.hover
-                      : const Color(0x00FFFFFF),
+              // Owner rule: no hover or press fill; only the on state carries one.
+              color: highlighted ? DanaviewColors.primaryTonal : const Color(0x00FFFFFF),
               border: Border.fromBorderSide(state.focused ? DanaviewBorders.focus : DanaviewBorders.focus.copyWith(color: const Color(0x00000000))),
             ),
             child: ExcludeSemantics(child: _icon(on, fg)),

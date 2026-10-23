@@ -86,7 +86,18 @@ void main() {
     expect(ctx.isExpanded, isTrue);
   });
 
-  test('hover, focus and press tints keep labels on filled controls at 4.5:1', () {
+  test('hover and press leave a fill untouched (owner rule); only keyboard focus tints it', () {
+    const hover = DanaviewPressState(pressed: false, hovered: true, focused: false, enabled: true);
+    const press = DanaviewPressState(pressed: true, hovered: true, focused: false, enabled: true);
+    const focus = DanaviewPressState(pressed: false, hovered: false, focused: true, enabled: true);
+    for (final fill in [DanaviewColors.primary, DanaviewColors.surfaceElevatedHigher, DanaviewColors.fieldActive]) {
+      expect(danaviewInteractiveFill(fill, hover), fill);
+      expect(danaviewInteractiveFill(fill, press), fill);
+      expect(danaviewInteractiveFill(fill, focus), isNot(fill));
+    }
+  });
+
+  test('hover, focus and press fills keep labels on filled controls at 4.5:1', () {
     const states = [
       DanaviewPressState(pressed: false, hovered: true, focused: false, enabled: true),
       DanaviewPressState(pressed: false, hovered: false, focused: true, enabled: true),
