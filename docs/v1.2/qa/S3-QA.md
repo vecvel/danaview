@@ -460,3 +460,93 @@ N-S3-6 (low, S3-W): `lib/main.dart`'s comment "Nothing with the flag off" above
 path, and every suite above passes, but the S3 E2E fails on the new regression FIX-S3Q-7 and the
 screenshots show FIX-S3Q-8. Still open, low: FIX-S3Q-3, FIX-S3Q-4, FIX-S3Q-5, D-S3W-1, D-S3W-2.
 Android half: **pending: Windows**.
+
+## Release candidate
+
+Ticket **S3-R**, Mac half, on `v1.2-wip`, 2026-10-23, 15:22–15:35. Build tree: `2ae2b294`, code clean
+(only this report modified). Nothing was signed, uploaded or changed in the signing settings; the
+version files were not touched (`pubspec.yaml` `1.0.0+1`). **The candidate carries the open S3-Q
+re-check defects FIX-S3Q-7 and FIX-S3Q-8** (§Re-check, verdict Red): it is a build and packaging check,
+not a release go; rebuild on the commit that closes them.
+
+### iOS release build
+
+```text
+LANG=en_US.UTF-8 flutter build ipa --release --no-codesign --build-name=1.0.0 --build-number=1 \
+  --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true \
+  --dart-define=DANAVIEW_FILES_HOME=true --dart-define=DANAVIEW_PHOTO_EDITOR=false \
+  --dart-define=DANAVIEW_BEAUTY=false --dart-define=DANAVIEW_AI_STUDIO=false
+```
+
+The S2-R flag set (S3 adds no flag). `WhisperCore.xcframework` `--status` = up-to-date, used as is;
+nothing rebuilt or downloaded.
+
+| Check | Result |
+|---|---|
+| Build | **pass**, archive 224 s: `build/ios/archive/Runner.xcarchive` (264.0 MB with dSYMs; S2 253.5 MB); `--no-codesign` skips the IPA export |
+| Info.plist (archived `Runner.app`) | `1.0.0` / `1`, `MinimumOSVersion 15.0`, `com.vecvel.danaview`; `NSPhotoLibraryUsageDescription` and `NSPhotoLibraryAddUsageDescription` the S2 texts; `LSSupportsOpeningDocumentsInPlace true` |
+| Document types (flag on, after the "Gate Files Home declarations" phase) | all five: Video Media **Owner**; Image, PDF Document, Office Document (16 UTIs), Text Document (plain text, CSV, TSV, JSON, Markdown, log) **Alternate** |
+| Share Extension | `PlugIns/DanaviewShare.appex` embedded (172 KB): `com.vecvel.danaview.share`, `1.0.0` / `1`, min 15.0, `com.apple.share-services`, activation rule images, movies, PDF, Office/iWork, text, delimited text, JSON |
+| App Group entitlement | not in the unsigned bundle (`--no-codesign` embeds none); the sources both targets sign with declare `group.com.vecvel.danaview`: Runner `CODE_SIGN_ENTITLEMENTS` → `Runner/Runner.entitlements` (`DANAVIEW_BG_GPU_ENTITLEMENT = NO`; the GPU variant carries the group too), extension `DanaviewShare/DanaviewShare.entitlements`; `InboxWriter.swift` uses the same id. Confirm on the signed archive (`codesign -d --entitlements -`, checklist item 8) |
+| `check_ios_min_os.sh --min 15.0` on the archived `Runner.app` | **OK**: 30 binaries (S2 28), 1524 strongly bound symbols probed (S2 1458), weak allowlist BackgroundTasks |
+| `nm -um` `NEWLAPACK` on `Runner`, `Frameworks/*` and the appex | none |
+| Privacy manifests | app and `DanaviewShare.appex` (both FileTimestamp `C617.1`, DiskSpace `E174.1`, no tracking, no collected data), `danaview_library_native` (S2 fix), Flutter, danaview_whisper, danaview_editor_engine, file_selector, shared_preferences, wakelock_plus, package_info_plus. **`danaview_pdf` ships none**: its binary and sources reference no required-reason API (`nm -um` and source grep: no file timestamps, disk space, user defaults, uptime), so none is required; `danaview_documents` is Dart only (no pod). The appex references `NSURLVolumeAvailableCapacityForImportantUsageKey`, covered by its `E174.1` |
+| Flutter warning | launch image is the default placeholder (as in S1/S2; owner asset) |
+
+**Size** (unsigned, archive's `Runner.app`, same method as S2):
+
+| Measure | S2 candidate | S3 candidate | Delta |
+|---|---|---|---|
+| `Runner.app` on disk | 63.8 MB (65 324 KB) | **66.1 MB (67 736 KB)** | +2.4 MB (+3.7 %) |
+| `Payload/Runner.app` zipped (`zip -9`) | 25.1 MB (25 076 450 B) | **26.1 MB (26 066 864 B)** | +0.99 MB (+3.9 %) |
+| S3 parts | App 23.0 MB, `danaview_pdf` 92 KB | App 23.3 MB, `danaview_pdf` 732 KB, `DanaviewShare.appex` 172 KB | App +0.3 MB, native +0.8 MB |
+
+### Install and smoke on the iOS Simulator (iPhone 16, iOS 26.5)
+
+Debug simulator build of the same tree, version and defines (`flutter build ios --simulator --debug`,
+84 s; release can't run on a simulator), fresh install; `s3_report.pdf`, `s3_shared.pdf` and
+`s3_table.csv` from `build/e2e/s3_docs/` (`make_s3_docs.sh`, local) copied into Files › On My iPhone.
+Driven by hand, every system sheet real:
+
+| Step | Result |
+|---|---|
+| Launch | pass: Home with Home, All, Videos, Photos, **Documents**, Playlists, Folders; no prompt |
+| Import a PDF and a CSV | pass: Import › From Files (system picker, multi-select) › both "Imported" |
+| Documents tab | pass: sub-filters All documents, PDF, Word, Excel, PowerPoint, Text/CSV, Other; rows `s3_table.csv 14 KB · 23 Oct 2026`, `s3_report.pdf 274 KB · 23 Oct 2026` with a page thumbnail. No page count on the PDF row (N-S3R-1) |
+| Open the PDF | pass: PDFKit viewer, "Page 1 of 200", search, thumbnails and the file-actions buttons in the top bar; Back returns to the list |
+| Open the CSV | pass: "Showing the preview." then Quick Look (about 2 s): header row, `Zürich`, `São Paulo`, quoted `has, comma` and the multi-line cell in one cell; closing returns to the app |
+| Share Extension from Files | pass: Files › long-press `s3_shared` › Share › **Danaview** › "Save to Danaview · 1 item · choose a folder" (Imported checked) › Save; back in Danaview the Documents tab lists `s3_shared.pdf 6.4 KB`, and the App Group holds only `folder-snapshot.json` afterwards (the batch was moved and removed). The picker's folder list leaves a large empty panel under a single row (N-S3R-2) |
+| Rule 30 | pass: of the session's 2 168 log lines, the 10 naming a test file are iOS's own (file coordination, DocumentManager, Quick Look); none from Flutter or the extension's code |
+
+The simulator was booted for this step and shut down after it. Device smoke of the signed build
+(iPhone 12, iPhone 7 iOS 15.8, iPhone 8 iOS 16.7): deferred: no device available.
+
+### Release checklist (S3)
+
+| # | Item | Owner | Status |
+|---|---|---|---|
+| 1 | Gate: S3-Q Mac half green; Android half | S3-W / HOM-21 / HOM-23, Windows | **open**: re-check Red on FIX-S3Q-7, FIX-S3Q-8; Android pending |
+| 2 | Version `1.0.0+1` (never bumped) | S3-R | **done** (in the tree) |
+| 3 | iOS release build with the S1–S3 flag set, Info.plist, document types, appex, min-OS, `NEWLAPACK`, privacy manifests, size | S3-R | **done** (above) |
+| 4 | Simulator install and smoke | S3-R | **done** (debug build) |
+| 5 | Rebuild and re-smoke on the commit that closes FIX-S3Q-7/8 (the Inbox-copy cleanup is visible only after Open with, not covered by this smoke) | S3-R | open |
+| 6 | Signing: **two App IDs with the App Group `group.com.vecvel.danaview`** (`com.vecvel.danaview`, `com.vecvel.danaview.share`; `ios/fastlane/SHARE_EXTENSION.md`), S1 §Signing commands with `DANAVIEW_FILES_HOME=true`; check both signed entitlements; fastlane still blocked by FIX-S1R-1 | **owner** | open |
+| 7 | Device smoke incl. the Share Extension under the extension memory limit, Open with from Files and Mail, iOS 15–17 | owner / lab | deferred: no device available |
+| 8 | Upload (internal until the owner's go); privacy report from the signed archive (app + extension: FileTimestamp, DiskSpace; no data collected) | **owner** | open |
+| 9 | `legalEffectiveDate`; hosted privacy page regenerated from a flag-on build (the S3 blocks exist only there); owner review of the S3 wording | **owner** | open |
+| 10 | Store answers: App Privacy unchanged, the App Review note for the share sheet and documents (§Wiring "Store-answer deltas") | **owner** | open |
+| 11 | Android release build and emulator smoke | Windows lane | pending |
+
+### Notes (S3-R)
+
+- N-S3R-1 (low, HOM-18 / HOM-23): the Documents row of a PDF shows `size · date` without the page
+  count the test-pass checklist (item 2) expects; say if pages should show there.
+- N-S3R-2 (low, INT-104, owner rule "no big gaps"): the extension's folder picker draws a full-height
+  bordered panel even with one folder; size the list to its rows.
+
+**S3-R Mac verdict:** the iOS candidate (`2ae2b294`, `1.0.0+1`, S1–S3 flags) builds in release with all
+five document types, the embedded Share Extension and both privacy manifests, passes the 15.0 min-OS and
+`NEWLAPACK` checks, grows 2.4 MB on disk / 0.99 MB zipped over S2, and smokes green on the iPhone 16 /
+iOS 26.5 simulator (Documents tab, PDF, CSV via Quick Look, Share Extension from Files). **Not a
+release candidate yet**: the S3 gate is Red (FIX-S3Q-7, FIX-S3Q-8); rebuild after those close. Signing
+with the App Group, upload and the store answers are the owner's; Android is the Windows lane.
