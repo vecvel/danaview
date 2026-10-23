@@ -29,6 +29,7 @@ class LibraryPluginContext(
     private val permissionCallbacks = HashMap<Int, (Map<String, Boolean>) -> Unit>()
     private val activityResultCallbacks = HashMap<Int, (Int, Intent?) -> Unit>()
     private val activityListeners = ArrayList<(Activity?) -> Unit>()
+    private val bindingListeners = ArrayList<(ActivityPluginBinding?) -> Unit>()
 
     /** The current Activity, or null while the plugin has none (background engine, rotation). */
     val activity: Activity? get() = binding?.activity
@@ -38,6 +39,7 @@ class LibraryPluginContext(
         binding.addRequestPermissionsResultListener(this)
         binding.addActivityResultListener(this)
         activityListeners.toList().forEach { it(binding.activity) }
+        bindingListeners.toList().forEach { it(binding) }
     }
 
     fun detach() {
@@ -52,11 +54,21 @@ class LibraryPluginContext(
         activityResultCallbacks.clear()
         results.forEach { it(Activity.RESULT_CANCELED, null) }
         activityListeners.toList().forEach { it(null) }
+        bindingListeners.toList().forEach { it(null) }
     }
 
     /** Called with the new Activity (or null) whenever it changes. Main thread. */
     fun addActivityListener(listener: (Activity?) -> Unit) {
         activityListeners.add(listener)
+    }
+
+    /**
+     * Called with the new activity binding (or null) whenever it changes, synchronously inside
+     * onAttachedToActivity: incoming intents (HOM-21A) add their new-intent and saved-state
+     * listeners there, before MainActivity reads its intent. Main thread.
+     */
+    fun addBindingListener(listener: (ActivityPluginBinding?) -> Unit) {
+        bindingListeners.add(listener)
     }
 
     /**
