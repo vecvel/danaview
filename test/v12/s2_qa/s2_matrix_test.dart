@@ -27,6 +27,7 @@ import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart' show EventChannel;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
@@ -154,9 +155,9 @@ Future<void> _visit(_App app, Future<void> Function(String where) check) async {
   await tester.tap(find.descendant(of: row, matching: find.byTooltip('More')));
   await pumpFrames(tester);
   await check('All row menu');
-  await tester.tapAt(const Offset(4, 4));
-  await pumpFrames(tester);
-  await tester.tap(find.text(_longDoc).hitTestable().first);
+  // Since S3 a document row's tap opens its viewer; the file menu is the row menu's
+  // "More actions…" (FIX-S3Q-1), so the matrix reaches File info through it (FIX-S3Q-3).
+  await tester.tap(find.text('More actions…').hitTestable().first);
   await pumpFrames(tester, count: 8);
   await check('document file menu');
   await app.tapKey('file-info');
@@ -196,6 +197,15 @@ Future<void> _visit(_App app, Future<void> Function(String where) check) async {
 }
 
 void main() {
+  // HOM-21A starts listening to the native library events at boot (Android incoming intents);
+  // a widget test has no native side, so give the channel a silent stream instead of a
+  // MissingPluginException.
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockStreamHandler(
+      const EventChannel('dev.flutter.pigeon.danaview_library_native.LibraryEventsApi.libraryEvents'),
+      MockStreamHandler.inline(onListen: (arguments, events) {}),
+    );
+  });
   tearDown(FeatureFlags.debugReset);
 
   group('S2 surfaces: no overflow', () {
