@@ -49,6 +49,8 @@ import 'package:go_router/go_router.dart';
 import '../../library_test_utils.dart';
 import '../filters/filters_support.dart';
 
+import '../../row_heights_test_utils.dart';
+
 final Finder _tabStrip = find.byKey(const ValueKey('home-tab-strip'));
 final Finder _storageSection = find.byKey(const ValueKey('settings-section-libraryStorage'));
 final Finder _privacySection = find.byKey(const ValueKey('settings-section-privacy'));
@@ -460,6 +462,7 @@ void main() {
       expect(i.right, moreOrLessEquals(1280 - DanaviewSpacing.xxl, epsilon: 0.5), reason: 'no max-width cap');
       expect(f.left, moreOrLessEquals(DanaviewSpacing.xxl, epsilon: 0.5));
       expect(i.center.dy, moreOrLessEquals(f.center.dy, epsilon: 1));
+      expectEqualRowHeights(tester, [field, import], height: DanaviewSpacing.controlHeight);
       await app.dispose();
     });
 
@@ -477,6 +480,7 @@ void main() {
       expect(i.left - f.right, moreOrLessEquals(DanaviewSpacing.md, epsilon: 0.5));
       expect(i.right, moreOrLessEquals(375 - DanaviewSpacing.lg, epsilon: 0.5));
       expect(i.center.dy, moreOrLessEquals(f.center.dy, epsilon: 1));
+      expectEqualRowHeights(tester, [field, import], height: DanaviewSpacing.controlHeight);
       await app.dispose();
     });
   });

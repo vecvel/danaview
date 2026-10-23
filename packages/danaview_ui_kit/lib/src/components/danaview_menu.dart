@@ -523,6 +523,7 @@ class DanaviewDropdown<T> extends StatelessWidget {
     this.label,
     this.icon,
     this.compact = false,
+    this.field = false,
     this.expand = false,
     this.enabled = true,
     this.menuWidth = 200,
@@ -539,6 +540,10 @@ class DanaviewDropdown<T> extends StatelessWidget {
   final String? label;
   final IconData? icon;
   final bool compact;
+
+  /// Sizes the trigger to [DanaviewSpacing.controlHeight] so it lines up with a text or search
+  /// field in the same row (ignored when [compact]).
+  final bool field;
 
   /// Fills the available width; requires bounded width constraints.
   final bool expand;
@@ -584,6 +589,7 @@ class DanaviewDropdown<T> extends StatelessWidget {
         label: compact ? null : label,
         icon: icon ?? current?.icon,
         compact: compact,
+        field: field,
         expand: expand,
         isOpen: isOpen,
         tooltip: tooltip,
@@ -600,6 +606,7 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.compact,
+    required this.field,
     required this.expand,
     required this.isOpen,
     required this.tooltip,
@@ -611,6 +618,7 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
   final String? label;
   final IconData? icon;
   final bool compact;
+  final bool field;
   final bool expand;
   final bool isOpen;
   final String? tooltip;
@@ -630,7 +638,7 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
         Widget visual = AnimatedContainer(
           duration: DanaviewMotion.fast,
           curve: DanaviewMotion.curve,
-          constraints: BoxConstraints(minHeight: compact ? 32 : 40),
+          constraints: BoxConstraints(minHeight: compact ? 32 : (field ? DanaviewSpacing.controlHeight : 40)),
           padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12, vertical: 4),
           decoration: BoxDecoration(
             color: danaviewInteractiveFill(

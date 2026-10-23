@@ -776,7 +776,7 @@ class FilesHomeToolsRow extends ConsumerWidget {
                         key: const ValueKey('s2-import'),
                         icon: Icons.add_rounded,
                         variant: DanaviewIconButtonVariant.primary,
-                        size: DanaviewSpacing.minTapTarget,
+                        size: DanaviewSpacing.controlHeight,
                         tooltip: importLabel,
                         semanticLabel: importLabel,
                         onPressed: open,
@@ -785,7 +785,7 @@ class FilesHomeToolsRow extends ConsumerWidget {
                         key: const ValueKey('s2-import'),
                         label: importLabel,
                         icon: Icons.add_rounded,
-                        size: DanaviewButtonSize.sm,
+                        size: DanaviewButtonSize.field,
                         onPressed: open,
                       );
                 return Row(
@@ -802,9 +802,10 @@ class FilesHomeToolsRow extends ConsumerWidget {
     );
   }
 
-  /// The search field's height at the current text scale (its line plus padding), at least 44.
+  /// The search field's height at the current text scale (its line plus padding), at least
+  /// [DanaviewSpacing.controlHeight].
   static double _fieldHeight(BuildContext context) => math.max(
-        DanaviewSpacing.minTapTarget,
+        DanaviewSpacing.controlHeight,
         MediaQuery.textScalerOf(context).scale(15) * 1.3 + 2 * DanaviewSpacing.md,
       );
 }

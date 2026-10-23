@@ -111,7 +111,7 @@ class _DanaviewTextFieldState extends State<DanaviewTextField> {
     final field = AnimatedContainer(
       duration: DanaviewMotion.fast,
       curve: DanaviewMotion.curve,
-      constraints: const BoxConstraints(minHeight: DanaviewSpacing.minTapTarget),
+      constraints: const BoxConstraints(minHeight: DanaviewSpacing.controlHeight),
       padding: EdgeInsets.only(left: widget.prefixIcon != null ? 10 : 12, right: showClear ? 2 : 12),
       decoration: BoxDecoration(color: fill, borderRadius: DanaviewRadius.mdAll),
       foregroundDecoration: BoxDecoration(borderRadius: DanaviewRadius.mdAll, border: Border.fromBorderSide(border)),
