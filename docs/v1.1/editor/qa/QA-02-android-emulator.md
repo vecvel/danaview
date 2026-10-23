@@ -1309,6 +1309,8 @@ window out of touch mode. `android/app` sets no `defaultFocusHighlightEnabled`. 
 FlutterView. Flutter's own keyboard-only focus rings stay as they are. The Android lane can take
 it; it was not changed in this pass.
 
+**FIX-QA02-POLISH-1: fixed (2026-10-23, editor-android).** `values-v26/` and `values-night-v26/` styles set `android:defaultFocusHighlightEnabled=false` on LaunchTheme and NormalTheme; on Pixel_Tablet_API_35 no frame after DPAD/letter/Tab/Esc keys, light and dark (window-edge pixels changed 0/3456; `polish1_light_before.png`, `polish1_light_after_keys.png`, `polish1_light_editor_*.png`, `polish1_dark_*.png`), while the unfixed control drew the RGB 128,170,2 frame on every edge pixel (`polish1_control_unfixed_*.png`); new instrumented test `android/app/src/androidTest/.../FocusHighlightTest#noSystemFocusFrameAfterKeyPress` passes light and dark and fails on the unfixed build. Flutter's own focus painting is untouched (Android View attribute only): arrow keys still drive the editor, but adb-injected Tab painted no in-app focus ring on Home, Settings, Projects or the editor on either build, fixed or unfixed (pre-existing, not caused by this fix; `polish1_light_projects_after_tab.png`).
+
 Screenshots for both sections are in `build/e2e/android/manual/` (gitignored, local to the laptop).
 
 Use **Git Bash**. Start each new window with:
