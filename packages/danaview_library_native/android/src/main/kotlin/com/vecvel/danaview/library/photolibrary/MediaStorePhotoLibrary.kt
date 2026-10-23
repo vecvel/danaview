@@ -155,16 +155,19 @@ class MediaStorePhotoLibrary(
         return ids.mapNotNull { byId[it] }
     }
 
-    /** Device folders that hold images or videos. */
+    /**
+     * Device folders that hold photos (the Photos tab's album chips, OBS-S2A-3): a bucket with only
+     * videos is left out (it belongs in Videos); the count is the bucket's photos.
+     */
     fun fetchAlbums(): List<PhotoAlbumMsg> {
         requireRead()
         val buckets = LinkedHashMap<String, Albums.Bucket>()
         val selection = MediaStoreQuery.selection(PhotoMediaFilterMsg.ALL, null)
-        resolver.query(collection, arrayOf(Col.BUCKET_ID, Col.BUCKET_DISPLAY_NAME), selection.sql, selection.args, null)?.use { c ->
+        resolver.query(collection, arrayOf(Col.BUCKET_ID, Col.BUCKET_DISPLAY_NAME, Col.MEDIA_TYPE), selection.sql, selection.args, null)?.use { c ->
             val row = CursorRow(c)
             while (c.moveToNext()) {
                 val id = row.long(Col.BUCKET_ID)?.toString() ?: continue
-                buckets.getOrPut(id) { Albums.Bucket(id, row.string(Col.BUCKET_DISPLAY_NAME)) }.count++
+                Albums.add(buckets, id, row.string(Col.BUCKET_DISPLAY_NAME), row.long(Col.MEDIA_TYPE)?.toInt())
             }
         }
         return Albums.albums(buckets.values)
