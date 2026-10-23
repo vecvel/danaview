@@ -1,6 +1,6 @@
 # 1.2.0 CI scripts (`scripts/ci/v12/`)
 
-Scripts for the 1.2.0 jobs of `.github/workflows/editor-ci.yml` (BUILD_PLAN v1.2 INT-101). Each job
+Scripts for the 1.2.0 jobs of `.github/workflows/danaview-ci.yml` (BUILD_PLAN v1.2 INT-101). Each job
 runs only when its paths changed (the workflow's `changes` job), on every push to `main`, nightly
 and on manual dispatch. Every script runs locally from any directory (`bash scripts/ci/v12/<name>.sh`)
 and needs only Flutter 3.44.2; nothing is downloaded beyond pub dependency resolution.

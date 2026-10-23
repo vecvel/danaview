@@ -1101,7 +1101,7 @@ Any prefix of this list has all its dependencies satisfied. v1 dependencies are 
   - `packages/danaview_editor/lib/src/app/editor_providers.dart`, `editor_availability.dart` (extends UX-01)
   - `test/architecture/dependency_rules_test.dart` (extends INT-01)
   - `packages/danaview_editor/test/architecture/ai_call_sites_test.dart`
-  - `.github/workflows/editor-ci.yml` (extends INT-01), `scripts/ci/editor/ai.sh`
+  - `.github/workflows/danaview-ci.yml` (extends INT-01), `scripts/ci/editor/ai.sh`
   - `docs/v1.1/editor/ARCHITECTURE.md` ([INTEGRATION]: D-45…D-70 with the owner's answers, §4 additions)
 - **Spec:**
   - **Placeholders (D-33)** for every new file in §3.2 and for the new binding and string files, each with `// OWNER: AIS-xx`.
@@ -2025,7 +2025,7 @@ These v1 files are edited by 1.2.0 tickets. Each row is edited by exactly one 1.
 | `danaview_editor/lib/src/app/editor_bootstrap.dart` | INT-02 | AIS-37 |
 | `danaview_features/lib/src/more/legal_texts.dart` | UX-42 | AIS-36 |
 | `lib/main.dart`, `lib/router/app_router.dart`, root `pubspec.yaml` | INT-02/INT-04/INT-05 | AIS-37 → AIS-41 (version only) |
-| `test/architecture/dependency_rules_test.dart`, `.github/workflows/editor-ci.yml` | INT-01 | AIS-01 |
+| `test/architecture/dependency_rules_test.dart`, `.github/workflows/danaview-ci.yml` | INT-01 | AIS-01 |
 | `docs/v1.1/editor/ARCHITECTURE.md` | INT-01/ENG-06/INT-05 | AIS-01 → AIS-41 |
 | `docs/v1.1/editor/release-checklist.md`, release lanes | INT-05 | AIS-41 |
 

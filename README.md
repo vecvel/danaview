@@ -393,7 +393,7 @@ danaview/
 │   ├── v1.1/editor/                  Video editor architecture, build plan, designs, spikes
 │   ├── v1.2/                         Files & Media Home, AI Studio, photo & video editor update
 │   └── v1.3/                         Desktop editor, Danaview Camera
-├── scripts/ci/editor/                Editor CI scripts (core, Flutter packages, iOS, Android, whisper)
+├── scripts/ci/editor/                Danaview CI scripts (core, Flutter packages, iOS, Android, whisper)
 └── test/                             App-level tests
 ```
 
