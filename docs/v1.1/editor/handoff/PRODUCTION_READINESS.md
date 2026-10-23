@@ -6,15 +6,17 @@
 
 ---
 
-## 0. Live status (kept current; last update 2026-10-17 10:30 IST)
+## 0. Live status (kept current; last update 2026-10-22 IST)
 
 | Ticket | State | What's left |
 |---|---|---|
-| **QA-01** iOS simulator E2E | **Nearly certified.** Full run 16/18; s07 and s13 pass when re-run alone. iPad s12 passes (V-U5 certified on the simulator). iOS 18.2 lane 3/3 | Fix **FIX-IOS-12-1**: the second back-to-back export stalls in "rendering" in the s07 full run (IOS-12 `ExportCoordinator.swift` and its writer; probably the same family as D7). The manual iPad Files/Photos drop and the physical-keyboard step need a person (screenshots in `build/e2e/ios/2C9213E9-.../manual/`). The iPhone 7/8 smoke needs devices |
-| **QA-05** soak and crash recovery | **iOS side green.** **D7 fixed** (FIX-IOS-D7, §4.1) and verified 2026-10-17: seeded soak (5150) 965 ops, 0 failed ops, 14 exports, no crash, memory −15.9 %, 39/39 reopens valid; the process-death chain passes on the same code. `ExportD7Tests` 6/6. See `qa/QA-05-soak.md` §2 | Android soak/death on the Windows lane, and the device-only steps (§6 of the report) |
-| **QA-02** Android emulator E2E | **Windows lane, code D run done** (`ff95929`, merged): 17 of 18 scenarios and 6 of 7 extra phases, s08 in the batch, first AND-12 detached-export proof on API 35 | **FIX M-21**: the host's `swipeFromRecents` removes another app's task first, so `swipe-check` reports `ExportReattach.none` in the batch and alone. s13 fails in the batch only on emulator mic silence (passes alone). Then close the ticket |
-| **INT-05** release | **Prepared, not applied** (release-checklist) | Owner "go" |
+| **QA-01** iOS simulator E2E | **Certified at simulator level** 2026-10-23: automated suite s01–s18 + extras, iPad s12, iOS 18.2 lane; manual iPad steps 1–3 by XCUITest (`90ab695`), step 4 (pointer hover) by the owner | iPhone 7/8 lab smoke deferred (no devices) |
+| **QA-05** soak and crash recovery | **Certified** 2026-10-22: iOS green after D7; Android half on `0fa7896` (death chain 7/7, seeded soak 5150 runs a and b with 0 failures, memory flat, no ANR/crash). D8–D12 and W1–W7/W4b fixed | 1 h runs and device-only steps deferred (no devices) |
+| **QA-02** Android emulator E2E | **Fully closed** 2026-10-23: emulator suite certified (`14be342`), tablet checklist M1-M4 24/24 after FIX-QA02-M2-2, re-check on `e07e388` (`bd90635`) incl. the owner's UI polish | — |
+| **INT-05** release | **Closed in 1.1 (owner, 2026-10-22): moved into the single 1.0.0 release ticket at the end of 1.3** (widened AIS-41, `docs/v1.2/BUILD_PLAN.md` on `v1.2-wip`). Release-pipeline checks applied (`f8cd585`): whisper xcframework build, `check_ios_min_os.sh` and the `nm -um` NEWLAPACK check in the iOS lane; `check_native_libs.sh` in the Android lane and `android-release.yml` | Nothing in 1.1. The flags, legal date, store texts, dry-run builds and uploads are the 1.0.0 ticket's, after 1.3 (release-checklist §2, §3.2–§3.4) |
 | Round 7 (Mac Dart fixes for QA-02: M-1, M-2..M-7, M-9, M-10, M-13..M-15, M-17 Dart) | **Done and merged** into `editor-wip` (`c336899`, 01:10). M-15: the Dart close no longer waits and releases the preview; whether the remaining 30 s on-screen delay is native shows in the new `[EditorClose]`/`[EditorLifecycle]` logs ("leaving the editor" with no "exit callback" means the Android native release blocks the main thread) | Windows: pull `editor-wip`, run the full QA-02 pass; on s09 check the M-15 logs |
+
+**FIX-QA05-D8-2 done (2026-10-22, `911110f`):** orphaned export outputs in `<support>/danaview/editor/exports` (cancelled, failed or killed-before-handoff exports) are swept: unreferenced files older than 24 h at bootstrap (+20 s) and after every export job's end, fail-safe on any unreadable job record; Settings › Storage lists "Export files" with its size and clears unreferenced files of any age. No Android change needed; if the D8 engine half moves `export-jobs.json` off the cache, put it at `<supportRoot>/export-jobs.json` or `<supportRoot>/exports/export-jobs.json` in the same v1 format (both are read).
 
 Other follow-ups found by QA-01 (not blocking):
 - The player library screens (`danaview_home_screen.dart`, `danaview_folder_screen.dart`, `library_storage.dart`) have a follow-up noted in `QA-01-ios-simulator.md`.
@@ -28,19 +30,16 @@ QA-01 re-check was never run.
 
 **Next actions, in order:**
 1. ~~Merge `parallel-r7`~~ done (`c336899`).
-2. ~~Fix D7~~ done, ~~re-run QA-05~~ done (`qa/QA-05-soak.md` §2 is green). **Re-run the QA-01 scenarios
-the D7 fix touches** (s02, s06, s09, s12, s13 at least) and check FIX-IOS-12-1's back-to-back export
-in s07.
-3. Windows: pull `editor-wip` and fix **M-21** (swipe-from-recents), then close QA-02.
-4. Close QA-01, QA-02 and QA-05, and refresh the ticket totals in `BUILD_STATE.md` (its header still
-   reads 151 done / 13 in progress / 2 not started, against §1's 162 of 166).
-5. INT-05 on the owner's go.
+2. ~~Fix D7~~ done, ~~re-run QA-05~~ done, ~~QA-01 re-check~~ done (2026-10-21, automated suite certified). Round 9 small fixes merged (`256243f`: empty-project hint, Restart-preview seek ack, relink monitor, iPad device-folder hints).
+3. ~~M-21~~ done (`88469c0`); ~~M-22~~ done (`07485cf`); ~~M-23, D8 (Dart), W1–W7~~ done (`8fb43c2`, `2c09282`, `5912db4`). Windows: merge `editor-wip`, fix D9, D10 and the D8 engine half, run the re-runs in the QA-02 and QA-05 rows, then close QA-02.
+4. Close QA-01, QA-02 and QA-05 in `BUILD_STATE.md` (totals now 163 done, 3 open: QA-01, QA-02, QA-05).
+5. ~~INT-05 on the owner's go~~ closed in 1.1 (2026-10-22): the pipeline checks are applied (`f8cd585`); the rest of the release moves to the single 1.0.0 ticket after 1.3 (widened AIS-41, `docs/v1.2/BUILD_PLAN.md`). The Android lane should run `check_native_libs.sh` once on a fresh release AAB after merging `editor-wip`.
 
 ---
 
 ## 1. Where things stand
 
-- **Tickets:** 162 of 166 BUILD_PLAN tickets done (see §0 for live detail). Left: **QA-01**, **QA-02**, **QA-05**, **INT-05**.
+- **Tickets:** 163 of 166 BUILD_PLAN tickets done (see §0 for live detail). Left: **QA-01**, **QA-02**, **QA-05**. INT-05 is closed in 1.1 and moved to the 1.0.0 release ticket after 1.3.
 - **Platforms:** iOS and Android editor features are all built, and the Android lane (ENG-08, AI-04, AND-02 to AND-19) is complete. What remains is the QA certification and the fixes it finds.
 - **What's done, in short:** all of M0 to M5; QA-00 (E2E suite), QA-03 (parity), QA-04 (performance; UX-43 closed as not needed), QA-06 (AI eval host side), QA-07 (auto captions, re-run passes; the DANAVIEW_AUTO_CAPTIONS flag can ship), QA-08 (a11y), QA-09 (overflow), QA-10 (persistence), QA-11 (export conformance), and the idle benchmark (CORE-35 gate passes).
 - **Release prep:** INT-05 is drafted in `docs/v1.1/editor/release-checklist.md`, with nothing applied. It holds the version 1.1.0+3 diff, the release flag diff, casual store texts, privacy/App Privacy/Data safety texts, owner steps and the rollback plan.
@@ -51,7 +50,7 @@ in s07.
 
 | Item | Where | What to do |
 |---|---|---|
-| **Round 6** Mac build (QA-01 re-certification on the iOS simulator) | main checkout `/Users/besaoct/Desktop/danaview` | Let it finish. Its results go into `docs/v1.1/editor/qa/QA-01-ios-simulator.md` |
+| **Round 6** Mac build (QA-01 re-certification on the iOS simulator) | main checkout `/Users/besaoct/Desktop/vecvel/vecvel-cross-platform/danaview` | Let it finish. Its results go into `docs/v1.1/editor/qa/QA-01-ios-simulator.md` |
 | **Round 7 parallel** Dart fixes for the Windows QA-02 requests | git worktree `.claude/worktrees/parallel-r7`, branch `parallel-r7` | When finished, `git add -A && git commit` in the worktree, then from the main checkout `git merge --no-edit parallel-r7 && git push origin editor-wip`, then `git worktree remove .claude/worktrees/parallel-r7`. **Merge only after QA-01 has finished**, because QA-01 rebuilds the app from the main checkout's files |
 | Windows lane | `C:\dev\danaview`, branch `editor-android` | Kotlin INT-07 fixes (§4.3), then a full QA-02 pass |
 
@@ -190,7 +189,7 @@ Paste the block below to any capable coding agent (Claude Code, or another agent
 
 ```text
 You are the lead engineer for Danaview, a private, all-in-one media app (Flutter; native engines in Swift for
-iOS/macOS and Kotlin for Android; whisper.cpp on-device captions). Repo: /Users/besaoct/Desktop/danaview, branch
+iOS/macOS and Kotlin for Android; whisper.cpp on-device captions). Repo: /Users/besaoct/Desktop/vecvel/vecvel-cross-platform/danaview, branch
 editor-wip, remote github.com/vecvel/danaview. A second machine (Windows laptop, branch editor-android) builds and
 tests the Android lane.
 

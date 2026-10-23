@@ -27,6 +27,7 @@ import 'package:danaview_platform/danaview_platform.dart' show PlatformBridge;
 
 import '../../../app/editor_bootstrap.dart' show editorRuntimeProvider;
 import '../../../app/editor_providers.dart' show EditorNotConfiguredError;
+import '../../../app/export_output_sweeper.dart' show ExportOutputLeases;
 import '../../state/default_plan_compiler.dart' show DefaultSessionPlanCompiler;
 import '../../state/editor_session.dart';
 import '../../state/plan_compiler_port.dart' show ResolvingSessionPlanCompiler;
@@ -176,6 +177,8 @@ final class ExportEnvironment {
     this.wakelock = _defaultWakelock,
     this.newToken = _defaultToken,
     this.notificationPermissionTimeout = defaultNotificationPermissionTimeout,
+    this.outputLeases,
+    this.onJobEnded,
   });
 
   /// The default of [notificationPermissionTimeout].
@@ -191,6 +194,8 @@ final class ExportEnvironment {
     ExportAssetResolver resolveAssets = defaultExportAssetResolver,
     ExportCompile compile = defaultExportCompile,
     ExportWakelock wakelock = _defaultWakelock,
+    ExportOutputLeases? outputLeases,
+    void Function()? onJobEnded,
   }) =>
       ExportEnvironment(
         roots: roots,
@@ -207,6 +212,8 @@ final class ExportEnvironment {
         resolveAssets: resolveAssets,
         compile: compile,
         wakelock: wakelock,
+        outputLeases: outputLeases,
+        onJobEnded: onJobEnded,
       );
 
   /// App roots.
@@ -246,11 +253,29 @@ final class ExportEnvironment {
   /// without notifications (UX-39): an unanswered dialog must not hold the export at "Preparing".
   final Duration notificationPermissionTimeout;
 
+  /// Where the controller registers the export files it uses, so the export sweep keeps them
+  /// (FIX-QA05-D8-2); null registers nothing.
+  final ExportOutputLeases? outputLeases;
+
+  /// Called when an export job reaches a terminal state (the runtime's export sweep, FIX-QA05-D8-2).
+  final void Function()? onJobEnded;
+
   /// The platform in effect.
   TargetPlatform get targetPlatform => platform ?? defaultTargetPlatform;
 
-  /// `<cache>/danaview/editor/work` (engine outputs).
-  String get workDir => roots.workDir;
+  /// `<support>/danaview/editor/exports` (export outputs and their caption side files). Not the
+  /// purgeable cache: the system emptied that mid-export under low storage (QA-05 D8).
+  String get workDir => roots.exportsDir;
+
+  /// Creates [workDir] when it is missing (first use, or removed behind the app's back). Never
+  /// throws: a directory that cannot be made fails the job that needs it with a proper error.
+  Future<void> ensureWorkDir() async {
+    try {
+      await fs.createDirectory(workDir);
+    } on Object catch (e) {
+      debugPrint('[Export] Could not create the exports folder: ${e.runtimeType}');
+    }
+  }
 
   /// `<cache>/danaview/editor/sprites`.
   String get spritesDir => SpritePrepass.spritesDirOf(roots.editorCache);
@@ -266,7 +291,12 @@ final class ExportEnvironment {
 final exportEnvironmentProvider = Provider<ExportEnvironment>((ref) {
   final runtime = ref.watch(editorRuntimeProvider);
   if (runtime == null) throw EditorNotConfiguredError('exportEnvironmentProvider');
-  return ExportEnvironment.local(runtime.roots, fontResolver: ref.watch(fontCatalogProvider).resolve);
+  return ExportEnvironment.local(
+    runtime.roots,
+    fontResolver: ref.watch(fontCatalogProvider).resolve,
+    outputLeases: runtime.exportLeases,
+    onJobEnded: runtime.exportSweeper.sweepSoon,
+  );
 }, name: 'exportEnvironmentProvider');
 
 /// Navigation the router supplies for the export flow (INT-04). Every callback is optional.

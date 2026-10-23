@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:danaview_data/danaview_data.dart' show LibraryStorage;
 import 'package:danaview_domain/danaview_domain.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
@@ -270,7 +271,8 @@ class _DanaviewFolderScreenState extends ConsumerState<DanaviewFolderScreen> {
   String _emptyMessage(BuildContext context, {required bool isDevice}) {
     if (!isDevice) return 'This folder has no videos or subfolders.';
     if (Theme.of(context).platform == TargetPlatform.iOS) {
-      return 'In the Files app, copy videos to On My iPhone › Danaview. '
+      final location = LibraryStorage.iosFilesLocation(tablet: LibraryStorage.isTabletWidth(MediaQuery.sizeOf(context).shortestSide));
+      return 'In the Files app, copy videos to $location. '
           'On a Mac, you can also drag them into Danaview with Finder file sharing.';
     }
     return 'Videos you open with Open file are kept here, ready to play again.';

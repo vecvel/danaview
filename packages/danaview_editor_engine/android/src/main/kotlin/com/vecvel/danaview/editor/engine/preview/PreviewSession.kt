@@ -20,13 +20,22 @@
 //   Surface; experimentalRedrawLastFrame is never used. A backend that draws on the Surface itself
 //   (AND-16) hands it to the renderer for paused edits and takes it back on play or seek
 //   ([Owner]); the renderer prefetches the exact frames on pause and after an exact seek settles.
+//   A paused render asked for while a seek is in flight or pending waits until the seek is acked
+//   and then draws the acked frame (QA-05 D10: taking the Surface from a backend that was
+//   composing the seek's frame left that frame unpresented, and the seek was acked at its timeout
+//   with the frame shown before it). The seek ack's timeout reports the frame actually on screen,
+//   whoever drew it.
 // - Transport and seq (ARCH §12.2): play, pause and seek take the next command seq; replies carry
 //   it and clock samples carry the seq of the last command they reflect. Clock samples go out at
 //   every state change and at 10 Hz while playing (EventHub coalesces to <= 10 Hz), with
 //   `timeUs = timeOfFrame(k)` of the displayed frame (D-35). Seeks go through [SeekController].
 // - Quality: [QualityGovernor] (auto full → 1/2 → 1/4 under dropped frames, back after 10 s clean,
 //   pinned levels never move, thermal SEVERE caps at half); a change resizes the SurfaceProducer
-//   and is reported with `degraded(q)` and `frameSize`.
+//   and is reported with `degraded(q)` (`recovered` when auto is back at full) and `frameSize`.
+//   When playback stops for good (pause, end of the plan, export suspension) auto returns to the
+//   requested level at once, reports it as such a step and the renderer draws the paused frame
+//   again at that size; a paused seek does the same, before it is issued, if it still finds a
+//   lowered level, so the paused frame is never left at a lowered quality (QA-05 D11).
 // - Look stills, colour sampling and trim-edge frames come from AND-06's SourceFrameCache
 //   (FrameExtractor EXACT; look stills through LayerLookEffect overrides), off the preview lane.
 // - Export suspension (ARCH §14.3): PreviewSessionManager suspends sessions on minimal/low/mid
@@ -279,6 +288,13 @@ class PreviewSession internal constructor(
         }
     }
     private val idleWaiters = ArrayList<() -> Unit>()
+
+    /** A paused render was asked for while a seek was busy (D10), and the callers waiting for it. */
+    private var renderAfterSeek = false
+    private val afterSeekWaiters = ArrayList<(PausedFrameRenderer.RenderResult?) -> Unit>()
+
+    /** Paused renders queued or running and not finished yet (debugCaptureFrame waits for them). */
+    private var pausedRendersInFlight = 0
 
     // ---- state (danaview-preview) ----
     private var committed: ParamSnapshot? = null
@@ -565,6 +581,8 @@ class PreviewSession internal constructor(
         val s = ++seq
         enqueue { next ->
             if (!playing) {
+                // Playback may have stopped without a reset (nothing to do when it had one).
+                resetQualityOnStop()
                 appliedSeq = maxOf(appliedSeq, s)
                 emitClock()
                 done.succeed(s)
@@ -596,6 +614,7 @@ class PreviewSession internal constructor(
                     renderer.cancel()
                     requestPausedRender(null)
                 }
+                resetQualityOnStop()
                 then()
             }
         }
@@ -608,6 +627,9 @@ class PreviewSession internal constructor(
         val s = ++seq
         clearSourceFrame()
         val k = SeekMath.targetFrame(grid, timeUs, frameCount)
+        // A paused seek renders at the requested quality (QA-05 D11): the resize is queued before
+        // the seek is issued, so the ack comes after it.
+        if (!playing) resetQualityOnStop()
         if (committed == null || frameCount <= 0) {
             playhead = k
             appliedSeq = maxOf(appliedSeq, s)
@@ -618,6 +640,7 @@ class PreviewSession internal constructor(
             onLane {
                 val ack = r.getOrElse {
                     done.fail(EngineErrors.from(it))
+                    renderDeferredAfterSeek()
                     return@onLane
                 }
                 val shown = ack.displayedFrame
@@ -629,8 +652,18 @@ class PreviewSession internal constructor(
                 appliedSeq = maxOf(appliedSeq, ack.seq)
                 emitClock()
                 done.succeed(SeekAckMsg(timeUs, grid.timeOfFrame(shown), shown, ack.seq))
+                renderDeferredAfterSeek()
             }
         })
+    }
+
+    /** Runs the paused render deferred while seeks were busy (D10), once none is in flight or pending. */
+    private fun renderDeferredAfterSeek() {
+        if (!renderAfterSeek || seeks.isBusy) return
+        renderAfterSeek = false
+        val waiting = afterSeekWaiters.toList()
+        afterSeekWaiters.clear()
+        requestPausedRender { r -> waiting.forEach { it(r) } }
     }
 
     private fun issueSeek(k: Long, exact: Boolean, done: Completion<Unit>) {
@@ -692,11 +725,23 @@ class PreviewSession internal constructor(
     private fun targetRenderSize(): Pair<Int, Int> =
         QualityGovernor.renderSize(canvas.w, canvas.h, governor.level, maxPreviewLongSide)
 
+    /**
+     * Playback stopped for good: auto goes back to the requested level (QA-05 D11) and reports it
+     * like a governor step (`degraded(q)`, plus `recovered` at full); [applyQuality] draws the
+     * paused frame again at the new size. Nothing happens when the level did not change.
+     */
+    private fun resetQualityOnStop() {
+        if (disposed) return
+        governor.onPlaybackStopped()?.let { applyQuality(it) }
+    }
+
     /** Resizes the texture to the governor's level when it differs ([change] reports an automatic step). */
     private fun applyQuality(change: QualityGovernor.Change?, done: Completion<Unit>? = null) {
         val (w, h) = targetRenderSize()
         if (change != null && change.reason != QualityGovernor.Reason.REQUEST) {
             ctx.events.preview(sessionId, PreviewEventMsg(PreviewEventKindMsg.DEGRADED, quality = change.to.msg))
+            // Back at full: also report the recovery, as iOS does (QA-05 D11).
+            if (change.to == QualityLevel.FULL) ctx.events.preview(sessionId, PreviewEventMsg(PreviewEventKindMsg.RECOVERED))
         }
         if (w == surfaceW && h == surfaceH) {
             done?.succeed(Unit)
@@ -709,8 +754,15 @@ class PreviewSession internal constructor(
                     done?.succeed(Unit)
                     return@resize next()
                 }
+                val drawer = owner
                 replaceSurface(o.surface, o.width, o.height) {
                     ctx.events.preview(sessionId, PreviewEventMsg(PreviewEventKindMsg.FRAME_SIZE, width = o.width.toLong(), height = o.height.toLong()))
+                    // A backend that draws on the Surface only scales its last frame up: after a
+                    // stop reset the renderer composes the paused frame at the new size (D11). The
+                    // renderer, when it drew, has already done so in replaceSurface.
+                    if (change?.reason == QualityGovernor.Reason.STOP && drawer == Owner.BACKEND && !playing && committed != null) {
+                        requestPausedRender(null)
+                    }
                     done?.succeed(Unit)
                     next()
                 }
@@ -718,7 +770,12 @@ class PreviewSession internal constructor(
         }
     }
 
+    /** Test hook: replaces PowerManager's thermal status (THERMAL_STATUS_*) when set; lane only. */
+    @VisibleForTesting
+    var thermalStatusOverride: Int? = null
+
     private fun pollThermal() {
+        thermalStatusOverride?.let { status -> governor.setThermalStatus(status)?.let { applyQuality(it) }; return }
         if (Build.VERSION.SDK_INT < 29) return
         val status = thermalStatus29() ?: return
         governor.setThermalStatus(status)?.let { applyQuality(it) }
@@ -872,10 +929,14 @@ class PreviewSession internal constructor(
         // yet while the Surface still shows the earlier frame (QA-02 s18: a capture right after the
         // editor's opening seek failed with "nothing composed"). Wait, bounded by the seek's own
         // timeout, until that seek has put its frame on screen, then read the Surface's owner.
+        // Likewise a paused render in flight (or deferred behind a seek, D10): the renderer's
+        // canvas still holds its previous frame until the render presents, while the Surface shows
+        // what the backend drew, so reading the canvas then returned a stale frame.
         val deadline = scheduler.nowMs() + seeks.exactTimeoutMs + CAPTURE_SEEK_GRACE_MS
         fun capture() {
             if (disposed) return done.fail(cancelled())
-            if (seeks.isBusy && scheduler.nowMs() < deadline) {
+            val busy = seeks.isBusy || renderAfterSeek || pausedRendersInFlight > 0
+            if (busy && scheduler.nowMs() < deadline) {
                 scheduler.schedule(CAPTURE_POLL_MS) { capture() }
                 return
             }
@@ -896,15 +957,23 @@ class PreviewSession internal constructor(
         backend.trim(level)
     }
 
-    /** Export suspension on weak tiers (ARCH §14.3): pause, release decoders, defer paused renders. */
-    internal fun suspendForExport() {
-        if (disposed || suspended) return
+    /**
+     * Export suspension on weak tiers (ARCH §14.3): pause, release decoders, defer paused renders.
+     * [released] runs once the backend has released its decoders (or at once when there is nothing
+     * to suspend); the export waits for it before it creates its own codecs (QA-05 D9).
+     */
+    internal fun suspendForExport(released: (() -> Unit)? = null) {
+        if (disposed || suspended) {
+            released?.invoke()
+            return
+        }
         suspended = true
         seeks.cancelAll(busy())
         enqueue { next ->
             val finish = {
                 backend.suspendForExport { r ->
                     r.exceptionOrNull()?.let { Log.w(TAG, "backend suspend: ${EngineErrors.from(it).code}") }
+                    released?.invoke()
                     onLane {
                         renderer.cancel()
                         renderer.trim(CacheTrimLevelMsg.BACKGROUND)
@@ -1018,6 +1087,7 @@ class PreviewSession internal constructor(
         playhead = if (frameCount > 0) k.coerceIn(0, frameCount - 1) else 0
         renderer.setFrame(playhead)
         if (backend.drawsOnSurface) renderer.prefetch(playhead) { }
+        resetQualityOnStop()
         emitClock()
     }
 
@@ -1071,20 +1141,33 @@ class PreviewSession internal constructor(
             renderAfterResume = true
             return done?.invoke(null) ?: Unit
         }
+        if (seeks.isBusy) {
+            // QA-05 D10: the backend may be composing the seek's frame on the Surface; taking the
+            // Surface now would leave that frame unpresented. Draw after the ack, on the acked frame.
+            renderAfterSeek = true
+            done?.let { afterSeekWaiters += it }
+            return
+        }
+        pausedRendersInFlight++
         enqueue { next ->
             if (playing || disposed) {
+                pausedRendersInFlight--
                 done?.invoke(null)
                 return@enqueue next()
             }
             ensureOwner(Owner.RENDERER) {
                 renderer.render { r ->
                     onLane {
+                        pausedRendersInFlight--
                         val result = r.getOrNull()
                         r.exceptionOrNull()?.let {
                             val code = EngineErrors.from(it).code
                             if (code != EngineErrorCode.cancelled) Log.w(TAG, "paused render failed: $code")
                         }
                         if (result != null && result.presented) {
+                            // The renderer's frame is the one on screen now: a seek acked at its
+                            // timeout reports it, not an older backend frame (D10).
+                            seeks.resetDisplayed(result.k)
                             lastRender = result
                             onRendered?.invoke(result)
                             noteFirstFrame()

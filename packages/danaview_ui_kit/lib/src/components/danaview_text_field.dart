@@ -103,11 +103,9 @@ class _DanaviewTextFieldState extends State<DanaviewTextField> {
     final focused = _focusNode.hasFocus;
     final hasError = widget.errorText != null;
     final showClear = widget.showClearButton && widget.enabled && _controller.text.isNotEmpty;
-    final border = hasError
-        ? const BorderSide(color: Color(0x61EF4444), width: 1)
-        : focused
-            ? DanaviewBorders.focus
-            : DanaviewBorders.hairline;
+    // Focus shows as the tinted fill and errors as the message below; the outline stays a neutral
+    // hairline in every state.
+    const border = DanaviewBorders.hairline;
     final fill = focused ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevatedHigher;
 
     final field = AnimatedContainer(

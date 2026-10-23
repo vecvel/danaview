@@ -42,7 +42,7 @@ import 'package:danaview_editor/src/editor/actions/editor_action_registry.dart' 
 import 'package:danaview_editor/src/editor/contracts/action_binding.dart' show EditorActionSource;
 import 'package:danaview_editor/src/editor/contracts/action_ids.dart';
 import 'package:danaview_editor/src/editor/flows/export/export_controller.dart';
-import 'package:danaview_editor/src/editor/state/editor_state.dart' show EditorTaskKind, PreviewPhase;
+import 'package:danaview_editor/src/editor/state/editor_state.dart' show EditorTaskKind, ExportFailed, ExportFailureKind, PreviewPhase;
 import 'package:danaview_editor/src/editor/state/tasks_controller.dart' show TasksController;
 import 'package:danaview_editor_core/codec.dart' show ProjectJsonCodec;
 import 'package:danaview_editor_core/model.dart';
@@ -619,7 +619,7 @@ final class _Soak {
     await watch.until((s) => switch (s) {
           ExportUiRunning(:final fraction) => mode != 'complete' && fraction > 0.05,
           ExportUiCompleted() => watch.delivered,
-          ExportUiFailed() => _lowStorage,
+          ExportUiFailed() => _storageFailure(s),
           ExportUiSetup(:final issue) => issue != null && _lowStorage,
           _ => false,
         }, what: 'the export to run');
@@ -630,10 +630,13 @@ final class _Soak {
         final ack = await _host('background', args: {'seconds': 2 + rng.nextInt(4)});
         backgrounded = ack != null;
         if (!backgrounded) await _lifecycleBlip(const Duration(seconds: 2));
-        await watch.until((s) => (s is ExportUiCompleted && watch.delivered) || s is ExportUiInterrupted,
+        // QA-05 D8: the same storage failure the first wait accepts under low storage.
+        await watch.until((s) => (s is ExportUiCompleted && watch.delivered) || s is ExportUiInterrupted || _storageFailure(s),
             what: 'the export to finish after the interruption');
         paused = paused || watch.paused;
-        if (ed.exportState is ExportUiInterrupted) {
+        if (ed.exportState is ExportUiFailed) {
+          outcome = 'storage failure after ${backgrounded ? 'background' : 'inactive'} (low storage)';
+        } else if (ed.exportState is ExportUiInterrupted) {
           final st = ed.exportState as ExportUiInterrupted;
           outcome = 'interrupted (resumable ${st.canResume})';
           if (st.canResume) {
@@ -864,6 +867,12 @@ final class _Soak {
     await ed.waitReady();
     return 'offline and back';
   }
+
+  /// QA-05 D8: under the lowStorage op an export may fail, but only with the storage failure
+  /// ("Not enough space to export"); any other failure (`unknown` included) stays an op failure.
+  /// Both waits of [_export] use this, so a backgrounded export is judged the same way.
+  bool _storageFailure(ExportUiState s) =>
+      _lowStorage && s is ExportUiFailed && s.failure == const ExportFailed(ExportFailureKind.diskFull);
 
   Future<String> _lowStorageOp() async {
     final ack = await _host('lowStorage', args: {'leaveMb': 200}, timeout: const Duration(minutes: 3));

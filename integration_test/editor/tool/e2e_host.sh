@@ -196,23 +196,50 @@ android_app_resumed() {
 # Swipes the app's task away in recents: opens recents and waits until it is on screen (the app is
 # no longer resumed), swipes the centered card up, and repeats until `dumpsys activity recents` no
 # longer lists the task. Returns 0 only when the task is confirmed gone.
+# The app's task id from `dumpsys activity recents` ("Recent #n: Task{… #<id> type=standard … I=<app>/…}").
+android_app_task_id() {
+  adb -s "$DEVICE" shell dumpsys activity recents | tr -d '\r' | grep -E 'Recent #[0-9]+: Task\{' |
+    grep -E "[ :=]$APP_ID([ /}]|$)" | head -1 | sed -nE 's/.*Task\{[^ ]+ #([0-9]+) .*/\1/p'
+}
+
+# Removes the app's own task from recents, as a user swipe would (AND-12 detached export).
+# FIX M-21 (QA-02, 2026-10-17): swiping at the screen centre could remove ANOTHER app's task first
+# (Photos, Settings), and the app's task went only after the export had finished attached. So the
+# app's task is removed by id with `am stack remove <id>`, which goes through the same
+# ActivityTaskManager.removeTask path as the launcher's swipe (checked on the API 35 image). The
+# result is confirmed with `dumpsys activity recents` before reporting success. If `am stack remove`
+# is unavailable, the gesture is the fallback, and every attempt checks WHICH task vanished, failing
+# instead of reporting "task gone" when it was not the app's.
 android_swipe_from_recents() {
-  local size w h attempt
+  local id attempt size w h before after
+  id="$(android_app_task_id)"
+  if [[ -z "$id" ]]; then log "swipeFromRecents: the app has no task in recents"; return 1; fi
+  for attempt in 1 2 3; do
+    adb -s "$DEVICE" shell am stack remove "$id" >/dev/null 2>&1
+    for _ in $(seq 1 10); do android_has_recent_task || break; sleep 0.3; done
+    if ! android_has_recent_task; then
+      log "swipeFromRecents: task $id removed by id (attempt $attempt)"; return 0
+    fi
+    log "swipeFromRecents: task $id still in recents after removal attempt $attempt"
+    id="$(android_app_task_id)"; [[ -n "$id" ]] || { log "swipeFromRecents: task gone"; return 0; }
+  done
+  # Fallback: the launcher gesture, checking which task vanished.
   size="$(adb -s "$DEVICE" shell wm size | tr -d '\r' | awk '{print $NF}' | tail -1)"
   w="${size%x*}"; h="${size#*x}"
-  for attempt in 1 2 3 4 5; do
+  for attempt in 1 2; do
+    before="$(android_app_task_id)"
     adb -s "$DEVICE" shell input keyevent KEYCODE_APP_SWITCH
     for _ in $(seq 1 20); do android_app_resumed || break; sleep 0.5; done
-    sleep 1.5 # the overview animation settles (slow under an export's load)
+    sleep 1.5
     adb -s "$DEVICE" shell input swipe $((w / 2)) $((h / 2)) $((w / 2)) $((h / 20)) 250
     for _ in $(seq 1 10); do android_has_recent_task || break; sleep 0.5; done
-    if ! android_has_recent_task; then
-      adb -s "$DEVICE" shell input keyevent KEYCODE_HOME
-      log "swipeFromRecents: task gone (attempt $attempt)"; return 0
+    adb -s "$DEVICE" shell input keyevent KEYCODE_HOME
+    after="$(android_app_task_id)"
+    if [[ -n "$before" && -z "$after" ]]; then
+      log "swipeFromRecents: task $before gone by gesture (fallback attempt $attempt)"; return 0
     fi
-    log "swipeFromRecents: task still in recents after attempt $attempt"
+    log "swipeFromRecents: the gesture did not remove the app's task (fallback attempt $attempt; before=$before after=$after)"
   done
-  adb -s "$DEVICE" shell input keyevent KEYCODE_HOME
   return 1
 }
 

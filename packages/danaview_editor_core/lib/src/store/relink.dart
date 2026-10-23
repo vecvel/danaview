@@ -14,6 +14,12 @@
 //   persisted grant, Documents reference; ImportPolicy) and applies ONE undoable
 //   `RelinkAssets` pool edit ("Relink media") that keeps every MediaId; clips beyond the end of a
 //   shorter replacement are trimmed (or removed when they start beyond it) in the same entry.
+//   Afterwards it re-checks the availability monitors of every watched session over the same
+//   project, not only (and never creating) the monitor of the session it was given: UX-40 relinks
+//   on a scratch copy of the open session and replays the result there, so the open session's
+//   monitor (the one the editor's health banner and plan compiler read) is the one that must move.
+//   The re-check runs on the next event-loop turn, after a caller replaying the result right after
+//   the await has committed it (FIX-CORE-28-1).
 // * `autoMatch(session, picks)` ("Relink several"): each pick is paired with a blocking asset
 //   (missing, access lost, changed): exact fingerprint first, then duration ±100 ms with equal
 //   kind and dimensions; a pick with several candidates, or a candidate wanted by several picks,
@@ -251,8 +257,24 @@ final class MediaRelinkService implements MediaRelinkDelegate {
     }
     final adjust = _clampsFor(session, shorter);
     final outcome = session.applyPoolEdit(RelinkAssets(replacements), adjust: adjust);
-    unawaited(monitorOf(session).refresh());
+    _recheckAfterRelink(session);
     return outcome;
+  }
+
+  /// Re-checks the existing monitors of [session] and of every other watched session over the
+  /// same project (the open session behind a scratch copy), on the next event-loop turn. No
+  /// monitor is created for a session nobody watches (FIX-CORE-28-1).
+  void _recheckAfterRelink(EditSession session) {
+    final project = session.project.id;
+    Timer.run(() {
+      _watched.removeWhere((w) => w.target == null);
+      for (final w in [..._watched]) {
+        final s = w.target;
+        if (s == null || !(identical(s, session) || s.project.id == project)) continue;
+        final monitor = _monitors[s];
+        if (monitor != null) unawaited(monitor.refresh());
+      }
+    });
   }
 
   /// Trims (or removes) clips that run past the end of a shorter replacement: a forward clip loses

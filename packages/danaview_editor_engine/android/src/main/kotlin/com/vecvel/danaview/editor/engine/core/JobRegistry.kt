@@ -248,6 +248,44 @@ class JobRegistry(
             if (changed) Log.i(TAG, if (active) "export started: pausing background jobs" else "export ended")
             pump()
         }
+        releaseHoldWaiters()
+    }
+
+    /**
+     * Calls [done] once no job held by an export ([setExportActive]) is still running: the stopped
+     * jobs have returned from their bodies, so their Transformers and codecs are released (QA-05
+     * D9: an export creating its codecs while pre-empted jobs still release theirs). Immediately
+     * when none runs. [done] may run on the calling thread or on a job worker, under no lock.
+     */
+    fun whenHeldJobsStopped(done: () -> Unit) {
+        val now = synchronized(lock) {
+            if (heldRunning()) {
+                holdWaiters += done
+                false
+            } else {
+                true
+            }
+        }
+        if (now) done()
+    }
+
+    private val holdWaiters = ArrayList<() -> Unit>()
+
+    private fun heldRunning(): Boolean = entries.values.any { it.state == State.RUNNING && heldByExport(it) }
+
+    /** Releases the [whenHeldJobsStopped] waiters whose condition holds (called outside the lock). */
+    private fun releaseHoldWaiters() {
+        val ready = synchronized(lock) {
+            if (holdWaiters.isEmpty() || heldRunning()) return
+            ArrayList(holdWaiters).also { holdWaiters.clear() }
+        }
+        for (w in ready) {
+            try {
+                w()
+            } catch (t: RuntimeException) {
+                Log.w(TAG, "hold waiter failed: ${t.javaClass.simpleName}")
+            }
+        }
     }
 
     // ---- introspection (tests) ----
@@ -370,6 +408,7 @@ class JobRegistry(
             failure != null -> finishFailure(entry, failure)
         }
         synchronized(lock) { pump() }
+        releaseHoldWaiters()
     }
 
     // ---- events ----

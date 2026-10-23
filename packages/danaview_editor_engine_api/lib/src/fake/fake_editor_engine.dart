@@ -154,11 +154,15 @@ final class FakeEditorEngine implements EditorEngine {
     return p;
   }
 
+  /// Copied to [FakePreviewSession.seekGate] of every preview opened from now on.
+  Future<void>? previewSeekGate;
+
   @override
   Future<PreviewSession> openPreview(PreviewConfig config) async {
     _call('openPreview');
     final s = FakePreviewSession(textureId: 100 + sessions.length, config: config, log: log, validatePlans: validatePlans)
-      ..audioMuted = recorder.recording;
+      ..audioMuted = recorder.recording
+      ..seekGate = previewSeekGate;
     sessions.add(s);
     return s;
   }
@@ -285,6 +289,10 @@ final class FakePreviewSession implements PreviewSession {
   /// test of "seek after a lengthening edit" turns it on.
   bool clampSeeksToPlan = false;
 
+  /// When set, [seek] waits for it before showing the frame (a test holds the opening seek while
+  /// the first frame is already up).
+  Future<void>? seekGate;
+
   /// Rendered ranges the engine would play from their files (D-45): set by [setRenderedRanges],
   /// pruned by every patch that touches a range ([patchTouchesRange]) and cleared by [setPlan].
   List<RenderedRange> renderedRanges = const [];
@@ -406,6 +414,8 @@ final class FakePreviewSession implements PreviewSession {
   @override
   Future<SeekAck> seek(TimeUs t, {SeekKind kind = SeekKind.exact}) async {
     _log.hit('preview.seek');
+    final gate = seekGate;
+    if (gate != null) await gate;
     var k = _grid.frameIndexOf(t < 0 ? 0 : t);
     if (kind == SeekKind.scrub && k + scrubOffsetFrames >= 0) k += scrubOffsetFrames;
     final end = plan?.durUs ?? 0;

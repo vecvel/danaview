@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -30,9 +33,6 @@ class DanaviewPressable extends StatefulWidget {
     this.enabled = true,
     this.semanticLabel,
     this.tooltip,
-    this.pressedScale = 0.97,
-    this.pressedOpacity = 0.85,
-    this.hoverColor = DanaviewColors.hover,
     this.borderRadius,
     this.circle = false,
     this.focusNode,
@@ -51,8 +51,6 @@ class DanaviewPressable extends StatefulWidget {
     this.enabled = true,
     this.semanticLabel,
     this.tooltip,
-    this.pressedScale = 0.97,
-    this.pressedOpacity = 1.0,
     this.focusNode,
     this.autofocus = false,
     this.isButton = true,
@@ -60,7 +58,6 @@ class DanaviewPressable extends StatefulWidget {
     this.toggled,
     this.behavior = HitTestBehavior.opaque,
   })  : child = null,
-        hoverColor = DanaviewColors.hover,
         borderRadius = null,
         circle = false;
 
@@ -71,9 +68,6 @@ class DanaviewPressable extends StatefulWidget {
   final bool enabled;
   final String? semanticLabel;
   final String? tooltip;
-  final double pressedScale;
-  final double pressedOpacity;
-  final Color hoverColor;
   final BorderRadius? borderRadius;
   final bool circle;
   final FocusNode? focusNode;
@@ -100,6 +94,72 @@ class _DanaviewPressableState extends State<DanaviewPressable> {
 
   bool get _active => widget.enabled && (widget.onTap != null || widget.onLongPress != null);
 
+  // Pointer-hover tooltip (QA-01 step 4). Material's Tooltip shows on hover only from the mouse
+  // tracker's enter/exit callbacks; on the iPad (pointer or trackpad) those did not show it, while
+  // the hover events themselves arrive (the timeline's hover pill, which uses them, works). So the
+  // pressable also shows its tooltip from the hit-tested hover events after the theme's wait, and
+  // hides it when a hover leaves its box, a pointer goes down or the pointer is removed. Touch never
+  // hovers, so taps and long presses behave as before. No hover highlight is added.
+  final GlobalKey<TooltipState> _tooltipKey = GlobalKey<TooltipState>();
+  Timer? _hoverTimer;
+  int? _hoverDevice;
+  bool _hoverShown = false;
+
+  void _onPointerHover(PointerHoverEvent event) {
+    if (_hoverDevice == event.device) return;
+    _endHover();
+    _hoverDevice = event.device;
+    GestureBinding.instance.pointerRouter.addGlobalRoute(_onGlobalPointer);
+    final wait = TooltipTheme.of(context).waitDuration ?? Duration.zero;
+    _hoverTimer = Timer(wait, () {
+      _hoverTimer = null;
+      if (!mounted || _hoverDevice == null) return;
+      _hoverShown = _tooltipKey.currentState?.ensureTooltipVisible() ?? false;
+    });
+  }
+
+  void _onGlobalPointer(PointerEvent event) {
+    if (event is PointerDownEvent) {
+      // A press hides the tooltip; it shows again only after the pointer has left and come back.
+      _hideHoverTooltip();
+      return;
+    }
+    if (event.device != _hoverDevice) return;
+    if (event is PointerRemovedEvent) {
+      _endHover();
+      return;
+    }
+    if (event is PointerHoverEvent) {
+      final box = context.findRenderObject();
+      final inside = box is RenderBox && box.attached && box.hasSize && (Offset.zero & box.size).contains(box.globalToLocal(event.position));
+      if (!inside) _endHover();
+    }
+  }
+
+  void _hideHoverTooltip() {
+    _hoverTimer?.cancel();
+    _hoverTimer = null;
+    if (_hoverShown) {
+      _hoverShown = false;
+      Tooltip.dismissAllToolTips();
+    }
+  }
+
+  void _endHover() {
+    _hideHoverTooltip();
+    if (_hoverDevice != null) {
+      GestureBinding.instance.pointerRouter.removeGlobalRoute(_onGlobalPointer);
+      _hoverDevice = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _hoverTimer?.cancel();
+    if (_hoverDevice != null) GestureBinding.instance.pointerRouter.removeGlobalRoute(_onGlobalPointer);
+    super.dispose();
+  }
+
   void _setPressed(bool value) {
     if (_pressed != value) setState(() => _pressed = value);
   }
@@ -110,12 +170,10 @@ class _DanaviewPressableState extends State<DanaviewPressable> {
     if (!_active) _pressed = false;
   }
 
+  // Owner rule: no hover or press effect on controls. Only hardware-keyboard focus
+  // (onShowFocusHighlight) paints, as the focus ring and its soft fill.
   Widget _decorate(Widget child, DanaviewPressState state) {
-    final overlay = state.focused
-        ? DanaviewColors.primarySoft
-        : state.hovered
-            ? widget.hoverColor
-            : widget.hoverColor.withValues(alpha: 0);
+    final overlay = state.focused ? DanaviewColors.primarySoft : DanaviewColors.primarySoft.withValues(alpha: 0);
     return AnimatedContainer(
       duration: DanaviewMotion.fast,
       curve: DanaviewMotion.curve,
@@ -141,20 +199,9 @@ class _DanaviewPressableState extends State<DanaviewPressable> {
       enabled: active,
     );
 
+    // No press scale or press opacity (owner rule). [state] still reports hovered and pressed for
+    // builders that need them for logic; the kit's controls do not paint them.
     Widget content = widget.builder?.call(context, state) ?? _decorate(widget.child!, state);
-
-    content = AnimatedOpacity(
-      opacity: state.pressed ? widget.pressedOpacity : 1.0,
-      duration: DanaviewMotion.press,
-      curve: DanaviewMotion.curve,
-      child: content,
-    );
-    content = AnimatedScale(
-      scale: state.pressed ? widget.pressedScale : 1.0,
-      duration: DanaviewMotion.press,
-      curve: DanaviewMotion.curve,
-      child: content,
-    );
 
     content = GestureDetector(
       behavior: widget.behavior,
@@ -202,9 +249,14 @@ class _DanaviewPressableState extends State<DanaviewPressable> {
     final tooltip = widget.tooltip;
     if (tooltip != null && tooltip.isNotEmpty) {
       content = Tooltip(
+        key: _tooltipKey,
         message: tooltip,
         excludeFromSemantics: widget.semanticLabel != null,
-        child: content,
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerHover: _onPointerHover,
+          child: content,
+        ),
       );
     }
     return content;

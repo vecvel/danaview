@@ -148,15 +148,13 @@ class DanaviewLibraryRow extends StatelessWidget {
 
     return DanaviewPressable.builder(
       onTap: onTap,
-      pressedScale: 1,
       semanticLabel: semanticLabel,
       isButton: onTap != null,
       builder: (context, state) {
-        final background = state.pressed
-            ? DanaviewColors.hover
-            : (state.hovered || state.focused)
-                ? DanaviewColors.hairlineSubtle
-                : highlighted
+        // Owner rule: no hover or press fill; only hardware-keyboard focus tints.
+        final background = state.focused
+            ? DanaviewColors.hairlineSubtle
+            : highlighted
                     ? DanaviewColors.primarySoft
                     : const Color(0x00FFFFFF);
         return AnimatedContainer(

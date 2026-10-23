@@ -171,16 +171,20 @@ class EditorSession {
     }
   }
 
-  /// Records where the editor opened (called by `EditorController.open` after the exact seek).
+  /// Records where the editor opened (called by `EditorController.open` after the exact seek, and
+  /// by `restartPreview` after the re-created preview's first seek, FIX-UX-08-1).
   void markOpenedAt(TimeUs t, SeekAck? ack) {
     _openedAt = t;
     _initialSeek = ack;
   }
 
-  /// Replaces the preview after "Restart preview" re-created it.
+  /// Replaces the preview after "Restart preview" re-created it. The open's seek ack belonged to
+  /// the old preview, so it is dropped until `restartPreview` records the new preview's own seek
+  /// with [markOpenedAt] (FIX-UX-08-1).
   void replacePreview(PreviewSession? preview, PlanSync? planSync) {
     _preview = preview;
     _planSync = planSync;
+    _initialSeek = null;
   }
 
   /// Detaches everything (called by `EditorController.close`); the caller disposes the preview.

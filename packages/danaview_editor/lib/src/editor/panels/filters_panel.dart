@@ -565,48 +565,47 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
       actions: InspectorHeaderActions(onReset: look == null || !enabled ? null : _removeLook),
       child: CustomScrollView(
         slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.lg),
-            sliver: SliverToBoxAdapter(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                if (locked)
-                  Padding(
-                    padding: const EdgeInsets.only(top: DanaviewSpacing.sm),
-                    child: Text(ColorStrings.trackLocked, style: _hintStyle.copyWith(color: DanaviewColors.warning)),
-                  ),
-                DanaviewSectionHeader(ColorStrings.looks, padding: const EdgeInsets.only(top: DanaviewSpacing.md, bottom: DanaviewSpacing.sm)),
-                _Carousel(label: ColorStrings.looksLabel, children: looks),
-                if (look != null) ...[
-                  const SizedBox(height: DanaviewSpacing.sm),
-                  InspectorPropertyRow(
-                    key: const ValueKey<String>('row.look.intensity'),
-                    item: item.id,
-                    property: PropertyKeys.lookIntensity,
-                    label: ColorStrings.intensity,
-                  ),
-                ],
-                DanaviewSectionHeader(
-                  ColorStrings.myLuts,
-                  padding: const EdgeInsets.only(top: DanaviewSpacing.lg, bottom: DanaviewSpacing.sm),
-                  action: DanaviewButton.secondary(
-                    key: const ValueKey<String>('lut.import'),
-                    label: _busy ? ColorStrings.importing : ColorStrings.importCube,
-                    icon: Icons.upload_file_rounded,
-                    size: DanaviewButtonSize.sm,
-                    onPressed: enabled && !_busy ? _import : null,
-                  ),
+          // No horizontal sliver padding: the carousels run edge to edge of the panel (and clip
+          // there); every other row carries the panel inset itself.
+          SliverToBoxAdapter(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              if (locked)
+                _inset(Padding(
+                  padding: const EdgeInsets.only(top: DanaviewSpacing.sm),
+                  child: Text(ColorStrings.trackLocked, style: _hintStyle.copyWith(color: DanaviewColors.warning)),
+                )),
+              _inset(DanaviewSectionHeader(ColorStrings.looks, padding: const EdgeInsets.only(top: DanaviewSpacing.md, bottom: DanaviewSpacing.sm))),
+              _Carousel(key: const ValueKey<String>('looks.carousel'), label: ColorStrings.looksLabel, children: looks),
+              if (look != null) ...[
+                const SizedBox(height: DanaviewSpacing.sm),
+                _inset(InspectorPropertyRow(
+                  key: const ValueKey<String>('row.look.intensity'),
+                  item: item.id,
+                  property: PropertyKeys.lookIntensity,
+                  label: ColorStrings.intensity,
+                )),
+              ],
+              _inset(DanaviewSectionHeader(
+                ColorStrings.myLuts,
+                padding: const EdgeInsets.only(top: DanaviewSpacing.lg, bottom: DanaviewSpacing.sm),
+                action: DanaviewButton.secondary(
+                  key: const ValueKey<String>('lut.import'),
+                  label: _busy ? ColorStrings.importing : ColorStrings.importCube,
+                  icon: Icons.upload_file_rounded,
+                  size: DanaviewButtonSize.sm,
+                  onPressed: enabled && !_busy ? _import : null,
                 ),
-                if (_message != null) _MessageView(message: _message!, onDismiss: () => setState(() => _message = null)),
-                if (lutTiles.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: DanaviewSpacing.sm),
-                    child: Text(ColorStrings.noLuts, style: _hintStyle),
-                  )
-                else
-                  _Carousel(label: ColorStrings.lutsLabel, children: lutTiles),
-                const SizedBox(height: DanaviewSpacing.lg),
-              ]),
-            ),
+              )),
+              if (_message != null) _inset(_MessageView(message: _message!, onDismiss: () => setState(() => _message = null))),
+              if (lutTiles.isEmpty)
+                _inset(Padding(
+                  padding: const EdgeInsets.only(bottom: DanaviewSpacing.sm),
+                  child: Text(ColorStrings.noLuts, style: _hintStyle),
+                ))
+              else
+                _Carousel(key: const ValueKey<String>('luts.carousel'), label: ColorStrings.lutsLabel, children: lutTiles),
+              const SizedBox(height: DanaviewSpacing.lg),
+            ]),
           ),
         ],
       ),
@@ -648,6 +647,15 @@ List<ItemId> lutUsers(EditProject project, MediaId lut) {
   return out;
 }
 
+/// The panel's horizontal content inset.
+const double _panelPadding = DanaviewSpacing.lg;
+
+/// A carousel's inset: the panel inset less the ring's room, so the pictures line up with the rows.
+const EdgeInsets _carouselInset = EdgeInsets.symmetric(horizontal: _panelPadding - _ringInset);
+
+/// [child] with the panel's horizontal inset.
+Widget _inset(Widget child) => Padding(padding: const EdgeInsets.symmetric(horizontal: _panelPadding), child: child);
+
 TextStyle get _hintStyle => DanaviewTextStyles.caption.copyWith(fontFamily: DanaviewFonts.family, color: DanaviewColors.textMuted);
 
 @immutable
@@ -677,8 +685,8 @@ class _MessageView extends StatelessWidget {
         decoration: BoxDecoration(
           color: DanaviewColors.surfaceElevated,
           borderRadius: DanaviewRadius.mdAll,
-          border:
-              Border.all(color: message.error ? DanaviewColors.error.withValues(alpha: 0.5) : DanaviewColors.border, width: DanaviewBorders.width),
+          // Errors read from the icon and text colour; the edge stays a neutral hairline.
+          border: const Border.fromBorderSide(DanaviewBorders.hairline),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -703,8 +711,12 @@ class _MessageView extends StatelessWidget {
 }
 
 /// A horizontally scrolling row of tiles (height from its content, so large text never overflows).
+///
+/// It spans the panel edge to edge and clips to its own bounds, so tiles scroll only inside the
+/// panel (never over the tool rail or the preview); the inset lines the first and last tile up
+/// with the panel's content.
 class _Carousel extends StatelessWidget {
-  const _Carousel({required this.label, required this.children});
+  const _Carousel({super.key, required this.label, required this.children});
 
   final String label;
   final List<Widget> children;
@@ -716,12 +728,13 @@ class _Carousel extends StatelessWidget {
       label: label,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
+        clipBehavior: Clip.hardEdge,
+        padding: _carouselInset,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (var i = 0; i < children.length; i++) ...[
-              if (i > 0) const SizedBox(width: DanaviewSpacing.sm),
+              if (i > 0) const SizedBox(width: DanaviewSpacing.xs),
               children[i],
             ],
           ],
@@ -732,7 +745,25 @@ class _Carousel extends StatelessWidget {
 }
 
 /// Size of a look tile's picture.
-const Size _thumbSize = Size(88, 56);
+const double _thumbWidth = 88;
+const Size _thumbSize = Size(_thumbWidth, 56);
+
+/// Width of the selection ring drawn around the selected tile's picture.
+const double _ringWidth = DanaviewSpacing.xxs;
+
+/// Gap between the picture and its selection ring.
+const double _ringGap = DanaviewSpacing.xxs;
+
+/// Space the ring takes on each side of the picture (reserved on every tile so selecting one
+/// never shifts the strip, and the ring never overlaps a neighbour).
+const double _ringInset = _ringWidth + _ringGap;
+
+/// Width of a whole tile: the picture plus the ring's room on both sides.
+const double _tileWidth = _thumbWidth + 2 * _ringInset;
+
+/// The ring's corner radius: the picture's radius grown by the ring's inset, so both curves share
+/// a centre and the ring hugs the picture with an even gap.
+const BorderRadius _ringRadius = BorderRadius.all(Radius.circular(DanaviewRadius.md + _ringInset));
 
 class _LookTile extends StatelessWidget {
   const _LookTile({
@@ -764,25 +795,37 @@ class _LookTile extends StatelessWidget {
         enabled: enabled,
         selected: selected,
         semanticLabel: ColorStrings.lookTile(label, selected: selected),
-        borderRadius: DanaviewRadius.mdAll,
+        borderRadius: _ringRadius,
+        // Owner rule: no press or hover feedback (the kit paints none); the ring is the selected state only.
         child: SizedBox(
-          width: _thumbSize.width,
+          width: _tileWidth,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: _thumbSize.width,
-                height: _thumbSize.height,
-                clipBehavior: Clip.antiAlias,
+              // The ring sits outside the picture's clip, so its corners are never cut.
+              DecoratedBox(
+                key: const ValueKey<String>('look.ring'),
                 decoration: BoxDecoration(
-                  borderRadius: DanaviewRadius.mdAll,
-                  border:
-                      Border.all(color: selected ? DanaviewColors.primaryLight : DanaviewColors.border, width: selected ? 2 : DanaviewBorders.width),
+                  borderRadius: _ringRadius,
+                  border: Border.all(color: selected ? DanaviewColors.primaryLight : const Color(0x00000000), width: _ringWidth),
                 ),
-                child: thumb,
+                child: Padding(
+                  padding: const EdgeInsets.all(_ringInset),
+                  child: SizedBox.fromSize(
+                    size: _thumbSize,
+                    child: DecoratedBox(
+                      position: DecorationPosition.foreground,
+                      decoration: BoxDecoration(
+                        borderRadius: DanaviewRadius.mdAll,
+                        border: Border.all(color: DanaviewColors.border, width: DanaviewBorders.width),
+                      ),
+                      child: ClipRRect(borderRadius: DanaviewRadius.mdAll, child: thumb),
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(height: DanaviewSpacing.xs),
+              const SizedBox(height: DanaviewSpacing.xxs),
               Text(
                 label,
                 maxLines: 2,

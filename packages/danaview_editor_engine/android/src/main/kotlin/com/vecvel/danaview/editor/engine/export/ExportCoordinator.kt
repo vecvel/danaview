@@ -37,7 +37,11 @@
 //     whether it is hardware). With no Dart listener attached (D-39) the job's [detachedHandler]
 //     records a completedWhileDetached record (default: keep the file and exempt it from the
 //     work/ wipe; AND-12's ExportService replaces it with its MediaStore handoff);
-//   - failure: ExportErrors.map (ARCH §14.3), the partial output is deleted, jobFailed.
+//   - failure: ExportErrors.map (ARCH §14.3), the partial output is deleted, jobFailed. A failure
+//     because engine files below the cache root went missing (the system purged them under low
+//     storage, QA-05 D8), or an output the purge removed before completion, is a storage failure
+//     (StorageLoss: diskFull, whatever the free space after the purge), never internal or mediaOffline;
+//     purged generated images are written again when opened (GeneratedImageAssetLoaderFactory).
 // cancel(jobId): stops the job, deletes the partial output and work/export-<jobId>/, jobFailed
 //   (cancelled). Idempotent.
 // activeJobs(): ActiveExportStore records (running jobs of this process; one-shot interrupted
@@ -75,6 +79,7 @@ import com.vecvel.danaview.editor.engine.composition.AudioStreamAssetLoaderFacto
 import com.vecvel.danaview.editor.engine.composition.CompositionMapper
 import com.vecvel.danaview.editor.engine.composition.CompositionSpec
 import com.vecvel.danaview.editor.engine.composition.ExtractorSourceTimeline
+import com.vecvel.danaview.editor.engine.composition.GeneratedImageAssetLoaderFactory
 import com.vecvel.danaview.editor.engine.composition.Media3Composition
 import com.vecvel.danaview.editor.engine.composition.PngCompositionImages
 import com.vecvel.danaview.editor.engine.composition.SourceTimeline
@@ -357,6 +362,12 @@ interface ExportEnvironment {
 
     /** The job ended (any outcome): undo [exportStarted]. */
     fun exportEnded(jobId: String, output: File)
+
+    /**
+     * Calls [ready] once the codecs that [exportStarted] asked others to release (preview decks,
+     * pre-empted jobs) are released, or after [CodecHandover.BOUND_MS] (QA-05 D9). At once by default.
+     */
+    fun whenCodecsReleased(jobId: String, ready: () -> Unit) = ready()
 }
 
 /** Production [ExportEnvironment] over the engine context. */
@@ -390,9 +401,18 @@ class ContextExportEnvironment(private val ctx: EngineContext) : ExportEnvironme
 
     override fun hasDartListener(): Boolean = ctx.events.hasListener
 
+    private val handovers = java.util.concurrent.ConcurrentHashMap<String, CodecHandover>()
+
     override fun exportStarted(jobId: String, output: File) {
-        guarded("job registry") { ctx.jobs.setExportActive(jobId, true) }
-        guarded("preview suspension") { ctx.previews.suspendForExport(jobId) }
+        val handover = CodecHandover(2)
+        handovers[jobId] = handover
+        val jobsStopped = handover.part()
+        val previewsReleased = handover.part()
+        guarded("job registry") {
+            ctx.jobs.setExportActive(jobId, true)
+            ctx.jobs.whenHeldJobsStopped(jobsStopped)
+        }
+        guarded("preview suspension") { ctx.previews.suspendForExport(jobId, previewsReleased) }
         guarded("work pin") { DiskCache.markActive(output) }
         guarded("export service") {
             val intent = Intent(ctx.appContext, ExportService::class.java)
@@ -402,7 +422,26 @@ class ContextExportEnvironment(private val ctx: EngineContext) : ExportEnvironme
         }
     }
 
+    override fun whenCodecsReleased(jobId: String, ready: () -> Unit) {
+        val handover = handovers[jobId] ?: return ready()
+        val started = android.os.SystemClock.uptimeMillis()
+        val handler = ctx.threads.export.handler ?: android.os.Handler(Looper.getMainLooper())
+        val timeout = Runnable { handover.timeout() }
+        handover.whenOpen {
+            handler.removeCallbacks(timeout)
+            val waited = android.os.SystemClock.uptimeMillis() - started
+            if (handover.allReported) {
+                Log.i(EngineContext.TAG, "export $jobId: previews and paused jobs released their codecs in $waited ms")
+            } else {
+                Log.w(EngineContext.TAG, "export $jobId: codec handover timed out after $waited ms; starting anyway")
+            }
+            ready()
+        }
+        if (!handover.isOpen) handler.postDelayed(timeout, CodecHandover.BOUND_MS)
+    }
+
     override fun exportEnded(jobId: String, output: File) {
+        handovers.remove(jobId)?.timeout()
         guarded("work pin") { DiskCache.unmarkActive(output) }
         guarded("preview resume") { ctx.previews.resumeAfterExport(jobId) }
         guarded("job registry") { ctx.jobs.setExportActive(jobId, false) }
@@ -540,7 +579,8 @@ class ExportCoordinator(private val ctx: EngineContext) {
                 "slots=${running.job.load.slots} peak=${running.job.load.peakDecoders} multiPass=${running.multiPassRoute}",
         )
         done.succeed(running.info.jobId)
-        onLane { launch(running) }
+        // QA-05 D9: the export's codecs start after the previews and paused jobs released theirs.
+        environment.whenCodecsReleased(running.info.jobId) { onLane { launch(running) } }
     }
 
     /** Cancels [jobId] and deletes its partial output. Idempotent; callable from any thread. */
@@ -668,11 +708,13 @@ class ExportCoordinator(private val ctx: EngineContext) {
             },
             assetLoaders = { built ->
                 val base = baseLoader?.invoke(ctx.appContext)
-                when {
+                val inner = when {
                     !built.selectsAudioStreams -> base
                     base == null -> AudioStreamAssetLoaderFactory(ctx.appContext)
                     else -> AudioStreamAssetLoaderFactory(ctx.appContext, base = base)
                 }
+                // QA-05 D8: generated images purged under the job are written again when opened.
+                GeneratedImageAssetLoaderFactory(ctx.appContext, images, inner)
             },
         )
         val info = ExportJobInfo(jobId, title, output.absolutePath, msg, whenDetached)
@@ -747,6 +789,11 @@ class ExportCoordinator(private val ctx: EngineContext) {
     private fun complete(r: Running, encoderName: String?) {
         if (r.ended) return
         val output = r.job.output
+        if (!output.isFile && Paths.isInside(output, r.paths.cacheRoot)) {
+            // QA-05 D8: the muxer wrote to a file the system purged from the cache root under it.
+            end(r, ExportOutcome.FAILED, StorageLoss.failure())
+            return
+        }
         if (!output.isFile || output.length() <= 0L) {
             end(r, ExportOutcome.FAILED, EngineException(EngineErrorCode.encodingFailed, "export finished without an output file"))
             return
@@ -798,7 +845,8 @@ class ExportCoordinator(private val ctx: EngineContext) {
         r.job.output.delete()
         r.job.workDir.deleteRecursively()
         if (outcome == ExportOutcome.INTERRUPTED) r.store.markInterrupted(r.info.jobId) else r.store.finish(r.info.jobId)
-        val mapped = ExportErrors.map(error)
+        val lost = if (outcome == ExportOutcome.FAILED) StorageLoss.classify(error, r.paths.cacheRoot) else null
+        val mapped = lost ?: ExportErrors.map(error)
         Log.i(EngineContext.TAG, "export ${r.info.jobId}: ended $outcome (${mapped.code})")
         if (outcome == ExportOutcome.FAILED) Log.w(EngineContext.TAG, "export ${r.info.jobId}: failure ${describeFailure(error)}")
         ctx.events.jobFailed(r.info.jobId, mapped)

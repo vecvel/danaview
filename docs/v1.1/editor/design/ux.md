@@ -511,7 +511,7 @@ Mode selection: `release` when `EditorCapabilities.lowMemoryDevice`, otherwise `
 | Event | Behavior |
 |---|---|
 | Route enter | `ScreenOrientationPolicy.enter(this, free)`; `EditorController.open()`; preview created; wakelock off until playing |
-| Close button / Android back / Esc (nothing to dismiss) | Order: (1) close the open inspector or flow; (2) clear the selection; (3) `controller.close()` flushes the save (shows "Saving…" in the top bar; waits up to 3 s); on failure ask: "Couldn't save your latest changes. Leave anyway? Your last autosave is kept." → pop |
+| Close button / Android back / Esc (nothing to dismiss) | Order: (1) close the open inspector or flow; (2) clear the selection; (3) `controller.close()` flushes the save (shows "Saving…" in the top bar; waits up to 4/6/8/10 s by device tier (high/mid/low/minimal); if the save is still running, a "Still saving your latest changes" dialog leaves on its own once it lands, FIX-M1 2026-10-17); on failure ask: "Couldn't save your latest changes. Leave anyway? Your last autosave is kept." → pop |
 | `AppLifecycleState.inactive` | Pause playback, commit or cancel any open transaction (a gesture interrupted by a call is cancelled), request autosave |
 | `hidden` / `paused` | Flush the save immediately; keep the preview session but stop the clock listener |
 | `resumed` | `preview.refresh()` and re-seek to the playhead (Android `SurfaceProducer` may have lost its surface; see §24) |

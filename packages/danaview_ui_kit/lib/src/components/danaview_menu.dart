@@ -97,11 +97,40 @@ class DanaviewMenuAnchor extends StatefulWidget {
   final VoidCallback? onOpen;
   final VoidCallback? onClose;
 
+  /// Whether any menu is open (opening or shown, not closing). Keyboard scopes that handle Esc
+  /// themselves (the editor's shortcuts) leave the key alone while this is true, since Esc closes
+  /// the menu first.
+  static bool get anyOpen => _DanaviewMenuAnchorState._open.isNotEmpty;
+
   @override
   State<DanaviewMenuAnchor> createState() => _DanaviewMenuAnchorState();
 }
 
 class _DanaviewMenuAnchorState extends State<DanaviewMenuAnchor> with SingleTickerProviderStateMixin {
+  /// Open menus, newest last. Esc closes the newest one through an early key handler, so it works
+  /// wherever keyboard focus is: the menu's focus scope may not hold focus (the menu was opened
+  /// from a post-frame callback, a platform moved focus back, or focus was elsewhere), and Esc
+  /// would then reach the screen behind it instead (FIX-QA02-M2-2).
+  static final List<_DanaviewMenuAnchorState> _open = [];
+
+  static KeyEventResult _onEarlyKey(KeyEvent event) {
+    if (_open.isEmpty || event.logicalKey != LogicalKeyboardKey.escape) return KeyEventResult.ignored;
+    // Repeats and the key up are swallowed while the menu is open, so nothing behind sees them.
+    if (event is KeyDownEvent) _open.last._close();
+    return KeyEventResult.handled;
+  }
+
+  void _register() {
+    if (_open.contains(this)) return;
+    if (_open.isEmpty) FocusManager.instance.addEarlyKeyEventHandler(_onEarlyKey);
+    _open.add(this);
+  }
+
+  void _unregister() {
+    if (!_open.remove(this)) return;
+    if (_open.isEmpty) FocusManager.instance.removeEarlyKeyEventHandler(_onEarlyKey);
+  }
+
   final OverlayPortalController _portal = OverlayPortalController();
   final GlobalKey _anchorKey = GlobalKey();
   final FocusScopeNode _menuScope = FocusScopeNode(debugLabel: 'DanaviewMenu');
@@ -139,6 +168,7 @@ class _DanaviewMenuAnchorState extends State<DanaviewMenuAnchor> with SingleTick
     _focusBeforeOpen = FocusManager.instance.primaryFocus;
     _portal.show();
     _animation.forward();
+    _register();
     setState(() {});
     widget.onOpen?.call();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -148,6 +178,7 @@ class _DanaviewMenuAnchorState extends State<DanaviewMenuAnchor> with SingleTick
 
   void _close() {
     if (!_isOpen) return;
+    _unregister();
     _animation.reverse();
     setState(() {});
     widget.onClose?.call();
@@ -155,6 +186,7 @@ class _DanaviewMenuAnchorState extends State<DanaviewMenuAnchor> with SingleTick
 
   @override
   void dispose() {
+    _unregister();
     _curved.dispose();
     _animation.dispose();
     _menuScope.dispose();
@@ -418,13 +450,9 @@ class _DanaviewMenuItemTile extends StatelessWidget {
             }
           : null,
       selected: item.selected,
-      pressedScale: 1,
       builder: (context, state) {
-        final background = state.pressed
-            ? DanaviewColors.pressed
-            : (state.hovered || state.focused)
-                ? DanaviewColors.hover
-                : const Color(0x00FFFFFF);
+        // Owner rule: no hover or press fill; only hardware-keyboard focus marks the item.
+        final background = state.focused ? DanaviewColors.hover : const Color(0x00FFFFFF);
         return danaviewDimmed(
           item.enabled,
           AnimatedContainer(
@@ -597,7 +625,6 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
       onTap: onTap,
       tooltip: tooltip,
       semanticLabel: label == null ? text : '$label: $text',
-      pressedScale: 0.98,
       builder: (context, state) {
         final highlighted = isOpen || state.focused;
         Widget visual = AnimatedContainer(
@@ -614,7 +641,8 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
           ),
           foregroundDecoration: BoxDecoration(
             borderRadius: radius,
-            border: Border.fromBorderSide(highlighted ? DanaviewBorders.focus : DanaviewBorders.hairline),
+            // Open shows as the tinted fill; only keyboard focus draws the ring.
+            border: Border.fromBorderSide(state.focused ? DanaviewBorders.focus : DanaviewBorders.hairline),
           ),
           child: Row(
             mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,

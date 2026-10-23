@@ -218,6 +218,20 @@ void main() {
       expect(tester.widget<CompareButton>(find.byType(CompareButton)).active, isFalse);
     });
 
+    testWidgets('the active compare button keeps the neutral hairline; only its icon turns primary', (tester) async {
+      await pumpAdjust(tester, project: withVisuals({ColorIds.a: graded}));
+      BoxDecoration deco() => tester.widget<Container>(compare).decoration! as BoxDecoration;
+      expect(deco().border, const Border.fromBorderSide(DanaviewBorders.hairline));
+      final g = await tester.startGesture(tester.getCenter(compare));
+      await tester.pump();
+      expect(tester.widget<CompareButton>(find.byType(CompareButton)).active, isTrue);
+      expect(deco().border, const Border.fromBorderSide(DanaviewBorders.hairline), reason: 'no primary outline when active');
+      expect(tester.widget<Icon>(find.descendant(of: compare, matching: find.byType(Icon))).color, DanaviewColors.primaryLight);
+      expectNeutralBorders(tester, of: compare);
+      await g.up();
+      await tester.pump();
+    });
+
     testWidgets('a cancelled press also restores', (tester) async {
       final rig = await pumpAdjust(tester, project: withVisuals({ColorIds.a: graded}));
       final g = await tester.startGesture(tester.getCenter(compare));

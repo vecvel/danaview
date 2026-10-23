@@ -176,8 +176,10 @@ abstract final class DanaviewTheme {
       splashFactory: NoSplash.splashFactory,
       splashColor: Colors.transparent,
       highlightColor: Colors.transparent,
-      hoverColor: DanaviewColors.hover,
-      focusColor: DanaviewColors.primarySoft,
+      // Owner rule: no hover or press effect on any control, Material ones included. Keyboard
+      // focus rings are drawn by the kit's own controls (onShowFocusHighlight), not this colour.
+      hoverColor: Colors.transparent,
+      focusColor: Colors.transparent,
       textTheme: const TextTheme(
         headlineMedium: DanaviewTextStyles.largeTitle,
         titleLarge: TextStyle(
@@ -242,13 +244,10 @@ abstract final class DanaviewTheme {
         border: outline,
         enabledBorder: outline,
         disabledBorder: outline.copyWith(borderSide: DanaviewBorders.subtle),
-        focusedBorder: outline.copyWith(borderSide: DanaviewBorders.focus),
-        errorBorder: outline.copyWith(
-          borderSide: const BorderSide(color: Color(0x61EF4444), width: 1),
-        ),
-        focusedErrorBorder: outline.copyWith(
-          borderSide: const BorderSide(color: Color(0x61EF4444), width: 1),
-        ),
+        // Outlines stay a neutral hairline in every state; errors read from errorStyle.
+        focusedBorder: outline,
+        errorBorder: outline,
+        focusedErrorBorder: outline,
       ),
       pageTransitionsTheme: PageTransitionsTheme(
         builders: <TargetPlatform, PageTransitionsBuilder>{

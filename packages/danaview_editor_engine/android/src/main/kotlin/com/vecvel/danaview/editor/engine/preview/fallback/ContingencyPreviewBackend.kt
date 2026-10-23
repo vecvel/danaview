@@ -86,6 +86,8 @@ class ContingencyPreviewBackend(private val config: Config) : PreviewBackend {
         @Volatile override var injectedCompositeDelayMs: Long = 0L,
         /** D-45 rendered ranges (AND-18). */
         @Volatile override var rangeHook: RenderedRangeHook = RenderedRangeHook.NONE,
+        /** Test hook: extra time per deck-plan build (a slow index of a new rendition). */
+        @Volatile override var injectedPlanDelayMs: Long = 0L,
     ) : EngineOptions
 
     @Volatile private var delegate: PreviewBackend? = null

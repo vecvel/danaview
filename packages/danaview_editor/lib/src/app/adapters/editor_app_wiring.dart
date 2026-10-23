@@ -145,7 +145,8 @@ abstract final class EditorAppWiring {
         ),
       ];
 
-  /// Settings › Storage rows of the editor: projects, cache (in use while a captions job runs) and,
+  /// Settings › Storage rows of the editor: projects, cache (in use while a captions job runs), the
+  /// export files (FIX-QA05-D8-2) and,
   /// with [transcription], the speech model (ARCH §17.10). Empty without [onOpenProjects].
   static List<StorageContributor> storageContributors({
     required EditorRuntime runtime,
@@ -161,6 +162,7 @@ abstract final class EditorAppWiring {
         cache: EditorCacheCleaner(roots: runtime.roots, trimEngine: () => engine.trimCaches(CacheTrimLevel.clearAll)),
         cacheUse: editorCacheUseOf(openProjects: () => repository.openIds, exporter: engine.exporter, transcription: transcription),
         onOpenProjects: onOpenProjects,
+        exports: runtime.exportSweeper,
       ),
       if (transcription != null) SpeechStorageContributor(service: transcription),
     ];

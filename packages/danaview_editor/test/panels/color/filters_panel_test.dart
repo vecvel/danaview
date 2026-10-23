@@ -46,6 +46,10 @@ Finder get importButton => find.byKey(const ValueKey<String>('lut.import'));
 
 Finder get intensityRow => find.widgetWithText(InspectorSliderRow, 'Intensity');
 
+Finder get looksCarousel => find.byKey(const ValueKey<String>('looks.carousel'));
+
+Finder get looksScroll => find.descendant(of: looksCarousel, matching: find.byType(SingleChildScrollView));
+
 Finder get message => find.byKey(const ValueKey<String>('lut.message'));
 
 bool selected(WidgetTester tester, String key) => tester.widget<DanaviewPressable>(find.descendant(of: tile(key), matching: find.byType(DanaviewPressable))).selected ?? false;
@@ -303,6 +307,17 @@ void main() {
       expect(tester.widget<DanaviewButton>(importButton).onPressed, isNotNull);
     });
 
+    testWidgets('an error message keeps the neutral hairline; the error reads from its icon and text', (tester) async {
+      await pumpFilters(tester, picks: [writePick(tmp, 'Broken.cube', brokenCube)]);
+      await tester.tap(importButton);
+      await tester.pump();
+      await settle(tester, () => message.evaluate().isNotEmpty);
+      final box = tester.widget<Container>(message).decoration! as BoxDecoration;
+      expect(box.border, const Border.fromBorderSide(DanaviewBorders.hairline), reason: 'no red outline');
+      expect(tester.widget<Icon>(find.descendant(of: message, matching: find.byType(Icon)).first).color, DanaviewColors.errorLight);
+      expectNeutralBorders(tester, of: message);
+    });
+
     testWidgets('an oversize LUT says what is supported', (tester) async {
       await pumpFilters(tester, picks: [writePick(tmp, 'Big.cube', oversizeCube)]);
       await tester.tap(importButton);
@@ -450,6 +465,87 @@ void main() {
       walk(current);
       expect(withActions, isNotNull);
       handle.dispose();
+    });
+  });
+
+  group('looks strip polish (owner screenshots 4/5)', () {
+    Finder ring(String key) => find.descendant(of: tile(key), matching: find.byKey(const ValueKey<String>('look.ring')));
+    Finder picture(String key) => find.descendant(of: tile(key), matching: find.byType(ClipRRect));
+
+    testWidgets('the selection ring sits outside the clipped picture with matching, uncut corners', (tester) async {
+      final rig = await pumpFilters(tester);
+      await tapTile(tester, 'look.teal_orange');
+      expect(rig.visual(ColorIds.a).look, const BuiltinLook('teal_orange'));
+      final box = tester.widget<DecoratedBox>(ring('look.teal_orange')).decoration as BoxDecoration;
+      final border = box.border! as Border;
+      expect(border.top.color, DanaviewColors.primaryLight);
+      expect(border.top.width, DanaviewSpacing.xxs);
+      const inset = DanaviewSpacing.xxs * 2;
+      expect(box.borderRadius, const BorderRadius.all(Radius.circular(DanaviewRadius.md + inset)), reason: 'concentric with the picture');
+      // The ring is not inside any clip of the tile (the old ring was cut by the picture's clip).
+      expect(find.ancestor(of: ring('look.teal_orange'), matching: find.byType(ClipRRect)), findsNothing);
+      expect(find.descendant(of: ring('look.teal_orange'), matching: find.byType(ClipRRect)), findsOneWidget);
+      final ringRect = tester.getRect(ring('look.teal_orange'));
+      final picRect = tester.getRect(picture('look.teal_orange'));
+      expect(ringRect.left, closeTo(picRect.left - inset, 0.01));
+      expect(ringRect.top, closeTo(picRect.top - inset, 0.01));
+      expect(ringRect.right, closeTo(picRect.right + inset, 0.01));
+      expect(ringRect.bottom, closeTo(picRect.bottom + inset, 0.01));
+      expect(picRect.size, const Size(88, 56));
+      // Unselected tiles reserve the ring's room with a transparent ring (no layout shift).
+      final other = (tester.widget<DecoratedBox>(ring('look.warm')).decoration as BoxDecoration).border! as Border;
+      expect(other.top.color.a, 0);
+      expect(tester.getSize(ring('look.warm')), ringRect.size);
+    });
+
+    testWidgets('rings never overlap the neighbouring tile', (tester) async {
+      await pumpFilters(tester);
+      final keys = ['look.none', for (final l in BuiltinLooks.all.take(4)) 'look.${l.id}'];
+      for (var i = 1; i < keys.length; i++) {
+        final prev = tester.getRect(ring(keys[i - 1]));
+        final next = tester.getRect(ring(keys[i]));
+        expect(next.left - prev.right, greaterThanOrEqualTo(DanaviewSpacing.xs), reason: '${keys[i - 1]} | ${keys[i]}');
+      }
+    });
+
+    testWidgets('tiles have no press or hover effect; selection stays in semantics', (tester) async {
+      await pumpFilters(tester);
+      final p = tester.widget<DanaviewPressable>(find.descendant(of: tile('look.none'), matching: find.byType(DanaviewPressable)));
+      expect(p.selected, isTrue);
+      await expectNoHoverOrPressEffect(tester, tile('look.warm'), what: 'look tile');
+      await expectNoHoverOrPressEffect(tester, tile('look.none'), what: 'selected look tile');
+    });
+
+    testWidgets('the strip spans the panel and clips to it, so scrolled tiles never paint over the rail or the preview', (tester) async {
+      await pumpFilters(tester);
+      final panel = tester.getRect(find.byType(FiltersPanel));
+      final strip = tester.getRect(looksCarousel);
+      expect(strip.left, closeTo(panel.left, 0.01));
+      expect(strip.right, closeTo(panel.right, 0.01));
+      expect(tester.widget<SingleChildScrollView>(looksScroll).clipBehavior, Clip.hardEdge);
+      // The first picture lines up with the panel's 16 px content inset.
+      expect(tester.getRect(picture('look.none')).left, closeTo(panel.left + DanaviewSpacing.lg, 0.01));
+      // Scroll to the end: None leaves the strip and the viewport clips it.
+      await tester.ensureVisible(tile('look.pastel'));
+      await tester.pump();
+      expect(tester.getRect(tile('look.none')).right, lessThan(strip.left));
+      expect(tester.getRect(tile('look.pastel')).right, lessThanOrEqualTo(strip.right + 0.01));
+    });
+
+    testSurfaces('the strips stay inside the panel at every surface', (tester, surface) async {
+      final rig = await ColorRig.pump(tester, inspectorFrame,
+          surface: surface, project: withVisuals({ColorIds.a: const VisualProps(look: BuiltinLook('warm'))}));
+      await rig.select(ColorIds.a);
+      rig.editor.openInspector(FiltersInspector(ColorIds.a));
+      await tester.pump();
+      await tester.pump();
+      final panel = tester.getRect(find.byType(FiltersPanel));
+      final strip = tester.getRect(looksCarousel);
+      expect(strip.left, greaterThanOrEqualTo(panel.left - 0.01));
+      expect(strip.right, lessThanOrEqualTo(panel.right + 0.01));
+      expect(tester.widget<SingleChildScrollView>(looksScroll).clipBehavior, Clip.hardEdge);
+      expectNoOverflow(tester);
+      expectOwnerUiRules(tester);
     });
   });
 

@@ -7,7 +7,9 @@
 // number = source frame). Covers: open → firstFrame; paused edits through AND-17 (param patch,
 // transient, clear, editing mode, refresh); "a rebuild keeps the last frame"; seq semantics of
 // play/pause/seek and the clock; exact seeks and scrubs; stills playback (drops, never a wrong
-// frame); quality resize; export suspension; look stills, colour samples, source frames; dispose.
+// frame); quality resize; auto quality back at the requested level when playback stops (QA-05 D11,
+// also with [RecordingBackend]: pause, end of the plan, thermally capped to half); export
+// suspension; look stills, colour samples, source frames; dispose.
 // Times are emulator numbers (logged under AND10), never device numbers.
 
 package com.vecvel.danaview.editor.engine.preview
@@ -296,12 +298,151 @@ class PreviewSessionTest {
             h.producer.awaitFrame(0)
             h.play()
             h.waitUntil("degraded", 10_000) { h.previewEvents(PreviewEventKindMsg.DEGRADED).isNotEmpty() }
-            h.pause()
-            val degraded = h.previewEvents(PreviewEventKindMsg.DEGRADED)
-            assertEquals(PreviewQualityMsg.HALF, degraded.first().quality)
             h.waitUntil("half-size frames") { h.producer.last()?.width == 320 }
             h.waitUntil("frameSize event") { h.previewEvents(PreviewEventKindMsg.FRAME_SIZE).any { it.width == 320L } }
-            Log.i(AND10_TAG, "auto quality under StillFramesBackend load (emulator): ${degraded.map { it.quality }}, drop ratio ${"%.2f".format(h.sync { h.session.governor.windowDropRatio })}")
+            val ratio = h.sync { h.session.governor.windowDropRatio }
+            val degraded = h.previewEvents(PreviewEventKindMsg.DEGRADED)
+            assertEquals(PreviewQualityMsg.HALF, degraded.first().quality)
+            assertTrue("no recovery while degraded", h.previewEvents(PreviewEventKindMsg.RECOVERED).isEmpty())
+            // QA-05 D11: the pause returns auto to full and the paused frame is drawn at full size.
+            h.pause()
+            h.waitUntil("full-size paused frame") { h.producer.last()?.width == 640 }
+            assertEquals(640 to 360, h.sync { h.session.renderSize })
+            assertEquals(PreviewQualityMsg.FULL, h.previewEvents(PreviewEventKindMsg.DEGRADED).last().quality)
+            assertEquals(1, h.previewEvents(PreviewEventKindMsg.RECOVERED).size)
+            val k = h.sync { h.session.playhead }
+            assertEquals((PreviewPlans.SOURCE_OFFSET + k).toInt(), barcode(requireNotNull(h.producer.last())))
+            Log.i(AND10_TAG, "auto quality under StillFramesBackend load (emulator): ${degraded.map { it.quality }}, drop ratio ${"%.2f".format(ratio)}")
+        }
+    }
+
+    /** Reports [n] shown and [n] dropped playback frames at [k]: > 10% dropped, one step down. */
+    private fun overload(h: PreviewHarness, k: Long, n: Int = 8) = h.sync {
+        repeat(n) {
+            h.session.frameDisplayed(k)
+            h.session.frameDropped(k)
+        }
+    }
+
+    @Test
+    fun aStopReturnsAutoToTheRequestedQualityOnceAndRedrawsThePausedFrame() {
+        val b = RecordingBackend()
+        PreviewHarness("and10_d11", backend = { b }).apply { open(PreviewQualityMsg.AUTO) }.use { h ->
+            fun events(kind: PreviewEventKindMsg) = h.previewEvents(kind)
+            h.setPlan(PreviewPlans.plan(listOf(PreviewPlans.main()), rev = 1))
+            h.producer.awaitFrame(0)
+            // Pause while not degraded: no quality event.
+            h.play()
+            b.show(3)
+            h.pause()
+            Thread.sleep(200)
+            assertTrue(events(PreviewEventKindMsg.DEGRADED).isEmpty())
+            assertTrue(events(PreviewEventKindMsg.RECOVERED).isEmpty())
+
+            // Degrade during playback, then pause.
+            h.play()
+            b.show(8)
+            overload(h, 8)
+            h.waitUntil("half size while playing") { h.sync { h.session.renderSize } == 320 to 180 }
+            assertEquals(listOf(PreviewQualityMsg.HALF), events(PreviewEventKindMsg.DEGRADED).map { it.quality })
+            val n = h.producer.frameCount
+            h.pause()
+            val f = h.producer.awaitFrame(n)
+            assertEquals("the paused frame is drawn again at the requested size", 640, f.width)
+            assertEquals((PreviewPlans.SOURCE_OFFSET + 8).toInt(), barcode(f))
+            assertEquals(640 to 360, h.sync { h.session.renderSize })
+            assertEquals(listOf(PreviewQualityMsg.HALF, PreviewQualityMsg.FULL), events(PreviewEventKindMsg.DEGRADED).map { it.quality })
+            assertEquals(1, events(PreviewEventKindMsg.RECOVERED).size)
+            h.waitUntil("frameSize back at full") { events(PreviewEventKindMsg.FRAME_SIZE).lastOrNull()?.width == 640L }
+
+            // Play again: it starts at the requested level.
+            h.play()
+            assertEquals(QualityLevel.FULL, h.sync { h.session.governor.level })
+            assertEquals(640 to 360, h.sync { h.session.renderSize })
+            // pause/play/pause without new drops: no more quality events.
+            h.pause()
+            h.play()
+            b.show(12)
+            h.pause()
+            Thread.sleep(300)
+            assertEquals(2, events(PreviewEventKindMsg.DEGRADED).size)
+            assertEquals(1, events(PreviewEventKindMsg.RECOVERED).size)
+            // A paused seek renders at the requested size.
+            val ack = h.seek(PreviewPlans.grid.timeOfFrame(30))
+            assertEquals(30L, ack.displayedFrame)
+            assertEquals(640 to 360, h.sync { h.session.renderSize })
+        }
+    }
+
+    @Test
+    fun bTheEndOfThePlanAfterDegradingReturnsAutoToFullAtTheLastFrame() {
+        val b = RecordingBackend()
+        PreviewHarness("and10_d11_end", backend = { b }).apply { open(PreviewQualityMsg.AUTO) }.use { h ->
+            fun events(kind: PreviewEventKindMsg) = h.previewEvents(kind)
+            h.setPlan(PreviewPlans.plan(listOf(PreviewPlans.main()), rev = 1))
+            h.producer.awaitFrame(0)
+            val playSeq = h.play()
+            b.show(80)
+            overload(h, 80)
+            h.waitUntil("half size while playing") { h.sync { h.session.renderSize } == 320 to 180 }
+            assertEquals(listOf(PreviewQualityMsg.HALF), events(PreviewEventKindMsg.DEGRADED).map { it.quality })
+            assertTrue(events(PreviewEventKindMsg.RECOVERED).isEmpty())
+            // The backend reaches the end of the plan without a loop.
+            val last = PreviewPlans.FRAMES - 1
+            val n = h.producer.frameCount
+            h.onPreview { b.show(last) }
+            h.onPreview { h.session.ended(last) }
+            h.waitUntil("ended") { h.clocks().any { !it.playing && it.seq == playSeq } }
+            val f = h.producer.awaitFrame(n)
+            assertEquals("the last frame is drawn again at full size", 640, f.width)
+            assertEquals((PreviewPlans.SOURCE_OFFSET + last).toInt(), barcode(f))
+            assertEquals(640 to 360, h.sync { h.session.renderSize })
+            assertEquals(QualityLevel.FULL, h.sync { h.session.governor.level })
+            assertEquals(last, h.sync { h.session.playhead })
+            assertEquals(listOf(PreviewQualityMsg.HALF, PreviewQualityMsg.FULL), events(PreviewEventKindMsg.DEGRADED).map { it.quality })
+            assertEquals(1, events(PreviewEventKindMsg.RECOVERED).size)
+            h.waitUntil("frameSize back at full") { events(PreviewEventKindMsg.FRAME_SIZE).lastOrNull()?.width == 640L }
+            // A pause after the end finds nothing to reset: no more events.
+            h.pause()
+            Thread.sleep(300)
+            assertEquals(2, events(PreviewEventKindMsg.DEGRADED).size)
+            assertEquals(1, events(PreviewEventKindMsg.RECOVERED).size)
+        }
+    }
+
+    @Test
+    fun cAThermallyCappedStopResetsAutoToHalfWithoutRecovery() {
+        val b = RecordingBackend()
+        PreviewHarness("and10_d11_thermal", backend = { b }).apply { open(PreviewQualityMsg.AUTO) }.use { h ->
+            fun events(kind: PreviewEventKindMsg) = h.previewEvents(kind)
+            h.setPlan(PreviewPlans.plan(listOf(PreviewPlans.main()), rev = 1))
+            h.producer.awaitFrame(0)
+            // Thermal SEVERE: play polls it and caps the level at half.
+            h.sync { h.session.thermalStatusOverride = QualityGovernor.THERMAL_STATUS_SEVERE }
+            h.play()
+            h.waitUntil("thermal half") { h.sync { h.session.renderSize } == 320 to 180 }
+            assertTrue(h.sync { h.session.governor.thermalCapped })
+            assertEquals(listOf(PreviewQualityMsg.HALF), events(PreviewEventKindMsg.DEGRADED).map { it.quality })
+            // Degrade during playback: auto full → half (hidden by the cap), then → quarter, which
+            // shows. Steps are at least one window (2 s) apart from the thermal change.
+            Thread.sleep(2_100)
+            b.show(8)
+            overload(h, 8)
+            overload(h, 8)
+            h.waitUntil("quarter size while playing") { h.sync { h.session.renderSize } == 160 to 90 }
+            assertEquals(listOf(PreviewQualityMsg.HALF, PreviewQualityMsg.QUARTER), events(PreviewEventKindMsg.DEGRADED).map { it.quality })
+            // Pause: auto resets, but only to half while capped; no recovery.
+            val n = h.producer.frameCount
+            h.pause()
+            val f = h.producer.awaitFrame(n)
+            assertEquals("the paused frame is drawn again at half size", 320, f.width)
+            assertEquals((PreviewPlans.SOURCE_OFFSET + 8).toInt(), barcode(f))
+            assertEquals(320 to 180, h.sync { h.session.renderSize })
+            assertEquals(QualityLevel.HALF, h.sync { h.session.governor.level })
+            assertEquals(listOf(PreviewQualityMsg.HALF, PreviewQualityMsg.QUARTER, PreviewQualityMsg.HALF), events(PreviewEventKindMsg.DEGRADED).map { it.quality })
+            h.waitUntil("frameSize at half") { events(PreviewEventKindMsg.FRAME_SIZE).lastOrNull()?.width == 320L }
+            Thread.sleep(300)
+            assertTrue("no recovery while thermally capped", events(PreviewEventKindMsg.RECOVERED).isEmpty())
         }
     }
 

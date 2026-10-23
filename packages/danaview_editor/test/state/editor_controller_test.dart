@@ -189,6 +189,39 @@ void main() {
       await c.close();
     });
 
+    test('FIX-UX-08-1: "Restart preview" records the new preview\'s seek ack as the open seek', () async {
+      final repo = RecordingRepository();
+      final project = textProject(repo);
+      final engine = FakeEditorEngine(validatePlans: false);
+      engine.failNext['openPreview'] = EngineFailure.of(EngineErrorCode.gpuUnavailable);
+      final rig = ControllerRig(repository: repo, id: project.id, engine: engine);
+      await rig.open(initialPlayhead: 1234567);
+      final c = rig.controller;
+      final t = project.settings.frameRate.quantize(1234567);
+      expect(rig.session.initialSeek, isNull, reason: 'no preview, no open seek');
+      await c.restartPreview();
+      await rig.settle();
+      expect(c.state.preview.phase, PreviewPhase.ready);
+      // A playhead created from now on takes the restarted preview's ack, not the open's.
+      final ack = rig.session.initialSeek;
+      expect(ack, isNotNull);
+      expect(ack!.displayedFrameTime, t);
+      expect(ack.seq, rig.preview.seq);
+      expect(rig.session.openedAt, t);
+      await c.close();
+    });
+
+    test('FIX-UX-08-1: replacing the preview drops the old preview\'s open seek ack', () async {
+      final repo = RecordingRepository();
+      final project = textProject(repo);
+      final rig = ControllerRig(repository: repo, id: project.id);
+      await rig.open(initialPlayhead: 1234567);
+      expect(rig.session.initialSeek, isNotNull);
+      rig.session.replacePreview(rig.session.preview, rig.session.planSync);
+      expect(rig.session.initialSeek, isNull);
+      await rig.controller.close();
+    });
+
     test('an engine failure from PlanSync marks the preview failed; "Restart preview" recovers it', () async {
       final repo = RecordingRepository();
       final project = textProject(repo);

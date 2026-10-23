@@ -21,6 +21,11 @@
 //   not downmixed by the decoder). Output buffers are handed to the reading thread un-copied and
 //   released there, which bounds memory by the codec's own buffer count. Raw PCM tracks (WAV) are
 //   read from the extractor without a codec.
+// - Teardown (QA-05 native crash): the input callback copies extractor samples into codec input
+//   buffers on the callback thread, and MediaCodec.stop()/release() unmap those buffers. Stopping
+//   the codec from the reading thread raced a callback mid-copy (SIGSEGV in memcpy <-
+//   GetByteArrayRegion on "danaview-pcm"), so the codec is stopped and released, and the extractor
+//   it reads is released, only ON the callback thread (`shutdown`), which then quits.
 // - Range: decoding starts at a sync sample >= 200 ms before the range start (decoder warm-up,
 //   e.g. AAC's overlap) and frames outside [startUs, endUs) are dropped by sample index
 //   (`PcmTrim`). The end is clipped to the track duration.
@@ -48,6 +53,7 @@ import com.vecvel.danaview.editor.engine.core.EngineException
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
@@ -175,6 +181,7 @@ class PcmStream private constructor(
     }
 
     private var ended = false
+    private var closed = false
     private var outputEncoding = AudioFormat.ENCODING_PCM_16BIT
 
     /** Content time of the first decoded sample (set by the first output buffer). */
@@ -278,22 +285,9 @@ class PcmStream private constructor(
     }
 
     override fun close() {
-        try {
-            codec?.stop()
-        } catch (e: IllegalStateException) {
-            // Already stopped or in error.
-        }
-        codec?.release()
-        thread?.let {
-            it.quitSafely()
-            // The callback thread reads the extractor: let it finish before the extractor goes.
-            try {
-                it.join(1_000)
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
-        }
-        extractor.release()
+        if (closed) return
+        closed = true
+        if (codec != null && thread != null) shutdown(codec, thread, extractor) else extractor.release()
     }
 
     private fun mapCodecError(error: Throwable): EngineException = when (error) {
@@ -310,6 +304,58 @@ class PcmStream private constructor(
 
         /** Waiting limit for the decoded format. */
         private const val FORMAT_TIMEOUT_MS = 10_000L
+
+        /** How long a teardown is waited for (it completes on the callback thread regardless). */
+        private const val TEARDOWN_WAIT_MS = 2_000L
+
+        /**
+         * Stops and releases [codec], then releases [extractor], ON its callback [thread], which then
+         * quits; waits up to [TEARDOWN_WAIT_MS] for it. The input callback writes extractor samples
+         * into codec input buffers on that thread and stop()/release() unmap them, so a teardown run
+         * anywhere else can land while a callback is mid-copy (see the file comment). On the callback
+         * thread nothing runs concurrently, and MediaCodec.stop() drops the callbacks still queued
+         * there. When the thread is busy past the wait (a slow extractor read), the teardown still
+         * runs there afterwards: the caller never touches the codec or the extractor again.
+         */
+        internal fun shutdown(codec: MediaCodec, thread: HandlerThread, extractor: MediaExtractorCompat?) {
+            val done = CountDownLatch(1)
+            val teardown = Runnable {
+                try {
+                    try {
+                        codec.stop()
+                    } catch (e: IllegalStateException) {
+                        // Already stopped, or in error.
+                    }
+                    codec.release()
+                } catch (t: Throwable) {
+                    // A dead codec: nothing more to free.
+                } finally {
+                    try {
+                        extractor?.release()
+                    } catch (t: Throwable) {
+                        // ignore
+                    }
+                    thread.quitSafely()
+                    done.countDown()
+                }
+            }
+            val looper = thread.looper
+            when {
+                Thread.currentThread() === thread -> teardown.run()
+                // Ahead of queued callbacks: they would only feed a codec that is going away.
+                looper != null && Handler(looper).postAtFrontOfQueue(teardown) -> Unit
+                else -> {
+                    // The thread already ended (only the teardown quits it): no callback can run any more.
+                    thread.join(TEARDOWN_WAIT_MS)
+                    teardown.run()
+                }
+            }
+            try {
+                done.await(TEARDOWN_WAIT_MS, TimeUnit.MILLISECONDS)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
 
         /** AAC: let the decoder output up to 8 channels (MediaFormat.KEY_MAX_OUTPUT_CHANNEL_COUNT, API 30 name). */
         private const val KEY_AAC_MAX_OUTPUT_CHANNELS = "aac-max-output-channel_count"
@@ -331,6 +377,8 @@ class PcmStream private constructor(
             isCancelled: () -> Boolean,
         ): PcmStream {
             val extractor = MediaSources.extractor(context, uri)
+            // Once the decoder's callback thread runs, it owns the extractor (it reads from it there).
+            var handedOver = false
             try {
                 val tracks = audioTracks(extractor)
                 if (tracks.isEmpty()) throw EngineException(EngineErrorCode.unsupportedMedia, "no audio track")
@@ -356,9 +404,9 @@ class PcmStream private constructor(
                         extractor, null, null, null, rate, channelCount, 0, name, start, end, 0L, encoding, isCancelled, null,
                     )
                 }
-                return openDecoder(extractor, format, mime, rate, channelCount, start, end, delayUs, isCancelled)
+                return openDecoder(extractor, format, mime, rate, channelCount, start, end, delayUs, isCancelled) { handedOver = true }
             } catch (t: Throwable) {
-                extractor.release()
+                if (!handedOver) extractor.release()
                 throw if (t is EngineException) t else MediaSources.mapOpenError(t)
             }
         }
@@ -373,6 +421,7 @@ class PcmStream private constructor(
             end: Long,
             delayUs: Long,
             isCancelled: () -> Boolean,
+            onHandover: () -> Unit,
         ): PcmStream {
             // A fresh format without the encoder delay/padding keys (see the file comment).
             val config = MediaFormat.createAudioFormat(mime, rate, channelCount)
@@ -390,7 +439,34 @@ class PcmStream private constructor(
             } catch (e: Exception) {
                 throw EngineException(EngineErrorCode.decoderInitFailed, "audio decoder unavailable", cause = e)
             }
-            val thread = HandlerThread("danaview-pcm").apply { start() }
+            val thread = try {
+                HandlerThread("danaview-pcm").apply { start() }
+            } catch (t: Throwable) {
+                codec.release()
+                throw t
+            }
+            // From here the codec, its thread and the extractor are torn down together, on that thread.
+            onHandover()
+            try {
+                return startDecoder(extractor, codec, thread, config, codecName, start, end, delayUs, isCancelled)
+            } catch (t: Throwable) {
+                shutdown(codec, thread, extractor)
+                throw t
+            }
+        }
+
+        /** Starts [codec] in callback mode on [thread] and waits for its output format (failures: the caller tears down). */
+        private fun startDecoder(
+            extractor: MediaExtractorCompat,
+            codec: MediaCodec,
+            thread: HandlerThread,
+            config: MediaFormat,
+            codecName: String,
+            start: Long,
+            end: Long,
+            delayUs: Long,
+            isCancelled: () -> Boolean,
+        ): PcmStream {
             val events = LinkedBlockingQueue<Event>()
             val feedEndUs = end + delayUs + PREROLL_US
             codec.setCallback(object : MediaCodec.Callback() {
@@ -431,38 +507,25 @@ class PcmStream private constructor(
                 codec.configure(config, null, null, 0)
                 codec.start()
             } catch (e: Exception) {
-                codec.release()
-                thread.quitSafely()
                 throw EngineException(EngineErrorCode.decoderInitFailed, "audio decoder failed to start", cause = e)
             }
             // Wait for the decoded format (it precedes the first output buffer).
             val deadline = System.nanoTime() + FORMAT_TIMEOUT_MS * 1_000_000
             var firstOutput: Event.Output? = null
             var outFormat: MediaFormat? = null
-            try {
-                while (outFormat == null) {
-                    if (isCancelled()) throw EngineException(EngineErrorCode.cancelled, "cancelled")
-                    if (System.nanoTime() > deadline) throw EngineException(EngineErrorCode.decodeFailed, "audio decoder produced no output", retryable = true)
-                    when (val event = events.poll(POLL_MS, TimeUnit.MILLISECONDS)) {
-                        null -> Unit
-                        is Event.Format -> outFormat = event.format
-                        is Event.Failure -> throw if (event.error is EngineException) event.error else EngineException(EngineErrorCode.decodeFailed, "audio decode failed", cause = event.error)
-                        is Event.Output -> {
-                            // Some decoders deliver output before announcing a format: use the configured one.
-                            firstOutput = event
-                            outFormat = codec.outputFormat
-                        }
+            while (outFormat == null) {
+                if (isCancelled()) throw EngineException(EngineErrorCode.cancelled, "cancelled")
+                if (System.nanoTime() > deadline) throw EngineException(EngineErrorCode.decodeFailed, "audio decoder produced no output", retryable = true)
+                when (val event = events.poll(POLL_MS, TimeUnit.MILLISECONDS)) {
+                    null -> Unit
+                    is Event.Format -> outFormat = event.format
+                    is Event.Failure -> throw if (event.error is EngineException) event.error else EngineException(EngineErrorCode.decodeFailed, "audio decode failed", cause = event.error)
+                    is Event.Output -> {
+                        // Some decoders deliver output before announcing a format: use the configured one.
+                        firstOutput = event
+                        outFormat = codec.outputFormat
                     }
                 }
-            } catch (t: Throwable) {
-                try {
-                    codec.stop()
-                } catch (e: IllegalStateException) {
-                    // ignore
-                }
-                codec.release()
-                thread.quitSafely()
-                throw t
             }
             val format = outFormat!!
             val outRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
