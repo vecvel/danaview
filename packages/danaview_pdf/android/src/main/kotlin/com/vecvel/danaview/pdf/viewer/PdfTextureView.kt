@@ -321,11 +321,14 @@ class PdfTextureView(
             }
         }
         frames.incrementAndGet()
-        if (complete && completeFrames.incrementAndGet() == 1) {
+        if (complete) {
+            // Before the count goes up, so whoever sees the first complete frame also sees the
+            // pre-warm it scheduled (render thread only; the callback is cleared after one call).
             onFirstCompleteFrame?.let {
                 onFirstCompleteFrame = null
                 it()
             }
+            completeFrames.incrementAndGet()
         }
         onFrame?.invoke(complete)
     }
