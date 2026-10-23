@@ -16,10 +16,11 @@
 //
 // Regression rule: a row fails when its p90 exceeds `baseline × f × 1.25` and the difference is more
 // than [noiseFloorUs] (sub-millisecond rows jitter by tens of µs between runs). Budget rule: a gated
-// row fails when its p90 exceeds `budget × f`. f is the host factor: this run's calibration p50
-// over the baseline run's (src/calibration.dart), so the gate holds the baseline host's numbers and
-// the ARCH §18.2 budgets as met on that host on a slower or faster CI host; on the baseline host
-// f ≈ 1. A baseline without a calibration uses f = 1. A failing row is
+// row fails when its p90 exceeds `budget × f`. f is the row's host factor: this run's calibration
+// p50 of the row's kind (compute or codec, [rowKinds]) over the baseline run's
+// (src/calibration.dart), so the gate holds the baseline host's numbers and the ARCH §18.2 budgets
+// as met on that host on a slower or faster CI host; on the baseline host f ≈ 1. A baseline
+// without a calibration uses f = 1. A failing row is
 // re-measured up to twice and the best run counts, so a single noisy run does not fail CI.
 
 // ignore_for_file: avoid_print
@@ -45,6 +46,17 @@ const double regressionFactor = 1.25;
 const int noiseFloorUs = 50;
 
 const bool _aot = bool.fromEnvironment('dart.vm.product');
+
+/// The calibration each row is normalized by.
+const Map<String, CalibrationKind> rowKinds = {
+  'apply_1000': CalibrationKind.compute,
+  'dry_run_1000': CalibrationKind.compute,
+  'incremental_compile_2000': CalibrationKind.compute,
+  'full_compile_2000': CalibrationKind.compute,
+  'plan_encode_2000': CalibrationKind.codec,
+  'autosave_block_2000': CalibrationKind.codec,
+  'open_2000': CalibrationKind.codec,
+};
 
 Future<void> main(List<String> args) async {
   final jit = args.contains('--jit');
@@ -139,16 +151,20 @@ Future<int> _run(String root, List<String> args) async {
   final results = {for (final r in runAll()) r.id: r};
   final baseline = _readBaseline(baselineFile);
   // The lower of two calibrations (before and after the rows): noise only ever slows a pass down.
-  final calibrationNow = [calibration, calibrationUs(quick: args.contains('--quick'))].reduce((a, b) => a < b ? a : b);
+  final again = calibrationUs(quick: args.contains('--quick'));
+  final calibrationNow = {for (final k in CalibrationKind.values) k: calibration[k]! < again[k]! ? calibration[k]! : again[k]!};
   final baseCalibration = _readBaselineCalibration(baselineFile);
-  final f = baseCalibration == null || baseCalibration <= 0 ? 1.0 : calibrationNow / baseCalibration;
-  final baselineHost = _readBaselineHost(baselineFile);
-  print('Host factor ${f.toStringAsFixed(2)} (calibration p50 $calibrationNow µs; baseline '
-      '${baseCalibration == null ? 'has no calibration, factor 1' : '$baseCalibration µs on $baselineHost'})');
+  final factors = {
+    for (final k in CalibrationKind.values)
+      k: (baseCalibration[k] ?? 0) <= 0 ? 1.0 : calibrationNow[k]! / baseCalibration[k]!,
+  };
+  double factorOf(String id) => factors[rowKinds[id] ?? CalibrationKind.compute]!;
+  print('Host factors against the baseline host (${_readBaselineHost(baselineFile)}): '
+      '${[for (final k in CalibrationKind.values) '${k.name} ${factors[k]!.toStringAsFixed(2)} (${calibrationNow[k]} µs vs ${baseCalibration[k] ?? 'none'})'].join(', ')}');
 
   if (check) {
     for (var attempt = 0; attempt < 2; attempt++) {
-      final failing = results.values.where((r) => _failure(r, baseline[r.id], f) != null).map((r) => r.id).toList();
+      final failing = results.values.where((r) => _failure(r, baseline[r.id], factorOf(r.id)) != null).map((r) => r.id).toList();
       if (failing.isEmpty) break;
       print('Re-measuring ${failing.join(', ')} (attempt ${attempt + 2} of 3)');
       for (final id in failing) {
@@ -162,6 +178,7 @@ Future<int> _run(String root, List<String> args) async {
   print('');
   for (final r in results.values) {
     final base = baseline[r.id];
+    final f = factorOf(r.id);
     final delta = base == null
         ? ''
         : '  (baseline p90 ${(base / 1000).toStringAsFixed(3)} ms × f = ${(base * f / 1000).toStringAsFixed(3)} ms, '
@@ -173,7 +190,7 @@ Future<int> _run(String root, List<String> args) async {
   final report = {
     'host': host,
     'mode': _aot ? 'aot' : 'jit',
-    'calibrationUs': calibrationNow,
+    'calibrationUs': {for (final k in CalibrationKind.values) k.name: calibrationNow[k]},
     'metrics': {for (final r in results.values) r.id: r.toJson()},
   };
   if (jsonOut != null) File(jsonOut).writeAsStringSync('${const JsonEncoder.withIndent('  ').convert(report)}\n');
@@ -189,7 +206,7 @@ Future<int> _run(String root, List<String> args) async {
 
   if (!check) return 0;
   for (final r in results.values) {
-    final why = _failure(r, baseline[r.id], f);
+    final why = _failure(r, baseline[r.id], factorOf(r.id));
     if (why != null) failures.add(why);
   }
   if (baseline.isEmpty) failures.add('no baseline: run --update-baseline on the dev Mac');
@@ -216,11 +233,16 @@ String? _failure(MetricResult r, int? baselineP90, double f) {
   return null;
 }
 
-/// The baseline run's calibration p50 (µs), or null.
-int? _readBaselineCalibration(File f) {
-  if (!f.existsSync()) return null;
+/// The baseline run's calibration p50s (µs) by kind (empty without a calibration).
+Map<CalibrationKind, int> _readBaselineCalibration(File f) {
+  if (!f.existsSync()) return const {};
   final j = jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
-  return (j['calibrationUs'] as num?)?.toInt();
+  final c = j['calibrationUs'];
+  if (c is! Map<String, Object?>) return const {};
+  return {
+    for (final k in CalibrationKind.values)
+      if (c[k.name] is num) k: (c[k.name]! as num).toInt(),
+  };
 }
 
 /// The baseline host's description.
