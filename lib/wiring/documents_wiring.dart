@@ -35,7 +35,8 @@ import 'package:danaview_documents/danaview_documents.dart';
 import 'package:danaview_domain/danaview_domain.dart' as domain show LibraryFolder;
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/flags.dart';
-import 'package:danaview_features/src/library/file_actions/file_actions.dart' show fileOutPortProvider;
+import 'package:danaview_features/src/library/file_actions/file_actions.dart'
+    show anchorOf, fileActionIcon, fileActionId, fileActionLabel, fileMenuActions, fileOutPortProvider, libraryFileActionsProvider, runFileAction;
 import 'package:danaview_features/src/library/filters/filter_providers.dart' show linkedDocumentsProvider;
 import 'package:danaview_features/src/library/import/import_providers.dart';
 import 'package:danaview_features/src/library/organise/organise_providers.dart' show recordLibraryOpenProvider;
@@ -133,8 +134,10 @@ ViewerFile viewerFileOfLinked(DocumentItem document) {
 typedef ProviderRead = T Function<T>(ProviderListenable<T> provider);
 
 /// Opens [file] full screen in the viewer the router picks (HOM-23), with this build's native
-/// viewers, the file-out port and Recents (Danaview folder entries only).
-Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerFile file) {
+/// viewers, the file-out port and Recents (Danaview folder entries only). With [fileMenuItem] (a
+/// Danaview folder entry) every viewer's top bar ends with a "File actions" button: HOM-22's
+/// Share, Open in another app, Save out, Copy to, Favourite and File info (FIX-S3Q-1).
+Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerFile file, {MediaItem? fileMenuItem}) {
   final setup = read(documentViewerSetupProvider);
   final fileOut = read(fileOutPortProvider);
   final record = read(recordLibraryOpenProvider);
@@ -151,19 +154,82 @@ Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerF
       color: DanaviewColors.background,
       child: DefaultTextStyle.merge(
         style: DanaviewTextStyles.body.copyWith(decoration: TextDecoration.none),
-        child: DocumentViewer(
-          key: const ValueKey('s3-document-viewer'),
-          file: file,
-          viewers: setup.viewers,
-          probes: setup.probes,
-          fileOut: fileOut,
-          onOpened: record,
-          onClose: () => unawaited(Navigator.of(context).maybePop()),
+        child: _withFileMenu(
+          fileMenuItem,
+          DocumentViewer(
+            key: const ValueKey('s3-document-viewer'),
+            file: file,
+            viewers: setup.viewers,
+            probes: setup.probes,
+            fileOut: fileOut,
+            onOpened: record,
+            onClose: () => unawaited(Navigator.of(context).maybePop()),
+          ),
         ),
       ),
     ),
     transitionsBuilder: (context, animation, _, child) => FadeTransition(opacity: animation, child: child),
   ));
+}
+
+/// The file actions a viewer's top bar offers: the ones that leave the open file where it is.
+/// Move to, Rename and Delete stay in the row menu.
+const Set<FileAction> viewerFileActions = {
+  FileAction.share,
+  FileAction.openIn,
+  FileAction.saveOut,
+  FileAction.copyTo,
+  FileAction.favourite,
+  FileAction.info,
+};
+
+Widget _withFileMenu(MediaItem? item, Widget viewer) {
+  if (item == null) return viewer;
+  return DocumentHostActions(
+    actions: [
+      Consumer(
+        builder: (context, ref, _) => DanaviewIconButton(
+          key: const ValueKey('viewer-file-menu'),
+          icon: Icons.more_horiz_rounded,
+          size: 44,
+          onPressed: () => unawaited(showViewerFileMenu(context, ref, item)),
+          semanticLabel: 'File actions',
+          tooltip: 'File actions',
+        ),
+      ),
+    ],
+    child: viewer,
+  );
+}
+
+/// HOM-22's single-file menu for the file a viewer shows, limited to [viewerFileActions].
+Future<void> showViewerFileMenu(BuildContext context, WidgetRef ref, MediaItem item) async {
+  final anchor = anchorOf(context);
+  final chosen = await showDanaviewSheet<FileAction>(
+    context,
+    title: item.name,
+    builder: (sheetContext) => Consumer(builder: (context, ref, _) {
+      final port = ref.watch(fileOutPortProvider);
+      final favourite = ref.watch(libraryFileActionsProvider)?.liveEntry(item.id)?.isFavourite ?? false;
+      return SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final action in fileMenuActions(item, port).where(viewerFileActions.contains))
+              DanaviewListTile(
+                key: ValueKey(fileActionId(action)),
+                leading: DanaviewTileIcon(fileActionIcon(action, favourite: favourite), color: DanaviewColors.primaryLight),
+                title: fileActionLabel(action, capabilities: port?.capabilities, favourite: favourite),
+                onTap: () => Navigator.of(sheetContext).pop(action),
+              ),
+          ],
+        ),
+      );
+    }),
+  );
+  if (chosen == null || !context.mounted) return;
+  await runFileAction(context, ref, chosen, [item], anchor: anchor);
 }
 
 // ---------------------------------------------------------------------------------------------

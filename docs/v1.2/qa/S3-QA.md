@@ -55,13 +55,19 @@ montage (INT-105, S8), Search with AI (S7).
   the App Group `group.com.vecvel.danaview` (`ios/fastlane/SHARE_EXTENSION.md`).
 - With the flag off the **Dart side** is the S1 app (S3 test "flag off", S2 test "flag off",
   INT-101's `flags_off_test.dart`): no documents overrides, no Open-with interceptor, no inbox
-  host. The **native side is not flag-gated** in the source: `ios/Runner/Info.plist` and
-  `macos/Runner/Info.plist` carry INT-104's image, PDF, Office and text `CFBundleDocumentTypes`
-  (rank Alternate) and `ios/Runner.xcodeproj` embeds `DanaviewShare` in every configuration. In a
-  flag-off build that still ships them, Open with on a photo or document reaches the 1.1
-  `_handleIncomingMedia` path (`lib/app.dart`, imported and queued in the player), and a "Save to
-  Danaview" batch stays in the App Group (nothing imports or cleans it). See S3-Q §3a and
-  FIX-S3Q-6.
+  host. The **native side is gated per build** (INT-104 fixer): the source `Info.plist`s keep the
+  image, PDF, Office and text `CFBundleDocumentTypes` (rank Alternate), and a "Gate Files Home
+  declarations" run-script phase on the Runner target of `ios/Runner.xcodeproj` and of
+  `macos/Runner.xcodeproj` decodes `DART_DEFINES` after Info.plist processing. Unless
+  `DANAVIEW_FILES_HOME=true` it deletes every rank-Alternate document type from the built
+  `Info.plist` (only the 1.1 "Video Media" type is left, so neither the Files app nor Finder offers
+  Danaview for photos or documents) and, on iOS, removes the embedded `DanaviewShare.appex` (no
+  share-sheet entry, no App Group batches). Each build re-copies the types from the source plist
+  first, so an incremental flag flip does not keep stale types; a flag-on iOS build fails if the
+  appex is missing. The 1.1 video path is unchanged. The phases were checked by running the script
+  against `macos/Runner/Info.plist` with the flag off (Video Media only) and on (all five types);
+  the simulator/device check is the gate phase's. Android stays the Windows lane (4173f44). The
+  Dart-side guard FIX-S3Q-6 offered is no longer needed for the OS paths.
 
 ### Privacy policy, terms and licences
 

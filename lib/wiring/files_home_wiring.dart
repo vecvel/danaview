@@ -450,15 +450,15 @@ Future<void> openLibraryEntryWith(BuildContext context, ProviderRead read, FileE
     case FileKind.document || FileKind.other:
       // The viewer host records the open (Recents).
       if (!context.mounted) return;
-      await openDocumentViewer(context, read, viewerFileOfEntry(entry, path));
+      await openDocumentViewer(context, read, viewerFileOfEntry(entry, path), fileMenuItem: mediaItemOfEntry(entry, path));
   }
 }
 
 /// Shows HOM-22's single-file menu for a Danaview library [entry] (Share, Open in another app,
 /// Save out, Copy to, Move to, Rename, Favourite, File info, Delete, as its kind and the file-out
 /// port allow) and runs the chosen action. From S3 a document or other-file row tap opens the
-/// viewer, so this is how those rows reach the file actions S2 gave them (FIX-S3Q-1); the row
-/// menu's "More actions…" item calls it once HOM-18's `LibraryEntryActions` carries that hook.
+/// viewer, so this is how those rows reach the file actions S2 gave them (FIX-S3Q-1): the row
+/// menu's "More actions…" item (`LibraryEntryActions.onMore`) calls it.
 Future<void> showLibraryEntryFileMenu(BuildContext context, WidgetRef ref, FileEntry entry) async {
   final store = ref.read(libraryStoreProvider);
   if (store == null) return;
@@ -596,6 +596,7 @@ class FilesHomeState extends State<FilesHome> {
       onRename: (e) => run(FileAction.rename, e),
       onMove: (e) => run(FileAction.moveTo, e),
       onDelete: (e) => run(FileAction.delete, e),
+      onMore: (e) => unawaited(showLibraryEntryFileMenu(context, ref, e)),
     );
   }
 

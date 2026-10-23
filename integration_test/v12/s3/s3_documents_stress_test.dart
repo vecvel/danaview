@@ -79,6 +79,9 @@ const String _docsDir = String.fromEnvironment('DV_S3_DOCS');
 const int _n = int.fromEnvironment('DV_S3_STRESS_N', defaultValue: 10000);
 const String _rootName = 'S3 Stress';
 
+/// The walk as a closure over [roots] only, so Isolate.run sends nothing of the test's context.
+Future<List<DocumentItem>> Function() _walkTask(List<String> roots) => () => walkLinkedDocuments(roots);
+
 /// ARCH §10.1: ≤ 8 ms build+raster per frame at 60 Hz; "jank" is a frame over 2 × the 16.7 ms
 /// frame interval.
 const int _budgetUs = 8000;
@@ -349,7 +352,7 @@ void main() {
     for (var k = 0; k < 3; k++) {
       final w = Stopwatch()..start();
       // As linkedDocumentWalkerProvider does: on a background isolate.
-      linked = await Isolate.run(() => walkLinkedDocuments(rootPaths));
+      linked = await Isolate.run(_walkTask(List<String>.of(rootPaths)));
       w.stop();
       walkUs.add(w.elapsedMicroseconds);
     }

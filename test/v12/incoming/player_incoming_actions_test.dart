@@ -228,11 +228,60 @@ void main() {
       expect(first.sourceHint, SourceHint.player);
       expect(find.text('Saved to Danaview folders'), findsOneWidget);
 
+      final item = saveToDanaviewFolderMenuItem(ctx, ref)!;
+      expect(item.label, 'Save to Danaview folder');
+
       final again = (await tester.runAsync(() => saveToDanaviewFolder(ctx, ref)))!;
       await pumpFrames(tester);
       expect(again.id, first.id);
       expect(find.text('Already in Danaview folders'), findsOneWidget);
       expect(lib.store.reader.allEntries(), hasLength(1));
+      expect(File(video).existsSync(), isTrue);
+
+      DanaviewToast.dismiss();
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(lib.close);
+      await env.dispose();
+    });
+
+    testWidgets('the menu entry is hidden without a library and imports the playing file when tapped', (tester) async {
+      useSurface(tester, librarySurfaces[1]);
+      final env = await LibraryTestEnv.create();
+      final lib = (await tester.runAsync(_Lib.open))!;
+      final video = lib.file('Trip.mov', 5000);
+      late WidgetRef ref;
+      late BuildContext ctx;
+      Widget host() => Consumer(builder: (context, r, _) {
+            ref = r;
+            ctx = context;
+            return const SizedBox.expand();
+          });
+      await tester.pumpWidget(libraryTestApp(env, host()));
+      await pumpFrames(tester);
+      await tester.runAsync(() => ref.read(queueControllerProvider.notifier).playFrom([LibraryRepository.mediaRefForFile(video)]));
+      await pumpFrames(tester);
+      expect(saveToDanaviewFolderMenuItem(ctx, ref), isNull, reason: 'flag off: no library');
+      await tester.pumpWidget(const SizedBox());
+
+      await tester.pumpWidget(libraryTestApp(
+        env,
+        host(),
+        overrides: [libraryStoreProvider.overrideWithValue(lib.store), importServiceProvider.overrideWithValue(lib.service)],
+      ));
+      await pumpFrames(tester);
+      await tester.runAsync(() => ref.read(queueControllerProvider.notifier).playFrom([LibraryRepository.mediaRefForFile(video)]));
+      await pumpFrames(tester);
+      var closed = false;
+      final item = saveToDanaviewFolderMenuItem(ctx, ref, beforeSave: () => closed = true)!;
+      await tester.runAsync(() async {
+        item.onTap!();
+        for (var i = 0; i < 50 && lib.store.reader.allEntries().isEmpty; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      });
+      await pumpFrames(tester);
+      expect(closed, isTrue);
+      expect(lib.store.reader.allEntries().single.sourceHint, SourceHint.player);
       expect(File(video).existsSync(), isTrue);
 
       DanaviewToast.dismiss();
@@ -253,6 +302,7 @@ void main() {
       await pumpFrames(tester);
       expect(saveableCurrentMedia(ref), isNull);
       expect(canSaveToDanaviewFolder(ref), isFalse);
+      expect(saveToDanaviewFolderMenuItem(tester.element(find.byType(Consumer).first), ref), isNull, reason: 'a stream');
       await tester.pumpWidget(const SizedBox());
       await env.dispose();
     });

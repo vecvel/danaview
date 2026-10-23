@@ -244,6 +244,7 @@
 				33CC10EB2044A3C60003C045 /* Resources */,
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
+				E1040A1B2C3D4E5F60710060 /* Gate Files Home declarations */,
 				DCEE6EE8005294F20E12CFE4 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
@@ -333,6 +334,23 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		E1040A1B2C3D4E5F60710060 /* Gate Files Home declarations */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}",
+			);
+			name = "Gate Files Home declarations";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# INT-104: Files & Media Home declarations follow DANAVIEW_FILES_HOME (ARCH §8). Flag off: the built\n# app carries only the 1.1 declarations (no rank-Alternate document types under Finder Open With).\nset -e\nfiles_home=0\nold_ifs=$IFS; IFS=','\nfor define in ${DART_DEFINES:-}; do\n  if [ \"$(printf '%s' \"$define\" | /usr/bin/base64 -D 2>/dev/null)\" = \"DANAVIEW_FILES_HOME=true\" ]; then files_home=1; fi\ndone\nIFS=$old_ifs\nbuilt_plist=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nmkdir -p \"${TARGET_TEMP_DIR}\"\ntypes_xml=\"${TARGET_TEMP_DIR}/danaview-document-types.xml\"\n/usr/bin/plutil -extract CFBundleDocumentTypes xml1 -o \"$types_xml\" \"${SRCROOT}/${INFOPLIST_FILE}\"\n/usr/bin/plutil -replace CFBundleDocumentTypes -xml \"$(cat \"$types_xml\")\" \"$built_plist\"\nrm -f \"$types_xml\"\nif [ \"$files_home\" = 1 ]; then exit 0; fi\ncount=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleDocumentTypes\" \"$built_plist\" | grep -c \"LSHandlerRank\" || true)\ni=$((count - 1))\nwhile [ \"$i\" -ge 0 ]; do\n  rank=$(/usr/libexec/PlistBuddy -c \"Print :CFBundleDocumentTypes:$i:LSHandlerRank\" \"$built_plist\" 2>/dev/null || true)\n  if [ \"$rank\" = \"Alternate\" ]; then /usr/libexec/PlistBuddy -c \"Delete :CFBundleDocumentTypes:$i\" \"$built_plist\"; fi\n  i=$((i - 1))\ndone\n";
+			showEnvVarsInLog = 0;
+		};
 		3399D490228B24CF009A79C7 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;

@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:io' show Directory, FileSystemEntity, FileSystemEntityType, Platform;
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:danaview_domain/danaview_domain.dart';
 import 'package:danaview_library/danaview_library.dart';
@@ -167,6 +168,22 @@ Future<FileEntry?> saveToDanaviewFolder(BuildContext context, WidgetRef ref, {Fo
       showPlayerToast(context, "Couldn't save this video.", kind: DanaviewToastKind.error);
   }
   return item.entry ?? item.duplicateOf;
+}
+
+/// The player menu's "Save to Danaview folder" entry, or null when [canSaveToDanaviewFolder] is
+/// false (flag off / no library, nothing playing, or a stream). [beforeSave] runs first, e.g. to
+/// close the menu or sheet. A player menu adds it with `if (saveToDanaviewFolderMenuItem(...)
+/// case final item?) item`.
+DanaviewMenuItem? saveToDanaviewFolderMenuItem(BuildContext context, WidgetRef ref, {VoidCallback? beforeSave, FolderId? target}) {
+  if (!canSaveToDanaviewFolder(ref)) return null;
+  return DanaviewMenuItem(
+    label: 'Save to Danaview folder',
+    icon: Icons.drive_folder_upload_outlined,
+    onTap: () {
+      beforeSave?.call();
+      unawaited(saveToDanaviewFolder(context, ref, target: target));
+    },
+  );
 }
 
 /// Where iOS puts the copies it makes for the app when another app opens a file with Danaview:
