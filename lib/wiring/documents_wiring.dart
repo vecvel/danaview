@@ -410,7 +410,21 @@ const String incomingNotSupportedMessage = "Danaview can't open this kind of fil
 /// those (nothing is imported or shown) and says so in a neutral toast instead of handing them to
 /// the 1.1 player. Videos, streams and danaview:// links, and every other platform, keep the 1.1
 /// path unchanged.
+/// Tells HOM-21's cleanup where iOS puts its own "Open in" copies: the app container's
+/// `Documents/Inbox` and `tmp/<x>-Inbox` (FIX-S3Q-7). `$HOME` is empty inside an iOS app, so the
+/// default roots matched nothing and those copies piled up. On iOS the temporary directory is
+/// `<container>/tmp`, so the container's Documents folder is its sibling. No-op elsewhere.
+void configureSystemOpenInCopyRoots() {
+  if (!Platform.isIOS) return;
+  final tmp = Directory.systemTemp.absolute.path;
+  final container = File(tmp.endsWith('/') ? tmp.substring(0, tmp.length - 1) : tmp).parent.path;
+  SystemOpenInCopyRoots.configure(
+    SystemOpenInCopyRoots.ios(documentsDirectory: '$container/Documents', temporaryDirectory: tmp),
+  );
+}
+
 bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required IncomingEntryOpener openEntry, TargetPlatform? platform}) {
+  configureSystemOpenInCopyRoots();
   if (!documentsWired) {
     final os = platform ?? defaultTargetPlatform;
     if (os != TargetPlatform.iOS && os != TargetPlatform.macOS) return false;
