@@ -10,7 +10,6 @@
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/library/home/home_tab_strip.dart';
 import 'package:danaview_features/src/library/library_widgets.dart';
-import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
