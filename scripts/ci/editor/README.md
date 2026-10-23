@@ -9,7 +9,8 @@
 | Job | Runner | Script | Owner | Runs on |
 |---|---|---|---|---|
 | `workflow-lint` | ubuntu-latest | (inline) actionlint 1.7.7 + shellcheck on `danaview-ci.yml` | INT-01 | PR, push |
-| `dart-core` | GitHub-hosted `macos-26` (JSON goldens carry arm64 float results) | `core.sh` | CORE-01 | PR, push |
+| `dart-core` | GitHub-hosted `macos-26` (JSON goldens carry arm64 float results) | `core.sh test` | CORE-01 | PR, push |
+| `dart-core-benchmark` | ubuntu-latest (the host `benchmark/baseline.json` is recorded on) | `core.sh benchmark` | CORE-35 | PR, push |
 | `flutter-packages` | GitHub-hosted `macos-26` (goldens are rendered on macOS) | `flutter_packages.sh` | INT-01 | PR, push |
 | `whisper-host` | ubuntu-latest (plain, TSan, ASan) + GitHub-hosted `macos-26` | `whisper_host.sh` | AI-03 | PR, push |
 | `android-unit` | ubuntu-latest | `android_unit.sh` | ENG-09 | PR, push |
@@ -63,7 +64,7 @@ Inputs the workflow passes:
 ## Running locally
 
 ```sh
-scripts/ci/editor/core.sh                              # dart-core
+scripts/ci/editor/core.sh                              # dart-core + dart-core-benchmark (test | benchmark for one)
 scripts/ci/editor/flutter_packages.sh                  # every editor Flutter package + test/architecture
 scripts/ci/editor/flutter_packages.sh architecture     # only the root architecture tests
 scripts/ci/editor/flutter_packages.sh danaview_editor_engine_api
