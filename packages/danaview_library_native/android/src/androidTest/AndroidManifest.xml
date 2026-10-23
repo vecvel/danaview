@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- OWNER: HOM-02A (HOM-20A adds the recording provider, HOM-22A the share / open-in receiver)
+<!-- OWNER: HOM-02A (HOM-20A adds the recording provider, HOM-22A the share / open-in receiver,
+     HOM-21A the Danaview package query)
      The test APK of danaview_library_native is its own app: it declares the photo permissions the
      Danaview app declares (D-3) so the tests can grant them with UiAutomation. RecordingProvider
      (pickers tests) serves test files and records every open mode (read-only check, rule 27). -->
@@ -11,6 +12,12 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+
+    <!-- HOM-21A: the incoming e2e test (incoming/IncomingAppE2eTest.kt) sends intents to the
+         installed Danaview app, so the test APK must see it (package visibility, API 30+). -->
+    <queries>
+        <package android:name="com.vecvel.danaview" />
+    </queries>
 
     <application>
         <provider
