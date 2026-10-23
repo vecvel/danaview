@@ -237,10 +237,13 @@ final class ExportStallTests: XCTestCase {
     // MARK: D1 root cause
 
     /// Reads [startUs, endUs) of the export composition of [plan] on a private queue; returns the
-    /// frames read, or nil when the read did not end within [timeout] s (the hung reader is left
-    /// alone: cancelling it while copyNextSampleBuffer blocks crashes).
+    /// frames read, or nil when the reader hung: no frame for [stallTimeout] s (the AVFoundation hang
+    /// delivers none at all), or still reading after [hardTimeout] s. A slow host that keeps
+    /// delivering frames is not a hang (the hosted CI VM reads this 320×180 plan at well under
+    /// 93 fps, so a fixed 10 s cap on the 931-frame range timed out while frames were still flowing).
+    /// The hung reader is left alone: cancelling it while copyNextSampleBuffer blocks crashes.
     private func readFrames(_ h: ExportHarness, plan data: Data, startUs: Int64, endUs: Int64, anchor: Bool,
-                            timeout: TimeInterval = 10) throws -> Int? {
+                            stallTimeout: TimeInterval = 10, hardTimeout: TimeInterval = 300) throws -> Int? {
         let plan = try RenderPlanDecoder.decodePlan(data)
         let built = try buildComposition(h, plan)
         let range = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: plan)
@@ -263,15 +266,35 @@ final class ExportStallTests: XCTestCase {
             }
             done.signal()
         }
-        if done.wait(timeout: .now() + timeout) == .timedOut {
-            SegmentedWriter.keepAbandoned([reader, output, built])
-            return nil
+        let started = Date()
+        var lastFrames = 0
+        var lastProgress = started
+        while done.wait(timeout: .now() + 0.25) == .timedOut {
+            lock.lock()
+            let n = frames
+            lock.unlock()
+            let now = Date()
+            if n != lastFrames {
+                lastFrames = n
+                lastProgress = now
+            }
+            if now.timeIntervalSince(lastProgress) > stallTimeout || now.timeIntervalSince(started) > hardTimeout {
+                lastProbe = "stall probe [\(startUs), \(endUs)) anchor \(anchor): hung after \(n) frames, "
+                    + String(format: "%.1f s", now.timeIntervalSince(started))
+                SegmentedWriter.keepAbandoned([reader, output, built])
+                return nil
+            }
         }
         built.releaseMedia()
         lock.lock()
         defer { lock.unlock() }
+        lastProbe = "stall probe [\(startUs), \(endUs)) anchor \(anchor): \(frames) frames in "
+            + String(format: "%.1f s", Date().timeIntervalSince(started))
         return frames
     }
+
+    /// What the last [readFrames] saw (frames and time), for the assertion messages.
+    private var lastProbe = ""
 
     private func buildComposition(_ h: ExportHarness, _ plan: RenderPlan) throws -> BuiltComposition {
         let session = try DVRenderSession(snapshots: ParamSnapshotStore(ParamSnapshot(plan: plan)), qos: .userInitiated)
@@ -297,10 +320,10 @@ final class ExportStallTests: XCTestCase {
         XCTAssertNil(try readFrames(h, plan: plan, startUs: 30_000_000, endUs: 31_033_334, anchor: false),
                      "hang reproduced (if this ever reads, the anchor may no longer be needed)")
         // With the anchor every range reads its exact frame count.
-        XCTAssertEqual(try readFrames(h, plan: plan, startUs: 30_000_000, endUs: 31_033_334, anchor: true), 31)
-        XCTAssertEqual(try readFrames(h, plan: plan, startUs: 21_000_000, endUs: 25_000_000, anchor: true), 120)
-        XCTAssertEqual(try readFrames(h, plan: plan, startUs: 10_000_000, endUs: 20_000_000, anchor: true), 300)
-        XCTAssertEqual(try readFrames(h, plan: plan, startUs: 0, endUs: 31_033_334, anchor: true), 931)
+        XCTAssertEqual(try readFrames(h, plan: plan, startUs: 30_000_000, endUs: 31_033_334, anchor: true), 31, lastProbe)
+        XCTAssertEqual(try readFrames(h, plan: plan, startUs: 21_000_000, endUs: 25_000_000, anchor: true), 120, lastProbe)
+        XCTAssertEqual(try readFrames(h, plan: plan, startUs: 10_000_000, endUs: 20_000_000, anchor: true), 300, lastProbe)
+        XCTAssertEqual(try readFrames(h, plan: plan, startUs: 0, endUs: 31_033_334, anchor: true), 931, lastProbe)
     }
 
     func testSpacerAnchorKeepsTheSpacerCoveringTheTimeline() throws {
