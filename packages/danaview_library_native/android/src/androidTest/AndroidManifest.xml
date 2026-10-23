@@ -5,6 +5,9 @@
      (pickers tests) serves test files and records every open mode (read-only check, rule 27). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- HOM-04A (3): the API 24-28 thumbnail test writes its seed files into public Pictures/Movies
+         (MediaStore below 29 can't open files under Android/data). Test APK only. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />

@@ -11,6 +11,9 @@
 //   nor the Play services back-port, androidx's ACTION_OPEN_DOCUMENT fallback in DocumentsUI)
 //   picks a photo and a video. Every picked item is described and copied, and must equal the
 //   seeded bytes, which are unchanged afterwards. A cancelled picker answers an empty list.
+// - Names (OBS-S2A-1): media-id names ("1000000777.jpg") become IMG_yyyyMMdd_HHmmss.<ext> from
+//   DATE_TAKEN, else DATE_ADDED, real names stay, clashes inside one pick are "Name (2).ext"; the
+//   system Photo Picker's own items come back with such names.
 
 package com.vecvel.danaview.library.pickers
 
@@ -171,6 +174,40 @@ class AndroidPickersTest {
     }
 
     @Test
+    fun mediaIdNamesBecomeCaptureDateNamesAndClashesAreNumbered() {
+        val takenMs = 1_729_501_500_000L // 2024-10-21 09:05:00 UTC
+        val addedS = 1_700_000_000L
+        val files = listOf("1000000777.jpg", "1000000778.jpg", "1000000779.mp4", "Holiday.jpg", "1000000780.jpg")
+        for (name in files) File(RecordingProvider.dir(context), name).writeBytes(jpegBytes(Color.RED))
+        RecordingProvider.dates["1000000777.jpg"] = takenMs to addedS
+        RecordingProvider.dates["1000000778.jpg"] = takenMs to null // the same second: a clash
+        RecordingProvider.dates["1000000779.mp4"] = null to addedS // no DATE_TAKEN: DATE_ADDED
+        RecordingProvider.dates["Holiday.jpg"] = takenMs to addedS // a real name stays
+        // 1000000780.jpg: no dates at all, the reported name stays.
+        try {
+            val stampOf = { ms: Long -> java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date(ms)) }
+            val photos = pickers.describeAll(files.map { RecordingProvider.uri(context, it) }, PickedSourceMsg.PHOTO_LIBRARY)
+            assertEquals(
+                listOf(
+                    "IMG_${stampOf(takenMs)}.jpg",
+                    "IMG_${stampOf(takenMs)} (2).jpg",
+                    "IMG_${stampOf(addedS * 1000)}.mp4",
+                    "Holiday.jpg",
+                    "1000000780.jpg",
+                ),
+                photos.map { it.displayName },
+            )
+            // A files pick keeps a digits-only name that is not the URI's id.
+            File(RecordingProvider.dir(context), "2024.jpg").writeBytes(jpegBytes(Color.BLUE))
+            RecordingProvider.dates["2024.jpg"] = takenMs to addedS
+            val doc = pickers.describeAll(listOf(RecordingProvider.uri(context, "2024.jpg"), RecordingProvider.uri(context, "Holiday.jpg")), PickedSourceMsg.FILES)
+            assertEquals(listOf("2024.jpg", "Holiday.jpg"), doc.map { it.displayName })
+        } finally {
+            RecordingProvider.dates.clear()
+        }
+    }
+
+    @Test
     fun resumeAfterAnInterruptedCopy() {
         val bytes = ByteArray(9 shl 20) { ((it * 31 + (it shr 8) * 7 + 5) and 0xff).toByte() }
         val name = "big-$stamp.mp4"
@@ -285,8 +322,18 @@ class AndroidPickersTest {
         assertEquals(2, uris.size)
         val expected = setOf(photo.toList(), video.toList())
         val got = HashSet<List<Byte>>()
-        for (uri in uris) {
-            val item = pickers.describe(uri, PickedSourceMsg.PHOTO_LIBRARY)
+        val items = pickers.describeAll(uris, PickedSourceMsg.PHOTO_LIBRARY)
+        if (system) {
+            // OBS-S2A-1: the Photo Picker reports "<media id>.<ext>"; imports are named by capture date.
+            for (item in items) {
+                assertTrue(item.displayName, Regex("""IMG_\d{8}_\d{6}( \(\d+\))?\.(jpg|mp4)""").matches(item.displayName))
+                assertEquals(if (item.mimeType!!.startsWith("video/")) "mp4" else "jpg", item.displayName.substringAfterLast('.'))
+            }
+        } else {
+            assertEquals(names.toSet(), items.map { it.displayName }.toSet())
+        }
+        android.util.Log.i("AndroidPickersTest", "photo picker names: ${items.map { it.displayName }}")
+        for ((uri, item) in uris.zip(items)) {
             assertEquals(PickedSourceMsg.PHOTO_LIBRARY, item.source)
             assertTrue(item.needsCopy)
             assertTrue(item.displayName.isNotEmpty())

@@ -3,8 +3,10 @@
 // Emulator tests of the Android thumbnailers (BUILD_PLAN HOM-04A: images, videos and PDFs on API 35
 // and 29; a corrupt file yields a typed failure, not a crash). Everything is generated on the
 // device (JPEG with EXIF orientation, H.264 MP4 through SeededMedia.encodeMp4, PDF through
-// PdfDocument); MediaStore rows are seeded on API 29+ only (RELATIVE_PATH). Each test checks the
-// written file decodes at the reported size and format, and that the source was not modified.
+// PdfDocument; an encrypted PDF written by hand); MediaStore rows are seeded with RELATIVE_PATH on
+// API 29+ and by scanning files in the app's external files folder below 29 (the pre-29 paths, run
+// on Pixel_API_28). Each test checks the written file decodes at the reported size and format, and
+// that the source was not modified.
 
 package com.vecvel.danaview.library.thumbnails
 
@@ -36,6 +38,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
 import kotlin.math.abs
@@ -81,18 +84,47 @@ class AndroidThumbnailerTest {
 
     private fun mp4(name: String): File = File(dir, name).also { SeededMedia.encodeMp4(it, 160, 120, 15) }
 
-    /** A two-page PDF (US Letter, 612×792 pt) with a black square near the top-left of page 1. */
-    private fun pdf(name: String): File {
+    /** A two-page PDF (US Letter, 612×792 pt unless given) with a black square near the top-left of page 1. */
+    private fun pdf(name: String, widthPt: Int = 612, heightPt: Int = 792): File {
         val f = File(dir, name)
         val doc = PdfDocument()
         for (n in 1..2) {
-            val page = doc.startPage(PdfDocument.PageInfo.Builder(612, 792, n).create())
+            val page = doc.startPage(PdfDocument.PageInfo.Builder(widthPt, heightPt, n).create())
             if (n == 1) page.canvas.drawRect(36f, 36f, 236f, 236f, Paint().apply { color = Color.BLACK })
             doc.finishPage(page)
         }
         f.outputStream().use { doc.writeTo(it) }
         doc.close()
         return f
+    }
+
+    /**
+     * A one-page PDF encrypted with the standard security handler (RC4, R2) whose stored O/U
+     * entries match neither an empty user password nor any password the test knows: opening it
+     * needs a password, as a password-protected document from a user would.
+     */
+    private fun encryptedPdf(name: String): File {
+        val out = ByteArrayOutputStream()
+        val offsets = ArrayList<Int>()
+        fun w(t: String) = out.write(t.toByteArray(Charsets.ISO_8859_1))
+        val hex32 = (0 until 32).joinToString("") { "%02X".format((it * 37 + 11) and 0xFF) }
+        val id = (0 until 16).joinToString("") { "%02X".format((it * 53 + 7) and 0xFF) }
+        w("%PDF-1.4\n")
+        val objects = listOf(
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+            "<< /Filter /Standard /V 1 /R 2 /O <$hex32> /U <${hex32.reversed()}> /P -44 >>",
+        )
+        objects.forEachIndexed { i, body ->
+            offsets.add(out.size())
+            w("${i + 1} 0 obj\n$body\nendobj\n")
+        }
+        val xref = out.size()
+        w("xref\n0 ${objects.size + 1}\n0000000000 65535 f \n")
+        for (o in offsets) w("%010d 00000 n \n".format(o))
+        w("trailer\n<< /Size ${objects.size + 1} /Root 1 0 R /Encrypt 4 0 R /ID [<$id> <$id>] >>\nstartxref\n$xref\n%%EOF\n")
+        return File(dir, name).apply { writeBytes(out.toByteArray()) }
     }
 
     private fun junk(name: String, header: ByteArray = ByteArray(0)): File =
@@ -248,15 +280,89 @@ class AndroidThumbnailerTest {
     }
 
     // ---------------------------------------------------------------------------------------------
+    // MediaStore below API 29 (HOM-04A (3)): seeded by writing files into fresh public
+    // Pictures/Movies folders (WRITE_EXTERNAL_STORAGE, test APK only, maxSdk 28) and scanning them
+    // (no RELATIVE_PATH below 29), read through the pre-29 paths: a sampled decode turned by the
+    // row's ORIENTATION, and MediaMetadataRetriever on the row's URI.
+
+    /** Scans [file] into MediaStore and returns its id (null when the scan gives no row). */
+    private fun scanned(file: File): Long? {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var uri: android.net.Uri? = null
+        android.media.MediaScannerConnection.scanFile(context, arrayOf(file.path), null) { _, u -> uri = u; latch.countDown() }
+        assertTrue("scanned", latch.await(20, java.util.concurrent.TimeUnit.SECONDS))
+        return uri?.let { android.content.ContentUris.parseId(it) }
+    }
+
+    /** Deletes [files] and scans them again, which drops their MediaStore rows. */
+    private fun unscan(files: List<File>) {
+        files.forEach { it.delete() }
+        val latch = java.util.concurrent.CountDownLatch(files.size)
+        android.media.MediaScannerConnection.scanFile(context, files.map { it.path }.toTypedArray(), null) { _, _ -> latch.countDown() }
+        latch.await(20, java.util.concurrent.TimeUnit.SECONDS)
+    }
+
+    @Test
+    fun mediaStoreBelowApi29TurnsByOrientationAndReadsVideoFrames() {
+        assumeTrue("the pre-29 MediaStore paths (API 24-28)", sdk < 29)
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        (PhotoPermissions.toRequest(sdk) + android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            .forEach { automation.grantRuntimePermission(context.packageName, it) }
+        val tag = UUID.randomUUID().toString().take(8)
+        @Suppress("DEPRECATION")
+        fun publicDir(type: String) = File(android.os.Environment.getExternalStoragePublicDirectory(type), "DanaviewTest-$tag").apply { mkdirs() }
+        val pictures = publicDir(android.os.Environment.DIRECTORY_PICTURES)
+        val movies = publicDir(android.os.Environment.DIRECTORY_MOVIES)
+        // Stored 400×200 landscape, EXIF "rotate 90": the scanner records ORIENTATION 90.
+        val photoFile = File(pictures, "pre29-$tag.jpg").also { jpeg("pre29-src.jpg", 400, 200, ExifInterface.ORIENTATION_ROTATE_90).copyTo(it) }
+        val videoFile = File(movies, "pre29-$tag.mp4").also { SeededMedia.encodeMp4(it, 160, 120, 15) }
+        try {
+            val photo = scanned(photoFile) ?: error("photo not scanned")
+            val video = scanned(videoFile) ?: error("video not scanned")
+            val before = photoFile.readBytes()
+            // Fit: displayed portrait 200×400 into 128 -> 64×128, red (stored left) on top.
+            val fit = media("ms:$photo", 128, 128, ThumbnailModeMsg.FIT, ThumbnailFormatMsg.JPEG)
+            assertEquals(64 to 128, fit.widthPx to fit.heightPx)
+            val b = decoded(fit)
+            assertTrue(isRedish(b.getPixel(32, 8)))
+            assertTrue(isBlueish(b.getPixel(32, 120)))
+            // Fill: the box, centre-cropped; WebP as the cache asks.
+            val fill = media("ms:$photo", 96, 96)
+            assertEquals(ThumbnailFormatMsg.WEBP, fill.format)
+            assertEquals(96 to 96, fill.widthPx to fill.heightPx)
+            decoded(fill)
+            // Large class: never upscaled past the displayed 200×400.
+            val large = media("ms:$photo", 1280, 1280, ThumbnailModeMsg.FIT)
+            assertEquals(200 to 400, large.widthPx to large.heightPx)
+            decoded(large)
+            // Video: a frame through MediaMetadataRetriever on the MediaStore URI, 4:3 kept in fit.
+            val v = media("ms:$video", 192, 192)
+            assertEquals(192 to 192, v.widthPx to v.heightPx)
+            decoded(v)
+            val vf = media("ms:$video", 1280, 1280, ThumbnailModeMsg.FIT)
+            assertTrue(abs(vf.widthPx.toDouble() / vf.heightPx - 4.0 / 3.0) < 0.05)
+            decoded(vf)
+            // Sources are only read.
+            assertArrayEquals(before, photoFile.readBytes())
+            // An id that is gone.
+            assertEquals(LibraryErrorCode.notFound, failure { media("ms:999999999", 64, 64) }.code)
+        } finally {
+            unscan(listOf(photoFile, videoFile))
+            pictures.delete()
+            movies.delete()
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Documents
 
     @Test
     fun pdfFirstPageFitsTheBoxOnWhite() {
         val src = pdf("doc.pdf")
         val before = src.readBytes()
-        val o = thumbnailer.document(src.path, PxSize(384, 384), ThumbnailFormatMsg.WEBP, 0.9, out.path, ThumbnailCancelToken())
+        val o = thumbnailer.document(src.path, PxSize(384, 384), 1.0, ThumbnailFormatMsg.WEBP, 0.9, out.path, ThumbnailCancelToken())
         assertNotNull(o)
-        // 612×792 pt fitted into 384: 297×384 (upscaling is allowed for vector pages too).
+        // 612×792 pt at scale 1 fitted into 384: 297×384.
         assertEquals(297 to 384, o!!.widthPx to o.heightPx)
         val b = decoded(o)
         val ink = b.getPixel(40, 40)
@@ -266,13 +372,59 @@ class AndroidThumbnailerTest {
         assertArrayEquals(before, src.readBytes())
         // A PDF without the extension is recognised by its header.
         val renamed = File(dir, "doc-no-ext").apply { writeBytes(before) }
-        assertNotNull(thumbnailer.document(renamed.path, PxSize(96, 96), ThumbnailFormatMsg.PNG, 0.9, out.path, ThumbnailCancelToken()))
+        assertNotNull(thumbnailer.document(renamed.path, PxSize(96, 96), 1.0, ThumbnailFormatMsg.PNG, 0.9, out.path, ThumbnailCancelToken()))
+    }
+
+    @Test
+    fun pdfHonoursScaleAndFitNeverUpscaling() {
+        fun doc(src: File, box: Int, scale: Double): Pair<Int, Int> {
+            val o = thumbnailer.document(src.path, PxSize(box, box), scale, ThumbnailFormatMsg.PNG, 0.9, out.path, ThumbnailCancelToken())!!
+            decoded(o)
+            return o.widthPx to o.heightPx
+        }
+        val letter = pdf("letter.pdf")
+        // A large box: the page's natural size at the scale, not blown up to the box.
+        assertEquals(612 to 792, doc(letter, 1600, 1.0))
+        assertEquals(1224 to 1584, doc(letter, 1600, 2.0))
+        // Larger than the box at scale 3: fitted into it.
+        assertEquals(1236 to 1600, doc(letter, 1600, 3.0))
+        // A small page (100×50 pt).
+        val small = pdf("small.pdf", 100, 50)
+        assertEquals(100 to 50, doc(small, 384, 1.0))
+        assertEquals(300 to 150, doc(small, 384, 3.0))
+        assertEquals(384 to 192, doc(small, 384, 10.0))
+        // The ink scales with the page: the square from 36 pt starts at 72 px at scale 2.
+        val o = thumbnailer.document(letter.path, PxSize(1600, 1600), 2.0, ThumbnailFormatMsg.PNG, 0.9, out.path, ThumbnailCancelToken())!!
+        val b = decoded(o)
+        assertTrue("ink at scale 2", Color.red(b.getPixel(80, 80)) < 60)
+        assertTrue("paper before the square", Color.red(b.getPixel(60, 60)) > 230)
+        // A bad scale is an invalid argument; nothing written.
+        out.delete()
+        for (bad in listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY)) {
+            assertEquals(LibraryErrorCode.invalidArgument, failure {
+                thumbnailer.document(letter.path, PxSize(96, 96), bad, ThumbnailFormatMsg.PNG, 0.9, out.path, ThumbnailCancelToken())
+            }.code)
+        }
+        assertFalse(out.exists())
+    }
+
+    @Test
+    fun encryptedPdfHasNoThumbnail() {
+        val src = encryptedPdf("locked.pdf")
+        val before = src.readBytes()
+        assertNull(thumbnailer.document(src.path, PxSize(384, 384), 2.0, ThumbnailFormatMsg.WEBP, 0.8, out.path, ThumbnailCancelToken()))
+        assertFalse(out.exists())
+        assertTrue(dir.listFiles()!!.none { it.name.endsWith(".part") })
+        assertArrayEquals(before, src.readBytes())
+        // The same file without the extension (header sniff) too.
+        val renamed = File(dir, "locked-no-ext").apply { writeBytes(before) }
+        assertNull(thumbnailer.document(renamed.path, PxSize(96, 96), 1.0, ThumbnailFormatMsg.WEBP, 0.8, out.path, ThumbnailCancelToken()))
     }
 
     @Test
     fun nonPdfDocumentHasNoThumbnail() {
         val txt = File(dir, "notes.txt").apply { writeText("hello") }
-        assertNull(thumbnailer.document(txt.path, PxSize(96, 96), ThumbnailFormatMsg.WEBP, 0.8, out.path, ThumbnailCancelToken()))
+        assertNull(thumbnailer.document(txt.path, PxSize(96, 96), 1.0, ThumbnailFormatMsg.WEBP, 0.8, out.path, ThumbnailCancelToken()))
         assertFalse(out.exists())
     }
 
@@ -285,7 +437,7 @@ class AndroidThumbnailerTest {
         assertEquals(LibraryErrorCode.ioError, failure { media(junk("broken.mp4", bytes(0, 0, 0, 0x18) + "ftypmp42".toByteArray()).path, 96, 96) }.code)
         assertEquals(LibraryErrorCode.ioError, failure { media(junk("mystery.bin").path, 96, 96) }.code)
         assertEquals(LibraryErrorCode.ioError, failure {
-            thumbnailer.document(junk("broken.pdf", "%PDF-1.4\n".toByteArray()).path, PxSize(96, 96), ThumbnailFormatMsg.WEBP, 0.8, out.path, ThumbnailCancelToken())
+            thumbnailer.document(junk("broken.pdf", "%PDF-1.4\n".toByteArray()).path, PxSize(96, 96), 1.0, ThumbnailFormatMsg.WEBP, 0.8, out.path, ThumbnailCancelToken())
         }.code)
         assertEquals(LibraryErrorCode.ioError, failure { media(File(dir, "empty.jpg").apply { writeBytes(ByteArray(0)) }.path, 96, 96) }.code)
         assertFalse(out.exists())
@@ -297,7 +449,7 @@ class AndroidThumbnailerTest {
         assertEquals(LibraryErrorCode.notFound, failure { media(File(dir, "gone.jpg").path, 96, 96) }.code)
         assertEquals(LibraryErrorCode.notFound, failure { media(dir.path, 96, 96) }.code)
         assertEquals(LibraryErrorCode.notFound, failure {
-            thumbnailer.document(File(dir, "gone.pdf").path, PxSize(96, 96), ThumbnailFormatMsg.WEBP, 0.8, out.path, ThumbnailCancelToken())
+            thumbnailer.document(File(dir, "gone.pdf").path, PxSize(96, 96), 1.0, ThumbnailFormatMsg.WEBP, 0.8, out.path, ThumbnailCancelToken())
         }.code)
         assertEquals(LibraryErrorCode.notSupportedOnDevice, failure { media(pdf("x.pdf").path, 96, 96) }.code)
         assertEquals(LibraryErrorCode.notSupportedOnDevice, failure { media("ph:AAAA/L0/001", 96, 96) }.code)

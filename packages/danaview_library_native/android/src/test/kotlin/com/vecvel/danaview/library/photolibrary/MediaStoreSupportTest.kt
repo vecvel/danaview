@@ -254,6 +254,24 @@ class MediaStoreSupportTest {
     // Albums
 
     @Test
+    fun albumsHoldPhotosOnlyAndVideoOnlyBucketsAreLeftOut() {
+        val buckets = LinkedHashMap<String, Albums.Bucket>()
+        // Camera: 2 photos + 1 video; Movies: videos only; Mixed: a video first, then a photo.
+        Albums.add(buckets, "1", "Camera", Col.MEDIA_TYPE_IMAGE)
+        Albums.add(buckets, "1", "Camera", Col.MEDIA_TYPE_VIDEO)
+        Albums.add(buckets, "1", "Camera", Col.MEDIA_TYPE_IMAGE)
+        Albums.add(buckets, "2", "Movies", Col.MEDIA_TYPE_VIDEO)
+        Albums.add(buckets, "2", "Movies", Col.MEDIA_TYPE_VIDEO)
+        Albums.add(buckets, "3", "Mixed", Col.MEDIA_TYPE_VIDEO)
+        Albums.add(buckets, "3", "Mixed", Col.MEDIA_TYPE_IMAGE)
+        Albums.add(buckets, "4", "Odd", null)
+        val albums = Albums.albums(buckets.values)
+        assertEquals(listOf("1", "3"), albums.map { it.albumId })
+        assertEquals(listOf(2L, 1L), albums.map { it.estimatedCount })
+        assertEquals(2L, buckets.getValue("2").videos)
+    }
+
+    @Test
     fun albumsPutCameraAndScreenshotsFirst() {
         val albums = Albums.albums(
             listOf(

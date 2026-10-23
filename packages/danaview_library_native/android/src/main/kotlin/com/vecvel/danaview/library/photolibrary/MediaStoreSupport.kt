@@ -271,14 +271,29 @@ class ChangeCollector(private val maxIds: Int = 500) {
 
 /** Device folders (MediaStore buckets) as albums. */
 object Albums {
-    /** One counted bucket. */
-    data class Bucket(val id: String, val name: String?, var count: Long = 0)
+    /** One counted bucket: [count] photos (the album's size) and [videos] videos. */
+    data class Bucket(val id: String, val name: String?, var count: Long = 0, var videos: Long = 0)
+
+    /**
+     * Counts one MediaStore row of [mediaType] in bucket [id] (OBS-S2A-3): photos make the album,
+     * videos are only tallied, so a video-only bucket is no album (it belongs in Videos).
+     */
+    fun add(buckets: MutableMap<String, Bucket>, id: String, name: String?, mediaType: Int?) {
+        val bucket = buckets.getOrPut(id) { Bucket(id, name) }
+        when (mediaType) {
+            Col.MEDIA_TYPE_IMAGE -> bucket.count++
+            Col.MEDIA_TYPE_VIDEO -> bucket.videos++
+        }
+    }
 
     /** Buckets the OS itself fills (camera, screenshots) are `smart`, as PhotoKit's smart albums. */
     fun isSystemBucket(name: String?): Boolean =
         name != null && (name.equals("Camera", ignoreCase = true) || name.equals("Screenshots", ignoreCase = true))
 
-    /** Albums of [buckets]: system buckets first (Camera, Screenshots), then by name. */
+    /**
+     * The Photos tab's albums of [buckets]: only buckets holding photos, sized by their photos
+     * (OBS-S2A-3); system buckets first (Camera, Screenshots), then by name.
+     */
     fun albums(buckets: Collection<Bucket>): List<PhotoAlbumMsg> = buckets
         .filter { it.count > 0 }
         .sortedWith(

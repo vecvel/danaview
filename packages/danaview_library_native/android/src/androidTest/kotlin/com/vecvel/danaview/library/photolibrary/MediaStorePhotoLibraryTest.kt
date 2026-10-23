@@ -1,7 +1,7 @@
 // OWNER: HOM-02A
 //
 // Emulator tests of the MediaStore library (BUILD_PLAN HOM-02A: API 35 and 29 with seeded media):
-// paging with change tokens, filters and albums, assets by id, EXIF detail, create-new copies,
+// paging with change tokens, filters and albums (photo buckets only, OBS-S2A-3), assets by id, EXIF detail, create-new copies,
 // change events on add and delete, and the access states including Android 14+ partial access
 // (granted for real with UiAutomation; the test APK is installed fresh by connectedAndroidTest, so
 // nothing is granted when the first test, in name order, runs).
@@ -223,10 +223,23 @@ class MediaStorePhotoLibraryTest {
     fun c2_albumsListTheSeedFolder() {
         grantFull()
         val (_, album) = seedAlbum()
-        val seeded = library.fetchAlbums().single { it.albumId == album }
-        assertEquals(6L, seeded.estimatedCount)
-        assertEquals(PhotoAlbumKindMsg.USER, seeded.kind)
-        assertEquals(seed.folder.trimEnd('/').substringAfterLast('/'), seeded.title)
+        // OBS-S2A-3: a second folder holding only a video is no album (it belongs in Videos).
+        val videoOnly = SeededMedia(context)
+        try {
+            val clip = videoOnly.addVideo("only_clip.mp4")
+            val videoBucket = videoOnly.bucketId(clip)
+            val albums = library.fetchAlbums()
+            val seeded = albums.single { it.albumId == album }
+            // Five photos and one video: the album counts its photos.
+            assertEquals(5L, seeded.estimatedCount)
+            assertEquals(PhotoAlbumKindMsg.USER, seeded.kind)
+            assertEquals(seed.folder.trimEnd('/').substringAfterLast('/'), seeded.title)
+            assertTrue("video-only bucket listed", albums.none { it.albumId == videoBucket })
+            // Its video is still in the library (the Videos filter of that bucket).
+            assertEquals(1L, page(PhotoMediaFilterMsg.VIDEOS, videoBucket, 0, 10).totalCount)
+        } finally {
+            videoOnly.deleteAll()
+        }
     }
 
     @Test

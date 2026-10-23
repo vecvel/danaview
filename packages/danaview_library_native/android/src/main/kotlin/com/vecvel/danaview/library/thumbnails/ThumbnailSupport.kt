@@ -127,6 +127,19 @@ object ThumbnailGeometry {
         return PxSize(max(1, (source.width * s).roundToInt()), max(1, (source.height * s).roundToInt()))
     }
 
+    /**
+     * The pixel size of a document page thumbnail (HOM-04A, honouring scale and fit): the page of
+     * [pageWidthPt]×[pageHeightPt] points (1/72 in) is [scale] pixels per point at its natural
+     * size, and is fitted into [box] (`fit`: aspect kept, at least 1 px per side, never larger
+     * than the natural size). A small page on a 1x screen stays small instead of being blown up.
+     */
+    fun documentSize(pageWidthPt: Int, pageHeightPt: Int, scale: Double, box: PxSize): PxSize {
+        val pw = max(1, pageWidthPt).toDouble()
+        val ph = max(1, pageHeightPt).toDouble()
+        val s = min(scale, min(box.width / pw, box.height / ph))
+        return PxSize(max(1, (pw * s).roundToInt()), max(1, (ph * s).roundToInt()))
+    }
+
     /** The centred crop with the box's aspect for `fill`, the whole image for `fit` (source pixels). */
     fun cropRect(source: PxSize, box: PxSize, mode: ThumbnailModeMsg): PxRect {
         val whole = PxRect(0, 0, source.width, source.height)
@@ -216,4 +229,8 @@ object ThumbnailRequests {
         if (!outputPath.startsWith("/")) return ThumbnailFailure.invalid("output path is not absolute")
         return null
     }
+
+    /** The validation failure of a document request's screen [scale] (finite, above 0), or null. */
+    fun validateScale(scale: Double): ThumbnailFailure? =
+        if (scale.isNaN() || scale.isInfinite() || scale <= 0.0) ThumbnailFailure.invalid("scale out of range") else null
 }

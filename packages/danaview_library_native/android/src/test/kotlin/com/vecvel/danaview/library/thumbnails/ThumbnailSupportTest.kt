@@ -93,6 +93,33 @@ class ThumbnailSupportTest {
     }
 
     @Test
+    fun documentSizeIsThePageAtTheScaleFittedIntoTheBox() {
+        // US Letter 612×792 pt.
+        assertEquals(PxSize(297, 384), ThumbnailGeometry.documentSize(612, 792, 1.0, PxSize(384, 384)))
+        assertEquals(PxSize(612, 792), ThumbnailGeometry.documentSize(612, 792, 1.0, PxSize(1600, 1600)))
+        assertEquals(PxSize(1224, 1584), ThumbnailGeometry.documentSize(612, 792, 2.0, PxSize(1600, 1600)))
+        assertEquals(PxSize(1236, 1600), ThumbnailGeometry.documentSize(612, 792, 3.0, PxSize(1600, 1600)))
+        assertEquals(PxSize(989, 1280), ThumbnailGeometry.documentSize(612, 792, 3.0, PxSize(1280, 1280)))
+        // Landscape pages; tiny pages keep at least 1 px.
+        assertEquals(PxSize(384, 192), ThumbnailGeometry.documentSize(100, 50, 10.0, PxSize(384, 384)))
+        assertEquals(PxSize(300, 150), ThumbnailGeometry.documentSize(100, 50, 3.0, PxSize(384, 384)))
+        assertEquals(PxSize(1, 1), ThumbnailGeometry.documentSize(1, 1, 0.25, PxSize(96, 96)))
+        assertEquals(PxSize(96, 1), ThumbnailGeometry.documentSize(3000, 1, 1.0, PxSize(96, 96)))
+        // A huge scale is bounded by the box.
+        assertEquals(PxSize(297, 384), ThumbnailGeometry.documentSize(612, 792, 1e9, PxSize(384, 384)))
+    }
+
+    @Test
+    fun documentScaleMustBePositiveAndFinite() {
+        assertNull(ThumbnailRequests.validateScale(1.0))
+        assertNull(ThumbnailRequests.validateScale(0.5))
+        assertNull(ThumbnailRequests.validateScale(3.0))
+        for (bad in listOf(0.0, -2.0, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            assertEquals(LibraryErrorCode.invalidArgument, ThumbnailRequests.validateScale(bad)!!.code)
+        }
+    }
+
+    @Test
     fun requestSizeCoversTheBoxForFill() {
         val box = PxSize(384, 384)
         assertEquals(PxSize(512, 384), ThumbnailGeometry.requestSize(PxSize(4000, 3000), box, fill))

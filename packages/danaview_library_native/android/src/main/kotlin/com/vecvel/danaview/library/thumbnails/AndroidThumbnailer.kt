@@ -12,8 +12,10 @@
 //   `MediaMetadataRetriever` below.
 // * Other `content://` URIs: a sampled decode with the EXIF orientation (images) or
 //   `MediaMetadataRetriever` (videos).
-// * Documents: `PdfRenderer`'s first page (white paper, fitted into the box, may upscale: PDF is
-//   vector); other documents have no thumbnail (null, the caller shows a type icon).
+// * Documents: `PdfRenderer`'s first page on white paper, rendered straight at its thumbnail size:
+//   the page's points times the request's screen scale, fitted into the box and never larger
+//   (ThumbnailGeometry.documentSize). Other documents and password-protected (encrypted) PDFs have
+//   no thumbnail: null, the caller shows the type icon (Dart: the lock icon for an encrypted PDF).
 //
 // The bitmap is then cropped / fitted into the box (ThumbnailGeometry, the same rules as HOM-04 on
 // Apple) and encoded as lossy WebP (V2-28), JPEG or PNG as asked (HEIC is written as JPEG) into a
@@ -134,20 +136,22 @@ class AndroidThumbnailer(context: Context) {
     }
 
     /**
-     * Writes the first-page thumbnail of the document at [path] fitted into [box]; null when the
-     * document has no thumbnail here (not a PDF, or an encrypted one).
+     * Writes the first-page thumbnail of the document at [path]: the page at [scale] pixels per
+     * point, fitted into [box] and never upscaled past that; null when the document has no
+     * thumbnail here (not a PDF, or an encrypted one that needs a password).
      */
-    fun document(path: String, box: PxSize, format: ThumbnailFormatMsg, quality: Double, outputPath: String, token: ThumbnailCancelToken): ThumbnailOutput? {
+    fun document(path: String, box: PxSize, scale: Double, format: ThumbnailFormatMsg, quality: Double, outputPath: String, token: ThumbnailCancelToken): ThumbnailOutput? {
+        ThumbnailRequests.validateScale(scale)?.let { throw it }
         token.check()
         val file = checkedFile(path)
         val isPdf = ThumbnailTypes.kind(null, file.name) == MediaKind.PDF || readHead(file)?.let(ThumbnailTypes::looksLikePdf) == true
         if (!isPdf) return null
         val bitmap = try {
-            renderPdfFirstPage(file, box, token)
+            renderPdfFirstPage(file, box, scale, token)
         } catch (f: ThumbnailFailure) {
             throw f
         } catch (e: SecurityException) {
-            return null // password-protected: no thumbnail, the caller shows the type icon
+            return null // encrypted (password-protected): no thumbnail, Dart shows the lock icon
         } catch (e: IOException) {
             throw ThumbnailFailure.io("unreadable or corrupt document")
         } catch (e: OutOfMemoryError) {
@@ -354,19 +358,15 @@ class AndroidThumbnailer(context: Context) {
         null
     }
 
-    /** Page 1 of the PDF rendered on white, fitted into [box] (upscaled when the page is smaller). */
-    private fun renderPdfFirstPage(file: File, box: PxSize, token: ThumbnailCancelToken): Bitmap? = PDF_LOCK.withLock {
+    /** Page 1 of the PDF rendered on white at [scale] px per point, fitted into [box] (never upscaled past that). */
+    private fun renderPdfFirstPage(file: File, box: PxSize, scale: Double, token: ThumbnailCancelToken): Bitmap? = PDF_LOCK.withLock {
         token.check()
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
             PdfRenderer(pfd).use { renderer ->
                 if (renderer.pageCount < 1) return@withLock null
                 renderer.openPage(0).use { page ->
-                    val pw = max(1, page.width)
-                    val ph = max(1, page.height)
-                    val s = min(box.width.toDouble() / pw, box.height.toDouble() / ph)
-                    val w = max(1, (pw * s).roundToInt())
-                    val h = max(1, (ph * s).roundToInt())
-                    val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    val size = ThumbnailGeometry.documentSize(page.width, page.height, scale, box)
+                    val bitmap = Bitmap.createBitmap(size.width, size.height, Bitmap.Config.ARGB_8888)
                     bitmap.eraseColor(Color.WHITE)
                     token.check()
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)

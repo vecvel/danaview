@@ -88,10 +88,11 @@ class ThumbnailHostApiImpl(private val context: LibraryPluginContext) : Thumbnai
         ThumbnailRequests.validate(request.requestId, request.widthPx, request.heightPx, request.quality, request.outputPath)?.let {
             return callback(Result.failure(error(it)))
         }
+        ThumbnailRequests.validateScale(request.scale)?.let { return callback(Result.failure(error(it))) }
         if (!request.path.startsWith("/")) return callback(Result.failure(error(ThumbnailFailure.invalid("document path is not absolute"))))
         val box = PxSize(request.widthPx.toInt(), request.heightPx.toInt())
         submit(request.requestId, callback) { token ->
-            thumbnailer.document(request.path, box, request.format, request.quality, request.outputPath, token)?.let(::msg)
+            thumbnailer.document(request.path, box, request.scale, request.format, request.quality, request.outputPath, token)?.let(::msg)
         }
     }
 
