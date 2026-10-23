@@ -172,8 +172,27 @@ void main() {
       for (final platform in TargetPlatform.values) {
         expect(documentsOverrides(platform: platform, support: '/s'), isEmpty, reason: platform.name);
       }
-      expect(installIncomingDocumentOpen(appNavigatorKey, openEntry: (_, __, ___) async {}), isFalse);
-      expect(IncomingMediaBridge.interceptor, isNull);
+      for (final platform in [TargetPlatform.android, TargetPlatform.windows, TargetPlatform.linux]) {
+        expect(installIncomingDocumentOpen(appNavigatorKey, openEntry: (_, __, ___) async {}, platform: platform), isFalse);
+        expect(IncomingMediaBridge.interceptor, isNull, reason: platform.name);
+      }
+    });
+
+    test('iOS and macOS: photos and documents opened with Danaview are claimed, not imported or played', () async {
+      FeatureFlags.debugFilesHomeOverride = false;
+      for (final platform in [TargetPlatform.iOS, TargetPlatform.macOS]) {
+        IncomingMediaBridge.interceptor = null;
+        var opened = 0;
+        expect(installIncomingDocumentOpen(appNavigatorKey, openEntry: (_, __, ___) async => opened++, platform: platform), isFalse);
+        final claim = IncomingMediaBridge.interceptor!;
+        for (final doc in ['/tmp/Guide.pdf', 'file:///tmp/Notes.docx', '/tmp/a.txt', '/tmp/IMG_1.jpg']) {
+          expect(await claim(doc), isTrue, reason: '$doc on ${platform.name}');
+        }
+        for (final media in ['/tmp/clip.mp4', 'https://example.com/live.m3u8', 'danaview://open?url=https://e.com/a.mp4']) {
+          expect(await claim(media), isFalse, reason: '$media keeps the 1.1 path on ${platform.name}');
+        }
+        expect(opened, 0);
+      }
     });
   });
 
@@ -390,6 +409,10 @@ void main() {
             reason: 'a viewer text has the fallback debug style');
       }
       expect(find.ancestor(of: find.byType(DocumentViewer), matching: find.byType(Material)), findsWidgets);
+      final resolved = DefaultTextStyle.of(tester.element(find.byType(DocumentViewer))).style;
+      expect(resolved.fontFamily, contains('Figtree'), reason: 'the kit text style');
+      expect(resolved.fontSize, DanaviewTextStyles.body.fontSize);
+      expect(resolved.decoration, TextDecoration.none);
       await app.dispose();
     });
 
@@ -430,6 +453,45 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('file-info')));
       await pumpFrames(tester, count: 8);
       expect(find.text('Notes.docx'), findsWidgets);
+      expect(tester.takeException(), isNull);
+      await app.dispose();
+    });
+  });
+
+  group('flag on: file actions for documents (FIX-S3Q-1)', () {
+    testWidgets('the row menu offers Open and "More actions…", which opens the file menu', (tester) async {
+      useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
+      final app = await _pumpApp(tester);
+      await app.tab(HomeTab.documents);
+      final row = find.byKey(ValueKey('library-entry-${app.entries['Notes.docx']!.id.value}'));
+      await tester.tap(find.descendant(of: row, matching: find.byTooltip('More')));
+      await pumpFrames(tester, count: 6);
+      expect(find.text('Open'), findsOneWidget);
+      await tester.tap(find.text('More actions…'));
+      await pumpFrames(tester, count: 8);
+      for (final id in ['file-share', 'file-favourite', 'file-copy-to', 'file-info']) {
+        expect(find.byKey(ValueKey(id)), findsOneWidget, reason: id);
+      }
+      expect(tester.takeException(), isNull);
+      await app.dispose();
+    });
+
+    testWidgets("the viewer's top bar opens Share, Save out and File info", (tester) async {
+      useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
+      final app = await _pumpApp(tester);
+      await app.tab(HomeTab.all);
+      await tester.tap(_row('Archive.zip'));
+      await pumpFrames(tester, count: 8);
+      expect(find.byKey(const ValueKey(ViewerKind.fileCard)), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('viewer-file-menu')));
+      await pumpFrames(tester, count: 8);
+      expect(find.byKey(const ValueKey('file-share')), findsOneWidget);
+      expect(find.byKey(const ValueKey('file-info')), findsOneWidget);
+      expect(find.byKey(const ValueKey('file-delete')), findsNothing, reason: 'Delete stays in the row menu');
+      expect(find.byKey(const ValueKey('file-move-to')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('file-info')));
+      await pumpFrames(tester, count: 8);
+      expect(find.text('Archive.zip'), findsWidgets);
       expect(tester.takeException(), isNull);
       await app.dispose();
     });

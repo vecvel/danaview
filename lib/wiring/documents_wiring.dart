@@ -4,7 +4,8 @@
 // INT-103): the Documents tab, the viewers and Open with / the iOS Share Extension, composed at the
 // app root behind DANAVIEW_FILES_HOME (default false, never flipped in code). With the flag off
 // nothing here runs: [documentsOverrides] returns no override and [installIncomingDocumentOpen]
-// leaves the 1.1 incoming-media path untouched.
+// only guards the 1.1 incoming-media path against the photos and documents the shipped native
+// document types can still send (a neutral toast; videos and links play as in 1.1).
 //
 // With the flag on:
 //
@@ -46,6 +47,7 @@ import 'package:danaview_library_native/danaview_library_native.dart' show Nativ
 import 'package:danaview_pdf/danaview_pdf.dart' show PdfDocuments, PlatformPdfDocuments;
 import 'package:danaview_platform/danaview_platform.dart' show IncomingMediaBridge;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -396,11 +398,30 @@ typedef IncomingEntryOpener = Future<void> Function(BuildContext context, Provid
 /// The toast of an Open with import that failed (HOM-21).
 const String incomingOpenFailedMessage = "Couldn't open this file.";
 
+/// The toast for a photo or document opened with Danaview while DANAVIEW_FILES_HOME is off.
+const String incomingNotSupportedMessage = "Danaview can't open this kind of file.";
+
 /// Installs HOM-21's interceptor on [IncomingMediaBridge] (flag on only): photos and documents
 /// another app opens with Danaview are imported into `Imported` and shown by [openEntry] on the
 /// root navigator of [navigator]; everything else plays as in 1.1. Returns whether it installed.
-bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required IncomingEntryOpener openEntry}) {
-  if (!documentsWired) return false;
+///
+/// With the flag off nothing of S3 runs, but on iOS and macOS the native document types S3 adds
+/// (Info.plist) ship in every build, so a photo or document can still arrive: there a guard claims
+/// those (nothing is imported or shown) and says so in a neutral toast instead of handing them to
+/// the 1.1 player. Videos, streams and danaview:// links, and every other platform, keep the 1.1
+/// path unchanged.
+bool installIncomingDocumentOpen(GlobalKey<NavigatorState> navigator, {required IncomingEntryOpener openEntry, TargetPlatform? platform}) {
+  if (!documentsWired) {
+    final os = platform ?? defaultTargetPlatform;
+    if (os != TargetPlatform.iOS && os != TargetPlatform.macOS) return false;
+    IncomingMediaBridge.interceptor = (media) async {
+      if (routeIncoming(media) != IncomingRoute.importAndView) return false;
+      final c = _insideOverlayOf(navigator);
+      if (c != null && c.mounted) DanaviewToast.show(c, incomingNotSupportedMessage, icon: Icons.info_outline_rounded);
+      return true;
+    };
+    return false;
+  }
   BuildContext? context() => navigator.currentContext;
   ProviderContainer? container() {
     final c = context();

@@ -666,6 +666,7 @@ class FilesHomeState extends State<FilesHome> {
               onOpenFolder: widget.onOpenFolder,
               onOpenEntry: (e) => _openEntry(context, ref, e),
               onOpenPlayer: widget.onOpenPlayer,
+              onMoreEntry: (e) => unawaited(showLibraryEntryFileMenu(context, ref, e)),
             )),
       );
 
