@@ -15,6 +15,11 @@ on:
       - 'docs/**'
       - '**/*.md'
   workflow_dispatch:
+    inputs:
+      release_key:
+        description: 'Sign with the production release key (default: debug key; owner decision pending)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -70,7 +75,15 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          USE_RELEASE_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.release_key }}
         run: |
+          # Internal builds are public downloads (the repo is public), so they use the DEBUG key unless
+          # a manual run asks for the release key. The production key stays for the 1.0.0 release.
+          if [ "$USE_RELEASE_KEY" != "true" ]; then
+            echo "::notice title=Debug signing::Internal build signed with the debug key (release_key not requested)."
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
             echo "::warning title=Debug signing::The ANDROID_KEYSTORE_* / ANDROID_KEY_* secrets are not available (fork or unset). These APKs are signed with the DEBUG key and cannot update a release-signed install."
             echo "mode=debug" >> "$GITHUB_OUTPUT"
