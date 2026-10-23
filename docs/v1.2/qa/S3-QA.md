@@ -550,3 +550,29 @@ five document types, the embedded Share Extension and both privacy manifests, pa
 iOS 26.5 simulator (Documents tab, PDF, CSV via Quick Look, Share Extension from Files). **Not a
 release candidate yet**: the S3 gate is Red (FIX-S3Q-7, FIX-S3Q-8); rebuild after those close. Signing
 with the App Group, upload and the store answers are the owner's; Android is the Windows lane.
+
+## Final Mac-half verdict (2026-10-23, lead)
+
+**Green.** FIX-S3Q-7 (iOS Open-in copies not cleaned up) and FIX-S3Q-8 (status-bar-tall gap under
+the CSV header) fixed in `2351545`. The S3 E2E
+(`integration_test/v12/s3/s3_documents_test.dart`, iPhone 16 / iOS 26.5) passes 1/1 end to end,
+including reopen, originals unchanged (8 files) and no HttpClient. The CSV screenshot shows the
+rows right under the header in Figtree. One earlier run failed mid-run at a list scroll
+(`_reveal`, "No element" while the list rebuilt); it passed on the clean re-run, so it's recorded
+as a flaky harness step (low).
+
+**Release candidate (Mac half), rebuilt on `ab252f2` (the fixed tree):**
+- `flutter build ipa --release --no-codesign` with DANAVIEW_EDITOR, DANAVIEW_AUTO_CAPTIONS and
+  DANAVIEW_FILES_HOME true (PHOTO_EDITOR, BEAUTY, AI_STUDIO false): archive 264.0 MB, zipped app
+  26.06 MB (S2: 25.08 MB, +0.98 MB).
+- Version 1.0.0 (1), minimum iOS 15.0; DanaviewShare.appex embedded.
+- check_ios_min_os: OK. NEWLAPACK: none.
+- Not signed or uploaded. The App Group entitlement is checked on the owner's signed archive.
+
+**Android half:** HOM-25 and HOM-21A (with the flag-gated activity-alias) merged into v1.2-wip.
+The S3-Q and S3-R Android halves are pending on Windows.
+
+Still open, low: FIX-S3Q-3..5, N-S3-5/6, N-S3R-1 (no PDF page count on its row), N-S3R-2
+(the Share Extension folder picker's empty panel), D-S3W-2 (the player menu "Save to Danaview
+folder" item needs its one-line hook in danaview_controls_overlay.dart). Recommended for S4's
+first round.

@@ -1,4 +1,5 @@
 import java.io.FileInputStream
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -12,6 +13,22 @@ val keystoreProperties = Properties().apply {
     val file = rootProject.file("key.properties")
     if (file.exists()) FileInputStream(file).use { load(it) }
 }
+
+// EXTENDED: INT-104/HOM-21A, Windows lane. The 1.2 flags are Dart --dart-define values; the Flutter
+// tool hands them to Gradle as the `dart-defines` project property, a comma-separated list of
+// base64-encoded "KEY=value" entries. A flag is on only for the exact value "true", as in Dart's
+// bool.fromEnvironment; anything else, a missing define or an undecodable entry is off.
+fun dartDefineFlag(key: String): Boolean {
+    val raw = project.findProperty("dart-defines") as String? ?: return false
+    return raw.split(',').filter { it.isNotBlank() }.any { entry ->
+        val decoded = runCatching { String(Base64.getDecoder().decode(entry.trim()), Charsets.UTF_8) }.getOrNull()
+        decoded == "$key=true"
+    }
+}
+
+// DANAVIEW_FILES_HOME (Pillar 1). Off by default: the HOM-21A document/photo/text share filters
+// (the IncomingDocumentsAlias in AndroidManifest.xml) are then disabled, as in 1.1.
+val danaviewFilesHome = dartDefineFlag("DANAVIEW_FILES_HOME")
 
 android {
     namespace = "com.vecvel.danaview"
@@ -30,6 +47,12 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["danaviewFilesHome"] = danaviewFilesHome.toString()
+        buildConfigField("boolean", "DANAVIEW_FILES_HOME", danaviewFilesHome.toString())
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {
