@@ -55,11 +55,12 @@ final class MetricResult {
         if (!budgetGated) 'budgetGated': false,
       };
 
-  /// One aligned text line for the console.
-  String describe() {
+  /// One aligned text line for the console; the verdict compares [p90] with the budget × [hostFactor].
+  String describe({double hostFactor = 1}) {
     String ms(int us) => (us / 1000).toStringAsFixed(us < 10000 ? 3 : 1).padLeft(8);
+    final ok = p90 <= budgetUs * hostFactor;
     return '${id.padRight(30)} p50 ${ms(p50)} ms  p90 ${ms(p90)} ms  max ${ms(max)} ms  '
-        'budget ${ms(budgetUs)} ms  ${withinBudget ? 'ok' : budgetGated ? 'OVER BUDGET' : 'over budget (not gated here)'}';
+        'budget ${ms(budgetUs)} ms  ${ok ? 'ok' : budgetGated ? 'OVER BUDGET' : 'over budget (not gated here)'}';
   }
 }
 

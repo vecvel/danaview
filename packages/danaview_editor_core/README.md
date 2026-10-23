@@ -135,16 +135,27 @@ written by `benchmark/src/large_project.dart` (deterministic) and regenerated wi
 ```sh
 dart run benchmark/run.dart                    # measure and print
 dart run benchmark/run.dart --check            # CI gate (core.sh): budgets + ≤ 25 % p90 regression
-dart run benchmark/run.dart --update-baseline  # rewrite benchmark/baseline.json (on the CI host)
+dart run benchmark/run.dart --update-baseline  # rewrite benchmark/baseline.json (on the dev Mac)
 dart run benchmark/run.dart --json out.json    # also write the results
 ```
 
 `--check` fails when any of these hold:
 
-- a gated row misses its budget;
-- a row's p90 exceeds `baseline × 1.25` by more than 50 µs;
+- a gated row's p90 exceeds its budget × f;
+- a row's p90 exceeds `baseline × f × 1.25` by more than 50 µs;
 - the fixture loses its shape, validity or D-14 limits.
 
-A failing row is measured again up to twice, and the best run counts. Refresh the baseline only on
-the CI host, and only for an intended change. The device numbers (one mid-tier Android, one iPhone)
+A failing row is measured again up to twice, and the best run counts.
+
+**Host factor f.** `baseline.json` is recorded on the dev Mac (Apple M2, 8 cores, macOS 26.6.2,
+AOT), the host the budgets were verified on; no CI runner matches it (the `dart-core-benchmark` job
+on ubuntu-latest and the macos-26 VM run 1.2–2.3× slower, and ubuntu-latest machines differ from
+run to run). Each run therefore times two fixed pure-Dart calibration workloads
+(`benchmark/src/calibration.dart`, no package code) before and after the rows: `compute` (object
+churn, maps, sorting) for the apply, dryRun and compile rows, and `codec` (JSON, double
+formatting, string and byte building) for the encode, autosave and open rows, which slow down more
+on x86_64. A row's f = the lower of the two p50s of its kind ÷ the baseline's `calibrationUs`. On the dev Mac f ≈ 1, so the gate there is the plain budget and
+the plain 25 % rule; on a slower host both scale with it. The budgets themselves are device
+budgets (§18.2 low/mid tier); device numbers are QA-04's. Refresh the baseline on the dev Mac, on
+a quiet machine, and only for an intended change (`--update-baseline` writes the calibration too). The device numbers (one mid-tier Android, one iPhone)
 are recorded through QA-04.

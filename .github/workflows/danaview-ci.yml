@@ -75,7 +75,7 @@ on:
         type: boolean
         default: false
       ios_only_testing:
-        description: 'ios job: xcodebuild -only-testing filter for RunnerTests (e.g. RunnerTests/ChannelRoundTripTests)'
+        description: 'ios job: xcodebuild -only-testing filter for RunnerTests (e.g. RunnerTests/ChannelRoundTripTests; comma-separated for several)'
         type: string
         default: ''
 
@@ -130,9 +130,41 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
-      - name: Run core.sh
+      - name: Run core.sh test
         if: steps.script.outputs.present == 'true'
-        run: bash scripts/ci/editor/core.sh
+        run: bash scripts/ci/editor/core.sh test
+
+  dart-core-benchmark:
+    name: dart-core-benchmark
+    if: github.event_name != 'schedule'
+    # The core benchmark gate (CORE-35). benchmark/baseline.json is recorded on the dev Mac (Apple M2,
+    # 8 cores); no CI runner matches it, so run.dart scales the baseline and the ARCH §18.2 budgets by
+    # a host factor measured in the same run (benchmark/src/calibration.dart). ubuntu-latest because
+    # its 4 vCPUs time steadily (p90/p50 1.03-1.25); the 3-vCPU macos-26 VM dart-core needs for its
+    # JSON goldens is noisier (p90/p50 up to 1.7).
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Look for scripts/ci/editor/core.sh
+        id: script
+        run: |
+          if [ -f scripts/ci/editor/core.sh ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=dart-core-benchmark skipped::scripts/ci/editor/core.sh does not exist yet (owner: CORE-01)"
+          fi
+      - name: Set up Flutter (Dart SDK)
+        if: steps.script.outputs.present == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run core.sh benchmark
+        if: steps.script.outputs.present == 'true'
+        run: bash scripts/ci/editor/core.sh benchmark
 
   flutter-packages:
     name: flutter-packages
