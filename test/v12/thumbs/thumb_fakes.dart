@@ -176,6 +176,9 @@ class FakeGenerator implements ThumbnailGenerator {
   /// The format of each request, in order.
   final List<NativeThumbnailFormat> formats = [];
 
+  /// The scale of each document request, in order.
+  final List<double> scales = [];
+
   /// Formats this "platform" writes as JPEG instead (the iOS < 17 HEIC downgrade).
   final Set<NativeThumbnailFormat> writesJpegFor = {};
   final List<String> cancelled = [];
@@ -241,6 +244,7 @@ class FakeGenerator implements ThumbnailGenerator {
     NativeThumbnailFormat format = NativeThumbnailFormat.jpeg,
     double quality = 0.8,
   }) async {
+    scales.add(scale);
     if (noDocumentThumbnail.contains(path)) {
       started.add(path);
       return null;
@@ -265,10 +269,11 @@ class FakeGenerator implements ThumbnailGenerator {
       caching.add((start: start, stop: stop));
 }
 
-ThumbRequest req(int i, {ThumbSizeClass c = ThumbSizeClass.m, DateTime? modified, ThumbSourceKind kind = ThumbSourceKind.media, String? source}) => ThumbRequest(
+ThumbRequest req(int i, {ThumbSizeClass c = ThumbSizeClass.m, DateTime? modified, ThumbSourceKind kind = ThumbSourceKind.media, String? source, double scale = 1}) => ThumbRequest(
       itemId: 'fe_${i.toString().padLeft(6, '0')}',
       source: source ?? '/lib/item$i.jpg',
       modifiedAt: modified ?? DateTime.utc(2026, 1, 1),
       sizeClass: c,
       kind: kind,
+      scale: scale,
     );

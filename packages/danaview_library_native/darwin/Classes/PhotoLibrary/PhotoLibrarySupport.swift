@@ -2,7 +2,8 @@
 //
 // Pure helpers of the PhotoKit library, unit-tested without a photo library: change tokens and
 // page windows (PhotoSnapshotBook), type mapping (UTI → MIME, RAW detection; closes the Apple half
-// of V2-V2: HEIC, AVIF, RAW, Live) and create-new file naming for copies (rule 26).
+// of V2-V2: HEIC, AVIF, RAW, Live), create-new file naming for copies (rule 26) and the album
+// listing filter (photo-only albums, parity with Android 5ee89f2).
 
 import Foundation
 
@@ -160,5 +161,33 @@ enum CopyNaming {
       if !exists(path) { return path }
     }
     return nil
+  }
+}
+
+/// Which albums `fetchAlbums` lists (HOM-02; parity with Android 5ee89f2): only albums that hold
+/// photos, counted by their photos. Video-only and empty albums are left out (a page of one can
+/// still be fetched by id), as are the hidden album and the library itself (smart "Recents" /
+/// "All Photos", which the library tab already is).
+enum PhotoAlbumListing {
+  /// One collection PhotoKit returned, reduced to what the filter needs.
+  struct Candidate: Equatable {
+    var albumId: String
+    var title: String?
+    var isSmart: Bool
+    var isCloudShared: Bool
+    /// The hidden album or the user library smart album.
+    var isExcludedSmart: Bool
+    /// Its photos (images only; videos do not count).
+    var photoCount: Int
+  }
+
+  /// The records of [candidates] that hold photos, in order.
+  static func records(_ candidates: [Candidate]) -> [PhotoAlbumRecord] {
+    candidates.compactMap { c in
+      if c.isSmart && c.isExcludedSmart { return nil }
+      guard c.photoCount > 0 else { return nil }
+      let kind: PhotoAlbumKind = c.isSmart ? .smart : (c.isCloudShared ? .shared : .user)
+      return PhotoAlbumRecord(albumId: c.albumId, title: c.title ?? "", kind: kind, estimatedCount: c.photoCount)
+    }
   }
 }

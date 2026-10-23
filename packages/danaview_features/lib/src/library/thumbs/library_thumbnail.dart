@@ -126,6 +126,8 @@ class _LibraryThumbnailState extends ConsumerState<LibraryThumbnail> {
         modifiedAt: widget.modifiedAt,
         sizeClass: _classFor(constraints),
         kind: widget.kind,
+        // Documents render at the screen's pixel ratio so L tiles are sharp on 2-3x screens.
+        scale: widget.kind == ThumbSourceKind.document ? (MediaQuery.maybeDevicePixelRatioOf(context) ?? 1) : 1,
       );
       _ensure(service, request);
       final image = _bitmap?.image;

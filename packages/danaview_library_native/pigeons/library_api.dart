@@ -739,7 +739,7 @@ abstract class PhotoLibraryHostApi {
   @asyncCallback
   List<PhotoAssetMsg> fetchAssets(List<String> localIdentifiers);
 
-  /// System albums and device folders that contain photos or videos.
+  /// System albums and device folders that hold photos, counted by their photos (video-only ones are left out).
   @asyncCallback
   List<PhotoAlbumMsg> fetchAlbums();
 

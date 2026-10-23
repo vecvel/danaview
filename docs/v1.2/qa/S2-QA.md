@@ -724,3 +724,48 @@ import with EXIF in File info, Danaview folders, Recently deleted, player, edito
 toggle. **It is not ready to upload until FIX-S2R-1 lands** (privacy manifest). Signing, upload, the
 effective date, the wording review and the store answers are the owner's; the Android candidate is
 done on Windows (`f125f8c`).
+
+## S2 tail (2026-10-23)
+
+Mac answers to the "For you to look at" list of `b8a72cc` (decisions in `ee1c68a`).
+
+- **PDF thumbnail sharpness (HOM-04 / HOM-04A).** `ThumbRequest` carries a render `scale` (screen
+  pixels per PDF point); `LibraryThumbnail` sets it to the cell's device pixel ratio for documents
+  (media stay at 1), and `ThumbnailService` passes it to `documentThumbnail` as `scale`, the size
+  class still bounding the result to `widthPx x heightPx` (a Letter page in L at 3x is drawn at
+  1836 x 2376 px and fitted into the 1280 box, about 989 x 1280, instead of 612 x 792 at 1x). The cache key holds the
+  scale in hundredths, and a scale other than 1 adds `@<scale>x` to the item's hash directory
+  (`l/<hh>/<hash>@3x/<modifiedMs>.thumb`), so 1x and 3x neither collide nor clean each other up;
+  scale-1 paths are unchanged, so existing caches stay valid. Tests:
+  `test/v12/thumbs/thumbnail_service_test.dart` (the scale reaches the generator, keys and paths
+  differ per scale, media ignore it, 2.625 keys as 2.63) and `library_thumbnail_test.dart` (a
+  document cell at DPR 3 asks at 3).
+- **Apple fetchAlbums parity (HOM-02, Android `5ee89f2`).** `fetchAlbums` now counts each
+  collection's photos only (images, not videos) and lists only albums holding photos; video-only and
+  empty albums are left out (a page of one still loads by id), as before the hidden album and the
+  user library smart album. The filter is the pure `PhotoAlbumListing` in
+  `PhotoLibrarySupport.swift`, tested by
+  `PhotoLibrarySupportTests.testAlbumsListOnlyThoseHoldingPhotosCountedByPhotos`. The frozen Pigeon
+  surface changed only in its doc comment ("System albums and device folders that hold photos,
+  counted by their photos (video-only ones are left out)"): the definition and the generated Dart,
+  Swift and Kotlin carry the same text, and `pigeon_regeneration_test.dart` (offline, pinned Pigeon)
+  confirms the committed output equals a regeneration. No signature changed.
+- **S2 E2E on a used install (S2-Q).** `integration_test/v12/s2/s2_files_home_test.dart` now answers
+  "Already in Danaview. Keep both or skip?" with Keep both (`import-keep-both-*` key) whenever it shows
+  while waiting for an import, and works on what it creates itself: the new top-level folder (the
+  writer names it "Trips (2)" when Trips exists), the entries not in the library before the import
+  (or their `name (n).ext`), and Recently deleted rows by `trashed-<id>`. A fresh install behaves as
+  before; `DANAVIEW_E2E_FRESH=1` is optional. Analyzed clean; not run on a device in this pass.
+- **Keyboard focus rings on Android (decision A).** The kit is right: the new
+  `packages/danaview_ui_kit/test/focus_ring_android_test.dart` (TargetPlatform.android, the default
+  automatic highlight strategy) shows a touch leaves the highlight mode at touch with no ring, a
+  mouse hover paints none, a hardware Tab switches the mode to traditional and rings
+  `DanaviewButton`, a second Tab moves the ring to `DanaviewIconButton`, and the next touch turns it
+  off. The app sets no highlight strategy and no root shortcut takes Tab. So Windows' "no in-app ring
+  with adb-injected Tab" is recorded as an emulator/tool reality. The likely reason:
+  `adb shell input keyevent` injects a virtual-keyboard event (device -1, DOWN and UP back to back)
+  that Android's own view-level focus navigation handles (the same path that drew the system frame
+  fixed by `2f514ce`), so the framework does not get a Tab key down it acts on and FocusManager stays
+  in touch mode. Not verified on a device here; the check, when wanted, is a
+  real keyboard (the tablet AVD's `hw.keyboard=yes` host keyboard, or USB/Bluetooth on a device).
+  No kit change; no focus effect on touch or hover.
