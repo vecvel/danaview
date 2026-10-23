@@ -79,6 +79,9 @@
 #                           and passed as DV_S2_MEDIA=<that device path> (unless DV_E2E_EXTRA_DEFINES
 #                           sets DV_S2_MEDIA itself). Default for a --target under integration_test/v12/s2:
 #                           build/e2e/s2_media when it exists; otherwise nothing is staged
+#   DV_S3_DOCS_HOST=<dir>   the same for the S3 documents (integration_test/v12/s3/tool/make_s3_docs.sh
+#                           output): pushed to Android/data/<app>/files/s3_docs, passed as DV_S3_DOCS;
+#                           default for a --target under integration_test/v12/s3: build/e2e/s3_docs
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -130,8 +133,22 @@ case "$RUN_TARGET" in
   integration_test/v12/s2/*)
     if [ -z "$S2_MEDIA_HOST" ] && [ -d "$ROOT/build/e2e/s2_media" ]; then S2_MEDIA_HOST="$ROOT/build/e2e/s2_media"; fi ;;
 esac
+# EXTENDED: S3-Q (Android half): the S3 documents, staged like the S2 media.
+S3_DOCS_DEVICE="/sdcard/Android/data/com.vecvel.danaview/files/s3_docs"
+S3_DOCS_HOST="${DV_S3_DOCS_HOST:-}"
+case "$RUN_TARGET" in
+  integration_test/v12/s3/*)
+    if [ -z "$S3_DOCS_HOST" ] && [ -d "$ROOT/build/e2e/s3_docs" ]; then S3_DOCS_HOST="$ROOT/build/e2e/s3_docs"; fi ;;
+esac
 declare -a EXTRA_DEFINES=()
 for d in ${DV_E2E_EXTRA_DEFINES:-}; do EXTRA_DEFINES+=("$d"); done
+if [ -n "$S3_DOCS_HOST" ]; then
+  [ -d "$S3_DOCS_HOST" ] || die "DV_S3_DOCS_HOST $S3_DOCS_HOST is not a directory (integration_test/v12/s3/tool/make_s3_docs.sh)"
+  case " ${DV_E2E_EXTRA_DEFINES:-} " in
+    *" DV_S3_DOCS="*) ;;
+    *) EXTRA_DEFINES+=("DV_S3_DOCS=$S3_DOCS_DEVICE") ;;
+  esac
+fi
 if [ -n "$S2_MEDIA_HOST" ]; then
   [ -d "$S2_MEDIA_HOST" ] || die "DV_S2_MEDIA_HOST $S2_MEDIA_HOST is not a directory (integration_test/v12/s2/tool/make_s2_media.sh)"
   case " ${DV_E2E_EXTRA_DEFINES:-} " in
@@ -327,6 +344,13 @@ setup_device() {
     "$ADB" -s "$SERIAL" push "$src/." "$S2_MEDIA_DEVICE/" >/dev/null || die "cannot push the S2 media to $SERIAL"
     echo "S2 media: $S2_MEDIA_HOST -> $S2_MEDIA_DEVICE ($("$ADB" -s "$SERIAL" shell "ls $S2_MEDIA_DEVICE" | tr -d '\r' | tr '\n' ' '))"
   fi
+  if [ -n "$S3_DOCS_HOST" ]; then
+    local docs="$S3_DOCS_HOST"
+    if [ -n "$WINDOWS" ]; then docs="$(cygpath -m "$docs")"; fi
+    "$ADB" -s "$SERIAL" shell "mkdir -p $S3_DOCS_DEVICE" || die "cannot create $S3_DOCS_DEVICE on $SERIAL"
+    "$ADB" -s "$SERIAL" push "$docs/." "$S3_DOCS_DEVICE/" >/dev/null || die "cannot push the S3 documents to $SERIAL"
+    echo "S3 documents: $S3_DOCS_HOST -> $S3_DOCS_DEVICE ($("$ADB" -s "$SERIAL" shell "ls $S3_DOCS_DEVICE" | tr -d '\r' | tr '\n' ' '))"
+  fi
 }
 
 # The app's external files folder (the handshake's shared dir). On API 30+ a folder that adb creates
@@ -341,6 +365,7 @@ prepare_shared() {
   [ "$API" -ge 30 ] || return 0
   dirs="$base $base/files $base/files/e2e_fixtures $base/files/e2e_models $base/files/e2e_handshake $base/files/e2e_out"
   [ -z "$S2_MEDIA_HOST" ] || dirs="$dirs $base/files/s2_media"
+  [ -z "$S3_DOCS_HOST" ] || dirs="$dirs $base/files/s3_docs"
   "$ADB" -s "$SERIAL" shell "mkdir -p $dirs" || die "cannot create $base/files on $SERIAL"
   for d in $dirs; do
     if [ "$("$ADB" -s "$SERIAL" shell stat -c %u "$d" | tr -d '\r')" = 2000 ]; then
