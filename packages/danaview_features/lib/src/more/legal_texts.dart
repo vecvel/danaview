@@ -177,8 +177,8 @@ const List<LegalBullet> documentsPermissionBullets = [
   LegalBullet(
     lead: 'Documents',
     "PDFs, Office files, text and other documents open on your device: PDFs in Danaview's PDF viewer, text "
-    'and spreadsheets in its own viewers, and on iPhone, iPad and Mac other files in the system preview, with '
-    "editing turned off. Viewing never changes the file. A file Danaview can't show goes to another app only "
+    'and spreadsheets in its own viewers, and on iPhone, iPad and Mac other files in the system preview as '
+    "read-only previews. Viewing never changes the file. A file Danaview can't show goes to another app only "
     'when you choose Open in another app.',
   ),
   LegalBullet(
