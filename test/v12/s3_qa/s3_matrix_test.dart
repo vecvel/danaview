@@ -251,9 +251,19 @@ final class _App {
 
   Future<void> tapTooltip(String tooltip) => tapFinder(find.byTooltip(tooltip).hitTestable());
 
+  /// Scrolls the tab's list until [target] is built and on screen (rows are built lazily).
+  Future<void> reveal(Finder target) async {
+    if (target.hitTestable().evaluate().isNotEmpty) return;
+    final lists = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down);
+    await tester.scrollUntilVisible(target, 120, scrollable: lists.last, maxScrolls: 80);
+    await pumpFrames(tester);
+  }
+
   Future<void> open(String name, {HomeTab tab = HomeTab.documents}) async {
     await this.tab(tab);
-    await tapFinder(find.byKey(ValueKey('library-entry-${entries[name]!.id.value}')));
+    final row = find.byKey(ValueKey('library-entry-${entries[name]!.id.value}'));
+    await reveal(row);
+    await tapFinder(row);
     await settle(frames: 12);
     expect(find.byType(DocumentViewer), findsOneWidget, reason: 'the viewer of $name');
   }
@@ -338,8 +348,7 @@ Future<void> _visit(_App app, Future<void> Function(String where) check) async {
   await check('Documents tab, empty sub-filter');
   await app.tapKey('documents-sub-all');
   final row = find.byKey(ValueKey('library-entry-${app.entries[_longPdf]!.id.value}'));
-  await tester.ensureVisible(row);
-  await tester.pump();
+  await app.reveal(row);
   await tester.tap(find.descendant(of: row, matching: find.byTooltip('More')));
   await pumpFrames(tester);
   await check('Documents row menu');
@@ -389,7 +398,9 @@ Future<void> _visit(_App app, Future<void> Function(String where) check) async {
   await app.back();
 
   await app.tab(HomeTab.documents);
-  await app.tapFinder(find.byKey(ValueKey('linked-document-${app.linked.id.value}')));
+  final linkedRow = find.byKey(ValueKey('linked-document-${app.linked.id.value}'));
+  await app.reveal(linkedRow);
+  await app.tapFinder(linkedRow);
   await app.settle(frames: 12);
   expect(find.byType(DocumentViewer), findsOneWidget);
   await check('linked-folder PDF');

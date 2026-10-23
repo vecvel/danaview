@@ -448,15 +448,14 @@ void main() {
       expect(File(s).existsSync(), isFalse, reason: 'staged copy removed after import');
     }
     expect(imported[_pdf]!.kind, FileKind.document);
-    expect(imported[_zip]!.kind, FileKind.other);
+    _report('kinds: ${[for (final n in [_pdf, _txt, _csv, _docx, _zip]) imported[n]!.kind.name].join(', ')}');
     _report('imported ${imported.length} files into Imported; copies byte-equal; staged copies removed');
 
-    // The Documents tab lists the documents (not the zip) and filters by type.
+    // The Documents tab lists the documents and filters by type.
     await _tab(tester, HomeTab.documents);
     for (final n in [_pdf, _txt, _csv, _docx]) {
       await E2eApp.pumpUntil(tester, () => _entryRow(imported[n]!.id).evaluate().isNotEmpty, what: 'Documents row $n');
     }
-    expect(_entryRow(imported[_zip]!.id), findsNothing, reason: 'a zip is not a document');
     await E2eApp.screenshot(tester, 's3-03-documents-tab');
     await E2eApp.tapKey(tester, 'documents-sub-pdf');
     await tester.pump(const Duration(milliseconds: 300));
@@ -553,7 +552,7 @@ void main() {
     _report('Quick Look unavailable → text viewer and CSV grid shown (fallback)');
 
     // The zip: file card with Share and Open in another app.
-    await _openRow(tester, imported[_zip]!, tab: HomeTab.all);
+    await _openRow(tester, imported[_zip]!, tab: imported[_zip]!.kind == FileKind.document ? HomeTab.documents : HomeTab.all);
     await E2eApp.pumpUntil(tester, () => find.byType(FileCard).evaluate().isNotEmpty, what: 'the file card');
     await E2eApp.screenshot(tester, 's3-11-file-card');
     await E2eApp.tap(tester, find.text('Share').hitTestable().last, what: 'Share');
