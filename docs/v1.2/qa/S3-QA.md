@@ -344,8 +344,126 @@ available (simulator VoiceOver not scripted).
 
 ### 7. Android Emulator half
 
-**Pending: Windows** (HOM-25 viewer, HOM-21A intents, D-S3W-1 manifest filters; the S3 E2E needs
-its Android variant: no App Group inbox, `ACTION_SEND` instead).
+Windows / Android lane, branch `v1.2-android`, 2026-10-23, 16:08–17:50. **Trees:** the S3 E2E and
+the v1.1 suite ran on `88c0c1c9` (= `b69264a9`, which carries `origin/v1.2-wip` up to the Mac's S3
+gate `ff101df3` with HOM-25 and HOM-21A incl. the flag-gated alias, plus the new Android E2E); at the
+lead's request `origin/v1.2-wip` (`e9e6eeba`, with the full-width card-grid UI `14dc89fe`) and
+`origin/hom21a-android` (`8e02dd93`, 0dc39697's shared-text naming and the alias-aware JVM manifest
+test) were then merged (`66595c4f`), and the S3 E2E, the tablet grid check and S3-R ran on that tree.
+Version `1.0.0+1` untouched. Host: Windows 11, Flutter 3.44.8, JBR 21.0.10. Emulators:
+**Pixel_9_Pro_XL_API_35** on `emulator-5554` (cold boot, `-no-snapshot-load`) and
+**Pixel_Tablet_API_35** on `emulator-5558` (`-gpu host`, cold boot). QA changed no product code.
+Evidence (not committed): `build/s3_android/` and `build/e2e/android/` in `C:/dev/v12`.
+
+**Gate verdict (Android half): green, with two low FIX requests (FIX-S3Q-A1 MIME of Office files,
+FIX-S3Q-A2 PdfBox-Android licence entry).** The S3 E2E Android variant passes 1 of 1 on both trees,
+the full v1.1 suite with the S3 flag set passes (s13 is the owner-accepted emulator-microphone
+limitation; s02 failed once on a player seek and passed on its re-run), the flag-off build offers
+Danaview for no document, photo or text intent while videos keep the 1.1 path, and the tablet grids
+match 14dc89fe. **D-S3W-1 is fixed** by HOM-21A (`8ebb2094`, alias `a61160de`, merged into v1.2-wip
+in `ff101df3`): the VIEW / SEND / SEND_MULTIPLE filters for PDF, Office, OpenDocument, RTF, `text/*`
+and `image/*` (+ `video/*` on SEND) are on `.IncomingDocumentsAlias`, enabled only in a
+`DANAVIEW_FILES_HOME=true` build (§Release candidate, Android candidate).
+
+#### 7.1 S3 E2E on the Android Emulator (`ACTION_VIEW` / `ACTION_SEND` instead of the App Group inbox)
+
+`integration_test/v12/s3/s3_documents_android_test.dart` (new, `// OWNER: S3-Q (Android half)`,
+`88c0c1c9`) mirrors the iOS scenario on the real S2 + S3 wiring (`filesHomeOverrides` with
+`documentsOverrides`: HOM-25's `PdfRenderer` viewer and HOM-21A's `NativeIncomingPort`;
+`installIncomingDocumentOpen` as `lib/main.dart`). Open with and Share to Danaview are **real
+intents**: the host driver sends them with `am start` to `.IncomingDocumentsAlias` through a new
+handshake action `sendIntent` (`e2e_host.sh`, EXTENDED: S3-Q; only VIEW / SEND, only the app's own
+FileProvider URIs under `<cacheDir>/danaview-out/`, only the app's two components). `am` has no
+Uri-list extra, so ACTION_SEND_MULTIPLE is covered by the real Files share in the release smoke
+(§Release candidate) and HOM-21A's instrumented `IncomingAppE2eTest`. `e2e_android.sh` stages the
+documents like the S2 media (`DV_S3_DOCS_HOST`, default `build/e2e/s3_docs`):
+
+```text
+integration_test/v12/s3/tool/make_s3_docs.sh                 # Pillow + the committed spike fixtures
+DANAVIEW_E2E_FRESH=1 DV_E2E_EXTRA_DEFINES="DANAVIEW_FILES_HOME=true" \
+  scripts/ci/editor/e2e_android.sh --target integration_test/v12/s3/s3_documents_android_test.dart emulator-5554
+```
+
+Five earlier attempts failed on the harness or the test, none on the app: stale handshake files of an
+older install (fixed in `e2e_android.sh`'s fresh start, `23e1013e`), `am`'s missing Uri-list extra
+(SEND_MULTIPLE replaced by two SENDs), the list reveal holding a Scrollable that the tab rebuilt while
+scrolling on a used install ("No element", the same step the Mac saw flake; the reveal now looks the
+list up before every drag), and a used install whose library already held the Open-with PDF (VIEW
+dedupes by content, as designed; the scenario now asserts a fresh install). **The final run passes,
+1 of 1** (16:28–16:31, `88c0c1c9`), and again on the merged tree (17:27, `66595c4f`):
+
+| Step | Result |
+|---|---|
+| Home with the flag: Home, All, Videos, Photos, **Documents**, Folders; Open with interceptor and the incoming-intent importer installed | pass (`s3a-01`) |
+| Import "From Files" into Imported: PDF (200 pages), text, CSV, Word, zip; copies byte-equal; staged copies removed; all five `document` | pass |
+| Documents tab, PDF sub-filter | pass (`s3a-03`) |
+| Row menu Open, Rename…, Move to…, **More actions…**, Delete → HOM-22's menu (Share, Open in another app, Save out, Copy to, Move to, Rename, Favourite, File info, Delete) → File info | pass (`s3a-04`, `-04b`, `-04c`; FIX-S3Q-1 holds on Android) |
+| PDF in `PdfRenderer`: "Page 1 of 200" 1 795 ms after the tap (merged tree 2 000 ms; debug build on the emulator, the ≤ 500 ms budget is the mid-tier device's); search for page 150's token "1 of 1 match" in 2.4 s (API 35 platform text, no pre-warm); page thumbnails; Open in another app and the top bar's Share hand over the library file | pass (`s3a-05`…`-07b`) |
+| Text in the in-app viewer (UTF-8, CJK), CSV in the grid (cells, `Zürich`), rows right under the header in Figtree (FIX-S3Q-8 holds) | pass (`s3a-08`, `-09`) |
+| Word → file card (Android Office, V2-121), Open in another app hands it over **as `application/msword`** (FIX-S3Q-A1); zip → file card, Share and Open in hand over the library file | pass (`s3a-10`, `-11`) |
+| Recents record every open | pass |
+| **Open with**: `ACTION_VIEW application/pdf` (content URI) → imported into Imported, `sourceHint openWith`, PDF viewer shown; the same file again opens the existing entry, no second copy | pass (`s3a-12`) |
+| **Share to**: `ACTION_SEND` of a PDF, then of a JPEG → each into Imported, `sourceHint shareExtension`, toast "1 shared item saved", JPEG `photo`; `ACTION_SEND text/plain` with a subject → `s3q_shared_note.txt` holding the text | pass (`s3a-13`) |
+| Library closed and reopened: entries, shared items, Recents persist; the PDF opens again | pass (`s3a-14`) |
+| Originals (8 files): bytes and timestamps unchanged; no `HttpClient` | pass |
+
+Evidence: `build/s3_android/e2e_s3/` and `build/s3_android/e2e_s3_merged/` (log and screenshots),
+run logs `build/s3_android/e2e_s3_run*.log`.
+
+#### 7.2 Full v1.1 suite on the Android Emulator with the S3 flag set
+
+`DANAVIEW_E2E_MODELS=C:/dev/models DANAVIEW_E2E_FRESH=1 DV_E2E_EXTRA_DEFINES="DANAVIEW_FILES_HOME=true"
+scripts/ci/editor/e2e_android.sh emulator-5554` (API 35, headless; FIX-S2Q-A2's pass-through, so no
+`flutter` wrapper this time), 16:31–17:23 on `88c0c1c9`, plus the script's `DANAVIEW_EDITOR=true
+DANAVIEW_AUTO_CAPTIONS=true`. `E2eApp._boot` adds `filesHomeOverrides` with S3-W's
+`documentsOverrides`; the library under `files/library` existed after the batches, so the flag
+reached the app.
+
+| Batch | Result |
+|---|---|
+| s01, s03–s12, s14–s18 | **16 pass**, no harness retry, no emulator restart |
+| s02 | failed once ("player position to reach 0:05:10 after a second seek", 00:00 / 00:08 under software rendering), **passed on its re-run** (`--target s02`, 17:23–17:25): emulator playback flake, as OBS-S2A-2 |
+| s13 | fail: voiceover level -79.1 dBFS (needs > -60), emulator microphone silence (owner-accepted); start latency 500 ms |
+| `x_android_export_background` fgs, cancel, swipe, death | **4 of 4 pass** |
+
+s07 burned cues 313 / 293 changed samples, HEVC/MOV not offered (reported); s08 3 cues; s15 head
+-15.1 dBFS, body -9.0 dBFS. Summary: `build/s3_android/v11_suite_summary.txt`, logs
+`build/e2e/android/emulator-5554/logs/`. Flags-off batch not repeated (S3 changes nothing outside
+the flag on the Dart side; the native side is §Release candidate's flag-off check).
+
+#### 7.3 Tablet grids (Mac 0dc39697, UI change 14dc89fe)
+
+Release APK of §Release candidate (`66595c4f`, `DANAVIEW_FILES_HOME=true`) on Pixel_Tablet_API_35
+(2560 × 1600 px, 320 dpi = 1 280 × 800 dp in landscape), five documents and a photo imported through
+the real DocumentsUI picker. Screenshots
+`build/e2e/android/manual/s3_grids_{home,all,documents}_{landscape,portrait}.png`.
+
+| Check | Landscape | Portrait |
+|---|---|---|
+| Home: search field full width with **Import** beside it; Open file / folder / link cards across the width | pass | pass |
+| All and Documents: wrapping cards, equal heights | 4 columns, 294 dp each | 2 columns, 370 dp each |
+| Minimum column about 264 dp (4 × 264 + gaps fits 1 216 dp; 3 × 264 + gaps does not fit 752 dp) | pass | pass |
+| Gaps 12 dp (24 px between cards); page margin 32 dp / 24 dp | pass | pass |
+| No max-width cap (cards and search reach the page margins) | pass | pass |
+
+On the phone (Pixel 9 Pro XL) the same build shows the search field with a round **+** Import
+button beside it (release smoke `r03`).
+
+#### 7.4 Notes from the Android half
+
+- N-S3A-1: `8e02dd93` is in the candidate: a text shared without a subject became
+  `Shared text 2026-10-23 1745.txt` (release smoke), with a subject the subject's name (E2E).
+- N-S3A-2: Android shares land in Imported (no folder picker on Android); checklist item 9's
+  "chosen folder" is iOS only.
+- N-S3A-3: the PDF viewer's top bar shows two identical "…" buttons (File actions, View options) on
+  Android as on iOS; say if one should get a different icon.
+
+#### 7.5 FIX requests from the Android half
+
+| Id | Owner | Defect | Evidence | Fix direction |
+|---|---|---|---|---|
+| FIX-S3Q-A1 (low) | S3-W (`documents_wiring.dart` `documentTypeOf`) with HOM-23 | `documentTypeOf` returns the first MIME and UTI of the classifier row, so every Word-row file (`.docx`, `.odt`, `.rtf`, `.pages`) is handed to Open in another app / Share as `application/msword` / `com.microsoft.word.doc`, and the Excel and PowerPoint rows likewise; an app that keys on the exact type may refuse or mis-open the file | §7.1 "Word → file card … as `application/msword`"; `type_table.dart` Word row | Pick the MIME / UTI that matches the file's extension, and test `.docx` → `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+| FIX-S3Q-A2 (low, licence) | S3-W / INT-106 (`legal_texts.dart` Licences) with the owner | PdfBox-Android 2.0.27.0 (Apache-2.0; `danaview_pdf`'s Android dependency for HOM-25's text and search below API 35) ships in the S3 Android build (its `com/tom_roush/pdfbox` resources alone are 4.4 MB of the AAB), but §Wiring says S3 bundles no third-party native code and adds no licence entry until S4 | `unzip -l app-release.aab`; `packages/danaview_pdf/android/build.gradle.kts` | Add the PdfBox-Android Apache-2.0 entry (with its NOTICE) to the Licences now, in builds with `DANAVIEW_FILES_HOME` |
 
 ### 8. Defects (FIX tickets, block the gate unless marked low)
 
@@ -521,11 +639,65 @@ Driven by hand, every system sheet real:
 The simulator was booted for this step and shut down after it. Device smoke of the signed build
 (iPhone 12, iPhone 7 iOS 15.8, iPhone 8 iOS 16.7): deferred: no device available.
 
+### Android candidate
+
+Windows / Android lane, 2026-10-23, 17:29–17:50, on `66595c4f` (= the S3 gate tree plus
+`origin/v1.2-wip` `e9e6eeba` with 14dc89fe and `origin/hom21a-android` `8e02dd93`; clean, version
+`1.0.0+1` already in the tree). Nothing was signed, uploaded or changed in the signing settings; there
+is no `android/key.properties`. Built alone (no `flutter test` in the tree at the same time).
+
+```text
+flutter build appbundle --release --build-name=1.0.0 --build-number=1 \
+  --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true \
+  --dart-define=DANAVIEW_FILES_HOME=true --dart-define=DANAVIEW_PHOTO_EDITOR=false \
+  --dart-define=DANAVIEW_BEAUTY=false --dart-define=DANAVIEW_AI_STUDIO=false
+# then `flutter build apk --release` with the same arguments (smoke), and once with
+# DANAVIEW_FILES_HOME=false (flag-off check)
+```
+
+| Check | Result |
+|---|---|
+| Build | **pass**: AAB 304 s, fat APK 112 s, flag-off APK 131 s; copies in `build/s3_android/release/` |
+| Signing | debug key (`CN=Android Debug`), as expected without `key.properties` |
+| `check_native_libs.sh` on the AAB | **all checks passed** (16 KB alignment, Whisper libraries and their 24 `dv_*` exports, no `libc++_shared.so`, sizes) |
+| Version (`aapt2 dump badging`) | `versionName 1.0.0`, `versionCode 1`, `com.vecvel.danaview`, targetSdk 36, compileSdk 36; native code arm64-v8a, armeabi-v7a, x86_64 |
+| Permissions | unchanged from S2 (S3 adds none) |
+| Manifest (`aapt2 dump xmltree`) | `.IncomingDocumentsAlias` (target `.MainActivity`, exported) carries the VIEW / SEND / SEND_MULTIPLE document, text and image filters (D-S3W-1); `android:enabled=true` in the flag-on build, `false` in the flag-off build, the only difference between the two manifests |
+| Third-party code | PdfBox-Android 2.0.27.0 (HOM-25) is in the build: FIX-S3Q-A2 |
+
+**Size** (debug-signed; Play's per-device sizes come from the console after upload):
+
+| Measure | S2 candidate | S3 candidate | Delta |
+|---|---|---|---|
+| `app-release.aab` | 101.0 MB (105 869 493 B) | **108.2 MB (113 460 081 B)** | +7.2 MB (+7.2 %) |
+| Native libraries per ABI in the AAB (uncompressed) | arm64-v8a 41.3, armeabi-v7a 35.5, x86_64 44.7 MB | arm64-v8a 41.7, armeabi-v7a 35.9, x86_64 45.2 MB | about +0.4 MB per ABI (S3 Dart in `libapp.so`) |
+| PdfBox-Android resources (`com/tom_roush/pdfbox/…`) | — | 4.4 MB | new (plus its classes in the dex) |
+| Fat release APK (smoke only) | 128.0 MB | 135.2 MB (141 714 355 B) | +7.1 MB |
+
+**Install and smoke** of the release APK on Pixel_9_Pro_XL_API_35 (`emulator-5554`), fresh install,
+the S3 documents pushed to `Download/S3QA` and media-scanned, `POST_NOTIFICATIONS` pre-granted. Driven
+with `adb input` + `uiautomator dump`, every system UI real (DocumentsUI, the share sheet, the Open
+with chooser, the share resolver). Screenshots `build/s3_android/smoke/r01…r14`.
+
+| Step | Result |
+|---|---|
+| Launch, Files home | pass: tabs Home, All, Videos, Photos, **Documents**, Playlists, Folders, Projects; search with the + Import button; no prompt (`r01`) |
+| Share in from Files (**ACTION_SEND_MULTIPLE**): Files › Download › S3QA › select `s3_shared.jpg` + `s3_shared.pdf` › Share › "Sharing 2 files" › **Danaview** | pass: Danaview opened at Home with the toast "2 shared items saved"; both in Imported, the photo under Recent photos (`r02`, `r03`) |
+| Open with from Files (**ACTION_VIEW**): tap `s3_openwith.pdf` › Open with (Danaview, Drive PDF Viewer, Drive) › Danaview › Just once | pass: imported, PDF viewer "Page 1 of 3" (`r04`, `r05`) |
+| Import From Files (in-app, DocumentsUI) and open the PDF | pass: `s3_report.pdf` imported; Documents tab lists the three PDFs (`r06`); viewer "Page 1 of 200" (`r07`) |
+| PDF search | pass: `HOM27T-P0150` → "1 of 1 match", jumps to "Page 150 of 200" (`r08`) |
+| Share text in (**ACTION_SEND text/plain**, implicit, from the shell): the resolver lists Danaview › Just once | pass: `Shared text 2026-10-23 1745.txt` (31 B, 8e02dd93's name) in All; opens in the text viewer, "UTF-8 · 1 line", the shared text shown (`r09`–`r11`) |
+| Rule 30 | pass: the app's logcat for the session (265 lines) names none of the shared or imported files |
+| **Flag-off build** (`DANAVIEW_FILES_HOME=false`, same tree, fresh install) | pass: the 1.1 Home (Open file / folder / link, Playlists, Folders; no tabs, no Documents) (`r12`); `cmd package query-activities`: VIEW of PDF / JPEG / text, SEND of PDF / JPEG / text / video, SEND_MULTIPLE PDF → **no Danaview**; VIEW `video/mp4`, VIEW `audio/mpeg`, `danaview://` → `.MainActivity` (`flagoff_query_activities.txt`); Files › tap a PDF opens Drive's viewer directly (Danaview not offered, `r13`); Files › tap an MP4 › Open with › Danaview opens the 1.1 player (`frame_counter_720p24.mp4`, 00:00 / 00:08, `r14`) |
+
+Not done: `bundletool build-apks` from the AAB (the APK of the same tree stood in), API 34 / 29 / 28
+smoke (HOM-21A's instrumented tests ran there), the device smoke of a signed build (owner / lab).
+
 ### Release checklist (S3)
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | Gate: S3-Q Mac half green; Android half | S3-W / HOM-21 / HOM-23, Windows | **open**: re-check Red on FIX-S3Q-7, FIX-S3Q-8; Android pending |
+| 1 | Gate: S3-Q Mac half green; Android half | S3-W / HOM-21 / HOM-23, Windows | **open**: re-check Red on FIX-S3Q-7, FIX-S3Q-8; Android half **green** (§7, `88c0c1c9` / `66595c4f`; D-S3W-1 fixed by HOM-21A; FIX-S3Q-A1/A2 low) |
 | 2 | Version `1.0.0+1` (never bumped) | S3-R | **done** (in the tree) |
 | 3 | iOS release build with the S1–S3 flag set, Info.plist, document types, appex, min-OS, `NEWLAPACK`, privacy manifests, size | S3-R | **done** (above) |
 | 4 | Simulator install and smoke | S3-R | **done** (debug build) |
@@ -535,7 +707,7 @@ The simulator was booted for this step and shut down after it. Device smoke of t
 | 8 | Upload (internal until the owner's go); privacy report from the signed archive (app + extension: FileTimestamp, DiskSpace; no data collected) | **owner** | open |
 | 9 | `legalEffectiveDate`; hosted privacy page regenerated from a flag-on build (the S3 blocks exist only there); owner review of the S3 wording | **owner** | open |
 | 10 | Store answers: App Privacy unchanged, the App Review note for the share sheet and documents (§Wiring "Store-answer deltas") | **owner** | open |
-| 11 | Android release build and emulator smoke | Windows lane | pending |
+| 11 | Android release build and emulator smoke | Windows lane | **done** (debug-signed AAB of `66595c4f`, native-lib checks pass, smoke on API 35 green incl. real Files share / Open with / text share, flag-off build offers no document intents; tablet grids §7.3; see "Android candidate") |
 
 ### Notes (S3-R)
 
