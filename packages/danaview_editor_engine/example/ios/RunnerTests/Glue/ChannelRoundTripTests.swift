@@ -1,8 +1,9 @@
 // OWNER: ENG-07
 //
-// The installed glue answers over the real Pigeon channels with the production (placeholder)
-// services: initialize + capabilities round-trip (placeholder capabilities: supported false,
-// `engine_not_available`), a placeholder media call fails with `notSupportedOnDevice`, and
+// The installed glue answers over the real Pigeon channels: initialize + capabilities round-trip
+// with the production services (the service's own answer) and with placeholder capabilities
+// (supported false, `engine_not_available`); a D-33 placeholder failure arrives as a
+// `notSupportedOnDevice` error envelope; the production services answer a missing file; and
 // V-N8: the generated Swift `@EventChannelApi` handler (`EngineEventsStreamHandler`) accepts
 // `listen` and delivers `EngineEventMsg` envelopes on `EngineEventsApi.engineEvents`.
 
@@ -70,10 +71,50 @@ final class ChannelRoundTripTests: XCTestCase {
         XCTAssertNotNil(messenger.handlers[EngineGlue.eventChannelName])
     }
 
-    func testCapabilitiesRoundTripWithThePlaceholderEngine() throws {
+    /// Replaces the fixture with one over [services] (the old glue is uninstalled first).
+    private func useServices(_ services: EngineServices) throws {
+        fixture.glue.uninstall()
+        fixture = try GlueFixture(services: services)
+        fixture.glue.install()
+    }
+
+    /// The production `Capabilities` reach Dart unchanged. The values depend on the device (Metal,
+    /// encoders, idiom), so the expectation is the service's own in-process answer, not constants.
+    func testCapabilitiesRoundTripWithTheProductionEngine() throws {
         let initialized = call("EngineHostApi", "initialize", [fixture.roots.config])
         XCTAssertEqual(initialized?.count, 1, "initialize failed: \(String(describing: initialized))")
 
+        let reply = try XCTUnwrap(call("EngineHostApi", "capabilities", nil))
+        XCTAssertEqual(reply.count, 1, "capabilities failed: \(reply)")
+        let caps = try XCTUnwrap(reply.first as? CapabilitiesMsg)
+
+        let done = expectation(description: "capabilities in process")
+        var direct: CapabilitiesMsg?
+        Capabilities(context: fixture.context).capabilities { result in
+            direct = try? result.get()
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        let expected = try XCTUnwrap(direct)
+
+        XCTAssertEqual(caps.supported, expected.supported)
+        XCTAssertEqual(caps.unsupportedReason, expected.unsupportedReason)
+        XCTAssertEqual(caps.tier, expected.tier)
+        XCTAssertEqual(caps.h264Encode, expected.h264Encode)
+        XCTAssertEqual(caps.hevcEncode, expected.hevcEncode)
+        XCTAssertEqual(caps.maxExportWidth, expected.maxExportWidth)
+        XCTAssertEqual(caps.maxExportHeight, expected.maxExportHeight)
+        XCTAssertEqual(caps.maxFpsByHeight, expected.maxFpsByHeight)
+        XCTAssertEqual(caps.backgroundKind, expected.backgroundKind)
+        XCTAssertTrue(caps.voiceRecording)
+        XCTAssertEqual(caps.planVersions, Capabilities.planVersions)
+    }
+
+    /// The placeholder capabilities (`engine_not_available`, the Dart `EditorCapabilities.unsupported`)
+    /// survive the Pigeon codec.
+    func testCapabilitiesRoundTripWithThePlaceholderEngine() throws {
+        let fake = FakeServices()
+        try useServices(fake.services)
         let reply = try XCTUnwrap(call("EngineHostApi", "capabilities", nil))
         XCTAssertEqual(reply.count, 1, "capabilities failed: \(reply)")
         let caps = try XCTUnwrap(reply.first as? CapabilitiesMsg)
@@ -84,7 +125,12 @@ final class ChannelRoundTripTests: XCTestCase {
         XCTAssertEqual(caps.planVersions, [])
     }
 
+    /// A D-33 placeholder failure (`notSupportedOnDevice`) comes back as a Pigeon error envelope
+    /// [code, message, details] on async engine and preview calls.
     func testPlaceholderServicesFailWithNotSupportedOnDevice() throws {
+        let fake = FakeServices()
+        fake.failure = EngineError.notSupportedOnDevice("media")
+        try useServices(fake.services)
         _ = call("EngineHostApi", "initialize", [fixture.roots.config])
         let uri = "file://" + fixture.roots.support.appendingPathComponent("media/a.mp4").path
         let probe = try XCTUnwrap(call("EngineHostApi", "probe", [ResolvedMediaMsg(uri: uri, fingerprint: "fp", isProxy: false)]))
@@ -100,8 +146,25 @@ final class ChannelRoundTripTests: XCTestCase {
             "PreviewHostApi", "open",
             [PreviewConfigMsg(canvasWidth: 1080, canvasHeight: 1920, fps: 30, quality: .auto, useProxies: false)]))
         XCTAssertEqual(open.first as? String, "notSupportedOnDevice")
+    }
 
-        // Idempotent and fire-and-forget calls succeed without an engine.
+    /// The production services answer a missing file with errors that carry no path, and the
+    /// idempotent and fire-and-forget calls succeed with nothing open.
+    func testProductionServicesAnswerOverTheChannels() throws {
+        _ = call("EngineHostApi", "initialize", [fixture.roots.config])
+        let uri = "file://" + fixture.roots.support.appendingPathComponent("media/a.mp4").path
+        let probe = try XCTUnwrap(call("EngineHostApi", "probe", [ResolvedMediaMsg(uri: uri, fingerprint: "fp", isProxy: false)]))
+        XCTAssertEqual(probe.count, 3, "probe of a missing file succeeded: \(probe)")
+        XCTAssertEqual(probe[0] as? String, "mediaOffline")
+        XCTAssertFalse((probe[1] as? String ?? "").contains("/"))
+
+        let compatibility = try XCTUnwrap(call("EngineHostApi", "compatibility", [uri]))
+        XCTAssertEqual(compatibility.count, 1, "compatibility failed: \(compatibility)")
+        let verdict = try XCTUnwrap(compatibility.first as? CompatibilityMsg)
+        XCTAssertFalse(verdict.editable)
+        XCTAssertEqual(verdict.code, ProbeIssue.notFound)
+
+        // Idempotent and fire-and-forget calls succeed with nothing open.
         XCTAssertEqual(call("PreviewHostApi", "dispose", ["s1"])?.count, 1)
         XCTAssertEqual(call("EngineHostApi", "trimCaches", [CacheTrimLevelMsg.memoryPressure])?.count, 1)
         XCTAssertEqual(call("ExportHostApi", "consumeJobRecord", ["e1"])?.count, 1)
