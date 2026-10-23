@@ -1,0 +1,10 @@
+name: danaview_editor
+dependencies:
+  flutter:
+    sdk: flutter
+  danaview_ai_studio:
+    path: ../danaview_ai_studio
+  danaview_secure_keys:
+    path: ../danaview_secure_keys
+  danaview_diarization:
+    path: ../danaview_diarization

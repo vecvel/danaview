@@ -1,0 +1,12 @@
+name: danaview_ai
+dependencies:
+  flutter:
+    sdk: flutter
+  collection: ^1.18.0
+  meta: ^1.11.0
+  danaview_ai_providers:
+    path: ../danaview_ai_providers
+  danaview_editor_core:
+    path: ../danaview_editor_core
+dev_dependencies:
+  test: ^1.25.0

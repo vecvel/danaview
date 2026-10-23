@@ -1,4 +1,7 @@
 # OWNER: INT-01
+# EXTENDED: AIS-01 (ai-dart job and the AI package paths)
+# EXTENDED: INT-101 (v12-dart, v12-flutter and home-preservation jobs with path filters;
+# scripts/ci/v12/README.md)
 #
 # Editor CI (ARCH §22). Every job checks out the repo, then runs its script under
 # scripts/ci/editor/ when that script exists and prints a skip notice otherwise (the owning ticket
@@ -20,6 +23,21 @@ on:
       # Material scan) and reads the BUILD_PLAN owns lists, so changes there run it too.
       - 'packages/danaview_features/**'
       - 'docs/v1.1/editor/BUILD_PLAN.md'
+      # 1.2.0 AI packages (AIS-01): danaview_ai_providers, danaview_ai_studio, later danaview_ai,
+      # danaview_ai_ui, danaview_ai_genkit.
+      - 'packages/danaview_ai*/**'
+      # 1.2.0 (INT-101): the Files & Media Home packages, face tracking, search, the platform bridge
+      # (HOM-21), the 1.2.0 root tests and scripts. Each 1.2.0 job filters further (job `changes`).
+      - 'packages/danaview_library*/**'
+      - 'packages/danaview_pdf/**'
+      - 'packages/danaview_documents/**'
+      - 'packages/danaview_face_tracking/**'
+      - 'packages/danaview_search/**'
+      - 'packages/danaview_platform/**'
+      - 'test/v12/**'
+      - 'test/home_screen_test.dart'
+      - 'scripts/ci/v12/**'
+      - 'docs/v1.2/ARCHITECTURE.md'
   push:
     branches: [main]
     # Same list as pull_request above.
@@ -32,6 +50,17 @@ on:
       - '.github/workflows/editor-ci.yml'
       - 'packages/danaview_features/**'
       - 'docs/v1.1/editor/BUILD_PLAN.md'
+      - 'packages/danaview_ai*/**'
+      - 'packages/danaview_library*/**'
+      - 'packages/danaview_pdf/**'
+      - 'packages/danaview_documents/**'
+      - 'packages/danaview_face_tracking/**'
+      - 'packages/danaview_search/**'
+      - 'packages/danaview_platform/**'
+      - 'test/v12/**'
+      - 'test/home_screen_test.dart'
+      - 'scripts/ci/v12/**'
+      - 'docs/v1.2/ARCHITECTURE.md'
   schedule:
     # Nightly suites (fuzz, full overflow matrix, AI eval): 02:30 UTC.
     - cron: '30 2 * * *'
@@ -125,6 +154,158 @@ jobs:
       - name: Run flutter_packages.sh
         if: steps.script.outputs.present == 'true'
         run: bash scripts/ci/editor/flutter_packages.sh
+
+  ai-dart:
+    name: ai-dart
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Look for scripts/ci/editor/ai.sh
+        id: script
+        run: |
+          if [ -f scripts/ci/editor/ai.sh ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=ai-dart skipped::scripts/ci/editor/ai.sh does not exist yet (owner: AIS-01)"
+          fi
+      - name: Set up Flutter (Dart SDK)
+        if: steps.script.outputs.present == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run ai.sh (analyze and test the AI packages)
+        if: steps.script.outputs.present == 'true'
+        run: bash scripts/ci/editor/ai.sh
+
+  # 1.2.0 (INT-101): which 1.2.0 jobs a pull request needs (scripts/ci/v12/README.md). Pushes to
+  # main, the nightly schedule and manual dispatches run all of them.
+  changes:
+    name: changes (1.2.0 path filters)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      v12_dart: ${{ steps.filter.outputs.v12_dart }}
+      v12_flutter: ${{ steps.filter.outputs.v12_flutter }}
+      home_preservation: ${{ steps.filter.outputs.home_preservation }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            v12_dart:
+              - 'packages/danaview_library/**'
+              - 'packages/danaview_search/**'
+              - 'packages/danaview_domain/**'
+              - 'packages/danaview_editor_core/lib/photo.dart'
+              - 'packages/danaview_editor_core/lib/beauty.dart'
+              - 'packages/danaview_editor_core/lib/src/photo/**'
+              - 'packages/danaview_editor_core/lib/src/color/**'
+              - 'packages/danaview_editor_core/lib/src/beauty/**'
+              - 'packages/danaview_editor_core/lib/src/plan/**'
+              - 'packages/danaview_editor_core/lib/src/ops/**'
+              - 'packages/danaview_editor_core/test/**'
+              - 'scripts/ci/v12/library.sh'
+              - '.github/workflows/editor-ci.yml'
+            v12_flutter:
+              - 'packages/danaview_library*/**'
+              - 'packages/danaview_pdf/**'
+              - 'packages/danaview_documents/**'
+              - 'packages/danaview_face_tracking/**'
+              - 'packages/danaview_search/**'
+              - 'packages/danaview_features/**'
+              - 'packages/danaview_ui_kit/**'
+              - 'packages/danaview_editor/lib/src/app/flags_v12.dart'
+              - 'packages/danaview_editor/lib/src/editor/contracts/**'
+              - 'packages/danaview_editor/lib/src/editor/wiring/**'
+              - 'test/architecture/**'
+              - 'test/v12/**'
+              - 'docs/v1.2/ARCHITECTURE.md'
+              - 'scripts/ci/v12/documents.sh'
+              - 'scripts/ci/v12/face.sh'
+              - '.github/workflows/editor-ci.yml'
+            home_preservation:
+              - 'packages/danaview_features/lib/src/library/**'
+              - 'packages/danaview_platform/**'
+              - 'packages/danaview_library*/**'
+              - 'test/v12/preservation/**'
+              - 'test/home_screen_test.dart'
+              - 'scripts/ci/v12/home_preservation.sh'
+              - '.github/workflows/editor-ci.yml'
+
+  v12-dart:
+    name: v12-dart (library, search, core photo)
+    needs: changes
+    # `needs` with a skipped `changes` (push, dispatch) still runs thanks to always().
+    if: always() && github.event_name != 'schedule' && (github.event_name != 'pull_request' || needs.changes.outputs.v12_dart == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Flutter (Dart SDK)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run scripts/ci/v12/library.sh
+        run: bash scripts/ci/v12/library.sh
+
+  v12-flutter:
+    name: v12-flutter (documents, features, face tracking)
+    needs: changes
+    if: always() && github.event_name != 'schedule' && (github.event_name != 'pull_request' || needs.changes.outputs.v12_flutter == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run scripts/ci/v12/documents.sh
+        run: bash scripts/ci/v12/documents.sh
+      - name: Run scripts/ci/v12/face.sh
+        run: bash scripts/ci/v12/face.sh
+
+  home-preservation:
+    name: home-preservation (HOM-15 merge gate)
+    needs: changes
+    if: always() && github.event_name != 'schedule' && (github.event_name != 'pull_request' || needs.changes.outputs.home_preservation == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Look for scripts/ci/v12/home_preservation.sh
+        id: script
+        run: |
+          if [ -f scripts/ci/v12/home_preservation.sh ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=home-preservation skipped::scripts/ci/v12/home_preservation.sh does not exist yet (owner: HOM-15)"
+          fi
+      - name: Set up Flutter
+        if: steps.script.outputs.present == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run home_preservation.sh
+        if: steps.script.outputs.present == 'true'
+        run: bash scripts/ci/v12/home_preservation.sh
 
   whisper-host:
     name: whisper-host (${{ matrix.name }})

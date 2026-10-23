@@ -1,3 +1,6 @@
+// EXTENDED: ST-04 (speed-test fallback: the open-network prompt, neutral server wording, calm
+// "no server" failure and the details-row notes; V2-402, V2-404, V2-405)
+
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -10,9 +13,31 @@ import '../library/library_widgets.dart';
 import 'media_tool_format.dart' show formatDataSize;
 import 'network_format.dart';
 import 'network_tool_providers.dart';
+import 'speed_consent_sheet.dart';
 import 'speed_gauge.dart';
 
-export 'network_tool_providers.dart' show speedTestServiceProvider;
+export '../more/settings_sections/privacy_section.dart' show PrivacySettingsSection, buildPrivacySettingsSection;
+export 'network_tool_providers.dart'
+    show
+        CoordinatedSpeedTestResult,
+        FallbackSpeedTestService,
+        ProviderHealthStore,
+        SpeedResultNote,
+        SpeedTestCoordinator,
+        SpeedTestCoordinatorFactory,
+        SpeedTestUnavailable,
+        SpeedTestUnavailableReason,
+        MemorySpeedConsentStore,
+        PrefsSpeedConsentStore,
+        SpeedConsentAnswer,
+        SpeedConsentChoice,
+        SpeedConsentController,
+        SpeedConsentStore,
+        speedConsentProvider,
+        speedConsentStoreProvider,
+        speedProviderHealthProvider,
+        speedTestServiceProvider;
+export 'speed_consent_sheet.dart' show SpeedConsentCopy, SpeedConsentSheet;
 
 enum _TestStatus { idle, running, done, stopped, failed }
 
@@ -35,6 +60,9 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
   _TestStatus _status = _TestStatus.idle;
   SpeedTestUpdate? _update;
   String? _error;
+
+  /// Why no server could run the test, when that is how it failed.
+  SpeedTestUnavailableReason? _unavailable;
   StreamSubscription<SpeedTestUpdate>? _subscription;
 
   SpeedTestResult? get _result => _update?.result;
@@ -52,8 +80,13 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
       _status = _TestStatus.running;
       _update = null;
       _error = null;
+      _unavailable = null;
     });
-    _subscription = ref.read(speedTestServiceProvider).run().listen(
+    final service = ref.read(speedTestServiceProvider);
+    final updates = service is FallbackSpeedTestService
+        ? service.runWithConsent(requestConsent: () => requestOpenNetworkConsent(context, ref))
+        : service.run();
+    _subscription = updates.listen(
       (update) {
         if (!mounted) return;
         setState(() {
@@ -65,6 +98,7 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
         if (!mounted) return;
         setState(() {
           _status = _TestStatus.failed;
+          _unavailable = error is SpeedTestUnavailable ? error.reason : null;
           _error = error is SpeedTestException ? error.message : 'The speed test stopped unexpectedly. Try again.';
         });
       },
@@ -135,10 +169,10 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
         ),
         const SizedBox(height: DanaviewSpacing.lg),
         ConstrainedBox(constraints: const BoxConstraints(maxWidth: 320), child: _actionButton()),
-        if (server != null) ...[
+        if (server != null || _status == _TestStatus.running) ...[
           const SizedBox(height: DanaviewSpacing.sm),
           Text(
-            'Cloudflare · $server',
+            speedServerLine(running: _status == _TestStatus.running, server: server),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
@@ -308,12 +342,22 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
           const SizedBox(height: DanaviewSpacing.lg),
         ],
         if (_status == _TestStatus.failed) ...[
-          DanaviewInlineEmpty(
-            icon: Icons.wifi_off_rounded,
-            iconColor: DanaviewColors.errorLight,
-            title: "The test didn't finish",
-            message: _error,
-          ),
+          if (_unavailable != null)
+            DanaviewInlineEmpty(
+              icon: Icons.cloud_off_rounded,
+              iconColor: DanaviewColors.warning,
+              title: "Couldn't reach a test server",
+              message: _unavailable == SpeedTestUnavailableReason.consentDeclined
+                  ? 'Try again in a minute. You can allow the open network in Settings › Privacy.'
+                  : 'Try again in a minute.',
+            )
+          else
+            DanaviewInlineEmpty(
+              icon: Icons.wifi_off_rounded,
+              iconColor: DanaviewColors.errorLight,
+              title: "The test didn't finish",
+              message: _error,
+            ),
           const SizedBox(height: DanaviewSpacing.lg),
         ],
         _MetricGrid(metrics: metrics),
@@ -325,6 +369,26 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
               style: DanaviewTextStyles.caption,
             ),
           ),
+        if (result is CoordinatedSpeedTestResult)
+          for (final note in SpeedResultNote.values)
+            if (result.notes.contains(note))
+              Padding(
+                key: ValueKey('speed-note-${note.name}'),
+                padding: const EdgeInsets.fromLTRB(4, DanaviewSpacing.xs, 4, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 1),
+                      child: ExcludeSemantics(
+                        child: Icon(Icons.info_outline_rounded, size: 14, color: DanaviewColors.textMuted),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(speedResultNoteText(note), style: DanaviewTextStyles.caption)),
+                  ],
+                ),
+              ),
         if (!running && download != null)
           _VideoVerdict(downloadMbps: download, uploadMbps: upload, latencyMs: latency, jitterMs: jitter),
       ],
@@ -341,7 +405,7 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
       title: 'Uses up to ${formatDataSize(config.maxTotalBytes)} of data',
       message: 'The test downloads and uploads data for about $roughSeconds seconds; fast connections '
           'finish sooner. On mobile data, this counts toward your plan. '
-          "It runs against Cloudflare's speed test servers.",
+          'It runs against a nearby test server.',
     );
   }
 }

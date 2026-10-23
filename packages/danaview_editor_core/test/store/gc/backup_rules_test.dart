@@ -4,6 +4,11 @@
 // excluded from Auto Backup (API ≤ 30) and from cloud backup and device transfer (API 31+); the
 // player's data stays included; the manifest references both rule files. The device check is the
 // `bmgr` procedure in README.md (V-A7, QA-10).
+//
+// EXTENDED: D-3, Windows lane (ARCH V2-115, owner 2026-10-22): the Danaview library
+// (`files/library`) leaves cloud backup and Auto Backup on API ≤ 30, and stays in device transfer
+// except its import part files (`files/library/imports`). The library rules have their own test,
+// test/v12/library_storage/android_backup_rules_test.dart at the app root.
 
 import 'dart:io';
 
@@ -25,22 +30,28 @@ String _section(String xml, String tag) {
   return m![1]!;
 }
 
-const _expected = [('exclude', 'file', 'danaview/editor'), ('exclude', 'file', 'danaview/speech')];
+const _editor = [('exclude', 'file', 'danaview/editor'), ('exclude', 'file', 'danaview/speech')];
+
+const _expected = {
+  'cloud-backup': [..._editor, ('exclude', 'file', 'library')],
+  'device-transfer': [..._editor, ('exclude', 'file', 'library/imports')],
+  'full-backup-content': [..._editor, ('exclude', 'file', 'library')],
+};
 
 void main() {
-  test('API 31+: cloud backup and device transfer exclude exactly the editor and speech trees', () {
+  test('API 31+: cloud backup and device transfer exclude exactly the editor and speech trees (+ D-3 library rules)', () {
     final xml = _read('res/xml/danaview_data_extraction_rules.xml');
     expect(xml, contains('<data-extraction-rules>'));
     for (final section in ['cloud-backup', 'device-transfer']) {
-      expect(_rules(_section(xml, section)), _expected, reason: section);
+      expect(_rules(_section(xml, section)), _expected[section], reason: section);
     }
-    expect(_rules(xml), hasLength(4), reason: 'no include rules (everything else stays included)');
+    expect(_rules(xml), hasLength(6), reason: 'no include rules (everything else stays included)');
   });
 
-  test('API ≤ 30: full-backup-content excludes the same trees', () {
+  test('API ≤ 30: full-backup-content excludes the same trees (+ D-3: the whole library)', () {
     final xml = _read('res/xml/danaview_backup_rules.xml');
     expect(xml, contains('<full-backup-content>'));
-    expect(_rules(xml), _expected);
+    expect(_rules(xml), _expected['full-backup-content']);
   });
 
   test('the manifest references both rule files on <application>', () {

@@ -1,0 +1,51 @@
+{
+ "clip": "c5_2spk_similar",
+ "duration": 27.72,
+ "speakers": [
+  "Karen",
+  "Samantha"
+ ],
+ "overlap_seconds": 1.01,
+ "segments": [
+  {
+   "speaker": "Samantha",
+   "start": 0.5,
+   "end": 3.38
+  },
+  {
+   "speaker": "Karen",
+   "start": 3.88,
+   "end": 7.78
+  },
+  {
+   "speaker": "Samantha",
+   "start": 8.28,
+   "end": 10.79
+  },
+  {
+   "speaker": "Karen",
+   "start": 9.79,
+   "end": 12.34
+  },
+  {
+   "speaker": "Samantha",
+   "start": 12.84,
+   "end": 15.06
+  },
+  {
+   "speaker": "Karen",
+   "start": 15.56,
+   "end": 18.88
+  },
+  {
+   "speaker": "Samantha",
+   "start": 19.38,
+   "end": 23.05
+  },
+  {
+   "speaker": "Karen",
+   "start": 23.55,
+   "end": 26.92
+  }
+ ]
+}

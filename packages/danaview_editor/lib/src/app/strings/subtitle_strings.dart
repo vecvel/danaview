@@ -1,4 +1,5 @@
 // OWNER: UX-31
+// EXTENDED: AIS-01 (labels of the 1.2.0 panel sections)
 //
 // Copy of the captions panel and the caption actions (ux.md §10.9): plain, specific and with a
 // next step where one exists (ARCH §19). Glyphs never carry meaning alone; every icon-only control
@@ -52,6 +53,10 @@ abstract final class SubtitleStrings {
         SubtitlesPanelSection.cues => 'Captions',
         SubtitlesPanelSection.style => 'Style',
         SubtitlesPanelSection.position => 'Position',
+        // 1.2.0 (AIS-01; AIS-17, AIS-33 and AIS-18 own the sections).
+        SubtitlesPanelSection.transcript => 'Transcript',
+        SubtitlesPanelSection.review => 'Review',
+        SubtitlesPanelSection.cue => 'Cue',
       };
 
   /// Shown when the track is locked.

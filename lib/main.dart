@@ -1,3 +1,6 @@
+// EXTENDED: S2-W (S2 wiring: the Files & Media Home overrides behind DANAVIEW_FILES_HOME, from
+// lib/wiring/files_home_wiring.dart; none with the flag off.)
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -25,6 +28,7 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:danaview_whisper/danaview_whisper.dart';
 import 'app.dart';
 import 'router/app_router.dart' show appExportHost, openPrivacyPolicy, openProjects;
+import 'wiring/files_home_wiring.dart' show filesHomeOverrides;
 
 Future<void> main([List<String> args = const []]) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,6 +55,8 @@ Future<void> main([List<String> args = const []]) async {
   await engine.initialize();
 
   final editorOverrides = await _editorOverrides();
+  // Files & Media Home (S2): the library, thumbnails and import; nothing with the flag off.
+  final filesHome = await filesHomeOverrides(prefs: prefs);
 
   runApp(
     ProviderScope(
@@ -59,6 +65,7 @@ Future<void> main([List<String> args = const []]) async {
         sessionRepositoryProvider.overrideWithValue(sessionRepo),
         libraryRepositoryProvider.overrideWithValue(libraryRepo),
         ...editorOverrides,
+        ...filesHome.overrides,
       ],
       child: const DanaviewApp(),
     ),

@@ -1,0 +1,57 @@
+{
+ "clip": "c3_3spk_turns",
+ "duration": 34.33,
+ "speakers": [
+  "Daniel",
+  "Karen",
+  "Samantha"
+ ],
+ "overlap_seconds": 0.0,
+ "segments": [
+  {
+   "speaker": "Samantha",
+   "start": 0.5,
+   "end": 2.92
+  },
+  {
+   "speaker": "Daniel",
+   "start": 3.42,
+   "end": 6.9
+  },
+  {
+   "speaker": "Karen",
+   "start": 7.4,
+   "end": 10.53
+  },
+  {
+   "speaker": "Samantha",
+   "start": 11.13,
+   "end": 14.47
+  },
+  {
+   "speaker": "Daniel",
+   "start": 14.87,
+   "end": 18.66
+  },
+  {
+   "speaker": "Karen",
+   "start": 19.16,
+   "end": 22.11
+  },
+  {
+   "speaker": "Daniel",
+   "start": 22.61,
+   "end": 25.47
+  },
+  {
+   "speaker": "Samantha",
+   "start": 26.07,
+   "end": 29.48
+  },
+  {
+   "speaker": "Karen",
+   "start": 29.98,
+   "end": 33.53
+  }
+ ]
+}

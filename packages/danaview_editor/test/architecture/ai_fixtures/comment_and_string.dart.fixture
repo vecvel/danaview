@@ -1,0 +1,15 @@
+// Mentions in comments, docs and strings never count: AiSendConsent.accepted(d) and
+// ProviderProbeConsent.accepted(d) appear only in the send view and the provider sheet.
+/// See `AiSendConsent.accepted(` in ai_send_view.dart.
+const help = 'AiSendConsent.accepted( is called after Send';
+const raw = r'ProviderProbeConsent.accepted(';
+final notAConsent = MyAiSendConsent.accepted(1);
+final alsoNot = AiSendConsentX.accepted;
+
+class MyAiSendConsent {
+  MyAiSendConsent.accepted(int x);
+}
+
+class AiSendConsentX {
+  static const accepted = 1;
+}

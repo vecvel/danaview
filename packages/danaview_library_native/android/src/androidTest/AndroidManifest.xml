@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OWNER: HOM-02A (HOM-20A adds the recording provider, HOM-22A the share / open-in receiver)
+     The test APK of danaview_library_native is its own app: it declares the photo permissions the
+     Danaview app declares (D-3) so the tests can grant them with UiAutomation. RecordingProvider
+     (pickers tests) serves test files and records every open mode (read-only check, rule 27). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- HOM-04A (3): the API 24-28 thumbnail test writes its seed files into public Pictures/Movies
+         (MediaStore below 29 can't open files under Android/data). Test APK only. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+
+    <application>
+        <provider
+            android:name="com.vecvel.danaview.library.pickers.RecordingProvider"
+            android:authorities="${applicationId}.recording"
+            android:exported="false" />
+
+        <!-- HOM-22A: a share / open-in receiver inside the test APK (exportout tests). -->
+        <activity
+            android:name="com.vecvel.danaview.library.exportout.ShareTargetActivity"
+            android:exported="true"
+            android:label="DV Test Receiver">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/x-danaview-test" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

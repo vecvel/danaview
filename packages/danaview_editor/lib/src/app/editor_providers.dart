@@ -1,4 +1,6 @@
 // OWNER: UX-01
+// EXTENDED: AIS-01 (1.2.0 root providers: aiStudioServiceProvider, fontLibraryProvider,
+// subtitlePresetStoreProvider; AI_STUDIO_PLAN §5.5 AIS-01)
 //
 // Riverpod 2 providers of the editor (ARCH §17.3).
 //
@@ -26,6 +28,7 @@
 // caches) are declared by their owners in their own files.
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:danaview_ai_studio/danaview_ai_studio.dart' show AiStudioOff, AiStudioService;
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/store.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
@@ -107,6 +110,34 @@ final editorPrefsProvider = Provider<EditorPrefs>(
 final editorCapabilitiesProvider = FutureProvider<EditorCapabilities>(
   (ref) => ref.watch(editorEngineProvider).capabilities(),
   name: 'editorCapabilitiesProvider',
+);
+
+/// AI Studio (AI_STUDIO_PLAN §3.6). Defaults to [AiStudioOff], so an unconfigured editor, every
+/// test and a build without `DANAVIEW_AI_STUDIO` build no provider and send nothing (D-45, D-65);
+/// EditorBootstrap (AIS-37) overrides it with the real service while the master switch is on.
+///
+/// See AI_STUDIO_PLAN §3.6, D-45.
+final aiStudioServiceProvider = Provider<AiStudioService>(
+  (ref) => const AiStudioOff(),
+  name: 'aiStudioServiceProvider',
+);
+
+/// The app-level library of imported fonts (`FontLibraryStore`, AIS-23), overridden by
+/// EditorBootstrap (AIS-37).
+///
+/// See AI_STUDIO_PLAN D-61.
+final fontLibraryProvider = Provider<FontLibraryStore>(
+  (ref) => throw EditorNotConfiguredError('fontLibraryProvider'),
+  name: 'fontLibraryProvider',
+);
+
+/// The user's subtitle style presets (`PresetStore`, AIS-23), overridden by EditorBootstrap
+/// (AIS-37).
+///
+/// See AI_STUDIO_PLAN D-62.
+final subtitlePresetStoreProvider = Provider<PresetStore>(
+  (ref) => throw EditorNotConfiguredError('subtitlePresetStoreProvider'),
+  name: 'subtitlePresetStoreProvider',
 );
 
 // -------------------------------------------------------------------------------------------------

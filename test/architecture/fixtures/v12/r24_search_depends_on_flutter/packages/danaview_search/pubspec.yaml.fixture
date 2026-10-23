@@ -1,0 +1,12 @@
+name: danaview_search
+dependencies:
+  flutter:
+    sdk: flutter
+  characters: ^1.3.0
+  collection: ^1.18.0
+  meta: ^1.11.0
+  sqlite3: ^2.9.4
+  danaview_library:
+    path: ../danaview_library
+dev_dependencies:
+  test: ^1.25.0

@@ -1,0 +1,9 @@
+import 'package:characters/characters.dart';
+import 'package:danaview_ai_providers/danaview_ai_providers.dart';
+import 'package:danaview_editor_core/model.dart';
+import 'package:danaview_transcription/danaview_transcription.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+
+// Not a widget: a plain class whose name ends in State.
+class PlanState {}

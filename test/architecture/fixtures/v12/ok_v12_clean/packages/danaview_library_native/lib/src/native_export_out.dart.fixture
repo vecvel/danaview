@@ -1,0 +1,2 @@
+// Create-new only: overwrite: false is fine.
+Future<void> saveOut(String name) async => _api.saveOut(name, overwrite: false);

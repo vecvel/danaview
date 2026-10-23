@@ -1,4 +1,7 @@
 // OWNER: CORE-09
+// EXTENDED: AIS-01 (part directives for rich_cue_commands.dart and ai_cue_commands.dart)
+// EXTENDED: INT-101 (part directives for photo_bridge_commands.dart, beauty_commands.dart and
+// keyframe_easing_commands.dart)
 //
 // The command framework (ARCH §7.1, domain.md §6.1).
 //
@@ -84,6 +87,13 @@ part 'commands/transition_commands.dart';
 part 'commands/track_commands.dart';
 part 'commands/marker_commands.dart';
 part 'commands/project_commands.dart';
+// 1.2.0 (AIS-01): rich cue commands (AIS-05) and AI batch commands (AIS-06).
+part 'commands/rich_cue_commands.dart';
+part 'commands/ai_cue_commands.dart';
+// 1.2.0 (INT-101): photo bridge (VED-14), beauty (VED-18) and keyframe easing (VED-19) commands.
+part 'commands/photo_bridge_commands.dart';
+part 'commands/beauty_commands.dart';
+part 'commands/keyframe_easing_commands.dart';
 
 /// An editing command (ARCH §7.1). Sealed: every command lives in one of this library's parts.
 ///

@@ -1,0 +1,2 @@
+package com.vecvel.danaview.library.thumbnails
+fun open(r: android.content.ContentResolver, uri: android.net.Uri) { r.openFileDescriptor(uri, "rw") }

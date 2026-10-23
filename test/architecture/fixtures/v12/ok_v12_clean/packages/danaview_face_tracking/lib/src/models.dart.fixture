@@ -1,0 +1,2 @@
+// Models load from the path the caller gives (see https://example.invalid in a comment only).
+final class ModelPaths { const ModelPaths(this.landmarker); final String landmarker; }

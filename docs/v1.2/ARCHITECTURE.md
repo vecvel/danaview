@@ -140,7 +140,7 @@ Status: **final** (no owner input needed), **owner 2026-10-15/16** (decided), **
 | V2-112 | D-97 | Sort and group: date groups, folder; location grouping only from existing EXIF place names (V2-22) | final, narrowed | — |
 | V2-113 | D-98 | Owner UI rules | final (= §1.4) | §1.4 |
 | V2-114 | D-98a | Filters `All`/`Videos`/`Photos`/`Documents`; document sub-filters `PDF`, `Word`, `Excel`, `PowerPoint`, `Text/CSV`, `Other`; UTType / MIME / extension classifier table | owner 2026-10-16 | §5.1 |
-| V2-115 | D-98b | Danaview folders app-private, nested, mixed types, included in backups; Recently deleted 30 days; not shown in the iOS Files app in 1.2.0 | owner 2026-10-16; Android backup limit **[VERIFY: HOM-17]** | V2-06, V2-08, §5.2 |
+| V2-115 | D-98b | Danaview folders app-private, nested, mixed types, included in backups; Recently deleted 30 days; not shown in the iOS Files app in 1.2.0 | owner 2026-10-16; Android backup: **owner decision 2026-10-22: `filesDir/library/` is excluded from Google cloud backup and kept in device-to-device transfer** (one app over the 25 MB quota loses its whole cloud backup, player data included); iOS/macOS unchanged | V2-06, V2-08, §5.2 |
 | V2-116 | D-98c | Import is a copy; sources never changed; Photos/Gallery, Files, "Open with Danaview", iOS Share Extension | owner 2026-10-16 | §5.6, §8.3 |
 | V2-117 | D-98d | Getting files out: Save to Files, Save to Downloads, share sheet, Open in another app | owner 2026-10-16 | §8.4 |
 | V2-118 | D-98e | File actions and multi-select bar | owner 2026-10-16 | — |
@@ -148,10 +148,12 @@ Status: **final** (no owner input needed), **owner 2026-10-15/16** (decided), **
 | V2-120 | D-98g | Viewers native first (PDFKit, `PdfRenderer`, Quick Look) | owner 2026-10-16 | §8.1, §8.2 |
 | V2-121 | D-98h | Android Office files: file card + Open in another app; text/CSV in-app; no paid SDK | owner 2026-10-16 | — |
 | V2-122 | D-98i | No Office editing | owner 2026-10-16 | §1.3 |
-| V2-123 | D-98j | PDF tools via one `danaview_pdf` plugin; results as new files; Android platform/Jetpack APIs first, PdfBox-Android or PDFium only if HOM-27 shows text turning into pictures | owner 2026-10-16; **[VERIFY: HOM-27]** | §8.1 |
+| V2-123 | D-98j | PDF tools via one `danaview_pdf` plugin; results as new files; Android platform/Jetpack APIs first, PdfBox-Android or PDFium only if HOM-27 shows text turning into pictures | owner 2026-10-16; **HOM-27 decided 2026-10-22: route (b) PdfBox-Android 2.0.27.0** (Apache-2.0, with BouncyCastle 1.72) is the single Android write engine for every PDF tool (HOM-28A…31A); platform `PdfRenderer` stays the viewer (HOM-25). Route (a) fails (no page-level write API; rasterising loses text). +2.0 MB per APK after R8, pure Java. Report: `files-media-home/spikes/HOM-27-android-pdf-write.md` | §8.1 |
 | V2-124 | D-98k | Desktop documents: macOS = iOS paths; Windows/Linux viewers and tools wait for 1.3.0 | owner 2026-10-16 | V2-30 |
 
 #### AI Studio and rich subtitles (AIS plan §2, §7)
+
+**Recorded by AIS-01 (2026-10-22, V2-33).** D-45…D-70 and D-70a…D-70i are recorded here as V2-201…V2-235; v1.1 ARCH is not edited (its own D-45 stays the render-preview cache). The rows marked **[OWNER]** have no owner answer yet: Q-A1…Q-A10 (§16) list the recommendation, which is the working default until the owner decides; AIS-41 closes them. The AIS-01 skeleton is in place: `danaview_ai_providers` and `danaview_ai_studio` (placeholders, analyzed and tested by the `ai-dart` CI job, `scripts/ci/editor/ai.sh`), the 20 `EditorActionId`s of AIS §4.4, `SubtitlesPanelSection.{transcript, review, cue}`, the `DANAVIEW_AI_STUDIO` flag (`aiStudioFlag` / `EditorFlags.aiStudioEnabled`; off hides the four AI actions), the root providers `aiStudioServiceProvider` (default `AiStudioOff`), `fontLibraryProvider`, `subtitlePresetStoreProvider`, and rules 9–12, 14, 15 in `test/architecture/dependency_rules_test.dart`. Rule 13 is checked with the rule 17 paths (V2-20) by `packages/danaview_editor/test/architecture/ai_call_sites_test.dart` until AIS-43 moves it.
 
 | V2 | Plan | Decision (short) | Status | Here |
 |---|---|---|---|---|
@@ -304,7 +306,7 @@ Only the app root constructs plugin-backed implementations and adapts them to po
 
 ### 4.2 Dependency rules (enforced by `test/architecture/dependency_rules_test.dart` and per-package architecture tests)
 
-Rules 1–8 are v1.1 ARCH §4.2 and stay as they are. Rules 9–19 are the AIS plan's §3.1, with rule 13 replaced by rule 17 and adapters moved by V2-24. Rules 20–31 are new (INT-101 adds them).
+Rules 1–8 are v1.1 ARCH §4.2 and stay as they are. Rules 9–19 are the AIS plan's §3.1, with rule 13 replaced by rule 17 and adapters moved by V2-24. Rules 20–31 are new (INT-101 adds them). **Status (INT-101, 2026-10-22):** rules 20–31 and the flag rule F of V2-04 (the 1.2.0 flags are read only in each package's flags file) are enforced by `test/architecture/dependency_rules_test.dart`, each with a negative fixture in `test/architecture/fixtures/v12/`; rule 20's `dart:io` allowance includes `lib/src/desktop/` for HOM-03's desktop discovery (V2-109). Rules 21, 26, 27 and 30 also grep the plugins' Swift and Kotlin sources. Ahead of AIS-43, INT-101 also enforces rule 16 (skipped until `danaview_ai` exists), rule 18 (socket grep over `danaview_diarization`, `danaview_media_analysis`, `danaview_search`, Dart, Swift and Kotlin) and rule 19 (no `package:genkit*` outside `danaview_ai_genkit`, which itself may not import `http`, `dio`, `web_socket_channel` or `grpc` or open sockets), each with a negative fixture.
 
 9. `danaview_ai_providers` → only `meta`, `collection`, `crypto` and the SDK. No Flutter, no `danaview_*`.
 10. `danaview_ai_studio` → `danaview_ai`, `danaview_ai_providers` (types), `danaview_editor_core`, `danaview_transcription`, `characters`, `collection`, `meta`, `path`. Never engine packages, `danaview_editor`, `danaview_features`, `danaview_secure_keys`. No widgets.
@@ -339,7 +341,8 @@ Rules 1–8 are v1.1 ARCH §4.2 and stay as they are. Rules 9–19 are the AIS p
 | `danaview_pdf` | Flutter plugin (iOS, macOS via `darwin/`, Android) | INT-101; surface HOM-24 | `pigeons/pdf_api.dart`, `lib/src/{pdf_document,pdf_view,pdf_tools,pdf_text}.dart`, `darwin/Classes/{Glue,Viewer,Text,Tools,Annotate,Sign,Compress}/`, `android/src/main/kotlin/com/vecvel/danaview/pdf/{glue,viewer,text,tools,annotate,sign,compress}/` |
 | `danaview_documents` | Flutter UI | INT-101 | `lib/src/{router,text,card,pdf/{viewer,organiser,annotate,sign,compress},quicklook,signatures}/` |
 | `danaview_face_tracking` | Flutter plugin (iOS, Android) | INT-101; surface VED-16 | `pigeons/face_api.dart`, `lib/src/{face_tracker,video_sampler,models}.dart`, `ios/Classes/{Glue,Face,Pose,Segmentation,VideoSampler}/`, `android/src/main/kotlin/com/vecvel/danaview/face/{glue,face,pose,segmentation,videosampler}/` |
-| AI packages | per AIS plan §3.1 | AIS-01, AIS-11, AIS-43, AIS-45, AIS-50; `danaview_search` skeleton by INT-101 | per AIS plan §3.2 as amended by V2-20, V2-24 |
+| **Status (INT-101, 2026-10-22)** | | | The five packages above and the `danaview_search` skeleton exist with D-33 placeholders and one public entry file per directory (barrels never change); `danaview_library_native` and `danaview_pdf` are plugins for iOS, macOS (shared `darwin/`) and Android, `danaview_face_tracking` for iOS and Android, with empty native glue stubs until HOM-02/HOM-02A, HOM-24/HOM-25 and VED-16/VED-16A. `sqlite3` is pinned to 2.x (no build-hook download); HOM-17 and AIS-50 settle the Android SQLite and FTS5 question (V-S21): bundled via `sqlite3_flutter_libs` at the app root, D-7, 2026-10-22. |
+| AI packages | per AIS plan §3.1 | AIS-01, AIS-11, AIS-43, AIS-45, AIS-50; `danaview_search` skeleton by INT-101 | per AIS plan §3.2 as amended by V2-20, V2-24. **Status (AIS-01, 2026-10-22):** `danaview_ai_providers` and `danaview_ai_studio` exist with D-33 placeholders; the moved paths (`danaview_ai_ui`, V2-20; `lib/adapters/`, V2-24) are left to AIS-43 and AIS-37 |
 
 ### 4.4 Changed existing packages (who extends what)
 
@@ -773,7 +776,7 @@ v1.1 ARCH §20.1 extended: sources are opened read-only (rule 27); imports copy;
 | Diarization runtime | **0** install growth (owner 2026-10-16) | AIS-44 |
 | Face/pose/segmentation runtime code | recorded; models not bundled (Q-N1 decided: download) | VED-33 |
 | PDF library (only if HOM-27 picks b or c) | recorded per ABI | HOM-27 |
-| SQLite (`sqlite3` native libs where the OS one lacks FTS5) | recorded | HOM-17, AIS-50 |
+| SQLite: bundled via `sqlite3_flutter_libs` 0.5.x at the app root on every platform, FTS5 included (D-7, V-S21, 2026-10-22); pure-Dart packages keep only `sqlite3` 2.x | recorded (about +1.5 MB per ABI / per iOS arch uncompressed) | HOM-17, AIS-50 |
 | Share Extension | ≤ 1 MB | HOM-21 |
 
 AIS-41's release checklist records IPA and AAB sizes against 1.1.0.
@@ -899,7 +902,7 @@ Test media are generated locally (ffmpeg, code) or come from v1.1 ENG-05; PDFs a
 | V2-V3 | ImageIO has no WebP encoder on iOS/macOS; HEIC thumbnails on iOS 17+ | HOM-04, VED-29 |
 | V2-V4 | libmpv displays images in a playlist with `image-display-duration` on every platform | HOM-12 |
 | V2-V5 | `PdfRenderer` text search/selection and password support per Android version; `androidx.pdf` availability | HOM-25 |
-| V2-V6 | Android PDF write route (a/b/c), text preservation, size, min API, 200-page timings, licence | HOM-27 |
+| V2-V6 | Android PDF write route (a/b/c), text preservation, size, min API, 200-page timings, licence | HOM-27 — **closed 2026-10-22**: route (b) PdfBox-Android 2.0.27.0; text kept (203/203 tokens on merge); 200-page operations 41–398 ms on API 28–37; +2.0 MB; minSdk 14 (lowest run API 28); Apache-2.0 + BouncyCastle (MIT-style) |
 | V2-V7 | PDFKit stamp burn-in and compression write options (iOS 16+, macOS 13+) | HOM-30, HOM-31 |
 | V2-V8 | Share Extension memory limit with streamed copies of a 2 GB video | HOM-21 |
 | V2-V9 | SQLite FTS5 availability per platform with `sqlite3` (system vs bundled), CJK tokenization | HOM-17, AIS-50 |
@@ -927,7 +930,7 @@ Owner decisions of 2026-10-15/16 are applied and not repeated here. Q-N1 to Q-N9
 | **Q-N2** | Is MediaPipe (or the runtime VED-33 picks) acceptable on iOS if it adds a few MB of native code? | **Owner decision 2026-10-21:** Yes, if VED-33 records only a few MB of iOS runtime growth (≤ 8 MB); otherwise revisit. | V2-13 |
 | **Q-N3** | Still export caps on weak devices (minimal ≤ 24 MP, low ≤ 48 MP)? | **Owner decision 2026-10-21:** Yes: minimal ≤ 24 MP, low ≤ 48 MP, with a plain notice in the export sheet. | V2-18 |
 | **Q-N4** | "Search by place" (reverse geocoding, a network call) in 1.2.0? | **Owner decision 2026-10-21:** Deferred: no reverse geocoding in 1.2.0; search stays offline and indexes only place names already in files. | V2-22 |
-| **Q-N5** | Development flags `DANAVIEW_FILES_HOME`, `DANAVIEW_PHOTO_EDITOR`, `DANAVIEW_BEAUTY` until their QA passes? | **Owner decision 2026-10-21:** Yes: DANAVIEW_FILES_HOME, DANAVIEW_PHOTO_EDITOR and DANAVIEW_BEAUTY stay off until their QA passes. | V2-04 |
+| **Q-N5** | Development flags `DANAVIEW_FILES_HOME`, `DANAVIEW_PHOTO_EDITOR`, `DANAVIEW_BEAUTY` until their QA passes? | **Owner decision 2026-10-21:** Yes: DANAVIEW_FILES_HOME, DANAVIEW_PHOTO_EDITOR and DANAVIEW_BEAUTY stay off until their QA passes. **Status (INT-101, 2026-10-22):** applied: the flags default to false and are read only in `packages/danaview_features/lib/src/flags.dart` and `packages/danaview_editor/lib/src/app/flags_v12.dart` (`DANAVIEW_AI_STUDIO` stays in AIS-01's `editor_availability.dart`), asserted by architecture rule F. | V2-04 |
 | **Q-N6** | Face test data: synthetic and licensed only, or may the owner record consented clips? | **Owner decision 2026-10-21:** Synthetic and licensed faces only; no owner-recorded clips. | V2-31 |
 | **Q-N7** | Saved signatures excluded from backups (lost on a new phone)? | **Owner decision 2026-10-21:** Yes: saved signatures stay on the device and are excluded from backups. | V2-29 |
 | **Q-N8** | Photos tab: show the system photo library by default (asks for access) or only Danaview folders until the user opts in? | **Owner decision 2026-10-21:** Danaview folders by default; the system photo library only after the user opts in ("Show my photo library"). | V2-103 |

@@ -1,0 +1,4 @@
+import PDFKit
+
+// The viewer opens read-only and never writes back. URLSession in a comment is fine.
+func open(_ url: URL) -> PDFDocument? { PDFDocument(url: url) }

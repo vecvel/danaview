@@ -1,4 +1,5 @@
 // OWNER: UX-31
+// EXTENDED: AIS-01 (the 1.2.0 sections show the cue list until AIS-17/AIS-18/AIS-33 host them)
 //
 // The captions panel (ux.md §10.9) for one subtitle track, optionally focused on one cue.
 //
@@ -547,7 +548,7 @@ class _SubtitlesPanelState extends ConsumerState<SubtitlesPanel> {
     final metrics = _metricsFor(context);
 
     final header = _header(project, track, cues.length, ready, canEdit);
-    final section = route.section;
+    final section = _shownSection(route.section);
     return CustomScrollView(
       key: SubtitlesPanelKeys.scroll,
       controller: _scroll,
@@ -688,9 +689,9 @@ class _SubtitlesPanelState extends ConsumerState<SubtitlesPanel> {
           label: SubtitleStrings.sections,
           child: DanaviewSegmentedControl<SubtitlesPanelSection>(
             key: SubtitlesPanelKeys.sections,
-            value: route.section,
+            value: _shownSection(route.section),
             options: [
-              for (final s in SubtitlesPanelSection.values) DanaviewOption<SubtitlesPanelSection>(value: s, label: SubtitleStrings.section(s)),
+              for (final s in SubtitlesPanelSection.v11) DanaviewOption<SubtitlesPanelSection>(value: s, label: SubtitleStrings.section(s)),
             ],
             onChanged: (s) {
               if (s == route.section) return;
@@ -1782,3 +1783,8 @@ class _PositionSectionState extends ConsumerState<_PositionSection> with _TrackE
     );
   }
 }
+
+/// The 1.1 section the panel shows for [section]: the 1.2.0 sections (transcript, review, cue)
+/// show the cue list until their owners (AIS-17, AIS-33, AIS-18) add them to the panel (AIS-01).
+SubtitlesPanelSection _shownSection(SubtitlesPanelSection section) =>
+    SubtitlesPanelSection.v11.contains(section) ? section : SubtitlesPanelSection.cues;

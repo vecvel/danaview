@@ -1,3 +1,5 @@
+# EXTENDED: INT-101 (danaview_library, danaview_library_native, danaview_documents, danaview_search;
+# ARCH v1.2 §4.2 rule 23: never an AI package, danaview_secure_keys, danaview_pdf or an editor package)
 name: danaview_features
 description: UI feature controllers, player screens, overlays, settings menus, and diagnostics HUD.
 version: 1.0.0
@@ -24,6 +26,15 @@ dependencies:
     path: ../danaview_ui_kit
   danaview_platform:
     path: ../danaview_platform
+  # 1.2.0 Files & Media Home (INT-101, ARCH v1.2 §4.1, rule 23).
+  danaview_library:
+    path: ../danaview_library
+  danaview_library_native:
+    path: ../danaview_library_native
+  danaview_documents:
+    path: ../danaview_documents
+  danaview_search:
+    path: ../danaview_search
 
 dev_dependencies:
   flutter_test:

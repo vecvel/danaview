@@ -1,0 +1,9 @@
+package com.vecvel.danaview.library.thumbnails
+
+import android.util.Log
+
+// Read-only opens only: mode "r" (rule 27). "rw" in a comment is fine.
+fun open(resolver: android.content.ContentResolver, uri: android.net.Uri) {
+    resolver.openFileDescriptor(uri, "r")
+    Log.d(TAG, "thumbnail decoded")
+}

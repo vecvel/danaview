@@ -1,0 +1,5 @@
+import 'dart:io';
+
+// A provider building its own client bypasses the transport (rule 14).
+final own = HttpClient()..connectionTimeout = null;
+const note = 'HttpClient( in a string is fine';

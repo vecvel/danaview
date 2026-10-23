@@ -1,0 +1,5 @@
+import 'package:flutter/widgets.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
+
+// DanaviewSwitch and DanaviewSlider are kit components; a Switch in a comment is fine.
+Widget build() => const DanaviewSwitch(label: 'Wrap lines: Switch');

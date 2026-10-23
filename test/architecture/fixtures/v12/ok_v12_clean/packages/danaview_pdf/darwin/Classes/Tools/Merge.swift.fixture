@@ -1,0 +1,7 @@
+import PDFKit
+
+// Tools write new files only (rule 27 allows .write(to:) under Tools/).
+func merge(_ docs: [PDFDocument], into url: URL) -> Bool {
+  let out = PDFDocument()
+  return out.write(to: url)
+}

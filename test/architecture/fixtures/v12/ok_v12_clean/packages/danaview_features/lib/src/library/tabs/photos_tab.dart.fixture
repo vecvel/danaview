@@ -1,0 +1,6 @@
+import 'package:danaview_library/danaview_library.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
+
+// Reads the flag through FeatureFlags, never bool.fromEnvironment itself; DanaviewCard is a kit widget.
+Widget tab() => FeatureFlags.filesHomeEnabled ? const DanaviewCard() : const SizedBox();
+void log() => debugPrint('photos tab built');

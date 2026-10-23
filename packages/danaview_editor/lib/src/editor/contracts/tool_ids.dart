@@ -1,7 +1,13 @@
 // OWNER: UX-01
+// EXTENDED: AIS-01 (1.2.0: no new top-level tool, see below)
+// EXTENDED: INT-101 (PhotoToolId, the Still Photo Mode tray; VED plan §6.1)
 //
 // Top-level tools shown when nothing is selected (ARCH §17.7, ux.md §9.1). Context tools for a
 // selection are `EditorActionId`s chosen by `ToolSets.forSelection` (UX-16).
+//
+// 1.2.0 (AI_STUDIO_PLAN §4.2, §4.4): the strip is unchanged. The rich-subtitle and AI Studio entry
+// points (Transcript, AI Studio, Translate, presets, fonts) live in the Captions tool's panel
+// header ([ToolId.captions]) and the cue selection tools; AI ones only with `DANAVIEW_AI_STUDIO`.
 
 import 'action_ids.dart';
 
@@ -48,4 +54,47 @@ enum ToolId {
   /// opening it closes the open panel, and a new selection closes it (the selection's context
   /// tools take its place).
   bool get opensTab => this == ToolId.audio;
+}
+
+/// A tool of the Still Photo Mode tray (VED plan §6.1, BUILD_PLAN VED-01). The photo screen is not
+/// the timeline: these tools never join [ToolId.stripOrder], and the timeline strip is unchanged.
+///
+/// Tools are gated by capabilities and build flags and are hidden, not disabled (ARCH v1.2 §3):
+/// [beauty] needs `DANAVIEW_BEAUTY` (and, at runtime, the Beauty pack, V2-14).
+///
+/// See VED plan §6.1, ARCH v1.2 §6.1.
+enum PhotoToolId {
+  /// Crop, straighten, horizon and keystone (VED-09).
+  crop,
+
+  /// Pro tone (VED-06).
+  tone,
+
+  /// The 8-band HSL mixer (VED-07).
+  hsl,
+
+  /// RGB and channel curves (VED-08).
+  curves,
+
+  /// Beauty & Retouching (VED-26; `DANAVIEW_BEAUTY`).
+  beauty,
+
+  /// Selective masks and local adjustments (VED-10).
+  masks,
+
+  /// Text, stickers and borders (VED-11).
+  text,
+
+  /// Photo presets (VED-12).
+  presets;
+
+  /// The tray order of VED plan §6.1.
+  static const List<PhotoToolId> trayOrder = values;
+
+  /// Whether this tool exists only with `DANAVIEW_BEAUTY` on.
+  bool get needsBeauty => this == PhotoToolId.beauty;
+
+  /// The tray of a build: with [beauty] off the Beauty tool is absent (hidden, not disabled).
+  static List<PhotoToolId> tray({required bool beauty}) =>
+      [for (final tool in trayOrder) if (beauty || !tool.needsBeauty) tool];
 }

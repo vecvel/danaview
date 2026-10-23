@@ -1,0 +1,6 @@
+abstract final class FeatureFlags {
+  static const bool filesHome = bool.fromEnvironment('DANAVIEW_FILES_HOME');
+  static const bool photoEditor = bool.fromEnvironment('DANAVIEW_PHOTO_EDITOR');
+  static const bool beauty = bool.fromEnvironment('DANAVIEW_BEAUTY');
+  static const bool aiStudio = bool.fromEnvironment('DANAVIEW_AI_STUDIO');
+}

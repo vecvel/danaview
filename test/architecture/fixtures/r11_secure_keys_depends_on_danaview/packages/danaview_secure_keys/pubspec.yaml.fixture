@@ -1,0 +1,6 @@
+name: danaview_secure_keys
+dependencies:
+  flutter:
+    sdk: flutter
+  danaview_ai_providers:
+    path: ../danaview_ai_providers

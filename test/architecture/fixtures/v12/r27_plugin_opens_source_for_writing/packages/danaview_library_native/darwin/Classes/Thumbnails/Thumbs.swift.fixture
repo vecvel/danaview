@@ -1,0 +1,2 @@
+import Foundation
+func touch(_ url: URL) throws { _ = try FileHandle(forUpdating: url) }

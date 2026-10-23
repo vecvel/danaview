@@ -1,0 +1,2 @@
+import PDFKit
+func save(_ doc: PDFDocument, _ url: URL) -> Bool { doc.write(to: url) }

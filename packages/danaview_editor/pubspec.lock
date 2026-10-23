@@ -81,6 +81,20 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
+  danaview_ai_providers:
+    dependency: "direct main"
+    description:
+      path: "../danaview_ai_providers"
+      relative: true
+    source: path
+    version: "1.2.0"
+  danaview_ai_studio:
+    dependency: "direct main"
+    description:
+      path: "../danaview_ai_studio"
+      relative: true
+    source: path
+    version: "1.2.0"
   danaview_data:
     dependency: "direct main"
     description:
@@ -88,6 +102,13 @@ packages:
       relative: true
     source: path
     version: "1.0.0"
+  danaview_documents:
+    dependency: transitive
+    description:
+      path: "../danaview_documents"
+      relative: true
+    source: path
+    version: "1.2.0"
   danaview_domain:
     dependency: "direct main"
     description:
@@ -130,6 +151,27 @@ packages:
       relative: true
     source: path
     version: "1.0.0"
+  danaview_library:
+    dependency: transitive
+    description:
+      path: "../danaview_library"
+      relative: true
+    source: path
+    version: "1.2.0"
+  danaview_library_native:
+    dependency: transitive
+    description:
+      path: "../danaview_library_native"
+      relative: true
+    source: path
+    version: "1.2.0"
+  danaview_pdf:
+    dependency: transitive
+    description:
+      path: "../danaview_pdf"
+      relative: true
+    source: path
+    version: "1.2.0"
   danaview_platform:
     dependency: "direct main"
     description:
@@ -137,6 +179,13 @@ packages:
       relative: true
     source: path
     version: "1.0.0"
+  danaview_search:
+    dependency: transitive
+    description:
+      path: "../danaview_search"
+      relative: true
+    source: path
+    version: "1.2.0"
   danaview_transcription:
     dependency: "direct main"
     description:
@@ -713,6 +762,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.10.2"
+  sqlite3:
+    dependency: transitive
+    description:
+      name: sqlite3
+      sha256: "3145bd74dcdb4fd6f5c6dda4d4e4490a8087d7f286a14dee5d37087290f0f8a2"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.9.4"
   stack_trace:
     dependency: transitive
     description:

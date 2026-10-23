@@ -1,0 +1,2 @@
+import 'dart:io';
+void opened(String path) { print('opened $path'); }

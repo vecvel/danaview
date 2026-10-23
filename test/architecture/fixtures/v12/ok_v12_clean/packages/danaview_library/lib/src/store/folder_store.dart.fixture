@@ -1,0 +1,11 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
+// The store is the writer: writes, renames and deletes are allowed here (rule 26).
+Future<void> put(Directory root, String id, List<int> bytes) async {
+  final part = File(p.join(root.path, 'imports', '$id.part'));
+  await part.writeAsBytes(bytes, mode: FileMode.write);
+  await part.rename(p.join(root.path, 'files', id));
+  print('store: entry written');
+}

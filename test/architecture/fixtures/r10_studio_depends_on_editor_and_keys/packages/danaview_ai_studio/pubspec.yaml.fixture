@@ -1,0 +1,9 @@
+name: danaview_ai_studio
+dependencies:
+  flutter:
+    sdk: flutter
+  danaview_editor:
+    path: ../danaview_editor
+  danaview_secure_keys:
+    path: ../danaview_secure_keys
+  shared_preferences: ^2.2.3

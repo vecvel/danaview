@@ -1,4 +1,10 @@
 PODS:
+  - danaview_library_native (1.2.0):
+    - Flutter
+    - FlutterMacOS
+  - danaview_pdf (1.2.0):
+    - Flutter
+    - FlutterMacOS
   - desktop_drop (0.0.1):
     - FlutterMacOS
   - FlutterMacOS (1.0.0)
@@ -12,6 +18,8 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
+  - danaview_library_native (from `Flutter/ephemeral/.symlinks/plugins/danaview_library_native/darwin`)
+  - danaview_pdf (from `Flutter/ephemeral/.symlinks/plugins/danaview_pdf/darwin`)
   - desktop_drop (from `Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - media_kit_libs_macos_video (from `Flutter/ephemeral/.symlinks/plugins/media_kit_libs_macos_video/macos`)
@@ -20,6 +28,10 @@ DEPENDENCIES:
   - window_manager (from `Flutter/ephemeral/.symlinks/plugins/window_manager/macos`)
 
 EXTERNAL SOURCES:
+  danaview_library_native:
+    :path: Flutter/ephemeral/.symlinks/plugins/danaview_library_native/darwin
+  danaview_pdf:
+    :path: Flutter/ephemeral/.symlinks/plugins/danaview_pdf/darwin
   desktop_drop:
     :path: Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos
   FlutterMacOS:
@@ -34,6 +46,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/window_manager/macos
 
 SPEC CHECKSUMS:
+  danaview_library_native: f38c92ddb1d6dc617c2f4e06466909d4e5fd9ca2
+  danaview_pdf: 1e9ee66aeeabf35c87ba7aade9cdfb2a5bf5b3a1
   desktop_drop: e0b672a7d84c0a6cbc378595e82cdb15f2970a43
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   media_kit_libs_macos_video: 85a23e549b5f480e72cae3e5634b5514bc692f65

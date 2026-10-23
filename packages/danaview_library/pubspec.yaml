@@ -1,0 +1,34 @@
+# OWNER: INT-101
+#
+# The Files & Media Home library (ARCH v1.2 §4.1, §4.3, §5): item model, classifier, library.db,
+# Danaview folders, Recently deleted, import, inbox, organise, file actions and desktop discovery.
+# Pure Dart.
+#
+# Rule 20 (test/architecture/dependency_rules_test.dart): no package:flutter, no danaview_* package
+# except danaview_domain; dependencies sqlite3, meta, collection, crypto, path. dart:io only under
+# lib/src/{store,import,inbox,actions,db,desktop}/. Rule 26: only lib/src/store/ and lib/src/import/
+# write under the library root.
+#
+# sqlite3 is pinned to the 2.x line: 3.x runs a build hook that downloads a prebuilt SQLite at build
+# and test time. 2.x opens the platform SQLite (iOS, macOS; Android through the app root's
+# libraries, HOM-17 / AIS-50 [VERIFY V-S21]).
+name: danaview_library
+description: Danaview library - the Files & Media Home item model, classifier, library database, Danaview folders, Recently deleted, import and file actions. Pure Dart.
+version: 1.2.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  collection: ^1.18.0
+  crypto: ^3.0.3
+  meta: ^1.11.0
+  path: ^1.9.0
+  sqlite3: ^2.9.4
+  danaview_domain:
+    path: ../danaview_domain
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0

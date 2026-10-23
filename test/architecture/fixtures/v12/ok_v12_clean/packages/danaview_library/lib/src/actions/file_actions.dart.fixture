@@ -1,0 +1,5 @@
+import 'dart:io';
+
+// Actions read and hand files to the native layer; `.delete(` in a comment or 'a string' is fine.
+Future<int> size(File f) => f.length();
+const note = 'never call f.delete( here';

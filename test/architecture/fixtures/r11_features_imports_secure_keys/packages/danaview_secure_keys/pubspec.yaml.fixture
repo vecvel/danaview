@@ -1,0 +1,4 @@
+name: danaview_secure_keys
+dependencies:
+  flutter:
+    sdk: flutter

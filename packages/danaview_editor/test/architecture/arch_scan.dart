@@ -1,4 +1,5 @@
 // OWNER: UX-01
+// EXTENDED: AIS-01 (danaview_ai_studio and danaview_ai_providers are planned dependencies, AI_STUDIO_PLAN §3.1 rule 12)
 //
 // Source scanning helpers for danaview_editor's architecture tests (ARCH §1.3, §4.2 rules 7 and 8).
 // Comments and string literals are blanked before matching (interpolated `${…}` code is kept), so
@@ -31,7 +32,8 @@ const featureEntryPoints = {
   'package:danaview_features/storage.dart',
 };
 
-/// The `danaview_*` packages danaview_editor depends on (BUILD_PLAN UX-01).
+/// The `danaview_*` packages danaview_editor depends on (BUILD_PLAN UX-01; 1.2.0: AI_STUDIO_PLAN
+/// §3.1 rule 12, added by AIS-01).
 const allowedDanaviewDependencies = {
   'danaview_editor_core',
   'danaview_editor_engine_api',
@@ -42,6 +44,9 @@ const allowedDanaviewDependencies = {
   'danaview_platform',
   'danaview_domain',
   'danaview_features',
+  // 1.2.0 (AIS-01).
+  'danaview_ai_studio',
+  'danaview_ai_providers',
 };
 
 /// Packages danaview_editor must never depend on or import: the engine plugin (rule 7) and the router

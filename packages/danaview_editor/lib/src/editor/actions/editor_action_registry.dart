@@ -1,4 +1,6 @@
 // OWNER: UX-15
+// EXTENDED: AIS-01 (editorActionMeta delegates the 1.2.0 ids to ais_action_meta.dart)
+// EXTENDED: INT-101 (and the photo and beauty ids, EditorActionId.vedAdditions)
 //
 // EditorActionRegistry (ARCH §17.6, ux.md §15): one table that feeds every way of invoking an
 // action, so tool tiles, context menus, keyboard shortcuts, semantics custom actions and the
@@ -36,6 +38,7 @@ import '../../app/editor_providers.dart';
 import '../contracts/contracts.dart';
 import '../state/editor_state.dart';
 import '../wiring/action_bindings.dart';
+import 'ais_action_meta.dart' show aisActionMeta;
 import 'bindings/render_preview_bindings.dart' show renderPreviewMeta;
 import 'shortcuts_sheet.dart';
 
@@ -324,6 +327,34 @@ EditorActionMeta editorActionMeta(EditorActionId id) {
     EditorActionId.history => const EditorActionMeta('History', Icons.history_rounded),
     EditorActionId.tasks => const EditorActionMeta('Background tasks', Icons.pending_actions_rounded),
     EditorActionId.relink => const EditorActionMeta('Relink media', Icons.link_rounded),
+    // 1.2.0 (AI_STUDIO_PLAN §4.4): label, icon and shortcuts in ais_action_meta.dart (AIS-01).
+    EditorActionId.cueStyleBold ||
+    EditorActionId.cueStyleItalic ||
+    EditorActionId.cueStyleUnderline ||
+    EditorActionId.cueStyleClear ||
+    EditorActionId.cuePlacement ||
+    EditorActionId.splitCueAtCursor ||
+    EditorActionId.mergeCueWithPrevious ||
+    EditorActionId.snapCueToSpeech ||
+    EditorActionId.estimateWordTimings ||
+    EditorActionId.removeEmojis ||
+    EditorActionId.aiStudio ||
+    EditorActionId.askAi ||
+    EditorActionId.translateTrack ||
+    EditorActionId.reviewAiChanges ||
+    EditorActionId.transcriptView ||
+    EditorActionId.karaokeSettings ||
+    EditorActionId.speakers ||
+    EditorActionId.reviewEmojis ||
+    EditorActionId.subtitlePresets ||
+    EditorActionId.importFont ||
+    // 1.2.0 photo and beauty (VED plan §6; INT-101): also in ais_action_meta.dart.
+    EditorActionId.editPhoto ||
+    EditorActionId.beauty ||
+    EditorActionId.compareBeforeAfter ||
+    EditorActionId.photoToVideo ||
+    EditorActionId.batchEditPhotos =>
+      aisActionMeta(id),
   };
 }
 

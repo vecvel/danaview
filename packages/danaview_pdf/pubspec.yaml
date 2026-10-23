@@ -1,0 +1,41 @@
+# OWNER: INT-101
+#
+# PDF viewing, text extraction and page tools (ARCH v1.2 §4.1, §4.3, §8): PDFKit on iOS and macOS
+# (shared `darwin/` sources), PdfRenderer and the HOM-27 write path on Android. The Pigeon surface
+# is HOM-24's (frozen after it, V2-25); the native stubs in darwin/ and android/ are placeholders
+# for HOM-24 and HOM-25.
+#
+# Rule 21 (test/architecture/dependency_rules_test.dart): no danaview_* package, no sockets.
+# Rule 27: sources are opened read-only; tools write only new files.
+name: danaview_pdf
+description: Danaview PDF - PDFKit and PdfRenderer viewers, text extraction and page tools (merge, split, reorder, rotate, annotate, sign, compress) that write new files.
+version: 1.2.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  # Generates lib/src/pigeon/ from pigeons/pdf_api.dart (HOM-24, Mac only).
+  pigeon: ^29.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.vecvel.danaview.pdf.glue
+        pluginClass: DanaviewPdfPlugin
+      ios:
+        pluginClass: DanaviewPdfPlugin
+        sharedDarwinSource: true
+      macos:
+        pluginClass: DanaviewPdfPlugin
+        sharedDarwinSource: true

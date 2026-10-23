@@ -1,0 +1,38 @@
+# OWNER: INT-101
+#
+# Face mesh, pose and segmentation runtime and video frame sampling for the Beauty & Retouching
+# suite (ARCH v1.2 §4.1, §4.3, §6.4, V2-13, V2-14). Flutter plugin for iOS and Android; the 1.3.0
+# camera and desktop editor reuse it. The Pigeon surface is VED-16's (frozen after it, V2-25); the
+# native stubs in ios/ and android/ are placeholders for VED-16 and VED-16A.
+#
+# Rule 21 (test/architecture/dependency_rules_test.dart): no danaview_* package, no sockets; models
+# load only from paths the caller gives (the consented Beauty pack, V2-14). Rule 29: the editor
+# reaches it only through FaceTrackingPort, adapted at the app root.
+name: danaview_face_tracking
+description: Danaview face tracking - face mesh, pose and segmentation trackers and video frame sampling for the beauty suite on iOS and Android.
+version: 1.2.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  # Generates lib/src/pigeon/ from pigeons/face_api.dart (VED-16, Mac only).
+  pigeon: ^29.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.vecvel.danaview.face.glue
+        pluginClass: DanaviewFaceTrackingPlugin
+      ios:
+        pluginClass: DanaviewFaceTrackingPlugin

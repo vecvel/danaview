@@ -32,6 +32,10 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Danaview saves photos and videos you export or save to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Danaview shows your photos and videos in its library and lets you edit them. They stay on your device.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

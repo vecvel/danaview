@@ -9,6 +9,12 @@
 #   scripts/ci/editor/e2e_android.sh emulator-5554           # an already running emulator/device
 #   DANAVIEW_E2E_ONLY="s01 s07 x_android_export_background" scripts/ci/editor/e2e_android.sh
 #   DANAVIEW_E2E_DRY_RUN=1 scripts/ci/editor/e2e_android.sh  # print the batches and commands only
+#   DV_E2E_EXTRA_DEFINES="DANAVIEW_FILES_HOME=true" scripts/ci/editor/e2e_android.sh \
+#     --target integration_test/v12/s2/s2_files_home_test.dart emulator-5554   # S2 with its media
+#
+# --target <t>  runs only <t>: a batch name (s07, x_android_export_background[:cancel], ...) or a
+#               test file path (e.g. integration_test/v12/...), which runs as one batch through
+#               `e2e_host.sh run <file>`. Without it every batch runs (DANAVIEW_E2E_ONLY/SKIP apply).
 #
 # What it does:
 #   1. picks the device: a serial that adb lists, a running emulator of that AVD, or boots the AVD
@@ -65,11 +71,26 @@
 #                           cannot answer: unanswered, the export waits in "Preparing..." forever)
 #   DANAVIEW_E2E_KEEP_EMULATOR=1  leave an emulator this script booted running at the end
 #   DANAVIEW_E2E_EMULATOR_ARGS  extra emulator arguments when booting
+#   DV_E2E_EXTRA_DEFINES="KEY=VALUE ..."  extra dart defines (space-separated) for every flutter
+#                           test: passed to e2e_host.sh as -D KEY=VALUE and added to the
+#                           x_android_export_background phases (as e2e_ios.sh does)
+#   DV_S2_MEDIA_HOST=<dir>  the S2 test media (integration_test/v12/s2/tool/make_s2_media.sh output):
+#                           pushed to Android/data/<app>/files/s2_media on the device during staging
+#                           and passed as DV_S2_MEDIA=<that device path> (unless DV_E2E_EXTRA_DEFINES
+#                           sets DV_S2_MEDIA itself). Default for a --target under integration_test/v12/s2:
+#                           build/e2e/s2_media when it exists; otherwise nothing is staged
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SUITE="integration_test/editor"
 HOST="$ROOT/$SUITE/tool/e2e_host.sh"
+RUN_TARGET=""
+case "${1:-}" in
+  --target)
+    [ $# -ge 2 ] || { echo "usage: $0 [--target <batch|file.dart>] [<avd>|<serial>]" >&2; exit 2; }
+    RUN_TARGET="$2"; shift 2 ;;
+  --target=*) RUN_TARGET="${1#--target=}"; shift ;;
+esac
 TARGET="${1:-Pixel_9_Pro_XL_API_35}"
 DRY_RUN="${DANAVIEW_E2E_DRY_RUN:-}"
 AUDIO="${DANAVIEW_E2E_AUDIO:-}"
@@ -90,7 +111,7 @@ note() { if [ "$GHA" = true ]; then echo "::notice title=e2e-android::$1"; else 
 case "$TARGET" in
   -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
 esac
-[ $# -le 1 ] || { echo "usage: $0 [<avd>|<serial>]" >&2; exit 2; }
+[ $# -le 1 ] || { echo "usage: $0 [--target <batch|file.dart>] [<avd>|<serial>]" >&2; exit 2; }
 [ -f "$HOST" ] || die "the QA-00 host driver ${HOST#"$ROOT"/} is missing"
 
 WINDOWS=""
@@ -99,6 +120,35 @@ if [ -n "$WINDOWS" ]; then
   # Git Bash rewrites arguments that start with / into Windows paths; the host driver passes device
   # paths (/sdcard/...) to adb.exe, which must stay as they are.
   export MSYS2_ARG_CONV_EXCL="/sdcard;/storage;/data/local"
+fi
+
+# Extra dart defines (DV_E2E_EXTRA_DEFINES) and the S2 media (DV_S2_MEDIA_HOST). Both are empty
+# unless asked for, and the run is then exactly what it was without them.
+S2_MEDIA_DEVICE="/sdcard/Android/data/com.vecvel.danaview/files/s2_media"
+S2_MEDIA_HOST="${DV_S2_MEDIA_HOST:-}"
+case "$RUN_TARGET" in
+  integration_test/v12/s2/*)
+    if [ -z "$S2_MEDIA_HOST" ] && [ -d "$ROOT/build/e2e/s2_media" ]; then S2_MEDIA_HOST="$ROOT/build/e2e/s2_media"; fi ;;
+esac
+declare -a EXTRA_DEFINES=()
+for d in ${DV_E2E_EXTRA_DEFINES:-}; do EXTRA_DEFINES+=("$d"); done
+if [ -n "$S2_MEDIA_HOST" ]; then
+  [ -d "$S2_MEDIA_HOST" ] || die "DV_S2_MEDIA_HOST $S2_MEDIA_HOST is not a directory (integration_test/v12/s2/tool/make_s2_media.sh)"
+  case " ${DV_E2E_EXTRA_DEFINES:-} " in
+    *" DV_S2_MEDIA="*) ;;
+    *) EXTRA_DEFINES+=("DV_S2_MEDIA=$S2_MEDIA_DEVICE") ;;
+  esac
+fi
+# e2e_host.sh -D arguments and flutter --dart-define arguments of the extra defines.
+host_define_args() { local d; for d in ${EXTRA_DEFINES[@]+"${EXTRA_DEFINES[@]}"}; do printf -- '-D\n%s\n' "$d"; done; }
+declare -a HOST_DEFINES=() FLUTTER_DEFINES=()
+while IFS= read -r line; do [ -n "$line" ] && HOST_DEFINES+=("$line"); done < <(host_define_args)
+for d in ${EXTRA_DEFINES[@]+"${EXTRA_DEFINES[@]}"}; do FLUTTER_DEFINES+=("--dart-define=$d"); done
+if [ -n "$WINDOWS" ] && [ "${#EXTRA_DEFINES[@]}" -gt 0 ]; then
+  # A define's value may be a device path (DV_S2_MEDIA=/sdcard/...): Git Bash would turn it into a
+  # Windows path when flutter (a native program) gets --dart-define=KEY=/sdcard/....
+  for d in "${EXTRA_DEFINES[@]}"; do MSYS2_ARG_CONV_EXCL="$MSYS2_ARG_CONV_EXCL;--dart-define=${d%%=*}"; done
+  export MSYS2_ARG_CONV_EXCL
 fi
 
 # ---- process helpers ----------------------------------------------------------------------------
@@ -268,6 +318,15 @@ setup_device() {
   prepare_shared
   host stage || die "e2e_host.sh stage failed"
   if [ -n "$MODELS_DIR" ]; then host stage-models "$MODELS_DIR" || die "e2e_host.sh stage-models failed"; fi
+  if [ -n "$S2_MEDIA_HOST" ]; then
+    # "<dir>/." pushes the folder's contents into the existing one. Git Bash would rewrite /c/... into
+    # C:/... and drop the "/." (adb then nests s2_media/s2_media), so Windows gets a C:/ path here.
+    local src="$S2_MEDIA_HOST"
+    if [ -n "$WINDOWS" ]; then src="$(cygpath -m "$src")"; fi
+    "$ADB" -s "$SERIAL" shell "mkdir -p $S2_MEDIA_DEVICE" || die "cannot create $S2_MEDIA_DEVICE on $SERIAL"
+    "$ADB" -s "$SERIAL" push "$src/." "$S2_MEDIA_DEVICE/" >/dev/null || die "cannot push the S2 media to $SERIAL"
+    echo "S2 media: $S2_MEDIA_HOST -> $S2_MEDIA_DEVICE ($("$ADB" -s "$SERIAL" shell "ls $S2_MEDIA_DEVICE" | tr -d '\r' | tr '\n' ' '))"
+  fi
 }
 
 # The app's external files folder (the handshake's shared dir). On API 30+ a folder that adb creates
@@ -281,6 +340,7 @@ prepare_shared() {
   local base="/sdcard/Android/data/com.vecvel.danaview" d dirs
   [ "$API" -ge 30 ] || return 0
   dirs="$base $base/files $base/files/e2e_fixtures $base/files/e2e_models $base/files/e2e_handshake $base/files/e2e_out"
+  [ -z "$S2_MEDIA_HOST" ] || dirs="$dirs $base/files/s2_media"
   "$ADB" -s "$SERIAL" shell "mkdir -p $dirs" || die "cannot create $base/files on $SERIAL"
   for d in $dirs; do
     if [ "$("$ADB" -s "$SERIAL" shell stat -c %u "$d" | tr -d '\r')" = 2000 ]; then
@@ -337,6 +397,9 @@ selected() { # <batch> <list>: whether the list names the batch or its file
   return 1
 }
 
+# A --target that is a test file (not a batch name) runs as its own batch.
+is_file_target() { case "$1" in *.dart) return 0 ;; *) return 1 ;; esac; }
+
 check_names() { # <var name> <list>
   local t ok b
   for t in $2; do
@@ -351,7 +414,7 @@ check_names() { # <var name> <list>
 # ---- one batch ----------------------------------------------------------------------------------
 
 OUT=""
-host() { DV_E2E_PHASE_TIMEOUT="$PHASE_TIMEOUT" bash "$HOST" -p android -d "$SERIAL" "$@"; }
+host() { DV_E2E_PHASE_TIMEOUT="$PHASE_TIMEOUT" bash "$HOST" -p android -d "$SERIAL" ${HOST_DEFINES[@]+"${HOST_DEFINES[@]}"} "$@"; }
 
 # One phase of x_android_export_background, served by `e2e_host.sh serve`. <expect> is "pass" or
 # "dies" (the host carried out an action that ended the app).
@@ -364,7 +427,7 @@ extra_phase() {
   spid=$!
   (cd "$ROOT" && flutter test "$file" -d "$SERIAL" --dart-define=DANAVIEW_EDITOR=true \
     --dart-define=DANAVIEW_AUTO_CAPTIONS=true --dart-define=DV_E2E_HOST=true \
-    --dart-define=DV_E2E_PHASE="$phase") > "$logf" 2>&1 &
+    ${FLUTTER_DEFINES[@]+"${FLUTTER_DEFINES[@]}"} --dart-define=DV_E2E_PHASE="$phase") > "$logf" 2>&1 &
   fpid=$!
   start=$SECONDS
   fgs_seen=""
@@ -448,9 +511,9 @@ print_cmd() { # <batch>: the dry-run view of run_batch
       case "${b#*:}" in fgs) ph="fgs fgs-check" ;; swipe) ph="swipe swipe-check" ;; death) ph="death death-check" ;; *) ph="${b#*:}" ;; esac
       for p in $ph; do
         echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL serve &"
-        echo "  + flutter test $SUITE/x_android_export_background_test.dart -d $SERIAL --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true --dart-define=DV_E2E_HOST=true --dart-define=DV_E2E_PHASE=$p"
+        echo "  + flutter test $SUITE/x_android_export_background_test.dart -d $SERIAL --dart-define=DANAVIEW_EDITOR=true --dart-define=DANAVIEW_AUTO_CAPTIONS=true --dart-define=DV_E2E_HOST=true${FLUTTER_DEFINES[*]+ ${FLUTTER_DEFINES[*]}} --dart-define=DV_E2E_PHASE=$p"
       done ;;
-    *) echo "  + DV_E2E_PHASE_TIMEOUT=$PHASE_TIMEOUT $SUITE/tool/e2e_host.sh -p android -d $SERIAL run $b" ;;
+    *) echo "  + DV_E2E_PHASE_TIMEOUT=$PHASE_TIMEOUT $SUITE/tool/e2e_host.sh -p android -d $SERIAL${HOST_DEFINES[*]+ ${HOST_DEFINES[*]}} run $b" ;;
   esac
 }
 
@@ -477,15 +540,26 @@ endgroup
 
 check_names DANAVIEW_E2E_ONLY "${DANAVIEW_E2E_ONLY:-}"
 check_names DANAVIEW_E2E_SKIP "${DANAVIEW_E2E_SKIP:-}"
+ONLY="${DANAVIEW_E2E_ONLY:-}"
+if [ -n "$RUN_TARGET" ]; then
+  if is_file_target "$RUN_TARGET"; then
+    [ -f "$ROOT/$RUN_TARGET" ] || die "--target $RUN_TARGET: no such test file (relative to the repo root)"
+  else
+    check_names --target "$RUN_TARGET"
+    ONLY="$RUN_TARGET"
+  fi
+fi
 declare -a PENDING=()
+if [ -n "$RUN_TARGET" ] && is_file_target "$RUN_TARGET"; then BATCHES+=("$RUN_TARGET"); fi
 for b in $(all_batches); do
-  if [ -n "${DANAVIEW_E2E_ONLY:-}" ] && ! selected "$b" "$DANAVIEW_E2E_ONLY"; then continue; fi
+  if [ -n "$RUN_TARGET" ] && is_file_target "$RUN_TARGET"; then break; fi
+  if [ -n "$ONLY" ] && ! selected "$b" "$ONLY"; then continue; fi
   if [ -n "${DANAVIEW_E2E_SKIP:-}" ] && selected "$b" "$DANAVIEW_E2E_SKIP"; then continue; fi
   if [ "$b" = s08 ] && [ -z "$MODELS_DIR" ]; then PENDING+=("$b"); continue; fi
   BATCHES+=("$b")
 done
 # DANAVIEW_E2E_ONLY may name the below-gate extra on any device.
-if [ -n "${DANAVIEW_E2E_ONLY:-}" ] && selected x_android_api28 "$DANAVIEW_E2E_ONLY" && [ "${API:-35}" -ge 29 ]; then
+if [ -n "$ONLY" ] && selected x_android_api28 "$ONLY" && [ "${API:-35}" -ge 29 ]; then
   note "x_android_api28 only checks something below API 29; on API $API its test is skipped"
   BATCHES+=(x_android_api28)
 fi
@@ -498,6 +572,8 @@ if [ "$DRY_RUN" = 1 ]; then
   echo "  + (API >= 30) adb shell mkdir -p + chmod 2777 Android/data/com.vecvel.danaview/files/{,e2e_fixtures,e2e_models,e2e_handshake,e2e_out}"
   echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage"
   [ -z "$MODELS_DIR" ] || echo "  + $SUITE/tool/e2e_host.sh -p android -d $SERIAL stage-models <DANAVIEW_E2E_MODELS>"
+  [ -z "$S2_MEDIA_HOST" ] || echo "  + adb push ${S2_MEDIA_HOST#"$ROOT"/}/. $S2_MEDIA_DEVICE/ (S2 media, passed as DV_S2_MEDIA)"
+  [ "${#EXTRA_DEFINES[@]}" -eq 0 ] || echo "  (extra defines: ${EXTRA_DEFINES[*]})"
   [ "$KEEP_APP" != 1 ] || echo "  (flutter test runs with --no-uninstall: DANAVIEW_E2E_KEEP_APP=1)"
   [ "$NOTIFICATIONS" != 1 ] || echo "  (API 33+, during every batch: adb shell pm grant com.vecvel.danaview android.permission.POST_NOTIFICATIONS once installed)"
   [ "$RESET" != 1 ] || echo "  (before every batch but the first: collect, adb shell pm clear com.vecvel.danaview, stage again: DANAVIEW_E2E_RESET=1)"
@@ -536,7 +612,7 @@ declare -a SUMMARY=()
 FAILED=0
 FIRST_BATCH=1
 for b in ${BATCHES[@]+"${BATCHES[@]}"}; do
-  label="$(echo "$b" | tr ':' '-')"
+  label="$(echo "$b" | tr ':/' '--')"
   blog="$OUT/logs/batch-$label.log"
   group "batch $b"
   if [ "$RESET" = 1 ] && [ -z "$FIRST_BATCH" ] && device_ok; then
@@ -570,7 +646,8 @@ for b in ${BATCHES[@]+"${BATCHES[@]}"}; do
   fi
   elapsed=$((SECONDS - started))
   # Measured values of this batch (DV_E2E_REPORT / DV_E2E_EXPORT lines of its flutter logs).
-  for f in "$OUT/logs/${b%%:*}"_*.log; do
+  case "$b" in *.dart) prefix="$(basename "$b" .dart)" ;; *) prefix="${b%%:*}_" ;; esac
+  for f in "$OUT/logs/$prefix"*.log; do
     [ -f "$f" ] && [ "$(find "$f" -newer "$OUT/logs/batch-$label.log.start" 2>/dev/null)" ] && grep -h 'DV_E2E_REPORT\|DV_E2E_EXPORT' "$f" | sed 's/^/  /' || true
   done
   rm -f "$OUT/logs/batch-$label.log.start"

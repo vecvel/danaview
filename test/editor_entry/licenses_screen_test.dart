@@ -93,6 +93,7 @@ void main() {
         'OpenAI Whisper speech models': 'MIT',
         'Silero VAD': 'MIT',
         'AndroidX Media3': 'Apache-2.0',
+        'SQLite': 'Public domain', // D-7: bundled by sqlite3_flutter_libs
       };
       for (final MapEntry(key: name, value: licence) in required.entries) {
         final notice = danaviewBundledNotices.singleWhere((n) => n.name == name);

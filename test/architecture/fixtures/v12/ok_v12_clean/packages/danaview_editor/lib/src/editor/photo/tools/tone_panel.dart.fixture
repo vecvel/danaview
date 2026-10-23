@@ -1,0 +1,4 @@
+import 'package:danaview_editor_core/model.dart';
+
+// DanaviewSlider (kit) and a Slider inside a 'string' pass.
+Widget panel() => const DanaviewSlider(label: 'Slider');

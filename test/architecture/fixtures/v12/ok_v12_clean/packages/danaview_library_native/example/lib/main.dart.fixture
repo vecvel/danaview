@@ -1,0 +1,2 @@
+// Example apps are not shipped code: URLSession here is not scanned.
+void main() {}

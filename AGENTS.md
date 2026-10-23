@@ -6,6 +6,9 @@
   branch `origin/editor-android` (no local copy); bring it in with
   `git merge --no-ff origin/editor-android` and the message
   `Merge remote-tracking branch 'origin/editor-android' into editor-wip`.
+- Danaview 1.2.0 work lands on `v1.2-wip` (its Android lane: `origin/v1.2-android`,
+  merged with `git merge --no-ff origin/v1.2-android`). `editor-wip` stays the v1.1 line;
+  late v1.1 fixes land there and are merged forward into `v1.2-wip`.
 - Mac and Windows/Android lanes checkpoint independently as
   `chore(editor): work-in-progress backup (<lane> lane)` commits, so `editor-wip`
   and `editor-android` routinely diverge; expect merges, not fast-forwards.

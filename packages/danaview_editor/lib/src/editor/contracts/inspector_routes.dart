@@ -1,4 +1,7 @@
 // OWNER: UX-01
+// EXTENDED: AIS-01 (SubtitlesPanelSection.transcript, review, cue; AI_STUDIO_PLAN §4.4)
+// EXTENDED: INT-101 (BeautyCategory, BeautyInspector and PhotoToolRoute: the Beauty clip inspector
+// and the Still Photo Mode panel routes)
 //
 // What the inspector shows (ARCH §17.7, ux.md §9.3). `InspectorHost` (UX-16) maps each route to
 // its panel; panel constructors take their route (`TransformPanel(route: TransformInspector(…))`).
@@ -6,6 +9,8 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:danaview_editor_core/model.dart';
+
+import 'tool_ids.dart';
 
 /// Which tab the text panel opens on (UX-30).
 ///
@@ -56,6 +61,20 @@ enum SubtitlesPanelSection {
 
   /// Track position.
   position,
+
+  /// Transcript view and the rich cue editor (AIS-17; AI_STUDIO_PLAN §4.3 U4).
+  transcript,
+
+  /// Review of AI suggestions (AIS-33; AI_STUDIO_PLAN §4.3).
+  review,
+
+  /// The focused cue: placement, overrides, speaker, emotion (AIS-18; AI_STUDIO_PLAN §4.3).
+  cue;
+
+  /// The 1.1 sections (UX-31's Captions / Style / Position switcher). The 1.2.0 sections are added
+  /// to the panel by their owners (AIS-17, AIS-18, AIS-33); until then the panel shows the cue
+  /// list for them.
+  static const List<SubtitlesPanelSection> v11 = [cues, style, position];
 }
 
 /// A panel of the inspector and what it targets.
@@ -359,4 +378,113 @@ final class TransitionInspector extends InspectorRoute {
 
   @override
   String toString() => 'TransitionInspector(${cut.track}: ${cut.left}|${cut.right})';
+}
+
+// -------------------------------------------------------------------------------------------------
+// 1.2.0 (INT-101): Still Photo Mode routes (VED plan §6.1, §6.2; BUILD_PLAN VED-01, VED-26).
+// -------------------------------------------------------------------------------------------------
+
+/// A category tab of the Beauty & Retouching inspector (VED plan §6.2, BUILD_PLAN VED-26), shared
+/// by the clip inspector and the photo tool tray.
+///
+/// See VED plan §6.2.
+enum BeautyCategory {
+  /// Face shape and slimming (VED-20).
+  faceShape,
+
+  /// Eyes and eyebrows (VED-21).
+  eyesBrows,
+
+  /// Nose and lips (VED-22).
+  noseLips,
+
+  /// Skin retouching and teeth (VED-23).
+  skin,
+
+  /// Virtual makeup and appearance (VED-24).
+  makeup,
+
+  /// Body reshaping (VED-25).
+  body,
+
+  /// Filters, portrait bokeh and stickers (VED-34).
+  filters,
+
+  /// Beauty presets and automatic enhancement (VED-28).
+  presets,
+}
+
+/// The panel of the Still Photo Mode screen: one tray tool of the open photo (VED-01). Stills have
+/// no timeline item, so these routes are separate from [InspectorRoute] and the photo screen hosts
+/// them itself.
+///
+/// See VED plan §6.1, ARCH v1.2 §6.1.
+@immutable
+final class PhotoToolRoute {
+  /// Creates the route; [beautyCategory] is the open tab of the [PhotoToolId.beauty] tool.
+  const PhotoToolRoute(this.tool, {this.beautyCategory = BeautyCategory.faceShape});
+
+  /// The tray tool.
+  final PhotoToolId tool;
+
+  /// The open beauty tab (meaningful for [PhotoToolId.beauty] only).
+  final BeautyCategory beautyCategory;
+
+  /// This route with the beauty tab [category].
+  PhotoToolRoute withBeautyCategory(BeautyCategory category) => PhotoToolRoute(tool, beautyCategory: category);
+
+  @override
+  bool operator ==(Object other) =>
+      other is PhotoToolRoute &&
+      other.tool == tool &&
+      (tool != PhotoToolId.beauty || other.beautyCategory == beautyCategory);
+
+  @override
+  int get hashCode => tool == PhotoToolId.beauty ? Object.hash(tool, beautyCategory) : tool.hashCode;
+
+  @override
+  String toString() =>
+      tool == PhotoToolId.beauty ? 'PhotoToolRoute(${tool.name}, ${beautyCategory.name})' : 'PhotoToolRoute(${tool.name})';
+}
+
+/// The Beauty & Retouching tab of the clip inspector for one timeline clip (VED plan §6.2,
+/// BUILD_PLAN VED-26), opened by `EditorActionId.beauty` while `DANAVIEW_BEAUTY` is on.
+///
+/// It re-targets like an item route (same tab, new clip). It is not yet a member of the sealed
+/// [InspectorRoute] family: a new subtype breaks the exhaustive route switches of UX-16's
+/// `InspectorHost` and `ToolSets`, so the clip inspector hosts it once those files gain a
+/// `BeautyInspector` arm ([INTEGRATION] with VED-26).
+///
+/// See VED plan §6.2, ARCH v1.2 §6.4.
+@immutable
+final class BeautyInspector {
+  /// Creates the route on [item] with the tab [category].
+  const BeautyInspector(this.item, {this.category = BeautyCategory.faceShape});
+
+  /// The edited clip.
+  final ItemId item;
+
+  /// The open category tab.
+  final BeautyCategory category;
+
+  /// The item the panel edits.
+  ItemId get target => item;
+
+  /// This route for [item] (same tab).
+  BeautyInspector withItem(ItemId item) => BeautyInspector(item, category: category);
+
+  /// This route with the tab [category].
+  BeautyInspector withCategory(BeautyCategory category) => BeautyInspector(item, category: category);
+
+  /// The route to show when the selection changes to [item]: the same tab on the new clip.
+  BeautyInspector retarget(ItemId item) => item == this.item ? this : withItem(item);
+
+  @override
+  bool operator ==(Object other) => other is BeautyInspector && other.item == item && other.category == category;
+
+  @override
+  int get hashCode => Object.hash(BeautyInspector, item, category);
+
+  @override
+  String toString() => 'BeautyInspector($item, ${category.name})';
 }

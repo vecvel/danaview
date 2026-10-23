@@ -1,0 +1,35 @@
+# OWNER: INT-101
+#
+# Documents UI of the Files & Media Home (ARCH v1.2 §4.1, §4.3): viewer router, text/CSV viewer,
+# file card, PDF viewer and tools UI, Quick Look, saved signatures.
+#
+# Rule 22 (test/architecture/dependency_rules_test.dart): danaview_ui_kit, danaview_library,
+# danaview_pdf, danaview_library_native, flutter_riverpod, characters. Never danaview_features, the
+# editor packages, the AI packages or danaview_search. Rule 31: Danaview kit components only.
+name: danaview_documents
+description: Danaview documents - viewer router, text and CSV viewer, file card, PDF viewer and tools UI, Quick Look and saved signatures.
+version: 1.2.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  characters: ^1.3.0
+  flutter_riverpod: ^2.5.1
+  danaview_library:
+    path: ../danaview_library
+  danaview_library_native:
+    path: ../danaview_library_native
+  danaview_pdf:
+    path: ../danaview_pdf
+  danaview_ui_kit:
+    path: ../danaview_ui_kit
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

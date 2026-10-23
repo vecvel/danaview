@@ -1,0 +1,8 @@
+name: danaview_ai_providers
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  meta: ^1.11.0
+  danaview_editor_core:
+    path: ../danaview_editor_core

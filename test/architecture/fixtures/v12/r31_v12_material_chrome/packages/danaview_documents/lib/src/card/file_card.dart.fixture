@@ -1,0 +1,1 @@
+Widget card() => Switch(value: true, onChanged: null);

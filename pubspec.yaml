@@ -40,6 +40,16 @@ dependencies:
     path: packages/danaview_transcription
   danaview_whisper:
     path: packages/danaview_whisper
+  # Files & Media Home (S2-W, ARCH v1.2 §4.1): the app root opens the library store and adapts the
+  # native plugin's backup flag (lib/wiring/files_home_wiring.dart).
+  danaview_library:
+    path: packages/danaview_library
+  danaview_library_native:
+    path: packages/danaview_library_native
+  # SQLite for library.db (D-7, ARCH v1.2 V-S21): the pure-Dart danaview_library and danaview_search
+  # use `sqlite3` 2.x, which loads a native libsqlite3 that Android apps can't take from the OS. The
+  # app bundles it here (0.5.x is the line for sqlite3 2.x; 0.6 is end-of-life for sqlite3 3.x).
+  sqlite3_flutter_libs: ^0.5.42
 
   # Native Playback Engine Bindings
   media_kit: ^1.1.10

@@ -11,6 +11,7 @@
 // 2026-10-16, FIX-LICENSES) opens the licences page from About on iOS and on macOS.
 
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -378,8 +379,11 @@ void main() {
         channel: WhisperDeviceChannel(enabled: false),
       );
       expect(captions.service, isA<TranscriptionServiceImpl>());
-      expect(captions.service.paths.root, '/nonexistent/support/danaview/speech');
-      expect(captions.store.layout.dir, '/nonexistent/support/danaview/speech/models');
+      // The product joins with the host separator (package:path), so on Windows the folders read
+      // `/nonexistent/support\danaview\speech` (FIX-S1Q-A3).
+      String under(List<String> parts) => ['/nonexistent/support', ...parts].join(Platform.pathSeparator);
+      expect(captions.service.paths.root, under(['danaview', 'speech']));
+      expect(captions.store.layout.dir, under(['danaview', 'speech', 'models']));
       await captions.dispose();
       device.controller.close().ignore();
     });

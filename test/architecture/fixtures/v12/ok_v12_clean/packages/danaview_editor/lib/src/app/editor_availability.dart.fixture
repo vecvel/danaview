@@ -1,0 +1,2 @@
+const bool aiStudioFlag = bool.fromEnvironment('DANAVIEW_AI_STUDIO');
+const bool editor = bool.fromEnvironment('DANAVIEW_EDITOR');

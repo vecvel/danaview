@@ -1,4 +1,5 @@
 # OWNER: UX-01
+# EXTENDED: AIS-01 (danaview_ai_studio and danaview_ai_providers, AI_STUDIO_PLAN §3.1 rule 12)
 #
 # The Danaview video editor UI (ARCH §4.6, §17). Screens take navigation callbacks from the app
 # router, so there is no go_router dependency. This manifest declares every dependency the package
@@ -25,6 +26,11 @@ dependencies:
   meta: ^1.11.0
   path: ^1.9.0
   shared_preferences: ^2.2.3
+  # 1.2.0 (AIS-01): AI Studio and provider types (rule 12: never danaview_secure_keys).
+  danaview_ai_providers:
+    path: ../danaview_ai_providers
+  danaview_ai_studio:
+    path: ../danaview_ai_studio
   danaview_data:
     path: ../danaview_data
   danaview_domain:

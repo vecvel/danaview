@@ -284,7 +284,7 @@ void main() {
         expect(opened, [destination], reason: label);
       }
 
-      await tester.scrollUntilVisible(find.text('Danaview 1.0.0 (1)'), 200);
+      await tester.scrollUntilVisible(find.text('Danaview $danaviewAppVersion ($danaviewBuildNumber)'), 200);
       await tester.tap(find.byTooltip('Back'));
       expect(backs, 1);
       expect(tester.takeException(), isNull);
@@ -331,7 +331,7 @@ void main() {
         platform: TargetPlatform.macOS,
       ));
       await pumpFrames(tester);
-      await tester.scrollUntilVisible(find.text('Danaview 1.0.0 (1)'), 200);
+      await tester.scrollUntilVisible(find.text('Danaview $danaviewAppVersion ($danaviewBuildNumber)'), 200);
       expect(find.text('Playback'), findsNothing);
       expect(find.byType(DanaviewSegmentedControl<int>), findsNothing);
       expect(tester.takeException(), isNull);
@@ -534,7 +534,7 @@ void main() {
       ));
       await pumpFrames(tester);
       expect(find.text('Danaview'), findsOneWidget);
-      expect(find.text('Version 1.0.0 (build 1)'), findsOneWidget);
+      expect(find.text('Version $danaviewAppVersion (build $danaviewBuildNumber)'), findsOneWidget);
       expect(find.text('Open-source licenses'), findsNothing);
       expect(find.textContaining('Flutter'), findsNothing);
 

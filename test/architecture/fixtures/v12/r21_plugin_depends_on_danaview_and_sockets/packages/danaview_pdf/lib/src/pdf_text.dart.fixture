@@ -1,0 +1,2 @@
+import 'dart:io';
+Future<void> f() async { await Socket.connect('h', 1); }

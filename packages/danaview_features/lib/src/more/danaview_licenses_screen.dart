@@ -4,7 +4,7 @@
 // Material LicensePage) listing
 // * the explicit notices of what the app bundles outside Dart packages ([danaviewBundledNotices]):
 //   mpv/FFmpeg and the libraries built with them (LGPL and permissive), whisper.cpp/ggml (MIT), the
-//   OpenAI Whisper and Silero VAD models (MIT), AndroidX Media3 (Apache-2.0);
+//   OpenAI Whisper and Silero VAD models (MIT), AndroidX Media3 (Apache-2.0), SQLite (public domain);
 // * every [LicenseRegistry] entry: Flutter's own NOTICES (Dart packages, engine), the Figtree app
 //   font ([registerDanaviewLicenses]) and the editor's content fonts (registered by the app router
 //   through `registerContentFontLicenses`), all OFL-1.1.
@@ -201,6 +201,15 @@ const List<BundledLicenseNotice> danaviewBundledNotices = [
     licence: 'Apache-2.0',
     usedFor: 'Video editor on Android: preview and export',
     text: 'Copyright © The Android Open Source Project. https://github.com/androidx/media\n\n$_apacheTerms',
+  ),
+  // D-7: the app bundles SQLite through sqlite3_flutter_libs (whose own MIT licence reaches the page
+  // through LicenseRegistry with the other Dart packages).
+  BundledLicenseNotice(
+    name: 'SQLite',
+    licence: 'Public domain',
+    usedFor: 'Library: Danaview folders and files',
+    text: 'SQLite is in the public domain: its authors have dedicated the code to the public domain. '
+        'https://sqlite.org/copyright.html',
   ),
 ];
 

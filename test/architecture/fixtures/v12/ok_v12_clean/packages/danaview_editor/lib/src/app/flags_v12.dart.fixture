@@ -1,0 +1,5 @@
+abstract final class EditorFlagsV12 {
+  static const bool photoEditor = bool.fromEnvironment('DANAVIEW_PHOTO_EDITOR');
+  static const bool beauty = bool.fromEnvironment('DANAVIEW_BEAUTY');
+  static const bool filesHome = bool.fromEnvironment('DANAVIEW_FILES_HOME');
+}

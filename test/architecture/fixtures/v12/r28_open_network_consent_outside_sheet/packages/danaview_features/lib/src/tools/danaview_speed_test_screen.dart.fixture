@@ -1,0 +1,2 @@
+// OpenNetworkConsent.accepted( in a comment is fine.
+Object skip() => OpenNetworkConsent.accepted(provider: 'fallback');

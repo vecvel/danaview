@@ -1,6 +1,6 @@
 # Danaview 1.3.0 Release Roadmap: Desktop Editor and Native Camera
 
-> **Release:** Danaview 1.3.0 (app version `1.3.0+N`). **Date:** 2026-10-12, contents changed by the owner on 2026-10-15. **Status:** Master roadmap and overview.
+> **Release:** Danaview 1.3.0 is an internal development milestone (app version stays `1.0.0+1`). **Owner decision 2026-10-22:** nothing has been released or uploaded yet; the app ships once, as **1.0.0 (build 1)**, after the last 1.3 QA. The store release is **AIS-41 "Release 1.0.0"** in [`../v1.2/BUILD_PLAN.md`](../v1.2/BUILD_PLAN.md) (it absorbs v1.1's INT-05); the 1.3 plans end release-ready and feed it their flags, store text, legal and QA evidence. **Date:** 2026-10-12, contents changed by the owner on 2026-10-15. **Status:** Master roadmap and overview.
 > **Baseline releases:**
 > - Danaview 1.0: cross-platform media player (libmpv, equalizer, subtitles, hardware decode).
 > - Danaview 1.1: multi-track video editor on iOS and Android (`docs/v1.1/editor/ARCHITECTURE.md`, `BUILD_PLAN.md`).

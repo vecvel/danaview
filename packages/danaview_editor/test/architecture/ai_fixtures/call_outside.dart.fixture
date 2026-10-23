@@ -1,0 +1,9 @@
+// A controller that accepts consent itself: both kinds fire (rule 13/17).
+import 'package:danaview_ai_providers/danaview_ai_providers.dart';
+
+void send(Object disclosure) {
+  final consent = AiSendConsent.accepted(disclosure);
+  final probe = ProviderProbeConsent
+      .accepted(disclosure);
+  print([consent, probe]);
+}

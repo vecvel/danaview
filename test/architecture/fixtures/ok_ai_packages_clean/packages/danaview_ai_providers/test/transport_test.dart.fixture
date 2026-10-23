@@ -1,0 +1,8 @@
+import 'dart:io';
+
+import 'package:test/test.dart';
+
+// Tests may build a client for the loopback fake server and assert URLs carry no ?key= (rules 14
+// and 15 scan lib/ and tool/ only).
+final c = HttpClient();
+const banned = '?key=';

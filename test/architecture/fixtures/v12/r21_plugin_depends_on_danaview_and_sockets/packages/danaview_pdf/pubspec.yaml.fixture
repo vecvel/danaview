@@ -1,0 +1,10 @@
+name: danaview_pdf
+dependencies:
+  danaview_library:
+    path: ../danaview_library
+  flutter:
+    sdk: flutter
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  pigeon: ^29.0.0
