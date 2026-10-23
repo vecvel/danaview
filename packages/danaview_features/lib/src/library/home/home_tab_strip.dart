@@ -198,13 +198,9 @@ class _HomeTabPill extends StatelessWidget {
         focusNode: focusNode,
         selected: selected,
         semanticLabel: '${tab.label} tab, ${index + 1} of $count',
-        pressedScale: 0.97,
         builder: (context, state) {
-          final overlay = state.focused
-              ? DanaviewColors.primarySoft
-              : state.hovered || state.pressed
-                  ? DanaviewColors.hover
-                  : DanaviewColors.hover.withValues(alpha: 0);
+          // Keyboard focus only; no hover or press tint (owner rule, c781a85).
+          final overlay = state.focused ? DanaviewColors.primarySoft : DanaviewColors.hover.withValues(alpha: 0);
           // The full strip height is the hit area (≥ 44 px); the pill is drawn inside it.
           return SizedBox(
             height: HomeTabStrip.height,

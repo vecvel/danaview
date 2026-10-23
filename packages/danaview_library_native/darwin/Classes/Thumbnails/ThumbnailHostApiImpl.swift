@@ -1,4 +1,5 @@
 // OWNER: HOM-04
+// EXTENDED: HOM-26 (documentThumbnail, the hand-off this header named)
 //
 // The Apple thumbnailers behind `ThumbnailHostApi` (ARCH v1.2 V2-28, V2-104; BUILD_PLAN HOM-04):
 //
@@ -7,7 +8,8 @@
 //   fallbacks); `ms:` and `content://` sources are Android's and answer `notSupportedOnDevice`.
 //   The work runs on a bounded background queue and the reply arrives on the main thread. The
 //   output is JPEG, or HEIC on iOS 17+ when asked; the result reports the format written.
-// * documentThumbnail: HOM-26 (Quick Look document thumbnails) replaces this answer.
+// * documentThumbnail: HOM-26's DocumentThumbnailer (QuickLook/QuickLookCore.swift) on the same
+//   queue, with the same request ids and cancel; nil when a document has no thumbnail.
 // * cancel: cancels a pending request (it fails with `cancelled`); unknown ids are ignored.
 // * updateCaching: moves the PhotoKit prefetch window.
 //
@@ -23,6 +25,7 @@ final class ThumbnailHostApiImpl: ThumbnailHostApi {
 
   private let files: FileThumbnailer
   private let photos: PhotoAssetThumbnailer
+  private let documents = DocumentThumbnailer()
   private let queue: OperationQueue
   private let lock = NSLock()
   private var pending: [String: ThumbnailCancelToken] = [:]
@@ -123,8 +126,40 @@ final class ThumbnailHostApiImpl: ThumbnailHostApi {
     lock.unlock()
   }
 
+  // HOM-26: documents through QuickLook/QuickLookCore.swift DocumentThumbnailer (PDF first page at
+  // the request's scale, Quick Look thumbnails otherwise; nil when there is none).
   func documentThumbnail(request: DocumentThumbnailRequestMsg, completion: @escaping (Result<ThumbnailResultMsg?, Error>) -> Void) {
-    completion(.failure(LibraryErrors.notSupported("HOM-26")))
+    if let f = DocumentThumbnailer.validate(requestId: request.requestId, path: request.path, widthPx: request.widthPx, heightPx: request.heightPx,
+                                            scale: request.scale, quality: request.quality, outputPath: request.outputPath) {
+      completion(.failure(ThumbnailHostApiImpl.error(f)))
+      return
+    }
+    let token = ThumbnailCancelToken()
+    lock.lock()
+    if pending[request.requestId] != nil {
+      lock.unlock()
+      completion(.failure(ThumbnailHostApiImpl.error(.busy("a request with this id is running"))))
+      return
+    }
+    pending[request.requestId] = token
+    lock.unlock()
+    let box = CGSize(width: Int(request.widthPx), height: Int(request.heightPx))
+    let format = ThumbnailHostApiImpl.format(request.format)
+    queue.addOperation { [documents, weak self] in
+      let result: Result<ThumbnailResultMsg?, Error>
+      do {
+        if token.isCancelled { throw ThumbnailFailure.cancelled() }
+        let out = try documents.generate(path: request.path, box: box, scale: CGFloat(request.scale), format: format, quality: request.quality,
+                                         outputPath: request.outputPath, token: token)
+        result = .success(out.map(ThumbnailHostApiImpl.msg))
+      } catch let f as ThumbnailFailure {
+        result = .failure(ThumbnailHostApiImpl.error(f))
+      } catch {
+        result = .failure(ThumbnailHostApiImpl.error(.io("thumbnail failed")))
+      }
+      self?.finish(request.requestId)
+      DispatchQueue.main.async { completion(result) }
+    }
   }
 
   func cancel(requestId: String) throws {

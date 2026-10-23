@@ -270,7 +270,6 @@ class _RecentPhotoTile extends StatelessWidget {
         child: DanaviewPressable(
           onTap: onTap,
           semanticLabel: photoCellLabel(photo),
-          pressedScale: 0.97,
           borderRadius: DanaviewRadius.mdAll,
           child: ClipRRect(
             borderRadius: DanaviewRadius.mdAll,

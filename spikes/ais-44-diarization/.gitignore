@@ -8,3 +8,6 @@ data/*.wav
 results/
 build/
 .dart_tool/
+# Android half: long clips generated from the tracked clips by android/make_long.py.
+data/a1_3spk_long.*
+data/a2_3spk_37min.*

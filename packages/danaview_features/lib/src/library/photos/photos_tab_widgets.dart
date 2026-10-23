@@ -231,7 +231,6 @@ class PhotoGridCell extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       semanticLabel: photoCellLabel(photo),
-      pressedScale: 0.98,
       borderRadius: DanaviewRadius.xsAll,
       child: ClipRRect(
         borderRadius: DanaviewRadius.xsAll,
