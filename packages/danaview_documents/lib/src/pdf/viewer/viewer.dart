@@ -1,9 +1,12 @@
 // OWNER: HOM-24
 //
-// Placeholder (D-33) created by INT-101. HOM-24 replaces this file:
-// the public entry of lib/src/pdf/viewer/, the PDF viewer UI. The package barrel exports it; HOM-24 re-exports
-// the public files of its directory from here (barrels never change after INT-101).
-// Until then it declares no public names.
+// The public entry of lib/src/pdf/viewer/ (HOM plan §8.4, V2-120): the PDF viewer screen, its
+// password sheet and panels, and the builder and probe the Home registers with the viewer host.
 
 /// The public entry of lib/src/pdf/viewer/: the PDF viewer UI.
 library;
+
+export 'pdf_password_sheet.dart';
+export 'pdf_viewer.dart';
+export 'pdf_viewer_panels.dart';
+export 'pdf_viewer_registration.dart';

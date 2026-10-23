@@ -1,9 +1,11 @@
 // OWNER: HOM-23
 //
-// Placeholder (D-33) created by INT-101. HOM-23 replaces this file:
-// the public entry of lib/src/router/, the viewer router. The package barrel exports it; HOM-23 re-exports
-// the public files of its directory from here (barrels never change after INT-101).
-// Until then it declares no public names.
+// The public entry of lib/src/router/ (HOM plan §8.4, ARCH §3): the viewer router, its probes, the
+// file it opens and the viewer host.
 
 /// The public entry of lib/src/router/: the viewer router.
 library;
+
+export 'document_viewer.dart';
+export 'viewer_file.dart';
+export 'viewer_router.dart';

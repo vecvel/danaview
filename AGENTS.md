@@ -9,6 +9,10 @@
 - Danaview 1.2.0 work lands on `v1.2-wip` (its Android lane: `origin/v1.2-android`,
   merged with `git merge --no-ff origin/v1.2-android`). `editor-wip` stays the v1.1 line;
   late v1.1 fixes land there and are merged forward into `v1.2-wip`.
+- `main` is kept up to date with everything (owner, 2026-10-23): after each merge into
+  `editor-wip` or `v1.2-wip` that lands finished work (a slice, a fix round, a QA close), merge
+  `v1.2-wip` into `main` with `git merge --no-ff` and push. Unfinished 1.2 features stay behind
+  their flags (default false), so `main` always builds and behaves like the last finished milestone.
 - Mac and Windows/Android lanes checkpoint independently as
   `chore(editor): work-in-progress backup (<lane> lane)` commits, so `editor-wip`
   and `editor-android` routinely diverge; expect merges, not fast-forwards.

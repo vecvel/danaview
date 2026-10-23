@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  OWNER: INT-104
+
+  Entitlements of the DanaviewShare Share Extension (com.vecvel.danaview.share, ARCH v1.2 §8).
+  Only the App Group shared with the app (ios/Runner/Runner.entitlements): the extension copies the
+  shared items into the group's Inbox/ and never touches the app's own container or library.db.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.vecvel.danaview</string>
+	</array>
+</dict>
+</plist>

@@ -306,20 +306,26 @@ final class PhotoLibraryService: NSObject, PHPhotoLibraryChangeObserver {
     queue.async {
       do {
         try self.requireRead()
-        var out: [PhotoAlbumRecord] = []
-        let media = Self.options(for: .baseline)
+        // Photo-only albums counted by their photos (PhotoAlbumListing; Android parity).
+        var candidates: [PhotoAlbumListing.Candidate] = []
+        let photos = Self.options(for: PhotoFetchKey(filter: .photos, sort: .creationNewestFirst, albumId: nil))
         let excludedSmart: Set<PHAssetCollectionSubtype> = [.smartAlbumAllHidden, .smartAlbumUserLibrary]
         let groups: [(PHAssetCollectionType, PHAssetCollectionSubtype)] = [(.smartAlbum, .any), (.album, .any)]
         for (type, subtype) in groups {
           let collections = PHAssetCollection.fetchAssetCollections(with: type, subtype: subtype, options: nil)
           collections.enumerateObjects { c, _, _ in
-            if type == .smartAlbum && excludedSmart.contains(c.assetCollectionSubtype) { return }
-            let count = PHAsset.fetchAssets(in: c, options: media).count
-            guard count > 0 else { return }
-            let kind: PhotoAlbumKind = type == .smartAlbum ? .smart : (c.assetCollectionSubtype == .albumCloudShared ? .shared : .user)
-            out.append(PhotoAlbumRecord(albumId: c.localIdentifier, title: c.localizedTitle ?? "", kind: kind, estimatedCount: count))
+            let isSmart = type == .smartAlbum
+            let excluded = isSmart && excludedSmart.contains(c.assetCollectionSubtype)
+            candidates.append(PhotoAlbumListing.Candidate(
+              albumId: c.localIdentifier,
+              title: c.localizedTitle,
+              isSmart: isSmart,
+              isCloudShared: c.assetCollectionSubtype == .albumCloudShared,
+              isExcludedSmart: excluded,
+              photoCount: excluded ? 0 : PHAsset.fetchAssets(in: c, options: photos).count))
           }
         }
+        let out = PhotoAlbumListing.records(candidates)
         completion(.success(out))
       } catch let failure as PhotoLibraryFailure {
         completion(.failure(failure))

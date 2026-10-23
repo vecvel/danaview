@@ -397,6 +397,8 @@ final class ThumbnailService {
           width: r.sizeClass.pixels,
           height: r.sizeClass.pixels,
           outputPath: part,
+          // Screen pixels per PDF point (the DPR the cell asked at), bounded by the class's box.
+          scale: key.scale,
           format: fmt,
           quality: quality,
         );

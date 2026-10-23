@@ -2,16 +2,22 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   OWNER: INT-03
+  EXTENDED: INT-104
 
-  Background GPU for continued-processing exports on iPad, iOS 26+ (ARCH §14.2, §20.4; D-22).
-  The Runner target signs with this file only when the build setting DANAVIEW_BG_GPU_ENTITLEMENT
-  is YES (project.pbxproj resolves CODE_SIGN_ENTITLEMENTS from it). It stays NO until Apple grants
-  the entitlement to com.vecvel.danaview; with NO the app is signed without entitlements and every
-  device exports with the `paused` background kind.
+  Entitlements of the Runner app target. Every configuration signs with this file unless the build
+  setting DANAVIEW_BG_GPU_ENTITLEMENT is YES, which selects RunnerBackgroundGpu.entitlements instead
+  (the same App Group plus the background GPU key; project.pbxproj resolves CODE_SIGN_ENTITLEMENTS).
+
+  App Group (INT-104, ARCH v1.2 §8 "Platform declarations"): group.com.vecvel.danaview is shared with
+  the DanaviewShare extension (DanaviewShare/DanaviewShare.entitlements). The extension streams shared
+  items into the group's Inbox/ folder; the app imports them into the library (HOM-21, ARCH §5.2).
+  The group must also be enabled on both App IDs in the developer portal (ios/fastlane/SHARE_EXTENSION.md).
 -->
 <plist version="1.0">
 <dict>
-	<key>com.apple.developer.background-tasks.continued-processing.gpu</key>
-	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.vecvel.danaview</string>
+	</array>
 </dict>
 </plist>

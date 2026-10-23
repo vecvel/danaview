@@ -2464,7 +2464,7 @@ protocol PhotoLibraryHostApi {
   func fetchPage(request: PhotoFetchRequestMsg, completion: @escaping (Result<PhotoPageMsg, Error>) -> Void)
   /// Assets by id, in the given order; unknown or inaccessible ids are left out.
   func fetchAssets(localIdentifiers: [String], completion: @escaping (Result<[PhotoAssetMsg], Error>) -> Void)
-  /// System albums and device folders that contain photos or videos.
+  /// System albums and device folders that hold photos, counted by their photos (video-only ones are left out).
   func fetchAlbums(completion: @escaping (Result<[PhotoAlbumMsg], Error>) -> Void)
   /// EXIF basics of one asset; `notFound` when it is gone.
   func assetDetail(localIdentifier: String, completion: @escaping (Result<PhotoAssetDetailMsg, Error>) -> Void)
@@ -2608,7 +2608,7 @@ class PhotoLibraryHostApiSetup {
     } else {
       fetchAssetsChannel.setMessageHandler(nil)
     }
-    /// System albums and device folders that contain photos or videos.
+    /// System albums and device folders that hold photos, counted by their photos (video-only ones are left out).
     let fetchAlbumsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.danaview_library_native.PhotoLibraryHostApi.fetchAlbums\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       fetchAlbumsChannel.setMessageHandler { _, reply in

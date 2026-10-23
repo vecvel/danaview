@@ -426,7 +426,8 @@ abstract interface class SystemPhotoLibrary {
   /// Assets by id, in order; unknown ids are left out.
   Future<List<SystemPhotoAsset>> fetchAssets(List<String> localIdentifiers);
 
-  /// Albums and device folders with photos or videos.
+  /// Albums and device folders that hold photos, counted by their photos (video-only ones are left
+  /// out; a page of one still loads by id).
   Future<List<SystemPhotoAlbum>> fetchAlbums();
 
   /// EXIF basics of one asset.

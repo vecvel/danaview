@@ -180,6 +180,32 @@ void main() {
     pdf!.dispose();
   });
 
+  test('documents render at the requested scale (DPR) and key on it; media do not', () async {
+    final at1 = req(11, c: ThumbSizeClass.l, kind: ThumbSourceKind.document, source: '/lib/b.pdf');
+    final at3 = req(11, c: ThumbSizeClass.l, kind: ThumbSourceKind.document, source: '/lib/b.pdf', scale: 3);
+    expect(at3.key, isNot(at1.key));
+    expect(at3.key.relativePath, isNot(at1.key.relativePath));
+    expect(at3.key.relativePath, contains('@3x/'));
+    expect(at1.key.relativePath, isNot(contains('@')));
+    expect(at3.at(ThumbSizeClass.m).key.scale, 3);
+    // Media keys ignore the scale.
+    expect(req(12, scale: 3).key, req(12).key);
+    // 2.625 is kept to hundredths: 2.63, and a jitter below that shares the key.
+    final odd = req(11, c: ThumbSizeClass.l, kind: ThumbSourceKind.document, source: '/lib/b.pdf', scale: 2.625);
+    expect(odd.key.relativePath, contains('@2.63x/'));
+    expect(req(11, c: ThumbSizeClass.l, kind: ThumbSourceKind.document, source: '/lib/b.pdf', scale: 2.6251).key, odd.key);
+
+    (await svc.load(at3).result)!.dispose();
+    expect(gen.scales, [3]);
+    // The 1x request is its own job and its own file, not a hit on the 3x one.
+    (await svc.load(at1).result)!.dispose();
+    expect(gen.scales, [3, 1]);
+    expect(disk.files.keys, containsAll([disk.pathOf(at1.key), disk.pathOf(at3.key)]));
+    // And the 3x one is still a hit.
+    (await svc.load(at3).result)!.dispose();
+    expect(gen.scales, [3, 1]);
+  });
+
   test('a cache file that does not decode is dropped and regenerated', () async {
     final r = req(4);
     disk.files[disk.pathOf(r.key)] = 'corrupt';

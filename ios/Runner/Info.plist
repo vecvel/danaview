@@ -80,6 +80,74 @@
 				<string>public.mpeg-4</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Image</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.image</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>PDF Document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Office Document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.microsoft.word.doc</string>
+				<string>org.openxmlformats.wordprocessingml.document</string>
+				<string>org.oasis-open.opendocument.text</string>
+				<string>public.rtf</string>
+				<string>com.apple.iwork.pages.pages</string>
+				<string>com.apple.iwork.pages.sffpages</string>
+				<string>com.microsoft.excel.xls</string>
+				<string>org.openxmlformats.spreadsheetml.sheet</string>
+				<string>org.oasis-open.opendocument.spreadsheet</string>
+				<string>com.apple.iwork.numbers.numbers</string>
+				<string>com.apple.iwork.numbers.sffnumbers</string>
+				<string>com.microsoft.powerpoint.ppt</string>
+				<string>org.openxmlformats.presentationml.presentation</string>
+				<string>org.oasis-open.opendocument.presentation</string>
+				<string>com.apple.iwork.keynote.key</string>
+				<string>com.apple.iwork.keynote.sffkey</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Text Document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.plain-text</string>
+				<string>public.comma-separated-values-text</string>
+				<string>public.tab-separated-values-text</string>
+				<string>public.json</string>
+				<string>net.daringfireball.markdown</string>
+				<string>public.log</string>
+			</array>
+		</dict>
 	</array>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
@@ -124,6 +192,97 @@
 				<key>public.mime-type</key>
 				<array>
 					<string>video/webm</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>net.daringfireball.markdown</string>
+			<key>UTTypeDescription</key>
+			<string>Markdown Document</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>md</string>
+					<string>markdown</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>text/markdown</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.oasis-open.opendocument.text</string>
+			<key>UTTypeDescription</key>
+			<string>OpenDocument Text</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+				<string>public.composite-content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>odt</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/vnd.oasis.opendocument.text</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.oasis-open.opendocument.spreadsheet</string>
+			<key>UTTypeDescription</key>
+			<string>OpenDocument Spreadsheet</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+				<string>public.composite-content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>ods</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/vnd.oasis.opendocument.spreadsheet</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.oasis-open.opendocument.presentation</string>
+			<key>UTTypeDescription</key>
+			<string>OpenDocument Presentation</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+				<string>public.composite-content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>odp</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/vnd.oasis.opendocument.presentation</string>
 				</array>
 			</dict>
 		</dict>

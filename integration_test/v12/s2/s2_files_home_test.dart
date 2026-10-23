@@ -18,6 +18,12 @@
 //      still-deleted video persist; the video is restored to Trips; every entry's file is there;
 //   8. no HttpClient is created during the whole scenario (HttpOverrides spy, QA-103 scope).
 //
+// Fresh or used install (S2 tail): the library of an earlier run may still hold Trips › Japan and
+// the same media. The test then works on what it creates itself (the new top-level folder, which
+// the writer names "Trips (2)", and the entries not there before), and answers the import's
+// "Already in Danaview. Keep both or skip?" with Keep both whenever it shows, so
+// DANAVIEW_E2E_FRESH=1 is optional.
+//
 // Local test media only: integration_test/v12/s2/tool/make_s2_media.sh writes them on the host and
 // the simulator reads them in place (`--dart-define=DV_S2_MEDIA=<dir>`). System UI that a Flutter
 // integration test can't drive (PHPicker, UIDocumentPicker, the share sheet) is replaced at the app's
@@ -262,8 +268,57 @@ Future<void> _dismissSheet(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 500));
 }
 
-FileEntry? _entryNamed(LibraryStore store, String name) =>
-    store.reader.allEntries(includeTrashed: true).where((e) => e.displayName == name).firstOrNull;
+/// True when [display] is [name] or the writer's de-duplicated `stem (n).ext` of it.
+bool _isNameOf(String display, String name) {
+  if (display == name) return true;
+  final dot = name.lastIndexOf('.');
+  final stem = dot < 0 ? name : name.substring(0, dot);
+  final ext = dot < 0 ? '' : name.substring(dot);
+  return RegExp('^${RegExp.escape(stem)} \\(\\d+\\)${RegExp.escape(ext)}\$').hasMatch(display);
+}
+
+/// The entry named [name] (or its de-duplicated name) that was not in [before].
+FileEntry? _newEntryNamed(LibraryStore store, String name, Set<EntryId> before) => store.reader
+    .allEntries(includeTrashed: true)
+    .where((e) => !before.contains(e.id) && _isNameOf(e.displayName, name))
+    .firstOrNull;
+
+Set<EntryId> _entryIds(LibraryStore store) => {for (final e in store.reader.allEntries(includeTrashed: true)) e.id};
+
+/// Creates a folder named [name] under [parent] through the Folders tab's [newKey] button and
+/// returns the folder that was not there before (on a used install the writer names it
+/// "Trips (2)").
+Future<LibraryFolder> _createFolder(WidgetTester tester, LibraryStore store, String newKey, String name, {FolderId? parent}) async {
+  final before = {for (final f in store.reader.childFolders(parent)) f.id};
+  await E2eApp.tapKey(tester, newKey);
+  await _prompt(tester, name, 'Create');
+  LibraryFolder? created() => store.reader.childFolders(parent).where((f) => !before.contains(f.id)).firstOrNull;
+  await E2eApp.pumpUntil(tester, () => created() != null, what: 'folder $name');
+  final f = created()!;
+  expect(_isNameOf(f.name, name), isTrue, reason: 'created ${f.name}');
+  return f;
+}
+
+/// The "Keep both" buttons of items waiting on the duplicate question.
+final Finder _keepBoth = find.byWidgetPredicate(
+    (w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('import-keep-both-'));
+
+/// Waits for the import of [name] to land as a new entry; when the import asks "Already in
+/// Danaview. Keep both or skip?" (a used install), answers Keep both.
+Future<FileEntry> _awaitImport(WidgetTester tester, LibraryStore store, String name, Set<EntryId> before, {required String what}) async {
+  for (var answered = 0;; answered++) {
+    await E2eApp.pumpUntil(tester, () => _newEntryNamed(store, name, before) != null || _keepBoth.hitTestable().evaluate().isNotEmpty,
+        what: what, timeout: const Duration(seconds: 60));
+    final entry = _newEntryNamed(store, name, before);
+    if (entry != null) {
+      if (answered > 0) _report('$what: answered "Keep both" to the duplicate question');
+      return entry;
+    }
+    if (answered >= 3) fail('$what: the duplicate question came back after Keep both');
+    await E2eApp.tap(tester, _keepBoth.hitTestable(), what: 'Keep both');
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+}
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -295,16 +350,13 @@ void main() {
 
     // ---- 2. Nested Danaview folders ----
     await _tab(tester, HomeTab.folders);
-    await E2eApp.tapKey(tester, 'folders-new-root');
-    await _prompt(tester, 'Trips', 'Create');
-    await E2eApp.pumpUntil(tester, () => store.reader.childFolders(null).any((f) => f.name == 'Trips'), what: 'folder Trips');
-    final trips = store.reader.childFolders(null).singleWhere((f) => f.name == 'Trips').id;
+    final tripsFolder = await _createFolder(tester, store, 'folders-new-root', 'Trips');
+    final trips = tripsFolder.id;
     await E2eApp.tap(tester, _folderRow(trips), what: 'Trips row');
-    await E2eApp.tapKey(tester, 'folders-new-here');
-    await _prompt(tester, 'Japan', 'Create');
-    await E2eApp.pumpUntil(tester, () => store.reader.childFolders(trips).any((f) => f.name == 'Japan'), what: 'folder Japan');
-    final japan = store.reader.childFolders(trips).single.id;
-    expect(store.reader.pathOf(japan).map((f) => f.name), ['Trips', 'Japan']);
+    final japan = (await _createFolder(tester, store, 'folders-new-here', 'Japan', parent: trips)).id;
+    final japanPath = [tripsFolder.name, 'Japan'];
+    expect(store.reader.pathOf(japan).map((f) => f.name), japanPath);
+    if (tripsFolder.name != 'Trips') _report('used install: working in ${tripsFolder.name} › Japan');
     await E2eApp.screenshot(tester, 's2-02-nested-folders');
     await E2eApp.tapKey(tester, 'folders-up');
 
@@ -314,21 +366,20 @@ void main() {
     await E2eApp.waitKey(tester, 'import-sheet');
     await E2eApp.tapKey(tester, 'import-target');
     await E2eApp.tapKey(tester, 'import-folder-${japan.value}');
+    final entriesBefore = _entryIds(store);
     world.picker.photos.add(photoSrc.path);
     await E2eApp.tapKey(tester, 'import-from-photos');
-    await E2eApp.pumpUntil(tester, () => _entryNamed(store, _photoName) != null, what: 'the photo import', timeout: const Duration(seconds: 60));
+    final photo = await _awaitImport(tester, store, _photoName, entriesBefore, what: 'the photo import');
     await E2eApp.tapKey(tester, 'import-target');
     await E2eApp.tapKey(tester, 'import-folder-imported');
     world.picker.files.add(videoSrc.path);
     await E2eApp.tapKey(tester, 'import-from-files');
-    await E2eApp.pumpUntil(tester, () => _entryNamed(store, _videoName) != null, what: 'the video import', timeout: const Duration(seconds: 60));
+    var video = await _awaitImport(tester, store, _videoName, entriesBefore, what: 'the video import');
     final c = ProviderScope.containerOf(tester.element(find.byType(DanaviewApp)), listen: false);
     await E2eApp.pumpUntil(tester, () => c.read(importServiceProvider)!.items.every((i) => i.state.isFinal), what: 'imports to finish');
     await E2eApp.screenshot(tester, 's2-03-import-sheet');
     await _dismissSheet(tester);
 
-    final photo = _entryNamed(store, _photoName)!;
-    var video = _entryNamed(store, _videoName)!;
     final imported = store.reader.systemFolder(FolderSystemRole.imported)!.id;
     expect(photo.folderId, japan);
     expect(photo.kind, FileKind.photo);
@@ -356,7 +407,7 @@ void main() {
     await _tab(tester, HomeTab.photos);
     await E2eApp.tap(tester, find.byKey(ValueKey<String>(photo.id.value)).hitTestable(), what: 'photo cell');
     await E2eApp.waitKey(tester, 'photo-viewer-pages');
-    expect((tester.widget<Text>(_key('photo-viewer-name'))).data, _photoName);
+    expect((tester.widget<Text>(_key('photo-viewer-name'))).data, photo.displayName);
     await E2eApp.tapKey(tester, 'photo-viewer-info');
     await E2eApp.waitKey(tester, 'photo-info-rows', timeout: const Duration(seconds: 20));
     final infoKeys = [
@@ -379,9 +430,9 @@ void main() {
     await E2eApp.tapKey(tester, 'photo-viewer-share');
     await E2eApp.pumpUntil(tester, () => world.out.shared.isNotEmpty, what: 'the share hand-off');
     final sharedPhoto = world.out.shared.single;
-    expect(sharedPhoto.displayName, _photoName);
+    expect(sharedPhoto.displayName, photo.displayName);
     expect(File(sharedPhoto.path).readAsBytesSync(), photoBytes);
-    _report('viewer: opened; Share handed over $_photoName (${sharedPhoto.mime})');
+    _report('viewer: opened; Share handed over ${photo.displayName} (${sharedPhoto.mime})');
     await E2eApp.tapKey(tester, 'photo-viewer-close');
 
     await _tab(tester, HomeTab.all);
@@ -430,36 +481,37 @@ void main() {
       await E2eApp.tap(tester, find.text('Delete').hitTestable().last, what: 'confirm Delete');
       await E2eApp.pumpUntil(tester, () => store.reader.entry(id)!.isTrashed, what: 'entry trashed');
     }
-    expect(store.reader.recentlyDeleted().map((t) => t.name), containsAll([_photoName, _videoName]));
+    expect(store.reader.recentlyDeleted().map((t) => t.id.value), containsAll([photo.id.value, video.id.value]));
     await _tab(tester, HomeTab.folders);
     await E2eApp.tapKey(tester, 'recently-deleted-row');
-    await E2eApp.pumpUntil(tester, () => find.text(_photoName).hitTestable().evaluate().isNotEmpty, what: 'Recently deleted list');
+    // By id: a used install may list same-named rows of earlier runs.
+    final photoTrashRow = _key('trashed-${photo.id.value}');
+    await E2eApp.pumpUntil(tester, () => photoTrashRow.hitTestable().evaluate().isNotEmpty, what: 'Recently deleted list');
+    expect(find.descendant(of: photoTrashRow, matching: find.text(photo.displayName)), findsOneWidget);
     await E2eApp.screenshot(tester, 's2-08-recently-deleted');
-    final photoTrashRow = find.ancestor(
-        of: find.text(_photoName), matching: find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('trashed-')));
-    await E2eApp.tap(tester, find.descendant(of: photoTrashRow.first, matching: find.text('Restore')), what: 'Restore photo');
+    await E2eApp.tap(tester, find.descendant(of: photoTrashRow, matching: find.text('Restore')), what: 'Restore photo');
     await E2eApp.pumpUntil(tester, () => !store.reader.entry(photo.id)!.isTrashed, what: 'photo restored');
     expect(store.reader.entry(photo.id)!.folderId, japan, reason: 'restored into its folder');
     expect(photoFile.readAsBytesSync(), photoBytes);
-    _report('delete: both in Recently deleted; photo restored to Trips/Japan');
+    _report('delete: both in Recently deleted; photo restored to ${japanPath.join('/')}');
 
     // ---- 7. Reopen the library (store half of an app restart) ----
     await world.close(tester);
     await world.launch(tester);
     final reopened = world.store;
-    expect(reopened.reader.pathOf(japan).map((f) => f.name), ['Trips', 'Japan'], reason: 'folders persist');
+    expect(reopened.reader.pathOf(japan).map((f) => f.name), japanPath, reason: 'folders persist');
     expect(reopened.reader.entry(photo.id)!.folderId, japan, reason: 'entries persist');
     expect(reopened.reader.entry(video.id)!.isTrashed, isTrue, reason: 'Recently deleted persists');
-    expect(reopened.reader.recentlyDeleted().map((t) => t.name), contains(_videoName));
+    expect(reopened.reader.recentlyDeleted().map((t) => t.id.value), contains(video.id.value));
     expect(reopened.reader.recents().map((e) => e.id), contains(photo.id), reason: 'Recents persist (a deleted entry leaves Recents)');
     await _tab(tester, HomeTab.folders);
     await E2eApp.tapKey(tester, 'recently-deleted-row');
-    final videoTrashRow = find.ancestor(
-        of: find.text(_videoName), matching: find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('trashed-')));
-    await E2eApp.tap(tester, find.descendant(of: videoTrashRow.first, matching: find.text('Restore')), what: 'Restore video');
+    final videoTrashRow = _key('trashed-${video.id.value}');
+    await E2eApp.tap(tester, find.descendant(of: videoTrashRow, matching: find.text('Restore')), what: 'Restore video');
     await E2eApp.pumpUntil(tester, () => !reopened.reader.entry(video.id)!.isTrashed, what: 'video restored');
     expect(reopened.reader.entry(video.id)!.folderId, trips);
-    expect(File(reopened.paths.entryFile(video.id, _videoName)).readAsBytesSync(), videoBytes);
+    final restoredVideo = reopened.reader.entry(video.id)!;
+    expect(File(reopened.paths.entryFile(video.id, restoredVideo.displayName)).readAsBytesSync(), videoBytes);
     // LibraryStore.checkInvariants() can't run on the app's isolate writer (FIX-S2Q-2): every live
     // entry's file is checked here instead.
     for (final e in reopened.reader.allEntries()) {

@@ -2654,7 +2654,7 @@ interface PhotoLibraryHostApi {
   fun fetchPage(request: PhotoFetchRequestMsg, callback: (Result<PhotoPageMsg>) -> Unit)
   /** Assets by id, in the given order; unknown or inaccessible ids are left out. */
   fun fetchAssets(localIdentifiers: List<String>, callback: (Result<List<PhotoAssetMsg>>) -> Unit)
-  /** System albums and device folders that contain photos or videos. */
+  /** System albums and device folders that hold photos, counted by their photos (video-only ones are left out). */
   fun fetchAlbums(callback: (Result<List<PhotoAlbumMsg>>) -> Unit)
   /** EXIF basics of one asset; `notFound` when it is gone. */
   fun assetDetail(localIdentifier: String, callback: (Result<PhotoAssetDetailMsg>) -> Unit)

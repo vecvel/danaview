@@ -7,6 +7,11 @@
 // and every version of one item's thumbnail sits in one small directory (invalidation by
 // modification time removes its siblings). The encoded format is sniffed when decoding, so one
 // name serves JPEG, HEIC, WebP and PNG.
+//
+// Documents also key on their render scale (screen pixels per PDF point, the device pixel ratio;
+// S2 tail): a scale other than 1 adds `@<scale>x` to the hash directory
+// (`l/<hh>/<hash>@3x/<modifiedMs>.thumb`), so a 1x and a 3x rendering never collide and the
+// sibling clean-up of one scale leaves the other alone. Scale-1 paths are unchanged.
 
 import 'package:flutter/foundation.dart';
 
@@ -64,6 +69,7 @@ final class ThumbRequest {
     required this.modifiedAt,
     required this.sizeClass,
     this.kind = ThumbSourceKind.media,
+    this.scale = 1,
   });
 
   /// The library item id.
@@ -81,12 +87,21 @@ final class ThumbRequest {
   /// Media or document.
   final ThumbSourceKind kind;
 
+  /// Screen pixels per PDF point a [ThumbSourceKind.document] renders at (the device pixel ratio;
+  /// the box of [sizeClass] still bounds it). Media ignore it. Kept to hundredths in the key.
+  final double scale;
+
   /// The cache key.
-  ThumbKey get key => ThumbKey(itemId: itemId, modifiedMs: modifiedAt.millisecondsSinceEpoch, sizeClass: sizeClass);
+  ThumbKey get key => ThumbKey(
+        itemId: itemId,
+        modifiedMs: modifiedAt.millisecondsSinceEpoch,
+        sizeClass: sizeClass,
+        scaleCenti: kind == ThumbSourceKind.document ? scaleCentiOf(scale) : 100,
+      );
 
   /// The same request at another size class.
   ThumbRequest at(ThumbSizeClass c) =>
-      ThumbRequest(itemId: itemId, source: source, modifiedAt: modifiedAt, sizeClass: c, kind: kind);
+      ThumbRequest(itemId: itemId, source: source, modifiedAt: modifiedAt, sizeClass: c, kind: kind, scale: scale);
 
   @override
   bool operator ==(Object other) =>
@@ -100,11 +115,18 @@ final class ThumbRequest {
   String toString() => 'ThumbRequest(${sizeClass.name}, ${kind.name})';
 }
 
-/// Item id + modification time + size class.
+/// [scale] in hundredths (at least 1): what a key stores, so 2.625 and 2.6249 share a key.
+int scaleCentiOf(double scale) {
+  if (!scale.isFinite || scale <= 0) return 100;
+  final c = (scale * 100).round();
+  return c < 1 ? 1 : c;
+}
+
+/// Item id + modification time + size class (+ render scale for documents).
 @immutable
 final class ThumbKey {
   /// A key.
-  const ThumbKey({required this.itemId, required this.modifiedMs, required this.sizeClass});
+  const ThumbKey({required this.itemId, required this.modifiedMs, required this.sizeClass, this.scaleCenti = 100});
 
   /// The library item id.
   final String itemId;
@@ -115,27 +137,40 @@ final class ThumbKey {
   /// Size class.
   final ThumbSizeClass sizeClass;
 
+  /// Render scale in hundredths (100 = 1x; only documents use another).
+  final int scaleCenti;
+
+  /// The render scale passed to the platform.
+  double get scale => scaleCenti / 100;
+
+  String get _scaleTag {
+    if (scaleCenti == 100) return '';
+    final whole = scaleCenti ~/ 100, frac = scaleCenti % 100;
+    final f = frac == 0 ? '' : '.${frac.toString().padLeft(2, '0').replaceFirst(RegExp(r'0$'), '')}';
+    return '@$whole${f}x';
+  }
+
   /// 16 hex digits of the item id's 64-bit FNV-1a hash.
   String get idHash => fnv1a64Hex(itemId);
 
   /// Path of this key's file below the cache root (`/`-separated).
   String get relativePath {
     final h = idHash;
-    return '${sizeClass.name}/${h.substring(0, 2)}/$h/$modifiedMs.thumb';
+    return '${sizeClass.name}/${h.substring(0, 2)}/$h$_scaleTag/$modifiedMs.thumb';
   }
 
   /// Directory holding every version of this item's thumbnail at this class, below the root.
   String get relativeItemDir {
     final h = idHash;
-    return '${sizeClass.name}/${h.substring(0, 2)}/$h';
+    return '${sizeClass.name}/${h.substring(0, 2)}/$h$_scaleTag';
   }
 
   @override
   bool operator ==(Object other) =>
-      other is ThumbKey && other.itemId == itemId && other.modifiedMs == modifiedMs && other.sizeClass == sizeClass;
+      other is ThumbKey && other.itemId == itemId && other.modifiedMs == modifiedMs && other.sizeClass == sizeClass && other.scaleCenti == scaleCenti;
 
   @override
-  int get hashCode => Object.hash(itemId, modifiedMs, sizeClass);
+  int get hashCode => Object.hash(itemId, modifiedMs, sizeClass, scaleCenti);
 
   @override
   String toString() => 'ThumbKey(${sizeClass.name})';
