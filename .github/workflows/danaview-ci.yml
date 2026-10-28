@@ -440,7 +440,7 @@ jobs:
     name: android-emulator (API 35 x86_64)
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
       - name: Look for scripts/ci/editor/android_emulator.sh
@@ -458,6 +458,8 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then echo "::error title=KVM::/dev/kvm is not accessible"; exit 1; fi
       - name: Set up Java
         if: steps.script.outputs.present == 'true'
         uses: actions/setup-java@v6
@@ -472,17 +474,55 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
-      - name: Run android_emulator.sh on an API 35 x86_64 emulator
+      # A booted AVD snapshot, cached: later runs start from it instead of a cold boot.
+      - name: Cache the AVD
         if: steps.script.outputs.present == 'true'
+        id: avd-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-35-x86_64-google_apis-pixel_6-r5
+      - name: Create the AVD and its snapshot
+        if: steps.script.outputs.present == 'true' && steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           target: google_apis
           profile: pixel_6
-          disable-animations: true
+          cores: 4
+          ram-size: 4096M
+          disk-size: 8G
+          force-avd-creation: false
+          emulator-boot-timeout: 900
+          disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash scripts/ci/editor/android_emulator.sh
+          script: echo "AVD snapshot created"
+      - name: Run android_emulator.sh on an API 35 x86_64 emulator
+        if: steps.script.outputs.present == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # emulator_ready.sh: boot check with one relaunch, and a relaunch when the emulator stops
+          # answering during a batch or suite (same AVD and options).
+          DANAVIEW_EMULATOR_AVD: test
+          DANAVIEW_EMULATOR_OPTIONS: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          DANAVIEW_EMULATOR_BOOT_TIMEOUT: 600
+          ANDROID_SERIAL: emulator-5554
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          cores: 4
+          ram-size: 4096M
+          disk-size: 8G
+          force-avd-creation: false
+          emulator-boot-timeout: 900
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash scripts/ci/editor/emulator_ready.sh && bash scripts/ci/editor/android_emulator.sh
 
   ios:
     name: ios (Xcode 26.6, iOS 26 simulator)

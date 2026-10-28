@@ -40,6 +40,15 @@ final class RampSeamTests: XCTestCase {
 
     private var boundariesUs: [Int64] { (1..<Self.speeds.count).map { Int64(Double($0) * Self.segmentUs) } }
 
+    /// The export's time-pitch check of the ramp (FIX-IOS-MEDIA `TimePitchWatch.of` for this
+    /// segment): reads with a dropout or a dropped seam crossfade are redone, as the export does.
+    private var crossfadeWatch: TimePitchWatch {
+        let end = Int64(Double(Self.speeds.count) * Self.segmentUs)
+        return TimePitchWatch(
+            spans: [.init(startUs: TimePitchWatch.edgeMarginUs, endUs: end - TimePitchWatch.edgeMarginUs, gain: [])],
+            seamsUs: boundariesUs)
+    }
+
     struct SeamReport {
         var floor: Float
         var seams: [Float]
@@ -99,7 +108,9 @@ final class RampSeamTests: XCTestCase {
         let envelopes = (0..<2).map { track in
             TapEnvelope.unity.withSeamCrossfades(TapEnvelope.alternatingSeams(boundariesUs: boundariesUs, track: track))
         }
-        let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: expectFrames, audible: [0..<expectFrames]) {
+        let (read, reads) = try await AudioTapSupport.readValidated(
+            expectFrames: expectFrames, audible: [0..<expectFrames], watch: crossfadeWatch
+        ) {
             try await AudioTapSupport.buildWithTaps(tracks: tracks, taps: envelopes.map { GainTap(envelope: $0) })
         }
         print("IOS-18 ramp crossfade: \(reads) read(s)")
@@ -111,7 +122,7 @@ final class RampSeamTests: XCTestCase {
         let single = try await singleTrackRead().map(measure)
         let crossfadeRead = try await crossfadeRead()
         XCTAssertNil(
-            AudioTapSupport.badReason(crossfadeRead, expectFrames: expectFrames, audible: [0..<expectFrames]),
+            AudioTapSupport.badReason(crossfadeRead, expectFrames: expectFrames, audible: [0..<expectFrames], watch: crossfadeWatch),
             "crossfade layout: no good read")
         let crossfade = measure(crossfadeRead)
         let singleText = single.map { "floor \($0.floor) seams \($0.seams) worst excess \($0.worstExcessDb) dBFS" } ?? "no good read"

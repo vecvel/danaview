@@ -561,22 +561,37 @@ void main() {
     final r = await env.export('freeze_colour', plan);
     final viaPreview = (await acc.readFramesOf(env, r.path, r.duration, 30, [10])).single;
     final viaFreeze = await env.freeze(r.path, acc.tof(10, 30) + acc.readLeadUs, tag: 'colour');
-    var worstPreview = 0, worstFreeze = 0;
+    // The export encodes BT.709 (ARCH §11.6). The platform's GL sampler picks the YUV→RGB matrix
+    // of the read-back: BT.709 on devices, BT.601 on the x86_64 emulator whatever the stream
+    // signals (measured: SourceFrameCacheTest, PrecomposePlanner). Each read-back must match the
+    // round trip of ONE matrix within 3 for every colour, and the freeze still the same one as the
+    // preview decode.
+    final worstPreview = [0, 0], worstFreeze = [0, 0]; // [BT.709 read-back, BT.601 read-back]
     for (var i = 0; i < colors.length; i++) {
       final want = [(colors[i] >> 16) & 0xFF, (colors[i] >> 8) & 0xFF, colors[i] & 0xFF];
+      final want601 = _bt709EncodeBt601Decode(want);
       final x = ((i + 0.5) * acc.qaW / colors.length).round();
       final pv = viaPreview.at(x * viaPreview.w ~/ acc.qaW, viaPreview.h ~/ 2);
       final fz = viaFreeze.at(x * viaFreeze.w ~/ acc.qaW, viaFreeze.h ~/ 2);
       for (var ch = 0; ch < 3; ch++) {
-        worstPreview = math.max(worstPreview, (pv[ch] - want[ch]).abs());
-        worstFreeze = math.max(worstFreeze, (fz[ch] - want[ch]).abs());
+        worstPreview[0] = math.max(worstPreview[0], (pv[ch] - want[ch]).abs());
+        worstPreview[1] = math.max(worstPreview[1], (pv[ch] - want601[ch]).abs());
+        worstFreeze[0] = math.max(worstFreeze[0], (fz[ch] - want[ch]).abs());
+        worstFreeze[1] = math.max(worstFreeze[1], (fz[ch] - want601[ch]).abs());
       }
-      acc.qa03('colour', {'color': hex(colors[i]), 'preview': pv.join(','), 'freeze': fz.join(',')});
+      acc.qa03('colour', {'color': hex(colors[i]), 'preview': pv.join(','), 'freeze': fz.join(','), 'bt601ReadBack': want601.join(',')});
     }
-    acc.qa03('colour', {'worstPreviewDelta': worstPreview, 'worstFreezeDelta': worstFreeze});
+    final m = worstPreview[0] <= worstPreview[1] ? 0 : 1;
+    acc.qa03('colour', {
+      'worstPreviewDelta': worstPreview[m],
+      'worstFreezeDelta': worstFreeze[m],
+      'readBackMatrix': m == 0 ? 'BT.709' : 'BT.601',
+      'worstPreviewDelta709': worstPreview[0],
+      'worstPreviewDelta601': worstPreview[1],
+    });
     acc.Qa03Env.discard(r.path);
-    expect(worstPreview, lessThanOrEqualTo(3), reason: 'export + preview decode round trip');
-    expect(worstFreeze, lessThanOrEqualTo(3), reason: 'freeze still colours differ from the decoded video');
+    expect(worstPreview[m], lessThanOrEqualTo(3), reason: 'export + preview decode round trip (${m == 0 ? 'BT.709' : 'BT.601'} read-back)');
+    expect(worstFreeze[m], lessThanOrEqualTo(3), reason: 'freeze still colours differ from the decoded video');
   });
 
   testWidgets('render parity: preview captures and exported frames vs the reference; iOS vs Android renders', (tester) async {
@@ -649,4 +664,17 @@ void main() {
     expect(cases, greaterThanOrEqualTo(8));
     expect(failures, isEmpty, reason: failures.join('\n'));
   }, skip: acc.Qa03Media.skipReason != null);
+}
+
+/// [rgb] (8-bit) encoded with the BT.709 limited-range matrix and decoded with the BT.601 one (the
+/// x86_64 emulator's GL sampler), rounded and clamped like the read-back.
+List<int> _bt709EncodeBt601Decode(List<int> rgb) {
+  final r = rgb[0] / 255, g = rgb[1] / 255, b = rgb[2] / 255;
+  final y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  final cb = (b - y) / 1.8556, cr = (r - y) / 1.5748;
+  // Quantised to 8-bit video range, as the encoder stores it.
+  final yq = (16 + 219 * y).round(), cbq = (128 + 224 * cb).round(), crq = (128 + 224 * cr).round();
+  final y1 = (yq - 16) / 219, pb = (cbq - 128) / 224, pr = (crq - 128) / 224;
+  int c(double v) => (v * 255).round().clamp(0, 255);
+  return [c(y1 + 1.402 * pr), c(y1 - 0.344136 * pb - 0.714136 * pr), c(y1 + 1.772 * pb)];
 }

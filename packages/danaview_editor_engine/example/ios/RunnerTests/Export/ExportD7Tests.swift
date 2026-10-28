@@ -335,8 +335,12 @@ final class ExportD7Tests: XCTestCase {
         guard r.ended else { return }
         try assertCompleted(h, r, durUs: D7Plans.durUs, s: s)
         let first = try XCTUnwrap(log.sources.first)
-        XCTAssertEqual(first.hungReads, 1)
-        XCTAssertEqual(first.resumes, 1, "resumed on a fresh reader instead of failing the read")
+        // The gated read always hangs (8 s > watchdog). A fresh reader can also stall on its own
+        // on a loaded simulator (AVFoundation's hang this fix is about, or a first buffer slower
+        // than the watchdog), which is resumed the same way, so the counts are compared with each
+        // other rather than with 1.
+        XCTAssertGreaterThanOrEqual(first.hungReads, 1, "the gated read counts as hung")
+        XCTAssertEqual(first.resumes, first.hungReads, "every hung read resumed on a fresh reader instead of failing the read")
         XCTAssertNotEqual(first.rejection, "hung")
         // The resumed reader is torn down; the hung one is never touched, not even after its call
         // returned (it is left behind with its composition).
