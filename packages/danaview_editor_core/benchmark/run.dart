@@ -14,14 +14,17 @@
 // time compilation, which the release app never pays). `scripts/ci/editor/core.sh` runs
 // `--check` in the dart-core job.
 //
-// Regression rule: a row fails when its p90 exceeds `baseline × f × 1.25` and the difference is more
-// than [noiseFloorUs] (sub-millisecond rows jitter by tens of µs between runs). Budget rule: a gated
-// row fails when its p90 exceeds `budget × f`. f is the row's host factor: this run's calibration
-// p50 of the row's kind (compute or codec, [rowKinds]) over the baseline run's
-// (src/calibration.dart), so the gate holds the baseline host's numbers and the ARCH §18.2 budgets
-// as met on that host on a slower or faster CI host; on the baseline host f ≈ 1. A baseline
-// without a calibration uses f = 1. A failing row is
-// re-measured up to twice and the best run counts, so a single noisy run does not fail CI.
+// Regression rule (always on): a row fails when its p90 exceeds `baseline × f × 1.25` and the
+// difference is more than [noiseFloorUs] (sub-millisecond rows jitter by tens of µs between runs).
+// f is the row's host factor: this run's calibration p50 of the row's kind ([rowKinds]) over the
+// baseline run's (src/calibration.dart), so the gate holds the baseline host's numbers on a slower
+// or faster CI host; on the baseline host f ≈ 1. A kind missing from the baseline uses f = 1.
+// Probe rule (always on): a probe kind's factor may not exceed the codec factor × [probeDriftLimit]
+// (a probe runs the row's own encoder, so this catches an encoder slowdown the probe would hide).
+// Budget rule (only with DV_PERF_STRICT=1, the dev-Mac / device check): a gated row fails when its
+// p90 exceeds its ARCH §18.2 budget, unscaled; these are device budgets, which a slower CI host
+// misses without any regression, so in CI a budget miss is reported but does not fail. A failing
+// row is re-measured up to twice and the best run counts, so a single noisy run does not fail CI.
 
 // ignore_for_file: avoid_print
 
@@ -45,6 +48,12 @@ const double regressionFactor = 1.25;
 /// Regressions smaller than this (µs) are noise.
 const int noiseFloorUs = 50;
 
+/// How far a probe kind's host factor may exceed the codec factor (see the probe rule above).
+const double probeDriftLimit = 1.6;
+
+/// DV_PERF_STRICT=1 also fails on absolute ARCH §18.2 budget misses (dev Mac / devices).
+final bool perfStrict = Platform.environment['DV_PERF_STRICT'] == '1';
+
 const bool _aot = bool.fromEnvironment('dart.vm.product');
 
 /// The calibration each row is normalized by.
@@ -53,8 +62,8 @@ const Map<String, CalibrationKind> rowKinds = {
   'dry_run_1000': CalibrationKind.compute,
   'incremental_compile_2000': CalibrationKind.compute,
   'full_compile_2000': CalibrationKind.compute,
-  'plan_encode_2000': CalibrationKind.codec,
-  'autosave_block_2000': CalibrationKind.codec,
+  'plan_encode_2000': CalibrationKind.planEncode,
+  'autosave_block_2000': CalibrationKind.autosave,
   'open_2000': CalibrationKind.codec,
 };
 
@@ -134,7 +143,8 @@ Future<int> _run(String root, List<String> args) async {
   final host = _host();
   print('Core benchmarks on ${host['os']} (${host['cpus']} CPUs), Dart ${host['dart']}, ${_aot ? 'AOT' : 'JIT'}');
   print('Fixture: ${shapeOf(large)}');
-  final calibration = calibrationUs(quick: args.contains('--quick'));
+  final probes = encodeProbes();
+  final calibration = calibrationUs(quick: args.contains('--quick'), probes: probes);
 
   final lane = buildOneLaneProject();
   List<MetricResult> runAll() => [
@@ -151,7 +161,7 @@ Future<int> _run(String root, List<String> args) async {
   final results = {for (final r in runAll()) r.id: r};
   final baseline = _readBaseline(baselineFile);
   // The lower of two calibrations (before and after the rows): noise only ever slows a pass down.
-  final again = calibrationUs(quick: args.contains('--quick'));
+  final again = calibrationUs(quick: args.contains('--quick'), probes: probes);
   final calibrationNow = {for (final k in CalibrationKind.values) k: calibration[k]! < again[k]! ? calibration[k]! : again[k]!};
   final baseCalibration = _readBaselineCalibration(baselineFile);
   final factors = {
@@ -161,6 +171,9 @@ Future<int> _run(String root, List<String> args) async {
   double factorOf(String id) => factors[rowKinds[id] ?? CalibrationKind.compute]!;
   print('Host factors against the baseline host (${_readBaselineHost(baselineFile)}): '
       '${[for (final k in CalibrationKind.values) '${k.name} ${factors[k]!.toStringAsFixed(2)} (${calibrationNow[k]} µs vs ${baseCalibration[k] ?? 'none'})'].join(', ')}');
+  print(perfStrict
+      ? 'DV_PERF_STRICT=1: absolute ARCH §18.2 budgets are gated.'
+      : 'Absolute ARCH §18.2 budgets are reported, not gated (set DV_PERF_STRICT=1 on the dev Mac / devices).');
 
   if (check) {
     for (var attempt = 0; attempt < 2; attempt++) {
@@ -182,8 +195,8 @@ Future<int> _run(String root, List<String> args) async {
     final delta = base == null
         ? ''
         : '  (baseline p90 ${(base / 1000).toStringAsFixed(3)} ms × f = ${(base * f / 1000).toStringAsFixed(3)} ms, '
-            '${(100 * (r.p90 - base * f) / (base * f)).toStringAsFixed(0)}%; budget × f ${(r.budgetUs * f / 1000).toStringAsFixed(3)} ms)';
-    print('${r.describe(hostFactor: f)}$delta');
+            '${(100 * (r.p90 - base * f) / (base * f)).toStringAsFixed(0)}%)';
+    print('${r.describe(gated: perfStrict)}$delta');
   }
 
   final jsonOut = _option(args, '--json');
@@ -209,6 +222,13 @@ Future<int> _run(String root, List<String> args) async {
     final why = _failure(r, baseline[r.id], factorOf(r.id));
     if (why != null) failures.add(why);
   }
+  for (final k in CalibrationKind.values.where((k) => k.isProbe)) {
+    if (!baseCalibration.containsKey(k) || !baseCalibration.containsKey(CalibrationKind.codec)) continue;
+    if (factors[k]! > factors[CalibrationKind.codec]! * probeDriftLimit) {
+      failures.add('probe ${k.name}: host factor ${factors[k]!.toStringAsFixed(2)} is over the codec factor '
+          '${factors[CalibrationKind.codec]!.toStringAsFixed(2)} × $probeDriftLimit; the encoder itself slowed down');
+    }
+  }
   if (baseline.isEmpty) failures.add('no baseline: run --update-baseline on the dev Mac');
   for (final id in baseline.keys) {
     if (!results.containsKey(id)) failures.add('$id is in the baseline but was not measured');
@@ -223,8 +243,8 @@ Future<int> _run(String root, List<String> args) async {
 
 /// Why [r] fails the gate on a host [f] times as slow as the baseline host, or null.
 String? _failure(MetricResult r, int? baselineP90, double f) {
-  if (r.budgetGated && r.p90 > r.budgetUs * f) {
-    return '${r.id}: p90 ${r.p90} µs is over the ARCH §18.2 budget of ${r.budgetUs} µs × host factor ${f.toStringAsFixed(2)}';
+  if (perfStrict && r.budgetGated && r.p90 > r.budgetUs) {
+    return '${r.id}: p90 ${r.p90} µs is over the ARCH §18.2 budget of ${r.budgetUs} µs (DV_PERF_STRICT=1)';
   }
   if (baselineP90 != null && r.p90 > baselineP90 * f * regressionFactor && r.p90 - baselineP90 * f > noiseFloorUs) {
     return '${r.id}: p90 ${r.p90} µs regressed more than ${((regressionFactor - 1) * 100).round()}% over the baseline '
