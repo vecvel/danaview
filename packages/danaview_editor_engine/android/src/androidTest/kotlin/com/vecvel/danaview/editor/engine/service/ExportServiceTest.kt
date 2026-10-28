@@ -412,19 +412,30 @@ class ExportServiceTest {
                 Thread.sleep(2_000)
             }
             assertTrue("recents", device.pressRecentApps())
-            Thread.sleep(3_000)
+            // Wait for Recents to show the task card (Launcher3 quickstep's thumbnail view) instead
+            // of a fixed pause: on a loaded emulator the overview can take several seconds.
+            val card = device.wait(Until.findObject(By.res(Pattern.compile(".*:id/snapshot"))), RECENTS_TIMEOUT_MS)
+            if (card == null) Log.i(SERVICE_TEST_TAG, "no task card in Recents after $RECENTS_TIMEOUT_MS ms (attempt ${attempt + 1})")
+            device.waitForIdle(2_000)
             val w = device.displayWidth
             val hgt = device.displayHeight
             // The current task's card is centred; a 400 ms swipe up dismisses it (Launcher3 quickstep).
             // `input swipe` (as a person's finger through the shell): UiDevice.swipe's injected
             // gesture did not dismiss the card on the API 35 launcher.
-            ServiceTest.shell("input swipe ${w / 2} ${hgt * 3 / 5} ${w / 2} ${hgt / 20} 400")
-            if (ServiceTest.waitFor(3_000) { relay.activity.isDestroyed }) {
+            val cx = card?.visibleCenter?.x ?: (w / 2)
+            val cy = card?.visibleCenter?.y ?: (hgt * 3 / 5)
+            ServiceTest.shell("input swipe $cx $cy $cx ${hgt / 20} 400")
+            if (ServiceTest.waitFor(RECENTS_TIMEOUT_MS) { relay.activity.isDestroyed }) {
                 Log.i(SERVICE_TEST_TAG, "swiped the task away in Recents (attempt ${attempt + 1})")
                 return
             }
             device.takeScreenshot(File(ServiceTest.app.filesDir, "and12_recents_$attempt.png"))
         }
         error("the task is still in Recents")
+    }
+
+    private companion object {
+        /** How long Recents may take to show the card, and the task to be removed after the swipe. */
+        const val RECENTS_TIMEOUT_MS = 10_000L
     }
 }

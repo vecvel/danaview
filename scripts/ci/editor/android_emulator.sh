@@ -37,6 +37,7 @@
 # Environment:
 #   ANDROID_SERIAL     the device to use (default: the only/first device `adb devices` lists)
 #   DANAVIEW_GRADLE_ARGS  extra Gradle arguments (CI adds --no-daemon)
+#   DV_PERF_STRICT=1   absolute performance limits in the instrumented tests (support/PerfGate.kt)
 #   DANAVIEW_EMULATOR_BATCHES  space-separated batches to run instead of every package, e.g.
 #                      "effects proxy"; join packages with a comma to run them as one batch
 #                      ("drop,harness")
@@ -153,6 +154,8 @@ fi
 
 declare -a GRADLE_ARGS=()
 if [ "$GHA" = true ]; then GRADLE_ARGS+=(--no-daemon); fi
+# Absolute performance limits of the instrumented tests only with DV_PERF_STRICT=1 (PerfGate.kt).
+if [ "${DV_PERF_STRICT:-}" = 1 ]; then GRADLE_ARGS+=("-Pandroid.testInstrumentationRunnerArguments.DV_PERF_STRICT=1"); fi
 for a in ${DANAVIEW_GRADLE_ARGS:-}; do GRADLE_ARGS+=("$a"); done
 
 group "flutter pub get + Gradle config (example)"
