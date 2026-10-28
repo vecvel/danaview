@@ -230,7 +230,10 @@ void main() {
       expect(_value(rows, 'dimensions'), '4032 × 3024 · 12.2 MP');
       expect(_value(rows, 'taken'), '14 September 2026, 17:42');
       // No location is read or shown (ARCH §9.4): the fixture's GPS IFD carries latitude 51.
-      expect(rows.any((r) => r.value.contains('51')), isFalse);
+      // Look for a location row or a coordinate, not any "51": the Added/Modified rows show the
+      // current time, which can contain 51 (a flaky false failure on CI at hh:51).
+      expect(rows.any((r) => r.id.toLowerCase().contains('location') || r.id.toLowerCase().contains('gps') || r.label.toLowerCase().contains('location')), isFalse);
+      expect(rows.any((r) => RegExp(r'51(\.\d+)?\s*°|51°|\b51\.\d{3,}').hasMatch(r.value)), isFalse);
       await lib.close(tester);
     });
 
