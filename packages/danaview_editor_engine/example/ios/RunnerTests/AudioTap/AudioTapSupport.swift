@@ -208,7 +208,7 @@ enum AudioTapSupport {
     /// (`GainTap.rangeDiscontinuities`). [make] returns the composition, the mix, the assets to keep
     /// alive and the taps. Returns the first good read (or the last bad one) and the number of reads.
     static func readValidated(
-        expectFrames: Int, audible: [Range<Int>] = [], attempts: Int = 4,
+        expectFrames: Int, audible: [Range<Int>] = [], watch: TimePitchWatch = .none, attempts: Int = 4,
         algorithm: AVAudioTimePitchAlgorithm = .timeDomain, timeout: TimeInterval = 30,
         make: () async throws -> (AVMutableComposition, AVMutableAudioMix, [AVURLAsset], [GainTap])
     ) async throws -> (read: MixRead, reads: Int) {
@@ -219,10 +219,11 @@ enum AudioTapSupport {
             _ = withExtendedLifetime(assets) {}
             last = read
             let jumps = taps.map(\.rangeDiscontinuities).reduce(0, +)
-            if jumps == 0, isGood(read, expectFrames: expectFrames, audible: audible) { return (read, attempt) }
+            let bad = badReason(read, expectFrames: expectFrames, audible: audible, watch: watch)
+            if jumps == 0, bad == nil { return (read, attempt) }
             print(
                 "IOS-18 bad read \(attempt)/\(attempts): hung=\(read.hung) frames=\(read.frames) "
-                    + "status=\(read.status.rawValue) rangeJumps=\(jumps) bad=\(badReason(read, expectFrames: expectFrames, audible: audible) ?? "no")")
+                    + "status=\(read.status.rawValue) rangeJumps=\(jumps) bad=\(bad ?? "no")")
         }
         return (try XCTUnwrap(last), attempts)
     }
@@ -232,7 +233,7 @@ enum AudioTapSupport {
     }
 
     /// Why a read is bad (nil = good).
-    static func badReason(_ read: MixRead, expectFrames: Int, audible: [Range<Int>]) -> String? {
+    static func badReason(_ read: MixRead, expectFrames: Int, audible: [Range<Int>], watch: TimePitchWatch = .none) -> String? {
         if read.hung { return "hung" }
         if read.frames < expectFrames { return "short (\(read.frames) < \(expectFrames))" }
         if read.interleaved.contains(where: { $0.isNaN }) { return "NaN" }
@@ -244,6 +245,17 @@ enum AudioTapSupport {
                     return "silent 100 ms window at frame \(a)"
                 }
                 a += 4_800
+            }
+        }
+        // The export's own check (FIX-IOS-MEDIA): AVFoundation's time-pitch unit sometimes renders
+        // an exact-zero stretch inside a piece or drops one track's seam crossfade; such a read is
+        // redone, in the export and here.
+        if !watch.isEmpty {
+            var scan = TimePitchScan(watch: watch)
+            read.interleaved.withUnsafeBufferPointer { scan.scan($0, firstFrame: 0, channels: 2) }
+            scan.evaluateSeams()
+            if scan.dropouts + scan.seamSteps > 0 {
+                return "time-pitch fault (\(scan.dropouts) dropout(s), \(scan.seamSteps) seam step(s); first: \(scan.firstFault ?? "?"))"
             }
         }
         return nil

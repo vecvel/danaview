@@ -110,7 +110,15 @@ final class ExportAudioValidationTests: XCTestCase {
         XCTAssertTrue(first.rejection?.contains("dropout") == true, "\(first.rejection ?? "accepted")")
         XCTAssertGreaterThanOrEqual(pipeline?.audioAttempts ?? 0, 2, "the dropout read is redone")
         let pcm = try ExportConformance.pcm(output)
-        XCTAssertGreaterThan(ExportConformance.rmsDb(pcm, channel: 0, a, b), -20, "the redone read has the tone there")
+        // The last attempt is accepted whatever it holds (a real time-pitch dropout on a loaded
+        // simulator can land there too); the tone is required when the accepted read was clean.
+        let last = try XCTUnwrap(sources.last)
+        XCTAssertFalse(last === first, "the redo reads on a fresh source")
+        if last.dropouts + last.seamSteps == 0 {
+            XCTAssertGreaterThan(ExportConformance.rmsDb(pcm, channel: 0, a, b), -20, "the redone read has the tone there")
+        } else {
+            XCTAssertEqual(pipeline?.audioAttempts, pipeline?.maxAudioAttempts, "a faulty read is only kept as the last attempt")
+        }
     }
 
     func testSeamStepInsideARampIsRedone() throws {
