@@ -140,6 +140,11 @@ if [ "$DRY_RUN" != 1 ]; then
   done
   [ "$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] || die "$SERIAL did not finish booting"
   echo "device $SERIAL, API $("$ADB" -s "$SERIAL" shell getprop ro.build.version.sdk | tr -d '\r'), $("$ADB" -s "$SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')"
+  # Emulator readiness (emulator_ensure / emulator_booted / emulator_relaunch): an emulator that
+  # stops answering during a batch or suite is relaunched (CI sets DANAVIEW_EMULATOR_AVD) and that
+  # batch or suite runs once more; a device that is not an emulator is only waited for.
+  # shellcheck source=emulator_ready.sh
+  source "$ROOT/scripts/ci/editor/emulator_ready.sh"
   endgroup
 else
   SERIAL="${ANDROID_SERIAL:-<serial>}"
@@ -186,11 +191,21 @@ for b in "${BATCHES[@]}"; do
       "-Pandroid.testInstrumentationRunnerArguments.package=$pkgs"
     tests="-" failures="-" status=DRY
   else
-    rm -rf "$RESULTS_SRC"
-    if ! run "$EXAMPLE/android" ./gradlew "${GRADLE_ARGS[@]+"${GRADLE_ARGS[@]}"}" :danaview_editor_engine:connectedDebugAndroidTest \
-      "-Pandroid.testInstrumentationRunnerArguments.package=$pkgs"; then
-      status=FAIL
-    fi
+    for attempt in 1 2; do
+      status=PASS
+      emulator_ensure || true
+      rm -rf "$RESULTS_SRC"
+      if ! run "$EXAMPLE/android" ./gradlew "${GRADLE_ARGS[@]+"${GRADLE_ARGS[@]}"}" :danaview_editor_engine:connectedDebugAndroidTest \
+        "-Pandroid.testInstrumentationRunnerArguments.package=$pkgs"; then
+        status=FAIL
+      fi
+      # The emulator went away during the batch: relaunch it and run the batch once more.
+      if [ "$status" = FAIL ] && [ "$attempt" = 1 ] && ! emulator_booted; then
+        fail_note "the emulator stopped answering during batch $label; relaunching it and running the batch again"
+        emulator_ensure && continue
+      fi
+      break
+    done
     mkdir -p "$RESULTS_DST/$label"
     if [ -d "$RESULTS_SRC" ]; then cp -R "$RESULTS_SRC/." "$RESULTS_DST/$label/"; fi
     tests="$(xml_sum "$RESULTS_DST/$label" tests)"
@@ -289,10 +304,22 @@ else
       run "$EXAMPLE" flutter test "integration_test/$f" -d "$SERIAL" --no-uninstall ${D[@]+"${D[@]}"}
       status=DRY passed="-" failures="-" skipped="-"
     else
-      status=PASS
-      if ! (cd "$EXAMPLE" && flutter test "integration_test/$f" -d "$SERIAL" --no-uninstall ${D[@]+"${D[@]}"}) 2>&1 | tee "$logf"; then
-        status=FAIL
-      fi
+      for attempt in 1 2; do
+        status=PASS
+        emulator_ensure || true
+        if ! (cd "$EXAMPLE" && flutter test "integration_test/$f" -d "$SERIAL" --no-uninstall ${D[@]+"${D[@]}"}) 2>&1 | tee "$logf"; then
+          status=FAIL
+        fi
+        # The emulator went away during the suite: relaunch it (media pushed again) and rerun once.
+        if [ "$status" = FAIL ] && [ "$attempt" = 1 ] && ! emulator_booted; then
+          fail_note "the emulator stopped answering during integration_test/$f; relaunching it and running the suite again"
+          if emulator_ensure; then
+            if needs_media "$s"; then MEDIA_PUSHED=false; push_qa03_media; fi
+            continue
+          fi
+        fi
+        break
+      done
       read -r passed failures skipped < <(progress_counts "$logf")
       if [ "$status" = FAIL ]; then
         SUITES_FAILED=$((SUITES_FAILED + 1))
