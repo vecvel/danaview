@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_ui_kit/src/foundation/danaview_internal.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -21,47 +22,73 @@ void main() {
     expect(DanaviewColors.foregroundOn(DanaviewColors.boostBand), DanaviewColors.textOnLight);
   });
 
-  test('text tokens meet contrast targets on surfaces', () {
-    for (final bg in [DanaviewColors.surface, DanaviewColors.surfaceElevated, DanaviewColors.surfaceElevatedHigher]) {
-      expect(DanaviewColors.contrastRatio(DanaviewColors.textMuted, bg), greaterThanOrEqualTo(4.5));
-      expect(DanaviewColors.contrastRatio(DanaviewColors.textSecondary, bg), greaterThanOrEqualTo(4.5));
-    }
+  test('Cinema B values match DESIGN_SYSTEM.md §2 and §13', () {
+    expect(DanaviewColors.background, const Color(0xFF000000));
+    expect(DanaviewColors.surface, const Color(0xFF141414));
+    expect(DanaviewColors.surfaceElevated, const Color(0xFF222222));
+    expect(DanaviewColors.surfaceElevatedHigher, const Color(0xFF2A2A2C));
+    expect(DanaviewColors.primary, const Color(0xFFB20710));
+    expect(DanaviewColors.primaryLight, const Color(0xFFF2444D));
+    expect(DanaviewColors.success, const Color(0xFF30D158));
+    expect(DanaviewColors.warning, const Color(0xFFFFD60A));
+    expect(DanaviewColors.error, const Color(0xFFFF9F0A), reason: 'errors are orange: red is the accent');
+    expect(DanaviewColors.destructive, const Color(0xFFF2444D));
+    expect(DanaviewColors.textSecondary, const Color(0xFF9A9A9A));
+    expect(DanaviewColors.textMuted, const Color(0xFF6E6E6E));
+    expect(DanaviewColors.focusRing.withValues(alpha: 1), const Color(0xFFF2444D));
+    expect(DanaviewColors.focusRing.a, closeTo(0.55, 0.01));
     expect(
-      DanaviewColors.contrastRatio(DanaviewColors.primaryLight, Color.alphaBlend(DanaviewColors.primaryTonal, DanaviewColors.surface)),
-      greaterThanOrEqualTo(4.5),
+      [DanaviewRadius.xs, DanaviewRadius.tile, DanaviewRadius.thumb, DanaviewRadius.control, DanaviewRadius.media,
+        DanaviewRadius.card, DanaviewRadius.toast, DanaviewRadius.sheet],
+      [6, 8, 10, 12, 14, 16, 20, 24],
     );
+    expect(DanaviewRadius.sheetTop, const BorderRadius.vertical(top: Radius.circular(24)));
+  });
+
+  test('text tokens meet contrast targets on surfaces', () {
+    for (final bg in [DanaviewColors.background, DanaviewColors.surface, DanaviewColors.surfaceElevated, DanaviewColors.surfaceElevatedHigher]) {
+      expect(DanaviewColors.contrastRatio(DanaviewColors.textSecondary, bg), greaterThanOrEqualTo(4.5));
+      expect(DanaviewColors.contrastRatio(DanaviewColors.textPrimary, bg), greaterThanOrEqualTo(4.5));
+      // Placeholders and disabled labels (owner-approved #6E6E6E) stay legible.
+      expect(DanaviewColors.contrastRatio(DanaviewColors.textMuted, bg), greaterThanOrEqualTo(2.5));
+    }
     expect(DanaviewColors.contrastRatio(Colors.white, Colors.black), closeTo(21, 0.01));
   });
 
   test('every foreground/background pair the components draw meets its contrast target', () {
     double ratio(Color fg, Color bg) => DanaviewColors.contrastRatio(fg, bg);
-    const destructiveFill = Color(0x29EF4444);
 
     // Filled, text-bearing controls: primary button, selected chip and segment, secondary button.
-    expect(ratio(DanaviewColors.foregroundOn(DanaviewColors.primary), DanaviewColors.primary), greaterThanOrEqualTo(4.5));
-    expect(
-      ratio(DanaviewColors.foregroundOn(DanaviewColors.surfaceElevatedHigher), DanaviewColors.surfaceElevatedHigher),
-      greaterThanOrEqualTo(4.5),
-    );
+    expect(ratio(DanaviewColors.foregroundOn(DanaviewColors.primary), DanaviewColors.primary), greaterThanOrEqualTo(7));
+    for (final fill in [DanaviewColors.surfaceElevated, DanaviewColors.surfaceElevatedHigher]) {
+      expect(ratio(DanaviewColors.foregroundOn(fill), fill), greaterThanOrEqualTo(4.5));
+    }
+    // Red text on dark is primaryLight: 4.5:1 on the background and cards, 3:1 on raised items.
+    for (final page in [DanaviewColors.background, DanaviewColors.surface]) {
+      expect(ratio(DanaviewColors.primaryLight, page), greaterThanOrEqualTo(4.5));
+      expect(ratio(DanaviewColors.destructive, Color.alphaBlend(DanaviewColors.destructiveSoft, page)), greaterThanOrEqualTo(4.5));
+    }
     for (final page in [DanaviewColors.background, DanaviewColors.surface, DanaviewColors.surfaceElevated]) {
-      expect(ratio(DanaviewColors.primaryLight, Color.alphaBlend(DanaviewColors.primaryTonal, page)), greaterThanOrEqualTo(4.5));
-      expect(ratio(DanaviewColors.errorLight, Color.alphaBlend(destructiveFill, page)), greaterThanOrEqualTo(4.5));
+      expect(ratio(DanaviewColors.primaryLight, page), greaterThanOrEqualTo(3));
+      expect(ratio(DanaviewColors.primaryLight, Color.alphaBlend(DanaviewColors.primaryTonal, page)), greaterThanOrEqualTo(3));
       expect(ratio(DanaviewColors.textPrimary, Color.alphaBlend(DanaviewColors.primarySoft, page)), greaterThanOrEqualTo(4.5));
       expect(ratio(DanaviewColors.errorLight, page), greaterThanOrEqualTo(4.5));
+      expect(ratio(DanaviewColors.error, page), greaterThanOrEqualTo(4.5));
       expect(ratio(DanaviewColors.textSecondary, page), greaterThanOrEqualTo(4.5));
     }
     // Text fields and dropdown triggers, resting and focused/open.
-    for (final fill in [DanaviewColors.surfaceElevatedHigher, DanaviewColors.fieldActive]) {
-      for (final fg in [DanaviewColors.textPrimary, DanaviewColors.textSecondary, DanaviewColors.textMuted]) {
+    for (final fill in [DanaviewColors.surfaceElevated, DanaviewColors.fieldActive]) {
+      for (final fg in [DanaviewColors.textPrimary, DanaviewColors.textSecondary]) {
         expect(ratio(fg, fill), greaterThanOrEqualTo(4.5), reason: '$fg on $fill');
       }
-      expect(ratio(DanaviewColors.primaryLight, fill), greaterThanOrEqualTo(3));
+      expect(ratio(DanaviewColors.textMuted, fill), greaterThanOrEqualTo(2.5));
     }
   });
 
-  test('focus outlines stay soft', () {
-    expect(DanaviewBorders.focus.color.a, lessThanOrEqualTo(0.3));
-    expect(DanaviewBorders.focus.width, lessThanOrEqualTo(1));
+  test('the focus ring is the one coloured edge: primaryLight at 55 %, 2 pt', () {
+    expect(DanaviewBorders.focus.color, DanaviewColors.focusRing);
+    expect(DanaviewBorders.focus.color.a, closeTo(0.55, 0.01));
+    expect(DanaviewBorders.focus.width, 2);
   });
 
   test('shadows stay soft and borders stay hairline', () {
@@ -70,9 +97,73 @@ void main() {
       expect(shadow.spreadRadius, lessThanOrEqualTo(0));
       expect(shadow.color.a, lessThanOrEqualTo(0.35));
     }
-    expect(DanaviewColors.border.a, lessThanOrEqualTo(0.12));
-    expect(DanaviewColors.borderBright.a, lessThanOrEqualTo(0.12));
-    expect(DanaviewBorders.width, inInclusiveRange(0.5, 1.0));
+    expect(DanaviewShadows.card, hasLength(2));
+    expect(DanaviewShadows.raised, hasLength(1));
+    // No bright outlines (owner rule): every hairline is white at 12 % or less.
+    for (final c in [
+      DanaviewColors.hairline,
+      DanaviewColors.hairlineSubtle,
+      DanaviewColors.divider,
+      DanaviewColors.border,
+      DanaviewColors.borderBright,
+    ]) {
+      expect(c.a, lessThanOrEqualTo(0.125));
+    }
+    expect(DanaviewColors.hairline.a, closeTo(0.07, 0.005));
+    expect(DanaviewBorders.width, 0.5);
+  });
+
+  test('DanaviewDepth recipes carry the hairline, top highlight and shadows of §3', () {
+    final card = DanaviewDepth.card();
+    expect(card.color, DanaviewColors.surface);
+    expect(card.shadows, DanaviewShadows.card);
+    final border = card.shape as DanaviewDepthBorder;
+    expect(border.side, DanaviewBorders.hairline);
+    expect(border.highlight, DanaviewColors.highlight);
+    expect(border.borderRadius, DanaviewRadius.cardAll);
+    expect(border, isA<RoundedSuperellipseBorder>(), reason: 'continuous corners');
+
+    final primary = DanaviewDepth.primary();
+    expect(primary.color, DanaviewColors.primary);
+    expect((primary.shape as DanaviewDepthBorder).highlight.a, closeTo(0.18, 0.01));
+    expect(primary.shadows, DanaviewShadows.raised);
+
+    final tile = DanaviewDepth.iconTile();
+    expect(tile.color, DanaviewColors.surfaceElevatedHigher);
+    expect((tile.shape as DanaviewDepthBorder).side.color.a, closeTo(0.10, 0.01));
+    expect((tile.shape as DanaviewDepthBorder).highlight.a, closeTo(0.12, 0.01));
+    expect((tile.shape as DanaviewDepthBorder).borderRadius, DanaviewRadius.tileAll);
+  });
+
+  testWidgets('DanaviewDepthBorder paints its top highlight inside the shape', (tester) async {
+    final key = GlobalKey();
+    await tester.pumpWidget(Center(
+      child: RepaintBoundary(
+        key: key,
+        child: Container(
+          width: 80,
+          height: 40,
+          color: Colors.black,
+          child: const DecoratedBox(
+            decoration: ShapeDecoration(
+              color: Colors.black,
+              shape: DanaviewDepthBorder(borderRadius: DanaviewRadius.controlAll, highlight: Colors.white),
+            ),
+          ),
+        ),
+      ),
+    ));
+    final ro = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final bytes = (await tester.runAsync(() async {
+      final image = await ro.toImage();
+      final data = await image.toByteData();
+      image.dispose();
+      return data!;
+    }))!;
+    int red(int x, int y) => bytes.getUint8((y * 80 + x) * 4);
+    expect(red(40, 0), greaterThan(200), reason: 'top edge highlighted');
+    expect(red(40, 20), 0, reason: 'interior untouched');
+    expect(red(40, 39), 0, reason: 'no highlight at the bottom');
   });
 
   testWidgets('breakpoint extension follows window width', (tester) async {
@@ -100,7 +191,7 @@ void main() {
     const hover = DanaviewPressState(pressed: false, hovered: true, focused: false, enabled: true);
     const press = DanaviewPressState(pressed: true, hovered: true, focused: false, enabled: true);
     const focus = DanaviewPressState(pressed: false, hovered: false, focused: true, enabled: true);
-    for (final fill in [DanaviewColors.primary, DanaviewColors.surfaceElevatedHigher, DanaviewColors.fieldActive]) {
+    for (final fill in [DanaviewColors.primary, DanaviewColors.surfaceElevated, DanaviewColors.fieldActive]) {
       expect(danaviewInteractiveFill(fill, hover), fill);
       expect(danaviewInteractiveFill(fill, press), fill);
       expect(danaviewInteractiveFill(fill, focus), isNot(fill));
@@ -113,7 +204,7 @@ void main() {
       DanaviewPressState(pressed: false, hovered: false, focused: true, enabled: true),
       DanaviewPressState(pressed: true, hovered: false, focused: false, enabled: true),
     ];
-    for (final fill in [DanaviewColors.primary, DanaviewColors.surfaceElevatedHigher, DanaviewColors.fieldActive]) {
+    for (final fill in [DanaviewColors.primary, DanaviewColors.surfaceElevated, DanaviewColors.fieldActive]) {
       final label = DanaviewColors.foregroundOn(fill);
       for (final state in states) {
         final tinted = danaviewInteractiveFill(fill, state);

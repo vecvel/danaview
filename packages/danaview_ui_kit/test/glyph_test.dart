@@ -173,7 +173,6 @@ void main() {
         );
     for (final color in const [
       DanaviewColors.cyan,
-      DanaviewColors.primaryLight,
       DanaviewColors.errorLight,
       DanaviewColors.warning,
       DanaviewColors.textSecondary,
@@ -183,8 +182,10 @@ void main() {
       expect(alpha, inInclusiveRange(DanaviewGlyphPainter.backAlpha, DanaviewGlyphPainter.maxBackAlpha));
       expect(onTile(color, alpha), greaterThanOrEqualTo(3), reason: '$color');
     }
-    // Purple is too dark to reach 3:1 without losing the two tones; it gets the strongest plate.
+    // Purple and the Cinema B red are too dark to reach 3:1 without losing the two tones; they get
+    // the strongest plate (and §7 puts glyphs on neutral tiles anyway).
     expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.purple), DanaviewGlyphPainter.maxBackAlpha);
+    expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.primaryLight), DanaviewGlyphPainter.maxBackAlpha);
     expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.primaryLight),
         greaterThan(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.cyan)));
     // Only the colour's hue and lightness count, not its alpha.
@@ -418,7 +419,7 @@ void main() {
     await tester.pumpAndSettle();
     await expectSettled(DanaviewGlyphKind.folderOff, 22);
     final dialogGlyph = tester.widget<DanaviewGlyph>(find.byType(DanaviewGlyph));
-    expect(dialogGlyph.color, DanaviewColors.errorLight);
+    expect(dialogGlyph.color, DanaviewColors.destructive);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(await confirmed, isFalse);
@@ -623,7 +624,7 @@ void main() {
         expectInside(tester, glyphButton, surface.size);
       }
       expect(tester.getSize(find.descendant(of: find.byType(DanaviewEmptyState), matching: find.byType(DanaviewGlyph))),
-          const Size.square(26));
+          const Size.square(24));
     });
   }
 }

@@ -21,52 +21,130 @@ abstract final class DanaviewFonts {
 
 }
 
+/// Cinema B palette (docs/design/DESIGN_SYSTEM.md §2): true black, neutral greys, one deep red
+/// accent. Status colours never use red: errors are orange, and red text on dark is [primaryLight].
 abstract final class DanaviewColors {
-  static const Color background = Color(0xFF07080C);
-  static const Color surface = Color(0xFF0F1118);
-  static const Color surfaceElevated = Color(0xFF181B26);
-  static const Color surfaceElevatedHigher = Color(0xFF222636);
-  static const Color overlayDark = Color(0xD907080C);
-  static const Color cardGlass = Color(0xFF12141F);
+  /// Screen background: true black (OLED).
+  static const Color background = Color(0xFF000000);
+
+  /// Cards, grouped lists, the tab bar.
+  static const Color surface = Color(0xFF141414);
+
+  /// Raised items on a card: idle tab pills, fields, secondary buttons, toasts.
+  static const Color surfaceElevated = Color(0xFF222222);
+
+  /// Icon tiles, menus, popovers.
+  static const Color surfaceElevatedHigher = Color(0xFF2A2A2C);
+  static const Color overlayDark = Color(0xD9000000);
+
+  /// Retired glass card fill; now the same as [surface].
+  static const Color cardGlass = Color(0xFF141414);
+
+  /// Behind sheets and dialogs: black at 60 %.
   static const Color scrim = Color(0x99000000);
 
-  static const Color hairline = Color(0x14FFFFFF);
-  static const Color hairlineSubtle = Color(0x0DFFFFFF);
-  static const Color border = Color(0x1AFFFFFF);
-  static const Color borderBright = Color(0x1EFFFFFF);
+  /// Neutral tile behind a loading thumbnail (§2.5), with a 20 pt type icon in [textSecondary].
+  static const Color mediaPlaceholder = Color(0xFF1C1C1E);
 
+  /// 0.5 pt hairline around a surface: white at 7 %.
+  static const Color hairline = Color(0x12FFFFFF);
+
+  /// Inner tiles on a card: white at 5 %.
+  static const Color hairlineSubtle = Color(0x0DFFFFFF);
+
+  /// List dividers: white at 6 %, inset to start after the icon tile.
+  static const Color divider = Color(0x0FFFFFFF);
+
+  /// Icon-tile hairline: white at 10 %.
+  static const Color border = Color(0x1AFFFFFF);
+
+  /// Selected tab-pill hairline: white at 12 %.
+  static const Color borderBright = Color(0x1FFFFFFF);
+
+  /// 1 px inner top highlight on cards, secondary buttons and toolbar circles: white at 6 %.
+  static const Color highlight = Color(0x0FFFFFFF);
+
+  /// Top highlight on icon tiles: white at 12 %.
+  static const Color highlightTile = Color(0x1FFFFFFF);
+
+  /// Top highlight on the primary button and the selected tab pill: white at 18 %.
+  static const Color highlightStrong = Color(0x2EFFFFFF);
+
+  /// Owner rule: kit controls never paint hover or press. Kept for the keyboard-focus tint.
   static const Color hover = Color(0x0FFFFFFF);
   static const Color pressed = Color(0x1AFFFFFF);
 
-  /// White text on it stays above 4.5:1.
-  static const Color primary = Color(0xFF5E60EE);
-  static const Color primaryLight = Color(0xFF818CF8);
-  static const Color primaryDark = Color(0xFF4F46E5);
-  static const Color primaryTonal = Color(0x296366F1);
-  static const Color primarySoft = Color(0x1F6366F1);
-  static const Color focusRing = Color(0x476366F1);
+  /// Deep red: selected tab, primary button, progress, slider track, switch on. White text on it
+  /// is 7.2:1. Never use it for text on black; use [primaryLight].
+  static const Color primary = Color(0xFFB20710);
 
-  /// Focused field / open trigger: primary-tinted at the resting fill's luminance, so hints keep
-  /// their contrast.
-  static const Color fieldActive = Color(0xFF21243E);
+  /// Accent text and icons on dark: links, section actions, selected tab-bar item, active icon.
+  static const Color primaryLight = Color(0xFFF2444D);
+
+  /// Retired darker accent; now the same as [primary].
+  static const Color primaryDark = Color(0xFFB20710);
+
+  /// Red at 22 %: tonal fills.
+  static const Color primaryTonal = Color(0x38B20710);
+
+  /// Red at 16 %: selected-row wash, keyboard focus fill.
+  static const Color primarySoft = Color(0x29B20710);
+
+  /// Keyboard-only focus ring (2 pt): [primaryLight] at 55 %.
+  static const Color focusRing = Color(0x8CF2444D);
+
+  /// Focused field / open trigger: one step brighter than the resting [surfaceElevated] fill,
+  /// neutral (no accent outline or tint).
+  static const Color fieldActive = Color(0xFF2A2A2C);
   static const Color onPrimary = Color(0xFFFFFFFF);
+
+  /// Product hue (Camera logo fold). Not for app UI: use neutral or [primary] (§2.4).
   static const Color cyan = Color(0xFF06B6D4);
+
+  /// Product hue (Editor logo fold). Not for app UI: use neutral or [primary] (§2.4).
   static const Color purple = Color(0xFF8B5CF6);
 
+  /// Volume-slider boost band: keeps its orange/red meaning.
   static const Color boostBand = Color(0xFFF59E0B);
   static const Color boostBandHigh = Color(0xFFEF4444);
-  static const Color success = Color(0xFF10B981);
-  static const Color warning = Color(0xFFF59E0B);
-  static const Color error = Color(0xFFEF4444);
-  static const Color errorLight = Color(0xFFF87171);
+
+  /// Saved, done, connected.
+  static const Color success = Color(0xFF30D158);
+
+  /// Unsaved, attention, low storage.
+  static const Color warning = Color(0xFFFFD60A);
+
+  /// Failed, invalid input, audio clipping. Orange, because red is the accent.
+  static const Color error = Color(0xFFFF9F0A);
+
+  /// Error text and icons on dark surfaces.
+  static const Color errorLight = Color(0xFFFFB340);
+
+  /// Delete and remove actions (always with a trash icon and a confirm dialog).
+  static const Color destructive = Color(0xFFF2444D);
+
+  /// Fill behind a destructive button: [destructive] at 10 % (its label keeps 4.5:1 on cards).
+  static const Color destructiveSoft = Color(0x1AF2444D);
 
   static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFFA0A6BC);
-  static const Color textMuted = Color(0xFF8B91A9);
+
+  /// Metadata, idle tab labels, counts.
+  static const Color textSecondary = Color(0xFF9A9A9A);
+
+  /// Placeholders and disabled labels.
+  static const Color textMuted = Color(0xFF6E6E6E);
+
+  /// Chevrons in rows.
+  static const Color chevron = Color(0xFF5A5A5A);
+
+  /// Idle tab-bar items.
+  static const Color tabIdle = Color(0xFF8A8A8A);
   static const Color textOnLight = Color(0xFF0B0C10);
 
   static const Color bufferTrack = Color(0x47FFFFFF);
-  static const Color trackBackground = Color(0x29FFFFFF);
+
+  /// Inactive track of switches, sliders and progress: white at 18 %.
+  static const Color trackBackground = Color(0x2EFFFFFF);
 
   static const double disabledOpacity = 0.4;
 
@@ -89,13 +167,98 @@ abstract final class DanaviewColors {
   }
 }
 
+/// Type scale (§6). Figtree comes from the theme, so styles do not set a family.
+///
+/// The iOS-scale styles are [largeTitle], [sheetTitle], [sectionHeader], [rowTitle], [bodyLarge],
+/// [subhead], [sectionAction], [footnote], [captionStrong] and [tabLabel]. The older compact styles
+/// ([title], [headline], [body], [label], [caption], [micro]) keep their sizes so existing screens
+/// do not reflow; restyled screens move to the iOS-scale names.
 abstract final class DanaviewTextStyles {
+  /// 30 / 700, tracking -0.5: screen title ("Danaview" on Home, "Settings").
   static const TextStyle largeTitle = TextStyle(
-    fontSize: 22,
+    fontSize: 30,
     fontWeight: FontWeight.w700,
     letterSpacing: -0.5,
+    height: 1.15,
     color: DanaviewColors.textPrimary,
   );
+
+  /// 22 / 700: sheet and dialog titles (§6 `title`).
+  static const TextStyle sheetTitle = TextStyle(
+    fontSize: 22,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.4,
+    height: 1.2,
+    color: DanaviewColors.textPrimary,
+  );
+
+  /// 20 / 700: section headers on Home and tabs.
+  static const TextStyle sectionHeader = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.3,
+    height: 1.2,
+    color: DanaviewColors.textPrimary,
+  );
+
+  /// 17 / 600: card titles and list-row titles (§6 `headline`).
+  static const TextStyle rowTitle = TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.2,
+    height: 1.25,
+    color: DanaviewColors.textPrimary,
+  );
+
+  /// 17 / 400: body text and list rows (§6 `body`).
+  static const TextStyle bodyLarge = TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w400,
+    letterSpacing: -0.2,
+    height: 1.3,
+    color: DanaviewColors.textPrimary,
+  );
+
+  /// 15 / 400: secondary row text.
+  static const TextStyle subhead = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w400,
+    height: 1.3,
+    color: DanaviewColors.textSecondary,
+  );
+
+  /// 15 / 600 in [DanaviewColors.primaryLight]: section actions and text buttons ("See all").
+  static const TextStyle sectionAction = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
+    color: DanaviewColors.primaryLight,
+  );
+
+  /// 13 / 400 with tabular figures: metadata (duration · size).
+  static const TextStyle footnote = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    height: 1.3,
+    color: DanaviewColors.textSecondary,
+    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+  );
+
+  /// 12 / 500: badges and duration labels (§6 `caption`), tabular figures.
+  static const TextStyle captionStrong = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    color: DanaviewColors.textPrimary,
+    fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+  );
+
+  /// 11 / 500: tab-bar labels.
+  static const TextStyle tabLabel = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w500,
+    color: DanaviewColors.tabIdle,
+  );
+
   static const TextStyle title = TextStyle(
     fontSize: 17,
     fontWeight: FontWeight.w600,
@@ -140,7 +303,7 @@ abstract final class DanaviewTextStyles {
 abstract final class DanaviewTheme {
   static ThemeData get darkTheme {
     const outline = OutlineInputBorder(
-      borderRadius: DanaviewRadius.mdAll,
+      borderRadius: DanaviewRadius.controlAll,
       borderSide: DanaviewBorders.hairline,
     );
 
@@ -154,9 +317,9 @@ abstract final class DanaviewTheme {
         onPrimary: DanaviewColors.onPrimary,
         primaryContainer: DanaviewColors.primaryTonal,
         onPrimaryContainer: DanaviewColors.primaryLight,
-        secondary: DanaviewColors.cyan,
-        onSecondary: DanaviewColors.textOnLight,
-        tertiary: DanaviewColors.purple,
+        secondary: DanaviewColors.primaryLight,
+        onSecondary: DanaviewColors.textPrimary,
+        tertiary: DanaviewColors.textSecondary,
         surface: DanaviewColors.surface,
         onSurface: DanaviewColors.textPrimary,
         onSurfaceVariant: DanaviewColors.textSecondary,
@@ -167,7 +330,7 @@ abstract final class DanaviewTheme {
         surfaceContainerHighest: DanaviewColors.surfaceElevatedHigher,
         error: DanaviewColors.error,
         onError: DanaviewColors.textPrimary,
-        outline: DanaviewColors.border,
+        outline: DanaviewColors.hairline,
         outlineVariant: DanaviewColors.hairline,
         shadow: Colors.black,
         scrim: DanaviewColors.scrim,
@@ -221,7 +384,7 @@ abstract final class DanaviewTheme {
       ),
       textSelectionTheme: const TextSelectionThemeData(
         cursorColor: DanaviewColors.primary,
-        selectionColor: Color(0x596366F1),
+        selectionColor: Color(0x66F2444D),
         selectionHandleColor: DanaviewColors.primary,
       ),
       scrollbarTheme: const ScrollbarThemeData(
@@ -234,7 +397,7 @@ abstract final class DanaviewTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: DanaviewColors.surfaceElevatedHigher,
+        fillColor: DanaviewColors.surfaceElevated,
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         hintStyle: const TextStyle(fontSize: 15, color: DanaviewColors.textMuted),
@@ -254,6 +417,43 @@ abstract final class DanaviewTheme {
           for (final platform in TargetPlatform.values)
             platform: const CupertinoPageTransitionsBuilder(),
         },
+      ),
+      // Material fallbacks some screens still use, in the Cinema B look (§8).
+      dialogTheme: const DialogThemeData(
+        backgroundColor: DanaviewColors.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedSuperellipseBorder(borderRadius: DanaviewRadius.sheetAll, side: DanaviewBorders.hairline),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: DanaviewColors.surface,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: DanaviewColors.scrim,
+        shape: RoundedSuperellipseBorder(borderRadius: DanaviewRadius.sheetTop, side: DanaviewBorders.hairline),
+      ),
+      popupMenuTheme: const PopupMenuThemeData(
+        color: DanaviewColors.surfaceElevatedHigher,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedSuperellipseBorder(borderRadius: DanaviewRadius.mediaAll, side: DanaviewBorders.hairline),
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: DanaviewColors.surfaceElevated,
+        actionTextColor: DanaviewColors.primaryLight,
+        contentTextStyle: TextStyle(fontSize: 15, color: DanaviewColors.textPrimary),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedSuperellipseBorder(borderRadius: DanaviewRadius.toastAll, side: DanaviewBorders.hairline),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: DanaviewColors.primary,
+        linearTrackColor: DanaviewColors.trackBackground,
+        circularTrackColor: DanaviewColors.trackBackground,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: const WidgetStatePropertyAll<Color>(Colors.white),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? DanaviewColors.primary : DanaviewColors.trackBackground,
+        ),
+        trackOutlineColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
+        overlayColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
       ),
       sliderTheme: const SliderThemeData(
         activeTrackColor: DanaviewColors.primary,
