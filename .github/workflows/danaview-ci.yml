@@ -138,8 +138,9 @@ jobs:
     name: dart-core-benchmark
     if: github.event_name != 'schedule'
     # The core benchmark gate (CORE-35). benchmark/baseline.json is recorded on the dev Mac (Apple M2,
-    # 8 cores); no CI runner matches it, so run.dart scales the baseline and the ARCH §18.2 budgets by
-    # a host factor measured in the same run (benchmark/src/calibration.dart). ubuntu-latest because
+    # 8 cores); no CI runner matches it, so run.dart scales the baseline by a per-row-kind host factor
+    # measured in the same run (benchmark/src/calibration.dart). The absolute ARCH §18.2 budgets are
+    # device budgets, gated only with DV_PERF_STRICT=1 (dev Mac); CI gates regressions. ubuntu-latest because
     # its 4 vCPUs time steadily (p90/p50 1.03-1.25); the 3-vCPU macos-26 VM dart-core needs for its
     # JSON goldens is noisier (p90/p50 up to 1.7).
     runs-on: ubuntu-latest
