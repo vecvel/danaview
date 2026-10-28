@@ -79,7 +79,8 @@ abstract final class DanaviewColors {
   static const Color primary = Color(0xFFB20710);
 
   /// Accent text and icons on dark: links, section actions, selected tab-bar item, active icon.
-  static const Color primaryLight = Color(0xFFF2444D);
+  /// #FF5A62 keeps 4.5:1 on every surface up to [surfaceElevated] (5.2:1 there, 6.9:1 on black).
+  static const Color primaryLight = Color(0xFFFF5A62);
 
   /// Retired darker accent; now the same as [primary].
   static const Color primaryDark = Color(0xFFB20710);
@@ -91,7 +92,7 @@ abstract final class DanaviewColors {
   static const Color primarySoft = Color(0x29B20710);
 
   /// Keyboard-only focus ring (2 pt): [primaryLight] at 55 %.
-  static const Color focusRing = Color(0x8CF2444D);
+  static const Color focusRing = Color(0x8CFF5A62);
 
   /// Focused field / open trigger: one step brighter than the resting [surfaceElevated] fill,
   /// neutral (no accent outline or tint).
@@ -131,8 +132,8 @@ abstract final class DanaviewColors {
   /// Metadata, idle tab labels, counts.
   static const Color textSecondary = Color(0xFF9A9A9A);
 
-  /// Placeholders and disabled labels.
-  static const Color textMuted = Color(0xFF6E6E6E);
+  /// Placeholders and disabled labels. #8A8A8A keeps 4.5:1 on field fills ([surfaceElevated]).
+  static const Color textMuted = Color(0xFF8A8A8A);
 
   /// Chevrons in rows.
   static const Color chevron = Color(0xFF5A5A5A);

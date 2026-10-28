@@ -28,14 +28,14 @@ void main() {
     expect(DanaviewColors.surfaceElevated, const Color(0xFF222222));
     expect(DanaviewColors.surfaceElevatedHigher, const Color(0xFF2A2A2C));
     expect(DanaviewColors.primary, const Color(0xFFB20710));
-    expect(DanaviewColors.primaryLight, const Color(0xFFF2444D));
+    expect(DanaviewColors.primaryLight, const Color(0xFFFF5A62));
     expect(DanaviewColors.success, const Color(0xFF30D158));
     expect(DanaviewColors.warning, const Color(0xFFFFD60A));
     expect(DanaviewColors.error, const Color(0xFFFF9F0A), reason: 'errors are orange: red is the accent');
     expect(DanaviewColors.destructive, const Color(0xFFF2444D));
     expect(DanaviewColors.textSecondary, const Color(0xFF9A9A9A));
-    expect(DanaviewColors.textMuted, const Color(0xFF6E6E6E));
-    expect(DanaviewColors.focusRing.withValues(alpha: 1), const Color(0xFFF2444D));
+    expect(DanaviewColors.textMuted, const Color(0xFF8A8A8A));
+    expect(DanaviewColors.focusRing.withValues(alpha: 1), const Color(0xFFFF5A62));
     expect(DanaviewColors.focusRing.a, closeTo(0.55, 0.01));
     expect(
       [DanaviewRadius.xs, DanaviewRadius.tile, DanaviewRadius.thumb, DanaviewRadius.control, DanaviewRadius.media,
@@ -49,8 +49,9 @@ void main() {
     for (final bg in [DanaviewColors.background, DanaviewColors.surface, DanaviewColors.surfaceElevated, DanaviewColors.surfaceElevatedHigher]) {
       expect(DanaviewColors.contrastRatio(DanaviewColors.textSecondary, bg), greaterThanOrEqualTo(4.5));
       expect(DanaviewColors.contrastRatio(DanaviewColors.textPrimary, bg), greaterThanOrEqualTo(4.5));
-      // Placeholders and disabled labels (owner-approved #6E6E6E) stay legible.
-      expect(DanaviewColors.contrastRatio(DanaviewColors.textMuted, bg), greaterThanOrEqualTo(2.5));
+      // Placeholders and disabled labels (#8A8A8A): 4.5:1 up to the field fill, 4:1 on icon tiles.
+      expect(DanaviewColors.contrastRatio(DanaviewColors.textMuted, bg),
+          greaterThanOrEqualTo(bg == DanaviewColors.surfaceElevatedHigher ? 4.0 : 4.5));
     }
     expect(DanaviewColors.contrastRatio(Colors.white, Colors.black), closeTo(21, 0.01));
   });
@@ -63,9 +64,11 @@ void main() {
     for (final fill in [DanaviewColors.surfaceElevated, DanaviewColors.surfaceElevatedHigher]) {
       expect(ratio(DanaviewColors.foregroundOn(fill), fill), greaterThanOrEqualTo(4.5));
     }
-    // Red text on dark is primaryLight: 4.5:1 on the background and cards, 3:1 on raised items.
-    for (final page in [DanaviewColors.background, DanaviewColors.surface]) {
+    // Red text on dark is primaryLight: 4.5:1 on the background, cards and raised items.
+    for (final page in [DanaviewColors.background, DanaviewColors.surface, DanaviewColors.surfaceElevated]) {
       expect(ratio(DanaviewColors.primaryLight, page), greaterThanOrEqualTo(4.5));
+    }
+    for (final page in [DanaviewColors.background, DanaviewColors.surface]) {
       expect(ratio(DanaviewColors.destructive, Color.alphaBlend(DanaviewColors.destructiveSoft, page)), greaterThanOrEqualTo(4.5));
     }
     for (final page in [DanaviewColors.background, DanaviewColors.surface, DanaviewColors.surfaceElevated]) {
@@ -81,7 +84,9 @@ void main() {
       for (final fg in [DanaviewColors.textPrimary, DanaviewColors.textSecondary]) {
         expect(ratio(fg, fill), greaterThanOrEqualTo(4.5), reason: '$fg on $fill');
       }
-      expect(ratio(DanaviewColors.textMuted, fill), greaterThanOrEqualTo(2.5));
+      // Placeholders: 4.5:1 on the resting fill, 4:1 on the focused fill.
+      expect(ratio(DanaviewColors.textMuted, fill),
+          greaterThanOrEqualTo(fill == DanaviewColors.surfaceElevated ? 4.5 : 4.0));
     }
   });
 

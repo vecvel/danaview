@@ -40,7 +40,7 @@ radius or shadow.
 | `scrim` | `#000000` at 60 % | Behind sheets and dialogs |
 | `textPrimary` | `#FFFFFF` | Titles, body |
 | `textSecondary` | `#9A9A9A` | Metadata, idle tab labels, counts |
-| `textMuted` | `#6E6E6E` | Placeholders, disabled labels, chevrons (`#5A5A5A`) |
+| `textMuted` | `#8A8A8A` | Placeholders, disabled labels; chevrons use `#5A5A5A`. Lifted from `#6E6E6E` so placeholders reach 4.5:1 on the `#222222` field fill. |
 
 ### 2.2 Accent
 
@@ -48,9 +48,9 @@ radius or shadow.
 |---|---|---|
 | `primary` | `#B20710` | Selected tab, primary button, progress fill, slider track, switch on |
 | `onPrimary` | `#FFFFFF` | Text and icons on `primary` (contrast 7.2:1) |
-| `primaryLight` | `#F2444D` | Accent **text and icons on dark**: links, section actions, the selected tab-bar item, active toolbar icon |
+| `primaryLight` | `#FF5A62` | Accent **text and icons on dark**: links, section actions, the selected tab-bar item, active toolbar icon. Lifted from `#F2444D` so it keeps 4.5:1 on raised items too (5.2:1 on `#222222`, 6.9:1 on black). |
 | `primarySoft` | `#B20710` at 16 % | Selected row wash, keyboard focus fill |
-| `focusRing` | `#F2444D` at 55 % | Keyboard-only focus ring (2 pt) |
+| `focusRing` | `#FF5A62` (`primaryLight`) at 55 % | Keyboard-only focus ring (2 pt) |
 
 Rules:
 - At most **one filled red control per view**. Siblings are `surfaceElevated` with white text.
@@ -320,10 +320,10 @@ and desktops keep the editor and settings buttons in the top bar and have no tab
 | `surfaceElevated #181B26` | `#222222` |
 | `surfaceElevatedHigher #222636` | `#2A2A2C` |
 | `primary #5E60EE`, `primaryDark #4F46E5` | `#B20710` |
-| `primaryLight #818CF8` | `#F2444D` |
+| `primaryLight #818CF8` | `#FF5A62` (was `#F2444D` in the first Cinema B cut; lifted for 4.5:1 on raised items) |
 | `primaryTonal`, `primarySoft` (indigo washes) | red at 22 % / 16 % |
-| `focusRing` (indigo 28 %) | `#F2444D` at 55 % |
-| `textSecondary #A0A6BC`, `textMuted #8B91A9` (blue-grey) | `#9A9A9A`, `#6E6E6E` (neutral) |
+| `focusRing` (indigo 28 %) | `#FF5A62` at 55 % |
+| `textSecondary #A0A6BC`, `textMuted #8B91A9` (blue-grey) | `#9A9A9A`, `#8A8A8A` (neutral; `textMuted` lifted from `#6E6E6E` so placeholders reach 4.5:1 on `#222222`) |
 | `error #EF4444` | `#FF9F0A` (orange); `destructive` `#F2444D` |
 | `warning #F59E0B` | `#FFD60A` |
 | `success #10B981` | `#30D158` |

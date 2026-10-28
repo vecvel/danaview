@@ -174,6 +174,7 @@ void main() {
     for (final color in const [
       DanaviewColors.cyan,
       DanaviewColors.errorLight,
+      DanaviewColors.primaryLight,
       DanaviewColors.warning,
       DanaviewColors.textSecondary,
       DanaviewColors.textPrimary,
@@ -182,11 +183,11 @@ void main() {
       expect(alpha, inInclusiveRange(DanaviewGlyphPainter.backAlpha, DanaviewGlyphPainter.maxBackAlpha));
       expect(onTile(color, alpha), greaterThanOrEqualTo(3), reason: '$color');
     }
-    // Purple and the Cinema B red are too dark to reach 3:1 without losing the two tones; they get
-    // the strongest plate (and §7 puts glyphs on neutral tiles anyway).
+    // Purple and the darker Cinema B reds are too dark to reach 3:1 without losing the two tones;
+    // they get the strongest plate (and §7 puts glyphs on neutral tiles anyway).
     expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.purple), DanaviewGlyphPainter.maxBackAlpha);
-    expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.primaryLight), DanaviewGlyphPainter.maxBackAlpha);
-    expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.primaryLight),
+    expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.destructive), DanaviewGlyphPainter.maxBackAlpha);
+    expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.destructive),
         greaterThan(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.cyan)));
     // Only the colour's hue and lightness count, not its alpha.
     expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.purple.withValues(alpha: 0.4)), DanaviewGlyphPainter.maxBackAlpha);
