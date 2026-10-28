@@ -47,6 +47,20 @@ Finder _glyphIn(String text, DanaviewGlyphKind kind, {Type within = DanaviewPres
       matching: find.byWidgetPredicate((w) => w is DanaviewGlyph && w.kind == kind),
     );
 
+/// Taps the quick action [label]: the empty Home's button, else the row of the top bar's Import
+/// (+) menu (DESIGN_SYSTEM §10.1).
+Future<void> _tapQuickAction(WidgetTester tester, String label) async {
+  final button = find.descendant(of: find.byKey(const ValueKey('home-empty-state')), matching: find.text(label));
+  if (button.evaluate().isEmpty) {
+    await tester.tap(find.byTooltip(HomeChromeLabels.import));
+    await pumpFrames(tester);
+    await tester.tap(find.text(label).last);
+  } else {
+    await tester.tap(button);
+  }
+  await pumpFrames(tester);
+}
+
 Future<void> _finish(WidgetTester tester, LibraryTestEnv env) async {
   DanaviewToast.dismiss();
   await tester.pumpWidget(const SizedBox());
@@ -85,7 +99,8 @@ void main() {
         ));
         await pumpFrames(tester);
         expect(tester.takeException(), isNull);
-        expect(find.text('Open file'), findsOneWidget);
+        // Open file is a row of the top bar's Import menu once the Home has content.
+        expect(find.byTooltip(HomeChromeLabels.import), findsOneWidget);
         expect(find.text('Continue watching'), findsOneWidget);
 
         await _tapShowAll(tester);
@@ -105,7 +120,10 @@ void main() {
         ));
         await pumpFrames(tester);
         expect(tester.takeException(), isNull);
-        expect(find.text('No playlists yet'), findsOneWidget);
+        // One empty state with the quick actions instead of an empty state per section.
+        expect(find.byKey(const ValueKey('home-empty-state')), findsOneWidget);
+        expect(find.text('Open file'), findsOneWidget);
+        expect(find.text('No playlists yet'), findsNothing);
         await _scrollThrough(tester);
         await _finish(tester, env);
       });
@@ -216,7 +234,7 @@ void main() {
         return opacity;
       }
 
-      final row = find.ancestor(of: subtitle, matching: find.byType(Row)).last;
+      final row = find.ancestor(of: subtitle, matching: find.byType(HomeMediaCard)).first;
       final title = find.descendant(of: row, matching: find.textContaining('Missing Movie'));
       final leading = find.descendant(of: row, matching: find.byType(Icon)).first;
       expect(opacityOf(leading), lessThan(1));
@@ -319,7 +337,9 @@ void main() {
       await tester.tap(find.widgetWithText(DanaviewButton, 'Delete'));
       await pumpFrames(tester);
       expect(env.library.getSavedPlaylistNames(), isEmpty);
-      expect(find.text('No playlists yet'), findsOneWidget);
+      // The Home hides the now-empty Playlists section (DESIGN_SYSTEM §10.3).
+      expect(find.text('Movies'), findsNothing);
+      expect(find.text('Playlists'), findsNothing);
       expect(File(joinPath([tree.path, 'Movie 1 - $longTitle.mp4'])).existsSync(), isTrue);
       await _finish(tester, env);
     });
@@ -392,7 +412,7 @@ void main() {
   });
 
   group('Home glyphs', () {
-    testWidgets('quick actions and the empty Folders section draw the folder glyphs', (tester) async {
+    testWidgets('the quick actions and the Import menu draw the folder glyphs', (tester) async {
       useSurface(tester, librarySurfaces[4]);
       final env = await LibraryTestEnv.create();
       await tester.pumpWidget(libraryTestApp(
@@ -408,10 +428,12 @@ void main() {
         ),
         findsOneWidget,
       );
-      await tester.scrollUntilVisible(find.text('No folders yet'), 300, scrollable: find.byType(Scrollable).first);
+      // The empty Home hides the empty Folders section; Add folder is a row of the Import menu.
+      expect(find.text('No folders yet'), findsNothing);
+      await tester.tap(find.byTooltip(HomeChromeLabels.import));
       await pumpFrames(tester);
-      expect(_glyphIn('No folders yet', DanaviewGlyphKind.folderVideo, within: DanaviewSurface), findsOneWidget);
-      expect(_glyphIn('Add folder', DanaviewGlyphKind.folderAdd, within: DanaviewButton), findsOneWidget);
+      expect(_glyphIn('Add folder', DanaviewGlyphKind.folderAdd), findsOneWidget);
+      expect(_glyphIn('Open folder', DanaviewGlyphKind.folderOpen), findsWidgets);
       expect(tester.takeException(), isNull);
       await _finish(tester, env);
     });
@@ -736,14 +758,14 @@ void main() {
       await container.read(queueControllerProvider.notifier).playFrom([item]);
       await pumpFrames(tester);
 
-      expect(find.text('NOW PLAYING'), findsOneWidget);
+      expect(find.text('Now playing'), findsOneWidget);
       expect(find.byTooltip('Clear'), findsOneWidget);
 
       // Simulate player error
       engine.emitMockError(const UnsupportedFormat('stream.m3u8', details: 'Unrecognized'));
       await pumpFrames(tester);
 
-      expect(find.text('COULD NOT PLAY'), findsOneWidget);
+      expect(find.text("Couldn't play"), findsOneWidget);
       expect(find.byTooltip('Retry'), findsOneWidget);
       expect(find.byIcon(Icons.error_outline_rounded), findsWidgets);
 
@@ -751,8 +773,8 @@ void main() {
       await tester.tap(find.byTooltip('Clear'));
       await pumpFrames(tester);
 
-      expect(find.text('COULD NOT PLAY'), findsNothing);
-      expect(find.text('NOW PLAYING'), findsNothing);
+      expect(find.text("Couldn't play"), findsNothing);
+      expect(find.text('Now playing'), findsNothing);
 
       await engine.dispose();
       await _finish(tester, env);
@@ -773,7 +795,7 @@ void main() {
       final container = ProviderScope.containerOf(tester.element(find.byType(DanaviewHomeScreen)));
       await container.read(queueControllerProvider.notifier).playFrom([item]);
       await pumpFrames(tester);
-      await tester.tap(find.text('NOW PLAYING'));
+      await tester.tap(find.text('Now playing'));
       await pumpFrames(tester);
       expect(opened, 1);
       expect(container.read(queueControllerProvider).items, [item]);
@@ -794,6 +816,8 @@ void main() {
       await tester.scrollUntilVisible(find.textContaining('Missing Movie'), 300, scrollable: find.byType(Scrollable).first);
       expect(find.textContaining('Missing Movie'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('Show less'), 300, scrollable: find.byType(Scrollable).first);
+      // scrollUntilVisible jumps without a frame; lay out the new offset before tapping.
+      await tester.pump();
       await tester.tap(find.text('Show less'));
       await pumpFrames(tester);
       expect(find.text('Show all 11'), findsOneWidget);
@@ -822,8 +846,7 @@ void main() {
         'mms://broadcast.example.com/live',
       ];
       for (final link in links) {
-        await tester.tap(find.text('Open link'));
-        await pumpFrames(tester);
+        await _tapQuickAction(tester, 'Open link');
         await tester.enterText(find.byType(EditableText), link);
         await tester.tap(find.widgetWithText(DanaviewButton, 'Play'));
         await pumpFrames(tester);

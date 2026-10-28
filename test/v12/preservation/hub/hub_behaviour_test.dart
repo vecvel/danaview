@@ -2,7 +2,9 @@
 //
 // BUILD_PLAN HOM-06 (FILES_MEDIA_HOME_PLAN P-1, P-2, P-3, P-7; ARCH v1.2 V2-32): the Now Playing
 // card, Continue watching and the quick actions behave exactly as in 1.1 with DANAVIEW_FILES_HOME
-// off and in the `Home` tab with it on. Each behaviour runs under both flag values; the callback
+// off and in the `Home` tab with it on. Since the Cinema B Home (DESIGN_SYSTEM §10) Continue
+// watching is a row of media cards and the quick actions are the Import (+) menu's first rows
+// (the buttons of the empty Home's one empty state). Each behaviour runs under both flag values; the callback
 // test replays one script of hub actions under both and requires the same transcript (every
 // callback receives the same MediaRef as in 1.1).
 
@@ -10,7 +12,7 @@ import 'dart:io';
 
 import 'package:danaview_domain/danaview_domain.dart';
 import 'package:danaview_features/src/library/library_format.dart';
-import 'package:danaview_features/src/library/library_widgets.dart';
+import 'package:danaview_features/danaview_features.dart' show HomeMediaCard;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,6 +28,9 @@ Future<void> _scrollTo(WidgetTester tester, Finder finder, {required bool filesH
 }
 
 Future<void> _menu(WidgetTester tester, int row, String item) async {
+  // Continue watching is a sideways row of cards: bring the card's menu into view first.
+  await tester.ensureVisible(recentMenu(row));
+  await tester.pump();
   await tester.tap(recentMenu(row));
   await pumpFrames(tester);
   await tester.tap(find.text(item));
@@ -33,8 +38,7 @@ Future<void> _menu(WidgetTester tester, int row, String item) async {
 }
 
 Future<void> _openLink(WidgetTester tester, String link) async {
-  await tester.tap(find.text('Open link'));
-  await pumpFrames(tester);
+  await tapQuickAction(tester, 'Open link');
   await tester.enterText(find.byType(EditableText), link);
   await tester.tap(find.widgetWithText(DanaviewButton, 'Play'));
   await pumpFrames(tester);
@@ -47,7 +51,9 @@ Future<List<Object?>> _runScript(WidgetTester tester, Directory tree, {required 
   final log = <Object?>[];
   void record(String step) => log.add([step, calls.playerOpens, List.of(hubQueue(tester)), List.of(calls.folders)]);
 
-  // P-2: tap a row, then the row menu's Play.
+  // P-2: tap a card, then the card menu's Play.
+  await tester.ensureVisible(find.textContaining('Show.S01E02'));
+  await tester.pump();
   await tester.tap(find.textContaining('Show.S01E02'));
   await pumpFrames(tester);
   record('tap row');
@@ -77,11 +83,9 @@ Future<List<Object?>> _runScript(WidgetTester tester, Directory tree, {required 
   // P-3: Open file and Open folder (host is desktop: the folder picker is shown).
   final picked = joinPath([tree.path, 'Season 1', 'Show.S01E08.$longTitle.mkv']);
   fakeFileSelector(files: [picked], directory: joinPath([tree.path, 'Season 1']));
-  await tester.tap(find.text('Open file'));
-  await pumpFrames(tester);
+  await tapQuickAction(tester, 'Open file');
   record('open file');
-  await tester.tap(find.text('Open folder'));
-  await pumpFrames(tester);
+  await tapQuickAction(tester, 'Open folder');
   record('open folder');
   log.add(['folders', env.library.getFolders().map((f) => f.path).toList()]);
 
@@ -135,9 +139,9 @@ void main() {
       testWidgets('P-1: Now Playing shows the current media and a tap returns to the player', (tester) async {
         final calls = HubCalls();
         final env = await pumpHub(tester, filesHome: on, tree: tree, calls: calls, seed: false);
-        expect(find.text('NOW PLAYING'), findsNothing);
+        expect(find.text('Now playing'), findsNothing);
         await startPlaying(tester, hubStream);
-        expect(find.text('NOW PLAYING'), findsOneWidget);
+        expect(find.text('Now playing'), findsOneWidget);
         expect(find.descendant(of: nowPlayingCard, matching: find.text(hubStream.title)), findsOneWidget);
         final semantics = tester.ensureSemantics();
         expect(find.bySemanticsLabel(RegExp('^${RegExp.escape('Now playing: ${hubStream.title}. Open player')}')), findsOneWidget);
@@ -151,8 +155,8 @@ void main() {
 
       testWidgets('P-2: progress bars, resume points and episode badges', (tester) async {
         final env = await pumpHub(tester, filesHome: on, tree: tree);
-        final rows = tester.widgetList<DanaviewLibraryRow>(
-          find.descendant(of: continueWatchingRows, matching: find.byType(DanaviewLibraryRow)),
+        final rows = tester.widgetList<HomeMediaCard>(
+          find.descendant(of: continueWatchingRows, matching: find.byType(HomeMediaCard)),
         ).toList();
         expect(rows, hasLength(6));
         expect([for (final r in rows) r.badge], ['S01E01', 'S01E02', 'S01E03', 'S01E04', 'S01E05', 'S01E06']);
@@ -160,6 +164,7 @@ void main() {
           final position = Duration(minutes: 5 + i * 7);
           expect(rows[i].progress, closeTo(position.inSeconds / (52 * 60), 1e-9), reason: 'row $i');
           expect(rows[i].subtitle, '${formatShortDuration(const Duration(minutes: 52) - position)} left');
+          expect(rows[i].duration, '52:00', reason: 'row $i');
         }
         expect(rows[4].progress ?? 0, 0);
         await finishHome(tester, env);
@@ -168,7 +173,7 @@ void main() {
       testWidgets('P-2: Show all N expands to every entry and Show less collapses', (tester) async {
         final env = await pumpHub(tester, filesHome: on, tree: tree);
         Iterable<Element> rows() =>
-            find.descendant(of: continueWatchingRows, matching: find.byType(DanaviewLibraryRow)).evaluate();
+            find.descendant(of: continueWatchingRows, matching: find.byType(HomeMediaCard)).evaluate();
         expect(find.text('Show all 10'), findsOneWidget);
         expect(rows(), hasLength(6));
         await _scrollTo(tester, find.text('Show all 10'), filesHome: on);
@@ -185,6 +190,8 @@ void main() {
 
       testWidgets('P-2: the item menu lists Play, Add to playlist…, Remove from history', (tester) async {
         final env = await pumpHub(tester, filesHome: on, tree: tree);
+        await tester.ensureVisible(recentMenu(0));
+        await tester.pump();
         await tester.tap(recentMenu(0));
         await pumpFrames(tester);
         for (final item in ['Play', 'Add to playlist…', 'Remove from history']) {
@@ -230,13 +237,36 @@ void main() {
         await finishHome(tester, env);
       });
 
-      testWidgets('P-3: the three quick actions stay in place in 1.1 order', (tester) async {
-        final env = await pumpHub(tester, filesHome: on, tree: tree);
-        for (final label in ['Open file', 'Open folder', 'Open link']) {
-          expect(find.descendant(of: quickActions, matching: find.text(label)), findsOneWidget, reason: label);
+      testWidgets('P-3: the three quick actions keep 1.1 order: Import menu rows, empty-state buttons', (tester) async {
+        var env = await pumpHub(tester, filesHome: on, tree: tree);
+        // With content the quick actions are the first rows of the top bar's Import (+) menu.
+        expect(quickActions, findsNothing);
+        await tester.tap(importButton);
+        await pumpFrames(tester);
+        final ys = [for (final label in ['Open file', 'Open folder', 'Open link']) tester.getCenter(find.text(label)).dy];
+        expect(ys[0], lessThan(ys[1]));
+        expect(ys[1], lessThan(ys[2]));
+        for (final label in ['New playlist', 'Add folder']) {
+          expect(find.text(label), findsOneWidget, reason: label);
         }
-        // Quick actions sit right under the (hidden) Now Playing card, above Continue watching.
-        expect(tester.getTopLeft(quickActions).dy, lessThan(tester.getTopLeft(continueWatchingHeader).dy));
+        await tester.tapAt(Offset.zero);
+        await pumpFrames(tester);
+        await finishHome(tester, env);
+
+        // An empty Home shows them as one empty state's buttons, in the same order.
+        env = await pumpHub(tester, filesHome: on, tree: tree, seed: false);
+        expect(homeEmptyState, findsOneWidget);
+        // In reading order: side by side when they fit, else stacked.
+        final at = [
+          for (final label in ['Open file', 'Open folder', 'Open link'])
+            tester.getCenter(find.descendant(of: quickActions, matching: find.text(label))),
+        ];
+        for (var i = 1; i < at.length; i++) {
+          final before = at[i - 1].dy < at[i].dy || (at[i - 1].dy == at[i].dy && at[i - 1].dx < at[i].dx);
+          expect(before, isTrue, reason: 'quick action $i is out of order');
+        }
+        expect(find.text('Continue watching'), findsNothing);
+        expect(find.text('Playlists'), findsNothing);
         await finishHome(tester, env);
       });
 
@@ -244,10 +274,8 @@ void main() {
         final calls = HubCalls();
         final env = await pumpHub(tester, filesHome: on, tree: tree, calls: calls);
         fakeFileSelector();
-        await tester.tap(find.text('Open file'));
-        await pumpFrames(tester);
-        await tester.tap(find.text('Open folder'));
-        await pumpFrames(tester);
+        await tapQuickAction(tester, 'Open file');
+        await tapQuickAction(tester, 'Open folder');
         expect(calls.playerOpens, 0);
         expect(calls.folders, isEmpty);
         expect(hubQueue(tester), isEmpty);
@@ -263,8 +291,7 @@ void main() {
         }
         expect(calls.playerOpens, hubProtocolLinks.length);
 
-        await tester.tap(find.text('Open link'));
-        await pumpFrames(tester);
+        await tapQuickAction(tester, 'Open link');
         await tester.enterText(find.byType(EditableText), 'ftp://files.example.com/movie.mp4');
         await tester.tap(find.widgetWithText(DanaviewButton, 'Play'));
         await pumpFrames(tester);
