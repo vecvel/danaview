@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../foundation/danaview_internal.dart';
+import '../theme/danaview_depth.dart';
 import '../theme/danaview_theme.dart';
 import '../theme/danaview_tokens.dart';
 import 'danaview_icon_button.dart';
@@ -362,7 +363,7 @@ class _DanaviewNumberFieldState extends State<DanaviewNumberField> {
         cursorColor: DanaviewColors.primary,
         cursorRadius: const Radius.circular(2),
         backgroundCursorColor: DanaviewColors.textMuted,
-        selectionColor: const Color(0x596366F1),
+        selectionColor: const Color(0x66F2444D),
         selectionControls: _selectionControls(context),
         maxLines: 1,
         textAlign: unit == null ? TextAlign.center : TextAlign.end,
@@ -386,14 +387,11 @@ class _DanaviewNumberFieldState extends State<DanaviewNumberField> {
       curve: DanaviewMotion.curve,
       constraints: const BoxConstraints(minHeight: 40),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      decoration: BoxDecoration(
-        color: focused ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevatedHigher,
-        borderRadius: DanaviewRadius.mdAll,
+      decoration: ShapeDecoration(
+        color: focused ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevated,
+        shape: DanaviewDepth.shape(DanaviewRadius.controlAll),
       ),
-      foregroundDecoration: const BoxDecoration(
-        borderRadius: DanaviewRadius.mdAll,
-        border: Border.fromBorderSide(DanaviewBorders.hairline),
-      ),
+      foregroundDecoration: ShapeDecoration(shape: DanaviewDepth.border(borderRadius: DanaviewRadius.controlAll)),
       child: LayoutBuilder(
         builder: (context, box) {
           // The unit takes its own width, at most a third of the box; an equal-flex Flexible here

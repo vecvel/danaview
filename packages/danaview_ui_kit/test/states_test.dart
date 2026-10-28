@@ -11,25 +11,28 @@ AnimatedContainer _frame(WidgetTester tester, Type owner) => tester.widget<Anima
     );
 
 Color _borderColor(AnimatedContainer frame) =>
-    ((frame.foregroundDecoration! as BoxDecoration).border! as Border).top.color;
+    ((frame.foregroundDecoration! as ShapeDecoration).shape as OutlinedBorder).side.color;
 
-Color _fill(AnimatedContainer frame) => (frame.decoration! as BoxDecoration).color!;
+Color _fill(AnimatedContainer frame) => (frame.decoration! as ShapeDecoration).color!;
 
 void main() {
   testWidgets('text field keeps its hint readable and its outline soft in every state', (tester) async {
     final focus = FocusNode();
     addTearDown(focus.dispose);
     await pumpKit(tester, _phone, DanaviewTextField(focusNode: focus, hint: 'Search'));
+    // §2.1: placeholders are textMuted (#6E6E6E); on the field fills they keep 2.5:1 at least,
+    // which the owner accepted for placeholder text. Typed text is white.
     const hint = DanaviewColors.textMuted;
 
     var frame = _frame(tester, DanaviewTextField);
-    expect(DanaviewColors.contrastRatio(hint, _fill(frame)), greaterThanOrEqualTo(4.5));
+    expect(_fill(frame), DanaviewColors.surfaceElevated);
+    expect(DanaviewColors.contrastRatio(hint, _fill(frame)), greaterThanOrEqualTo(2.5));
 
     focus.requestFocus();
     await tester.pumpAndSettle();
     frame = _frame(tester, DanaviewTextField);
     expect(_fill(frame), DanaviewColors.fieldActive);
-    expect(DanaviewColors.contrastRatio(hint, _fill(frame)), greaterThanOrEqualTo(4.5));
+    expect(DanaviewColors.contrastRatio(hint, _fill(frame)), greaterThanOrEqualTo(2.5));
     expect(_borderColor(frame).a, lessThanOrEqualTo(0.3));
     expect(_borderColor(frame), DanaviewColors.hairline, reason: 'focus shows as the fill, not a primary outline');
 
@@ -70,12 +73,12 @@ void main() {
           of: find.byType(DanaviewNumberField),
           matching: find.byWidgetPredicate((w) => w is AnimatedContainer && w.constraints?.minHeight == 40),
         ));
-    Border border() => (frame().foregroundDecoration! as BoxDecoration).border! as Border;
-    expect(border(), const Border.fromBorderSide(DanaviewBorders.hairline));
+    BorderSide border() => ((frame().foregroundDecoration! as ShapeDecoration).shape as OutlinedBorder).side;
+    expect(border(), DanaviewBorders.hairline);
     await tester.tap(find.byType(EditableText));
     await tester.pumpAndSettle();
     expect(_fill(frame()), DanaviewColors.fieldActive, reason: 'the field is focused');
-    expect(border(), const Border.fromBorderSide(DanaviewBorders.hairline), reason: 'focus shows as the fill, not a primary outline');
+    expect(border(), DanaviewBorders.hairline, reason: 'focus shows as the fill, not a primary outline');
     expectNoErrors(tester);
   });
 

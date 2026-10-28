@@ -55,12 +55,13 @@ void main() {
       final keys = ['text', 'search', 'button', 'dropdown', 'icon'];
       expectEqualRowHeights(tester, [for (final k in keys) find.byKey(ValueKey(k))], height: DanaviewSpacing.controlHeight);
 
-      BoxDecoration deco(String k) => controlFrameWidget(tester, find.byKey(ValueKey(k))).decoration! as BoxDecoration;
+      ShapeBorder shape(String k) => (controlFrameWidget(tester, find.byKey(ValueKey(k))).decoration! as ShapeDecoration).shape;
+      BorderRadiusGeometry radius(String k) => (shape(k) as RoundedSuperellipseBorder).borderRadius;
       for (final k in ['search', 'button', 'dropdown']) {
-        expect(deco(k).borderRadius, deco('text').borderRadius, reason: '$k radius');
+        expect(radius(k), radius('text'), reason: '$k radius');
       }
-      expect(deco('text').borderRadius, DanaviewRadius.mdAll);
-      expect(deco('icon').shape, BoxShape.circle);
+      expect(radius('text'), DanaviewRadius.controlAll);
+      expect(shape('icon'), isA<CircleBorder>());
       expect(tester.takeException(), isNull);
     });
   }

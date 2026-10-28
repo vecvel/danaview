@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../foundation/danaview_internal.dart';
+import '../theme/danaview_depth.dart';
 import '../theme/danaview_theme.dart';
 import '../theme/danaview_tokens.dart';
 import 'danaview_button.dart';
@@ -147,10 +148,8 @@ class DanaviewDialog extends StatelessWidget {
           width: 44,
           height: 44,
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.16),
-            borderRadius: DanaviewRadius.mdAll,
-          ),
+          // Neutral icon tile (§7); the glyph carries any status colour.
+          decoration: DanaviewDepth.iconTile(borderRadius: DanaviewRadius.controlAll),
           child: danaviewIconOrGlyph(icon, glyph, size: 22, color: iconColor),
         ),
         const SizedBox(height: 14),
@@ -158,11 +157,11 @@ class DanaviewDialog extends StatelessWidget {
       if (title != null)
         Semantics(
           header: true,
-          child: Text(title!, style: DanaviewTextStyles.title),
+          child: Text(title!, style: DanaviewTextStyles.sheetTitle),
         ),
       if (message != null) ...[
         if (title != null) const SizedBox(height: 6),
-        Text(message!, style: DanaviewTextStyles.bodySecondary),
+        Text(message!, style: DanaviewTextStyles.subhead),
       ],
       if (content != null) ...[
         if (title != null || message != null) const SizedBox(height: 16),
@@ -173,7 +172,8 @@ class DanaviewDialog extends StatelessWidget {
     return ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxWidth),
       child: DanaviewSurface(
-        borderRadius: DanaviewRadius.dialogAll,
+        color: DanaviewColors.surface,
+        borderRadius: DanaviewRadius.sheetAll,
         shadow: DanaviewShadow.soft,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -216,7 +216,7 @@ Future<bool> showDanaviewConfirm(
     builder: (context) => DanaviewDialog(
       icon: icon,
       glyph: glyph,
-      iconColor: destructive ? DanaviewColors.errorLight : DanaviewColors.primaryLight,
+      iconColor: destructive ? DanaviewColors.destructive : DanaviewColors.primaryLight,
       title: title,
       message: message,
       actions: [

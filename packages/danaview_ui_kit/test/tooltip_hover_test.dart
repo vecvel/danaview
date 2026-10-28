@@ -103,7 +103,7 @@ void main() {
     await pumpButton(tester, TargetPlatform.macOS);
     Color? fill() {
       final box = find.descendant(of: find.byType(DanaviewIconButton), matching: find.byType(AnimatedContainer)).first;
-      return ((tester.widget<AnimatedContainer>(box).decoration) as BoxDecoration?)?.color;
+      return (tester.widget<AnimatedContainer>(box).decoration as ShapeDecoration?)?.color;
     }
 
     final before = fill();
