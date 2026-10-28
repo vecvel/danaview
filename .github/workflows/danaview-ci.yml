@@ -459,7 +459,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
-          [ -r /dev/kvm ] && [ -w /dev/kvm ] || { echo "::error title=KVM::/dev/kvm is not accessible"; exit 1; }
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then echo "::error title=KVM::/dev/kvm is not accessible"; exit 1; fi
       - name: Set up Java
         if: steps.script.outputs.present == 'true'
         uses: actions/setup-java@v6
