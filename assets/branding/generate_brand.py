@@ -19,7 +19,9 @@ Construction (1024 grid, glyph centred on 512,512):
               The flap's free edges AC and CB form the v (90 deg, tilted 10).
   knockout    page is cut 44 around the flap; flap drawn with its fold edge
               set 20 in from AB and a 4 round stroke -> 40 visible gap.
-  flap tone   #C9CBFF on the indigo tile (or the product accent).
+  flap tone   #E50914 on the black tile (or the product accent).
+Colourway R3 (owner, 2026-10-29): tile #2A2A2A -> #0A0A0A, 0.5 pt (8/1024) edge in white at 14%,
+top highlight band in white at 5%, white page, red fold.
 """
 import math, os, subprocess, base64, shutil, sys, tempfile
 
@@ -28,8 +30,12 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 RSVG = "/opt/homebrew/bin/rsvg-convert"
 MAGICK = "/opt/homebrew/bin/magick"
 
-GRAD = ("#7C7FF5", "#5141DD")
-FLAP = "#C9CBFF"
+GRAD = ("#2A2A2A", "#0A0A0A")
+TILE_SOLID = "#0A0A0A"     # opaque matte for flattened PNGs
+FLAP = "#E50914"
+EDGE_W, EDGE_OPACITY = 8, 0.14   # hairline at icon scale (0.5 pt), inside the tile outline
+BAND_OPACITY = 0.05             # top highlight band
+LIGHT_TEXT = "#0B0C10"         # lockup word on light
 PRODUCTS = [  # file, name, flap colour
     ("player", "Player", FLAP),
     ("editor", "Editor", "#8B5CF6"),
@@ -132,16 +138,44 @@ def bg_defs(uid, stops=GRAD):
     a, b = stops
     return (f'<linearGradient id="bg{uid}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1024" y2="1024">'
             f'<stop offset="0" stop-color="{a}"/><stop offset="1" stop-color="{b}"/></linearGradient>'
-            f'<radialGradient id="gl{uid}" gradientUnits="userSpaceOnUse" cx="225.28" cy="143.36" r="798.72">'
-            f'<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.10"/><stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0.035"/>'
-            f'<stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>')
+            + band_def(f"gl{uid}", 0, 512))
 
 
-def icon_body(uid, flap=FLAP, stops=GRAD):
-    """Full-bleed square icon content (no outer <svg>)."""
+def band_def(gid, y0, y1):
+    """Top highlight band: white at BAND_OPACITY from y0, fading out by y1."""
+    return (f'<linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="0" y1="{f(y0)}" x2="0" y2="{f(y1)}">'
+            f'<stop offset="0" stop-color="#FFFFFF" stop-opacity="{BAND_OPACITY}"/>'
+            f'<stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>')
+
+
+def edge_shape(kind):
+    """Tile outline on the 1024 icon grid: the squircle (iOS / macOS / Windows masks) or the
+    rx 229 rounded rect used for in-page placements."""
+    if kind == "rrect":
+        return '<rect width="1024" height="1024" rx="229"/>'
+    s0 = 1024 / 824
+    return f'<path transform="translate({f(-100 * s0)} {f(-100 * s0)}) scale({f(s0)})" d="{SQUIRCLE}"/>'
+
+
+def edge(uid, kind):
+    """0.5 pt hairline (EDGE_W on the grid) in white at EDGE_OPACITY, drawn inside the outline:
+    a 2x stroke clipped to the shape."""
+    if not kind:
+        return ""
+    sh = edge_shape(kind)
+    if kind == "rrect":
+        st = sh.replace("/>", f' fill="none" stroke="#FFFFFF" stroke-opacity="{EDGE_OPACITY}" stroke-width="{2 * EDGE_W}"/>')
+    else:
+        st = sh.replace("/>", f' fill="none" stroke="#FFFFFF" stroke-opacity="{EDGE_OPACITY}" stroke-width="{f(2 * EDGE_W * 824 / 1024)}"/>')
+    return f'<defs><clipPath id="ec{uid}">{sh}</clipPath></defs><g clip-path="url(#ec{uid})">{st}</g>'
+
+
+def icon_body(uid, flap=FLAP, stops=GRAD, edge_kind="squircle"):
+    """Full-bleed square icon content (no outer <svg>). edge_kind picks the outline the hairline
+    follows ("squircle", "rrect" or None)."""
     return (f'<defs>{bg_defs(uid, stops)}{shadow_filter("sh" + uid, 25.6, 15.36)}</defs>'
             f'<rect width="1024" height="1024" fill="url(#bg{uid})"/><rect width="1024" height="1024" fill="url(#gl{uid})"/>'
-            f'<g filter="url(#sh{uid})">{glyph(uid, flap=flap)}</g>')
+            f'{edge(uid, edge_kind)}<g filter="url(#sh{uid})">{glyph(uid, flap=flap)}</g>')
 
 
 def svg(body, w=1024, h=1024, extra=""):
@@ -181,12 +215,10 @@ def adaptive_glyph(uid, mono=False):
                f'<g filter="url(#gs{uid})"><g transform="translate(512 512) scale(0.6667) translate(-512 -512)">{g}</g></g>')
 
 
-BACKGROUND = svg(
+BACKGROUND = svg(  # adaptive layer: no edge (the launcher picks the mask)
     '<defs><linearGradient id="bgFill" gradientUnits="userSpaceOnUse" x1="170.667" y1="170.667" x2="853.333" y2="853.333">'
-    '<stop offset="0" stop-color="#7C7FF5"/><stop offset="1" stop-color="#5141DD"/></linearGradient>'
-    '<radialGradient id="bgGlow" gradientUnits="userSpaceOnUse" cx="320.853" cy="266.24" r="532.48">'
-    '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.10"/><stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0.035"/>'
-    '<stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient></defs>'
+    f'<stop offset="0" stop-color="{GRAD[0]}"/><stop offset="1" stop-color="{GRAD[1]}"/></linearGradient>'
+    + band_def("bgGlow", 170.667, 512) + '</defs>'
     '<rect width="1024" height="1024" fill="url(#bgFill)"/><rect width="1024" height="1024" fill="url(#bgGlow)"/>')
 
 
@@ -211,7 +243,7 @@ def wordmark_run():
 
 def lockup(uid, layout, text_color):
     clip = f'<clipPath id="lc{uid}"><rect width="1024" height="1024" rx="229"/></clipPath>'
-    mark = f'<g clip-path="url(#lc{uid})">{icon_body(uid)}</g>'
+    mark = f'<g clip-path="url(#lc{uid})">{icon_body(uid, edge_kind="rrect")}</g>'
     run, cap = wordmark_run()
     k = WM_TILE / 1024
     if layout == "horizontal":
@@ -244,7 +276,7 @@ def render(svg_path, out, size, opaque=False):
     os.makedirs(os.path.dirname(out), exist_ok=True)
     subprocess.run([RSVG, "-w", str(size), "-h", str(size), "-o", out, svg_path], check=True)
     if opaque:
-        subprocess.run([MAGICK, out, "-background", "#5141DD", "-alpha", "remove", "-alpha", "off", out], check=True)
+        subprocess.run([MAGICK, out, "-background", TILE_SOLID, "-alpha", "remove", "-alpha", "off", out], check=True)
 
 
 def tmp_svg(tmp, name, text):
@@ -272,7 +304,7 @@ def main(parts):
 def build_wordmarks(br):
     for layout in ("horizontal", "stacked"):
         write(f"{br}/wordmark/danaview_lockup_{layout}.svg", lockup("w" + layout[0], layout, "#FFFFFF"))
-        write(f"{br}/wordmark/danaview_lockup_{layout}_light.svg", lockup("l" + layout[0], layout, "#0F1118"))
+        write(f"{br}/wordmark/danaview_lockup_{layout}_light.svg", lockup("l" + layout[0], layout, LIGHT_TEXT))
 
 def build_icons(tmp, br):
     # 1. masters (same filenames and roles as before)
@@ -285,6 +317,7 @@ def build_icons(tmp, br):
     render(rounded, os.path.join(ROOT, br, "danaview_icon_rounded.png"), 1024)
     render(gly, os.path.join(ROOT, br, "danaview_glyph.png"), 1024)
     render(bgp, os.path.join(ROOT, br, "danaview_background.png"), 1024, opaque=True)
+    render(rounded, os.path.join(ROOT, br, "linux", "danaview_256.png"), 256)
     for key, name, col in PRODUCTS:
         write(f"{br}/products/{key}.svg", svg(icon_body("p" + key, flap=col)))
 
@@ -392,20 +425,20 @@ def build_preview(tmp, icon, rounded):
 
 def build_brand_sheet(tmp):
     W, H = 2400, 3380
-    P = [f'<rect width="{W}" height="{H}" fill="#07080C"/>']
+    P = [f'<rect width="{W}" height="{H}" fill="#000000"/>']
     tx = lambda x, y, s, t, c="#E6E7EE", w=400, a="start": P.append(text_path(t, x, y, s, c, w, a))
     tx(120, 170, 76, "Danaview", "#FFFFFF", 700)
-    tx(120, 236, 30, "Brand sheet · mark 6B page-fold Dv · v1", "#9A9DB0")
+    tx(120, 236, 30, "Brand sheet · mark 6B page-fold Dv · colourway R3", "#9A9DB0")
     # master
     P.append(f'<g transform="translate(120 320) scale(0.5)"><clipPath id="mc"><rect width="1024" height="1024" rx="229"/></clipPath>'
-             f'<g clip-path="url(#mc)">{icon_body("bs")}</g></g>')
-    tx(120, 880, 24, "Master icon · white page on the indigo gradient", "#9A9DB0")
+             f'<g clip-path="url(#mc)">{icon_body("bs", edge_kind="rrect")}</g></g>')
+    tx(120, 880, 24, "Master icon · white page and red fold on the black tile", "#9A9DB0")
     # construction
     cx0, cy0, k = 760, 320, 0.5
-    g = [f'<rect width="1024" height="1024" fill="#0F1118"/>']
+    g = [f'<rect width="1024" height="1024" fill="#141414"/>']
     for i in range(0, 1025, 64):
-        g.append(f'<line x1="{i}" y1="0" x2="{i}" y2="1024" stroke="#1C1F2B" stroke-width="2"/><line x1="0" y1="{i}" x2="1024" y2="{i}" stroke="#1C1F2B" stroke-width="2"/>')
-    g.append(glyph("bc", page="#3A3F78", flap="#6F73D9"))
+        g.append(f'<line x1="{i}" y1="0" x2="{i}" y2="1024" stroke="#222222" stroke-width="2"/><line x1="0" y1="{i}" x2="1024" y2="{i}" stroke="#222222" stroke-width="2"/>')
+    g.append(glyph("bc", page="#3A3A3A", flap="#7A1016"))
     g.append(f'<circle cx="512" cy="512" r="338" fill="none" stroke="#10B981" stroke-width="3" stroke-dasharray="14 10"/>')
     g.append(f'<rect x="{L}" y="{T}" width="{RR - L}" height="{BB - T}" fill="none" stroke="#F59E0B" stroke-width="3" stroke-dasharray="10 8"/>')
     g.append(f'<line x1="{f(A[0] - 120 * math.cos(math.radians(FOLD_DEG)))}" y1="{f(A[1] - 120 * math.sin(math.radians(FOLD_DEG)))}" '
@@ -440,20 +473,20 @@ def build_brand_sheet(tmp):
     # colours
     y = 1330
     tx(120, y, 34, "Colour", "#FFFFFF", 700)
-    sw = [("#7C7FF5", "Gradient start"), ("#5141DD", "Gradient end"), ("#FFFFFF", "Page"), (FLAP, "Flap tone"),
-          ("#07080C", "UI background"), ("#0F1118", "UI surface")]
+    sw = [(GRAD[0], "Gradient start"), (GRAD[1], "Gradient end"), ("#FFFFFF", "Page"), (FLAP, "Fold (v)"),
+          ("#000000", "UI background"), ("#141414", "UI surface")]
     for i, (hx, n) in enumerate(sw):
         x = 120 + i * 360
-        P.append(f'<rect x="{x}" y="{y + 30}" width="320" height="120" rx="18" fill="{hx}" stroke="#2A2D3D" stroke-width="2"/>')
+        P.append(f'<rect x="{x}" y="{y + 30}" width="320" height="120" rx="18" fill="{hx}" stroke="#2A2A2A" stroke-width="2"/>')
         tx(x, y + 190, 24, n, "#E6E7EE", 600); tx(x, y + 222, 22, hx, "#7D8094")
     # family
     y = 1640
-    tx(120, y, 34, "Product family · indigo tile, accent on the flap only", "#FFFFFF", 700)
+    tx(120, y, 34, "Product family · black tile, accent on the fold only", "#FFFFFF", 700)
     for i, (key, name, col) in enumerate(PRODUCTS):
         x = 120 + i * 420
         P.append(f'<g transform="translate({x} {y + 40}) scale(0.3125)"><clipPath id="pf{key}"><rect width="1024" height="1024" rx="229"/></clipPath>'
-                 f'<g clip-path="url(#pf{key})">{icon_body("bf" + key, flap=col)}</g></g>')
-        tx(x, y + 400, 26, name, "#E6E7EE", 600); tx(x, y + 432, 22, col if key != "player" else "#C9CBFF (master)", "#7D8094")
+                 f'<g clip-path="url(#pf{key})">{icon_body("bf" + key, flap=col, edge_kind="rrect")}</g></g>')
+        tx(x, y + 400, 26, name, "#E6E7EE", 600); tx(x, y + 432, 22, col if key != "player" else f"{FLAP} (master)", "#7D8094")
     # wordmark
     y = 2150
     tx(120, y, 34, "Wordmark · Figtree 700, outlined, tracking −1%", "#FFFFFF", 700)
@@ -462,15 +495,15 @@ def build_brand_sheet(tmp):
 
     def panel(x, yy, layout, k, bgc, col, uid):
         w, h = size(layout)
-        P.append(f'<rect x="{x}" y="{yy}" width="{f(w * k)}" height="{f(h * k)}" rx="20" fill="{bgc}" stroke="#2A2D3D" stroke-width="2"/>')
+        P.append(f'<rect x="{x}" y="{yy}" width="{f(w * k)}" height="{f(h * k)}" rx="20" fill="{bgc}" stroke="#2A2A2A" stroke-width="2"/>')
         P.append(f'<g transform="translate({x} {yy}) scale({k})">{inner(uid, layout, col)}</g>')
         return w * k
 
-    hw = panel(120, y + 30, "horizontal", 1.3, "#0F1118", "#FFFFFF", "bsh")
-    panel(120 + hw + 48, y + 30, "horizontal", 1.3, "#F3F3F7", "#0F1118", "bsl")
+    hw = panel(120, y + 30, "horizontal", 1.3, "#141414", "#FFFFFF", "bsh")
+    panel(120 + hw + 48, y + 30, "horizontal", 1.3, "#F3F3F7", LIGHT_TEXT, "bsl")
     y2 = y + 330
-    sw = panel(120, y2, "stacked", 1.0, "#0F1118", "#FFFFFF", "bss")
-    panel(120 + sw + 48, y2, "stacked", 1.0, "#F3F3F7", "#0F1118", "bst")
+    sw = panel(120, y2, "stacked", 1.0, "#141414", "#FFFFFF", "bss")
+    panel(120 + sw + 48, y2, "stacked", 1.0, "#F3F3F7", LIGHT_TEXT, "bst")
     notes = ["Lockup construction (tile side t)",
              "Cap height = page height (448/1024 t); cap top and baseline sit on the page edges",
              "Gap from tile to the word's ink = t/3 (beside it, or below it when stacked)",
@@ -486,14 +519,14 @@ def build_brand_sheet(tmp):
              ("", "recolour the page"), ("", "add a play triangle")]
     for i, (tr, n) in enumerate(donts):
         x = 120 + i * 560
-        inner = icon_body(f"dn{i}")
+        inner = icon_body(f"dn{i}", edge_kind="rrect")
         if n == "recolour the page":
             inner = inner.replace('fill="#FFFFFF" mask', 'fill="#F59E0B" mask')
         extra = ""
         if n == "add a play triangle":
-            extra = '<path d="M420 420 L420 620 L590 520 Z" fill="#5141DD"/>'
+            extra = '<path d="M420 420 L420 620 L590 520 Z" fill="#0A0A0A"/>'
         P.append(f'<g transform="translate({x} {y + 30}) scale(0.3125)"><clipPath id="dc{i}"><rect width="1024" height="1024" rx="229"/></clipPath>'
-                 f'<g clip-path="url(#dc{i})"><rect width="1024" height="1024" fill="#5141DD"/><g transform="{tr}">{inner}</g>{extra}</g>'
+                 f'<g clip-path="url(#dc{i})"><rect width="1024" height="1024" fill="{TILE_SOLID}"/><g transform="{tr}">{inner}</g>{extra}</g>'
                  f'<line x1="40" y1="984" x2="984" y2="40" stroke="#EF4444" stroke-width="40" stroke-linecap="round"/></g>')
         tx(x, y + 400, 26, n, "#A9ACBF")
     p = tmp_svg(tmp, "brand.svg", svg("".join(P), W, H))
@@ -515,25 +548,25 @@ def feature_graphic_svg():
     X = 80                                   # left text column
     P = ['<defs>'
          '<radialGradient id="fgGlow" gradientUnits="userSpaceOnUse" cx="800" cy="250" r="420">'
-         '<stop offset="0" stop-color="#5E60EE" stop-opacity="0.34"/><stop offset="0.45" stop-color="#5E60EE" stop-opacity="0.12"/>'
-         '<stop offset="1" stop-color="#5E60EE" stop-opacity="0"/></radialGradient>'
+         '<stop offset="0" stop-color="#B20710" stop-opacity="0.30"/><stop offset="0.45" stop-color="#B20710" stop-opacity="0.10"/>'
+         '<stop offset="1" stop-color="#B20710" stop-opacity="0"/></radialGradient>'
          '<radialGradient id="fgGlow2" gradientUnits="userSpaceOnUse" cx="120" cy="40" r="520">'
-         '<stop offset="0" stop-color="#818CF8" stop-opacity="0.07"/><stop offset="1" stop-color="#818CF8" stop-opacity="0"/></radialGradient>'
+         '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.04"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></radialGradient>'
          '<filter id="fgShadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">'
          '<feGaussianBlur in="SourceAlpha" stdDeviation="18"/><feOffset dy="14" result="b"/>'
          '<feFlood flood-color="#000" flood-opacity="0.45"/><feComposite in2="b" operator="in"/></filter>'
          '<clipPath id="fgTile"><rect width="1024" height="1024" rx="229"/></clipPath>'
          '</defs>',
-         f'<rect width="{W}" height="{H}" fill="#07080C"/>',
+         f'<rect width="{W}" height="{H}" fill="#000000"/>',
          f'<rect width="{W}" height="{H}" fill="url(#fgGlow)"/><rect width="{W}" height="{H}" fill="url(#fgGlow2)"/>']
     # icon on the right: 232 tile centred on (800, 250)
     side = 232
     k = side / 1024
     ix, iy = 800 - side / 2, 250 - side / 2
     P.append(f'<rect x="{f(ix)}" y="{f(iy)}" width="{side}" height="{side}" rx="{f(229 * k)}" fill="#000" filter="url(#fgShadow)"/>')
-    P.append(f'<g transform="translate({f(ix)} {f(iy)}) scale({f(k)})"><g clip-path="url(#fgTile)">{icon_body("fg")}</g></g>')
+    P.append(f'<g transform="translate({f(ix)} {f(iy)}) scale({f(k)})"><g clip-path="url(#fgTile)">{icon_body("fg", edge_kind="rrect")}</g></g>')
     # left column
-    P.append(text_path(FEATURE_COPY["eyebrow"], X, 132, 15, "#818CF8", 600, tracking=0.2))
+    P.append(text_path(FEATURE_COPY["eyebrow"], X, 132, 15, "#F2444D", 600, tracking=0.2))
     run = figtree(700).layout("Danaview", 92, WM_TRACK)
     P.append(f'<path d="{run.path(X, 222, ink_left=True)}" fill="#FFFFFF"/>')
     l1, l2 = FEATURE_COPY["tagline"]
@@ -544,9 +577,9 @@ def feature_graphic_svg():
     for label in FEATURE_COPY["pills"]:
         r = figtree(600).layout(label.replace("&amp;", "&"), size, 0.1)
         w = r.ink_width + 2 * pad
-        P.append(f'<rect x="{f(px)}" y="{top}" width="{f(w)}" height="{ph}" rx="{ph / 2}" fill="#5E60EE" fill-opacity="0.14"/>')
+        P.append(f'<rect x="{f(px)}" y="{top}" width="{f(w)}" height="{ph}" rx="{ph / 2}" fill="#FFFFFF" fill-opacity="0.08"/>')
         cap = 0.7 * size
-        P.append(f'<path d="{r.path(px + pad, top + ph / 2 + cap / 2, ink_left=True)}" fill="#D6D8FF"/>')
+        P.append(f'<path d="{r.path(px + pad, top + ph / 2 + cap / 2, ink_left=True)}" fill="#E6E6E6"/>')
         px += w + gap
     return svg("".join(P), W, H)
 
@@ -556,7 +589,7 @@ def build_feature_graphic(tmp):
     out = os.path.join(ROOT, "android/fastlane/metadata/android/en-US/images/featureGraphic.png")
     raw = os.path.join(tmp, "fg.png")
     subprocess.run([RSVG, "-w", "1024", "-h", "500", "-o", raw, src], check=True)
-    subprocess.run([MAGICK, raw, "-background", "#07080C", "-alpha", "remove", "-alpha", "off",
+    subprocess.run([MAGICK, raw, "-background", "#000000", "-alpha", "remove", "-alpha", "off",
                     "-strip", "-define", "png:color-type=2", f"PNG24:{out}"], check=True)
 
 
