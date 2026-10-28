@@ -22,11 +22,26 @@ final class _Cue {
 }
 
 /// Which calibration a row is normalized by: the model/ops/compile rows by [compute] (object
-/// churn, maps, sorting), the encode/decode rows by [codec] (JSON, double formatting, string and
-/// byte building). The two kinds slow down by different amounts between hosts (x86_64 Linux vs
-/// the arm64 dev Mac: ≈ 1.5× for compute, up to 2× for codec work), so one factor would either
-/// loosen the compute rows or fail the codec rows.
-enum CalibrationKind { compute, codec }
+/// churn, maps, sorting), the open row by [codec] (JSON parse, string and byte building), the
+/// plan encode row by [planEncode] and the autosave row by [autosave]. Kinds slow down by
+/// different amounts between hosts (ubuntu-latest vs the arm64 dev Mac: ≈ 1.2× for compute and
+/// codec, ≈ 1.5× for the project and plan encoders), so one factor would either loosen some rows
+/// or fail others.
+///
+/// [planEncode] and [autosave] are probes: the row's own encoder on a small input
+/// ([encodeProbes] in core_benchmarks.dart), so the factor tracks exactly the row's kind of work.
+/// Because a probe runs package code, a proportional encoder slowdown would move the probe with
+/// the row; run.dart therefore also fails when a probe's factor drifts more than
+/// `probeDriftLimit` from the [codec] factor (see run.dart).
+enum CalibrationKind {
+  compute,
+  codec,
+  planEncode,
+  autosave;
+
+  /// Whether this kind is a probe of package code (see above).
+  bool get isProbe => this == planEncode || this == autosave;
+}
 
 int _compute(int seed) {
   var x = seed * 2654435761 + 1;
@@ -66,12 +81,16 @@ int _codec(int seed) {
   return (back['items']! as List<Object?>).length + out.length;
 }
 
-/// Calibration p50s (µs) of this host by kind.
-Map<CalibrationKind, int> calibrationUs({bool quick = false}) {
-  int p50(int Function(int) work) {
+/// Calibration p50s (µs) of this host by kind; [probes] supplies the probe kinds' workloads.
+Map<CalibrationKind, int> calibrationUs({bool quick = false, Map<CalibrationKind, Object? Function(int)> probes = const {}}) {
+  int p50(Object? Function(int) work) {
     final samples = measure(warmup: 5, samples: quick ? 10 : 40, body: (i) => blackhole = work(i));
     return MetricResult('host_calibration', samples, budgetUs: 0, label: 'host calibration', budgetGated: false).p50;
   }
 
-  return {CalibrationKind.compute: p50(_compute), CalibrationKind.codec: p50(_codec)};
+  return {
+    CalibrationKind.compute: p50(_compute),
+    CalibrationKind.codec: p50(_codec),
+    for (final e in probes.entries) e.key: p50(e.value),
+  };
 }
