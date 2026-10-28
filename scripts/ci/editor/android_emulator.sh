@@ -37,7 +37,7 @@
 # Environment:
 #   ANDROID_SERIAL     the device to use (default: the only/first device `adb devices` lists)
 #   DANAVIEW_GRADLE_ARGS  extra Gradle arguments (CI adds --no-daemon)
-#   DV_PERF_STRICT=1   absolute performance limits in the instrumented tests (support/PerfGate.kt)
+#   DV_PERF_STRICT=1   absolute performance limits in the instrumented tests (harness/PerfGate.kt)
 #   DANAVIEW_EMULATOR_BATCHES  space-separated batches to run instead of every package, e.g.
 #                      "effects proxy"; join packages with a comma to run them as one batch
 #                      ("drop,harness")

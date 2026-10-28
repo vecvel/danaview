@@ -4,9 +4,10 @@
 // throughput and timing limits apply only with DV_PERF_STRICT=1 (a quiet dev machine or a real
 // device), passed by android_emulator.sh as the instrumentation argument DV_PERF_STRICT. On a
 // loaded CI emulator the correctness checks stay on and the throughput limits only require the
-// check to be non-vacuous.
+// check to be non-vacuous. Lives in harness/ (androidTest only): support/ is also compiled into
+// the unit tests, which have no InstrumentationRegistry.
 
-package com.vecvel.danaview.editor.engine.support
+package com.vecvel.danaview.editor.engine.harness
 
 import androidx.test.platform.app.InstrumentationRegistry
 

@@ -13,7 +13,7 @@ import android.util.Log
 import com.vecvel.danaview.editor.engine.plan.PlanLayerKind
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
 import com.vecvel.danaview.editor.engine.preview.fallback.ContingencyPreviewBackend
-import com.vecvel.danaview.editor.engine.support.PerfGate
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
