@@ -31,7 +31,7 @@ abstract final class HomeTabStripColors {
   static const Color idleForeground = DanaviewColors.textSecondary;
 }
 
-/// The tab strip of the Files & Media Home.
+/// The tab strip of the Files & Media Home (DESIGN_SYSTEM §10.2): capsule pills that scroll sideways.
 class HomeTabStrip extends StatefulWidget {
   /// A strip of [tabs] with [selected] highlighted; [onSelected] gets the tapped or keyed tab.
   const HomeTabStrip({
@@ -151,7 +151,7 @@ class _HomeTabStripState extends State<HomeTabStrip> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 for (var i = 0; i < widget.tabs.length; i++) ...[
-                  if (i > 0) const SizedBox(width: DanaviewSpacing.xs + 2),
+                  if (i > 0) const SizedBox(width: DanaviewSpacing.sm),
                   _HomeTabPill(
                     key: _keyOf(widget.tabs[i]),
                     tab: widget.tabs[i],
@@ -201,10 +201,11 @@ class _HomeTabPill extends StatelessWidget {
         selected: selected,
         semanticLabel: '${tab.label} tab, ${index + 1} of $count',
         builder: (context, state) {
-          // Keyboard focus only; no hover or press tint (owner rule, c781a85).
-          final overlay = state.focused ? DanaviewColors.primarySoft : DanaviewColors.hover.withValues(alpha: 0);
-          // The hit area is at least 44 px high (an invisible minimum); the pill fits its label
-          // and is drawn centred inside it, so the strip grows with the text scale.
+          // The §8 tab pill (DanaviewTabPill's look): a capsule sized to its label, padding
+          // 13 x 6; selected is `primary` with a white 600 label, a 12 % hairline and an 18 % top
+          // highlight; idle is raised `surfaceElevated` with a `textSecondary` label. Keyboard
+          // focus draws the focus ring only; no hover or press tint (owner rule). The hit area
+          // is at least 44 px high (an invisible minimum), so the strip grows with the text.
           return ConstrainedBox(
             constraints: const BoxConstraints(minHeight: HomeTabStrip.minTargetHeight),
             child: Center(
@@ -213,29 +214,30 @@ class _HomeTabPill extends StatelessWidget {
               child: AnimatedContainer(
                 duration: DanaviewMotion.fast,
                 curve: DanaviewMotion.curve,
-                constraints: const BoxConstraints(minWidth: 56),
-                padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.md, vertical: 6),
+                constraints: const BoxConstraints(minHeight: 32),
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: fill, borderRadius: DanaviewRadius.xlAll),
-                foregroundDecoration: BoxDecoration(
-                  color: selected ? null : overlay,
-                  borderRadius: DanaviewRadius.xlAll,
-                  border: Border.fromBorderSide(
-                    state.focused
-                        ? DanaviewBorders.focus.copyWith(width: 2, color: DanaviewColors.primaryLight)
-                        : selected
-                            ? DanaviewBorders.hairline.copyWith(color: Colors.transparent)
-                            : DanaviewBorders.hairline,
+                decoration: ShapeDecoration(
+                  color: fill,
+                  shape: DanaviewDepthBorder(
+                    borderRadius: DanaviewRadius.capsuleAll,
+                    side: selected ? DanaviewBorders.bright : DanaviewBorders.hairline,
+                    highlight: selected ? DanaviewColors.highlightStrong : DanaviewColors.highlight,
                   ),
+                ),
+                foregroundDecoration: DanaviewDepth.focusRing(
+                  focused: state.focused,
+                  borderRadius: DanaviewRadius.capsuleAll,
                 ),
                 child: ExcludeSemantics(
                   child: Text(
                     tab.label,
                     maxLines: 1,
                     softWrap: false,
-                    style: DanaviewTextStyles.label.copyWith(
+                    style: TextStyle(
+                      fontSize: 15,
                       color: fg,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                       height: 1.2,
                     ),
                   ),

@@ -44,7 +44,7 @@ Future<void> showFileActionsMenu(BuildContext context, WidgetRef ref, MediaItem 
             for (final action in actions)
               DanaviewListTile(
                 key: ValueKey(fileActionId(action)),
-                leading: DanaviewTileIcon(
+                leading: DanaviewIconTile(
                   fileActionIcon(action, favourite: favourite),
                   color: action == FileAction.delete ? DanaviewColors.errorLight : DanaviewColors.primaryLight,
                 ),
@@ -78,7 +78,7 @@ Future<FolderChoice?> showFolderPicker(BuildContext context, List<FolderChoice> 
                     padding: EdgeInsets.only(left: DanaviewSpacing.md * c.depth.clamp(0, 4)),
                     child: DanaviewListTile(
                       key: ValueKey('file-folder-${c.id.value}'),
-                      leading: const DanaviewTileIcon(Icons.folder_rounded, color: DanaviewColors.primaryLight),
+                      leading: const DanaviewIconTile(Icons.folder_rounded),
                       title: c.name,
                       subtitle: c.depth > 0 ? c.path.sublist(0, c.path.length - 1).join(' › ') : null,
                       semanticLabel: c.label,

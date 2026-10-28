@@ -102,7 +102,6 @@ class HomeEmptyTabPane extends StatelessWidget {
             HomeTab.folders => Icons.folder_outlined,
             _ => Icons.grid_view_rounded,
           },
-          iconColor: DanaviewColors.primaryLight,
           title: 'Nothing here yet',
           message: switch (tab) {
             HomeTab.photos => 'Photos you add to Danaview show up here.',
@@ -135,10 +134,9 @@ class HomeProjectsPane extends StatelessWidget {
       children: [
         DanaviewInlineEmpty(
           icon: Icons.movie_edit,
-          iconColor: DanaviewColors.purple,
           title: 'Video projects',
           message: 'Edit videos and photos, then export them back to your library.',
-          action: DanaviewButton.tonal(
+          action: DanaviewButton.secondary(
             label: 'Open projects',
             icon: Icons.folder_open_rounded,
             size: DanaviewButtonSize.sm,

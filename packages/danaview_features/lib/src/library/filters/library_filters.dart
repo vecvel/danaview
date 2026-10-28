@@ -97,5 +97,8 @@ HomeTabSlots libraryFilterTabSlots({
       recentPhotos: base.recentPhotos,
       favourites: base.favourites,
       selectionBar: base.selectionBar,
+      search: base.search,
+      documentsOverview: showDocuments ? base.documentsOverview : null,
+      projectsOverview: base.projectsOverview,
       showDocuments: showDocuments,
     );

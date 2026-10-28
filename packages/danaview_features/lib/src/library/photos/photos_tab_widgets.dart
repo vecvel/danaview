@@ -129,7 +129,7 @@ class PhotoLibraryOptInRow extends ConsumerWidget {
             title: 'Show my photo library',
             subtitle: subtitle,
             value: on,
-            leading: const DanaviewTileIcon(Icons.photo_library_outlined),
+            leading: const DanaviewIconTile(Icons.photo_library_outlined),
             onChanged: onChanged,
           ),
           if (blocked || limited)

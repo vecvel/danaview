@@ -120,7 +120,7 @@ class LibraryEntryLeading extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final doc = entry.docKind;
     final icon = doc != null ? documentKindIcon(doc) : organiseKindIcon(entry.kind);
-    final tile = DanaviewTileIcon(icon, color: libraryKindColor(entry.kind), size: size);
+    final tile = DanaviewIconTile(icon, size: size);
     final store = ref.watch(libraryStoreProvider);
     final thumbable = entry.kind == FileKind.photo || entry.kind == FileKind.video || entry.docKind == DocumentKind.pdf;
     if (store == null || !thumbable) return tile;
@@ -198,7 +198,7 @@ class LinkedDocumentRow extends StatelessWidget {
     return KeyedSubtree(
       key: ValueKey('linked-document-${document.id.value}'),
       child: DanaviewLibraryRow(
-        leading: DanaviewTileIcon(documentKindIcon(document.docKind), color: DanaviewColors.purple, size: 40),
+        leading: DanaviewIconTile(documentKindIcon(document.docKind), size: 40),
         title: document.name,
         subtitle: subtitle,
         semanticLabel: 'Document ${document.name} in a linked folder, $subtitle',
