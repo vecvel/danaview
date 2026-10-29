@@ -1,4 +1,6 @@
 // OWNER: HOM-24
+// EXTENDED: HOM-28 (with a PdfToolsScope above it, the top bar gets "Organise pages" and the menu
+// "Merge with…"; a Replace from the organiser reopens the file.)
 //
 // The PDF viewer screen (HOM plan §8.4, V2-120; ARCH §10.1 "PDF open ≤ 500 ms"): opens the file
 // read-only through danaview_pdf (rule 27), asks for the password of an encrypted file in a kit
@@ -23,6 +25,7 @@ import '../../card/document_out.dart';
 import '../../card/viewer_bar.dart';
 import '../../router/viewer_file.dart';
 import '../../text/viewer_parts.dart';
+import '../organiser/pdf_tool_launcher.dart';
 import 'pdf_password_sheet.dart';
 import 'pdf_viewer_panels.dart';
 
@@ -83,6 +86,7 @@ class PdfViewer extends StatefulWidget {
 class _PdfViewerState extends State<PdfViewer> {
   PdfCapabilities _caps = PdfCapabilities.none;
   PdfDocumentInfo? _doc;
+  String? _password;
   bool _needsPassword = false;
   bool _failed = false;
   PdfViewController? _view;
@@ -113,27 +117,30 @@ class _PdfViewerState extends State<PdfViewer> {
   @override
   void didUpdateWidget(PdfViewer old) {
     super.didUpdateWidget(old);
-    if (old.file != widget.file || old.documents != widget.documents) {
-      final doc = _doc;
-      if (doc != null) pdfIgnore(old.documents.close(doc.handle));
-      unawaited(_stateSub?.cancel());
-      _stateSub = null;
-      _searchGeneration++;
-      _openGeneration++;
-      setState(() {
-        _doc = null;
-        _view = null;
-        _state = null;
-        _outline = null;
-        _failed = false;
-        _needsPassword = false;
-        _panel = _Panel.none;
-        _hits = const [];
-        _currentHit = -1;
-        _searchStatus = PdfSearchStatus.idle;
-      });
-      unawaited(_open());
-    }
+    if (old.file != widget.file || old.documents != widget.documents) _reopen(old.documents);
+  }
+
+  /// Closes the open document of [documents] and opens the file again from the start.
+  void _reopen(PdfDocuments documents) {
+    final doc = _doc;
+    if (doc != null) pdfIgnore(documents.close(doc.handle));
+    unawaited(_stateSub?.cancel());
+    _stateSub = null;
+    _searchGeneration++;
+    _openGeneration++;
+    setState(() {
+      _doc = null;
+      _view = null;
+      _state = null;
+      _outline = null;
+      _failed = false;
+      _needsPassword = false;
+      _panel = _Panel.none;
+      _hits = const [];
+      _currentHit = -1;
+      _searchStatus = PdfSearchStatus.idle;
+    });
+    unawaited(_open());
   }
 
   @override
@@ -156,7 +163,7 @@ class _PdfViewerState extends State<PdfViewer> {
       if (stale()) return;
       _caps = caps;
       if (!_caps.canView) return _unavailable();
-      final doc = await documents.open(widget.file.path);
+      final doc = await documents.open(widget.file.path, password: _password);
       if (stale()) {
         pdfIgnore(documents.close(doc.handle));
         return;
@@ -198,6 +205,7 @@ class _PdfViewerState extends State<PdfViewer> {
     if (mounted) {
       setState(() {
         _doc = unlocked;
+        _password = password;
         _needsPassword = false;
       });
       unawaited(_loadOutline());
@@ -295,6 +303,14 @@ class _PdfViewerState extends State<PdfViewer> {
     if (view != null) pdfIgnore(view.goToPage(page));
   }
 
+  Future<void> _organise(PdfToolsEnvironment tools) async {
+    final saved = await openPdfOrganiser(context, tools, widget.file, password: _password);
+    if (mounted && saved != null && saved.replaced) _reopen(widget.documents);
+  }
+
+  Future<void> _mergeWith(PdfToolsEnvironment tools) =>
+      openPdfMerge(context, tools, [PdfMergeItem.ofFile(widget.file, password: _password)], pickFirst: true);
+
   Future<void> _copy() async {
     final view = _view;
     if (view == null) return;
@@ -315,12 +331,22 @@ class _PdfViewerState extends State<PdfViewer> {
     return 'Page ${state.pageIndex + 1} of ${formatCount(doc.pageCount)}';
   }
 
-  List<DanaviewMenuEntry> _menu() {
+  List<DanaviewMenuEntry> _menu(PdfToolsEnvironment? tools) {
     final doc = _doc;
     final port = widget.fileOut;
     final open = doc != null && !doc.locked && _view != null;
     final mode = _state?.displayMode ?? PdfDisplayMode.continuous;
+    final canMerge = tools != null && tools.pickMergeInputs != null && _caps.tools.contains(PdfTool.merge);
     return [
+      if (canMerge) ...[
+        DanaviewMenuItem(
+          label: 'Merge with…',
+          icon: Icons.merge_rounded,
+          enabled: doc != null && !doc.locked,
+          onTap: () => unawaited(_mergeWith(tools)),
+        ),
+        const DanaviewMenuDivider(),
+      ],
       if (_caps.selection && doc != null && doc.allowsCopying)
         DanaviewMenuItem(
           label: 'Copy selected text',
@@ -362,6 +388,8 @@ class _PdfViewerState extends State<PdfViewer> {
   Widget build(BuildContext context) {
     final doc = _doc;
     final ready = doc != null && !doc.locked;
+    final tools = PdfToolsScope.maybeOf(context);
+    final organise = tools != null && canOrganise(_caps.tools);
     return ColoredBox(
       color: DanaviewColors.background,
       child: Column(
@@ -374,7 +402,16 @@ class _PdfViewerState extends State<PdfViewer> {
               if (_caps.search) _barButton(_Panel.search, Icons.search_rounded, 'Search in PDF', enabled: ready),
               _barButton(_Panel.pages, Icons.grid_view_rounded, 'Pages', enabled: ready),
               if (_caps.outline && (_outline?.isNotEmpty ?? false)) _barButton(_Panel.outline, Icons.toc_rounded, 'Contents', enabled: ready),
-              ViewerOptionsButton(key: _menuKey, entries: _menu()),
+              if (organise)
+                DanaviewIconButton(
+                  key: const ValueKey('pdf-viewer-organise'),
+                  icon: Icons.dashboard_customize_outlined,
+                  size: 44,
+                  semanticLabel: 'Organise pages',
+                  tooltip: 'Organise pages',
+                  onPressed: ready ? () => unawaited(_organise(tools)) : null,
+                ),
+              ViewerOptionsButton(key: _menuKey, entries: _menu(tools)),
             ],
           ),
           Expanded(child: ClipRect(child: _body(context, doc))),
