@@ -8,6 +8,7 @@ import 'package:danaview_domain/danaview_domain.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import '../controllers/player_controller.dart';
 import '../controllers/providers.dart';
+import '../library/import/import_providers.dart' show importServiceProvider;
 import 'danaview_player_actions.dart';
 
 enum TimeDisplayMode {
@@ -476,7 +477,10 @@ class _DanaviewControlsOverlayState extends ConsumerState<DanaviewControlsOverla
     final fullTimeWidth = _timeExtent(context, state.duration);
     final mandatory = button + (rotate ? button : 0) + (fullscreen ? button : 0);
     final everything = mandatory + fullTimeWidth + candidates.values.fold(0.0, (sum, w) => sum + w);
-    final showMore = compact || everything > width;
+    // HOM-21: "Save to Danaview folder" lives in the More sheet, so the sheet is reachable at every
+    // width while it is offered (DANAVIEW_FILES_HOME, a local file playing; D-S3W-2).
+    final canSave = ref.watch(importServiceProvider) != null && saveableCurrentMedia(ref) != null;
+    final showMore = compact || everything > width || canSave;
 
     final shown = <_BarItem>{};
     if (showMore) {
@@ -647,6 +651,8 @@ class _DanaviewControlsOverlayState extends ConsumerState<DanaviewControlsOverla
   }
 
   void _showMoreSheet(BuildContext context) {
+    // The save outlives the sheet: its toast shows from the overlay's context.
+    final overlayContext = this.context;
     showDanaviewSheet<void>(
       context,
       title: 'Playback',
@@ -739,6 +745,14 @@ class _DanaviewControlsOverlayState extends ConsumerState<DanaviewControlsOverla
                   subtitle: 'Trim, add text, captions and more',
                   showChevron: true,
                   onTap: () => closeThen(onEdit),
+                ),
+              if (ref.watch(importServiceProvider) != null && saveableCurrentMedia(ref) != null)
+                DanaviewListTile(
+                  key: const ValueKey('player-sheet-save-to-danaview'),
+                  leading: const DanaviewIconTile(Icons.drive_folder_upload_outlined),
+                  title: 'Save to Danaview folder',
+                  subtitle: 'Keep a copy in your Danaview folders',
+                  onTap: () => closeThen(() => unawaited(saveToDanaviewFolder(overlayContext, this.ref))),
                 ),
               DanaviewListTile(
                 leading: const DanaviewIconTile(Icons.playlist_play_rounded),

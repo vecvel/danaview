@@ -3,7 +3,8 @@
 // Boots the real app for the E2E suite: the same wiring as `lib/main.dart` (mpv player engine,
 // session and library repositories, `EditorBootstrap.createRuntime`, `editorAppOverrides` with Auto
 // captions, then S2-W's `filesHomeOverrides`, which is empty with DANAVIEW_FILES_HOME off and the
-// wired library, thumbnails and import with it on; FIX-S2Q-5), with the production `MobileEditorEngine` wrapped by `E2eEditorEngine` (picker and
+// wired library, thumbnails and import with it on; FIX-S2Q-5, and S3-W's `installIncomingDocumentOpen`,
+// the Open with interceptor; FIX-S3Q-5), with the production `MobileEditorEngine` wrapped by `E2eEditorEngine` (picker and
 // handoff seams only). The wiring is built once per test process; every `testWidgets` pumps a new
 // `ProviderScope` + `DanaviewApp` over it.
 //
@@ -19,7 +20,9 @@ import 'dart:io';
 
 import 'package:danaview/app.dart';
 import 'package:danaview/main.dart' show createAutoCaptions, editorAppOverrides;
-import 'package:danaview/wiring/files_home_wiring.dart' show FilesHomeRuntime, filesHomeOverrides;
+import 'package:danaview/router/app_router.dart' show appNavigatorKey;
+import 'package:danaview/wiring/documents_wiring.dart' show installIncomingDocumentOpen;
+import 'package:danaview/wiring/files_home_wiring.dart' show FilesHomeRuntime, filesHomeOverrides, openLibraryEntryWith;
 import 'package:danaview_data/danaview_data.dart';
 import 'package:danaview_editor/danaview_editor.dart';
 import 'package:danaview_editor_engine/danaview_editor_engine.dart';
@@ -33,6 +36,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'e2e_config.dart';
@@ -113,6 +117,18 @@ abstract final class E2eApp {
     if (captions != null) await captions.service.initialize();
     // Files & Media Home (S2), as lib/main.dart: no override with the flag off (FIX-S2Q-5).
     final filesHome = await filesHomeOverrides(prefs: prefs);
+    // Open with Danaview (S3), as lib/main.dart: photos and documents are imported and shown in
+    // their viewer, videos keep the 1.1 path; with the flag off, iOS and macOS get only the
+    // "can't open this kind of file" guard for photos and documents (FIX-S3Q-5).
+    installIncomingDocumentOpen(
+      appNavigatorKey,
+      openEntry: (context, read, entry) => openLibraryEntryWith(
+        context,
+        read,
+        entry,
+        onOpenPlayer: () => unawaited(GoRouter.of(context).push('/player')),
+      ),
+    );
     final overrides = <Override>[
       playbackEngineProvider.overrideWithValue(player),
       sessionRepositoryProvider.overrideWithValue(sessionRepo),
