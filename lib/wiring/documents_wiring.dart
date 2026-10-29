@@ -378,17 +378,25 @@ String inboxStagingIn(String support) => '$support${Platform.pathSeparator}Danav
 ///
 /// With the flag on: the viewers of [platform], the linked-document scan, and on iOS the Share
 /// Extension inbox ([inbox] is a test seam) with its staging folder under [support]; on Android
-/// the incoming intents ([incoming] is a test seam).
+/// the incoming intents ([incoming] is a test seam). Where `danaview_pdf` runs (iOS, macOS,
+/// Android) the import records a PDF's page count ([pdf] is a test seam; FIX-S3Q-4).
 List<Override> documentsOverrides({
   required TargetPlatform platform,
   required String support,
   DocumentViewerSetup? viewers,
   NativeInbox? inbox,
   IncomingIntentPort? incoming,
+  PdfDocuments? pdf,
   bool excludeStagingFromBackup = true,
 }) {
   if (!documentsWired) return const [];
   final ios = platform == TargetPlatform.iOS;
+  // The plugin's probe only on a real host of that platform (widget tests run as iOS or Android on
+  // the desktop VM, where no plugin answers), or through the [pdf] seam.
+  final macOS = platform == TargetPlatform.macOS;
+  final android = platform == TargetPlatform.android;
+  final pdfHost = (ios && Platform.isIOS) || (macOS && Platform.isMacOS) || (android && Platform.isAndroid);
+  final countPages = (ios || macOS || android) && (pdf != null || pdfHost);
   final staging = inboxStagingIn(support);
   final appGroup = ios ? (inbox ?? NativeInbox()) : null;
   if (appGroup != null && excludeStagingFromBackup) unawaited(_prepareStaging(staging));
@@ -403,8 +411,16 @@ List<Override> documentsOverrides({
     // The plugin's port only on a real Android host (widget tests run as Android on the desktop VM).
     if (platform == TargetPlatform.android && (incoming != null || Platform.isAndroid))
       incomingIntentPortProvider.overrideWithValue(incoming ?? NativeIncomingPort()),
+    if (countPages) importPageCounterProvider.overrideWithValue(pdfPageCounter(pdf ?? PlatformPdfDocuments())),
   ];
 }
+
+/// The import's page counter over [pdf]: the plugin's probe (PDFKit / `PdfRenderer`, on a native
+/// background thread, read-only); null for a locked or damaged file (FIX-S3Q-4).
+DocumentPageCounter pdfPageCounter(PdfDocuments pdf) => (path) async {
+      final probe = await pdf.probe(path);
+      return probe.canOpen && probe.pageCount > 0 ? probe.pageCount : null;
+    };
 
 Future<void> _prepareStaging(String staging) async {
   try {
