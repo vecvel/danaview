@@ -240,7 +240,8 @@ class PdfDocumentsTest {
         assertTrue(caps.outline)
         assertEquals(api35, caps.passwords)
         assertTrue(caps.textExtraction)
-        assertTrue(caps.tools.isEmpty())
+        // The page tools are offered once HOM-28A landed (tools/PdfPageToolsTest covers them).
+        assertTrue(caps.tools.containsAll(com.vecvel.danaview.pdf.tools.PdfPageTools.supported))
 
         var onMain = false
         val opened = awaitCall<PdfDocumentInfoMsg> { cb ->
