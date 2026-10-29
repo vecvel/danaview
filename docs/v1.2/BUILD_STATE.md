@@ -8,7 +8,7 @@ Last update: 2026-10-22 (S2 Mac half complete).
 | **S1** Foundations + speed test | **Done on both platforms** (owner items open) | Mac: AIS-01, INT-101, HOM-01, HOM-16, ST-01…ST-05, S1-W, S1-Q Mac half, S1-R iOS candidate. **Android (Windows, 968a10e):** S1-Q Android half green (v1.1 suite 17/18 + 4/4 extras with every 1.2 flag off; s13 only on emulator mic silence, accepted), S1-R Android candidate 1.0.0 (1) AAB 95.4 MB passes check_native_libs.sh, release APK smoke green. Device observations to confirm: OBS-S1A-1 (release player barely advanced the 1080p fixture on the emulator), OBS-S1A-2 (VIEW intent to the running app stays on Home). Windows-host test portability FIX-S1Q-A1…A5 being fixed on the Mac. Owner items: legal date, Q-S1 wording, M-Lab store answers, signing, upload (at the 1.0.0 release). Report: `qa/S1-QA.md` |
 | **S2** Photos & Files Home | **Done on both platforms** (owner items open) | Mac half as before (S2-Q green, S2-R iOS candidate, FIX-S2R-1, D-7). **Android (Windows, `f125f8c`):** D-3, HOM-02A, HOM-04A, HOM-20A, HOM-22A; D-7 verified; S2-Q Android half green (S2 E2E on API 35, full v1.1 suite with the flag 17/18 + 7/7, bmgr backup checks); S2-R Android AAB 101.0 MB (+5.5 MB), native-lib checks pass, release smoke green. Open, low: FIX-S2Q-A1 (E2E expects the platform's primary save target), FIX-S2Q-A2 (e2e_android.sh define pass-through), OBS-S2A-1 (picker names), OBS-S2A-3 (video-only album chips). Report: `qa/S2-QA.md` |
 | **S3** Documents: view and share-in | **Done on both platforms** (2026-10-23) | Mac half as recorded (S3-Q green, iOS RC 26.06 MB). **Android (Windows, 90c7a5b7):** HOM-25, HOM-21A (flag-gated alias); S3-Q Android green (S3 E2E with real intents, v1.1 suite with the flag, flag-off check, tablet grids); S3-R Android AAB 108.2 MB (+7.2 MB), native-lib checks pass. FIX-S3Q-A1 (Office MIME by extension) and A2 (PdfBox-Android + Bouncy Castle licences) fixed. Low items carried to S4. Report: `qa/S3-QA.md` |
-| **S4** Documents: PDF tools | **In progress** | Mac half: HOM-31 compress (see "S4: HOM-31 compress" below); **HOM-28 page tools built** on `s4-hom28` (see "S4: HOM-28 page tools" below); **HOM-29 annotate built** on `s4-hom29` (see "S4: HOM-29 annotate" below; also fixes HOM-28's encrypted-output open item). Android: HOM-28A, HOM-29A, HOM-31A to do (contracts below). |
+| **S4** Documents: PDF tools | **In progress** | Mac half: HOM-31 compress (see "S4: HOM-31 compress" below); **HOM-28 page tools built** on `s4-hom28` (see "S4: HOM-28 page tools" below); **HOM-29 annotate built** on `s4-hom29` (see "S4: HOM-29 annotate" below; also fixes HOM-28's encrypted-output open item); **HOM-30 sign built** on `s4-hom30` (see "S4: HOM-30 sign" below; closes the plan's [VERIFY: HOM-30]). Android: HOM-28A, HOM-29A, HOM-30A, HOM-31A to do (contracts below). |
 | S5–S9 | Not started | |
 
 ## S4: HOM-31 compress (Mac half, 2026-10-30, branch `s4-hom31`)
@@ -310,6 +310,153 @@ a finger scrolling) needs a check in S4-Q, with Apple Pencil and pressure on a r
 unrotated in page space (on a rotated page the text turns with the page). PencilKit strokes become
 plain ink paths (pressure / tilt widths are not kept). No file-menu "Annotate" entry (the viewer is
 the way in). Moving or resizing a mark after placing it is not offered (delete and redo).
+
+## S4: HOM-30 sign (Mac half, 2026-10-30, branch `s4-hom30`)
+
+**Built.** Behind `DANAVIEW_FILES_HOME` (defaults unchanged), where the platform reports
+`PdfTool.sign` (PDFKit on iOS and macOS; Android once HOM-30A lands; never Windows / Linux).
+Visual signatures (an image, not a certificate, §8.6).
+- **Saved signatures** (`danaview_documents/lib/src/signatures/`): `FileSignatureStore` keeps one
+  transparent PNG per signature in `<app support>/signatures/` (a sibling of the library root
+  `DanaviewLibrary` / `library`, never inside the Danaview folders, so never in the library, the
+  Files app or a share); the folder is marked excluded from backups (`NativeBackupFlags`, iOS and
+  macOS). Names carry the kind and time (`sig-<µs>-drawn|typed|imported.png`), the size comes from
+  the PNG header, writes are temp + rename. At most 10: the 11th is refused with a sentence (never a
+  silent delete). List (newest first), use again, delete one, delete all. No print / debugPrint,
+  `toString` shows only the id (rule 30).
+- **New signature** sheet (kit sheet, segmented Draw / Type / Import): **Draw** on a paper pad
+  (Flutter canvas, an eager pan so the sheet never scrolls while drawing, quadratic-curve smoothing,
+  round caps), ink black or dark blue, Undo stroke and Clear; **Type** the name in Caveat, Pacifico
+  or Playfair Display italic, the OFL fonts the app already bundles in `danaview_editor_fonts`
+  (passed in by the app wiring, so `danaview_documents` takes no editor dependency; the fallback
+  with none is the app font Figtree in italic), each previewed on paper; **Import** a photo through
+  the system photo picker (the file picker on macOS), decoded at ≤ 1600 px, the background removed
+  in a background isolate (Otsu's split of the luminance, the threshold halfway between ink and
+  paper, a soft alpha edge; the ink keeps its own colour) and cropped to the ink, with "no
+  signature found" / "background too dark" sentences; the staged photo is deleted at once. Drawn
+  and typed signatures render at 3× and are cropped to the ink.
+- **Sign mode** (`danaview_documents/lib/src/pdf/sign/`, `PdfViewer`): "Sign" next to Annotate
+  in the viewer's top bar ("Sign…" in its menu under 360 px, so the bar keeps 44 pt buttons) and
+  "Sign…" in a PDF's file menu (`FileAction.signPdf`, `signPdfHandlerProvider`; opens the viewer
+  straight in sign mode through `PdfToolsScope.startWith`). The same native view stays; the top bar
+  becomes "Sign" with Undo, Redo and Save; the toolbar has "New", "Saved signatures" and the saved
+  signatures in one sideways-scrolling strip (the chosen one has a check) and a hint line. The
+  newest saved signature is ready, or "New signature" opens. A tap on the page places the chosen
+  signature centred there (≤ 180 × 90 pt, ≤ 40 % of the page width, aspect kept, inside the page,
+  upright on a page shown turned: footprint swapped and the image turned back by the page's
+  rotation), selects it and shows its neutral round handle; a tap on a placed one selects it; drag
+  it to move, drag the handle to resize (native, live, aspect kept, on its page), Delete removes
+  it; any number of pages and places; every edit is an undo step (`PdfSignModel`, 200 steps).
+  Leaving with placed signatures asks "Discard signatures?" (bar close, viewer back, system back).
+  A signature on the open PDF can't be deleted from the saved list until it's off the page.
+- **Saving** (`savePdfSignatures` over HOM-29's `savePdfAnnotations`): `PdfAnnotateEngine.save
+  (stamps:, burnIn: true)` into "<name> (signed).pdf" as a NEW file through the HOM-28
+  `PdfResultSink` (next to the original; `Imported` for linked / incoming files); Replace only for
+  a Danaview folder file (then the viewer reopens it); progress "Signing" with Cancel; calm toasts
+  ("This PDF doesn’t allow changes, so it can’t be signed."). An encrypted source keeps the
+  password it was unlocked with and the output stays encrypted (HOM-29's rule).
+- **Native** (`darwin/`): `Sign/PdfSigner.swift` routes the frozen `PdfToolsHostApi.sign` to the
+  annotate save with `burnIn: true` and reports `sign` in the capabilities; `Sign/PdfSignCore.swift`
+  (Flutter-free) is the move / resize / handle geometry; `Annotate/PdfAnnotateView.swift`'s new
+  `place` input: taps like select, a pan that starts on the selected stamp moves it and one on its
+  handle (22 pt disc at the lower trailing corner on screen, 44 pt target) resizes it, live on the
+  preview (the scroll view's pan is held off during the drag on iOS; an `NSPanGestureRecognizer`
+  on macOS), reported once at the end. `PdfAnnotateCore.drawImage` now swaps a quarter-turned
+  stamp's sides so it fills its rect (what the viewer hit-tests is what is drawn).
+- **Settings › Privacy**: "Saved signatures" (how many on this device) and "Delete all saved
+  signatures" (asks first), shown where the store is wired and sign is reported
+  (`appSettingsSectionsFor`, `SavedSignaturesPrivacyRows`).
+
+**[VERIFY: HOM-30] result: verified.** "Stamp annotation with the signature image, burned into the
+page on save" holds on PDFKit: the stamp is drawn into the page content by Quartz
+(`PdfAnnotateCore.burn`, HOM-29's hook) and no annotation is left. XCTests
+(`Tests/Sign/Core/PdfSignCoreTests.swift`, macOS + iPhone 17 simulator): Quartz's own renderer
+(`CGPDFDocument`, no PDFKit, as another viewer) draws the signature from the page content on every
+signed page (ink in, transparency kept, unsigned pages untouched) and the raw page dictionaries
+carry no `/Stamp` (no annotation at all on a page without its own); page text stays selectable and
+searchable under the signature; the page's own Ink and Text (+ Popup) annotations, crop box, media
+box and `/Rotate` 90 are kept and the outline still points at the signed page; a quarter-turned
+signature on a rotated page fills its rect upright; encrypted in → encrypted out (locked, opens
+only with the password, signature burned in under it); a cancel after any progress report and bad
+requests (missing image, page out of range, empty rect, output = input) leave no file; the source is
+never written. Glue (`Tests/Sign/Glue/`): capabilities list sign; the frozen `sign` writes a new
+file with no annotation, rejects an empty request and an existing output, cancels through
+`PdfToolsHostApi.cancel` with no file; the `place` input on a real `PDFView` shows the dashed mark
+and the handle disc for the selected stamp only, moves and resizes it (aspect kept, anchor kept),
+leaves other drags to the view, reports `itemMoved` once per drag, restores a cancelled drag, and
+removes everything when the mode ends (the file untouched).
+
+**API (HOM-30 Pigeon amendment, own block, to be lead-approved with the merge).** Appended only
+(no codec id or enum index moved): `PdfAnnotateInputMsg.place` and `@FlutterApi
+PdfAnnotateEventsApi.itemMoved(viewId, itemId, pageIndex, PdfRectMsg rect)`; Dart, Swift and Kotlin
+regenerated together. `danaview_pdf`: `PdfAnnotateInput.place`, `PdfStampMovedEvent`,
+`PdfStamp.withRect` and value equality. `danaview_documents`: `SignatureStore` (abstract) /
+`FileSignatureStore` (`inAppSupport`, `maxCount` 10, `SignatureStoreFullException`),
+`SavedSignature`, `SignatureKind`; `showSignatureCreateSheet`, `SignatureCreatePanel`,
+`SignatureFont`, `signatureFallbackFont`, `SignatureImageMaker`, `SignaturePhotoPicker`;
+`signature_image.dart` (`cleanSignaturePhoto`, `otsuThreshold`, `cropToInk`,
+`renderDrawnSignature`, `renderTypedSignature`, `encodeSignaturePng`, `decodeSignaturePhoto`);
+`SignaturePad`; `SignatureStrip`, `showSavedSignaturesSheet`, `SavedSignaturesSettingsSection`;
+`PdfSignModel`, `PdfSignSession`, `PdfSignToolbar`, `savePdfSignatures`, `signedPdfName`;
+`PdfToolsEnvironment.signatures / signatureFonts / pickSignaturePhoto`, `PdfToolsScope.startWith`
+(`PdfViewerStartTool.sign`); `savePdfAnnotations(newName:, progressTitle:)`. `danaview_library`:
+`FileAction.signPdf`, `fileActionsFor(canSign:)`. `danaview_features`: `signPdfHandlerProvider`.
+App: `signatureStoreProvider`, `signaturePhotoPickerProvider`, `pdfSignatureFonts`,
+`runPdfSign`, `withPdfTools(startWith:)`, `openDocumentViewer(startWith:)`,
+`pdfToolsOverrides(support:, signatures:)`.
+
+**Tests.** XCTests: `run_xctests.sh macos` 73 (sign core 9, sign glue 3; the HOM-24 glue test now
+expects sign among the tools and no placeholder), `ios-sim` 52 on the iPhone 17 simulator, iOS 26.5 (core incl.
+sign), `ios-typecheck`. Dart: `danaview_pdf/test/annotate` (place input, `itemMoved` → stamp move
+per viewer, stamp equality, no path printed); `danaview_documents/test/signatures` (store on a real
+folder: add / list / delete / delete all, cap, PNG only, app-private path beside the library root,
+backup exclusion once, no partial file, nothing logged; images: background removal, soft edge, no
+ink / no paper, crop, smoothing, real PNG rendering of drawn and typed signatures and photo decode;
+sheets: Draw / Type / Import, the fallback font, the full store, Cancel, saved list with in-use
+rows, delete all, Settings rows; 280 / 375 / 1280 × 0.85 / 1.35 overflow + 44 pt + labels);
+`test/pdf/sign` (model: placement size / aspect / clamping / upright rotation, move, resize,
+delete, multi-page, undo / redo, paths in use, names, hints; viewer: visibility, same native view,
+place input, newest signature ready, New signature when none (real rendering), place / select /
+move / resize / delete / several pages / rotated page / undo / redo, Save burn-in with the password
+and the name, Replace reopens, dismissed choice, Cancel, unsupported error, the discard prompt, the
+file menu's start in sign mode, in-use signatures, the 280 / 375 / 1280 × 0.85 / 1.35 matrix);
+`pdf_surface_test` (signer landed, amendment declared, sign core Flutter-free);
+`danaview_library/test/actions` (Sign… placement); `test/v12/wiring/s4_sign_wiring_test.dart`
+(flag off, store per platform and path, fonts, visibility of Sign / Sign… / Settings rows, a real
+library save of "Report (signed).pdf" next to the original with its bytes unchanged).
+`scripts/ci/v12/home_preservation.sh` run (library and file-action code touched).
+
+**Android contract for Windows' HOM-30A** (PdfBox-Android 2.0.27.0 per HOM-27):
+- Save: nothing new beyond HOM-29A's `PdfAnnotateHostApi.save` with `burnIn: true` and image stamps
+  (draw each `PdfSignatureStampMsg` image, PNG alpha kept, into the page content with
+  `PDPageContentStream` in append mode with a saved graphics state; geometry in page space from the
+  crop box's bottom-left; `rotationDegrees` clockwise around the rect's centre, and a quarter turn
+  (90 / 270) draws the image with its sides swapped so it fills the rect, as Apple does). Route the
+  frozen `PdfToolsHostApi.sign(PdfSignRequestMsg)` to the same write (`burnIn: true`, no
+  annotations; empty stamps → `invalidArgument`). No `/Stamp` annotation may remain; the page's own
+  annotations, boxes and `/Rotate` stay; text stays text; encrypted in → encrypted out
+  (`StandardProtectionPolicy(pw, pw, perms)`); `canModify()` false → `unsupported`; cancel polled
+  per page, no file left.
+- The texture view's `place` input (`PdfAnnotateInputMsg.place`): taps as `select` (report the page
+  point and the session item under it); for the selected stamp item draw a dashed mark and a
+  neutral handle disc (22 dp, light fill, grey hairline; no accent colour) at its lower trailing
+  corner on screen; a one-finger drag that starts on the stamp moves it, one that starts within
+  22 dp of the handle resizes it with the opposite corner fixed and the aspect kept (shorter side
+  ≥ 12 pt), both clamped to the page and shown live; on the drag's end call
+  `PdfAnnotateEventsApi.itemMoved(viewId, itemId, pageIndex, rect)` once; other drags scroll.
+- Saved signatures need nothing native: the Dart store is in `filesDir/signatures` (the app support
+  folder). **Exclude it from Android Auto Backup** (`full-backup-content` /
+  `data-extraction-rules`: `<exclude domain="file" path="signatures/"/>`), and keep the photo
+  picker path (`NativePickers.pickPhotos(filter: photos, limit: 1)`) working.
+- Report `PdfToolKindMsg.sign` in `capabilities().tools` only when the save and the place input both
+  work: the viewer's "Sign", the file menu's "Sign…" and the Settings rows appear then.
+
+**Open.** The native drag on iOS (the `UIPanGestureRecognizer` path with the scroll view's pan held
+off) is covered by the shared session code tested on macOS and by the iOS type-check, but was not
+driven by hand on the simulator in this session; check it (and Apple Pencil on an iPad) in S4-Q,
+with real photos of signatures (only generated images here). The handle keeps the size it had at
+the zoom when it was shown (it is redrawn on the next preview). Signatures can't be rotated by the
+user (upright only; the stamp's `rotationDegrees` follows the page). Android HOM-30A.
 
 ## Spikes
 

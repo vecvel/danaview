@@ -1,5 +1,6 @@
 // OWNER: HOM-22
 // EXTENDED: HOM-28 (Organise pages and Merge with… go to the app root's PDF page tools handler.)
+// EXTENDED: HOM-30 (Sign… goes to the app root's sign handler.)
 //
 // Runs one file action on one item or a selection (ARCH v1.2 V2-08, V2-117, V2-118; HOM plan
 // §8.3), shared by the single-file menu and the multi-select bar: the getting-files-out actions
@@ -108,6 +109,11 @@ Future<bool> runFileAction(BuildContext context, WidgetRef ref, FileAction actio
         final compress = ref.read(compressPdfHandlerProvider);
         if (compress == null) return false;
         await compress(context, items.first);
+        return true;
+      case FileAction.signPdf:
+        final sign = ref.read(signPdfHandlerProvider);
+        if (sign == null) return false;
+        await sign(context, items.first);
         return true;
       case FileAction.rename || FileAction.copyTo || FileAction.moveTo || FileAction.favourite || FileAction.delete:
         final ids = _entryIds(items);

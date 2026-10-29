@@ -6,6 +6,8 @@
 // strokes flattened, text) and HOM-30's stamps and burn-in, malformed saves fail before the engine,
 // progress is filtered to the job, cancel reaches `PdfToolsHostApi.cancel`, and a missing host API
 // is notSupportedOnDevice.
+// EXTENDED: HOM-30 (sign: the place input, the native hub's itemMoved → PdfStampMovedEvent, stamps
+// compare by value and never print their path).
 
 // The wrapper takes the generated host APIs; the tests subclass them.
 // ignore_for_file: implementation_imports
@@ -227,5 +229,33 @@ void main() {
     expect(text.toString(), isNot(contains('Hello')));
     expect(PdfAnnotationKind.highlight.isMarkup, isTrue);
     expect(PdfAnnotationKind.ink.isMarkup, isFalse);
+  });
+
+  test('HOM-30: the place input and itemMoved reach the viewer as a stamp move', () async {
+    await engine.setMode(7, const PdfAnnotateMode(input: PdfAnnotateInput.place, inkColorArgb: 0, inkWidth: 1));
+    expect(annotate.modes.single.$2!.input, PdfAnnotateInputMsg.place);
+
+    final defaultEngine = PlatformPdfAnnotateEngine(annotateApi: annotate, toolsApi: tools);
+    final got = <PdfAnnotateEvent>[];
+    final sub = defaultEngine.events(4).listen(got.add);
+    PlatformPdfAnnotateEngine.debugHub().itemMoved(4, 's1', 2, PdfRectMsg(x: 10, y: 20, width: 120, height: 40));
+    PlatformPdfAnnotateEngine.debugHub().itemMoved(4, 's1', 2, PdfRectMsg(x: 10, y: 20, width: 0, height: 40));
+    PlatformPdfAnnotateEngine.debugHub().itemMoved(5, 's2', 0, PdfRectMsg(x: 1, y: 1, width: 1, height: 1));
+    await pumpEventQueue();
+    await sub.cancel();
+    expect(got, hasLength(1), reason: 'an empty rect and other viewers are dropped');
+    final moved = got.single as PdfStampMovedEvent;
+    expect((moved.itemId, moved.pageIndex), ('s1', 2));
+    expect((moved.rect.x, moved.rect.y, moved.rect.width, moved.rect.height), (10, 20, 120, 40));
+  });
+
+  test('HOM-30: stamps compare by value, move with withRect and never print their path', () {
+    const stamp = PdfStamp(pageIndex: 1, rect: PdfRect(1, 2, 3, 4), imagePath: '/private/sig.png');
+    expect(stamp, const PdfStamp(pageIndex: 1, rect: PdfRect(1, 2, 3, 4), imagePath: '/private/sig.png'));
+    final moved = stamp.withRect(const PdfRect(5, 6, 7, 8));
+    expect(moved, isNot(stamp));
+    expect((moved.pageIndex, moved.imagePath, moved.rect.x), (1, '/private/sig.png', 5));
+    expect(stamp.toString(), isNot(contains('sig')));
+    expect(const PdfAnnotateItem.stamp('s', stamp), const PdfAnnotateItem.stamp('s', PdfStamp(pageIndex: 1, rect: PdfRect(1, 2, 3, 4), imagePath: '/private/sig.png')));
   });
 }

@@ -1,6 +1,8 @@
 // OWNER: HOM-22
 // EXTENDED: HOM-28 (a PDF's single-file menu gets "Organise pages" and "Merge with…" when the page
 // tools are wired, [fileActionsFor]'s `canPdfTools`.)
+// EXTENDED: HOM-30 ("Sign…" for a readable PDF when a sign handler exists, [fileActionsFor]'s
+// `canSign`: it opens the PDF viewer in sign mode.)
 //
 // Which file actions an item or a selection gets (ARCH v1.2 V2-118, V2-08; HOM plan §8.3, D-98e):
 //
@@ -62,6 +64,9 @@ enum FileAction {
 
   /// Compress one PDF into a new, smaller file (HOM-31).
   compressPdf,
+
+  /// Sign one PDF: the viewer opens in sign mode; the result is a new signed file (HOM-30).
+  signPdf,
 
   /// Move to Recently deleted (with the "Used in N projects" warning).
   delete,
@@ -131,7 +136,7 @@ String? localPathOf(String uri, {bool? windows}) {
 /// The single-file menu of [target], in menu order, for a platform offering [canShare],
 /// [canOpenIn], [canSaveOut] and [canSaveToPhotos]; [canPdfTools] (the page tools are wired, HOM-28)
 /// adds "Organise pages" and "Merge with…" for a readable PDF; [canCompress] (a compress handler
-/// exists, HOM-31) adds "Compress…".
+/// exists, HOM-31) adds "Compress…"; [canSign] (a sign handler exists, HOM-30) adds "Sign…".
 List<FileAction> fileActionsFor(
   FileActionTarget target, {
   required bool canShare,
@@ -140,6 +145,7 @@ List<FileAction> fileActionsFor(
   required bool canSaveToPhotos,
   bool canPdfTools = false,
   bool canCompress = false,
+  bool canSign = false,
 }) {
   final out = target.canLeave;
   final lib = target.isLibraryEntry;
@@ -152,6 +158,7 @@ List<FileAction> fileActionsFor(
     if (out && canOpenIn) FileAction.openIn,
     if (out && canPdfTools && target.isPdf) FileAction.organisePages,
     if (out && canPdfTools && target.isPdf) FileAction.mergeWith,
+    if (canSign && out && target.isPdf) FileAction.signPdf,
     if (lib) FileAction.favourite,
     if (out && canSaveOut) FileAction.saveOut,
     if (out && canSaveToPhotos && target.isMedia) FileAction.saveToPhotos,

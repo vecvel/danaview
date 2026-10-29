@@ -1,4 +1,5 @@
 // OWNER: HOM-29
+// EXTENDED: HOM-30 (a stamp move, the sign mode's event, never reaches an annotate session.)
 //
 // Ties an annotate session's model to the native viewer (HOM plan §8.5): pushes the tool's mode and
 // the model's items (and the selected one) to the viewer's preview whenever they change, in order
@@ -134,6 +135,8 @@ final class PdfAnnotateSession {
           case PdfAnnotateTool.pen:
             break;
         }
+      case PdfStampMovedEvent():
+        break;
     }
   }
 

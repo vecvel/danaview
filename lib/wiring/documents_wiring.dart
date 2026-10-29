@@ -182,7 +182,7 @@ typedef ProviderRead = T Function<T>(ProviderListenable<T> provider);
 /// viewers, the file-out port and Recents (Danaview folder entries only). With [fileMenuItem] (a
 /// Danaview folder entry) every viewer's top bar ends with a "File actions" button: HOM-22's
 /// Share, Open in another app, Save out, Copy to, Favourite and File info (FIX-S3Q-1).
-Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerFile file, {MediaItem? fileMenuItem}) {
+Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerFile file, {MediaItem? fileMenuItem, PdfViewerStartTool? startWith}) {
   final setup = read(documentViewerSetupProvider);
   final fileOut = read(fileOutPortProvider);
   final record = read(recordLibraryOpenProvider);
@@ -201,7 +201,7 @@ Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerF
         style: DanaviewTextStyles.body.copyWith(decoration: TextDecoration.none),
         child: _withFileMenu(
           fileMenuItem,
-          withPdfTools(read, DocumentViewer(
+          withPdfTools(startWith: startWith, read, DocumentViewer(
             key: const ValueKey('s3-document-viewer'),
             file: file,
             viewers: setup.viewers,
@@ -525,7 +525,7 @@ List<Override> documentsOverrides({
       incomingIntentPortProvider.overrideWithValue(incoming ?? NativeIncomingPort()),
     if (countPages) importPageCounterProvider.overrideWithValue(pdfPageCounter(pdf ?? PlatformPdfDocuments())),
     // S4: the PDF page tools (organiser, merge, file-menu and multi-select entries).
-    ...pdfToolsOverrides(platform: platform),
+    ...pdfToolsOverrides(platform: platform, support: support),
   ];
 }
 

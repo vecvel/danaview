@@ -304,7 +304,16 @@ enum class PdfAnnotateInputMsg(val raw: Int) {
   /** A tap reports its page point (`tapped`), where Dart places a text box. */
   TEXT(2),
   /** A tap reports the session annotation under it (`tapped` with its id), which Dart removes. */
-  ERASE(3);
+  ERASE(3),
+  /**
+   * HOM-30 amendment (sign): a tap reports its page point and the session item under it
+   * (`tapped`), where Dart places or selects a signature stamp. A drag that starts on the
+   * selected stamp moves it and one that starts on its corner handle (a neutral disc at the
+   * stamp's lower trailing corner on screen) resizes it with its aspect ratio kept; both stay on
+   * the stamp's page and are shown live, and the final rect is reported once when the drag ends
+   * (`PdfAnnotateEventsApi.itemMoved`). Every other drag scrolls and zooms as usual.
+   */
+  PLACE(4);
 
   companion object {
     fun ofRaw(raw: Int): PdfAnnotateInputMsg? {
@@ -4115,6 +4124,29 @@ class PdfAnnotateEventsApi(private val binaryMessenger: BinaryMessenger, private
       val channelName = "dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.tapped$separatedMessageChannelSuffix"
       val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
       channel.send(listOf(viewIdArg, pageIndexArg, xArg, yArg, itemIdArg)) {
+        if (it is List<*>) {
+          if (it.size > 1) {
+            continuation.resumeWithException(PdfPigeonError(it[0] as String, it[1] as String, it[2] as String?))
+          } else {
+            continuation.resume(Unit)
+          }
+        } else {
+          continuation.resumeWithException(PdfApiPigeonUtils.createConnectionError(channelName))
+        } 
+      }
+    }
+  }
+  /**
+   * HOM-30 amendment (sign): the user dragged or resized stamp [itemId] (input `place`) to
+   * [rect] on [pageIndex] (page space); Dart replaces the item and shows the preview again.
+   */
+  suspend fun itemMoved(viewIdArg: Long, itemIdArg: String, pageIndexArg: Long, rectArg: PdfRectMsg)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    return suspendCancellableCoroutine { continuation ->
+      val channelName = "dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.itemMoved$separatedMessageChannelSuffix"
+      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+      channel.send(listOf(viewIdArg, itemIdArg, pageIndexArg, rectArg)) {
         if (it is List<*>) {
           if (it.size > 1) {
             continuation.resumeWithException(PdfPigeonError(it[0] as String, it[1] as String, it[2] as String?))
