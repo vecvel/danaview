@@ -140,7 +140,10 @@ Future<void> _visit(_App app, Future<void> Function(String where) check) async {
   final s = app.seeded;
   await check('Overview (Import, search, Recent photos, Favourites, Recents)');
 
-  await app.tapKey('s2-import');
+  await app.tapKey('home-import');
+  await check('Import menu');
+  await tester.tap(find.text(HomeChromeLabels.importToLibrary));
+  await pumpFrames(tester, count: 8);
   await check('import sheet');
   await app.tapKey('import-target');
   await check('import folder chooser');

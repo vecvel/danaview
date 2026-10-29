@@ -265,8 +265,9 @@ void main() {
           final before = at[i - 1].dy < at[i].dy || (at[i - 1].dy == at[i].dy && at[i - 1].dx < at[i].dx);
           expect(before, isTrue, reason: 'quick action $i is out of order');
         }
-        expect(find.text('Continue watching'), findsNothing);
-        expect(find.text('Playlists'), findsNothing);
+        // Empty sections are hidden (the tab strip's Playlists pill is not a section).
+        expect(find.byKey(const ValueKey('home-continue-watching')), findsNothing);
+        expect(find.byKey(const ValueKey('home-playlists')), findsNothing);
         await finishHome(tester, env);
       });
 
