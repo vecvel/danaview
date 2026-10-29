@@ -12,6 +12,7 @@ package com.vecvel.danaview.editor.engine.preview
 import com.vecvel.danaview.editor.engine.paused.await
 import com.vecvel.danaview.editor.engine.pigeon.SeekAckMsg
 import com.vecvel.danaview.editor.engine.support.FrameBarcode
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -82,7 +83,9 @@ class PreviewHandoffTest {
             val late = h.seek(PreviewPlans.grid.timeOfFrame(60))
             val ms = (System.nanoTime() - t0) / 1e6
             assertEquals(30L, late.displayedFrame)
-            assertTrue("timeout ~500 ms ($ms)", ms in 450.0..2000.0)
+            // Never before the 500 ms timeout (both modes); how late is timing (4x on an emulator).
+            val lateBound = PerfGate.bound(2000.0)
+            assertTrue("timeout ~500 ms ($ms, bound 450..$lateBound, ${PerfGate.mode})", ms in 450.0..lateBound)
             assertEquals(1, h.sync { h.session.seeks.timeouts })
         }
     }

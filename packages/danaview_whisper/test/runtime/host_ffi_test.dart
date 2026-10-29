@@ -9,6 +9,8 @@
 // deterministically: 6 x "hello world" at 2 s steps, words hello/world); poll cost p95 < 0.5 ms;
 // cancel, pause-abort/resume equivalence, busy, DETECT; a failing load is typed; and the
 // hot-restart path (a second open() after the latch reset) cancels and joins the orphan job.
+// The poll-cost and cancel-latency limits apply as stated with DV_PERF_STRICT=1 (a quiet dev Mac);
+// otherwise (a loaded CI runner) they are 4× looser.
 
 import 'dart:async';
 import 'dart:io';
@@ -25,6 +27,11 @@ final String _jfk = Platform.environment['DV_TEST_JFK_WAV'] ?? 'third_party/whis
 final Object _skip = _lib == null || _model == null
     ? 'set DV_TEST_HOST_LIB and DV_TEST_FIXTURE_MODEL (test/runtime/host_ffi/link_host_shim.sh)'
     : false;
+
+/// DV_PERF_STRICT=1 gates the absolute timing limits; otherwise they are [_looseFactor]× looser.
+final bool _perfStrict = Platform.environment['DV_PERF_STRICT'] == '1';
+const int _looseFactor = 4;
+String get _perfMode => _perfStrict ? 'DV_PERF_STRICT=1' : 'loose ×$_looseFactor, no DV_PERF_STRICT';
 
 /// 16 kHz mono s16 samples of a canonical-or-not RIFF/WAVE file.
 Int16List _readPcm(String path) {
@@ -185,7 +192,7 @@ void main() {
     // ignore: avoid_print
     print('FFI status+take<=8: p50=${p(ffiCost, .5)} us p95=${p(ffiCost, .95)} us; '
         'WhisperJob.poll: p50=${p(pollCost, .5)} us p95=${p(pollCost, .95)} us max=${p(pollCost, .999)} us');
-    expect(p(ffiCost, .95), lessThan(500));
+    expect(p(ffiCost, .95), lessThan(_perfStrict ? 500 : 500 * _looseFactor), reason: 'FFI p95 ${p(ffiCost, .95)} µs ($_perfMode)');
     job.cancel();
     await expectLater(job.result, throwsA(isA<WhisperException>().having((e) => e.kind, 'kind', WhisperErrorKind.cancelled)));
     await model.release();
@@ -228,7 +235,7 @@ void main() {
     await expectLater(long.result, throwsA(isA<WhisperException>().having((e) => e.kind, 'kind', WhisperErrorKind.cancelled)));
     // ignore: avoid_print
     print('cancel -> result: ${sw.elapsedMilliseconds} ms (includes up to one 250 ms poll)');
-    expect(sw.elapsedMilliseconds, lessThan(1500 + 250));
+    expect(sw.elapsedMilliseconds, lessThan((_perfStrict ? 1500 : 1500 * _looseFactor) + 250), reason: '${sw.elapsedMilliseconds} ms ($_perfMode)');
     await model.release();
     await rt.releaseIdleModels();
   }, skip: _skip);

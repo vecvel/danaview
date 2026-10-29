@@ -7,8 +7,10 @@
 # - emulator_wait [timeout s]: `adb wait-for-device` (bounded), then polls sys.boot_completed and
 #   the package manager until both answer; returns non-zero on timeout.
 # - emulator_relaunch: kills the emulator of $ANDROID_SERIAL (adb emu kill, then the qemu process of
-#   the AVD) and starts the AVD again headless with $DANAVIEW_EMULATOR_OPTIONS (from a cold boot:
-#   -no-snapshot-load), waits for the boot and turns animations off. Needs DANAVIEW_EMULATOR_AVD
+#   the AVD) and starts the AVD again headless with $DANAVIEW_EMULATOR_OPTIONS from the job's booted
+#   AVD snapshot (the emulator cold-boots on its own when the snapshot does not load; a cold boot
+#   cost the CI run minutes of boot and a busy system for the batches after it), never saving a
+#   snapshot, waits for the boot and turns animations off. Needs DANAVIEW_EMULATOR_AVD
 #   (the emulator-runner AVD name, `test`); at most DANAVIEW_EMULATOR_RELAUNCHES (default 3) per
 #   run, logs in $DANAVIEW_EMULATOR_LOG_DIR (default /tmp).
 # - emulator_ensure: emulator_wait (60 s) when the device is not answering, then one relaunch.
@@ -67,7 +69,7 @@ emulator_relaunch() {
   "$EMU_ADB" kill-server >/dev/null 2>&1 || true
   "$EMU_ADB" start-server >/dev/null 2>&1 || true
   # shellcheck disable=SC2086 # options are a word list
-  nohup "$EMU_SDK/emulator/emulator" -port "$port" -avd "$avd" -no-snapshot-load -no-snapshot-save \
+  nohup "$EMU_SDK/emulator/emulator" -port "$port" -avd "$avd" -no-snapshot-save \
     ${DANAVIEW_EMULATOR_OPTIONS:-} >"$log" 2>&1 &
   if ! emulator_wait "${DANAVIEW_EMULATOR_BOOT_TIMEOUT:-300}"; then
     tail -n 40 "$log" 2>/dev/null || true

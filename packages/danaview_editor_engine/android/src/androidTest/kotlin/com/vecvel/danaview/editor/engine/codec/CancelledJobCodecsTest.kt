@@ -58,6 +58,7 @@ import com.vecvel.danaview.editor.engine.plan.PlanCanvas
 import com.vecvel.danaview.editor.engine.plan.PlanSize
 import com.vecvel.danaview.editor.engine.plan.PlanTarget
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -272,15 +273,19 @@ class CancelledJobCodecsTest {
         assertTrue("MediaCodec loopers back at the baseline ($baseline -> $after)", after.codecLoopers <= baseline.codecLoopers)
         assertTrue("Transformer threads back at the baseline ($baseline -> $after)", after.transformerThreads <= baseline.transformerThreads)
 
-        val aacMs = timedAacEncoder(ENCODER_BOUND_MS)
-        assertNotNull("an AAC encoder is created within $ENCODER_BOUND_MS ms after the cycles (${CodecCensus.take()})", aacMs)
+        // Bounds are device numbers with DV_PERF_STRICT=1, 4x on a loaded emulator; that an encoder
+        // can be created and the export completes is checked in both modes.
+        val encoderBound = PerfGate.boundMs(ENCODER_BOUND_MS)
+        val aacMs = timedAacEncoder(encoderBound)
+        assertNotNull("an AAC encoder is created within $encoderBound ms after the cycles (${PerfGate.mode}; ${CodecCensus.take()})", aacMs)
         Log.i(TAG, "AAC encoder created in $aacMs ms (emulator)")
 
         val t0 = System.nanoTime()
         val full = exports.export(exportPlan(), settings(fps = 30), "after_cycles")
         val ms = (System.nanoTime() - t0) / 1_000_000
         full.requireResult()
-        assertTrue("an export after the cycles completes within $EXPORT_BOUND_MS ms (took $ms)", ms <= EXPORT_BOUND_MS)
+        val exportBound = PerfGate.boundMs(EXPORT_BOUND_MS)
+        assertTrue("an export after the cycles completes within $exportBound ms (took $ms, ${PerfGate.mode})", ms <= exportBound)
         Log.i(TAG, "export after the cycles: $ms ms (emulator); ${CodecCensus.take()}")
     }
 

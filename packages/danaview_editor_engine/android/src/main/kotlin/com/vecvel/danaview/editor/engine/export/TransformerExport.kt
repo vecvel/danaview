@@ -25,7 +25,9 @@
 //     the composition selects audio streams > 0 (AudioStreamAssetLoaderFactory over the same
 //     default) or a test injects a factory.
 // Progress: Transformer.getProgress every 250 ms on the looper. Every callback runs on the looper;
-// nothing is called after cancel().
+// nothing is called after cancel(). cancel() and both end callbacks join the Transformer's internal
+// thread before they return or report (QA-05 D9, TransformerThreads: Media3 quits it lazily, after
+// cancel() returned), so no Media3 codec owner outlives the run's end.
 // [ExportErrors] maps ExportException codes to EngineErrorCode (ARCH §14.3) and decides the portrait
 // retry.
 
@@ -59,6 +61,7 @@ import com.vecvel.danaview.editor.engine.core.EngineContext
 import com.vecvel.danaview.editor.engine.core.EngineErrorCode
 import com.vecvel.danaview.editor.engine.core.EngineErrors
 import com.vecvel.danaview.editor.engine.core.EngineException
+import com.vecvel.danaview.editor.engine.media.TransformerThreads
 import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -108,6 +111,9 @@ class TransformerExport(
     private var transformer: Transformer? = null
     private var ended = false
 
+    /** The internal thread(s) [start] created (TransformerThreads). */
+    private var internalThreads: List<Thread> = emptyList()
+
     private val poll = object : Runnable {
         override fun run() {
             val t = transformer ?: return
@@ -125,6 +131,7 @@ class TransformerExport(
                 if (ended) return
                 ended = true
                 handler.removeCallbacks(poll)
+                TransformerThreads.awaitEnd(internalThreads)
                 listener.onCompleted(exportResult)
             }
 
@@ -132,6 +139,7 @@ class TransformerExport(
                 if (ended) return
                 ended = true
                 handler.removeCallbacks(poll)
+                TransformerThreads.awaitEnd(internalThreads)
                 listener.onError(exportException)
             }
 
@@ -141,7 +149,7 @@ class TransformerExport(
         })
         transformer = t
         output.absoluteFile.parentFile?.mkdirs()
-        t.start(composition, output.absolutePath)
+        internalThreads = TransformerThreads.startedBy { t.start(composition, output.absolutePath) }
         handler.postDelayed(poll, config.progressIntervalMs)
     }
 
@@ -150,7 +158,12 @@ class TransformerExport(
         if (ended) return
         ended = true
         handler.removeCallbacks(poll)
-        transformer?.cancel()
+        try {
+            transformer?.cancel()
+        } finally {
+            // cancel() returns before the internal thread has quit (QA-05 D9).
+            TransformerThreads.awaitEnd(internalThreads)
+        }
     }
 
     companion object {

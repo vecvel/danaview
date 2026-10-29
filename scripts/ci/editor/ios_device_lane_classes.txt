@@ -1,0 +1,14 @@
+# RunnerTests classes that run in the nightly device lane (.github/workflows/danaview-device.yml),
+# not in the required gate (.github/workflows/danaview-ci.yml). One xcodebuild test identifier per
+# line (RunnerTests/<Class>); `#` starts a comment. scripts/ci/editor/ios.sh reads this file:
+# DANAVIEW_IOS_RUNNER_LANE=gate passes each line as -skip-testing, =device as -only-testing.
+# Docs: docs/v1.2/CI_LANES.md. Move a class here only when it is a soak or perf-heavy class whose
+# result on a shared simulator depends on AVFoundation or the runner's load, not on the code.
+
+# QA-05 soak D7: AVFoundation's mix reader hangs 0-3 of 8 reads per run on the simulator
+# (testSoakMixReadHangsSometimes, back-to-back soak exports).
+RunnerTests/ExportD7Tests
+# QA-05 soak D1/D2: the soak project export, the real reader hang and the stall watchdogs.
+RunnerTests/ExportStallTests
+# Per-kernel 1080p Metal timing, median of 9 renders (simulator numbers, logged).
+RunnerTests/KernelTimingTests

@@ -18,7 +18,6 @@ import 'package:flutter/widgets.dart' hide AspectRatio;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/danaview_editor.dart';
 import 'package:danaview_editor/src/editor/flows/relink/recovery_dialog.dart';
-import 'package:danaview_editor/src/projects/new_project_sheet.dart';
 import 'package:danaview_editor/src/projects/project_actions.dart';
 import 'package:danaview_editor/src/projects/projects_controller.dart';
 import 'package:danaview_editor_core/model.dart';

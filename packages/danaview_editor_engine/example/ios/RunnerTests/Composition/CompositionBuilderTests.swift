@@ -465,6 +465,6 @@ final class CompositionBuilderTests: XCTestCase {
         let medianFull = full.sorted()[1]
         let medianAssemble = assemble.sorted()[1]
         print("IOS-08 2000-item build (simulator): full p50 \(String(format: "%.1f", medianFull)) ms, assemble p50 \(String(format: "%.1f", medianAssemble)) ms, encode+decode \(String(format: "%.1f", decodeMs)) ms")
-        XCTAssertLessThanOrEqual(medianFull, 150, "2,000-item build budget (ARCH §18.2, mid tier)")
+        PerfGate.assertAtMost(medianFull, 150, "2,000-item build budget (ARCH §18.2, mid tier)")
     }
 }

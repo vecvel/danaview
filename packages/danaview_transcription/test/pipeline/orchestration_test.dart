@@ -231,10 +231,13 @@ void main() {
       h.runtime.transcribeScript = (job) async {
         job.chunk(0, [fixtureSegments.first]);
         job.status(chunksCompleted: 1, processed: const Duration(seconds: 3), fraction: 0.3);
-        await settle();
-        final replay = await h.service.checkpoints.replay(h.key());
-        expect(replay, isNotNull);
-        expect(replay!.chunks.single.segments.single.text, 'Welcome to the harbour tour.');
+        // The chunk's checkpoint is appended through real file I/O while the job keeps running:
+        // wait for the write itself (a whole chunk line), not a fixed number of event-loop turns.
+        final replay = await eventually(() async {
+          final r = await h.service.checkpoints.replay(h.key());
+          return r == null || r.chunks.isEmpty ? null : r;
+        });
+        expect(replay.chunks.single.segments.single.text, 'Welcome to the harbour tour.');
         running!.cancel();
       };
       running = h.start().$1;

@@ -72,7 +72,13 @@ class TruncationNotice extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, c) {
             if (button == null) return Align(alignment: Alignment.centerLeft, child: text);
-            if (c.maxWidth < 440) {
+            // Side by side only when the button and a readable share of the sentence both fit at
+            // the ambient text scale: the button grows with it, and a fixed 440 px cut left the
+            // sentence a sliver at 568 px and 1.35 (wrapped into a 224 px tall notice that squeezed
+            // the CSV grid below its header row).
+            final fontSize = DanaviewTextStyles.bodySecondary.fontSize ?? 14;
+            final scale = MediaQuery.textScalerOf(context).scale(fontSize) / fontSize;
+            if (c.maxWidth < 440 * scale) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [text, const SizedBox(height: DanaviewSpacing.xs), button],

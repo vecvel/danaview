@@ -179,7 +179,7 @@ final class CompositorPipelineTests: XCTestCase {
         let p50 = times[times.count / 2]
         let p95 = times[Int(Double(times.count) * 0.95) - 1]
         print(String(format: "IOS-10 redraw-from-cache 1080p (%d sources): p50 %.1f ms, p95 %.1f ms", entry.sources.buffers.count, p50, p95))
-        XCTAssertLessThanOrEqual(p50, 30, "redraw-from-cache p50 ≤ 30 ms")
+        PerfGate.assertAtMost(p50, 30, "redraw-from-cache p50 ≤ 30 ms")
     }
 
     private static func meanLuma(_ pb: CVPixelBuffer, x: Int, y: Int, size: Int) -> Double {
@@ -434,7 +434,8 @@ final class CompositorPipelineTests: XCTestCase {
         // frames' worth of work. Hosted macos-26 VM (2026-10-23): compose p50 29.7 ms, plain 16.4 ms
         // (1.8×); on the dev Mac's simulator 30 ms is the binding bound.
         let k = 3.0
-        XCTAssertLessThan(compose.p50, max(30, k * reference.p50), "simulator compose budget: \(summary)")
+        // DV_PERF_STRICT=1: this bound as is; loose: 4 × 30 ms or the same k × plain-frame baseline.
+        PerfGate.assertAtMost(compose.p50, max(30, k * reference.p50), baseline: k * reference.p50, "simulator compose budget: \(summary)")
     }
 }
 

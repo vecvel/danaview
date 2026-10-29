@@ -57,6 +57,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** DV_PERF_STRICT=1 (environment or system property): absolute timing limits apply (a quiet machine). */
+private val perfStrict = System.getenv("DV_PERF_STRICT") == "1" || System.getProperty("DV_PERF_STRICT") == "1"
+
 class PickCopierTest {
     private val root: File = Files.createTempDirectory("pickcopier").toFile()
     private val intoDir = File(root, "work/picks")
@@ -152,7 +155,10 @@ class PickCopierTest {
         val tookMs = (System.nanoTime() - started) / 1_000_000
         assertEquals(EngineErrorCode.io, codeOf(r))
         assertTrue("retryable", EngineErrors.from(r.exceptionOrNull()!!).retryable)
-        assertTrue("stalled after ${tookMs} ms", tookMs in 250..5_000)
+        // Never before the 300 ms stall timeout (both modes); how soon after is timing: 5 s with
+        // DV_PERF_STRICT=1, 30 s on a loaded CI host.
+        val lateMs = if (perfStrict) 5_000L else 30_000L
+        assertTrue("stalled after $tookMs ms (bound 250..$lateMs)", tookMs in 250..lateMs)
         awaitGone(::leftovers)
         Thread.sleep(400)
         assertEquals(1, done.count.get())
