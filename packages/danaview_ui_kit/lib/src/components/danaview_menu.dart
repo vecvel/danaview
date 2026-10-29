@@ -440,6 +440,9 @@ class _DanaviewMenuItemTile extends StatelessWidget {
   final DanaviewMenuItem item;
   final VoidCallback onSelected;
 
+  /// The widest a trailing hint may be, as a share of the row's content width.
+  static const double _trailingShare = 0.4;
+
   @override
   Widget build(BuildContext context) {
     final touch = context.isTouchPlatform;
@@ -464,51 +467,64 @@ class _DanaviewMenuItemTile extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: DanaviewSpacing.minTapTarget),
             padding: EdgeInsets.symmetric(horizontal: touch ? 12 : 10, vertical: 6),
             decoration: ShapeDecoration(color: background, shape: DanaviewDepth.shape(DanaviewRadius.tileAll)),
-            child: Row(
-              children: [
-                if (item.icon != null || item.glyph != null) ...[
-                  danaviewIconOrGlyph(
-                    item.icon,
-                    item.glyph,
-                    size: 18,
-                    color: item.destructive ? DanaviewColors.destructive : DanaviewColors.textSecondary,
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: item.selected ? FontWeight.w600 : FontWeight.w500,
-                          color: fg,
-                        ),
-                      ),
-                      if (item.subtitle != null)
+            // The trailing hint (a shortcut, a value) gets at most 40 % of the row and ellipsizes, so
+            // a long hint or a large text scale never pushes the row past the menu width; the label
+            // keeps the rest.
+            child: LayoutBuilder(
+              builder: (context, constraints) => Row(
+                children: [
+                  if (item.icon != null || item.glyph != null) ...[
+                    danaviewIconOrGlyph(
+                      item.icon,
+                      item.glyph,
+                      size: 18,
+                      color: item.destructive ? DanaviewColors.destructive : DanaviewColors.textSecondary,
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          item.subtitle!,
+                          item.label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: DanaviewColors.textMuted),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: item.selected ? FontWeight.w600 : FontWeight.w500,
+                            color: fg,
+                          ),
                         ),
-                    ],
+                        if (item.subtitle != null)
+                          Text(
+                            item.subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, color: DanaviewColors.textMuted),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                if (item.trailing != null) ...[
-                  const SizedBox(width: 8),
-                  item.trailing!,
+                  if (item.trailing != null) ...[
+                    const SizedBox(width: 8),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: constraints.maxWidth * _trailingShare),
+                      child: DefaultTextStyle.merge(
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        child: item.trailing!,
+                      ),
+                    ),
+                  ],
+                  if (item.selected) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.check_rounded, size: 18, color: DanaviewColors.primaryLight),
+                  ],
                 ],
-                if (item.selected) ...[
-                  const SizedBox(width: 8),
-                  const Icon(Icons.check_rounded, size: 18, color: DanaviewColors.primaryLight),
-                ],
-              ],
+              ),
             ),
           ),
         );
