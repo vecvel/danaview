@@ -820,6 +820,49 @@ abstract class PdfEventsApi {
   PdfEventMsg pdfEvents();
 }
 
+// =============================================================================================
+// HOM-28 amendment [INTEGRATION] (2026-10-30, lead-approved): page organiser in one pass.
+//
+// The organiser (reorder + rotate + delete + extract selected pages) saves in one native write
+// instead of chaining three tools through temporary files. Its own host API, so the other S4
+// amendments (HOM-31 compress) merge without touching this block. Implemented by
+// Tools/PdfPageTools on Apple (HOM-28) and PdfBox-Android (HOM-28A). Progress events of an
+// organise job carry `tool: reorder`; the Dart side filters by job id only. Advertised through
+// `PdfCapabilitiesMsg.tools` containing reorder, rotate and deletePages (all three).
+// =============================================================================================
+
+/// One page of an organised document: source page [sourcePage] turned by [rotation] more degrees.
+class PdfPagePlanMsg {
+  PdfPagePlanMsg({required this.sourcePage, required this.rotation});
+
+  /// The 0-based page of the input; each page appears at most once.
+  int sourcePage;
+
+  /// Degrees clockwise added to the page's own rotation (a multiple of 90; may be negative).
+  int rotation;
+}
+
+/// Writes the input's pages in [pages] order (pages not listed are left out) into [outPath].
+class PdfOrganiseRequestMsg {
+  PdfOrganiseRequestMsg({required this.jobId, required this.input, required this.pages, required this.outPath});
+
+  /// Caller-chosen id for progress events and `PdfToolsHostApi.cancel`.
+  String jobId;
+  PdfToolInputMsg input;
+
+  /// At least one page; no source page twice.
+  List<PdfPagePlanMsg> pages;
+  String outPath;
+}
+
+/// The page organiser (HOM-28 Apple, HOM-28A Android). Jobs share `PdfToolsHostApi.cancel`.
+@HostApi()
+abstract class PdfOrganiseHostApi {
+  @asyncCallback
+  PdfToolResultMsg organise(PdfOrganiseRequestMsg request);
+}
+// ---- end of the HOM-28 amendment ------------------------------------------------------------
+
 // ---------------------------------------------------------------------------------------------
 // Compress estimates (HOM-31; [INTEGRATION] amendment, an additive block of its own)
 //

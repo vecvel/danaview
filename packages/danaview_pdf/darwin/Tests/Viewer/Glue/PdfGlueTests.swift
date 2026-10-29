@@ -5,7 +5,8 @@
 // builds a PDFKit viewer that navigates, zooms, finds and highlights fixture strings and copies a
 // selection, thumbnails render from an independent open while a view draws the same handle, every
 // async reply arrives on the main thread, the texture calls are Android-only, and every tool stub
-// answers notSupportedOnDevice and ends its job (compress landed with HOM-31: Tests/Compress/Glue/).
+// not landed yet (annotate, sign) answers notSupportedOnDevice and ends its job (the page tools landed
+// with HOM-28: Tests/Tools/Glue/; compress with HOM-31: Tests/Compress/Glue/).
 
 import Foundation
 import PDFKit
@@ -44,7 +45,7 @@ final class PdfGlueTests: XCTestCase {
     let caps = try api.capabilities()
     XCTAssertTrue(caps.platformView && caps.search && caps.selection && caps.passwords && caps.outline && caps.textExtraction)
     XCTAssertFalse(caps.textureView)
-    XCTAssertEqual(caps.tools, [.compress], "compress (HOM-31) has landed")
+    XCTAssertEqual(Set(caps.tools), [.merge, .split, .reorder, .rotate, .deletePages, .compress], "the page tools (HOM-28) and compress (HOM-31) have landed")
 
     let info = try wait { api.open(request: PdfOpenRequestMsg(path: locked.path, password: nil), completion: $0) }.get()
     XCTAssertTrue(info.locked)
@@ -80,16 +81,12 @@ final class PdfGlueTests: XCTestCase {
       "damaged")
   }
 
+  // The page tools (merge, split, reorder, rotate, delete) landed with HOM-28: Tools/PdfPageToolsGlueTests.
   func testToolStubsAnswerNotSupportedAndEndTheirJobs() {
     let tools = PdfToolsHostApiImpl(events: nil)
     let input = PdfToolInputMsg(path: "/nonexistent.pdf", isImage: false)
     let out = "/nonexistent-out.pdf"
     let calls: [(String, (@escaping (Result<PdfToolResultMsg, Error>) -> Void) -> Void)] = [
-      ("merge", { tools.merge(request: PdfMergeRequestMsg(jobId: "j1", inputs: [input], outPath: out), completion: $0) }),
-      ("split", { tools.split(request: PdfSplitRequestMsg(jobId: "j2", input: input, ranges: [], outPaths: []), completion: $0) }),
-      ("reorder", { tools.reorder(request: PdfReorderRequestMsg(jobId: "j3", input: input, order: [], outPath: out), completion: $0) }),
-      ("rotate", { tools.rotate(request: PdfRotateRequestMsg(jobId: "j4", input: input, pages: [], degrees: 90, outPath: out), completion: $0) }),
-      ("delete", { tools.deletePages(request: PdfDeletePagesRequestMsg(jobId: "j5", input: input, pages: [], outPath: out), completion: $0) }),
       ("annotate", { tools.annotate(request: PdfAnnotateRequestMsg(jobId: "j6", input: input, annotations: [], outPath: out), completion: $0) }),
       ("sign", { tools.sign(request: PdfSignRequestMsg(jobId: "j7", input: input, stamps: [], outPath: out), completion: $0) }),
     ]
@@ -98,6 +95,7 @@ final class PdfGlueTests: XCTestCase {
     }
     XCTAssertEqual(tools.jobs.runningCount, 0)
     XCTAssertEqual(code(wait { tools.merge(request: PdfMergeRequestMsg(jobId: "", inputs: [], outPath: out), completion: $0) }), "invalidArgument")
+    XCTAssertEqual(code(wait { tools.merge(request: PdfMergeRequestMsg(jobId: "j1", inputs: [input], outPath: out), completion: $0) }), "invalidArgument")
     XCTAssertNoThrow(try tools.cancel(jobId: "unknown"))
   }
 

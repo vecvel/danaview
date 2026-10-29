@@ -1,4 +1,6 @@
 // OWNER: HOM-22
+// EXTENDED: HOM-28 (the PDF page tools' single-file handler, [pdfPageToolsHandlerProvider], and the
+// labels of "Organise pages" and "Merge with…".)
 //
 // Providers of the file actions (ARCH v1.2 V2-117, V2-118; BUILD_PLAN HOM-22): the library-side
 // actions over the open store (null with DANAVIEW_FILES_HOME off: nothing opens the store), the
@@ -46,6 +48,13 @@ typedef MergeIntoPdfHandler = Future<void> Function(BuildContext context, List<M
 /// The "Merge into PDF" handler, or null (the action is hidden).
 final mergeIntoPdfHandlerProvider = Provider<MergeIntoPdfHandler?>((ref) => null);
 
+/// Opens a PDF's page tools from its file menu (HOM-28, wired by the app root): [action] is
+/// [FileAction.organisePages] or [FileAction.mergeWith].
+typedef PdfPageToolsHandler = Future<void> Function(BuildContext context, FileAction action, MediaItem item);
+
+/// The PDF page tools handler, or null (the actions are hidden).
+final pdfPageToolsHandlerProvider = Provider<PdfPageToolsHandler?>((ref) => null);
+
 /// Compresses one PDF into a new file (HOM-31, wired by the app root behind DANAVIEW_FILES_HOME).
 typedef CompressPdfHandler = Future<void> Function(BuildContext context, MediaItem item);
 
@@ -66,6 +75,8 @@ String fileActionLabel(FileAction action, {FileOutCapabilities? capabilities, bo
       FileAction.saveOut => (capabilities ?? FileOutCapabilities.of(fileOutPlatformOf(defaultTargetPlatform))).saveLabel,
       FileAction.saveToPhotos => 'Save to Photos',
       FileAction.mergeIntoPdf => 'Merge into PDF',
+      FileAction.organisePages => 'Organise pages',
+      FileAction.mergeWith => 'Merge with…',
       FileAction.compressPdf => 'Compress…',
       FileAction.delete => 'Delete',
     };
@@ -82,6 +93,8 @@ IconData fileActionIcon(FileAction action, {bool favourite = false}) => switch (
       FileAction.saveOut => Icons.save_alt_rounded,
       FileAction.saveToPhotos => Icons.add_photo_alternate_outlined,
       FileAction.mergeIntoPdf => Icons.picture_as_pdf_outlined,
+      FileAction.organisePages => Icons.dashboard_customize_outlined,
+      FileAction.mergeWith => Icons.merge_rounded,
       FileAction.compressPdf => Icons.compress_rounded,
       FileAction.delete => Icons.delete_outline_rounded,
     };
@@ -98,6 +111,8 @@ String fileActionId(FileAction action) => switch (action) {
       FileAction.saveOut => 'file-save-out',
       FileAction.saveToPhotos => 'file-save-photos',
       FileAction.mergeIntoPdf => 'file-merge-pdf',
+      FileAction.organisePages => 'file-organise-pages',
+      FileAction.mergeWith => 'file-merge-with',
       FileAction.compressPdf => 'file-compress-pdf',
       FileAction.delete => 'file-delete',
     };
