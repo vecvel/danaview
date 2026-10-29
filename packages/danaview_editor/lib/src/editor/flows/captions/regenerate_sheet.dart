@@ -633,7 +633,7 @@ class _ModeTile extends StatelessWidget {
   Widget build(BuildContext context) => DanaviewSurface(
         color: DanaviewColors.surface,
         child: DanaviewListTile(
-          leading: DanaviewTileIcon(icon, size: 36, color: selected ? DanaviewColors.primaryLight : DanaviewColors.textSecondary),
+          leading: DanaviewIconTile(icon, size: 36, color: selected ? DanaviewColors.primaryLight : DanaviewColors.textSecondary),
           title: title,
           subtitle: subtitle,
           subtitleMaxLines: 3,

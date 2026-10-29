@@ -58,13 +58,13 @@ class DesktopPhotoSidebar extends StatelessWidget {
             dense: true,
             title: 'All photos',
             subtitle: state.scanning && total == 0 ? 'Scanning…' : desktopPhotoCountLabel(total),
-            leading: const DanaviewTileIcon(Icons.photo_library_outlined),
+            leading: const DanaviewIconTile(Icons.photo_library_outlined),
             selected: state.selectedRootId == null,
             onTap: () => onSelect(null),
           ),
           if (pictures.isNotEmpty) ...[
             const DanaviewSectionHeader('Pictures'),
-            for (final r in pictures) _tile(r, const DanaviewTileIcon.glyph(DanaviewGlyphKind.folder)),
+            for (final r in pictures) _tile(r, const DanaviewIconTile.glyph(DanaviewGlyphKind.folder)),
           ],
           const DanaviewSectionHeader('Drives'),
           if (volumes.isEmpty)
@@ -77,10 +77,10 @@ class DesktopPhotoSidebar extends StatelessWidget {
               ),
             )
           else
-            for (final r in volumes) _tile(r, const DanaviewTileIcon(Icons.sd_storage_outlined)),
+            for (final r in volumes) _tile(r, const DanaviewIconTile(Icons.sd_storage_outlined)),
           if (custom.isNotEmpty) ...[
             const DanaviewSectionHeader('Added folders'),
-            for (final r in custom) _tile(r, const DanaviewTileIcon.glyph(DanaviewGlyphKind.folderOpen), removable: true),
+            for (final r in custom) _tile(r, const DanaviewIconTile.glyph(DanaviewGlyphKind.folderOpen), removable: true),
           ],
           const Padding(
             key: ValueKey('desktop-drop-hint'),

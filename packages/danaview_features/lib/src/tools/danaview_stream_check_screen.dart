@@ -222,7 +222,7 @@ class _DanaviewStreamCheckScreenState extends ConsumerState<DanaviewStreamCheckS
       return [
         DanaviewInlineEmpty(
           icon: Icons.podcasts_rounded,
-          iconColor: DanaviewColors.cyan,
+          iconColor: DanaviewColors.textSecondary,
           title: "This kind of link can't be checked",
           message: _unsupported,
           action: DanaviewButton.tonal(
@@ -255,7 +255,7 @@ class _DanaviewStreamCheckScreenState extends ConsumerState<DanaviewStreamCheckS
       return const [
         DanaviewInlineEmpty(
           icon: Icons.fact_check_rounded,
-          iconColor: DanaviewColors.cyan,
+          iconColor: DanaviewColors.textSecondary,
           title: 'Check before you play',
           message: 'Works with direct video and audio files, HLS (.m3u8) and DASH (.mpd) links. '
               'Only a small part of the file is downloaded.',
@@ -372,7 +372,7 @@ class _DanaviewStreamCheckScreenState extends ConsumerState<DanaviewStreamCheckS
       if (variant.codecs != null) variant.codecs!.replaceAll(',', ', '),
     ];
     return DanaviewLibraryRow(
-      leading: DanaviewTileIcon(
+      leading: DanaviewIconTile(
         height != null && height >= 2160
             ? Icons.four_k_rounded
             : height != null && height >= 720
@@ -380,7 +380,6 @@ class _DanaviewStreamCheckScreenState extends ConsumerState<DanaviewStreamCheckS
                 : height == null
                     ? Icons.audiotrack_rounded
                     : Icons.sd_rounded,
-        color: DanaviewColors.cyan,
         size: 40,
       ),
       title: title,
@@ -393,7 +392,7 @@ class _DanaviewStreamCheckScreenState extends ConsumerState<DanaviewStreamCheckS
 
   Widget _redirectRow(StreamRedirect redirect) {
     return DanaviewLibraryRow(
-      leading: const DanaviewTileIcon(Icons.route_rounded, color: DanaviewColors.purple, size: 40),
+      leading: const DanaviewIconTile(Icons.route_rounded, size: 40),
       title: '${redirect.statusCode} ${_redirectName(redirect.statusCode)}',
       subtitle: _readableUrl(redirect.to),
       subtitleMaxLines: 3,
@@ -504,7 +503,7 @@ class _SummaryCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DanaviewTileIcon(style.icon, color: style.color, size: 44),
+              DanaviewIconTile(style.icon, color: style.color, size: 44),
               const SizedBox(width: DanaviewSpacing.md),
               Expanded(
                 child: Column(

@@ -118,7 +118,7 @@ class _RecoveryBannerState extends ConsumerState<RecoveryBanner> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const ExcludeSemantics(child: DanaviewTileIcon(Icons.history_rounded, color: DanaviewColors.warning, size: 36)),
+                const ExcludeSemantics(child: DanaviewIconTile(Icons.history_rounded, color: DanaviewColors.warning, size: 36)),
                 const SizedBox(width: DanaviewSpacing.md),
                 Expanded(
                   child: ExcludeSemantics(
@@ -238,7 +238,7 @@ class _SessionCard extends StatelessWidget {
     return DanaviewSurface(
       color: DanaviewColors.surfaceElevated,
       borderColor: DanaviewColors.hairlineSubtle,
-      borderRadius: DanaviewRadius.mdAll,
+      borderRadius: DanaviewRadius.controlAll,
       padding: const EdgeInsets.all(DanaviewSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

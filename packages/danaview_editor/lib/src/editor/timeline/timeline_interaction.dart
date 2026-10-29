@@ -778,7 +778,7 @@ class TimelineInteractionLayer extends StatelessWidget {
         alignment: Alignment.topCenter,
         child: DanaviewSurface(
           color: DanaviewColors.surfaceElevatedHigher,
-          borderRadius: DanaviewRadius.smAll,
+          borderRadius: DanaviewRadius.controlAll,
           shadow: DanaviewShadow.soft,
           padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: 2),
           child: Text(
@@ -796,7 +796,7 @@ class TimelineInteractionLayer extends StatelessWidget {
 class _InteractionPainter extends CustomPainter {
   _InteractionPainter(this.interaction, this.layer, Listenable repaint) : super(repaint: repaint);
 
-  static const Color _invalid = Color(0xFFEF4444);
+  static const Color _invalid = DanaviewColors.error;
 
   final TimelineInteractionController interaction;
   final TimelineLayerContext layer;

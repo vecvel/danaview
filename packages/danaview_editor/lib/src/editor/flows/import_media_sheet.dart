@@ -710,7 +710,7 @@ class _ImportMediaSheetState extends ConsumerState<ImportMediaSheet> {
         key: const ValueKey('import-header'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DanaviewTileIcon(icon, color: color, size: 40),
+          DanaviewIconTile(icon, color: color, size: 40),
           const SizedBox(width: DanaviewSpacing.md),
           Expanded(
             child: Column(
@@ -921,7 +921,7 @@ class ImportItemTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ExcludeSemantics(child: DanaviewTileIcon(importItemIcon(picked, kind), size: 36)),
+            ExcludeSemantics(child: DanaviewIconTile(importItemIcon(picked, kind), size: 36)),
             const SizedBox(width: DanaviewSpacing.md),
             Expanded(
               child: ExcludeSemantics(

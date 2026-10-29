@@ -170,7 +170,7 @@ class _AllGood extends StatelessWidget {
           key: const ValueKey('relink-all-good'),
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const DanaviewTileIcon(Icons.check_circle_rounded, color: DanaviewColors.success, size: 40),
+            const DanaviewIconTile(Icons.check_circle_rounded, color: DanaviewColors.success, size: 40),
             const SizedBox(width: DanaviewSpacing.md),
             Expanded(
               child: Column(
@@ -332,7 +332,7 @@ class RelinkRowTile extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ExcludeSemantics(child: DanaviewTileIcon(relinkKindIcon(asset.kind), color: DanaviewColors.warning, size: 36)),
+                ExcludeSemantics(child: DanaviewIconTile(relinkKindIcon(asset.kind), color: DanaviewColors.warning, size: 36)),
                 const SizedBox(width: DanaviewSpacing.md),
                 Expanded(
                   child: ExcludeSemantics(
@@ -543,7 +543,7 @@ class _SeveralCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const ExcludeSemantics(child: DanaviewTileIcon(Icons.auto_fix_high_rounded, size: 36)),
+              const ExcludeSemantics(child: DanaviewIconTile(Icons.auto_fix_high_rounded, size: 36)),
               const SizedBox(width: DanaviewSpacing.md),
               Expanded(
                 child: Column(

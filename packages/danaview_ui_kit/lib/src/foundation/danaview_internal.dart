@@ -14,7 +14,9 @@ import '../theme/danaview_tokens.dart';
 Color danaviewInteractiveFill(Color base, DanaviewPressState state) {
   if (!state.focused) return base;
   final darken = Color.alphaBlend(base, DanaviewColors.background).computeLuminance() > 0.1;
-  return Color.alphaBlend(darken ? const Color(0x1A000000) : DanaviewColors.hover, base);
+  // A 3 % lift on dark fills: the 2 pt focus ring carries the state, and secondary text on the
+  // brightest fill (fieldActive) keeps 4.5:1.
+  return Color.alphaBlend(darken ? const Color(0x1A000000) : const Color(0x08FFFFFF), base);
 }
 
 /// Grows the layout to the 44pt minimum height on touch platforms; the visual stays centered.

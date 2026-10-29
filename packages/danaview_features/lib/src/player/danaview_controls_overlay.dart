@@ -591,7 +591,7 @@ class _DanaviewControlsOverlayState extends ConsumerState<DanaviewControlsOverla
   Widget _buildTime(String label) {
     final remaining = _timeMode == TimeDisplayMode.remaining;
     return DanaviewPressable(
-      borderRadius: DanaviewRadius.smAll,
+      borderRadius: DanaviewRadius.controlAll,
       semanticLabel: remaining ? 'Time remaining $label' : 'Elapsed time $label',
       tooltip: remaining ? 'Show elapsed time' : 'Show remaining time',
       onTap: () => setState(() {
@@ -734,21 +734,21 @@ class _DanaviewControlsOverlayState extends ConsumerState<DanaviewControlsOverla
               if (widget.onEditVideo case final onEdit?)
                 DanaviewListTile(
                   key: const ValueKey('player-sheet-edit-video'),
-                  leading: const DanaviewTileIcon(Icons.movie_edit),
+                  leading: const DanaviewIconTile(Icons.movie_edit),
                   title: 'Edit video',
                   subtitle: 'Trim, add text, captions and more',
                   showChevron: true,
                   onTap: () => closeThen(onEdit),
                 ),
               DanaviewListTile(
-                leading: const DanaviewTileIcon(Icons.playlist_play_rounded),
+                leading: const DanaviewIconTile(Icons.playlist_play_rounded),
                 title: 'Queue',
                 subtitle: count == 1 ? '1 video' : '$count videos',
                 showChevron: true,
                 onTap: () => closeThen(widget.onOpenQueue),
               ),
               DanaviewListTile(
-                leading: const DanaviewTileIcon(Icons.settings_rounded),
+                leading: const DanaviewIconTile(Icons.settings_rounded),
                 title: 'Settings',
                 subtitle: 'Video, audio, subtitles and more',
                 showChevron: true,
@@ -935,27 +935,35 @@ class _SeekIndicator extends StatelessWidget {
   final int seconds;
   final bool visible;
 
-  /// Changes on every seek so the bubble bumps again.
+  /// Changes on every seek so the bubble slides in again.
   final int pulse;
+
+  /// How far the bubble slides in, towards the side it seeks to (§11: a plain slide, no bounce).
+  static const double _slide = 8;
 
   @override
   Widget build(BuildContext context) {
     final back = side == _SeekSide.back;
+    // §11: with Reduce Motion on, the bubble only crossfades.
+    final slide = MediaQuery.disableAnimationsOf(context) ? 0.0 : _slide;
     return LayoutBuilder(
       builder: (context, constraints) {
         final bubble = TweenAnimationBuilder<double>(
           key: ValueKey(pulse),
-          tween: Tween(begin: 0.9, end: 1.0),
+          tween: Tween(begin: 0.0, end: 1.0),
           duration: DanaviewMotion.fast,
-          curve: Curves.easeOutBack,
-          builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+          curve: DanaviewMotion.curve,
+          builder: (context, t, child) => Opacity(
+            opacity: 0.5 + 0.5 * t,
+            child: Transform.translate(offset: Offset((back ? slide : -slide) * (1 - t), 0), child: child),
+          ),
           child: Semantics(
             liveRegion: true,
             label: back ? 'Back $seconds seconds' : 'Forward $seconds seconds',
             child: ExcludeSemantics(
               child: DanaviewSurface(
                 color: DanaviewColors.overlayDark,
-                borderRadius: DanaviewRadius.mdAll,
+                borderRadius: DanaviewRadius.toastAll,
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

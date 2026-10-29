@@ -12,7 +12,7 @@
 // * A disabled tile stays visible at 40 % opacity and stays tappable: the tap explains why it is
 //   disabled (the toolbar shows the registry's reason in a toast). Semantics: button + label + hint
 //   (the reason when disabled, else the shortcut).
-// * Standard rounded corners (DanaviewRadius.md): tiles carry text, so they are never fully round.
+// * Standard rounded corners (DanaviewRadius.control): tiles carry text, so they are never fully round.
 
 import 'package:flutter/widgets.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -149,7 +149,7 @@ class ToolTile extends StatelessWidget {
           height: height,
           decoration: BoxDecoration(
             color: fill,
-            borderRadius: DanaviewRadius.mdAll,
+            borderRadius: DanaviewRadius.controlAll,
             border: state.focused ? Border.fromBorderSide(DanaviewBorders.focus) : null,
           ),
           padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),

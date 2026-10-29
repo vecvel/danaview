@@ -522,7 +522,7 @@ class TimelineDropTargetState extends ConsumerState<TimelineDropTarget> with Sin
 class _DropGhostLayer extends ConsumerWidget {
   const _DropGhostLayer({required this.ghost, required this.owner});
 
-  static const Color _invalid = Color(0xFFEF4444);
+  static const Color _invalid = DanaviewColors.error;
   static const double _pillMaxWidth = 220;
 
   final DropGhost ghost;
@@ -586,7 +586,7 @@ class _DropGhostLayer extends ConsumerWidget {
         alignment: Alignment.topCenter,
         child: DanaviewSurface(
           color: DanaviewColors.surfaceElevatedHigher,
-          borderRadius: DanaviewRadius.smAll,
+          borderRadius: DanaviewRadius.controlAll,
           shadow: DanaviewShadow.soft,
           padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: 2),
           child: Text(

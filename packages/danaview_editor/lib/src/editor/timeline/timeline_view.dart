@@ -957,7 +957,7 @@ class _HoverPillView extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: DanaviewSurface(
             color: DanaviewColors.surfaceElevatedHigher,
-            borderRadius: DanaviewRadius.smAll,
+            borderRadius: DanaviewRadius.controlAll,
             shadow: DanaviewShadow.soft,
             padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: DanaviewSpacing.xs),
             child: Text(
@@ -1025,7 +1025,7 @@ class _MultiSelectBanner extends StatelessWidget {
             liveRegion: true,
             child: DanaviewSurface(
               color: DanaviewColors.surfaceElevatedHigher,
-              borderRadius: DanaviewRadius.mdAll,
+              borderRadius: DanaviewRadius.controlAll,
               shadow: DanaviewShadow.soft,
               padding:
                   const EdgeInsets.only(left: DanaviewSpacing.md, right: DanaviewSpacing.xs, top: DanaviewSpacing.xxs, bottom: DanaviewSpacing.xxs),

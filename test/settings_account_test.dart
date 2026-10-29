@@ -471,7 +471,8 @@ void main() {
       expect(find.text(emailError), findsOneWidget);
       final email = find.ancestor(of: find.text(emailError), matching: find.byType(DanaviewTextField)).first;
       final frame = tester.widget<AnimatedContainer>(find.descendant(of: email, matching: find.byType(AnimatedContainer)).first);
-      expect(((frame.foregroundDecoration! as BoxDecoration).border! as Border).top, DanaviewBorders.hairline,
+      // The kit field draws its edge as a continuous-corner shape (Cinema B).
+      expect(((frame.foregroundDecoration! as ShapeDecoration).shape as OutlinedBorder).side, DanaviewBorders.hairline,
           reason: 'no red outline around the email field');
       expect(tester.takeException(), isNull);
       await _finish(tester, env);

@@ -251,7 +251,7 @@ class _InspectorSliderRowState extends State<InspectorSliderRow> {
             child: DanaviewPressable(
               onTap: enabled && w.onSubmitted != null ? () => setState(() => _editing = true) : null,
               semanticLabel: '${w.label}, ${w.valueText}',
-              borderRadius: DanaviewRadius.smAll,
+              borderRadius: DanaviewRadius.controlAll,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minWidth: 44, minHeight: 32),
                 child: Padding(

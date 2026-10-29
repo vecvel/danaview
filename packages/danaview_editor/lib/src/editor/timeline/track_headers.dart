@@ -401,6 +401,10 @@ class TrackHeaderCell extends StatelessWidget {
     this.enabled = true,
   });
 
+  /// The selected lane's header: the red selection wash ([DanaviewColors.primarySoft]) over the
+  /// resting fill.
+  static final Color _selectedFill = Color.alphaBlend(DanaviewColors.primarySoft, DanaviewColors.surfaceElevated);
+
   /// The lane.
   final LaneModel lane;
 
@@ -451,7 +455,7 @@ class TrackHeaderCell extends StatelessWidget {
     final body = plan.compact ? _compact(label, plan, open) : _expanded(context, label, plan, open);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: selected ? const Color(0xFF1B1F33) : DanaviewColors.surfaceElevated,
+        color: selected ? _selectedFill : DanaviewColors.surfaceElevated,
         border: const Border(right: DanaviewBorders.hairline, bottom: DanaviewBorders.subtle),
       ),
       child: body,

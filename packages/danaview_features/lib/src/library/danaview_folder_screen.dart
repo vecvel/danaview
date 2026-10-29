@@ -119,7 +119,6 @@ class _DanaviewFolderScreenState extends ConsumerState<DanaviewFolderScreen> {
     if (listing.isEmpty) {
       return DanaviewEmptyState(
         glyph: isDevice ? DanaviewGlyphKind.device : DanaviewGlyphKind.folderOpen,
-        iconColor: isDevice ? DanaviewColors.cyan : DanaviewColors.primaryLight,
         title: isDevice ? 'No videos on this device yet' : 'No videos here',
         message: _emptyMessage(context, isDevice: isDevice),
         actions: [
@@ -220,7 +219,7 @@ class _DanaviewFolderScreenState extends ConsumerState<DanaviewFolderScreen> {
   Widget _folderRow(LibraryFolderEntry folder) {
     final count = folder.mediaCount;
     return DanaviewLibraryRow(
-      leading: const DanaviewTileIcon.glyph(DanaviewGlyphKind.folder, color: DanaviewColors.purple, size: 40),
+      leading: const DanaviewIconTile.glyph(DanaviewGlyphKind.folder),
       title: folder.name,
       titleMaxLines: 2,
       subtitle: count == null ? null : (count == 0 ? 'No videos' : formatCount(count, 'video')),
@@ -236,7 +235,7 @@ class _DanaviewFolderScreenState extends ConsumerState<DanaviewFolderScreen> {
     final item = media[index];
     final resume = ref.read(libraryControllerProvider.notifier).resumeInfoFor(item);
     return DanaviewLibraryRow(
-      leading: const DanaviewTileIcon(Icons.movie_rounded, size: 40),
+      leading: const DanaviewIconTile(Icons.movie_rounded),
       title: item.title,
       titleMaxLines: 2,
       badge: episodeLabel(item),

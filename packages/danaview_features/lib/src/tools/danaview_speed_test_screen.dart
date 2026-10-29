@@ -203,7 +203,7 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
         SpeedTestPhase.download || SpeedTestPhase.upload => DanaviewSpeedGauge(
             size: size,
             mbps: update.currentMbps,
-            color: update.phase == SpeedTestPhase.download ? DanaviewColors.cyan : DanaviewColors.purple,
+            color: DanaviewColors.primaryLight,
             label: update.phase == SpeedTestPhase.download ? 'DOWNLOAD' : 'UPLOAD',
             value: formatMbps(update.currentMbps),
             unit: 'Mbps',
@@ -226,7 +226,7 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
     return DanaviewSpeedGauge(
       size: size,
       mbps: 0,
-      color: DanaviewColors.primary,
+      color: DanaviewColors.primaryLight,
       label: switch (_status) {
         _TestStatus.failed => 'NOT FINISHED',
         _TestStatus.stopped => 'STOPPED',
@@ -240,7 +240,7 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
   Widget _downloadGauge(double size, double? mbps) => DanaviewSpeedGauge(
         size: size,
         mbps: mbps ?? 0,
-        color: DanaviewColors.cyan,
+        color: DanaviewColors.primaryLight,
         label: 'DOWNLOAD',
         value: mbps == null ? '–' : formatMbps(mbps),
         unit: 'Mbps',
@@ -300,7 +300,6 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
       _Metric(
         label: 'Download',
         icon: Icons.download_rounded,
-        color: DanaviewColors.cyan,
         value: mbps(download, SpeedTestPhase.download),
         unit: 'Mbps',
         measured: download != null,
@@ -308,7 +307,6 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
       _Metric(
         label: 'Upload',
         icon: Icons.upload_rounded,
-        color: DanaviewColors.purple,
         value: mbps(upload, SpeedTestPhase.upload),
         unit: 'Mbps',
         measured: upload != null,
@@ -316,7 +314,6 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
       _Metric(
         label: 'Ping',
         icon: Icons.timer_rounded,
-        color: DanaviewColors.primaryLight,
         value: latency == null ? '–' : formatMsValue(latency),
         unit: 'ms',
         measured: latencyDone,
@@ -324,7 +321,6 @@ class _DanaviewSpeedTestScreenState extends ConsumerState<DanaviewSpeedTestScree
       _Metric(
         label: 'Jitter',
         icon: Icons.waves_rounded,
-        color: DanaviewColors.warning,
         value: jitter == null ? '–' : formatMsValue(jitter),
         unit: 'ms',
         measured: latencyDone,
@@ -417,22 +413,22 @@ class _PhaseSteps extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const steps = [
-      (SpeedTestPhase.latency, 'Ping', DanaviewColors.primaryLight),
-      (SpeedTestPhase.download, 'Download', DanaviewColors.cyan),
-      (SpeedTestPhase.upload, 'Upload', DanaviewColors.purple),
+      (SpeedTestPhase.latency, 'Ping'),
+      (SpeedTestPhase.download, 'Download'),
+      (SpeedTestPhase.upload, 'Upload'),
     ];
     final current = update?.phase;
     return Row(
       children: [
         for (var i = 0; i < steps.length; i++) ...[
           if (i > 0) const SizedBox(width: DanaviewSpacing.sm),
-          Expanded(child: _step(steps[i].$1, steps[i].$2, steps[i].$3, current)),
+          Expanded(child: _step(steps[i].$1, steps[i].$2, current)),
         ],
       ],
     );
   }
 
-  Widget _step(SpeedTestPhase phase, String label, Color color, SpeedTestPhase? current) {
+  Widget _step(SpeedTestPhase phase, String label, SpeedTestPhase? current) {
     final double fill;
     if (current == null) {
       fill = 0;
@@ -444,7 +440,7 @@ class _PhaseSteps extends StatelessWidget {
       fill = 0;
     }
     final active = running && current == phase;
-    final radius = BorderRadius.circular(2);
+    const radius = DanaviewRadius.capsuleAll;
     return Column(
       children: [
         Container(
@@ -454,7 +450,7 @@ class _PhaseSteps extends StatelessWidget {
           child: FractionallySizedBox(
             widthFactor: fill.clamp(0.0, 1.0),
             heightFactor: 1,
-            child: DecoratedBox(decoration: BoxDecoration(color: color, borderRadius: radius)),
+            child: const DecoratedBox(decoration: BoxDecoration(color: DanaviewColors.primary, borderRadius: radius)),
           ),
         ),
         const SizedBox(height: 6),
@@ -477,7 +473,6 @@ class _Metric {
   const _Metric({
     required this.label,
     required this.icon,
-    required this.color,
     required this.value,
     required this.unit,
     required this.measured,
@@ -485,7 +480,6 @@ class _Metric {
 
   final String label;
   final IconData icon;
-  final Color color;
   final String value;
   final String unit;
 
@@ -555,7 +549,7 @@ class _MetricTile extends StatelessWidget {
           children: [
             Row(
               children: [
-                DanaviewTileIcon(metric.icon, color: metric.color, size: 28),
+                DanaviewIconTile(metric.icon),
                 const SizedBox(width: DanaviewSpacing.sm),
                 Expanded(
                   child: Text(
@@ -598,7 +592,7 @@ class _MetricRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
-            DanaviewTileIcon(metric.icon, color: metric.color, size: 40),
+            DanaviewIconTile(metric.icon, size: 40),
             const SizedBox(width: DanaviewSpacing.md),
             Expanded(
               child: Column(
@@ -708,7 +702,7 @@ class _VideoVerdict extends StatelessWidget {
         title: 'Fine for HD 720p',
         message: 'HD plays smoothly; Full HD may pause to buffer at times.',
         icon: Icons.hd_rounded,
-        color: DanaviewColors.primaryLight,
+        color: DanaviewColors.textPrimary,
       );
     }
     if (d >= 3) {
@@ -742,7 +736,7 @@ class _VideoVerdict extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              DanaviewTileIcon(headline.icon, color: headline.color, size: 40),
+              DanaviewIconTile(headline.icon, color: headline.color, size: 40),
               const SizedBox(width: DanaviewSpacing.md),
               Expanded(
                 child: Column(
@@ -828,7 +822,7 @@ class _VideoVerdict extends StatelessWidget {
 
   Widget _verdictRow({required bool ok, required String title, required String subtitle}) {
     return DanaviewLibraryRow(
-      leading: DanaviewTileIcon(
+      leading: DanaviewIconTile(
         ok ? Icons.check_circle_rounded : Icons.error_rounded,
         color: ok ? DanaviewColors.success : DanaviewColors.warning,
         size: 40,

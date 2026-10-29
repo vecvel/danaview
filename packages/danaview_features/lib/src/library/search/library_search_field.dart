@@ -127,7 +127,7 @@ class _HitRow extends StatelessWidget {
       key: ValueKey('library-search-hit-${item.id.value}'),
       title: item.name,
       subtitle: subtitle,
-      leading: kind == null ? const DanaviewTileIcon.glyph(DanaviewGlyphKind.folder) : DanaviewTileIcon(organiseKindIcon(kind)),
+      leading: kind == null ? const DanaviewIconTile.glyph(DanaviewGlyphKind.folder) : DanaviewIconTile(organiseKindIcon(kind)),
       semanticLabel: '$type ${item.name}${where == null ? '' : ', in $where'}',
       onTap: onTap,
     );

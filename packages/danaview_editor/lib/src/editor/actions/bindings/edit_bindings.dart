@@ -472,7 +472,7 @@ class MoveToTrackSheet extends StatelessWidget {
               key: ValueKey('move-to-${id.value}'),
               title: names[id] ?? (track.name.isEmpty ? TrackStrings.kindName(track.kind) : track.name),
               subtitle: EditStrings.clipsOnTrack(track.items.length),
-              leading: DanaviewTileIcon(trackKindIcon(track.kind)),
+              leading: DanaviewIconTile(trackKindIcon(track.kind)),
               onTap: () => Navigator.of(context).pop(id),
             ),
       ],

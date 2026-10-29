@@ -92,7 +92,7 @@ class _VideosTabState extends ConsumerState<VideosTab> {
               children: [
                 for (final item in shownRecent)
                   DanaviewLibraryRow(
-                    leading: DanaviewTileIcon(mediaIcon(item.media), color: mediaIconColor(item.media), size: 40),
+                    leading: DanaviewIconTile(mediaIcon(item.media)),
                     title: item.media.title,
                     badge: episodeLabel(item.media),
                     subtitle: mediaSubtitle(item.media, item.resume, exists: item.exists, fallback: parentFolderName(item.media.pathOrUri)),
@@ -103,10 +103,10 @@ class _VideosTabState extends ConsumerState<VideosTab> {
               ],
             ),
             if (recent.length > videosTabRecentPreview)
-              Center(
-                child: DanaviewButton.ghost(
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: DanaviewButton.text(
                   label: _showAllRecent ? 'Show less' : 'Show all ${recent.length}',
-                  trailingIcon: _showAllRecent ? Icons.expand_less_rounded : Icons.expand_more_rounded,
                   size: DanaviewButtonSize.sm,
                   onPressed: () => setState(() => _showAllRecent = !_showAllRecent),
                 ),
@@ -118,7 +118,7 @@ class _VideosTabState extends ConsumerState<VideosTab> {
               children: [
                 for (final p in state.playlists)
                   DanaviewLibraryRow(
-                    leading: const DanaviewTileIcon(Icons.queue_music_rounded, color: DanaviewColors.purple, size: 40),
+                    leading: const DanaviewIconTile(Icons.queue_music_rounded),
                     title: p.name,
                     subtitle: p.itemCount == 0 ? 'No videos yet' : formatCount(p.itemCount, 'video'),
                     onTap: widget.onOpenPlaylist == null ? null : () => widget.onOpenPlaylist!(p.name),
@@ -132,10 +132,8 @@ class _VideosTabState extends ConsumerState<VideosTab> {
               children: [
                 for (final f in folders)
                   DanaviewLibraryRow(
-                    leading: DanaviewTileIcon.glyph(
+                    leading: DanaviewIconTile.glyph(
                       f.isDevice ? DanaviewGlyphKind.device : DanaviewGlyphKind.folderVideo,
-                      color: f.isDevice ? DanaviewColors.cyan : DanaviewColors.primaryLight,
-                      size: 40,
                     ),
                     title: f.label,
                     subtitle: f.isDevice ? 'Device storage' : f.path,
@@ -201,7 +199,7 @@ class _NowPlayingStrip extends ConsumerWidget {
         children: [
           DanaviewLibraryRow(
             key: const ValueKey('videos-now-playing'),
-            leading: const DanaviewTileIcon(Icons.graphic_eq_rounded, color: DanaviewColors.primaryLight, size: 40),
+            leading: const DanaviewIconTile(Icons.graphic_eq_rounded),
             title: media.title,
             badge: 'Now playing',
             subtitle: subtitle,

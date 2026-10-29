@@ -131,10 +131,9 @@ class _FoldersTabState extends ConsumerState<FoldersTab> {
             topSpacing: 0,
             action: store.readOnly
                 ? null
-                : DanaviewButton.ghost(
+                : DanaviewButton.text(
                     key: const ValueKey('folders-new-root'),
                     label: 'New folder',
-                    icon: Icons.add_rounded,
                     size: DanaviewButtonSize.sm,
                     onPressed: () => _actions.createFolder(null),
                   ),

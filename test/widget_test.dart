@@ -45,9 +45,18 @@ void main() {
     expect(find.text('Open file'), findsOneWidget);
     expect(find.text('Open folder'), findsOneWidget);
     expect(find.text('Open link'), findsOneWidget);
-    expect(find.text('Playlists'), findsOneWidget);
-    expect(find.text('Folders'), findsOneWidget);
+    // An empty library shows one empty state (DESIGN_SYSTEM §10.3): the empty Playlists and Folders
+    // sections are hidden, and New playlist / Add folder sit in the top bar's Import (+) menu.
+    expect(find.byKey(const ValueKey('home-empty-state')), findsOneWidget);
+    expect(find.text('Playlists'), findsNothing);
+    expect(find.text('Folders'), findsNothing);
     expect(find.text('Continue watching'), findsNothing);
+    await tester.tap(find.byTooltip(HomeChromeLabels.import));
+    await pumpFrames(tester);
+    expect(find.text('New playlist'), findsOneWidget);
+    expect(find.text('Add folder'), findsOneWidget);
+    await tester.tapAt(Offset.zero);
+    await pumpFrames(tester);
     expect(tester.takeException(), isNull);
 
     await _tearDown(tester, engine);
@@ -82,7 +91,7 @@ void main() {
     await pumpFrames(tester, count: 10);
 
     expect(find.byType(DanaviewPlayerScreen), findsNothing);
-    expect(find.text('NOW PLAYING'), findsOneWidget);
+    expect(find.text('Now playing'), findsOneWidget);
     expect(find.text('Continue watching'), findsOneWidget);
     expect(find.text('big_buck_bunny.mp4'), findsNWidgets(2));
     expect(find.text('example.com'), findsOneWidget);
@@ -93,7 +102,7 @@ void main() {
     expect(clearBtn, findsOneWidget);
     await tester.tap(clearBtn);
     await pumpFrames(tester, count: 5);
-    expect(find.text('NOW PLAYING'), findsNothing);
+    expect(find.text('Now playing'), findsNothing);
     expect(tester.takeException(), isNull);
 
     await _tearDown(tester, engine);

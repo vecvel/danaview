@@ -49,9 +49,9 @@ class DanaviewLegalScreen extends ConsumerWidget {
                     const Text('Effective $legalEffectiveDate', style: DanaviewTextStyles.caption),
                     const SizedBox(height: DanaviewSpacing.lg),
                     if (document == LegalDocument.privacy)
-                      _Summary(text.summary, icon: Icons.verified_user_rounded, color: DanaviewColors.success)
+                      _Summary(text.summary, icon: Icons.verified_user_rounded)
                     else
-                      _Summary(text.summary, icon: Icons.gavel_rounded, color: DanaviewColors.primaryLight),
+                      _Summary(text.summary, icon: Icons.gavel_rounded),
                     for (final section in text.sections) _section(section),
                     if (email != null) _section(_contact(text, email)),
                     const SizedBox(height: DanaviewSpacing.xxl),
@@ -97,11 +97,10 @@ class DanaviewLegalScreen extends ConsumerWidget {
 }
 
 class _Summary extends StatelessWidget {
-  const _Summary(this.text, {required this.icon, required this.color});
+  const _Summary(this.text, {required this.icon});
 
   final String text;
   final IconData icon;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +110,7 @@ class _Summary extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DanaviewTileIcon(icon, color: color, size: 36),
+          DanaviewIconTile(icon, size: 36),
           const SizedBox(width: DanaviewSpacing.md),
           Expanded(
             child: Column(
@@ -151,7 +150,7 @@ class _Bullet extends StatelessWidget {
             child: SizedBox.square(
               dimension: 6,
               child: DecoratedBox(
-                decoration: BoxDecoration(color: DanaviewColors.primaryLight, shape: BoxShape.circle),
+                decoration: BoxDecoration(color: DanaviewColors.textSecondary, shape: BoxShape.circle),
               ),
             ),
           ),

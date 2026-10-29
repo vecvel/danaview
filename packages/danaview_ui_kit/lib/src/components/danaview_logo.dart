@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-/// The Danaview brand mark ("6B", the page-fold Dv) on its indigo tile.
+/// The Danaview brand mark ("6B", the page-fold Dv) on its black tile (colourway R3).
 ///
 /// [accent] recolours the flap only, for product variants (see [DanaviewLogoPainter.editorAccent] and
 /// friends). Without it the flap uses the master tone [DanaviewLogoPainter.flapTone].
@@ -48,14 +48,22 @@ class DanaviewLogoPainter extends CustomPainter {
   /// Flap colour for a product variant; null paints [flapTone].
   final Color? accent;
 
-  static const Color gradientStart = Color(0xFF7C7FF5);
-  static const Color gradientEnd = Color(0xFF5141DD);
+  static const Color gradientStart = Color(0xFF2A2A2A);
+  static const Color gradientEnd = Color(0xFF0A0A0A);
+
+  /// Tile edge: a hairline of 8 on the 1024 grid (0.5 pt at icon scale), white at 14%, inside
+  /// the tile outline.
+  static const Color edgeColor = Color(0x24FFFFFF);
+  static const double edgeWidth = 8 / 1024;
+
+  /// Top highlight band: white at 5% at the top edge, fading out by half the tile height.
+  static const Color highlightColor = Color(0x0DFFFFFF);
 
   /// The page (the D) colour.
   static const Color pageColor = Color(0xFFFFFFFF);
 
-  /// The master flap tone.
-  static const Color flapTone = Color(0xFFC9CBFF);
+  /// The master flap tone (the red fold of the master / Player mark).
+  static const Color flapTone = Color(0xFFE50914);
 
   /// Product accents: they go on the flap only.
   static const Color editorAccent = Color(0xFF8B5CF6);
@@ -85,16 +93,24 @@ class DanaviewLogoPainter extends CustomPainter {
       );
       canvas.save();
       canvas.clipRRect(tileShape);
-      // White glow centred at (225.28, 143.36) with r 798.72 on the 1024 grid: 10% -> 3.5% -> 0.
+      // Top highlight band: white at 5% fading to 0 by y 512 on the grid.
       canvas.drawRect(
         rect,
         Paint()
-          ..shader = const RadialGradient(
-            center: Alignment(225.28 / 512 - 1, 143.36 / 512 - 1),
-            radius: 798.72 / 1024,
-            colors: [Color(0x1AFFFFFF), Color(0x09FFFFFF), Color(0x00FFFFFF)],
-            stops: [0, 0.55, 1],
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.center,
+            colors: [highlightColor, Color(0x00FFFFFF)],
           ).createShader(rect),
+      );
+      // Edge hairline, drawn inside the tile outline.
+      final ew = s * edgeWidth;
+      canvas.drawRRect(
+        tileShape.deflate(ew / 2),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = ew
+          ..color = edgeColor,
       );
       canvas.restore();
     }

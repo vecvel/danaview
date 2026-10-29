@@ -42,17 +42,14 @@ class DanaviewSwitch extends StatelessWidget {
           height: _trackHeight,
           padding: const EdgeInsets.all(2),
           decoration: BoxDecoration(
-            color: value ? activeColor : DanaviewColors.surfaceElevatedHigher,
+            // §8: active track primary, inactive track white 18 %.
+            color: value ? activeColor : DanaviewColors.trackBackground,
             borderRadius: radius,
           ),
           foregroundDecoration: BoxDecoration(
             borderRadius: radius,
             border: Border.fromBorderSide(
-              state.focused
-                  ? DanaviewBorders.focus
-                  : value
-                      ? DanaviewBorders.hairline.copyWith(color: Colors.transparent)
-                      : DanaviewBorders.hairline,
+              state.focused ? DanaviewBorders.focus : DanaviewBorders.focus.copyWith(color: Colors.transparent),
             ),
           ),
           child: AnimatedAlign(

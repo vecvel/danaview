@@ -29,5 +29,6 @@ export 'src/components/danaview_switch.dart';
 export 'src/components/danaview_text_field.dart';
 export 'src/components/danaview_toast.dart';
 export 'src/components/danaview_volume_slider.dart';
+export 'src/theme/danaview_depth.dart';
 export 'src/theme/danaview_theme.dart';
 export 'src/theme/danaview_tokens.dart';

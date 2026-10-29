@@ -18,13 +18,19 @@ class DanaviewBadge extends StatelessWidget {
   final IconData? icon;
   final bool solid;
 
+  /// The tinted fill behind a non-solid badge: [color] at 10 %, the same strength as
+  /// [DanaviewColors.destructiveSoft]. At 16 % the red ([DanaviewColors.primaryLight]) and grey
+  /// ([DanaviewColors.textSecondary]) labels fell to 4.2–4.4:1 on raised cards; at 10 % every badge
+  /// colour keeps 4.5:1 on [DanaviewColors.surfaceElevated].
+  static Color tintFor(Color color) => color.withValues(alpha: 0.10);
+
   @override
   Widget build(BuildContext context) {
     final fg = solid ? DanaviewColors.foregroundOn(color) : color;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: solid ? color : color.withValues(alpha: 0.16),
+        color: solid ? color : tintFor(color),
         borderRadius: DanaviewRadius.xsAll,
       ),
       child: Row(

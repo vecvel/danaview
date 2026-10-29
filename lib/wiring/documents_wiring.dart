@@ -244,7 +244,7 @@ Future<void> showViewerFileMenu(BuildContext context, WidgetRef ref, MediaItem i
             for (final action in fileMenuActions(item, port).where(viewerFileActions.contains))
               DanaviewListTile(
                 key: ValueKey(fileActionId(action)),
-                leading: DanaviewTileIcon(fileActionIcon(action, favourite: favourite), color: DanaviewColors.primaryLight),
+                leading: DanaviewIconTile(fileActionIcon(action, favourite: favourite)),
                 title: fileActionLabel(action, capabilities: port?.capabilities, favourite: favourite),
                 onTap: () => Navigator.of(sheetContext).pop(action),
               ),

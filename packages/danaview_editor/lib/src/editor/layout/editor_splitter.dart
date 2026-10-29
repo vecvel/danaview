@@ -120,7 +120,7 @@ class _EditorSplitterState extends State<EditorSplitter> {
       height: 4,
       decoration: BoxDecoration(
         color: active ? DanaviewColors.primaryLight : const Color(0x33FFFFFF),
-        borderRadius: const BorderRadius.all(Radius.circular(2)),
+        borderRadius: DanaviewRadius.capsuleAll,
       ),
     );
     return Semantics(

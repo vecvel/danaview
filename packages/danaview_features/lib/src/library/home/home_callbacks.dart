@@ -22,6 +22,7 @@ class HomeCallbacks {
     this.onOpenProjects,
     this.onSearchWithAi,
     this.onOpenAiSettings,
+    this.onOpenAiStudio,
   });
 
   /// No callbacks: the Home shows none of the optional entry points.
@@ -46,6 +47,10 @@ class HomeCallbacks {
   /// Opens the AI settings (AIS-51's "Set up AI" link; wired by INT-103).
   final VoidCallback? onOpenAiSettings;
 
+  /// Opens AI Studio: the phone tab bar's AI Studio item (DESIGN_SYSTEM §10.5), shown only with
+  /// DANAVIEW_AI_STUDIO on and this set.
+  final VoidCallback? onOpenAiStudio;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -55,11 +60,20 @@ class HomeCallbacks {
           other.onMakeMontage == onMakeMontage &&
           other.onOpenProjects == onOpenProjects &&
           other.onSearchWithAi == onSearchWithAi &&
-          other.onOpenAiSettings == onOpenAiSettings;
+          other.onOpenAiSettings == onOpenAiSettings &&
+          other.onOpenAiStudio == onOpenAiStudio;
 
   @override
   int get hashCode =>
-      Object.hash(onEditPhoto, onBatchEditPhotos, onMakeMontage, onOpenProjects, onSearchWithAi, onOpenAiSettings);
+      Object.hash(
+        onEditPhoto,
+        onBatchEditPhotos,
+        onMakeMontage,
+        onOpenProjects,
+        onSearchWithAi,
+        onOpenAiSettings,
+        onOpenAiStudio,
+      );
 }
 
 /// Makes the Home's [HomeCallbacks] available to every tab, tray and bar below it, so the slot

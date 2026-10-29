@@ -487,11 +487,11 @@ class _SpeedCurveEditorState extends State<SpeedCurveEditor> {
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: DanaviewColors.surface,
-              borderRadius: DanaviewRadius.mdAll,
+              borderRadius: DanaviewRadius.controlAll,
               border: Border.fromBorderSide(_focused ? DanaviewBorders.focus : DanaviewBorders.hairline),
             ),
             child: ClipRRect(
-              borderRadius: DanaviewRadius.mdAll,
+              borderRadius: DanaviewRadius.controlAll,
               child: LayoutBuilder(builder: (context, c) {
                 final plot = _plot = SpeedPlot(SpeedCurveEditor.plotInset.deflateRect(Offset.zero & Size(c.maxWidth, widget.height)));
                 return Stack(clipBehavior: Clip.none, children: [

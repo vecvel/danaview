@@ -112,7 +112,7 @@ class ReadOnlyBanner extends ConsumerWidget {
     return const _BannerFrame(
       key: ValueKey('read-only-banner'),
       icon: Icons.lock_outline_rounded,
-      color: DanaviewColors.cyan,
+      color: DanaviewColors.textSecondary,
       title: RelinkStrings.readOnlyBannerTitle,
       detail: RelinkStrings.readOnlyBannerDetail,
       semanticLabel: '${RelinkStrings.readOnlyBannerTitle}. ${RelinkStrings.readOnlyBannerDetail}',
@@ -191,7 +191,7 @@ class _BannerFrame extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: DanaviewSpacing.xs),
           child: DanaviewSurface(
             color: DanaviewColors.surfaceElevated,
-            borderRadius: DanaviewRadius.mdAll,
+            borderRadius: DanaviewRadius.controlAll,
             shadow: DanaviewShadow.soft,
             padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.md, vertical: DanaviewSpacing.xs),
             child: LayoutBuilder(
