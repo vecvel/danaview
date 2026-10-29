@@ -45,15 +45,15 @@
 //   and the composition, so nothing is cancelled or released while a call into it is outstanding;
 // - the audio watchdog only signals: a hung read is left blocked on its queue and its reader is
 //   never torn down (kept for the process, like IOS-17's abandoned pumps), and the read resumes on
-//   a fresh composition and reader from the frame after the last delivered buffer
+//   a fresh composition and reader, the writer getting the frames after the last delivered buffer
 //   (`maxAudioResumes`), so the export completes; a stop request ends the wait at once (typed
-//   interruption). A resumed reader starts inside the timeline, and such an
-//   AVAssetReaderAudioMixOutput stops at the end of the audio there (10.0 s or 17.0 s of the soak's
-//   39 s, CI round 6) instead of rendering the silence to its range end, so a resumed read that
-//   ends early continues from the plan's audio layout (`continuation`): a fresh reader where audio
-//   goes on, the silence up to the next audio segment, the silence after the last one. (Reading
-//   the whole range again instead replays the same render and hangs at the same frame.) A read that
-//   still ends more than `maxShortfallUs` early is rejected and never shipped (`shortRead`);
+//   interruption). The resumed reader reads the read's whole range again and the frames already
+//   delivered are dropped: an AVAssetReaderAudioMixOutput whose range starts inside the timeline
+//   stops at the end of whichever track's media ends first after that point instead of rendering
+//   silence to its range end (soak, iOS 26.5 simulator: from 9 s it ended at 10.0 s, from 11 s and
+//   14 s at 17.0 s, from 10 s and 18 s it delivered nothing; from 0 it always reads the whole 39 s;
+//   CI round 6 shipped a 9.95 s audio track under a 39 s video). A read that still ends more than
+//   `maxShortfallUs` early is rejected and never shipped (`shortRead`);
 // - each export segment reads its own anchored copy of the composition (no composition is mutated
 //   while a reader uses it), every audio read gets a fresh composition (never the video phase's),
 //   and each phase's readers are torn down, and their compositions released, before the next phase
@@ -1064,12 +1064,9 @@ final class MixAudioSource: SegmentAudioSource {
             return s
         }
     }
-    /// Reader range end (resumes read to it).
-    private var rangeEnd: CMTime = .invalid
-    /// Continuations of resumed sessions that ended early, and whether the rest of the range is
-    /// silence the source renders itself (no audio segment after the last delivered frame).
-    private(set) var continuations = 0
-    private var padsToEnd = false
+    /// The read's range (a resume reads all of it again, see the header).
+    private var range: CMTimeRange = .invalid
+    private var rangeEnd: CMTime { range.end }
     /// Absolute 48 kHz frame of the next frame the writer gets (continuity across a resume).
     private var nextFrame: Int64 = 0
     /// A real buffer held back while the silence of a resume gap goes first.
@@ -1162,7 +1159,7 @@ final class MixAudioSource: SegmentAudioSource {
             throw EngineError(.internal, "audio mix without tracks")
         }
         let range = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: composition.built.plan)
-        rangeEnd = range.end
+        self.range = range
         nextFrame = MixAudioSource.frame(range.start)
         try open(composition, range: range)
     }
@@ -1184,18 +1181,6 @@ final class MixAudioSource: SegmentAudioSource {
         if let held = pending {
             pending = nil
             return try sanitized(held, skip: 0)
-        }
-        if padsToEnd {
-            let left = MixAudioSource.frame(rangeEnd) - nextFrame
-            guard left > 0 else {
-                padsToEnd = false
-                try finishValidation()
-                return nil
-            }
-            let silence = try ExportPCM.makeBuffer(
-                frames: Int(min(Int64(SilentAudioSource.chunkFrames), left)),
-                pts: CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate))) { _ in }
-            return try sanitized(silence, skip: 0, real: false)
         }
         while true {
             guard let current = session else { return nil }
@@ -1219,20 +1204,6 @@ final class MixAudioSource: SegmentAudioSource {
                 let skip = sessions.count > 1 ? Int(max(0, nextFrame - first)) : 0
                 return try sanitized(sample, skip: skip)
             case .end:
-                if sessions.count > 1, let reopen = reopen, let next = continuation() {
-                    // A resumed reader stopped at the end of the audio around it (see the header).
-                    continuations += 1
-                    takeSession(hung: false)?.close()
-                    guard let startUs = next else {
-                        Log.info(.export, "resumed audio read ended at \(resumeTime.seconds) s; silence to the end")
-                        padsToEnd = true
-                        return try nextAudio()
-                    }
-                    Log.info(.export, "resumed audio read ended at \(resumeTime.seconds) s; continuing from \(Double(startUs) / 1e6) s")
-                    continuationFrom = nextFrame
-                    try open(try reopen(), range: CMTimeRange(start: FrameGrid.cmTime(us: startUs), end: rangeEnd))
-                    continue
-                }
                 try finishValidation()
                 return nil
             case .failed(let error):
@@ -1252,35 +1223,15 @@ final class MixAudioSource: SegmentAudioSource {
                     throw EngineError(.decodeFailed, "audio read hung", retryable: true)
                 }
                 resumes += 1
-                Log.info(.export, "audio read hung at \(resumeTime.seconds) s; resuming on a fresh reader (\(resumes))")
-                try open(try reopen(), range: CMTimeRange(start: resumeTime, end: rangeEnd))
+                Log.info(.export, "audio read hung at \(resumeTime.seconds) s; reading again on a fresh reader from \(range.start.seconds) s (\(resumes))")
+                // From the range start, never from the resume point (see the header); the frames
+                // before `nextFrame` are dropped above.
+                try open(try reopen(), range: range)
             }
         }
     }
 
     private var resumeTime: CMTime { CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate)) }
-
-    /// Frame the last continuation started from (a continuation that delivered nothing is not
-    /// continued again).
-    private var continuationFrom: Int64?
-
-    /// Where a resumed session that ended at `nextFrame` (short of the range end) continues: `.some(t)`
-    /// opens a fresh reader at composition µs t (the frame itself when an audio segment still plays
-    /// there, else the next segment's start, the gap delivered as silence), `.some(nil)` renders
-    /// silence to the end (no audio segment after it), nil ends the read (at the range end, no
-    /// progress since the last continuation, or out of continuations; validation then judges it).
-    private func continuation() -> Int64?? {
-        let endFrame = MixAudioSource.frame(rangeEnd)
-        guard nextFrame < endFrame, continuationFrom != nextFrame else { return nil }
-        let plan = composition.built.plan
-        guard continuations < plan.audio.count + 2 else { return nil }
-        let nowUs = Int64((Double(nextFrame) * 1_000_000 / Double(ExportPCM.sampleRate)).rounded())
-        // A segment still playing (more than 1 ms of it left) continues right here.
-        if plan.audio.contains(where: { $0.t0 <= nowUs && $0.t1 - nowUs > 1_000 }) { return .some(nowUs) }
-        let nextStart = plan.audio.map(\.t0).filter { $0 > nowUs }.min()
-        guard let start = nextStart, MixAudioSource.frame(FrameGrid.cmTime(us: start)) < endFrame else { return .some(nil) }
-        return .some(start)
-    }
 
     /// Waits for [ticket] in short slices: at most `watchdog` seconds (then `.hung`), and never
     /// past a stop request (a cancel or background interruption ends the read at once, typed as

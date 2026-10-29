@@ -94,7 +94,7 @@ final class ExportAudioValidationTests: XCTestCase {
 
     /// Exports [data]; [corrupt] gives each attempt's injected fault (nil: the read as AVFoundation
     /// rendered it). Every redo is immediate (no back-off) unless [configure] says otherwise.
-    private func run(_ h: ExportHarness, _ data: Data,
+    private func run(_ h: ExportHarness, _ data: Data, watch: TimePitchWatch? = nil,
                      corrupt: @escaping (Int) -> ((Int, UnsafeMutableBufferPointer<Float>) -> Void)?,
                      configure: ((ReaderWriterPipeline) -> Void)? = nil) throws -> Run {
         var pipeline: ReaderWriterPipeline?
@@ -105,6 +105,7 @@ final class ExportAudioValidationTests: XCTestCase {
             configure?(p)
             p.audioSourceHook = { source, attempt in
                 seen.append(source)
+                if let watch = watch { source.timePitchWatch = watch }
                 source.corrupt = corrupt(attempt)
             }
         }
@@ -231,69 +232,102 @@ final class ExportAudioValidationTests: XCTestCase {
         assertCleanOrTypedFailure(r)
     }
 
+    /// A plain 1× tone (no time-pitch unit, so AVFoundation adds no fault of its own) watched like
+    /// a ramp over 0.01–2.09 s: the content-fault rule then sees only the injected faults, the same
+    /// in every run (a real fault of a loaded simulator broke a ramp-based version, CI round 6).
+    private static let plainTone = ExportPlans.toneAudio(map: [(0, 2_100_000, 500_000, 2_600_000)])
+    private static let plainWatch = TimePitchWatch(
+        spans: [.init(startUs: TimePitchWatch.edgeMarginUs, endUs: 2_100_000 - TimePitchWatch.edgeMarginUs, gain: [AnimKey(0, 1)])],
+        seamsUs: [])
+
     func testFaultReproducedByEveryReadIsContent() throws {
         // Digitally gated content looks like a dropout to the scan, but every fresh read renders it
         // at the same place: when every witness read (at least `minContentWitnesses`, the last one
-        // included) has it, the last one keeps it (the export does not fail forever). A real fault
-        // in the last read on top of it still fails the export (seen on a loaded simulator), but
-        // never for the injected one.
+        // included) has it, the last one keeps it and the export completes with it.
         let h = try make()
         let f = Self.dropoutFrames(attempt: 1)
         let injected = TimePitchFault(kind: .dropout, frame: Int64(f.lowerBound))
-        let r = try run(h, ExportPlans.toneAudio(map: ExportPlans.rampMap)) { _ in self.zeroing(f.lowerBound, f.upperBound) }
+        let r = try run(h, Self.plainTone, watch: Self.plainWatch) { _ in self.zeroing(f.lowerBound, f.upperBound) }
         let pipeline = try XCTUnwrap(r.pipeline)
         XCTAssertEqual(pipeline.audioAttempts, 5, "content faults are only accepted on the last attempt")
+        XCTAssertEqual(r.sources.count, 5)
+        for source in r.sources.dropLast() {
+            XCTAssertEqual(source.contentFaults, [], "never before the last attempt")
+            XCTAssertTrue(source.isTimePitchWitness, source.otherDefect ?? "")
+            XCTAssertEqual(source.timePitchFaults.count, 1, "\(source.timePitchFaults)")
+            XCTAssertTrue(source.timePitchFaults.contains { $0.matches(injected) }, "\(source.timePitchFaults)")
+        }
         let last = try XCTUnwrap(r.sources.last)
         XCTAssertGreaterThanOrEqual(last.dropouts, 1, "the content is still there")
-        for source in r.sources.dropLast() { XCTAssertEqual(source.contentFaults, [], "never before the last attempt") }
-        for source in r.sources where source.isTimePitchWitness {
-            XCTAssertTrue(source.timePitchFaults.contains { $0.matches(injected) }, "every witness has the injected fault")
-        }
-        assertCleanOrTypedFailure(r)
-        let witnesses = r.sources.dropLast().filter(\.isTimePitchWitness).count
-        guard witnesses + 1 >= pipeline.minContentWitnesses else {
-            // AVFoundation broke more reads than the rule allows (a tap range jump, NaN, silence, a
-            // hung read): no evidence, so the injected fault is not content and the export fails
-            // typed instead of shipping it.
-            XCTAssertEqual(last.contentFaults, [])
-            XCTAssertNotNil(r.failure, "a dropout without evidence is never shipped")
-            print("FIX-IOS-MEDIA content: only \(witnesses) earlier witness read(s): \(r.sources.map { $0.otherDefect ?? $0.rejection ?? "clean" })")
-            return
-        }
         XCTAssertTrue(last.contentFaults.contains { $0.matches(injected) }, "\(last.contentFaults)")
-        XCTAssertFalse(last.unexplainedFaults.contains { $0.matches(injected) })
+        XCTAssertEqual(last.unexplainedFaults, [])
+        XCTAssertNil(r.failure, r.failure?.message ?? "")
+        XCTAssertNotNil(r.done)
+        assertCleanOrTypedFailure(r)
+    }
+
+    func testContentFaultDoesNotExcuseAnotherFaultInTheLastRead() throws {
+        // The recurring fault is kept as content, but a fault only the last read has (AVFoundation's
+        // own, here injected 50 ms later) still fails the export typed: no dropout is shipped.
+        let h = try make()
+        let f = Self.dropoutFrames(attempt: 1)
+        let other = Self.dropoutFrames(attempt: 2)
+        let r = try run(h, Self.plainTone, watch: Self.plainWatch) { attempt in
+            let content = self.zeroing(f.lowerBound, f.upperBound)
+            guard attempt == 5 else { return content }
+            let extra = self.zeroing(other.lowerBound, other.upperBound)
+            return { index, samples in
+                content(index, samples)
+                extra(index, samples)
+            }
+        }
+        XCTAssertEqual(r.pipeline?.audioAttempts, 5)
+        let last = try XCTUnwrap(r.sources.last)
+        XCTAssertTrue(last.contentFaults.contains { $0.matches(TimePitchFault(kind: .dropout, frame: Int64(f.lowerBound))) })
+        XCTAssertEqual(last.unexplainedFaults.count, 1, "\(last.unexplainedFaults)")
+        XCTAssertTrue(last.unexplainedFaults.allSatisfy { $0.matches(TimePitchFault(kind: .dropout, frame: Int64(other.lowerBound))) })
+        XCTAssertNil(r.done, "the other dropout is never shipped")
+        assertCleanOrTypedFailure(r)
     }
 
     func testReadWithAnotherDefectIsNoWitness() throws {
         // CI round 6: a read rejected for a tap range jump scanned a broken render and missed the
         // content's dropout, so no fault was ever kept as content. A read with another defect (here
-        // NaN in read 2) is left out of the evidence; the other four reads still make it content.
+        // NaN in read 2, without the dropout) is left out of the evidence; the other four reads
+        // still make it content.
         let h = try make()
         let f = Self.dropoutFrames(attempt: 1)
         let injected = TimePitchFault(kind: .dropout, frame: Int64(f.lowerBound))
-        let r = try run(h, ExportPlans.toneAudio(map: ExportPlans.rampMap)) { attempt in
-            let zero = self.zeroing(f.lowerBound, f.upperBound)
-            guard attempt == 2 else { return zero }
-            return { index, samples in
-                zero(index, samples)
-                if index == 0 { samples[0] = .nan }
-            }
+        let r = try run(h, Self.plainTone, watch: Self.plainWatch) { attempt in
+            guard attempt == 2 else { return self.zeroing(f.lowerBound, f.upperBound) }
+            return { index, samples in if index == 0 { samples[0] = .nan } }
         }
         let pipeline = try XCTUnwrap(r.pipeline)
         XCTAssertEqual(pipeline.audioAttempts, 5)
         XCTAssertEqual(r.sources.count, 5)
         XCTAssertEqual(r.sources[1].otherDefect, "NaN")
         XCTAssertFalse(r.sources[1].isTimePitchWitness)
-        assertCleanOrTypedFailure(r)
+        XCTAssertEqual(r.sources[1].timePitchFaults, [], "the broken read lacks the content's fault")
         let last = try XCTUnwrap(r.sources.last)
-        let witnesses = r.sources.dropLast().filter(\.isTimePitchWitness).count
-        guard witnesses + 1 >= pipeline.minContentWitnesses else {
-            XCTAssertNotNil(r.failure, "a dropout without evidence is never shipped")
-            print("FIX-IOS-MEDIA no-witness: only \(witnesses) earlier witness read(s): \(r.sources.map { $0.otherDefect ?? $0.rejection ?? "clean" })")
-            return
-        }
         XCTAssertTrue(last.contentFaults.contains { $0.matches(injected) }, "\(last.contentFaults)")
-        XCTAssertFalse(last.unexplainedFaults.contains { $0.matches(injected) })
+        XCTAssertEqual(last.unexplainedFaults, [])
+        XCTAssertNotNil(r.done, r.failure?.message ?? "")
+        assertCleanOrTypedFailure(r)
+    }
+
+    func testTooFewWitnessesKeepNoContent() throws {
+        // Two broken reads leave three witnesses (the last included), fewer than
+        // `minContentWitnesses`: the dropout is not content and the export fails typed.
+        let h = try make()
+        let f = Self.dropoutFrames(attempt: 1)
+        let r = try run(h, Self.plainTone, watch: Self.plainWatch) { attempt in
+            guard attempt == 2 || attempt == 3 else { return self.zeroing(f.lowerBound, f.upperBound) }
+            return { index, samples in if index == 0 { samples[0] = .nan } }
+        }
+        XCTAssertEqual(r.pipeline?.audioAttempts, 5)
+        XCTAssertEqual(r.sources.last?.contentFaults, [])
+        XCTAssertNil(r.done, "a dropout without evidence is never shipped")
+        assertCleanOrTypedFailure(r)
     }
 
     func testRecurringFaultsMatchByKindAndPlace() {

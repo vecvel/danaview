@@ -366,6 +366,36 @@ final class ExportD7Tests: XCTestCase {
         assertReleased(h)
     }
 
+    func testHungMixReadPastTheEndOfATrackResumesToTheEnd() throws {
+        // CI round 6: a hang at about 12 s resumed on a reader that started there, and such an
+        // AVAssetReaderAudioMixOutput stops at the end of the next track's media (17.0 s of the
+        // soak's 39 s, or 10.0 s from just before 10 s): the export shipped a 9.95 s audio track.
+        // The resume reads the whole range again and drops what was delivered.
+        let h = try make()
+        let log = D7Log()
+        h.coordinator.configurePipeline = { p in
+            p.audioWatchdog = 1
+            p.audioSourceHook = { source, attempt in
+                log.add(source)
+                guard attempt == 1 else { return }
+                // About 0.17 s per buffer: read 70 is about 12 s in (between the speech's end at
+                // 10 s and the clap at 13.07 s).
+                source.readGate = { n in if n == 70 { Thread.sleep(forTimeInterval: 3) } }
+            }
+        }
+        let s = settings(320, 180)
+        let r = try export(h, D7Plans.soak800(), s)
+        guard r.ended else { return }
+        try assertCompleted(h, r, durUs: D7Plans.durUs, s: s)
+        let first = try XCTUnwrap(log.sources.first)
+        XCTAssertGreaterThanOrEqual(first.hungReads, 1, "the gated read counts as hung")
+        XCTAssertEqual(first.resumes, first.hungReads)
+        XCTAssertFalse(first.shortRead, first.otherDefect ?? "")
+        XCTAssertNotEqual(first.rejection, "hung")
+        XCTAssertNil(first.rejection, "the resumed read reaches the end: \(first.rejection ?? "")")
+        assertReleased(h)
+    }
+
     func testHungMixReadWithoutResumesIsRedoneOnAFreshComposition() throws {
         let h = try make()
         let log = D7Log()
