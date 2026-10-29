@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # OWNER: HOM-24
+# EXTENDED: HOM-30 (sign: Classes/Sign/PdfSignCore.swift and Tests/Sign/Core/ join the core target,
+# Tests/Sign/Glue/ the glue target; ios-sim runs the sign core too.)
 # EXTENDED: HOM-29 (annotate: Tests/Annotate/Core/ joins the core target with
 # Classes/Annotate/PdfAnnotateCore.swift, Tests/Annotate/Glue/ the glue target; ios-sim runs the
 # annotate core too.)
@@ -36,11 +38,12 @@ ios_fw="$flutter_root/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm
 all_sources=()
 while IFS= read -r f; do all_sources+=("$f"); done < <(find "$darwin/Classes" -name '*.swift' | sort)
 core_sources=("$darwin/Classes/Viewer/PdfCore.swift" "$darwin/Classes/Text/PdfTextCore.swift" "$darwin/Classes/Tools/PdfPageToolsCore.swift"
-  "$darwin/Classes/Annotate/PdfAnnotateCore.swift")
+  "$darwin/Classes/Annotate/PdfAnnotateCore.swift" "$darwin/Classes/Sign/PdfSignCore.swift")
 tools="$darwin/Tests/Tools"
 annotate="$darwin/Tests/Annotate"
-core_tests=("$here"/Core/*.swift "$tools"/Core/*.swift "$annotate"/Core/*.swift)
-glue_tests=("$here"/Glue/*.swift "$tools"/Glue/*.swift "$annotate"/Glue/*.swift)
+sign="$darwin/Tests/Sign"
+core_tests=("$here"/Core/*.swift "$tools"/Core/*.swift "$annotate"/Core/*.swift "$sign"/Core/*.swift)
+glue_tests=("$here"/Glue/*.swift "$tools"/Glue/*.swift "$annotate"/Glue/*.swift "$sign"/Glue/*.swift)
 
 if [ "$mode" = "ios-typecheck" ]; then
   [ -d "$ios_fw/Flutter.framework" ] || { echo "Flutter.framework not found under $ios_fw (run flutter precache --ios)" >&2; exit 1; }

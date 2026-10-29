@@ -176,7 +176,14 @@ enum PdfAnnotateInputMsg {
   /// A tap reports its page point (`tapped`), where Dart places a text box.
   text,
   /// A tap reports the session annotation under it (`tapped` with its id), which Dart removes.
-  erase;
+  erase,
+  /// HOM-30 amendment (sign): a tap reports its page point and the session item under it
+  /// (`tapped`), where Dart places or selects a signature stamp. A drag that starts on the
+  /// selected stamp moves it and one that starts on its corner handle (a neutral disc at the
+  /// stamp's lower trailing corner on screen) resizes it with its aspect ratio kept; both stay on
+  /// the stamp's page and are shown live, and the final rect is reported once when the drag ends
+  /// (`PdfAnnotateEventsApi.itemMoved`). Every other drag scrolls and zooms as usual.
+  place;
 }
 
 /// What this device's implementation offers; the Dart UI hides what is missing.
@@ -4008,6 +4015,10 @@ abstract class PdfAnnotateEventsApi {
   /// A tap at page point ([x], [y]) on [pageIndex]; [itemId] is the session item under it.
   void tapped(int viewId, int pageIndex, double x, double y, String? itemId);
 
+  /// HOM-30 amendment (sign): the user dragged or resized stamp [itemId] (input `place`) to
+  /// [rect] on [pageIndex] (page space); Dart replaces the item and shows the preview again.
+  void itemMoved(int viewId, String itemId, int pageIndex, PdfRectMsg rect);
+
   static void setUp(PdfAnnotateEventsApi? api, {
     BinaryMessenger? binaryMessenger, 
     String messageChannelSuffix = '',
@@ -4053,6 +4064,30 @@ abstract class PdfAnnotateEventsApi {
           final String? arg_itemId = args[4] as String?;
           try {
             api.tapped(arg_viewId, arg_pageIndex, arg_x, arg_y, arg_itemId);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.itemMoved$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final int arg_viewId = args[0]! as int;
+          final String arg_itemId = args[1]! as String;
+          final int arg_pageIndex = args[2]! as int;
+          final PdfRectMsg arg_rect = args[3]! as PdfRectMsg;
+          try {
+            api.itemMoved(arg_viewId, arg_itemId, arg_pageIndex, arg_rect);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

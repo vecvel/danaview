@@ -940,6 +940,14 @@ enum PdfAnnotateInputMsg {
 
   /// A tap reports the session annotation under it (`tapped` with its id), which Dart removes.
   erase,
+
+  /// HOM-30 amendment (sign): a tap reports its page point and the session item under it
+  /// (`tapped`), where Dart places or selects a signature stamp. A drag that starts on the
+  /// selected stamp moves it and one that starts on its corner handle (a neutral disc at the
+  /// stamp's lower trailing corner on screen) resizes it with its aspect ratio kept; both stay on
+  /// the stamp's page and are shown live, and the final rect is reported once when the drag ends
+  /// (`PdfAnnotateEventsApi.itemMoved`). Every other drag scrolls and zooms as usual.
+  place,
 }
 
 /// The annotate mode of a viewer.
@@ -1027,5 +1035,15 @@ abstract class PdfAnnotateEventsApi {
 
   /// A tap at page point ([x], [y]) on [pageIndex]; [itemId] is the session item under it.
   void tapped(int viewId, int pageIndex, double x, double y, String? itemId);
+
+  /// HOM-30 amendment (sign): the user dragged or resized stamp [itemId] (input `place`) to
+  /// [rect] on [pageIndex] (page space); Dart replaces the item and shows the preview again.
+  void itemMoved(int viewId, String itemId, int pageIndex, PdfRectMsg rect);
 }
 // ---- end of the HOM-29 amendment ------------------------------------------------------------
+//
+// HOM-30 amendment [INTEGRATION] (2026-10-30, to be lead-approved with the HOM-30 merge): the sign
+// mode's `PdfAnnotateInputMsg.place` and `PdfAnnotateEventsApi.itemMoved` above (appended, so no
+// existing codec id or enum index changes). Saving a signed copy is `PdfAnnotateHostApi.save` with
+// the stamps and `burnIn: true`; the frozen `PdfToolsHostApi.sign` is the same write (Sign/ on
+// Apple). Android (HOM-30A) reports `sign` in `capabilities().tools` once both work there.

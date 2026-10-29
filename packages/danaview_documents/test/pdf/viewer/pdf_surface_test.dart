@@ -3,6 +3,9 @@
 // tools are no longer placeholders: they advertise their tools and the core is Flutter-free.)
 // EXTENDED: HOM-29 (the PdfAnnotateHostApi amendment, with its PdfAnnotateEventsApi Flutter API, is
 // declared and routed; the annotator is no longer a placeholder and its core is Flutter-free.)
+// EXTENDED: HOM-30 (the signer is no longer a placeholder: it advertises sign and routes to the
+// annotate save with burn-in; the place input and itemMoved are appended in their own amendment
+// block; the sign geometry core is Flutter-free. No placeholder is left.)
 //
 // The frozen danaview_pdf surface (BUILD_PLAN HOM-24, ARCH v1.2 V2-25), checked from here because
 // HOM-24 owns no test directory inside packages/danaview_pdf: the Pigeon file declares exactly the
@@ -34,11 +37,9 @@ const _outputs = [
   'android/src/main/kotlin/com/vecvel/danaview/pdf/pigeon/PdfApi.g.kt',
 ];
 
-/// Tool placeholders of later tickets: file → owner (HOM-29's annotator and HOM-31's compressor
-/// have landed).
-const _placeholders = {
-  'darwin/Classes/Sign/PdfSigner.swift': 'HOM-30',
-};
+/// Tool placeholders of later tickets: file → owner (every tool has landed: HOM-28's page tools,
+/// HOM-29's annotator, HOM-30's signer and HOM-31's compressor).
+const Map<String, String> _placeholders = {};
 
 final _socket = RegExp(
   r'(?<![A-Za-z0-9_$])(?:HttpClient\s*\(|(?:Raw)?(?:Secure)?Socket\s*\.\s*connect\b|WebSocket\s*\.\s*connect\b|HttpURLConnection\b|URLSession\b|NWConnection\b|OkHttpClient\b|java\.net\.Socket\b|CFStreamCreatePairWithSocketToHost\b)',
@@ -193,6 +194,15 @@ void main() {
     expect(annotator, contains('static let supported: [PdfToolKindMsg] = [.annotate]'));
     expect(annotator, isNot(contains('PdfErrors.notSupported(')));
     expect(RegExp(r'@FlutterApi\(\)\s*abstract class PdfAnnotateEventsApi').hasMatch(pigeon), isTrue);
+    // HOM-30 landed: the signer advertises sign and routes the frozen sign to the annotate save
+    // with burn-in; the place input and the stamp move are the HOM-30 amendment's.
+    final signer = _f('darwin/Classes/Sign/PdfSigner.swift').readAsStringSync();
+    expect(signer, startsWith('// OWNER: HOM-30\n'));
+    expect(signer, contains('static let supported: [PdfToolKindMsg] = [.sign]'));
+    expect(signer, contains('burnIn: true'));
+    expect(signer, isNot(contains('PdfErrors.notSupported(')));
+    expect(pigeon, contains('HOM-30 amendment [INTEGRATION]'));
+    expect(RegExp(r'void itemMoved\(int viewId, String itemId, int pageIndex, PdfRectMsg rect\);').hasMatch(pigeon), isTrue);
     final views = _f('darwin/Classes/Viewer/PdfViewHostApiImpl.swift').readAsStringSync();
     expect(RegExp(r'PdfErrors\.notSupported\("HOM-25"\)').allMatches(views), hasLength(3), reason: 'texture views are Android only');
   });
@@ -205,13 +215,14 @@ void main() {
     }
   });
 
-  test('the viewer, text, page-tool, compress and annotate cores are Flutter-free (XCTest runs them without an app host)', () {
+  test('the viewer, text, page-tool, compress, annotate and sign cores are Flutter-free (XCTest runs them without an app host)', () {
     for (final path in [
       'darwin/Classes/Viewer/PdfCore.swift',
       'darwin/Classes/Text/PdfTextCore.swift',
       'darwin/Classes/Tools/PdfPageToolsCore.swift',
       'darwin/Classes/Compress/PdfCompressCore.swift',
       'darwin/Classes/Annotate/PdfAnnotateCore.swift',
+      'darwin/Classes/Sign/PdfSignCore.swift',
     ]) {
       expect(_f(path).readAsStringSync(), isNot(matches(RegExp(r'^import Flutter', multiLine: true))), reason: path);
     }

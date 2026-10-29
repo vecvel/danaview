@@ -1,4 +1,9 @@
 // OWNER: HOM-29
+// EXTENDED: HOM-30 (sign: the `place` input. A tap reports its page point and the item under it,
+// like select; a drag that starts on the selected stamp moves it and one that starts on its handle
+// (a neutral disc at the stamp's lower trailing corner on screen, a 44 pt target) resizes it with
+// its aspect kept, both live on the preview and kept on the stamp's page (Sign/PdfSignCore.swift);
+// the final rect goes to Dart once, when the drag ends. Other drags scroll and zoom as usual.)
 //
 // Annotate mode of the PDFKit viewer (HOM plan §8.5; the HOM-29 Pigeon amendment). The session's
 // annotations live in Dart (undo / redo); this file shows them as a preview on the viewer's
@@ -33,6 +38,22 @@ enum PdfAnnotateInput: Int {
   case ink
   case text
   case erase
+  case place
+}
+
+/// The sign mode's handle: a neutral disc (light fill, grey hairline) drawn at a stamp's corner.
+final class PdfHandleAnnotation: PDFAnnotation {
+  override func draw(with box: PDFDisplayBox, in context: CGContext) {
+    let inset = bounds.width * 0.06
+    let disc = bounds.insetBy(dx: inset, dy: inset)
+    context.saveGState()
+    context.setFillColor(CGColor(gray: 0.97, alpha: 1))
+    context.fillEllipse(in: disc)
+    context.setStrokeColor(CGColor(gray: 0.45, alpha: 0.9))
+    context.setLineWidth(max(bounds.width * 0.05, 0.25))
+    context.strokeEllipse(in: disc)
+    context.restoreGState()
+  }
 }
 
 /// One shown session item.
@@ -57,6 +78,14 @@ final class PdfAnnotateSession: NSObject {
   private(set) var shown: [PdfAnnotateShownItem] = []
   private var selectionMarker: (page: PDFPage, annotation: PDFAnnotation)?
   private var stampImages: [String: CGImage] = [:]
+  private(set) var selectedId: String?
+  /// The sign mode's resize handle on the selected stamp (input `place`).
+  private(set) var handle: (page: PDFPage, annotation: PDFAnnotation)?
+  private var drag: PdfStampDrag?
+
+  /// A stamp moved or resized by a drag (input `place`): its id, page index and final rect in
+  /// Pigeon page space.
+  var onMoved: ((String, Int, CGRect) -> Void)?
 
   /// A finished stroke: page index and points in Pigeon page space.
   var onInk: ((Int, [CGPoint]) -> Void)?
@@ -66,6 +95,7 @@ final class PdfAnnotateSession: NSObject {
 
   #if os(iOS)
   private var tap: UITapGestureRecognizer?
+  private var stampPan: UIPanGestureRecognizer?
   private var canvas: PKCanvasView?
   private var committedStrokes = 0
   private var clearingCanvas = false
@@ -74,6 +104,7 @@ final class PdfAnnotateSession: NSObject {
   private var pinchStart: CGFloat = 1
   #else
   private var click: NSClickGestureRecognizer?
+  private var stampPan: NSPanGestureRecognizer?
   private var mouseInk: PdfMouseInkView?
   #endif
 
@@ -103,6 +134,7 @@ final class PdfAnnotateSession: NSObject {
 
   /// Leaves annotate mode: the preview and every recognizer and overlay go.
   func end() {
+    drag = nil
     show([], selectedId: nil)
     uninstallInput()
   }
@@ -117,7 +149,10 @@ final class PdfAnnotateSession: NSObject {
     }
     if let marker = selectionMarker { marker.page.removeAnnotation(marker.annotation) }
     selectionMarker = nil
+    removeHandle()
+    drag = nil
     shown = []
+    self.selectedId = selectedId
     guard let document = pdfView.document else { return }
     for item in items {
       if let built = build(item, in: document) {
@@ -135,9 +170,112 @@ final class PdfAnnotateSession: NSObject {
       marker.isReadOnly = true
       page.addAnnotation(marker)
       selectionMarker = (page, marker)
+      if input == .place, item.kind == nil { addHandle(for: item, on: page) }
     }
     clearLiveInk()
   }
+
+  // -------------------------------------------------------------------------------------------
+  // Sign: moving and resizing the selected stamp (input `place`, HOM-30)
+
+  /// Page points per view point at the current zoom.
+  private var pagePerViewPoint: CGFloat { 1 / max(pdfView.scaleFactor, 0.01) }
+
+  /// [p] (Pigeon page space on [page]) in the PDF view's coordinates.
+  private func viewPoint(_ p: CGPoint, on page: PDFPage) -> CGPoint {
+    pdfView.convert(PdfAnnotateGeometry.toKit(p, page), from: page)
+  }
+
+  /// [p] (Pigeon page space) as a screen position whose y grows downwards.
+  private func screenPoint(_ p: CGPoint, on page: PDFPage) -> CGPoint {
+    let v = viewPoint(p, on: page)
+    #if os(macOS)
+    return pdfView.isFlipped ? v : CGPoint(x: v.x, y: -v.y)
+    #else
+    return v
+    #endif
+  }
+
+  private func handleCorner(of rect: CGRect, on page: PDFPage) -> CGPoint {
+    PdfSignGeometry.handleCorner(of: rect, toScreen: { self.screenPoint($0, on: page) })
+  }
+
+  private func handleBounds(at corner: CGPoint, on page: PDFPage) -> CGRect {
+    let d = PdfSignGeometry.handleDiameter * pagePerViewPoint
+    return PdfAnnotateGeometry.toKit(CGRect(x: corner.x - d / 2, y: corner.y - d / 2, width: d, height: d), page)
+  }
+
+  private func addHandle(for item: PdfAnnotateShownItem, on page: PDFPage) {
+    let annotation = PdfHandleAnnotation(bounds: handleBounds(at: handleCorner(of: item.bounds, on: page), on: page), forType: .circle, withProperties: nil)
+    annotation.isReadOnly = true
+    page.addAnnotation(annotation)
+    handle = (page, annotation)
+  }
+
+  private func removeHandle() {
+    if let handle { handle.page.removeAnnotation(handle.annotation) }
+    handle = nil
+  }
+
+  /// Starts moving or resizing the selected stamp when [viewPoint] is on its handle or on it.
+  /// False leaves the touch to scrolling.
+  func beginDrag(at viewPoint: CGPoint) -> Bool {
+    guard input == .place, let id = selectedId, let index = shown.firstIndex(where: { $0.id == id && $0.kind == nil }),
+          let document = pdfView.document else { return false }
+    let item = shown[index]
+    guard let page = document.page(at: item.pageIndex) else { return false }
+    let corner = handleCorner(of: item.bounds, on: page)
+    let toCorner = self.viewPoint(corner, on: page)
+    let resize = hypot(viewPoint.x - toCorner.x, viewPoint.y - toCorner.y) <= PdfSignGeometry.handleReach
+    let start = PdfAnnotateGeometry.fromKit(pdfView.convert(viewPoint, to: page), page)
+    let reach = PdfAnnotateSession.tapReach * pagePerViewPoint
+    guard resize || item.bounds.insetBy(dx: -reach, dy: -reach).contains(start) else { return false }
+    drag = PdfStampDrag(index: index, page: page, start: start, original: item.bounds, handle: resize ? corner : nil, current: item.bounds)
+    return true
+  }
+
+  /// Moves or resizes the dragged stamp to follow [viewPoint] (live on the preview).
+  func continueDrag(at viewPoint: CGPoint) {
+    guard var drag, drag.index < shown.count else { return }
+    let page = drag.page
+    let p = PdfAnnotateGeometry.fromKit(pdfView.convert(viewPoint, to: page), page)
+    let bounds = CGRect(origin: .zero, size: page.bounds(for: .cropBox).size)
+    if let corner = drag.handle {
+      drag.current = PdfSignGeometry.resized(drag.original, handle: corner, to: p, within: bounds)
+    } else {
+      drag.current = PdfSignGeometry.moved(drag.original, by: CGVector(dx: p.x - drag.start.x, dy: p.y - drag.start.y), within: bounds)
+    }
+    self.drag = drag
+    let item = shown[drag.index]
+    for annotation in item.annotations { annotation.bounds = PdfAnnotateGeometry.toKit(drag.current, page) }
+    selectionMarker?.annotation.bounds = PdfAnnotateGeometry.toKit(drag.current, page).insetBy(dx: -4, dy: -4)
+    handle?.annotation.bounds = handleBounds(at: handleCorner(of: drag.current, on: page), on: page)
+    pdfView.annotationsChanged(on: page)
+  }
+
+  /// Ends the drag: the final rect goes to Dart unless [cancelled] (then the stamp goes back).
+  func endDrag(cancelled: Bool) {
+    guard let drag, drag.index < shown.count else {
+      self.drag = nil
+      return
+    }
+    self.drag = nil
+    let item = shown[drag.index]
+    if cancelled || drag.current == drag.original {
+      for annotation in item.annotations { annotation.bounds = PdfAnnotateGeometry.toKit(drag.original, drag.page) }
+      selectionMarker?.annotation.bounds = PdfAnnotateGeometry.toKit(drag.original, drag.page).insetBy(dx: -4, dy: -4)
+      handle?.annotation.bounds = handleBounds(at: handleCorner(of: drag.original, on: drag.page), on: drag.page)
+      pdfView.annotationsChanged(on: drag.page)
+      return
+    }
+    shown[drag.index] = PdfAnnotateShownItem(
+      id: item.id, pageIndex: item.pageIndex, kind: item.kind, bounds: drag.current, rects: item.rects, strokes: item.strokes,
+      lineWidth: item.lineWidth, annotations: item.annotations)
+    onMoved?(item.id, item.pageIndex, drag.current)
+  }
+
+  /// True while a stamp is being dragged.
+  var isDragging: Bool { drag != nil }
 
   private func build(_ item: PdfAnnotateItemMsg, in document: PDFDocument) -> PdfAnnotateShownItem? {
     if let m = item.annotation, let spec = try? PdfAnnotator.spec(m),
@@ -231,6 +369,13 @@ final class PdfAnnotateSession: NSObject {
       tap.delegate = self
       pdfView.addGestureRecognizer(tap)
       self.tap = tap
+      if input == .place {
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(stampDragged(_:)))
+        pan.maximumNumberOfTouches = 1
+        pan.delegate = self
+        pdfView.addGestureRecognizer(pan)
+        stampPan = pan
+      }
     }
   }
 
@@ -238,6 +383,10 @@ final class PdfAnnotateSession: NSObject {
     installed = false
     if let tap { pdfView.removeGestureRecognizer(tap) }
     tap = nil
+    if let stampPan { pdfView.removeGestureRecognizer(stampPan) }
+    stampPan = nil
+    scrollView?.panGestureRecognizer.isEnabled = true
+    removeHandle()
     canvas?.removeFromSuperview()
     canvas = nil
     scrollPan = nil
@@ -248,6 +397,26 @@ final class PdfAnnotateSession: NSObject {
   @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
     guard recognizer.state == .ended else { return }
     handleTap(at: recognizer.location(in: pdfView))
+  }
+
+  @objc private func stampDragged(_ recognizer: UIPanGestureRecognizer) {
+    switch recognizer.state {
+    case .began:
+      // The page under the finger stays put while the stamp follows it.
+      scrollView?.panGestureRecognizer.isEnabled = false
+      continueDrag(at: recognizer.location(in: pdfView))
+    case .changed:
+      continueDrag(at: recognizer.location(in: pdfView))
+    case .ended:
+      continueDrag(at: recognizer.location(in: pdfView))
+      endDrag(cancelled: false)
+      scrollView?.panGestureRecognizer.isEnabled = true
+    case .cancelled, .failed:
+      endDrag(cancelled: true)
+      scrollView?.panGestureRecognizer.isEnabled = true
+    default:
+      break
+    }
   }
 
   /// True when the system prefers Apple Pencil for drawing (a finger then scrolls).
@@ -364,6 +533,14 @@ final class PdfAnnotateSession: NSObject {
       click.delaysPrimaryMouseButtonEvents = false
       pdfView.addGestureRecognizer(click)
       self.click = click
+      if input == .place {
+        let pan = NSPanGestureRecognizer(target: self, action: #selector(stampDragged(_:)))
+        // The PDF view doesn't start a text selection under a stamp drag.
+        pan.delaysPrimaryMouseButtonEvents = true
+        pan.delegate = self
+        pdfView.addGestureRecognizer(pan)
+        stampPan = pan
+      }
     }
   }
 
@@ -371,6 +548,9 @@ final class PdfAnnotateSession: NSObject {
     installed = false
     if let click { pdfView.removeGestureRecognizer(click) }
     click = nil
+    if let stampPan { pdfView.removeGestureRecognizer(stampPan) }
+    stampPan = nil
+    removeHandle()
     mouseInk?.removeFromSuperview()
     mouseInk = nil
   }
@@ -378,6 +558,20 @@ final class PdfAnnotateSession: NSObject {
   @objc private func clicked(_ recognizer: NSClickGestureRecognizer) {
     guard recognizer.state == .ended else { return }
     handleTap(at: recognizer.location(in: pdfView))
+  }
+
+  @objc private func stampDragged(_ recognizer: NSPanGestureRecognizer) {
+    switch recognizer.state {
+    case .began, .changed:
+      continueDrag(at: recognizer.location(in: pdfView))
+    case .ended:
+      continueDrag(at: recognizer.location(in: pdfView))
+      endDrag(cancelled: false)
+    case .cancelled, .failed:
+      endDrag(cancelled: true)
+    default:
+      break
+    }
   }
 
   private func updateInkTool() {
@@ -395,6 +589,15 @@ final class PdfAnnotateSession: NSObject {
 extension PdfAnnotateSession: UIGestureRecognizerDelegate {
   func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
     true
+  }
+
+  /// The stamp drag starts only on the selected stamp or its handle; elsewhere the page scrolls.
+  func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+    guard g === stampPan else { return true }
+    let pan = g as? UIPanGestureRecognizer
+    let start = g.location(in: pdfView)
+    let t = pan?.translation(in: pdfView) ?? .zero
+    return beginDrag(at: CGPoint(x: start.x - t.x, y: start.y - t.y))
   }
 }
 
@@ -420,6 +623,33 @@ extension PdfAnnotateSession: PKCanvasViewDelegate {
   }
 }
 #endif
+
+#if os(macOS)
+extension PdfAnnotateSession: NSGestureRecognizerDelegate {
+  /// The stamp drag starts only on the selected stamp or its handle; elsewhere the view selects
+  /// text as usual.
+  func gestureRecognizerShouldBegin(_ g: NSGestureRecognizer) -> Bool {
+    guard g === stampPan else { return true }
+    let pan = g as? NSPanGestureRecognizer
+    let now = g.location(in: pdfView)
+    let t = pan?.translation(in: pdfView) ?? .zero
+    return beginDrag(at: CGPoint(x: now.x - t.x, y: now.y - t.y))
+  }
+}
+#endif
+
+/// A stamp being dragged (input `place`).
+struct PdfStampDrag {
+  /// Its index in the shown items.
+  let index: Int
+  let page: PDFPage
+  /// Where the drag started (Pigeon page space).
+  let start: CGPoint
+  let original: CGRect
+  /// The handle corner when resizing; nil when moving.
+  let handle: CGPoint?
+  var current: CGRect
+}
 
 #if os(macOS)
 /// The macOS ink overlay: the mouse or trackpad draws a stroke (shown live); scrolling and

@@ -1,6 +1,9 @@
 // OWNER: HOM-28
 // EXTENDED: HOM-29 (the environment carries the annotate engine; the viewer offers "Annotate" when
 // it is set and the platform reports the tool.)
+// EXTENDED: HOM-30 (the environment carries the saved signatures, the script fonts and the photo
+// picker of the sign mode; the scope can open the viewer straight in sign mode, the file menu's
+// "Sign…".)
 //
 // How screens reach the PDF page tools (HOM plan §8.5): the app root builds one
 // [PdfToolsEnvironment] (documents for thumbnails and passwords, the page tools, the library result
@@ -15,6 +18,8 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../router/viewer_file.dart';
+import '../../signatures/signature_create_sheet.dart' show SignatureFont, SignaturePhotoPicker;
+import '../../signatures/signature_store.dart';
 import 'pdf_merge_screen.dart';
 import 'pdf_page_organiser.dart';
 import 'pdf_tool_save.dart';
@@ -68,7 +73,16 @@ typedef PdfMergePicker = Future<List<PdfMergeItem>> Function(BuildContext contex
 @immutable
 final class PdfToolsEnvironment {
   /// An environment.
-  const PdfToolsEnvironment({required this.documents, required this.tools, required this.sink, this.pickMergeInputs, this.annotate});
+  const PdfToolsEnvironment({
+    required this.documents,
+    required this.tools,
+    required this.sink,
+    this.pickMergeInputs,
+    this.annotate,
+    this.signatures,
+    this.signatureFonts = const [],
+    this.pickSignaturePhoto,
+  });
 
   /// Read-only documents (thumbnails, passwords, page counts).
   final PdfDocuments documents;
@@ -84,21 +98,45 @@ final class PdfToolsEnvironment {
 
   /// Annotate mode and its save (HOM-29); null hides "Annotate".
   final PdfAnnotateEngine? annotate;
+
+  /// Saved signatures (HOM-30); null (or no [annotate]) hides "Sign".
+  final SignatureStore? signatures;
+
+  /// Script fonts for typed signatures (empty: the app font in italic).
+  final List<SignatureFont> signatureFonts;
+
+  /// Picks a photo of a signature; null hides Import.
+  final PdfSignaturePhotoPicker? pickSignaturePhoto;
+}
+
+/// Picks a photo of a signature (HOM-30).
+typedef PdfSignaturePhotoPicker = SignaturePhotoPicker;
+
+/// A tool the PDF viewer opens in at once (the file menu's entries).
+enum PdfViewerStartTool {
+  /// Sign mode (HOM-30, "Sign…").
+  sign,
 }
 
 /// Provides a [PdfToolsEnvironment] to the PDF viewer below it.
 class PdfToolsScope extends InheritedWidget {
   /// Provides [environment] to [child].
-  const PdfToolsScope({super.key, required this.environment, required super.child});
+  const PdfToolsScope({super.key, required this.environment, this.startWith, required super.child});
 
   /// The tools' dependencies.
   final PdfToolsEnvironment environment;
 
+  /// The tool the viewer below opens in once its pages show (HOM-30), or null.
+  final PdfViewerStartTool? startWith;
+
   /// The environment above [context], or null (no tool buttons).
   static PdfToolsEnvironment? maybeOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<PdfToolsScope>()?.environment;
 
+  /// The start tool above [context], or null.
+  static PdfViewerStartTool? startToolOf(BuildContext context) => context.getInheritedWidgetOfExactType<PdfToolsScope>()?.startWith;
+
   @override
-  bool updateShouldNotify(PdfToolsScope oldWidget) => !identical(environment, oldWidget.environment);
+  bool updateShouldNotify(PdfToolsScope oldWidget) => !identical(environment, oldWidget.environment) || startWith != oldWidget.startWith;
 }
 
 Route<T> _toolRoute<T>(BuildContext context, String name, WidgetBuilder builder) {
