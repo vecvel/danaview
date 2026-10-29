@@ -28,6 +28,7 @@ import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
 import com.vecvel.danaview.pdf.glue.PdfDocumentHostApiImpl
 import com.vecvel.danaview.pdf.glue.PdfEventHub
 import com.vecvel.danaview.pdf.glue.PdfFailure
+import com.vecvel.danaview.pdf.glue.PdfThreads
 import com.vecvel.danaview.pdf.glue.PdfToolsHostApiImpl
 import com.vecvel.danaview.pdf.pigeon.PdfCompressEstimateMsg
 import com.vecvel.danaview.pdf.pigeon.PdfCompressPresetMsg
@@ -60,6 +61,7 @@ class PdfCompressTest {
     private val fx = CompressFixtures
     private val api = Build.VERSION.SDK_INT
     private lateinit var out: File
+    private var threads: PdfThreads? = null
 
     @Before
     fun setUp() {
@@ -68,6 +70,7 @@ class PdfCompressTest {
 
     @After
     fun tearDown() {
+        threads?.shutdown()
         out.deleteRecursively()
         assertTrue("no scratch left", scratchDirs().isEmpty())
     }
@@ -323,7 +326,8 @@ class PdfCompressTest {
         val events = Events()
         hub.onListen(null, PigeonEventSink(events))
         val compressor = PdfCompressor(main, hub, fx.context.cacheDir)
-        return Triple(compressor, PdfToolsHostApiImpl(compressor), events)
+        val t = PdfThreads().also { threads = it }
+        return Triple(compressor, PdfToolsHostApiImpl(t, hub::emit, compressor), events)
     }
 
     private fun request(jobId: String, source: File, preset: PdfCompressPresetMsg, target: File, password: String? = null, isImage: Boolean = false) =

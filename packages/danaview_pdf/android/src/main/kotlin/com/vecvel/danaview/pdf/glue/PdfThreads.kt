@@ -9,7 +9,8 @@
 // - render: the texture views' render passes (one thread, shared, so PdfRenderer work stays
 //   serialised and the views never compete with each other);
 // - prewarm: the page-text pre-warm below API 35 (text/PdfTextPrewarm.kt; one background-priority
-//   thread that exits when idle).
+//   thread that exits when idle);
+// - tools: the PDF tool jobs (HOM-28A onwards; two, so a new job doesn't wait behind a long one).
 //
 // Replies always hop back to the main thread.
 
@@ -33,6 +34,10 @@ class PdfThreads {
 
     val text: ExecutorService = Executors.newSingleThreadExecutor { r ->
         Thread(r, "danaview-pdf-text").apply { priority = Thread.NORM_PRIORITY - 1 }
+    }
+
+    val tools: ExecutorService = Executors.newFixedThreadPool(2) { r ->
+        Thread(r, "danaview-pdf-tools").apply { priority = Thread.NORM_PRIORITY - 1 }
     }
 
     private val renderThread = HandlerThread("danaview-pdf-render", Process.THREAD_PRIORITY_DISPLAY).apply { start() }
@@ -61,6 +66,7 @@ class PdfThreads {
     fun shutdown() {
         documents.shutdown()
         text.shutdown()
+        tools.shutdown()
         prewarm.shutdown()
         renderThread.quitSafely()
     }
