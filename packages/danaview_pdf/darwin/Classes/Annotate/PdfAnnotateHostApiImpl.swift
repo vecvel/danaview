@@ -1,4 +1,5 @@
 // OWNER: HOM-29
+// EXTENDED: HOM-30 (the `place` input's stamp drags go back through `PdfAnnotateEventsApi.itemMoved`.)
 //
 // The HOM-29 amendment's `PdfAnnotateHostApi` on Apple: annotate mode of a viewer (main thread,
 // Annotate/PdfAnnotateView.swift), and the annotate save as a tool job on the shared registry
@@ -59,6 +60,10 @@ final class PdfAnnotateHostApiImpl: PdfAnnotateHostApi {
       }
       session.onTap = { page, point, item in
         Task { @MainActor in try? await events.tapped(viewId: viewId, pageIndex: Int64(page), x: Double(point.x), y: Double(point.y), itemId: item) }
+      }
+      session.onMoved = { item, page, rect in
+        let msg = PdfRectMsg(x: Double(rect.minX), y: Double(rect.minY), width: Double(rect.width), height: Double(rect.height))
+        Task { @MainActor in try? await events.itemMoved(viewId: viewId, itemId: item, pageIndex: Int64(page), rect: msg) }
       }
     }
     return session

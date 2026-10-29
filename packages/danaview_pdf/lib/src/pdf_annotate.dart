@@ -1,4 +1,6 @@
 // OWNER: HOM-29
+// EXTENDED: HOM-30 (sign: [PdfAnnotateInput.place] and [PdfStampMovedEvent], the viewer's drag
+// and resize of a selected signature stamp; [PdfStamp.withRect].)
 //
 // Annotate and highlight (HOM plan §8.5, D-98j; BUILD_PLAN HOM-29, HOM-29A) over the Pigeon
 // surface: the HOM-29 amendment's `PdfAnnotateHostApi` (annotate mode of a viewer, the save job)
@@ -164,6 +166,20 @@ final class PdfStamp {
   /// Clockwise around the rect's centre.
   final double rotationDegrees;
 
+  /// This stamp at [rect] (moved or resized).
+  PdfStamp withRect(PdfRect rect) => PdfStamp(pageIndex: pageIndex, rect: rect, imagePath: imagePath, rotationDegrees: rotationDegrees);
+
+  @override
+  bool operator ==(Object other) =>
+      other is PdfStamp &&
+      other.pageIndex == pageIndex &&
+      _rectKey(other.rect) == _rectKey(rect) &&
+      other.imagePath == imagePath &&
+      other.rotationDegrees == rotationDegrees;
+
+  @override
+  int get hashCode => Object.hash(pageIndex, _rectKey(rect), imagePath, rotationDegrees);
+
   // Never prints the path (rule 30).
   @override
   String toString() => 'PdfStamp(page $pageIndex)';
@@ -213,6 +229,11 @@ enum PdfAnnotateInput {
 
   /// A tap reports the item under it, to remove.
   erase,
+
+  /// HOM-30 sign: a tap reports its page point and the item under it (place or select a stamp);
+  /// a drag on the selected stamp moves it, one on its corner handle resizes it (aspect kept),
+  /// reported once at the end as a [PdfStampMovedEvent]; other drags scroll.
+  place,
 }
 
 /// The annotate mode of a viewer.
@@ -282,6 +303,18 @@ final class PdfAnnotateTapEvent extends PdfAnnotateEvent {
 
   /// The session item under the tap, or null.
   final String? itemId;
+}
+
+/// HOM-30: the user moved or resized stamp [itemId] (input [PdfAnnotateInput.place]).
+final class PdfStampMovedEvent extends PdfAnnotateEvent {
+  /// Stamp [itemId] now fills [rect] on [pageIndex].
+  const PdfStampMovedEvent(super.viewId, super.pageIndex, this.itemId, this.rect);
+
+  /// The session item.
+  final String itemId;
+
+  /// Its new rect in page space.
+  final PdfRect rect;
 }
 
 /// Annotate mode of viewers and the annotate save. Implementations: [PlatformPdfAnnotateEngine];
@@ -383,6 +416,11 @@ final class _AnnotateEventsHub implements PdfAnnotateEventsApi {
   @override
   void tapped(int viewId, int pageIndex, double x, double y, String? itemId) =>
       _events.add(PdfAnnotateTapEvent(viewId, pageIndex, Offset(x, y), itemId));
+
+  @override
+  void itemMoved(int viewId, String itemId, int pageIndex, PdfRectMsg rect) {
+    if (rect.width > 0 && rect.height > 0) _events.add(PdfStampMovedEvent(viewId, pageIndex, itemId, _rect(rect)));
+  }
 }
 
 /// [PdfAnnotateEngine] over the plugin.

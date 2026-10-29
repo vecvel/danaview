@@ -1,4 +1,5 @@
 // OWNER: HOM-29
+// EXTENDED: HOM-30 (the fake events record `itemMoved`; the capabilities now list sign too.)
 //
 // XCTests of annotate behind the Pigeon host APIs on macOS (run_xctests.sh macos): the
 // capabilities list annotate; `PdfAnnotateHostApi.save` and the frozen `PdfToolsHostApi.annotate`
@@ -20,6 +21,7 @@ import XCTest
 final class FakeAnnotateEvents: PdfAnnotateEventsApiProtocol {
   var strokes: [(viewId: Int64, page: Int64, points: [Double])] = []
   var taps: [(page: Int64, x: Double, y: Double, item: String?)] = []
+  var moves: [(viewId: Int64, item: String, page: Int64, rect: PdfRectMsg)] = []
   var onEvent: (() -> Void)?
 
   nonisolated init() {}
@@ -31,6 +33,11 @@ final class FakeAnnotateEvents: PdfAnnotateEventsApiProtocol {
 
   func tapped(viewId viewIdArg: Int64, pageIndex pageIndexArg: Int64, x xArg: Double, y yArg: Double, itemId itemIdArg: String?) async throws {
     taps.append((pageIndexArg, xArg, yArg, itemIdArg))
+    onEvent?()
+  }
+
+  func itemMoved(viewId viewIdArg: Int64, itemId itemIdArg: String, pageIndex pageIndexArg: Int64, rect rectArg: PdfRectMsg) async throws {
+    moves.append((viewIdArg, itemIdArg, pageIndexArg, rectArg))
     onEvent?()
   }
 }
@@ -60,7 +67,7 @@ final class PdfAnnotateGlueTests: XCTestCase {
   func testCapabilitiesListAnnotate() throws {
     let caps = try PdfDocumentHostApiImpl(store: PdfDocumentStore()).capabilities()
     XCTAssertTrue(caps.tools.contains(.annotate))
-    XCTAssertFalse(caps.tools.contains(.sign), "sign is HOM-30's")
+    XCTAssertTrue(caps.tools.contains(.sign), "HOM-30 landed: sign is the annotate save with burn-in")
   }
 
   func testSaveAndTheFrozenAnnotateWriteNewFilesAndCancelLeavesNone() throws {

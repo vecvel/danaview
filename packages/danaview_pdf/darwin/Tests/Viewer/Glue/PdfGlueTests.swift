@@ -4,9 +4,10 @@
 // text and tools host APIs answer through Pigeon types and typed errors, the platform view factory
 // builds a PDFKit viewer that navigates, zooms, finds and highlights fixture strings and copies a
 // selection, thumbnails render from an independent open while a view draws the same handle, every
-// async reply arrives on the main thread, the texture calls are Android-only, and every tool stub
-// not landed yet (sign; annotate landed with HOM-29: Annotate/PdfAnnotateGlueTests) answers notSupportedOnDevice and ends its job (the page tools landed
-// with HOM-28: Tests/Tools/Glue/; compress with HOM-31: Tests/Compress/Glue/).
+// async reply arrives on the main thread, the texture calls are Android-only, and bad tool requests
+// answer invalidArgument and end their jobs (every tool has landed: the page tools with HOM-28,
+// Tests/Tools/Glue/; annotate with HOM-29, Tests/Annotate/Glue/; sign with HOM-30, Tests/Sign/Glue/;
+// compress with HOM-31, Tests/Compress/Glue/).
 
 import Foundation
 import PDFKit
@@ -45,8 +46,8 @@ final class PdfGlueTests: XCTestCase {
     let caps = try api.capabilities()
     XCTAssertTrue(caps.platformView && caps.search && caps.selection && caps.passwords && caps.outline && caps.textExtraction)
     XCTAssertFalse(caps.textureView)
-    XCTAssertEqual(Set(caps.tools), [.merge, .split, .reorder, .rotate, .deletePages, .annotate, .compress],
-                   "the page tools (HOM-28), annotate (HOM-29) and compress (HOM-31) have landed")
+    XCTAssertEqual(Set(caps.tools), [.merge, .split, .reorder, .rotate, .deletePages, .annotate, .sign, .compress],
+                   "the page tools (HOM-28), annotate (HOM-29), sign (HOM-30) and compress (HOM-31) have landed")
 
     let info = try wait { api.open(request: PdfOpenRequestMsg(path: locked.path, password: nil), completion: $0) }.get()
     XCTAssertTrue(info.locked)
@@ -82,7 +83,7 @@ final class PdfGlueTests: XCTestCase {
       "damaged")
   }
 
-  // The page tools (merge, split, reorder, rotate, delete) landed with HOM-28: Tools/PdfPageToolsGlueTests.
+  // Every tool has landed (HOM-28…HOM-31); their own glue tests cover them. Bad requests here.
   func testToolStubsAnswerNotSupportedAndEndTheirJobs() {
     let tools = PdfToolsHostApiImpl(events: nil)
     let input = PdfToolInputMsg(path: "/nonexistent.pdf", isImage: false)
@@ -91,7 +92,7 @@ final class PdfGlueTests: XCTestCase {
       ("sign", { tools.sign(request: PdfSignRequestMsg(jobId: "j7", input: input, stamps: [], outPath: out), completion: $0) }),
     ]
     for (name, call) in calls {
-      XCTAssertEqual(code(wait(call)), "notSupportedOnDevice", name)
+      XCTAssertEqual(code(wait(call)), "invalidArgument", "\(name): nothing to sign (HOM-30 landed)")
     }
     XCTAssertEqual(tools.jobs.runningCount, 0)
     XCTAssertEqual(code(wait { tools.merge(request: PdfMergeRequestMsg(jobId: "", inputs: [], outPath: out), completion: $0) }), "invalidArgument")
