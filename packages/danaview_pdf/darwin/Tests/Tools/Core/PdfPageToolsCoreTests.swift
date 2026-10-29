@@ -96,8 +96,9 @@ final class PdfPageToolsCoreTests: XCTestCase {
   }
 
   /// The token each page of [path] starts with ("" for a page without one), read back by PDFKit.
-  private func tokens(_ path: String) throws -> [String] {
+  private func tokens(_ path: String, password: String? = nil) throws -> [String] {
     let document = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: path)))
+    if let password { XCTAssertTrue(document.unlock(withPassword: password)) }
     return (0..<document.pageCount).map { i in
       let text = document.page(at: i)?.string ?? ""
       return text.split(separator: " ").first.map(String.init) ?? ""
@@ -189,7 +190,9 @@ final class PdfPageToolsCoreTests: XCTestCase {
     XCTAssertEqual(code { try PdfPageToolsCore.merge([src(a), src(locked)], outPath: self.out("x.pdf"), control: RecordingControl()) }, .passwordRequired)
     XCTAssertFalse(FileManager.default.fileExists(atPath: out("x.pdf")))
     let result = try PdfPageToolsCore.merge([src(a), src(locked, password: "pw")], outPath: out("m.pdf"), control: RecordingControl())
-    XCTAssertEqual(try tokens(result.path), ["AAA-P0001", "LCK-P0001", "LCK-P0002"])
+    // HOM-29: the output of an encrypted input is encrypted with its password.
+    XCTAssertTrue(PDFDocument(url: URL(fileURLWithPath: result.path))?.isLocked ?? false)
+    XCTAssertEqual(try tokens(result.path, password: "pw"), ["AAA-P0001", "LCK-P0001", "LCK-P0002"])
   }
 
   func testMergeRejectsBadInputsWithoutWriting() throws {

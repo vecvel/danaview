@@ -13,7 +13,16 @@ import io.flutter.plugin.common.StandardMethodCodec
 import io.flutter.plugin.common.StandardMessageCodec
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 private object PdfApiPigeonUtils {
+
+  fun createConnectionError(channelName: String): PdfPigeonError {
+    return PdfPigeonError("channel-error",  "Unable to establish connection on channel: '$channelName'.", "")  }
 
   fun wrapResult(result: Any?): List<Any?> {
     return listOf(result)
@@ -274,6 +283,31 @@ enum class PdfEventKindMsg(val raw: Int) {
 
   companion object {
     fun ofRaw(raw: Int): PdfEventKindMsg? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
+/** What a touch on an annotating viewer does. */
+enum class PdfAnnotateInputMsg(val raw: Int) {
+  /**
+   * The viewer scrolls, zooms and selects text as usual; a tap on a session annotation reports
+   * it (`PdfAnnotateEventsApi.tapped` with its id).
+   */
+  SELECT(0),
+  /**
+   * One finger, the pointer or Apple Pencil draws ink (PencilKit on iOS); two fingers scroll and
+   * zoom (a finger scrolls when the system prefers Pencil-only drawing). Finished strokes arrive
+   * through `PdfAnnotateEventsApi.inkStroke`.
+   */
+  INK(1),
+  /** A tap reports its page point (`tapped`), where Dart places a text box. */
+  TEXT(2),
+  /** A tap reports the session annotation under it (`tapped` with its id), which Dart removes. */
+  ERASE(3);
+
+  companion object {
+    fun ofRaw(raw: Int): PdfAnnotateInputMsg? {
       return values().firstOrNull { it.raw == raw }
     }
   }
@@ -2396,6 +2430,220 @@ data class PdfCompressEstimateMsg (
     return "PdfCompressEstimateMsg(sourceBytes=$sourceBytes, highBytes=$highBytes, mediumBytes=$mediumBytes, smallBytes=$smallBytes, sampled=$sampled)"
   }
 }
+
+/**
+ * The annotate mode of a viewer.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PdfAnnotateModeMsg (
+  val input: PdfAnnotateInputMsg,
+  /** The live ink colour as 0xAARRGGBB. */
+  val inkColorArgb: Long,
+  /** The live ink width in page points. */
+  val inkWidth: Double
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PdfAnnotateModeMsg {
+      val input = pigeonVar_list[0] as PdfAnnotateInputMsg
+      val inkColorArgb = pigeonVar_list[1] as Long
+      val inkWidth = pigeonVar_list[2] as Double
+      return PdfAnnotateModeMsg(input, inkColorArgb, inkWidth)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      input,
+      inkColorArgb,
+      inkWidth,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as PdfAnnotateModeMsg
+    return PdfApiPigeonUtils.deepEquals(this.input, other.input) && PdfApiPigeonUtils.deepEquals(this.inkColorArgb, other.inkColorArgb) && PdfApiPigeonUtils.deepEquals(this.inkWidth, other.inkWidth)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.input)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.inkColorArgb)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.inkWidth)
+    return result
+  }
+  override fun toString(): String {
+    return "PdfAnnotateModeMsg(input=$input, inkColorArgb=$inkColorArgb, inkWidth=$inkWidth)"
+  }
+}
+
+/**
+ * One item of an annotate session: exactly one of [annotation] and [stamp] is set.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PdfAnnotateItemMsg (
+  /** Dart's id of the item (hit tests answer it). */
+  val id: String,
+  val annotation: PdfAnnotationMsg? = null,
+  /** An image stamp (HOM-30's signatures; previewed like an annotation). */
+  val stamp: PdfSignatureStampMsg? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PdfAnnotateItemMsg {
+      val id = pigeonVar_list[0] as String
+      val annotation = pigeonVar_list[1] as PdfAnnotationMsg?
+      val stamp = pigeonVar_list[2] as PdfSignatureStampMsg?
+      return PdfAnnotateItemMsg(id, annotation, stamp)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      id,
+      annotation,
+      stamp,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as PdfAnnotateItemMsg
+    return PdfApiPigeonUtils.deepEquals(this.id, other.id) && PdfApiPigeonUtils.deepEquals(this.annotation, other.annotation) && PdfApiPigeonUtils.deepEquals(this.stamp, other.stamp)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.id)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.annotation)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.stamp)
+    return result
+  }
+  override fun toString(): String {
+    return "PdfAnnotateItemMsg(id=$id, annotation=$annotation, stamp=$stamp)"
+  }
+}
+
+/**
+ * Rects on one page (a text selection's lines).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PdfPageRectsMsg (
+  val pageIndex: Long,
+  val rects: List<PdfRectMsg>
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PdfPageRectsMsg {
+      val pageIndex = pigeonVar_list[0] as Long
+      val rects = pigeonVar_list[1] as List<PdfRectMsg>
+      return PdfPageRectsMsg(pageIndex, rects)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      pageIndex,
+      rects,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as PdfPageRectsMsg
+    return PdfApiPigeonUtils.deepEquals(this.pageIndex, other.pageIndex) && PdfApiPigeonUtils.deepEquals(this.rects, other.rects)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.pageIndex)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.rects)
+    return result
+  }
+  override fun toString(): String {
+    return "PdfPageRectsMsg(pageIndex=$pageIndex, rects=$rects)"
+  }
+}
+
+/**
+ * Writes [input] with [annotations] and [stamps] into [outPath].
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PdfAnnotateSaveRequestMsg (
+  /** Caller-chosen id for progress events and `PdfToolsHostApi.cancel`. */
+  val jobId: String,
+  val input: PdfToolInputMsg,
+  val annotations: List<PdfAnnotationMsg>,
+  /** Image stamps: kept as Stamp annotations with the image as their appearance, or burned in. */
+  val stamps: List<PdfSignatureStampMsg>,
+  /**
+   * Draw [annotations] and [stamps] into the page content instead of adding annotations (text
+   * stays text; the page's existing annotations stay annotations).
+   */
+  val burnIn: Boolean,
+  val outPath: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PdfAnnotateSaveRequestMsg {
+      val jobId = pigeonVar_list[0] as String
+      val input = pigeonVar_list[1] as PdfToolInputMsg
+      val annotations = pigeonVar_list[2] as List<PdfAnnotationMsg>
+      val stamps = pigeonVar_list[3] as List<PdfSignatureStampMsg>
+      val burnIn = pigeonVar_list[4] as Boolean
+      val outPath = pigeonVar_list[5] as String
+      return PdfAnnotateSaveRequestMsg(jobId, input, annotations, stamps, burnIn, outPath)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      jobId,
+      input,
+      annotations,
+      stamps,
+      burnIn,
+      outPath,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as PdfAnnotateSaveRequestMsg
+    return PdfApiPigeonUtils.deepEquals(this.jobId, other.jobId) && PdfApiPigeonUtils.deepEquals(this.input, other.input) && PdfApiPigeonUtils.deepEquals(this.annotations, other.annotations) && PdfApiPigeonUtils.deepEquals(this.stamps, other.stamps) && PdfApiPigeonUtils.deepEquals(this.burnIn, other.burnIn) && PdfApiPigeonUtils.deepEquals(this.outPath, other.outPath)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.jobId)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.input)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.annotations)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.stamps)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.burnIn)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.outPath)
+    return result
+  }
+  override fun toString(): String {
+    return "PdfAnnotateSaveRequestMsg(jobId=$jobId, input=$input, annotations=$annotations, stamps=$stamps, burnIn=$burnIn, outPath=$outPath)"
+  }
+}
 private open class PdfApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -2425,193 +2673,218 @@ private open class PdfApiPigeonCodec : StandardMessageCodec() {
         }
       }
       134.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          PdfCapabilitiesMsg.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          PdfAnnotateInputMsg.ofRaw(it.toInt())
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfOpenRequestMsg.fromList(it)
+          PdfCapabilitiesMsg.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfPageSizeMsg.fromList(it)
+          PdfOpenRequestMsg.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfDocumentInfoMsg.fromList(it)
+          PdfPageSizeMsg.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfProbeMsg.fromList(it)
+          PdfDocumentInfoMsg.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfOutlineItemMsg.fromList(it)
+          PdfProbeMsg.fromList(it)
         }
       }
       140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfThumbnailRequestMsg.fromList(it)
+          PdfOutlineItemMsg.fromList(it)
         }
       }
       141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfImageMsg.fromList(it)
+          PdfThumbnailRequestMsg.fromList(it)
         }
       }
       142.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfRectMsg.fromList(it)
+          PdfImageMsg.fromList(it)
         }
       }
       143.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfSearchOptionsMsg.fromList(it)
+          PdfRectMsg.fromList(it)
         }
       }
       144.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfSearchHitMsg.fromList(it)
+          PdfSearchOptionsMsg.fromList(it)
         }
       }
       145.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfSearchResultMsg.fromList(it)
+          PdfSearchHitMsg.fromList(it)
         }
       }
       146.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfViewStateMsg.fromList(it)
+          PdfSearchResultMsg.fromList(it)
         }
       }
       147.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfTextureViewRequestMsg.fromList(it)
+          PdfViewStateMsg.fromList(it)
         }
       }
       148.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfTextureViewMsg.fromList(it)
+          PdfTextureViewRequestMsg.fromList(it)
         }
       }
       149.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfViewportMsg.fromList(it)
+          PdfTextureViewMsg.fromList(it)
         }
       }
       150.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfTextRequestMsg.fromList(it)
+          PdfViewportMsg.fromList(it)
         }
       }
       151.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfPageTextMsg.fromList(it)
+          PdfTextRequestMsg.fromList(it)
         }
       }
       152.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfTextResultMsg.fromList(it)
+          PdfPageTextMsg.fromList(it)
         }
       }
       153.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfToolInputMsg.fromList(it)
+          PdfTextResultMsg.fromList(it)
         }
       }
       154.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfPageRangeMsg.fromList(it)
+          PdfToolInputMsg.fromList(it)
         }
       }
       155.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfMergeRequestMsg.fromList(it)
+          PdfPageRangeMsg.fromList(it)
         }
       }
       156.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfSplitRequestMsg.fromList(it)
+          PdfMergeRequestMsg.fromList(it)
         }
       }
       157.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfReorderRequestMsg.fromList(it)
+          PdfSplitRequestMsg.fromList(it)
         }
       }
       158.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfRotateRequestMsg.fromList(it)
+          PdfReorderRequestMsg.fromList(it)
         }
       }
       159.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfDeletePagesRequestMsg.fromList(it)
+          PdfRotateRequestMsg.fromList(it)
         }
       }
       160.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfInkStrokeMsg.fromList(it)
+          PdfDeletePagesRequestMsg.fromList(it)
         }
       }
       161.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfAnnotationMsg.fromList(it)
+          PdfInkStrokeMsg.fromList(it)
         }
       }
       162.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfAnnotateRequestMsg.fromList(it)
+          PdfAnnotationMsg.fromList(it)
         }
       }
       163.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfSignatureStampMsg.fromList(it)
+          PdfAnnotateRequestMsg.fromList(it)
         }
       }
       164.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfSignRequestMsg.fromList(it)
+          PdfSignatureStampMsg.fromList(it)
         }
       }
       165.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfCompressRequestMsg.fromList(it)
+          PdfSignRequestMsg.fromList(it)
         }
       }
       166.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfToolResultMsg.fromList(it)
+          PdfCompressRequestMsg.fromList(it)
         }
       }
       167.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfToolProgressMsg.fromList(it)
+          PdfToolResultMsg.fromList(it)
         }
       }
       168.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfEventMsg.fromList(it)
+          PdfToolProgressMsg.fromList(it)
         }
       }
       169.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfPagePlanMsg.fromList(it)
+          PdfEventMsg.fromList(it)
         }
       }
       170.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PdfOrganiseRequestMsg.fromList(it)
+          PdfPagePlanMsg.fromList(it)
         }
       }
       171.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          PdfOrganiseRequestMsg.fromList(it)
+        }
+      }
+      172.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           PdfCompressEstimateMsg.fromList(it)
+        }
+      }
+      173.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PdfAnnotateModeMsg.fromList(it)
+        }
+      }
+      174.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PdfAnnotateItemMsg.fromList(it)
+        }
+      }
+      175.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PdfPageRectsMsg.fromList(it)
+        }
+      }
+      176.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PdfAnnotateSaveRequestMsg.fromList(it)
         }
       }
       else -> super.readValueOfType(type, buffer)
@@ -2639,156 +2912,176 @@ private open class PdfApiPigeonCodec : StandardMessageCodec() {
         stream.write(133)
         writeValue(stream, value.raw.toLong())
       }
-      is PdfCapabilitiesMsg -> {
+      is PdfAnnotateInputMsg -> {
         stream.write(134)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is PdfOpenRequestMsg -> {
+      is PdfCapabilitiesMsg -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is PdfPageSizeMsg -> {
+      is PdfOpenRequestMsg -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is PdfDocumentInfoMsg -> {
+      is PdfPageSizeMsg -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is PdfProbeMsg -> {
+      is PdfDocumentInfoMsg -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is PdfOutlineItemMsg -> {
+      is PdfProbeMsg -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is PdfThumbnailRequestMsg -> {
+      is PdfOutlineItemMsg -> {
         stream.write(140)
         writeValue(stream, value.toList())
       }
-      is PdfImageMsg -> {
+      is PdfThumbnailRequestMsg -> {
         stream.write(141)
         writeValue(stream, value.toList())
       }
-      is PdfRectMsg -> {
+      is PdfImageMsg -> {
         stream.write(142)
         writeValue(stream, value.toList())
       }
-      is PdfSearchOptionsMsg -> {
+      is PdfRectMsg -> {
         stream.write(143)
         writeValue(stream, value.toList())
       }
-      is PdfSearchHitMsg -> {
+      is PdfSearchOptionsMsg -> {
         stream.write(144)
         writeValue(stream, value.toList())
       }
-      is PdfSearchResultMsg -> {
+      is PdfSearchHitMsg -> {
         stream.write(145)
         writeValue(stream, value.toList())
       }
-      is PdfViewStateMsg -> {
+      is PdfSearchResultMsg -> {
         stream.write(146)
         writeValue(stream, value.toList())
       }
-      is PdfTextureViewRequestMsg -> {
+      is PdfViewStateMsg -> {
         stream.write(147)
         writeValue(stream, value.toList())
       }
-      is PdfTextureViewMsg -> {
+      is PdfTextureViewRequestMsg -> {
         stream.write(148)
         writeValue(stream, value.toList())
       }
-      is PdfViewportMsg -> {
+      is PdfTextureViewMsg -> {
         stream.write(149)
         writeValue(stream, value.toList())
       }
-      is PdfTextRequestMsg -> {
+      is PdfViewportMsg -> {
         stream.write(150)
         writeValue(stream, value.toList())
       }
-      is PdfPageTextMsg -> {
+      is PdfTextRequestMsg -> {
         stream.write(151)
         writeValue(stream, value.toList())
       }
-      is PdfTextResultMsg -> {
+      is PdfPageTextMsg -> {
         stream.write(152)
         writeValue(stream, value.toList())
       }
-      is PdfToolInputMsg -> {
+      is PdfTextResultMsg -> {
         stream.write(153)
         writeValue(stream, value.toList())
       }
-      is PdfPageRangeMsg -> {
+      is PdfToolInputMsg -> {
         stream.write(154)
         writeValue(stream, value.toList())
       }
-      is PdfMergeRequestMsg -> {
+      is PdfPageRangeMsg -> {
         stream.write(155)
         writeValue(stream, value.toList())
       }
-      is PdfSplitRequestMsg -> {
+      is PdfMergeRequestMsg -> {
         stream.write(156)
         writeValue(stream, value.toList())
       }
-      is PdfReorderRequestMsg -> {
+      is PdfSplitRequestMsg -> {
         stream.write(157)
         writeValue(stream, value.toList())
       }
-      is PdfRotateRequestMsg -> {
+      is PdfReorderRequestMsg -> {
         stream.write(158)
         writeValue(stream, value.toList())
       }
-      is PdfDeletePagesRequestMsg -> {
+      is PdfRotateRequestMsg -> {
         stream.write(159)
         writeValue(stream, value.toList())
       }
-      is PdfInkStrokeMsg -> {
+      is PdfDeletePagesRequestMsg -> {
         stream.write(160)
         writeValue(stream, value.toList())
       }
-      is PdfAnnotationMsg -> {
+      is PdfInkStrokeMsg -> {
         stream.write(161)
         writeValue(stream, value.toList())
       }
-      is PdfAnnotateRequestMsg -> {
+      is PdfAnnotationMsg -> {
         stream.write(162)
         writeValue(stream, value.toList())
       }
-      is PdfSignatureStampMsg -> {
+      is PdfAnnotateRequestMsg -> {
         stream.write(163)
         writeValue(stream, value.toList())
       }
-      is PdfSignRequestMsg -> {
+      is PdfSignatureStampMsg -> {
         stream.write(164)
         writeValue(stream, value.toList())
       }
-      is PdfCompressRequestMsg -> {
+      is PdfSignRequestMsg -> {
         stream.write(165)
         writeValue(stream, value.toList())
       }
-      is PdfToolResultMsg -> {
+      is PdfCompressRequestMsg -> {
         stream.write(166)
         writeValue(stream, value.toList())
       }
-      is PdfToolProgressMsg -> {
+      is PdfToolResultMsg -> {
         stream.write(167)
         writeValue(stream, value.toList())
       }
-      is PdfEventMsg -> {
+      is PdfToolProgressMsg -> {
         stream.write(168)
         writeValue(stream, value.toList())
       }
-      is PdfPagePlanMsg -> {
+      is PdfEventMsg -> {
         stream.write(169)
         writeValue(stream, value.toList())
       }
-      is PdfOrganiseRequestMsg -> {
+      is PdfPagePlanMsg -> {
         stream.write(170)
         writeValue(stream, value.toList())
       }
-      is PdfCompressEstimateMsg -> {
+      is PdfOrganiseRequestMsg -> {
         stream.write(171)
+        writeValue(stream, value.toList())
+      }
+      is PdfCompressEstimateMsg -> {
+        stream.write(172)
+        writeValue(stream, value.toList())
+      }
+      is PdfAnnotateModeMsg -> {
+        stream.write(173)
+        writeValue(stream, value.toList())
+      }
+      is PdfAnnotateItemMsg -> {
+        stream.write(174)
+        writeValue(stream, value.toList())
+      }
+      is PdfPageRectsMsg -> {
+        stream.write(175)
+        writeValue(stream, value.toList())
+      }
+      is PdfAnnotateSaveRequestMsg -> {
+        stream.write(176)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -3672,6 +3965,165 @@ interface PdfCompressHostApi {
         } else {
           channel.setMessageHandler(null)
         }
+      }
+    }
+  }
+}
+/**
+ * Annotate mode of a viewer and the annotate save (HOM-29 Apple, HOM-29A Android).
+ *
+ * Generated interface from Pigeon that represents a handler of messages from Flutter.
+ */
+interface PdfAnnotateHostApi {
+  /**
+   * Puts view [viewId] into annotate mode with [mode], or back to plain viewing with null (the
+   * preview annotations are removed).
+   */
+  fun setAnnotateMode(viewId: Long, mode: PdfAnnotateModeMsg?)
+  /** Replaces the preview of view [viewId] with [items]; [selectedId] is drawn as selected. */
+  fun showAnnotations(viewId: Long, items: List<PdfAnnotateItemMsg>, selectedId: String?)
+  /** The view's text selection as one rect per line, grouped by page (empty without one). */
+  fun selectionLines(viewId: Long): List<PdfPageRectsMsg>
+  /** Writes the request's new file off the main thread (a tool job, `tool: annotate`). */
+  fun save(request: PdfAnnotateSaveRequestMsg, callback: (Result<PdfToolResultMsg>) -> Unit)
+
+  companion object {
+    /** The codec used by PdfAnnotateHostApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      PdfApiPigeonCodec()
+    }
+    /** Sets up an instance of `PdfAnnotateHostApi` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: PdfAnnotateHostApi?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.setAnnotateMode$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val viewIdArg = args[0] as Long
+            val modeArg = args[1] as PdfAnnotateModeMsg?
+            val wrapped: List<Any?> = try {
+              api.setAnnotateMode(viewIdArg, modeArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              PdfApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.showAnnotations$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val viewIdArg = args[0] as Long
+            val itemsArg = args[1] as List<PdfAnnotateItemMsg>
+            val selectedIdArg = args[2] as String?
+            val wrapped: List<Any?> = try {
+              api.showAnnotations(viewIdArg, itemsArg, selectedIdArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              PdfApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.selectionLines$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val viewIdArg = args[0] as Long
+            val wrapped: List<Any?> = try {
+              listOf(api.selectionLines(viewIdArg))
+            } catch (exception: Throwable) {
+              PdfApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.save$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val requestArg = args[0] as PdfAnnotateSaveRequestMsg
+            api.save(requestArg) { result: Result<PdfToolResultMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PdfApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PdfApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
+/**
+ * What an annotating viewer reports (native → Dart).
+ *
+ * Generated class from Pigeon that represents Flutter messages that can be called from Kotlin.
+ */
+class PdfAnnotateEventsApi(private val binaryMessenger: BinaryMessenger, private val messageChannelSuffix: String = "") {
+  companion object {
+    /** The codec used by PdfAnnotateEventsApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      PdfApiPigeonCodec()
+    }
+  }
+  /** A finished ink stroke on page [pageIndex], page-space points `[x0, y0, x1, y1, …]`. */
+  suspend fun inkStroke(viewIdArg: Long, pageIndexArg: Long, pointsArg: List<Double>)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    return suspendCancellableCoroutine { continuation ->
+      val channelName = "dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.inkStroke$separatedMessageChannelSuffix"
+      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+      channel.send(listOf(viewIdArg, pageIndexArg, pointsArg)) {
+        if (it is List<*>) {
+          if (it.size > 1) {
+            continuation.resumeWithException(PdfPigeonError(it[0] as String, it[1] as String, it[2] as String?))
+          } else {
+            continuation.resume(Unit)
+          }
+        } else {
+          continuation.resumeWithException(PdfApiPigeonUtils.createConnectionError(channelName))
+        } 
+      }
+    }
+  }
+  /** A tap at page point ([x], [y]) on [pageIndex]; [itemId] is the session item under it. */
+  suspend fun tapped(viewIdArg: Long, pageIndexArg: Long, xArg: Double, yArg: Double, itemIdArg: String?)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    return suspendCancellableCoroutine { continuation ->
+      val channelName = "dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.tapped$separatedMessageChannelSuffix"
+      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+      channel.send(listOf(viewIdArg, pageIndexArg, xArg, yArg, itemIdArg)) {
+        if (it is List<*>) {
+          if (it.size > 1) {
+            continuation.resumeWithException(PdfPigeonError(it[0] as String, it[1] as String, it[2] as String?))
+          } else {
+            continuation.resume(Unit)
+          }
+        } else {
+          continuation.resumeWithException(PdfApiPigeonUtils.createConnectionError(channelName))
+        } 
       }
     }
   }

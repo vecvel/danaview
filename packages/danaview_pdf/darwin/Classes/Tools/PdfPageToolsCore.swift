@@ -1,4 +1,7 @@
 // OWNER: HOM-28
+// EXTENDED: HOM-29 (an output made from an encrypted PDF is written encrypted with the password the
+// source was opened with, [PdfOutputEncryption]: merge takes its first encrypted input's, split
+// and organise their input's. Owner-approved, as HOM-31's compress does.)
 //
 // The Flutter-free core of the PDF page tools on iOS and macOS (HOM plan §8.5, D-98j; ARCH v1.2
 // rule 27): merge (PDFs and images), split, and organise (reorder, rotate, delete, extract) with
@@ -49,6 +52,26 @@ struct PdfPagePlanItem: Equatable {
   }
 }
 
+/// How a tool's output is encrypted: like its encrypted source, with the password the source was
+/// opened with as both its user and its owner password (HOM-31's compress does the same). A source
+/// that opened without a password (only permission restrictions, an empty user password) has no
+/// password to give the output, which PDFKit then writes as it does by default.
+struct PdfOutputEncryption: Equatable {
+  let password: String
+
+  /// The encryption of an output made from [document], opened with [password]; nil when it is
+  /// not encrypted or no password was needed.
+  static func of(_ document: PDFDocument, password: String?) -> PdfOutputEncryption? {
+    guard document.isEncrypted, let password, !password.isEmpty else { return nil }
+    return PdfOutputEncryption(password: password)
+  }
+
+  /// PDFKit's write options.
+  var options: [PDFDocumentWriteOption: Any] {
+    [.userPasswordOption: password, .ownerPasswordOption: password]
+  }
+}
+
 /// A file a tool wrote.
 struct PdfWrittenFile: Equatable {
   let path: String
@@ -79,6 +102,7 @@ enum PdfPageToolsCore {
       // Open everything first, so a bad input fails before any work and the totals are known.
       var parts: [(document: PDFDocument?, image: PDFDocument?)] = []
       var total = 0
+      var encryption: PdfOutputEncryption?
       for input in inputs {
         try checkCancelled(control)
         if input.isImage {
@@ -89,6 +113,7 @@ enum PdfPageToolsCore {
           let document = try openForWrite(input)
           parts.append((document, nil))
           total += document.pageCount
+          if encryption == nil { encryption = PdfOutputEncryption.of(document, password: input.password) }
         }
       }
       // The output is the first PDF itself (its pages are already in place) or a new document.
@@ -110,7 +135,7 @@ enum PdfPageToolsCore {
         }
       }
       // Keep every source alive until the write: the inserted pages draw from them.
-      return try write(output, to: outPath, control: control, keepAlive: parts)
+      return try write(output, to: outPath, control: control, keepAlive: parts, encryption: encryption)
     }
   }
 
@@ -124,6 +149,7 @@ enum PdfPageToolsCore {
     guard Set(outPaths).count == outPaths.count else { throw PdfFailure(.invalidArgument, "duplicate output") }
     for path in outPaths { try checkNewFile(path, inputs: [input.path]) }
     let source = try openForWrite(input)
+    let encryption = PdfOutputEncryption.of(source, password: input.password)
     let count = source.pageCount
     for range in ranges where range.isEmpty || range.lowerBound < 0 || range.upperBound > count {
       throw PdfFailure(.invalidArgument, "range out of bounds")
@@ -144,7 +170,7 @@ enum PdfPageToolsCore {
           done += 1
           control.progress(done: done, total: total)
         }
-        out.append(try write(part, to: path, control: control, keepAlive: source))
+        out.append(try write(part, to: path, control: control, keepAlive: source, encryption: encryption))
       }
       return out
     }
@@ -167,6 +193,7 @@ enum PdfPageToolsCore {
     guard !plan.isEmpty else { throw PdfFailure(.invalidArgument, "at least one page must remain") }
     try checkNewFile(outPath, inputs: [input.path])
     let document = try openForWrite(input)
+    let encryption = PdfOutputEncryption.of(document, password: input.password)
     let count = document.pageCount
     var seen = Set<Int>()
     for item in plan {
@@ -200,7 +227,7 @@ enum PdfPageToolsCore {
         done += 1
         control.progress(done: done, total: total)
       }
-      return try write(document, to: outPath, control: control, keepAlive: nil)
+      return try write(document, to: outPath, control: control, keepAlive: nil, encryption: encryption)
     }
   }
 
@@ -337,11 +364,15 @@ enum PdfPageToolsCore {
     }
   }
 
-  /// Writes [document] to the new file [path] (exclusive: never over an existing file).
-  static func write(_ document: PDFDocument, to path: String, control: PdfToolControl, keepAlive: Any?) throws -> PdfWrittenFile {
+  /// Writes [document] to the new file [path] (exclusive: never over an existing file), encrypted
+  /// with [encryption] when given.
+  static func write(
+    _ document: PDFDocument, to path: String, control: PdfToolControl, keepAlive: Any?, encryption: PdfOutputEncryption? = nil
+  ) throws -> PdfWrittenFile {
     try checkCancelled(control)
     guard !FileManager.default.fileExists(atPath: path) else { throw PdfFailure(.invalidArgument, "output exists") }
-    let ok = document.write(to: URL(fileURLWithPath: path))
+    let url = URL(fileURLWithPath: path)
+    let ok = encryption.map { document.write(to: url, withOptions: $0.options) } ?? document.write(to: url)
     withExtendedLifetime(keepAlive) {}
     guard ok, let attributes = try? FileManager.default.attributesOfItem(atPath: path) else {
       try? FileManager.default.removeItem(atPath: path)
