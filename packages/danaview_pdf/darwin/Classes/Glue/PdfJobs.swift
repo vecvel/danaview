@@ -39,6 +39,13 @@ final class PdfJob {
     let fraction = total > 0 ? min(1, max(0, Double(done) / Double(total))) : 0
     onProgress(PdfToolProgressMsg(jobId: id, tool: tool, fraction: fraction, pagesDone: Int64(done), pagesTotal: Int64(total)))
   }
+
+  /// Reports [fraction] (0…1) directly, for a tool whose work is not page by page (compress,
+  /// HOM-31); [pagesDone] and [pagesTotal] are 0 while unknown.
+  func progress(fraction: Double, pagesDone: Int, pagesTotal: Int) {
+    let clamped = min(1, max(0, fraction.isFinite ? fraction : 0))
+    onProgress(PdfToolProgressMsg(jobId: id, tool: tool, fraction: clamped, pagesDone: Int64(pagesDone), pagesTotal: Int64(pagesTotal)))
+  }
 }
 
 /// The running jobs by id.

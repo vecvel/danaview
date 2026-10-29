@@ -56,7 +56,8 @@ link_dir() { # <target dir> <source files...>
 link_dir "$work/Sources/DanaviewPdfCore" "${core_sources[@]}"
 link_dir "$work/Tests/DanaviewPdfCoreTests" "$here"/Core/*.swift
 link_dir "$work/Sources/danaview_pdf" "${all_sources[@]}"
-link_dir "$work/Tests/PdfGlueTests" "$here"/Glue/*.swift "$here/Core/TestPdfs.swift"
+link_dir "$work/Tests/PdfGlueTests" "$here"/Glue/*.swift "$here/Core/TestPdfs.swift" \
+  "$here"/../Compress/Glue/*.swift "$here/../Compress/CompressFixtures.swift"
 cat > "$work/Package.swift" <<PKG
 // swift-tools-version:5.7
 import PackageDescription
