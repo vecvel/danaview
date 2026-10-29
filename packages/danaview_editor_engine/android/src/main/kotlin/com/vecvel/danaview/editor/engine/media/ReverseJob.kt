@@ -263,6 +263,8 @@ class ReverseJob(private val ctx: EngineContext) {
         val latch = CountDownLatch(1)
         var failure: Throwable? = null
         var transformer: Transformer? = null
+        // QA-05 D9: the internal thread quits lazily after cancel(); joined before the chunk ends.
+        var internalThreads: List<Thread> = emptyList()
         val stop = Runnable {
             transformer?.cancel()
             latch.countDown()
@@ -309,7 +311,7 @@ class ReverseJob(private val ctx: EngineContext) {
                 val composition = Composition.Builder(EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO)).addItem(edited).build())
                     .setHdrMode(source.hdrMode)
                     .build()
-                t.start(composition, out.absolutePath)
+                internalThreads = TransformerThreads.startedBy { t.start(composition, out.absolutePath) }
             } catch (e: Throwable) {
                 failure = e
                 latch.countDown()
@@ -324,6 +326,7 @@ class ReverseJob(private val ctx: EngineContext) {
             val drained = CountDownLatch(1)
             handler.post { drained.countDown() }
             drained.await(STOP_POLL_MS * 20, TimeUnit.MILLISECONDS)
+            TransformerThreads.awaitEnd(internalThreads)
         }
         control.throwIfCancelled()
         failure?.let { throw if (it is ExportException) ProxyJob.mapError(it) else EngineErrors.from(it) }

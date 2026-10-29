@@ -195,6 +195,8 @@ class ProxyJob(private val ctx: EngineContext) {
         var completed: ExportResult? = null
         var failure: Throwable? = null
         var transformer: Transformer? = null
+        // Written on the looper, read after its thread is joined.
+        var internalThreads: List<Thread> = emptyList()
         val progress = ProgressHolder()
         val poll = object : Runnable {
             override fun run() {
@@ -220,7 +222,7 @@ class ProxyJob(private val ctx: EngineContext) {
                     }
                     val t = transformer(settings, latch, onDone = { completed = it }, onError = { failure = it })
                     transformer = t
-                    t.start(composition(uri, settings), output.absolutePath)
+                    internalThreads = TransformerThreads.startedBy { t.start(composition(uri, settings), output.absolutePath) }
                     handler.postDelayed(poll, PROGRESS_INTERVAL_MS)
                 } catch (t: Throwable) {
                     failure = t
@@ -239,8 +241,10 @@ class ProxyJob(private val ctx: EngineContext) {
             }
             drained.await(STOP_POLL_MS * 10, TimeUnit.MILLISECONDS)
             thread.quitSafely()
-            // QA-05 D9: the Transformer's looper is gone before the job reports its end.
+            // QA-05 D9: the Transformer's looper and its internal thread (quit lazily after cancel())
+            // are gone before the job reports its end.
             joinQuietly(thread)
+            TransformerThreads.awaitEnd(internalThreads)
         }
         control.throwIfCancelled()
         failure?.let { throw mapError(it) }
