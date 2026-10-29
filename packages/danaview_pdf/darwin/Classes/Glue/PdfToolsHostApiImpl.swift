@@ -23,7 +23,8 @@ final class PdfToolsHostApiImpl: PdfToolsHostApi {
     jobs = PdfJobRegistry(events: events)
   }
 
-  private func run(
+  /// Starts job [id] of [tool] and runs [body] with it; also used by PdfOrganiseHostApi (HOM-28).
+  func run(
     _ id: String, _ tool: PdfToolKindMsg, _ completion: @escaping (Result<PdfToolResultMsg, Error>) -> Void,
     _ body: (PdfJob, @escaping (Result<PdfToolResultMsg, Error>) -> Void) -> Void
   ) {

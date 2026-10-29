@@ -2387,6 +2387,122 @@ class PdfEventMsg {
   }
 }
 
+/// One page of an organised document: source page [sourcePage] turned by [rotation] more degrees.
+class PdfPagePlanMsg {
+  PdfPagePlanMsg({
+    required this.sourcePage,
+    required this.rotation,
+  });
+
+  /// The 0-based page of the input; each page appears at most once.
+  int sourcePage;
+
+  /// Degrees clockwise added to the page's own rotation (a multiple of 90; may be negative).
+  int rotation;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      sourcePage,
+      rotation,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PdfPagePlanMsg decode(Object result) {
+    result as List<Object?>;
+    return PdfPagePlanMsg(
+      sourcePage: result[0]! as int,
+      rotation: result[1]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PdfPagePlanMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(sourcePage, other.sourcePage) && _deepEquals(rotation, other.rotation);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'PdfPagePlanMsg(sourcePage: $sourcePage, rotation: $rotation)';
+  }
+}
+
+/// Writes the input's pages in [pages] order (pages not listed are left out) into [outPath].
+class PdfOrganiseRequestMsg {
+  PdfOrganiseRequestMsg({
+    required this.jobId,
+    required this.input,
+    required this.pages,
+    required this.outPath,
+  });
+
+  /// Caller-chosen id for progress events and `PdfToolsHostApi.cancel`.
+  String jobId;
+
+  PdfToolInputMsg input;
+
+  /// At least one page; no source page twice.
+  List<PdfPagePlanMsg> pages;
+
+  String outPath;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      jobId,
+      input,
+      pages,
+      outPath,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PdfOrganiseRequestMsg decode(Object result) {
+    result as List<Object?>;
+    return PdfOrganiseRequestMsg(
+      jobId: result[0]! as String,
+      input: result[1]! as PdfToolInputMsg,
+      pages: (result[2]! as List<Object?>).cast<PdfPagePlanMsg>(),
+      outPath: result[3]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PdfOrganiseRequestMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(jobId, other.jobId) && _deepEquals(input, other.input) && _deepEquals(pages, other.pages) && _deepEquals(outPath, other.outPath);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'PdfOrganiseRequestMsg(jobId: $jobId, input: $input, pages: $pages, outPath: $outPath)';
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -2515,6 +2631,12 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PdfEventMsg) {
       buffer.putUint8(168);
       writeValue(buffer, value.encode());
+    }    else if (value is PdfPagePlanMsg) {
+      buffer.putUint8(169);
+      writeValue(buffer, value.encode());
+    }    else if (value is PdfOrganiseRequestMsg) {
+      buffer.putUint8(170);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -2608,6 +2730,10 @@ class _PigeonCodec extends StandardMessageCodec {
         return PdfToolProgressMsg.decode(readValue(buffer)!);
       case 168:
         return PdfEventMsg.decode(readValue(buffer)!);
+      case 169:
+        return PdfPagePlanMsg.decode(readValue(buffer)!);
+      case 170:
+        return PdfOrganiseRequestMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -3326,3 +3452,41 @@ Stream<PdfEventMsg> pdfEvents( {String instanceName = ''}) {
   });
 }
     
+
+/// The page organiser (HOM-28 Apple, HOM-28A Android). Jobs share `PdfToolsHostApi.cancel`.
+class PdfOrganiseHostApi {
+  /// Constructor for [PdfOrganiseHostApi]. The [binaryMessenger] named argument is
+  /// available for dependency injection. If it is left null, the default
+  /// BinaryMessenger will be used which routes to the host platform.
+  PdfOrganiseHostApi({
+      BinaryMessenger? binaryMessenger, 
+      String messageChannelSuffix = '', 
+      })
+      : pigeonVar_binaryMessenger = binaryMessenger,
+        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+
+  final BinaryMessenger? pigeonVar_binaryMessenger;
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  final String pigeonVar_messageChannelSuffix;
+
+
+  Future<PdfToolResultMsg> organise(PdfOrganiseRequestMsg request) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.danaview_pdf.PdfOrganiseHostApi.organise$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as PdfToolResultMsg;
+  }
+}
