@@ -69,6 +69,7 @@ import com.vecvel.danaview.editor.engine.export.EncoderSettings
 import com.vecvel.danaview.editor.engine.export.ExportErrors
 import com.vecvel.danaview.editor.engine.export.HardwareEncoderSelector
 import com.vecvel.danaview.editor.engine.export.TransformerExport
+import com.vecvel.danaview.editor.engine.media.SourceFrameStills
 import com.vecvel.danaview.editor.engine.pigeon.GeneratedAssetMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.JobRequestMsg
@@ -368,7 +369,13 @@ class RenderPreviewJob internal constructor(
             images(paths),
             LayerEffectChainFactory(settings.width, settings.height, service.assets()),
             AtomicReference(ParamSnapshot.of(plan)),
-            Media3Composition.Options(hdrMode = env.hdrMode(plan), outputWidth = settings.width, outputHeight = settings.height),
+            Media3Composition.Options(
+                hdrMode = env.hdrMode(plan),
+                outputWidth = settings.width,
+                outputHeight = settings.height,
+                // A layer past its source end holds the last frame, as live playback (ARCH §11.5).
+                frameStills = SourceFrameStills(ctx.appContext, File(paths.engineAssets, SourceFrameStills.DIR)),
+            ),
         )
     }
 

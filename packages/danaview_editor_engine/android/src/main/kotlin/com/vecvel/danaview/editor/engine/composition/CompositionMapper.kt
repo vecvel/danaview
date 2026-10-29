@@ -23,6 +23,15 @@
 // `setFrameRate(gridFps)` when faster than 1× (V-N17); `setDurationUs` = the full source duration
 // (AND-01 §6.7); video items drop their audio, audio items their video. Gating (which layer of a
 // sequence covers an output frame) is LayerGating's, on the spec's active ranges.
+// Past the source end (ARCH §11.5: the displayed frame is the greatest PTS <= s + 500 µs, so a
+// layer whose map runs past its source shows the LAST source frame there, as AND-16's live decks
+// do): a media item whose map needs more source than the clip start leaves is split on the grid at
+// the first frame kH whose rule frame is the last one. [k0, kH) plays the source (SpeedFit on the
+// map cut at kH); [kH, k1) is a `hold` MEDIA item of the last frame, which Media3Composition draws
+// as a still image at the output fps (Media3Composition.FrameStills). Never a slowed clip: SpeedFit
+// stretching the remaining source over the whole item showed other frames than live and export.
+// Audio past its source end is silence (an AUDIO_GAP from the first grid frame whose source time
+// reaches the source duration), as the live audio decks play it.
 
 package com.vecvel.danaview.editor.engine.composition
 
@@ -31,6 +40,7 @@ import com.vecvel.danaview.editor.engine.core.EngineErrors
 import com.vecvel.danaview.editor.engine.core.EngineException
 import com.vecvel.danaview.editor.engine.plan.AudioSeg
 import com.vecvel.danaview.editor.engine.plan.FrameGrid
+import com.vecvel.danaview.editor.engine.plan.MapSegment
 import com.vecvel.danaview.editor.engine.plan.PlanAsset
 import com.vecvel.danaview.editor.engine.plan.PlanLayer
 import com.vecvel.danaview.editor.engine.plan.PlanLayerKind
@@ -120,11 +130,11 @@ class CompositionMapper(private val timeline: SourceTimeline) {
         var cursor = 0L
         for (p in lane.pieces) {
             if (p.t0 > cursor) items += generated(ItemKind.GAP, cursor, p.t0, a, fps)
-            items += when (p.layer.kind) {
-                PlanLayerKind.MEDIA -> mediaItem(p.layer, plan, a, options)
-                PlanLayerKind.IMAGE -> generated(ItemKind.IMAGE, p.t0, p.t1, a, fps, p.layer.id, assetOf(plan, p.layer).uri)
-                PlanLayerKind.SOLID -> generated(ItemKind.SOLID, p.t0, p.t1, a, fps, p.layer.id)
-                PlanLayerKind.SPRITE -> generated(ItemKind.SPRITE, p.t0, p.t1, a, fps, p.layer.id)
+            when (p.layer.kind) {
+                PlanLayerKind.MEDIA -> items.addAll(mediaItems(p.layer, plan, a, options))
+                PlanLayerKind.IMAGE -> items += generated(ItemKind.IMAGE, p.t0, p.t1, a, fps, p.layer.id, assetOf(plan, p.layer).uri)
+                PlanLayerKind.SOLID -> items += generated(ItemKind.SOLID, p.t0, p.t1, a, fps, p.layer.id)
+                PlanLayerKind.SPRITE -> items += generated(ItemKind.SPRITE, p.t0, p.t1, a, fps, p.layer.id)
             }
             active += ActiveRange(p.t0, p.t1, p.layer.id)
             cursor = p.t1
@@ -150,33 +160,78 @@ class CompositionMapper(private val timeline: SourceTimeline) {
         return EngineException(code, "source unreadable", itemId = itemId, mediaFingerprint = asset.fp.ifEmpty { null }, cause = e)
     }
 
-    private fun mediaItem(l: PlanLayer, plan: RenderPlan, a: Anchor, options: Options): ItemSpec {
+    /**
+     * The items of media layer [l]: one MEDIA item, or (its map running past the source end, file
+     * header) the played part and a `hold` item of the last source frame.
+     */
+    private fun mediaItems(l: PlanLayer, plan: RenderPlan, a: Anchor, options: Options): List<ItemSpec> {
         val asset = assetOf(plan, l)
         val uri = if (options.useProxies && plan.target == PlanTarget.PREVIEW) asset.proxyUri ?: asset.uri else asset.uri
         val s0 = l.map.first().s0
         val start = a.at(l.t0)
         val end = a.at(l.t1)
+        val k0 = a.frame(l.t0)
+        val k1 = a.frame(l.t1)
         val (clipStart, sourceDur) = try {
             timeline.ruleFramePtsUs(uri, s0) to (timeline.durationUs(uri) ?: asset.durUs)
         } catch (e: IOException) {
             throw sourceFailure(e, l.id, asset)
         }
         val maxRate = l.map.maxOf { it.rate }
-        if (l.hold) {
-            return ItemSpec(
-                kind = ItemKind.MEDIA, startUs = start, endUs = end, k0 = a.frame(l.t0), k1 = a.frame(l.t1),
-                layerId = l.id, uri = uri, clipStartUs = clipStart, clipEndUs = clipStart,
-                sourceDurationUs = sourceDur, planSourceStartUs = s0, hold = true, maxRate = maxRate,
-            )
-        }
+        fun held(from: Long, k: Long, framePts: Long) = ItemSpec(
+            kind = ItemKind.MEDIA, startUs = from, endUs = end, k0 = k, k1 = k1,
+            layerId = l.id, uri = uri, clipStartUs = framePts, clipEndUs = framePts,
+            sourceDurationUs = sourceDur, planSourceStartUs = s0, hold = true, maxRate = maxRate,
+        )
+        if (l.hold) return listOf(held(start, k0, clipStart))
         val maxInput = sourceDur?.let { it - clipStart } ?: Long.MAX_VALUE
-        val fit = SpeedFit.fit(l.map, end - start, maxInput)
+        if (sourceDur != null && l.map.last().s1 - clipStart > maxInput) {
+            // The map runs past the source end: hold the last frame from the first grid frame whose
+            // rule frame is the last one (ARCH §11.5; AND-16's decks show it there).
+            val lastPts = try {
+                timeline.ruleFramePtsUs(uri, sourceDur)
+            } catch (e: IOException) {
+                throw sourceFailure(e, l.id, asset)
+            }
+            val kH = firstHeldFrame(l.map, a.grid, k0, k1, lastPts)
+            if (kH == k0) return listOf(held(start, k0, lastPts))
+            if (kH < k1) {
+                val tH = a.grid.timeOfFrame(kH)
+                val played = cutMap(l.map, tH)
+                val mid = a.at(tH)
+                return listOf(
+                    playedItem(l, uri, start, mid, k0, kH, clipStart, sourceDur, s0, played, maxInput, plan),
+                    held(mid, kH, lastPts),
+                )
+            }
+            // No grid frame reaches the last source frame (the map ends less than a frame past the
+            // source): the clip below stays inside the source with a sub-frame speed fit.
+        }
+        return listOf(playedItem(l, uri, start, end, k0, k1, clipStart, sourceDur, s0, l.map, maxInput, plan))
+    }
+
+    private fun playedItem(
+        l: PlanLayer,
+        uri: String,
+        start: Long,
+        end: Long,
+        k0: Long,
+        k1: Long,
+        clipStart: Long,
+        sourceDur: Long?,
+        s0: Long,
+        map: List<MapSegment>,
+        maxInput: Long,
+        plan: RenderPlan,
+    ): ItemSpec {
+        val maxRate = l.map.maxOf { it.rate }
+        val fit = SpeedFit.fit(map, end - start, maxInput)
         return ItemSpec(
             kind = ItemKind.MEDIA,
             startUs = start,
             endUs = end,
-            k0 = a.frame(l.t0),
-            k1 = a.frame(l.t1),
+            k0 = k0,
+            k1 = k1,
             layerId = l.id,
             uri = uri,
             clipStartUs = clipStart,
@@ -223,13 +278,33 @@ class CompositionMapper(private val timeline: SourceTimeline) {
             } catch (e: IOException) {
                 throw sourceFailure(e, s.id, asset)
             }
-            val fit = SpeedFit.fit(s.map, end - start, sourceDur?.let { it - clipStart } ?: Long.MAX_VALUE)
+            val maxInput = sourceDur?.let { it - clipStart } ?: Long.MAX_VALUE
+            val k0 = a.frame(s.t0)
+            val k1 = a.frame(s.t1)
+            var map = s.map
+            var kEnd = k1
+            var playedEnd = end
+            if (sourceDur != null && s.map.last().s1 - clipStart > maxInput) {
+                // Past the source end the segment is silent (file header): it plays at its rate up
+                // to the last grid frame whose source time is still inside the source (so the clip
+                // never needs a speed fit past the end), then a gap.
+                kEnd = (firstFrameAtOrPast(s.map, a.grid, k0, k1, sourceDur + 1) - 1).coerceAtLeast(k0)
+                val tEnd = a.grid.timeOfFrame(kEnd)
+                playedEnd = a.at(tEnd)
+                if (kEnd > k0) map = cutMap(s.map, tEnd)
+            }
+            if (playedEnd <= start) {
+                items += ItemSpec(ItemKind.AUDIO_GAP, start, end, k0, k1)
+                cursor = s.t1
+                continue
+            }
+            val fit = SpeedFit.fit(map, playedEnd - start, maxInput)
             items += ItemSpec(
                 kind = ItemKind.AUDIO,
                 startUs = start,
-                endUs = end,
-                k0 = a.frame(s.t0),
-                k1 = a.frame(s.t1),
+                endUs = playedEnd,
+                k0 = k0,
+                k1 = kEnd,
                 segmentId = s.id,
                 uri = asset.uri,
                 clipStartUs = clipStart,
@@ -242,9 +317,52 @@ class CompositionMapper(private val timeline: SourceTimeline) {
                 gain = s.gain,
                 maxRate = fit.maxRate,
             )
+            if (playedEnd < end) items += ItemSpec(ItemKind.AUDIO_GAP, playedEnd, end, kEnd, k1)
             cursor = s.t1
         }
         if (cursor < plan.durUs) items += ItemSpec(ItemKind.AUDIO_GAP, a.at(cursor), plan.durUs, a.frame(cursor), a.frame(plan.durUs))
         return SequenceSpec(index = index, kind = SequenceKind.AUDIO, trackTypes = TrackTypes.AUDIO, items = items)
+    }
+
+    companion object {
+        /**
+         * Source time (µs) of [map] at plan time [t]: `s0 + (t − t0)·rate` on the segment holding
+         * [t] (clamped to the map), floored to µs. The same evaluation as the live path
+         * (PausedFrames.sourceTimeUs, AND-16's decks) so both pick the same frames.
+         */
+        fun sourceTimeUs(map: List<MapSegment>, t: Long): Long {
+            val seg = map.firstOrNull { t >= it.t0 && t < it.t1 } ?: if (t < map[0].t0) map[0] else map[map.size - 1]
+            if (seg.t1 <= seg.t0) return seg.s0
+            val tc = t.coerceIn(seg.t0, seg.t1)
+            return Math.floor(seg.sourceAt(tc.toDouble()) + 1e-6).toLong().coerceAtLeast(0L)
+        }
+
+        /**
+         * The first grid frame k in [k0, k1) whose rule frame is [lastPts] (source time + ε reaches
+         * it), or [k1] when none. Source time increases with k (rates are positive).
+         */
+        fun firstHeldFrame(map: List<MapSegment>, grid: FrameGrid, k0: Long, k1: Long, lastPts: Long): Long =
+            firstFrameAtOrPast(map, grid, k0, k1, lastPts - SourceTimeline.EPSILON_US)
+
+        /** The first grid frame k in [k0, k1) whose source time is >= [sourceUs], or [k1] when none. */
+        fun firstFrameAtOrPast(map: List<MapSegment>, grid: FrameGrid, k0: Long, k1: Long, sourceUs: Long): Long {
+            var lo = k0
+            var hi = k1
+            while (lo < hi) {
+                val mid = lo + (hi - lo) / 2
+                if (sourceTimeUs(map, grid.timeOfFrame(mid)) >= sourceUs) hi = mid else lo = mid + 1
+            }
+            return lo
+        }
+
+        /** [map] up to plan time [tEnd] (on the grid, inside the map): the segment holding it is cut there. */
+        fun cutMap(map: List<MapSegment>, tEnd: Long): List<MapSegment> = map.filter { it.t0 < tEnd }.map { seg ->
+            if (seg.t1 <= tEnd) {
+                seg
+            } else {
+                val s1 = seg.s0 + Math.round((tEnd - seg.t0).toDouble() * (seg.s1 - seg.s0).toDouble() / (seg.t1 - seg.t0).toDouble())
+                MapSegment(seg.t0, tEnd, seg.s0, s1)
+            }
+        }
     }
 }

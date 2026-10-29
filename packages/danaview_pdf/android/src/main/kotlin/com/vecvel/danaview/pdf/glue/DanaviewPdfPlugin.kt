@@ -8,6 +8,7 @@
 //   PdfTextHostApi     → text/PdfTextHostApiImpl      (PdfBox text; HOM-25)
 //   PdfToolsHostApi    → glue/PdfToolsHostApiImpl     (tools/ HOM-28A, annotate/ HOM-29A,
 //                                                      sign/ HOM-30A, compress/ HOM-31A)
+//   PdfCompressHostApi → compress/PdfCompressor       (estimate; HOM-31A)
 //   PdfEventsApi       → glue/PdfEventHub
 //
 // PdfBox-Android's resources are loaded once at attach (2-4 ms, HOM-27); a few seconds later a
@@ -17,6 +18,8 @@
 package com.vecvel.danaview.pdf.glue
 
 import android.os.Process
+import com.vecvel.danaview.pdf.compress.PdfCompressor
+import com.vecvel.danaview.pdf.pigeon.PdfCompressHostApi
 import com.vecvel.danaview.pdf.pigeon.PdfDocumentHostApi
 import com.vecvel.danaview.pdf.pigeon.PdfEventsStreamHandler
 import com.vecvel.danaview.pdf.pigeon.PdfTextHostApi
@@ -35,6 +38,7 @@ class DanaviewPdfPlugin : FlutterPlugin {
     private var threads: PdfThreads? = null
     private var store: PdfDocumentStore? = null
     private var views: PdfViewHostApiImpl? = null
+    private var compressor: PdfCompressor? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         PdfBoxSupport.init(binding.applicationContext)
@@ -48,8 +52,12 @@ class DanaviewPdfPlugin : FlutterPlugin {
         PdfDocumentHostApi.setUp(messenger, PdfDocumentHostApiImpl(s, t))
         PdfViewHostApi.setUp(messenger, v)
         PdfTextHostApi.setUp(messenger, PdfTextHostApiImpl(t))
-        PdfToolsHostApi.setUp(messenger, PdfToolsHostApiImpl())
-        PdfEventsStreamHandler.register(messenger, PdfEventHub())
+        val hub = PdfEventHub(t.main)
+        val c = PdfCompressor(t.main, hub, binding.applicationContext.cacheDir)
+        compressor = c
+        PdfToolsHostApi.setUp(messenger, PdfToolsHostApiImpl(compressor = c))
+        PdfCompressHostApi.setUp(messenger, c)
+        PdfEventsStreamHandler.register(messenger, hub)
         // Warm PdfBox's parser and the platform renderer once, after app start has settled.
         val cacheDir = binding.applicationContext.cacheDir
         t.main.postDelayed({
@@ -74,6 +82,9 @@ class DanaviewPdfPlugin : FlutterPlugin {
         PdfViewHostApi.setUp(messenger, null)
         PdfTextHostApi.setUp(messenger, null)
         PdfToolsHostApi.setUp(messenger, null)
+        PdfCompressHostApi.setUp(messenger, null)
+        compressor?.shutdown()
+        compressor = null
         views?.disposeAll()
         val t = threads
         val docs = store?.removeAll().orEmpty()

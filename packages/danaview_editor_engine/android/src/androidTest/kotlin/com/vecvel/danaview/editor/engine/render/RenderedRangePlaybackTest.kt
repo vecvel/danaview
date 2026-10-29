@@ -394,6 +394,70 @@ class RenderedRangePlaybackTest {
         return FallbackPlans.plan(fps, frames, layers)
     }
 
+    /**
+     * Diagnostics of the 6-layer cached playback (no assertion; android-r8, as boundaryRun's
+     * readout): each backward step with what the render FILE shows at both frames and the live
+     * rule frame there, telling a wrong render (Media3) from playback showing another file frame;
+     * then every file frame of every cell against the live rule. Layers K4 and K5 map past the
+     * counter's last frame (source frames 130..249 and 160..279 of 240): the live rule holds the
+     * last frame there, while the render's item is clipped at the source end and SpeedFit slows it
+     * to fill the item, so those cells differ from the rule by design of the mapping (reported as
+     * "past the source end"), which is not a backward step by itself.
+     */
+    private fun sixLayerReadout(plan: RenderPlan, h: RangeHarness, file: java.io.File, shown: List<Shown>, frames: Long) {
+        val pts = FallbackPlans.pts(h.engine.ctx, plan.canvas.fps)
+        val regions = cells()
+        val layers = (0 until 6).map { i -> plan.layers.first { it.id == "K$i#v" } }
+        val rf = RenderedFile(file)
+        fun fileCell(k: Long, i: Int): Int? {
+            val bmp = rf.frames(k.toInt(), 1).first()
+            try {
+                return FrameBarcode.decode(bmp, regions[i].barcode)
+            } finally {
+                bmp.recycle()
+            }
+        }
+        for (i in 0 until 6) {
+            val seen = shown.filter { it.readings["c$i"] != null }
+            for ((a, b) in seen.zipWithNext()) {
+                val va = a.readings["c$i"]!!
+                val vb = b.readings["c$i"]!!
+                if (vb >= va) continue
+                val wantA = FallbackPlans.expected(plan, layers[i], a.k, pts)
+                val wantB = FallbackPlans.expected(plan, layers[i], b.k, pts)
+                val fa = if (a.k in 0 until frames) fileCell(a.k, i) else null
+                val fb = if (b.k in 0 until frames) fileCell(b.k, i) else null
+                val verdict = when {
+                    fa != va || fb != vb -> "playback showed another frame than the file holds at that k"
+                    fa != wantA || fb != wantB -> "the file itself is wrong"
+                    else -> "file and playback agree with the live rule (a misread?)"
+                }
+                log18("six: backward step c$i: k=${a.k} shows $va then k=${b.k} shows $vb; file reads $fa, $fb; live rule $wantA, $wantB ($verdict)")
+            }
+        }
+        val off = Array(6) { ArrayList<String>() }
+        var k = 0
+        while (k < frames) {
+            val n = minOf(8L, frames - k).toInt()
+            val bitmaps = rf.frames(k, n)
+            for ((j, bmp) in bitmaps.withIndex()) {
+                for (i in 0 until 6) {
+                    val got = FrameBarcode.decode(bmp, regions[i].barcode)
+                    val want = FallbackPlans.expected(plan, layers[i], (k + j).toLong(), pts)
+                    if (got != want) off[i] += "k=${k + j} want=$want got=$got"
+                }
+                bmp.recycle()
+            }
+            k += n
+        }
+        for (i in 0 until 6) {
+            val first = FallbackPlans.expected(plan, layers[i], 0, pts) ?: -1
+            val past = first + frames - 1 > pts.size - 1
+            val note = if (past) " (past the source end at ${pts.size - 1}: the render stretches the item, live holds the last frame)" else ""
+            log18("six: c$i file vs live rule: ${off[i].size}/$frames frames differ ${off[i].take(6)}; source frames $first..${first + frames - 1}$note")
+        }
+    }
+
     /** The rectangle each keyed layer covers (213 × 120 around its centre). */
     private fun cells(): List<Region> = (0 until 6).map { i ->
         val cx = 640.0 / 3 * (i % 3) + 640.0 / 6
@@ -456,6 +520,7 @@ class RenderedRangePlaybackTest {
             if (PerfGate.strict) {
                 assertTrue("<= 2% dropped from the cache, or fewer drops than live playback: $line", dropPct <= 2.0 || dropped < liveDropped)
             }
+            if (backward > 0 || cellsMoving < 6) sixLayerReadout(plan, h, file, shown, frames)
             assertEquals("no backward step (wrong frame) in the cached playback: $line", 0, backward)
             assertEquals("every layer moves in the cached playback: $line", 6, cellsMoving)
         }

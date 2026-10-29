@@ -10,7 +10,7 @@
 //   outline        true  - PdfBox outline, every API level
 //   passwords      API 35+ only - older PdfRenderer versions can't open encrypted files (file card)
 //   textExtraction true  - as search, every API level (with a password too)
-//   tools          none yet (HOM-28A..HOM-31A)
+//   tools          compress (HOM-31A); the page tools, annotate and sign as they land
 
 package com.vecvel.danaview.pdf.glue
 
