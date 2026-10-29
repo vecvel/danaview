@@ -14,6 +14,9 @@
 // is a Danaview file; only the out actions otherwise; "Merge into PDF" when the selection holds
 // only PDFs and photos, at least two (routed to HOM-28; one photo as a PDF is 1.3.0's Export as
 // PDF, D-115d). Platform limits come from [FileOutCapabilities].
+//
+// EXTENDED: HOM-31 ("Compress…" in the single-file menu of a readable PDF when the app wires a
+// compress handler; the result is a new file, the original is never modified).
 
 import '../model/document_item.dart';
 import '../model/ids.dart';
@@ -57,6 +60,9 @@ enum FileAction {
   /// Merge a PDF with other PDFs and photos (HOM-28).
   mergeWith,
 
+  /// Compress one PDF into a new, smaller file (HOM-31).
+  compressPdf,
+
   /// Move to Recently deleted (with the "Used in N projects" warning).
   delete,
 }
@@ -91,7 +97,7 @@ final class FileActionTarget {
   /// Photo or video.
   bool get isMedia => item is PhotoMediaItem || item is VideoMediaItem;
 
-  /// A PDF document (the page tools' input).
+  /// A PDF document (the page tools' input, HOM-28; Compress, HOM-31).
   bool get isPdf => switch (item) {
         DocumentItem(docKind: DocumentKind.pdf) => true,
         _ => item.mimeType == 'application/pdf',
@@ -124,7 +130,8 @@ String? localPathOf(String uri, {bool? windows}) {
 
 /// The single-file menu of [target], in menu order, for a platform offering [canShare],
 /// [canOpenIn], [canSaveOut] and [canSaveToPhotos]; [canPdfTools] (the page tools are wired, HOM-28)
-/// adds "Organise pages" and "Merge with…" for a readable PDF.
+/// adds "Organise pages" and "Merge with…" for a readable PDF; [canCompress] (a compress handler
+/// exists, HOM-31) adds "Compress…".
 List<FileAction> fileActionsFor(
   FileActionTarget target, {
   required bool canShare,
@@ -132,6 +139,7 @@ List<FileAction> fileActionsFor(
   required bool canSaveOut,
   required bool canSaveToPhotos,
   bool canPdfTools = false,
+  bool canCompress = false,
 }) {
   final out = target.canLeave;
   final lib = target.isLibraryEntry;
@@ -147,6 +155,7 @@ List<FileAction> fileActionsFor(
     if (lib) FileAction.favourite,
     if (out && canSaveOut) FileAction.saveOut,
     if (out && canSaveToPhotos && target.isMedia) FileAction.saveToPhotos,
+    if (canCompress && out && target.isPdf) FileAction.compressPdf,
     if (lib) FileAction.delete,
   ];
 }

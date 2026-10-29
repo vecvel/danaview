@@ -5,7 +5,8 @@
 // builds a PDFKit viewer that navigates, zooms, finds and highlights fixture strings and copies a
 // selection, thumbnails render from an independent open while a view draws the same handle, every
 // async reply arrives on the main thread, the texture calls are Android-only, and every tool stub
-// not landed yet (annotate, sign, compress) answers notSupportedOnDevice and ends its job.
+// not landed yet (annotate, sign) answers notSupportedOnDevice and ends its job (the page tools landed
+// with HOM-28: Tests/Tools/Glue/; compress with HOM-31: Tests/Compress/Glue/).
 
 import Foundation
 import PDFKit
@@ -44,7 +45,7 @@ final class PdfGlueTests: XCTestCase {
     let caps = try api.capabilities()
     XCTAssertTrue(caps.platformView && caps.search && caps.selection && caps.passwords && caps.outline && caps.textExtraction)
     XCTAssertFalse(caps.textureView)
-    XCTAssertTrue(Set(caps.tools).isSuperset(of: [.merge, .split, .reorder, .rotate, .deletePages]), "the page tools (HOM-28) have landed")
+    XCTAssertEqual(Set(caps.tools), [.merge, .split, .reorder, .rotate, .deletePages, .compress], "the page tools (HOM-28) and compress (HOM-31) have landed")
 
     let info = try wait { api.open(request: PdfOpenRequestMsg(path: locked.path, password: nil), completion: $0) }.get()
     XCTAssertTrue(info.locked)
@@ -88,7 +89,6 @@ final class PdfGlueTests: XCTestCase {
     let calls: [(String, (@escaping (Result<PdfToolResultMsg, Error>) -> Void) -> Void)] = [
       ("annotate", { tools.annotate(request: PdfAnnotateRequestMsg(jobId: "j6", input: input, annotations: [], outPath: out), completion: $0) }),
       ("sign", { tools.sign(request: PdfSignRequestMsg(jobId: "j7", input: input, stamps: [], outPath: out), completion: $0) }),
-      ("compress", { tools.compress(request: PdfCompressRequestMsg(jobId: "j8", input: input, preset: .medium, outPath: out), completion: $0) }),
     ]
     for (name, call) in calls {
       XCTAssertEqual(code(wait(call)), "notSupportedOnDevice", name)

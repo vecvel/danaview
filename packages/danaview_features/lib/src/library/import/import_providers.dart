@@ -28,25 +28,33 @@ final importExtraCopiersProvider = Provider<List<ImportCopier>>((ref) => const [
 /// Hooks run for every imported entry (thumbnail request HOM-04, index request AIS-50).
 final importHooksProvider = Provider<List<ImportHook>>((ref) => const []);
 
-/// The import service, or null without a library store.
+/// Reads a PDF's page count for the Documents rows (FIX-S3Q-4); the app root overrides it where
+/// `danaview_pdf` runs (iOS, macOS, Android). Null: no page count is recorded.
+final importPageCounterProvider = Provider<DocumentPageCounter?>((ref) => null);
+
+/// The import service, or null without a library store. Creating it also fills in, in the
+/// background, the page counts of PDFs imported before they were recorded.
 final importServiceProvider = Provider<ImportService?>((ref) {
   final store = ref.watch(libraryStoreProvider);
   if (store == null || store.readOnly) return null;
   final extra = ref.watch(importExtraCopiersProvider);
   final hooks = ref.watch(importHooksProvider);
   final staging = ref.watch(importStagingDirectoryProvider);
+  final countPages = ref.watch(importPageCounterProvider);
   final native = extra.whereType<NativeImportCopier>().firstOrNull;
   final service = ImportService(
     store: store,
     copiers: [const FileImportCopier(), ...extra],
     onImported: hooks,
     release: native == null ? null : (uri) => native.release(uri),
+    countPages: countPages,
   );
   ref.onDispose(() => unawaited(service.dispose()));
   unawaited(() async {
     try {
       await service.resumePending();
       if (staging != null) await service.sweepStaging(staging);
+      if (countPages != null) await backfillPageCounts(store, countPages);
     } on Object {
       // A store closing during start-up: the next launch resumes.
     }

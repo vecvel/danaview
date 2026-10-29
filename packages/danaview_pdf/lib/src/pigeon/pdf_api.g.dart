@@ -2503,6 +2503,78 @@ class PdfOrganiseRequestMsg {
   }
 }
 
+/// The sizes each compression preset would give for one file.
+class PdfCompressEstimateMsg {
+  PdfCompressEstimateMsg({
+    required this.sourceBytes,
+    required this.highBytes,
+    required this.mediumBytes,
+    required this.smallBytes,
+    required this.sampled,
+  });
+
+  /// Size of the file now.
+  int sourceBytes;
+
+  /// Expected size with [PdfCompressPresetMsg.high].
+  int highBytes;
+
+  /// Expected size with [PdfCompressPresetMsg.medium].
+  int mediumBytes;
+
+  /// Expected size with [PdfCompressPresetMsg.small].
+  int smallBytes;
+
+  /// True when the sizes are extrapolated from a sample of pages (long files); false when every
+  /// page was compressed in memory (the sizes are then what a run writes).
+  bool sampled;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      sourceBytes,
+      highBytes,
+      mediumBytes,
+      smallBytes,
+      sampled,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PdfCompressEstimateMsg decode(Object result) {
+    result as List<Object?>;
+    return PdfCompressEstimateMsg(
+      sourceBytes: result[0]! as int,
+      highBytes: result[1]! as int,
+      mediumBytes: result[2]! as int,
+      smallBytes: result[3]! as int,
+      sampled: result[4]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PdfCompressEstimateMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(sourceBytes, other.sourceBytes) && _deepEquals(highBytes, other.highBytes) && _deepEquals(mediumBytes, other.mediumBytes) && _deepEquals(smallBytes, other.smallBytes) && _deepEquals(sampled, other.sampled);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'PdfCompressEstimateMsg(sourceBytes: $sourceBytes, highBytes: $highBytes, mediumBytes: $mediumBytes, smallBytes: $smallBytes, sampled: $sampled)';
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -2637,6 +2709,9 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PdfOrganiseRequestMsg) {
       buffer.putUint8(170);
       writeValue(buffer, value.encode());
+    }    else if (value is PdfCompressEstimateMsg) {
+      buffer.putUint8(171);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -2734,6 +2809,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return PdfPagePlanMsg.decode(readValue(buffer)!);
       case 170:
         return PdfOrganiseRequestMsg.decode(readValue(buffer)!);
+      case 171:
+        return PdfCompressEstimateMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -3488,5 +3565,44 @@ class PdfOrganiseHostApi {
     )
     ;
     return pigeonVar_replyValue! as PdfToolResultMsg;
+  }
+}
+
+/// Estimates for the compress sheet (HOM-31 Apple, HOM-31A Android).
+class PdfCompressHostApi {
+  /// Constructor for [PdfCompressHostApi]. The [binaryMessenger] named argument is
+  /// available for dependency injection. If it is left null, the default
+  /// BinaryMessenger will be used which routes to the host platform.
+  PdfCompressHostApi({
+      BinaryMessenger? binaryMessenger, 
+      String messageChannelSuffix = '', 
+      })
+      : pigeonVar_binaryMessenger = binaryMessenger,
+        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+
+  final BinaryMessenger? pigeonVar_binaryMessenger;
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  final String pigeonVar_messageChannelSuffix;
+
+
+  /// What each preset would give for [input], off the main thread; nothing is written.
+  Future<PdfCompressEstimateMsg> estimate(PdfToolInputMsg input) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.danaview_pdf.PdfCompressHostApi.estimate$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[input]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as PdfCompressEstimateMsg;
   }
 }

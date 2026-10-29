@@ -19,7 +19,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _pkg = '../danaview_pdf';
 
-const _hostApis = ['PdfDocumentHostApi', 'PdfViewHostApi', 'PdfTextHostApi', 'PdfToolsHostApi'];
+// PdfCompressHostApi: HOM-31's additive estimate block ([INTEGRATION] amendment).
+const _hostApis = ['PdfDocumentHostApi', 'PdfViewHostApi', 'PdfTextHostApi', 'PdfToolsHostApi', 'PdfCompressHostApi'];
 
 /// Host APIs added by lead-approved [INTEGRATION] amendments, each in its own block: API → owner.
 /// They are served by an existing Impl (an extension), so only their setUp is checked.
@@ -31,11 +32,10 @@ const _outputs = [
   'android/src/main/kotlin/com/vecvel/danaview/pdf/pigeon/PdfApi.g.kt',
 ];
 
-/// Tool placeholders of later tickets: file → owner.
+/// Tool placeholders of later tickets: file → owner (HOM-31's compressor has landed).
 const _placeholders = {
   'darwin/Classes/Annotate/PdfAnnotator.swift': 'HOM-29',
   'darwin/Classes/Sign/PdfSigner.swift': 'HOM-30',
-  'darwin/Classes/Compress/PdfCompressor.swift': 'HOM-31',
 };
 
 final _socket = RegExp(
@@ -80,7 +80,7 @@ void main() {
 
   test('the Pigeon file declares exactly the planned APIs and is marked frozen', () {
     final declared = RegExp(r'@HostApi\(\)\s*abstract class (\w+)').allMatches(pigeon).map((m) => m[1]).toList();
-    expect(declared, [..._hostApis, ..._amendmentApis.keys]);
+    expect(declared, unorderedEquals([..._hostApis, ..._amendmentApis.keys]));
     for (final entry in _amendmentApis.entries) {
       expect(pigeon, contains('${entry.value} amendment [INTEGRATION]'), reason: '${entry.key} sits in its marked block');
     }
@@ -197,8 +197,13 @@ void main() {
     }
   });
 
-  test('the viewer, text and page-tool cores are Flutter-free (XCTest runs them without an app host)', () {
-    for (final path in ['darwin/Classes/Viewer/PdfCore.swift', 'darwin/Classes/Text/PdfTextCore.swift', 'darwin/Classes/Tools/PdfPageToolsCore.swift']) {
+  test('the viewer, text, page-tool and compress cores are Flutter-free (XCTest runs them without an app host)', () {
+    for (final path in [
+      'darwin/Classes/Viewer/PdfCore.swift',
+      'darwin/Classes/Text/PdfTextCore.swift',
+      'darwin/Classes/Tools/PdfPageToolsCore.swift',
+      'darwin/Classes/Compress/PdfCompressCore.swift',
+    ]) {
       expect(_f(path).readAsStringSync(), isNot(matches(RegExp(r'^import Flutter', multiLine: true))), reason: path);
     }
   });

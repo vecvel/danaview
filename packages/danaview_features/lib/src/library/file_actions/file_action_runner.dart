@@ -104,6 +104,11 @@ Future<bool> runFileAction(BuildContext context, WidgetRef ref, FileAction actio
         if (tools == null) return false;
         await tools(context, action, items.first);
         return true;
+      case FileAction.compressPdf:
+        final compress = ref.read(compressPdfHandlerProvider);
+        if (compress == null) return false;
+        await compress(context, items.first);
+        return true;
       case FileAction.rename || FileAction.copyTo || FileAction.moveTo || FileAction.favourite || FileAction.delete:
         final ids = _entryIds(items);
         if (actions == null || ids.isEmpty) {

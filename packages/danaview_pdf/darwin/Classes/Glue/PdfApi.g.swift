@@ -2257,6 +2257,69 @@ struct PdfOrganiseRequestMsg: Hashable, CustomStringConvertible {
   }
 }
 
+/// The sizes each compression preset would give for one file.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PdfCompressEstimateMsg: Hashable, CustomStringConvertible {
+  /// Size of the file now.
+  var sourceBytes: Int64
+  /// Expected size with [PdfCompressPresetMsg.high].
+  var highBytes: Int64
+  /// Expected size with [PdfCompressPresetMsg.medium].
+  var mediumBytes: Int64
+  /// Expected size with [PdfCompressPresetMsg.small].
+  var smallBytes: Int64
+  /// True when the sizes are extrapolated from a sample of pages (long files); false when every
+  /// page was compressed in memory (the sizes are then what a run writes).
+  var sampled: Bool
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PdfCompressEstimateMsg? {
+    let sourceBytes = pigeonVar_list[0] as! Int64
+    let highBytes = pigeonVar_list[1] as! Int64
+    let mediumBytes = pigeonVar_list[2] as! Int64
+    let smallBytes = pigeonVar_list[3] as! Int64
+    let sampled = pigeonVar_list[4] as! Bool
+
+    return PdfCompressEstimateMsg(
+      sourceBytes: sourceBytes,
+      highBytes: highBytes,
+      mediumBytes: mediumBytes,
+      smallBytes: smallBytes,
+      sampled: sampled
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      sourceBytes,
+      highBytes,
+      mediumBytes,
+      smallBytes,
+      sampled,
+    ]
+  }
+  static func == (lhs: PdfCompressEstimateMsg, rhs: PdfCompressEstimateMsg) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return PdfApiPigeonInternal.deepEquals(lhs.sourceBytes, rhs.sourceBytes) && PdfApiPigeonInternal.deepEquals(lhs.highBytes, rhs.highBytes) && PdfApiPigeonInternal.deepEquals(lhs.mediumBytes, rhs.mediumBytes) && PdfApiPigeonInternal.deepEquals(lhs.smallBytes, rhs.smallBytes) && PdfApiPigeonInternal.deepEquals(lhs.sampled, rhs.sampled)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PdfCompressEstimateMsg")
+    PdfApiPigeonInternal.deepHash(value: sourceBytes, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: highBytes, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: mediumBytes, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: smallBytes, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: sampled, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PdfCompressEstimateMsg(sourceBytes: \(String(describing: sourceBytes)), highBytes: \(String(describing: highBytes)), mediumBytes: \(String(describing: mediumBytes)), smallBytes: \(String(describing: smallBytes)), sampled: \(String(describing: sampled)))"
+  }
+}
+
 private class PdfApiPigeonCodecReader: FlutterStandardReader {
   override func readValue(ofType type: UInt8) -> Any? {
     switch type {
@@ -2364,6 +2427,8 @@ private class PdfApiPigeonCodecReader: FlutterStandardReader {
       return PdfPagePlanMsg.fromList(self.readValue() as! [Any?])
     case 170:
       return PdfOrganiseRequestMsg.fromList(self.readValue() as! [Any?])
+    case 171:
+      return PdfCompressEstimateMsg.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
     }
@@ -2497,6 +2562,9 @@ private class PdfApiPigeonCodecWriter: FlutterStandardWriter {
       super.writeValue(value.toList())
     } else if let value = value as? PdfOrganiseRequestMsg {
       super.writeByte(170)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfCompressEstimateMsg {
+      super.writeByte(171)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -3260,6 +3328,40 @@ class PdfOrganiseHostApiSetup {
       }
     } else {
       organiseChannel.setMessageHandler(nil)
+    }
+  }
+}
+/// Estimates for the compress sheet (HOM-31 Apple, HOM-31A Android).
+///
+/// Generated protocol from Pigeon that represents a handler of messages from Flutter.
+protocol PdfCompressHostApi {
+  /// What each preset would give for [input], off the main thread; nothing is written.
+  func estimate(input: PdfToolInputMsg, completion: @escaping (Result<PdfCompressEstimateMsg, Error>) -> Void)
+}
+
+/// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
+class PdfCompressHostApiSetup {
+  static var codec: FlutterStandardMessageCodec { PdfApiPigeonCodec.shared }
+  /// Sets up an instance of `PdfCompressHostApi` to handle messages through the `binaryMessenger`.
+  static func setUp(binaryMessenger: FlutterBinaryMessenger, api: PdfCompressHostApi?, messageChannelSuffix: String = "") {
+    let channelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
+    /// What each preset would give for [input], off the main thread; nothing is written.
+    let estimateChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.danaview_pdf.PdfCompressHostApi.estimate\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      estimateChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let inputArg = args[0] as! PdfToolInputMsg
+        api.estimate(input: inputArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      estimateChannel.setMessageHandler(nil)
     }
   }
 }

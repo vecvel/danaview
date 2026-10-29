@@ -862,3 +862,47 @@ abstract class PdfOrganiseHostApi {
   PdfToolResultMsg organise(PdfOrganiseRequestMsg request);
 }
 // ---- end of the HOM-28 amendment ------------------------------------------------------------
+
+// ---------------------------------------------------------------------------------------------
+// Compress estimates (HOM-31; [INTEGRATION] amendment, an additive block of its own)
+//
+// The compress job itself is `PdfToolsHostApi.compress` above. This API only tells the sheet
+// what each preset would give before the user runs one. Android (HOM-31A) may leave it
+// unregistered: the Dart wrapper maps the `channel-error` to "no estimate" and the sheet shows
+// sizes once a preset has run.
+// ---------------------------------------------------------------------------------------------
+
+/// The sizes each compression preset would give for one file.
+class PdfCompressEstimateMsg {
+  PdfCompressEstimateMsg({
+    required this.sourceBytes,
+    required this.highBytes,
+    required this.mediumBytes,
+    required this.smallBytes,
+    required this.sampled,
+  });
+
+  /// Size of the file now.
+  int sourceBytes;
+
+  /// Expected size with [PdfCompressPresetMsg.high].
+  int highBytes;
+
+  /// Expected size with [PdfCompressPresetMsg.medium].
+  int mediumBytes;
+
+  /// Expected size with [PdfCompressPresetMsg.small].
+  int smallBytes;
+
+  /// True when the sizes are extrapolated from a sample of pages (long files); false when every
+  /// page was compressed in memory (the sizes are then what a run writes).
+  bool sampled;
+}
+
+/// Estimates for the compress sheet (HOM-31 Apple, HOM-31A Android).
+@HostApi()
+abstract class PdfCompressHostApi {
+  /// What each preset would give for [input], off the main thread; nothing is written.
+  @asyncCallback
+  PdfCompressEstimateMsg estimate(PdfToolInputMsg input);
+}
