@@ -1,4 +1,6 @@
 // OWNER: HOM-22
+// EXTENDED: HOM-28 ([LibraryFileActions.replaceFile]: the PDF tools' Replace for Danaview folder
+// files, through the store's writer.)
 //
 // The file actions over the library store (ARCH v1.2 V2-08, V2-117, V2-118, rule 26; HOM plan
 // §8.3): rename, Copy to…, Move to…, favourites and Delete (Recently deleted, with the "Used in N
@@ -14,6 +16,7 @@ import 'package:path/path.dart' as p;
 
 import '../classify/classifier.dart';
 import '../db/library_folder.dart';
+import '../import/import_copier.dart' show quickHashOfFile;
 import '../model/document_item.dart';
 import '../model/file_entry.dart';
 import '../model/file_kind.dart';
@@ -252,6 +255,20 @@ final class LibraryFileActions {
   /// Copies [ids] into [folder] as new entries (Copy to…), in one write; returns the copies.
   Future<List<FileEntry>> copyTo(List<EntryId> ids, FolderId folder) =>
       store.write((w, now) => [for (final id in ids) w.copyEntry(id, folder, now: now)]);
+
+  /// Replaces the file of the Danaview folder entry [id] with the finished file at [sourcePath]
+  /// (the PDF tools' "Replace", ARCH v1.2 §9.3): the entry keeps its id, name, folder, favourite
+  /// and references; [sourcePath] is only read (the caller deletes it). [pageCount] updates the
+  /// entry's facts. Throws [LibraryWriteException] (`trashed`, `notFound`, `readOnly`).
+  Future<FileEntry> replaceFile(EntryId id, String sourcePath, {int? pageCount}) async {
+    final String hash;
+    try {
+      hash = await quickHashOfFile(sourcePath);
+    } on FileSystemException {
+      throw const LibraryWriteException(LibraryWriteError.notFound);
+    }
+    return store.write((w, now) => w.replaceEntryFile(id, sourcePath, quickHash: hash, pageCount: pageCount, now: now));
+  }
 
   /// Moves [ids] into [folder] (Move to…) in one transaction.
   Future<void> moveTo(List<EntryId> ids, FolderId folder) => store.write((w, now) => w.moveEntries(ids, folder, now: now));

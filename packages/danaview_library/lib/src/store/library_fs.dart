@@ -1,4 +1,6 @@
 // OWNER: HOM-17
+// EXTENDED: HOM-28 (PDF "Replace": [copyIntoPart] stages a finished file in `imports/` and
+// [movePartOverEntry] renames it over an entry's file in one atomic step; ARCH v1.2 §9.3.)
 //
 // LibraryFs, the only code that writes under the library root (ARCH v1.2 rule 26, V2-06): entry
 // directories `files/<id>/`, renames inside one directory, the purge staging rename
@@ -128,6 +130,28 @@ final class LibraryFs {
     final target = paths.entryFile(id, name);
     retryOnSharingViolation(() => part.renameSync(target));
     faults.hit('fs.movePart');
+  }
+
+  /// Copies the finished file at [sourcePath] (outside the library, only read) into the part file
+  /// [relativePart] and flushes it to disk, so the rename that follows moves complete bytes.
+  void copyIntoPart(String sourcePath, String relativePart) {
+    final target = File(paths.resolve(relativePart));
+    File(sourcePath).copySync(target.path);
+    final raf = target.openSync(mode: FileMode.append);
+    try {
+      raf.flushSync();
+    } finally {
+      raf.closeSync();
+    }
+    faults.hit('fs.copyIntoPart');
+  }
+
+  /// Renames the part file [relativePart] over `files/<id>/<name>` (one atomic rename that replaces
+  /// the old file; the PDF tools' Replace).
+  void movePartOverEntry(String relativePart, EntryId id, String name) {
+    final part = File(paths.resolve(relativePart));
+    retryOnSharingViolation(() => part.renameSync(paths.entryFile(id, name)));
+    faults.hit('fs.movePartOver');
   }
 
   /// True when the part file [relativePart] exists.
