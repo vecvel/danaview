@@ -387,7 +387,7 @@ abstract final class DanaviewTheme {
       ),
       textSelectionTheme: const TextSelectionThemeData(
         cursorColor: DanaviewColors.primary,
-        selectionColor: Color(0x66F2444D),
+        selectionColor: Color(0x66FF5A62),
         selectionHandleColor: DanaviewColors.primary,
       ),
       scrollbarTheme: const ScrollbarThemeData(

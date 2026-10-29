@@ -244,7 +244,7 @@ abstract final class DanaviewDepth {
     BorderRadiusGeometry borderRadius = DanaviewRadius.controlAll,
     bool circle = false,
   }) {
-    final side = focused ? DanaviewBorders.focus : DanaviewBorders.focus.copyWith(color: const Color(0x00F2444D));
+    final side = focused ? DanaviewBorders.focus : DanaviewBorders.focus.copyWith(color: const Color(0x00FF5A62));
     return ShapeDecoration(
       shape: circle ? CircleBorder(side: side) : RoundedSuperellipseBorder(borderRadius: borderRadius, side: side),
     );

@@ -363,7 +363,7 @@ class _DanaviewNumberFieldState extends State<DanaviewNumberField> {
         cursorColor: DanaviewColors.primary,
         cursorRadius: const Radius.circular(2),
         backgroundCursorColor: DanaviewColors.textMuted,
-        selectionColor: const Color(0x66F2444D),
+        selectionColor: const Color(0x66FF5A62),
         selectionControls: _selectionControls(context),
         maxLines: 1,
         textAlign: unit == null ? TextAlign.center : TextAlign.end,
