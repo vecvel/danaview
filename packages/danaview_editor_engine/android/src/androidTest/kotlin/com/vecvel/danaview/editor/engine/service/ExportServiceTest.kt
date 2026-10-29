@@ -400,7 +400,7 @@ class ExportServiceTest {
         val current = relay.activity.taskId
         val am = ServiceTest.app.getSystemService(android.app.ActivityManager::class.java)
         for (t in am.appTasks) if (t.taskInfo.taskId != current) t.finishAndRemoveTask()
-        for (attempt in 0 until 4) {
+        for (attempt in 0 until RECENTS_ATTEMPTS) {
             if (attempt > 0) {
                 // A retry: bring our task back on top first (Recents may still be showing).
                 device.pressHome()
@@ -443,7 +443,28 @@ class ExportServiceTest {
             }
             device.takeScreenshot(File(ServiceTest.app.filesDir, "and12_recents_$attempt.png"))
         }
-        error("the task is still in Recents")
+        // The CI emulator's launcher (software GPU, loaded host) often never takes the fling at all.
+        // The dismissal then goes through the same system call the launcher's swipe ends in: the
+        // task's root task removed with its process kill and Recents removal (ActivityTaskManager
+        // removeRootTask -> removeTask(killProcess = true, REMOVE_FROM_RECENTS)), which is what
+        // ExportService.onTaskRemoved and the detach answer to. The assertions after this are
+        // unchanged.
+        device.pressHome()
+        val root = rootTaskOf(current)
+        Log.i(SERVICE_TEST_TAG, "the Recents gesture did not remove task $current; removing root task $root as the launcher does")
+        ServiceTest.shell("am stack remove $root")
+        if (awaitSwipedAway(relay, am, current)) return
+        error("the task is still in Recents (gesture and am stack remove $root):\n" + ServiceTest.shell("am stack list"))
+    }
+
+    /** The root task holding [taskId] (`am stack list`: "RootTask id=N ..." then "taskId=M: ..."). */
+    private fun rootTaskOf(taskId: Int): Int {
+        var root: Int? = null
+        for (line in ServiceTest.shell("am stack list").lines()) {
+            Regex("""^\s*RootTask id=(\d+)""").find(line)?.let { root = it.groupValues[1].toInt() }
+            if (Regex("""\btaskId=$taskId:""").containsMatchIn(line)) return root ?: taskId
+        }
+        return taskId
     }
 
     /** The card's centre once two looks 250 ms apart agree (up to 3 s); null without a card. */
@@ -476,6 +497,9 @@ class ExportServiceTest {
     private companion object {
         /** How long Recents may take to show the card, and the task to be removed after the swipe. */
         const val RECENTS_TIMEOUT_MS = 10_000L
+
+        /** Recents gesture rounds before the dismissal goes through the launcher's system call. */
+        const val RECENTS_ATTEMPTS = 2
 
         /** How long the activity may take to be destroyed once its task left Recents. */
         const val TASK_DESTROY_TIMEOUT_MS = 20_000L
