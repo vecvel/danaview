@@ -454,7 +454,7 @@ class _OnDeviceNote extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const DanaviewTileIcon(Icons.lock_rounded, color: DanaviewColors.success, size: 32),
+          const DanaviewIconTile(Icons.lock_rounded, size: 32),
           const SizedBox(width: DanaviewSpacing.md),
           Expanded(
             child: Padding(
@@ -506,10 +506,10 @@ class _DateOfBirthField extends StatelessWidget {
           decoration: BoxDecoration(
             // Owner rule: no press fill; only hardware-keyboard focus lifts the field.
             color: state.focused ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevatedHigher,
-            borderRadius: DanaviewRadius.mdAll,
+            borderRadius: DanaviewRadius.controlAll,
           ),
           foregroundDecoration: BoxDecoration(
-            borderRadius: DanaviewRadius.mdAll,
+            borderRadius: DanaviewRadius.controlAll,
             border: Border.fromBorderSide(state.focused ? DanaviewBorders.focus : border),
           ),
           child: Row(

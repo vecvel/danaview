@@ -591,7 +591,7 @@ class _DanaviewControlsOverlayState extends ConsumerState<DanaviewControlsOverla
   Widget _buildTime(String label) {
     final remaining = _timeMode == TimeDisplayMode.remaining;
     return DanaviewPressable(
-      borderRadius: DanaviewRadius.smAll,
+      borderRadius: DanaviewRadius.controlAll,
       semanticLabel: remaining ? 'Time remaining $label' : 'Elapsed time $label',
       tooltip: remaining ? 'Show elapsed time' : 'Show remaining time',
       onTap: () => setState(() {
@@ -734,21 +734,21 @@ class _DanaviewControlsOverlayState extends ConsumerState<DanaviewControlsOverla
               if (widget.onEditVideo case final onEdit?)
                 DanaviewListTile(
                   key: const ValueKey('player-sheet-edit-video'),
-                  leading: const DanaviewTileIcon(Icons.movie_edit),
+                  leading: const DanaviewIconTile(Icons.movie_edit),
                   title: 'Edit video',
                   subtitle: 'Trim, add text, captions and more',
                   showChevron: true,
                   onTap: () => closeThen(onEdit),
                 ),
               DanaviewListTile(
-                leading: const DanaviewTileIcon(Icons.playlist_play_rounded),
+                leading: const DanaviewIconTile(Icons.playlist_play_rounded),
                 title: 'Queue',
                 subtitle: count == 1 ? '1 video' : '$count videos',
                 showChevron: true,
                 onTap: () => closeThen(widget.onOpenQueue),
               ),
               DanaviewListTile(
-                leading: const DanaviewTileIcon(Icons.settings_rounded),
+                leading: const DanaviewIconTile(Icons.settings_rounded),
                 title: 'Settings',
                 subtitle: 'Video, audio, subtitles and more',
                 showChevron: true,
@@ -955,7 +955,7 @@ class _SeekIndicator extends StatelessWidget {
             child: ExcludeSemantics(
               child: DanaviewSurface(
                 color: DanaviewColors.overlayDark,
-                borderRadius: DanaviewRadius.mdAll,
+                borderRadius: DanaviewRadius.toastAll,
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

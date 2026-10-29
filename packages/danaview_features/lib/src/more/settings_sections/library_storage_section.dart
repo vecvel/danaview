@@ -85,7 +85,7 @@ class _SizeRow extends StatelessWidget {
       label: '$title, $size, $subtitle',
       excludeSemantics: true,
       child: DanaviewLibraryRow(
-        leading: DanaviewTileIcon(icon, color: DanaviewColors.primaryLight, size: 40),
+        leading: DanaviewIconTile(icon, size: 40),
         title: title,
         subtitle: subtitle,
         subtitleMaxLines: 2,
