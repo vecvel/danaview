@@ -34,10 +34,37 @@ abstract final class HomeChromeLabels {
   static const String settings = 'Settings';
 }
 
+/// The scroll distance over which the large title collapses into the inline title (§10.1).
+const double homeTitleCollapseDistance = 44;
+
+/// The inline (collapsed) title's size: iOS's 17 pt navigation-bar title.
+const double homeInlineTitleSize = 17;
+
+/// How far the title has collapsed for a scroll [offset] past the top: 0 (large) to 1 (inline).
+/// With Reduce Motion ([reduceMotion]) there is no in-between: any scroll shows the end state.
+double homeTitleCollapseFor(double offset, {bool reduceMotion = false}) {
+  if (!offset.isFinite || offset <= 0) return 0;
+  if (reduceMotion) return 1;
+  return (offset / homeTitleCollapseDistance).clamp(0.0, 1.0);
+}
+
+/// The top bar's row height: the toolbar buttons (a 44 pt target on touch, the 34 pt circle with
+/// a pointer), or the large title's line when the text scale makes it taller.
+double homeTopBarRowHeight(BuildContext context) => math.max(
+      context.isTouchPlatform ? DanaviewSpacing.minTapTarget : DanaviewIconButton.toolbarSize,
+      MediaQuery.textScalerOf(context).scale(DanaviewTextStyles.largeTitle.fontSize!) * DanaviewTextStyles.largeTitle.height!,
+    );
+
 /// The Home's top bar row: the logo tile, "Danaview" and the trailing [actions].
+///
+/// [collapse] (0 to 1) morphs the large title into the inline title iOS shows once the content
+/// scrolls (§10.1): the title shrinks from 30 pt to 17 pt in place and the logo tile from 28/32 pt
+/// to 22 pt. Both are paint-only transforms, so a scroll frame neither lays out the text again nor
+/// moves the buttons; the row keeps its height. The title stays one "Danaview" header for screen
+/// readers whatever the collapse.
 class HomeTopBar extends StatelessWidget {
   /// A bar with [actions] (toolbar circles) at the end.
-  const HomeTopBar({super.key, required this.actions, required this.compact});
+  const HomeTopBar({super.key, required this.actions, required this.compact, this.collapse = 0});
 
   /// The round buttons, in order.
   final List<Widget> actions;
@@ -45,29 +72,53 @@ class HomeTopBar extends StatelessWidget {
   /// Phone layout: a 28 pt logo tile (32 pt otherwise).
   final bool compact;
 
+  /// 0 shows the large title, 1 the inline title.
+  final double collapse;
+
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        DanaviewLogo(size: compact ? 28 : 32),
-        const SizedBox(width: DanaviewSpacing.sm),
-        Expanded(
-          child: Semantics(
-            header: true,
-            child: Text(
-              'Danaview',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: DanaviewTextStyles.largeTitle,
+    final t = collapse.clamp(0.0, 1.0);
+    final logo = compact ? 28.0 : 32.0;
+    final logoScale = 1 - t * (1 - 22 / logo);
+    final titleScale = 1 - t * (1 - homeInlineTitleSize / DanaviewTextStyles.largeTitle.fontSize!);
+    return SizedBox(
+      height: homeTopBarRowHeight(context),
+      child: Row(
+        children: [
+          Transform.scale(
+            key: const ValueKey('home-title-logo'),
+            scale: logoScale,
+            alignment: AlignmentDirectional.centerStart,
+            child: DanaviewLogo(size: logo),
+          ),
+          const SizedBox(width: DanaviewSpacing.sm),
+          Expanded(
+            child: Transform.translate(
+              // The shrunken logo leaves room: the inline title follows it.
+              offset: Offset(logo * (logoScale - 1) * (Directionality.of(context) == TextDirection.rtl ? -1 : 1), 0),
+              child: Transform.scale(
+                key: const ValueKey('home-title'),
+                scale: titleScale,
+                alignment: AlignmentDirectional.centerStart,
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    'Danaview',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: DanaviewTextStyles.largeTitle,
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-        // Fixed-size buttons: the title ellipsizes first.
-        for (final action in actions) ...[
-          const SizedBox(width: DanaviewSpacing.sm),
-          action,
+          // Fixed-size buttons: the title ellipsizes first.
+          for (final action in actions) ...[
+            const SizedBox(width: DanaviewSpacing.sm),
+            action,
+          ],
         ],
-      ],
+      ),
     );
   }
 }

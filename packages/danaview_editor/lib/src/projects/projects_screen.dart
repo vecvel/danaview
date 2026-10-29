@@ -32,6 +32,12 @@ import 'project_card.dart';
 import 'projects_controller.dart';
 import 'recovery_banner.dart';
 
+// The Home's Projects tab opens the same New project sheet (its one primary button); the app root
+// wires it through HomeCallbacks.onNewProject.
+export 'new_project_sheet.dart' show showNewProjectSheet;
+// …and lists the same project summaries (the app maps them onto the Home's own model).
+export 'package:danaview_editor_core/store.dart' show ProjectHealth, ProjectSummary;
+
 /// Opens a project in the editor (the router pushes `/editor/:id?t=`).
 typedef OpenProjectCallback = void Function(ProjectId id, {TimeUs? initialPlayhead});
 

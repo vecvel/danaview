@@ -79,10 +79,7 @@ Future<List<Object?>> _runScript(WidgetTester tester, Directory tree, PlaylistsH
   record('delete');
 
   // The rows left, in order, with their subtitles.
-  final rows = tester.widgetList<DanaviewLibraryRow>(
-    find.descendant(of: playlistsGroup(host), matching: find.byType(DanaviewLibraryRow)),
-  );
-  log.add(['rows', for (final row in rows) '${row.title} · ${row.subtitle}']);
+  log.add(['rows', for (final (title, subtitle) in playlistItems(tester, host)) '$title · $subtitle']);
 
   expect(tester.takeException(), isNull);
   await finishHome(tester, env);
@@ -146,11 +143,9 @@ void main() {
       testWidgets('P-4: rows in creation order with counts; empty and single disable Play/Shuffle', (tester) async {
         final calls = PlaylistCalls();
         final env = await pumpPlaylistsHome(tester, host: host, tree: tree, calls: calls);
-        final rows = tester.widgetList<DanaviewLibraryRow>(
-          find.descendant(of: playlistsGroup(host), matching: find.byType(DanaviewLibraryRow)),
-        );
-        expect([for (final r in rows) r.title], ['Road Trip', longPlaylistName, 'Single', 'Empty']);
-        expect([for (final r in rows) r.subtitle], ['4 videos', '4 videos', '1 video', 'No videos yet']);
+        final rows = playlistItems(tester, host);
+        expect([for (final r in rows) r.$1], ['Road Trip', longPlaylistName, 'Single', 'Empty']);
+        expect([for (final r in rows) r.$2], ['4 videos', '4 videos', '1 video', 'No videos yet']);
 
         // Empty: Play and Shuffle are disabled; Single: Shuffle is disabled.
         await playlistMenuAction(tester, host, 'Empty', 'Play');

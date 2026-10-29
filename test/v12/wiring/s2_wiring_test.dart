@@ -351,14 +351,19 @@ void main() {
       useSurface(tester, const TestSurface(Size(390, 844), 1.0));
       final app = await _pumpApp(tester, filesHome: true, seed: (lib) => _seedMixed(lib, tester));
       final shell = tester.state(find.byType(DanaviewHomeScreen));
-      FilesHomeState.showTab(tester.element(find.text('Open file')), HomeTab.photos);
+      // A library of a photo, a video and a document is not empty: the Overview shows the Recent
+      // photos tray and no empty state (every content type counts, DESIGN_SYSTEM §10.3).
+      expect(find.byKey(const ValueKey('home-empty-state')), findsNothing);
+      final overview = find.byKey(const ValueKey('s2-overview-library'));
+      expect(overview.hitTestable(), findsOneWidget);
+      FilesHomeState.showTab(tester.element(overview), HomeTab.photos);
       await pumpFrames(tester, count: 8);
-      expect(find.text('Open file').hitTestable(), findsNothing, reason: 'the Photos tab is showing');
+      expect(overview.hitTestable(), findsNothing, reason: 'the Photos tab is showing');
       expect(tester.state(find.byType(DanaviewHomeScreen)), same(shell), reason: 'the shell switched tabs itself');
       // A See all from the Overview (the tray's own notification) does the same.
       await app.tab(HomeTab.home);
       expect(tester.state(find.byType(DanaviewHomeScreen)), same(shell));
-      const HomeTabRequestNotification(HomeTab.folders).dispatch(tester.element(find.text('Open file')));
+      const HomeTabRequestNotification(HomeTab.folders).dispatch(tester.element(overview));
       await pumpFrames(tester, count: 8);
       expect(find.text('Danaview folders'), findsWidgets);
       expect(tester.state(find.byType(DanaviewHomeScreen)), same(shell), reason: 'no keyed re-mount');

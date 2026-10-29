@@ -7,6 +7,7 @@
 //   trail, create, rename, move and nest folders, rename, move and delete files, and the
 //   **Recently deleted** view (each row with its days left, Restore, Empty now). Every operation
 //   is one store write; the store's change event re-reads the lists in the next frame.
+//   A folder's files sit in the All tab's mixed card grid (DESIGN_SYSTEM §10.4).
 // * **Linked folders**: the 1.1 Folders section unchanged (P-5): the same rows open the same 1.1
 //   folder browser, and nothing in it renames, moves or deletes a file.
 //
@@ -23,6 +24,8 @@ import '../filters/entry_widgets.dart';
 import '../filters/filter_providers.dart';
 import '../folders/folder_actions.dart';
 import '../folders/folder_widgets.dart';
+import '../home/home_grid.dart';
+import '../home/home_media_card.dart';
 import '../library_format.dart';
 import '../library_widgets.dart';
 
@@ -78,7 +81,8 @@ class _FoldersTabState extends ConsumerState<FoldersTab> {
   FoldersTabLocation _at = const FoldersRoot();
 
   // Grid columns of the current width (set each layout; 1 keeps the list rows).
-  int _columns = 1;
+  /// The content width (the entries' card grid sizes its cells from it).
+  double _contentWidth = 0;
 
   void _go(FoldersTabLocation to) => setState(() => _at = to);
 
@@ -99,7 +103,7 @@ class _FoldersTabState extends ConsumerState<FoldersTab> {
       builder: (context, constraints) {
         final insets = danaviewLibraryInsets(constraints.maxWidth);
         final padding = insets.copyWith(top: DanaviewSpacing.lg, bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl);
-        _columns = danaviewLibraryGridColumns(constraints.maxWidth - padding.horizontal);
+        _contentWidth = constraints.maxWidth - padding.horizontal;
         final slivers = switch (at) {
           FoldersRoot() => _root(store),
           FoldersInFolder(:final id) => _folder(store!, id),
@@ -246,23 +250,18 @@ class _FoldersTabState extends ConsumerState<FoldersTab> {
           ),
         ),
       if (subfolders.isNotEmpty && entries.length > 0) const SliverToBoxAdapter(child: SizedBox(height: DanaviewSpacing.md)),
-      if (entries.length > 0 && _columns > 1)
-        danaviewLibrarySliverGrid(
-          columns: _columns,
+      // A folder's files in the same mixed grid as the All tab (DESIGN_SYSTEM §10.4).
+      if (entries.length > 0)
+        homeSliverCardGrid(
+          key: const ValueKey('folders-entries-grid'),
+          columns: homeAdaptiveColumns(_contentWidth),
+          width: _contentWidth,
+          extent: homeMediaCardExtent,
           itemCount: entries.length,
           itemBuilder: (context, i) {
             final entry = entries.at(i);
-            if (entry == null) return const SizedBox(height: 56);
-            return LibraryEntryRow(entry: entry, actions: entryActions);
-          },
-        )
-      else if (entries.length > 0)
-        SliverList.builder(
-          itemCount: entries.length,
-          itemBuilder: (context, i) {
-            final entry = entries.at(i);
-            if (entry == null) return const SizedBox(height: 56);
-            return LibraryEntryRow(entry: entry, actions: entryActions);
+            if (entry == null) return const SizedBox.shrink();
+            return LibraryEntryCard(entry: entry, actions: entryActions);
           },
         ),
     ];
