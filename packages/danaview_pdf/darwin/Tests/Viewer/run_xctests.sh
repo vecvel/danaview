@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # OWNER: HOM-24
+# EXTENDED: HOM-29 (annotate: Tests/Annotate/Core/ joins the core target with
+# Classes/Annotate/PdfAnnotateCore.swift, Tests/Annotate/Glue/ the glue target; ios-sim runs the
+# annotate core too.)
 # EXTENDED: HOM-28 (the page tools' tests in Tests/Tools/: Core/ joins the core target, Glue/ the glue
 # target; the `ios-sim` mode runs the Flutter-free core tests, page tools included, on an iOS
 # Simulator: DV_PDF_SIMULATOR names it, default "iPhone 17").
@@ -32,10 +35,12 @@ ios_fw="$flutter_root/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm
 
 all_sources=()
 while IFS= read -r f; do all_sources+=("$f"); done < <(find "$darwin/Classes" -name '*.swift' | sort)
-core_sources=("$darwin/Classes/Viewer/PdfCore.swift" "$darwin/Classes/Text/PdfTextCore.swift" "$darwin/Classes/Tools/PdfPageToolsCore.swift")
+core_sources=("$darwin/Classes/Viewer/PdfCore.swift" "$darwin/Classes/Text/PdfTextCore.swift" "$darwin/Classes/Tools/PdfPageToolsCore.swift"
+  "$darwin/Classes/Annotate/PdfAnnotateCore.swift")
 tools="$darwin/Tests/Tools"
-core_tests=("$here"/Core/*.swift "$tools"/Core/*.swift)
-glue_tests=("$here"/Glue/*.swift "$tools"/Glue/*.swift)
+annotate="$darwin/Tests/Annotate"
+core_tests=("$here"/Core/*.swift "$tools"/Core/*.swift "$annotate"/Core/*.swift)
+glue_tests=("$here"/Glue/*.swift "$tools"/Glue/*.swift "$annotate"/Glue/*.swift)
 
 if [ "$mode" = "ios-typecheck" ]; then
   [ -d "$ios_fw/Flutter.framework" ] || { echo "Flutter.framework not found under $ios_fw (run flutter precache --ios)" >&2; exit 1; }

@@ -1,4 +1,6 @@
 // OWNER: HOM-28
+// EXTENDED: HOM-29 (the environment carries the annotate engine; the viewer offers "Annotate" when
+// it is set and the platform reports the tool.)
 //
 // How screens reach the PDF page tools (HOM plan §8.5): the app root builds one
 // [PdfToolsEnvironment] (documents for thumbnails and passwords, the page tools, the library result
@@ -43,8 +45,7 @@ final class PdfMergeItem {
   final String? password;
 
   /// This item with [password].
-  PdfMergeItem withPassword(String password) =>
-      PdfMergeItem(path: path, displayName: displayName, isImage: isImage, entryId: entryId, password: password);
+  PdfMergeItem withPassword(String password) => PdfMergeItem(path: path, displayName: displayName, isImage: isImage, entryId: entryId, password: password);
 
   /// The tool input.
   PdfToolInput get input => isImage ? PdfToolInput.image(path) : PdfToolInput.pdf(path, password: password);
@@ -67,7 +68,7 @@ typedef PdfMergePicker = Future<List<PdfMergeItem>> Function(BuildContext contex
 @immutable
 final class PdfToolsEnvironment {
   /// An environment.
-  const PdfToolsEnvironment({required this.documents, required this.tools, required this.sink, this.pickMergeInputs});
+  const PdfToolsEnvironment({required this.documents, required this.tools, required this.sink, this.pickMergeInputs, this.annotate});
 
   /// Read-only documents (thumbnails, passwords, page counts).
   final PdfDocuments documents;
@@ -80,6 +81,9 @@ final class PdfToolsEnvironment {
 
   /// "Add files" in the merge screen; null hides it.
   final PdfMergePicker? pickMergeInputs;
+
+  /// Annotate mode and its save (HOM-29); null hides "Annotate".
+  final PdfAnnotateEngine? annotate;
 }
 
 /// Provides a [PdfToolsEnvironment] to the PDF viewer below it.

@@ -8,7 +8,7 @@ Last update: 2026-10-22 (S2 Mac half complete).
 | **S1** Foundations + speed test | **Done on both platforms** (owner items open) | Mac: AIS-01, INT-101, HOM-01, HOM-16, ST-01…ST-05, S1-W, S1-Q Mac half, S1-R iOS candidate. **Android (Windows, 968a10e):** S1-Q Android half green (v1.1 suite 17/18 + 4/4 extras with every 1.2 flag off; s13 only on emulator mic silence, accepted), S1-R Android candidate 1.0.0 (1) AAB 95.4 MB passes check_native_libs.sh, release APK smoke green. Device observations to confirm: OBS-S1A-1 (release player barely advanced the 1080p fixture on the emulator), OBS-S1A-2 (VIEW intent to the running app stays on Home). Windows-host test portability FIX-S1Q-A1…A5 being fixed on the Mac. Owner items: legal date, Q-S1 wording, M-Lab store answers, signing, upload (at the 1.0.0 release). Report: `qa/S1-QA.md` |
 | **S2** Photos & Files Home | **Done on both platforms** (owner items open) | Mac half as before (S2-Q green, S2-R iOS candidate, FIX-S2R-1, D-7). **Android (Windows, `f125f8c`):** D-3, HOM-02A, HOM-04A, HOM-20A, HOM-22A; D-7 verified; S2-Q Android half green (S2 E2E on API 35, full v1.1 suite with the flag 17/18 + 7/7, bmgr backup checks); S2-R Android AAB 101.0 MB (+5.5 MB), native-lib checks pass, release smoke green. Open, low: FIX-S2Q-A1 (E2E expects the platform's primary save target), FIX-S2Q-A2 (e2e_android.sh define pass-through), OBS-S2A-1 (picker names), OBS-S2A-3 (video-only album chips). Report: `qa/S2-QA.md` |
 | **S3** Documents: view and share-in | **Done on both platforms** (2026-10-23) | Mac half as recorded (S3-Q green, iOS RC 26.06 MB). **Android (Windows, 90c7a5b7):** HOM-25, HOM-21A (flag-gated alias); S3-Q Android green (S3 E2E with real intents, v1.1 suite with the flag, flag-off check, tablet grids); S3-R Android AAB 108.2 MB (+7.2 MB), native-lib checks pass. FIX-S3Q-A1 (Office MIME by extension) and A2 (PdfBox-Android + Bouncy Castle licences) fixed. Low items carried to S4. Report: `qa/S3-QA.md` |
-| **S4** Documents: PDF tools | **In progress** | Mac half: HOM-31 compress (see "S4: HOM-31 compress" below); **HOM-28 page tools built** on `s4-hom28` (see "S4: HOM-28 page tools" below). Android: HOM-28A, HOM-31A to do (contracts below). |
+| **S4** Documents: PDF tools | **In progress** | Mac half: HOM-31 compress (see "S4: HOM-31 compress" below); **HOM-28 page tools built** on `s4-hom28` (see "S4: HOM-28 page tools" below); **HOM-29 annotate built** on `s4-hom29` (see "S4: HOM-29 annotate" below; also fixes HOM-28's encrypted-output open item). Android: HOM-28A, HOM-29A, HOM-31A to do (contracts below). |
 | S5–S9 | Not started | |
 
 ## S4: HOM-31 compress (Mac half, 2026-10-30, branch `s4-hom31`)
@@ -166,9 +166,150 @@ contract with fake host APIs, organiser/merge widget tests, save rules over a re
   (viewer button, file menu, Merge into PDF) appears only then; Dart already validates requests and
   handles everything else.
 
-**Open.** An encrypted source's output is written without encryption (PDFKit `write(to:)` without
-owner password); decide in S4-Q whether to re-encrypt with the user password. Very large merges
-are built in memory by PDFKit. Real-world PDFs to be measured on a device in S4-Q. Android HOM-28A.
+**Open.** ~~An encrypted source's output is written without encryption~~ **fixed in HOM-29**
+(owner-approved recommendation): merge (its first encrypted input's password), split and organise
+write their output with PDFKit's user + owner password options set to the password the source was
+opened with, as compress does (`PdfOutputEncryption`, `Tests/Tools/Core/PdfPageToolsEncryptionTests`,
+macOS + iOS Simulator). The output's owner password becomes that password too; a source that
+opens without a password (permission restrictions only) is written as PDFKit does by default.
+HOM-28A must do the same (PdfBox: `StandardProtectionPolicy(password, password, permissions)` on
+the output when the input was encrypted). Very large merges are built in memory by PDFKit.
+Real-world PDFs to be measured on a device in S4-Q. Android HOM-28A.
+
+## S4: HOM-29 annotate (Mac half, 2026-10-30, branch `s4-hom29`)
+
+**Built.** Behind `DANAVIEW_FILES_HOME` (defaults unchanged), where the platform reports
+`PdfTool.annotate` (PDFKit on iOS and macOS; Android once HOM-29A lands; never Windows / Linux).
+- **Viewer mode** (`danaview_documents/lib/src/pdf/annotate/`, `PdfViewer`): "Annotate" in the PDF
+  viewer's top bar (with a `PdfToolsScope` whose environment has an annotate engine). The same
+  native view stays (the toolbar is added under it); the top bar becomes "Annotate" with Undo, Redo
+  and Save; the Cinema B toolbar has capsule tools Select / Pen / Text / Eraser (only the active
+  tool is red), then per tool: Highlight / Underline / Strike through for the text selection with
+  6 markup colours; pen colours (4) and widths (1.5 / 3 / 6 pt); text colours; the eraser hint; and
+  Edit text / Delete for a selected mark. Swatches are neutral discs with a check, widths neutral
+  dots on a raised tile; 44 pt targets, labels, no hover / press tints, icon-only below 600 px.
+- **Model** (`PdfAnnotateModel`): the session's items with undo / redo (history of immutable lists,
+  200 steps), selection, tool and look; dirty while it holds marks. `PdfAnnotateSession` pushes the
+  mode and the items to the native preview in order and turns viewer events into edits (stroke →
+  ink in the pen look; tap → select / place or edit a text box / erase by tool; markup → one
+  annotation per page, one undo step).
+- **Native preview** (`darwin/Classes/Annotate/PdfAnnotateView.swift`): the session's items are
+  PDFKit annotations on the viewer's in-memory document (read-only, removed when the mode ends or
+  the view goes; the file is never written; thumbnails and search use their own opens). Ink on iOS
+  is PencilKit (`PKCanvasView` over the pages, light appearance so ink isn't inverted): Pencil and a
+  finger draw and two fingers scroll / zoom, or a finger scrolls when the iPad prefers Pencil-only
+  drawing; each finished stroke goes to Dart in page space and stays on screen until its annotation
+  is shown. macOS: a pointer overlay (scroll and magnify pass through). Taps are hit-tested against
+  the session's items only; the file's own annotations show and are never touched.
+- **Saving** (`savePdfAnnotations`): "<name> (annotated).pdf" as a NEW file through the HOM-28
+  `PdfResultSink` (next to the original; `Imported` for linked / incoming files); "Replace" offered
+  only for a Danaview folder file (then the viewer reopens it). Progress sheet with Cancel; errors
+  are calm toasts ("This PDF doesn’t allow annotations."). Leaving with unsaved marks asks
+  ("Discard annotations?") from the bar's close, the viewer's back and the system back.
+- **Writer** (`PdfAnnotateCore.swift`, Flutter-free): real PDF annotations (Highlight / Underline /
+  StrikeOut with one quadrilateral per line, Ink with one path per stroke and `/BS` width, FreeText
+  with font and colour and a height fitted to its text, Text notes), so other apps can edit them;
+  off the main thread on its own open; cancel polled per page and before / after the write; only
+  `outPath` is written, once, and deleted on cancel or failure; the source is opened read-only;
+  `allowsCommenting` is required (else `unsupported`). Encrypted in → encrypted out with the
+  password it was opened with (`PdfOutputEncryption`, shared with the page tools).
+
+**API (HOM-29 Pigeon amendment, own block, lead-approved).** `PdfAnnotateInputMsg` (select, ink,
+text, erase), `PdfAnnotateModeMsg`, `PdfAnnotateItemMsg` (id + annotation or stamp),
+`PdfPageRectsMsg`, `PdfAnnotateSaveRequestMsg`; `PdfAnnotateHostApi.setAnnotateMode(viewId, mode?)`,
+`showAnnotations(viewId, items, selectedId?)`, `selectionLines(viewId)`, `save(request)` (a tool job,
+`tool: annotate`, cancelled by `PdfToolsHostApi.cancel`); `@FlutterApi PdfAnnotateEventsApi.inkStroke
+(viewId, pageIndex, points)` and `tapped(viewId, pageIndex, x, y, itemId?)`. The frozen
+`PdfToolsHostApi.annotate` is the same save without stamps and burn-in. (Adding the enum renumbered
+the generated codec's type ids; Dart, Swift and Kotlin were regenerated together.) Dart
+(`danaview_pdf`): `PdfAnnotation` (`.markup`, `.ink`, `.freeText`), `PdfAnnotationKind`, `PdfStamp`,
+`PdfAnnotateItem`, `PdfAnnotateMode` / `PdfAnnotateInput`, `PdfPageRects`, `PdfAnnotateEvent`
+(`PdfInkStrokeEvent`, `PdfAnnotateTapEvent`), `PdfAnnotateEngine` (setMode, show, selectionLines,
+events, save), `PlatformPdfAnnotateEngine`, `validateAnnotateSave`. `danaview_documents`:
+`PdfAnnotateModel`, `PdfAnnotateSession`, `PdfAnnotateToolbar`, `savePdfAnnotations`,
+`annotatedPdfName`, `PdfToolsEnvironment.annotate`, `PdfViewer.annotateTextPrompt` /
+`chooseSaveMode`. App wiring: `PdfToolsEngine.annotate` (`PlatformPdfAnnotateEngine` on iOS, macOS,
+Android), passed to the environment.
+
+**Hooks for HOM-30 (sign).** Build on these instead of new native code:
+- `PdfStamp(pageIndex, rect, imagePath, rotationDegrees)` — an image (PNG transparency kept, JPEG)
+  filling `rect` in page space, turned clockwise around its centre. Preview it in the viewer as a
+  session item: `PdfAnnotateItem.stamp(id, stamp)` through `PdfAnnotateEngine.show` (hit tests
+  answer its id, so tap-to-select / delete work; moving and resizing are HOM-30's UI, by replacing
+  the item).
+- `PdfAnnotateEngine.save(input, annotations:, stamps:, burnIn:, outPath:)`. Without `burnIn` a
+  stamp is a Stamp annotation whose appearance is the image (movable in other apps). With `burnIn:
+  true` the request's annotations and stamps are drawn into the page content
+  (`PdfAnnotateCore.burn`: the page is redrawn by Quartz into a one-page PDF, which keeps text as text,
+  then the page's boxes, rotation and its own annotations are carried over and the outline and link
+  destinations re-pointed to the new page); the file's own annotations stay annotations. HOM-30's
+  `PdfToolsHostApi.sign(PdfSignRequestMsg)` maps to `save(stamps: request.stamps, burnIn: true)`
+  (`PdfAnnotator.save` / `PdfAnnotateCore.annotate`), so `Sign/PdfSigner.swift` only routes.
+- Burn-in needs `allowsDocumentChanges` (else `unsupported`); tested: stamp and ink pixels in the
+  content, no new annotation, text searchable and selectable, crop box, rotation, outline kept.
+
+**Tests.** XCTests (`Tests/Viewer/run_xctests.sh macos | ios-sim`, 61 on macOS, core 43 on the
+iPhone 17 simulator, iOS 26.5): every kind round-trips (types, quadrilaterals, colours, paths and
+width, text, fitted box) and stays editable (changed and removed as objects; a second writer keeps
+them); markup and ink are visible; text stays selectable and searchable; the file's own annotations
+stay (own earlier save + the HOM-27 `annotated_2p` fixture); encrypted in → encrypted out (needs the
+password, opens with it); cancel at every report leaves no file; bad requests write nothing and
+never overwrite; stamps kept with their image and transparency; burn-in; hit tests and selection
+lines; glue (`Tests/Annotate/Glue`): capabilities, save and the frozen annotate over Pigeon, cancel →
+`cancelled` and no file, annotate mode on a real `PDFView` (preview on the in-memory document,
+selection mark, hit tests, selection lines, ink overlay → `inkStroke` in page space, mode end removes
+everything, the file untouched); page tools' encryption (3). Dart: `danaview_pdf/test/annotate`
+(wrapper: messages, events per viewer, stamps / burn-in, validation, progress, cancel, missing
+API); `danaview_documents/test/pdf/annotate` (model: undo / redo, steps, selection, history cap,
+names; viewer: entry visibility, same native view, tool → mode, ink, markup per page in one step,
+text boxes place / edit / remove, select + delete, eraser, Save new file with the password, Replace
+reopens, dismissed choice, Cancel, unsupported error, discard prompt from the bar, the back and the
+system back, refused mode; the 280 / 375 / 1280 px × 0.85 / 1.35 overflow, 44 pt and label matrix);
+`test/v12/wiring/s4_annotate_wiring_test.dart` (flag off, engines per platform, visibility, a real
+library save next to the original with its bytes unchanged); surface and architecture tests updated
+(the annotator is no longer a placeholder; the core is Flutter-free; tests write PDFs only through
+the tools, rule 27).
+
+**Android contract for Windows' HOM-29A** (PdfBox-Android 2.0.27.0 per HOM-27, which measured all
+six kinds with appearances on `annotated_2p`), in `android/.../pdf/annotate/` (rule 27's tool
+directory):
+- Implement `PdfToolsHostApi.annotate` and register **`PdfAnnotateHostApi`** in
+  `DanaviewPdfPlugin.kt`; `save` jobs use the same registry as the tools (`cancel(jobId)` stops them,
+  polled per page) and emit `toolProgress` with `tool: annotate`. Open the input read-only with
+  `PdfToolInputMsg.password` (missing / wrong → `passwordRequired`); `outPath` must not exist
+  (`invalidArgument`) and its folder must (`notFound`); write once at the end; on cancel or failure
+  delete it. Reply `PdfToolResultMsg([outPath], [pages], [size])`. `AccessPermission.canModifyAnnotations()`
+  false → `unsupported`; burn-in also needs `canModify()`.
+- Annotations as real PDF annotations with appearance streams (`PDAnnotationTextMarkup` Highlight /
+  Underline / StrikeOut with `/QuadPoints` per rect, `PDAnnotationInk`-equivalent `/InkList` per
+  stroke with `/BS /W`, `PDAnnotationFreeText` with `/DA` 14 pt in the colour and a height fitted to
+  the text from the rect's top edge and width, `PDAnnotationText` notes); geometry is page space
+  with the origin at the crop box's bottom-left (add the crop box origin). Colour 0xAARRGGBB.
+  Stamps: a `/Stamp` with the image as its `/AP`; `burnIn`: draw the annotations and stamps into
+  the page content (`PDPageContentStream` append mode with a saved graphics state), keep the page's
+  own annotations, boxes and rotation. Text stays text. An encrypted input → the output encrypted
+  with its password (`StandardProtectionPolicy(pw, pw, perms)`).
+- Annotate mode for the texture view: `setAnnotateMode(viewId, mode?)` (null removes the preview),
+  `showAnnotations(viewId, items, selectedId?)` drawn into the rendered tiles (the file is never
+  written), `selectionLines(viewId)` (line rects of the selection, grouped by page), and the events:
+  call `PdfAnnotateEventsApi.inkStroke` with page-space points for each finished stroke (finger or
+  stylus; two fingers scroll) and `tapped(viewId, page, x, y, itemId)` with the session item under
+  the tap (hit test: markup rects, ink within ~12 dp, boxes). Report `PdfToolKindMsg.annotate` in
+  `capabilities().tools` only when both the viewer mode and the save work: the Dart UI (the viewer's
+  "Annotate") appears then; Dart already validates saves and owns undo / redo and the save flow.
+
+**Checked on the iPhone 17 simulator** (iOS 26.5, a throwaway harness app around `PdfViewer`):
+the file's own annotations show; "Annotate" enters the mode on the same view; a finger stroke draws
+live with PencilKit and becomes an ink mark; Undo / Redo remove and restore it; Save wrote
+"Sample (annotated).pdf" (re-read on the Mac: the original's 7 annotations plus one Ink, the original
+unchanged); Back with unsaved marks asks "Discard annotations?".
+
+**Open.** Ink on an iPad simulator was NOT checked: the simulator tool was not granted access to an
+iPad (iPad Air 13-inch M4 / M2) in this session; the iPad path (PencilKit with Pencil-only drawing,
+a finger scrolling) needs a check in S4-Q, with Apple Pencil and pressure on a real iPad. Text boxes are placed
+unrotated in page space (on a rotated page the text turns with the page). PencilKit strokes become
+plain ink paths (pressure / tilt widths are not kept). No file-menu "Annotate" entry (the viewer is
+the way in). Moving or resizing a mark after placing it is not offered (delete and redo).
 
 ## Spikes
 
