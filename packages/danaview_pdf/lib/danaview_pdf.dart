@@ -6,6 +6,7 @@
 
 library;
 
+export 'src/pdf_compress.dart';
 export 'src/pdf_document.dart';
 export 'src/pdf_text.dart';
 export 'src/pdf_tools.dart';
