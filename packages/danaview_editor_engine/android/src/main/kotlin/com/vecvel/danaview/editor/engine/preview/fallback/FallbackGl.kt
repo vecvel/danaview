@@ -57,6 +57,15 @@ internal class FallbackGl(appContext: Context, assets: EffectAssets) {
     private var canvas: GlTarget? = null
     private var released = false
 
+    /**
+     * A GL fence after the newest composite (0: none, or already signalled). Deck frames are
+     * HardwareBuffers of the decks' ImageReaders: closing an Image hands its buffer back to the
+     * decoder without a release fence, so a composite still queued on the GPU could sample a frame
+     * the decoder wrote into that buffer afterwards (a later frame under the earlier frame's pts).
+     * [awaitReads] waits for this fence before a deck closes a frame it may have sampled.
+     */
+    private var readsFence = 0L
+
     val programs: ShaderPrograms
     val compositor: LayerCompositorGl
 
@@ -159,7 +168,26 @@ internal class FallbackGl(appContext: Context, assets: EffectAssets) {
     /** Composes [inputs] at [geometry] into the canvas target; returns the compositor stats. */
     fun compose(plan: RenderPlan, geometry: RenderGeometry, inputs: List<LayerCompositorGl.Input>): LayerCompositorGl.Stats = current {
         val c = canvasTarget(geometry.renderW, geometry.renderH)
-        compositor.compose(plan, geometry, inputs, c)
+        val stats = compositor.compose(plan, geometry, inputs, c)
+        // Fences in one context signal in order: the newest one covers every earlier composite.
+        if (readsFence != 0L) GLES30.glDeleteSync(readsFence)
+        readsFence = GLES30.glFenceSync(GLES30.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
+        stats
+    }
+
+    /**
+     * Blocks until the GPU finished every composite issued so far (they may have sampled deck
+     * frames), so a deck may hand those frames' buffers back to its decoder. Normally the fence has
+     * long signalled (the previous frame's composite); a stuck fence falls back to glFinish.
+     */
+    fun awaitReads() {
+        if (released || readsFence == 0L) return
+        current {
+            val r = GLES30.glClientWaitSync(readsFence, GLES30.GL_SYNC_FLUSH_COMMANDS_BIT, READS_TIMEOUT_NS)
+            if (r != GLES30.GL_ALREADY_SIGNALED && r != GLES30.GL_CONDITION_SATISFIED) GLES20.glFinish()
+            GLES30.glDeleteSync(readsFence)
+            readsFence = 0L
+        }
     }
 
     /** Blits the canvas onto the window with pts P(k) (ns) and swaps; false without a window or canvas. */
@@ -221,12 +249,18 @@ internal class FallbackGl(appContext: Context, assets: EffectAssets) {
 
     private companion object {
         const val WARM_SIZE = 32
+        /** Wait for [readsFence] before falling back to glFinish (ns). */
+        const val READS_TIMEOUT_NS = 100_000_000L
     }
 
     /** Releases every GL object and the context (the default display stays initialized: it is shared). */
     fun release() {
         if (released) return
         makeCurrent(pbuffer)
+        if (readsFence != 0L) {
+            GLES30.glDeleteSync(readsFence)
+            readsFence = 0L
+        }
         canvas?.release()
         canvas = null
         compositor.release()
