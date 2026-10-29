@@ -223,8 +223,12 @@ class ContingencySessionTest {
         harness("and16_surface").use { h ->
             h.setPlan(PreviewPlans.plan(listOf(PreviewPlans.main()), rev = 1))
             h.producer.awaitFrame(0)
+            val before = h.producer.frameCount
             h.play()
-            Thread.sleep(600)
+            // The loss lands during playback: once playback presents (a cold deck start takes
+            // 1–2 s on the emulator, longer when it is loaded), not after a fixed pause.
+            h.producer.awaitFrame(before, PerfGate.boundMs(15_000))
+            Thread.sleep(300)
             val gen = h.producer.generations
             val waited = h.producer.simulateCleanup()
             h.waitUntil("surfaceLost") { h.previewEvents(PreviewEventKindMsg.SURFACE_LOST).isNotEmpty() }
