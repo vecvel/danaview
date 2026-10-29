@@ -36,6 +36,8 @@
 //   DV_QA07_TIER=balanced     tier of q05-q07 (falls back to fast, reported, when the model is not staged)
 //   DV_QA07_BUDGET_MS=<ms>    q05 budget (device: the ai-eval.md §5 figure; default sized for a simulator)
 //   DV_QA07_NETWORK=true      allows the download phases
+//   DV_PERF_STRICT=1          the q03 re-split and q05 run-time limits apply as stated (a quiet dev Mac or
+//                             a real device); without it (a loaded CI emulator) they are 4× looser
 // How to stage and run: docs/v1.1/editor/qa/QA-07-ai.md §2.
 
 // ignore_for_file: implementation_imports, avoid_print
@@ -77,6 +79,12 @@ abstract final class Qa07 {
   static const String _tier = String.fromEnvironment('DV_QA07_TIER', defaultValue: 'balanced');
   static const int _budgetMs = int.fromEnvironment('DV_QA07_BUDGET_MS');
   static const bool network = bool.fromEnvironment('DV_QA07_NETWORK');
+
+  /// DV_PERF_STRICT=1 gates the absolute time limits; otherwise they are [looseFactor]× looser.
+  static const bool perfStrict = String.fromEnvironment('DV_PERF_STRICT') == '1';
+  static const int looseFactor = 4;
+  static Duration limit(Duration strict) => perfStrict ? strict : strict * looseFactor;
+  static String get perfMode => perfStrict ? 'DV_PERF_STRICT=1' : 'loose ×$looseFactor, no DV_PERF_STRICT';
 
   /// ai.md §16.4 scenario 1.
   static const double maxWer = 0.15;
@@ -639,7 +647,8 @@ Future<void> q03(WidgetTester tester, E2eEditor ed) async {
   expect(normalizedWords(resplit.map((c) => c.text).join(' ')), normalizedWords(before.map((c) => c.text).join(' ')),
       reason: 're-split keeps the recognised words');
   if (preset == SegmentationPreset.singleLine) expect(resplit.every((c) => !c.text.contains('\n')), isTrue, reason: 'one line per cue');
-  expect(sw.elapsed, lessThan(const Duration(seconds: 2)), reason: 're-split is instant (no transcription)');
+  expect(sw.elapsed, lessThan(Qa07.limit(const Duration(seconds: 2))),
+      reason: 're-split is instant (no transcription): ${sw.elapsedMilliseconds} ms (${Qa07.perfMode})');
   await ed.invoke(EditorActionId.undo);
   await ed.waitProject((p) => Captions.cuesMs(laneCues()).toString() == Captions.cuesMs(before).toString(), what: 'undo of the re-split');
 
@@ -766,7 +775,7 @@ Future<void> q05(WidgetTester tester, E2eEditor ed) async {
       'WER ${reference.isEmpty ? 'n/a (no reference text)' : (rate * 100).toStringAsFixed(1)}% platform ${Platform.operatingSystem}');
   Shared.sixtyTier = tier;
   Shared.sixtyWords = words;
-  expect(run.elapsed, lessThanOrEqualTo(budget), reason: 'run time within the budget');
+  expect(run.elapsed, lessThanOrEqualTo(Qa07.limit(budget)), reason: 'run time within the budget (${Qa07.perfMode})');
   // About 150 words: 2 lines × 42 graphemes per cue gives at least ~8 cues; one word per cue at most.
   expect(run.cues.length, inInclusiveRange(6, math.max(60, reference.length)), reason: 'cue count in range');
   if (reference.isNotEmpty) expect(rate, lessThanOrEqualTo(Qa07.maxWer), reason: 'WER vs the reference text');

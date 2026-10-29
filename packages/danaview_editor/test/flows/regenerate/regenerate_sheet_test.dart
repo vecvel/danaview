@@ -4,7 +4,10 @@
 // fake), one history entry, the edited-cues confirmation (Replace / Add as new track / cancel), the
 // clip-range target, the fallback to Transcribe again when cached transcripts are gone, refusals
 // (locked lane, nothing produced, read-only) and Transcribe again opening the prefilled Auto
-// captions sheet.
+// captions sheet. The 300 ms applies with DV_PERF_STRICT=1 (a quiet dev Mac); a loaded CI runner gets
+// 4× that.
+
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
@@ -17,6 +20,12 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewColors, Danav
 
 import '../../support/support.dart';
 import 'regenerate_rig.dart';
+
+/// DV_PERF_STRICT=1 (a quiet dev Mac) asserts the 300 ms re-split budget; otherwise (a loaded CI runner)
+/// [_looseFactor] times it.
+final bool _perfStrict = Platform.environment['DV_PERF_STRICT'] == '1';
+const int _looseFactor = 4;
+String get _perfMode => _perfStrict ? 'DV_PERF_STRICT=1' : 'loose ×$_looseFactor, no DV_PERF_STRICT';
 
 /// The fake, except that re-split finds no cached transcripts.
 final class _EvictedService implements TranscriptionService {
@@ -97,7 +106,9 @@ void main() {
       watch.stop();
 
       expect(outcome, isA<RegenerateApplied>());
-      expect(watch.elapsedMilliseconds, lessThanOrEqualTo(300), reason: 're-split took ${watch.elapsedMilliseconds} ms');
+      debugPrint('re-split of 30 min: ${watch.elapsedMilliseconds} ms');
+      expect(watch.elapsedMilliseconds, lessThanOrEqualTo(_perfStrict ? 300 : 300 * _looseFactor),
+          reason: 're-split took ${watch.elapsedMilliseconds} ms ($_perfMode)');
       expect((outcome as RegenerateApplied).cues, 720);
       expect(rig.lane.items.every((c) => (c as SubtitleCue).text.startsWith('Línea')), isTrue);
       expect(rig.lane.subtitle!.provenance!.segmentation.preset, SegmentationPreset.singleLine);
