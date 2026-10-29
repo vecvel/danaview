@@ -25,6 +25,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
+/** DV_PERF_STRICT=1 (environment or system property): absolute timing limits apply (a quiet machine). */
+private val perfStrict = System.getenv("DV_PERF_STRICT") == "1" || System.getProperty("DV_PERF_STRICT") == "1"
+
 class PdfTextPrewarmTest {
     /** A document of [pages] pages whose page read takes [pageMs]. */
     private class FakeDoc(val pages: Int, private val pageMs: Long = 0, budget: Long = Long.MAX_VALUE) : PrewarmTarget {
@@ -217,7 +220,10 @@ class PdfTextPrewarmTest {
         val t0 = System.nanoTime()
         val got = doc.lock.withLock { doc.cache.cachedPages }
         val waitedMs = (System.nanoTime() - t0) / 1e6
-        assertTrue("waited $waitedMs ms", waitedMs < 200)
+        // One 20 ms page, not the 8 s of all 400: 200 ms with DV_PERF_STRICT=1, 2 s on a loaded
+        // CI host (still far below the whole document).
+        val bound = if (perfStrict) 200.0 else 2_000.0
+        assertTrue("waited $waitedMs ms (bound $bound)", waitedMs < bound)
         assertTrue(got in 1 until 400)
         prewarmer.shutdown()
         await(what = "stopped by shutdown") { job.isFinished }

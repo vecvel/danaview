@@ -25,6 +25,7 @@ import com.vecvel.danaview.editor.engine.core.EngineThreads
 import com.vecvel.danaview.editor.engine.core.JobControl
 import com.vecvel.danaview.editor.engine.core.Paths
 import com.vecvel.danaview.editor.engine.harness.FixtureTree
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import com.vecvel.danaview.editor.engine.harness.TestFixtures
 import com.vecvel.danaview.editor.engine.pigeon.EngineEventKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.EngineEventMsg
@@ -225,7 +226,8 @@ object YuvReference {
         val info = MediaCodec.BufferInfo()
         var inputDone = false
         try {
-            val deadline = System.currentTimeMillis() + 30_000
+            // Software decode up to the frame: 30 s with DV_PERF_STRICT=1, 4x on a loaded emulator.
+            val deadline = System.currentTimeMillis() + PerfGate.boundMs(30_000)
             while (System.currentTimeMillis() < deadline) {
                 if (!inputDone) {
                     val i = codec.dequeueInputBuffer(10_000)

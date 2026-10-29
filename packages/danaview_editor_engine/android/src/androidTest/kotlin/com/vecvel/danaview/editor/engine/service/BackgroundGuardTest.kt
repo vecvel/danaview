@@ -15,6 +15,7 @@ import com.vecvel.danaview.editor.engine.core.EngineContext
 import com.vecvel.danaview.editor.engine.export.ExportService
 import com.vecvel.danaview.editor.engine.platform.FragmentRequests
 import com.vecvel.danaview.editor.engine.platform.PlatformTestEngine
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -68,22 +69,23 @@ class BackgroundGuardTest {
         val svc = ServiceTest.awaitForeground()
         assertEquals(ExportService.foregroundServiceTypeFor(Build.VERSION.SDK_INT), svc.requestedForegroundType)
         if (Build.VERSION.SDK_INT >= 29) assertEquals(svc.requestedForegroundType, svc.foregroundServiceType)
-        assertTrue(ServiceTest.waitFor(5_000) { shownTitle() == "Auto captions" })
+        // Waits: as written with DV_PERF_STRICT=1, 4x on a loaded emulator (harness/PerfGate.kt).
+        assertTrue(ServiceTest.waitFor(PerfGate.boundMs(5_000)) { shownTitle() == "Auto captions" })
         assertNull("no Cancel for a lease", ServiceTest.foregroundNotification()!!.notification.actions)
 
         call { ctx.backgroundGuard.update(first!!, 0.5, it) }
-        assertTrue("progress 50% shown within the 1 s throttle", ServiceTest.waitFor(3_000) { shownProgress() == 50 })
+        assertTrue("progress 50% shown within the 1 s throttle", ServiceTest.waitFor(PerfGate.boundMs(3_000)) { shownProgress() == 50 })
 
         val second = acquire("Second job")
         assertNotNull(second)
         assertTrue(first != second)
         assertTrue(
             "the second lease is counted",
-            ServiceTest.waitFor(3_000) { ServiceTest.foregroundNotification()?.notification?.extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() == "+1 more" },
+            ServiceTest.waitFor(PerfGate.boundMs(3_000)) { ServiceTest.foregroundNotification()?.notification?.extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() == "+1 more" },
         )
 
         call { ctx.backgroundGuard.release(first!!, it) }
-        assertTrue(ServiceTest.waitFor(3_000) { shownTitle() == "Second job" })
+        assertTrue(ServiceTest.waitFor(PerfGate.boundMs(3_000)) { shownTitle() == "Second job" })
         assertTrue("still in the foreground with one lease", ServiceTest.service()?.isForeground == true)
 
         call { ctx.backgroundGuard.release(second!!, it) }

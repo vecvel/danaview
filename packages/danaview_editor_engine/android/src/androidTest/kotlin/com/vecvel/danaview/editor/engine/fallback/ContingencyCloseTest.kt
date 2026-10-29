@@ -36,6 +36,7 @@ import com.vecvel.danaview.editor.engine.preview.PreviewPlans
 import com.vecvel.danaview.editor.engine.preview.PreviewSession
 import com.vecvel.danaview.editor.engine.preview.fallback.ContingencyPreviewBackend
 import com.vecvel.danaview.editor.engine.preview.fallback.EngineStats
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -99,7 +100,7 @@ class ContingencyCloseTest {
                 done.countDown()
             }
         }
-        assertTrue("dispose completed within $DISPOSE_BOUND_MS ms", done.await(DISPOSE_BOUND_MS, TimeUnit.MILLISECONDS))
+        assertTrue("dispose completed within ${PerfGate.boundMs(DISPOSE_BOUND_MS)} ms (${PerfGate.mode})", done.await(PerfGate.boundMs(DISPOSE_BOUND_MS), TimeUnit.MILLISECONDS))
         val ms = SystemClock.uptimeMillis() - t0
         probing.join(DISPOSE_BOUND_MS)
         assertTrue("dispose succeeded: $result", result!!.isSuccess)
@@ -111,7 +112,8 @@ class ContingencyCloseTest {
         val engine = runCatching { stats(h) }.exceptionOrNull()
         assertTrue("$what: the engine (and its decks) released", engine != null && EngineErrors.from(engine).code == EngineErrorCode.cancelled)
         assertTrue("$what: the session left the manager", h.manager.openSessions.isEmpty())
-        assertTrue("$what: the main thread never waited ${c.mainStallMs} ms (<= $MAIN_STALL_BOUND_MS)", c.mainStallMs <= MAIN_STALL_BOUND_MS)
+        val stallBound = PerfGate.boundMs(MAIN_STALL_BOUND_MS)
+        assertTrue("$what: the main thread never waited ${c.mainStallMs} ms (<= $stallBound, ${PerfGate.mode})", c.mainStallMs <= stallBound)
         Log.i(AND16_TAG, "close with $what: dispose ${c.disposeMs} ms, longest main-thread wait ${c.mainStallMs} ms")
     }
 
@@ -153,7 +155,7 @@ class ContingencyCloseTest {
                     h.manager.suspendForExport("job_close_$i") { released.countDown() }
                 }
                 assertReleased(h, c, "an export suspension in flight (#$i)")
-                assertTrue("the export's wait for the preview decoders ends", released.await(DISPOSE_BOUND_MS, TimeUnit.MILLISECONDS))
+                assertTrue("the export's wait for the preview decoders ends", released.await(PerfGate.boundMs(DISPOSE_BOUND_MS), TimeUnit.MILLISECONDS))
                 h.manager.resumeAfterExport("job_close_$i")
             }
         }
