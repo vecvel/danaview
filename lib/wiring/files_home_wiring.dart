@@ -3,6 +3,8 @@
 // other files opened through HOM-23's viewer router with the native viewers, audio in the player,
 // the S3 overrides of lib/wiring/documents_wiring.dart and the Share Extension inbox host. Still
 // nothing with DANAVIEW_FILES_HOME off.)
+// EXTENDED: HOM-30 (Settings › Privacy also lists the saved signatures of the PDF sign tool, with
+// "Delete all", where the platform reports the sign tool.)
 //
 // S2 wiring (BUILD_PLAN v1.2 §1A, slice S2 "Photos & Files Home"; the slice's share of INT-103):
 // the Files & Media Home behind DANAVIEW_FILES_HOME. With the flag off (the default, never flipped
@@ -40,6 +42,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:danaview_data/danaview_data.dart' show AppStorage, LibraryRepository;
+import 'package:danaview_documents/danaview_documents.dart' show SavedSignaturesSettingsSection;
 import 'package:danaview_domain/danaview_domain.dart' show MediaRef;
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/flags.dart';
@@ -71,6 +74,7 @@ import 'package:danaview_features/src/library/thumbs/thumbnail_service.dart' sho
 import 'package:danaview_features/src/more/settings_sections/library_storage_section.dart';
 import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_library_native/danaview_library_native.dart' show NativeBackupFlags;
+import 'package:danaview_pdf/danaview_pdf.dart' show PdfTool;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:flutter/foundation.dart';
@@ -80,6 +84,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart' show applyWorkaroundToOpenSqlite3OnOldAndroidVersions;
 
 import 'documents_wiring.dart';
+import 'pdf_tools_wiring.dart' show pdfToolsSupportedProvider, signatureStoreProvider;
 
 /// Whether this build wires the Files & Media Home (`DANAVIEW_FILES_HOME`, default false).
 bool get filesHomeWired => FeatureFlags.filesHomeEnabled;
@@ -379,11 +384,20 @@ void _toast(BuildContext context, String message, {bool error = false}) {
 // ---------------------------------------------------------------------------------------------
 
 /// The 1.2.0 Settings sections of this build: [base] (S1's Settings › Privacy) plus Settings ›
-/// Library storage (HOM-17) with DANAVIEW_FILES_HOME on.
+/// Library storage (HOM-17) with DANAVIEW_FILES_HOME on; Settings › Privacy then also shows the
+/// saved signatures (HOM-30) where signing is wired.
 SettingsSections appSettingsSectionsFor(SettingsSections base) {
   if (!filesHomeWired) return base;
+  final privacy = base.privacy;
   return SettingsSections(
-    privacy: base.privacy,
+    privacy: (context) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (privacy != null) privacy(context),
+        const SavedSignaturesPrivacyRows(),
+      ],
+    ),
     libraryStorage: base.libraryStorage ?? buildLibraryStorageSettingsSection,
     searchIndex: base.searchIndex,
   );
@@ -774,3 +788,18 @@ class FilesHomePhotosPane extends StatelessWidget {
 /// HOM-18's package default for the Documents tab (false); the app shows it from S3 on through
 /// [s3DocumentsShown].
 const bool s2DocumentsShown = documentsFilterShown;
+
+/// Settings › Privacy's saved signatures (HOM-30): shown where the store is wired and the platform
+/// reports the sign tool.
+class SavedSignaturesPrivacyRows extends ConsumerWidget {
+  /// The rows.
+  const SavedSignaturesPrivacyRows({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final store = ref.watch(signatureStoreProvider);
+    final tools = ref.watch(pdfToolsSupportedProvider).valueOrNull ?? const {};
+    if (store == null || !tools.contains(PdfTool.sign)) return const SizedBox.shrink();
+    return SavedSignaturesSettingsSection(key: const ValueKey('settings-saved-signatures'), store: store);
+  }
+}
