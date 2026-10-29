@@ -182,6 +182,33 @@ xml_sum() {
       END { print n + 0 }'
 }
 
+# The failed tests of a batch: "<class>#<method>" from its JUnit XML.
+failed_tests() {
+  find "$1" -name '*.xml' -type f 2>/dev/null | grep -v '/testlog/' | while IFS= read -r f; do
+    awk '
+      /<testcase / {
+        n = ""; c = ""
+        if (match($0, / name="[^"]*"/)) n = substr($0, RSTART + 7, RLENGTH - 8)
+        if (match($0, / classname="[^"]*"/)) c = substr($0, RSTART + 12, RLENGTH - 13)
+      }
+      /<failure|<error/ { if (n != "") print c "#" n }' "$f" || true
+  done | sort -u || true
+}
+
+# Prints the device log of each failed test (UTP's logcat-<class>-<method>.txt in the batch's
+# results), warnings and errors plus the engine's own lines, so a failure that only reproduces on
+# the CI emulator can be read from the job log without the results directory.
+print_failed_logcat() {
+  local dir="$1" t m logs
+  failed_tests "$dir" | while IFS= read -r t; do
+    m="${t#*#}"
+    logs="$(find "$dir" -type f -name "logcat-*${m}*.txt" 2>/dev/null | head -n 1 || true)"
+    [ -n "$logs" ] || continue
+    echo "--- logcat of $t (warnings, errors and engine lines, last 150) ---"
+    grep -E ' [WEF] | [WEF]/|^[WEF]/|[Dd]anaview|AND[0-9]|Media3|FrameExtractor|VideoFrameProcessor|ExoPlayer' "$logs" | tail -n 150 || true
+  done
+}
+
 declare -a SUMMARY=()
 FAILED=0
 if [ "$DRY_RUN" != 1 ]; then rm -rf "$RESULTS_DST"; mkdir -p "$RESULTS_DST"; fi
@@ -220,6 +247,7 @@ for b in "${BATCHES[@]}"; do
     if [ "$f" = "?" ]; then failures="?"; else failures=$((f + e)); fi
     if [ "$status" = PASS ] && [ "$failures" != "?" ] && [ "$failures" -gt 0 ]; then status=FAIL; fi
     if [ "$status" = PASS ] && [ "$tests" = "?" ]; then status=FAIL; fi
+    if [ "$status" = FAIL ]; then print_failed_logcat "$RESULTS_DST/$label" || true; fi
   fi
   elapsed=$((SECONDS - started))
   if [ "$status" = FAIL ]; then
