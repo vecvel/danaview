@@ -2,27 +2,31 @@
 
 <!-- OWNER: INT-01 -->
 
-`.github/workflows/danaview-ci.yml` (ARCH §22) runs one job per script in this directory. Each job checks out the repo, looks for its script and runs it with `bash`. If the script doesn't exist yet, the job prints a skip notice and passes. The ticket that owns a script creates it. Every script also runs locally with the same command.
+CI has two lanes (docs/v1.2/CI_LANES.md): the required gate `.github/workflows/danaview-ci.yml` (ARCH §22) and the non-blocking nightly device lane `.github/workflows/danaview-device.yml`. They run one job per script in this directory. Each job checks out the repo, looks for its script and runs it with `bash`. If the script doesn't exist yet, the job prints a skip notice and passes. The ticket that owns a script creates it. Every script also runs locally with the same command.
 
 ## Jobs, scripts and owners
 
 | Job | Runner | Script | Owner | Runs on |
 |---|---|---|---|---|
-| `workflow-lint` | ubuntu-latest | (inline) actionlint 1.7.7 + shellcheck on `danaview-ci.yml` | INT-01 | PR, push |
+| `workflow-lint` | ubuntu-latest | (inline) actionlint 1.7.7 + shellcheck on `danaview-ci.yml`, `danaview-device.yml` | INT-01 | PR, push |
 | `dart-core` | GitHub-hosted `macos-26` (JSON goldens carry arm64 float results) | `core.sh test` | CORE-01 | PR, push |
 | `dart-core-benchmark` | ubuntu-latest (steady timings; the gate is host-normalized to the dev-Mac baseline) | `core.sh benchmark` | CORE-35 | PR, push |
 | `flutter-packages` | GitHub-hosted `macos-26` (goldens are rendered on macOS) | `flutter_packages.sh` | INT-01 | PR, push |
 | `whisper-host` | ubuntu-latest (plain, TSan, ASan) + GitHub-hosted `macos-26` | `whisper_host.sh` | AI-03 | PR, push |
 | `android-unit` | ubuntu-latest | `android_unit.sh` | ENG-09 | PR, push |
-| `android-emulator` | ubuntu-latest, KVM, API 35 x86_64 (`reactivecircus/android-emulator-runner`) | `android_emulator.sh` | ENG-09 | PR, push |
-| `ios` | GitHub-hosted `macos-26` (Xcode 26.6, iOS 26.5 simulator) | `ios.sh`, which runs `check_ios_min_os.sh` | ENG-09 | PR (smoke + ios_preview suites), push, dispatch, nightly (all suites) |
-| `nightly` | ubuntu-latest | `nightly.sh` → every `nightly.d/*.sh` | INT-01 | cron 02:30 UTC, dispatch with `nightly: true` |
+| `ios` | GitHub-hosted `macos-26` (Xcode 26.6, iOS 26.5 simulator) | `ios.sh --no-device-build --runner-tests-only` with `DANAVIEW_IOS_RUNNER_LANE=gate` (RunnerTests minus `ios_device_lane_classes.txt`) | ENG-09 | PR, push, dispatch |
+| `gate` | ubuntu-latest | (inline) fails when any job above failed; the one required check | INT-01 | PR, push, dispatch |
+| `android-emulator` (device lane) | ubuntu-latest, KVM, API 35 x86_64 (`reactivecircus/android-emulator-runner`) | `android_emulator.sh` | ENG-09 | cron 02:30 UTC, dispatch |
+| `ios-soak` (device lane) | GitHub-hosted `macos-26` | `ios.sh --no-device-build --runner-tests-only` with `DANAVIEW_IOS_RUNNER_LANE=device` | ENG-09 | cron 02:30 UTC, dispatch |
+| `ios-device` (device lane) | GitHub-hosted `macos-26` | `ios.sh --no-runner-tests` (device build, D-41 check, every integration_test suite) | ENG-09 | cron 02:30 UTC, dispatch |
+| `nightly` (device lane) | ubuntu-latest | `nightly.sh` → every `nightly.d/*.sh` | INT-01 | cron 02:30 UTC, dispatch |
 
 Other scripts in this directory and their owners:
 
 | Script | Owner | Used by |
 |---|---|---|
 | `check_ios_min_os.sh` | ENG-09 | `ios.sh`; INT-05's iOS release lane (D-41) |
+| `ios_device_lane_classes.txt` | INT-01 | `ios.sh` (`DANAVIEW_IOS_RUNNER_LANE`): the RunnerTests classes of the device lane |
 | `check_native_libs.sh` | AI-04 | INT-05's Android release workflow step |
 | `e2e_ios.sh` | QA-01 | run by hand on the self-hosted Mac (simulators) |
 | `e2e_android.sh` | QA-02 | run by hand on a machine with the Android emulators |
@@ -34,8 +38,8 @@ Other scripts in this directory and their owners:
 ## Triggers
 
 - **Pull requests and pushes to `main`** that touch `packages/danaview_editor*/**`, `packages/danaview_transcription/**`, `packages/danaview_whisper/**`, `test/architecture/**`, `scripts/ci/editor/**` or the workflow itself. `packages/danaview_features/**` and `docs/v1.1/editor/BUILD_PLAN.md` also trigger it, because the architecture test guards `danaview_features` (ARCH §4.2 rule 1, ARCH §1.3 Material scan) and reads the BUILD_PLAN owns lists.
-- **Nightly** (cron `30 2 * * *`): only the `nightly` job runs.
-- **Manual** (`workflow_dispatch`): input `nightly` adds the nightly job.
+- **Nightly** (cron `30 2 * * *`): `danaview-device.yml` (the device lane), which opens or closes the `ci-nightly` issue.
+- **Manual** (`workflow_dispatch`): either workflow; `danaview-ci.yml`'s input `device_lane` adds the device lane on any branch.
 
 The existing release workflows (`android-release.yml`, `linux-release.yml`, `windows-release.yml`) don't depend on this workflow. INT-05 adds the release dart-defines and the release-lane checks.
 
@@ -93,7 +97,7 @@ DANAVIEW_EMULATOR_DRY_RUN=1 scripts/ci/editor/android_emulator.sh         # prin
 
 ## macOS runner
 
-The `ios` job and the macOS leg of `whisper-host` run on GitHub's hosted `macos-26` image (Apple silicon; free for this public repository, with a concurrency cap of 5 macOS jobs on the Free plan). Each job selects `/Applications/Xcode_26.6.app` with `xcode-select`; the image's preinstalled CocoaPods and CMake cover the toolchain step, and `ios.sh` picks the first iPhone on the newest iOS runtime (`DANAVIEW_IOS_SIMULATOR` overrides). Pull requests run only the `smoke` and `ios_preview` integration suites; push to `main`, manual dispatch and the nightly schedule run all of them. The QA-00 E2E suite (`DANAVIEW_E2E=1`, staged speech models) stays a manual run on a developer Mac.
+The `ios` job and the macOS leg of `whisper-host` run on GitHub's hosted `macos-26` image (Apple silicon; free for this public repository, with a concurrency cap of 5 macOS jobs on the Free plan). Each job selects `/Applications/Xcode_26.6.app` with `xcode-select`; the image's preinstalled CocoaPods and CMake cover the toolchain step, and `ios.sh` picks the first iPhone on the newest iOS runtime (`DANAVIEW_IOS_SIMULATOR` overrides). The gate runs RunnerTests only (minus the device-lane classes); the device lane's `ios-device` job builds for the device and runs every integration suite. The QA-00 E2E suite (`DANAVIEW_E2E=1`, staged speech models) stays a manual run on a developer Mac.
 
 A self-hosted Mac is no longer required. To bring one back, it needs:
 
