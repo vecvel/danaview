@@ -250,7 +250,7 @@ class _DerivedStatus extends ConsumerWidget {
       key: const ValueKey<String>('clipInfo.derived'),
       decoration: BoxDecoration(
         color: DanaviewColors.surfaceElevatedHigher,
-        borderRadius: DanaviewRadius.smAll,
+        borderRadius: DanaviewRadius.controlAll,
         border: Border.fromBorderSide(DanaviewBorders.hairline),
       ),
       child: Padding(

@@ -55,7 +55,7 @@ const Map<String, Color> _badgeColors = {
   'primaryLight': DanaviewColors.primaryLight,
   'errorLight': DanaviewColors.errorLight,
   'warning': DanaviewColors.warning,
-  'cyan': DanaviewColors.cyan,
+  'textSecondary': DanaviewColors.textSecondary,
 };
 
 void main() {

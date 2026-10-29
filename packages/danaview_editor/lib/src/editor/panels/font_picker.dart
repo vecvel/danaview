@@ -102,13 +102,13 @@ class _FontRow extends StatelessWidget {
         enabled: enabled,
         selected: selected,
         semanticLabel: TextStrings.fontRow(family.family, family.category, selected: selected),
-        borderRadius: DanaviewRadius.mdAll,
+        borderRadius: DanaviewRadius.controlAll,
         child: Container(
           constraints: const BoxConstraints(minHeight: DanaviewSpacing.minTapTarget),
           padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.md, vertical: DanaviewSpacing.xs),
           decoration: BoxDecoration(
             color: selected ? DanaviewColors.surfaceElevatedHigher : null,
-            borderRadius: DanaviewRadius.mdAll,
+            borderRadius: DanaviewRadius.controlAll,
           ),
           child: ExcludeSemantics(
             child: Row(

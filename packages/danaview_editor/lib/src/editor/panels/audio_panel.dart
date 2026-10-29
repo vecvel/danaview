@@ -408,7 +408,7 @@ class _Note extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: DanaviewColors.surfaceElevatedHigher,
-            borderRadius: DanaviewRadius.smAll,
+            borderRadius: DanaviewRadius.controlAll,
             border: Border.fromBorderSide(DanaviewBorders.hairline),
           ),
           child: Padding(

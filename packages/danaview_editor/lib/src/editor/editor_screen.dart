@@ -463,7 +463,7 @@ class _EditorUnavailable extends StatelessWidget {
       ),
     );
     final icon = notFound ? Icons.folder_off_rounded : Icons.error_outline_rounded;
-    final iconColor = notFound ? DanaviewColors.primaryLight : DanaviewColors.errorLight;
+    final iconColor = notFound ? DanaviewColors.textPrimary : DanaviewColors.errorLight;
     final title = notFound ? EditorShellStrings.unavailableTitle : (status.failureTitle ?? EditorShellStrings.failedTitle);
     final message = notFound ? EditorShellStrings.unavailableMessage : status.failureMessage;
     final action = goToProjects != null
@@ -480,38 +480,27 @@ class _EditorUnavailable extends StatelessWidget {
     // Short landscape screens: icon beside the text, so the action stays above the fold.
     final compact = SingleChildScrollView(
       padding: const EdgeInsets.all(DanaviewSpacing.lg),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.14), borderRadius: DanaviewRadius.lgAll),
-                child: Icon(icon, size: 24, color: iconColor),
-              ),
-              const SizedBox(width: DanaviewSpacing.md),
-              Flexible(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: DanaviewTextStyles.title),
-                    if (message != null) ...[
-                      const SizedBox(height: DanaviewSpacing.xxs),
-                      Text(message, style: DanaviewTextStyles.bodySecondary),
-                    ],
-                    const SizedBox(height: DanaviewSpacing.md),
-                    action,
-                  ],
-                ),
-              ),
-            ],
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DanaviewIconTile(icon, size: 48, iconSize: 24, color: iconColor),
+          const SizedBox(width: DanaviewSpacing.md),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: DanaviewTextStyles.title),
+                if (message != null) ...[
+                  const SizedBox(height: DanaviewSpacing.xxs),
+                  Text(message, style: DanaviewTextStyles.bodySecondary),
+                ],
+                const SizedBox(height: DanaviewSpacing.md),
+                action,
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
     return SafeArea(

@@ -29,7 +29,6 @@ import 'package:danaview_editor_core/store.dart';
 import 'package:danaview_editor_engine_api/danaview_editor_engine_api.dart';
 import 'package:danaview_features/storage.dart';
 import 'package:danaview_transcription/danaview_transcription.dart' show TranscriptionService;
-import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import 'export_output_sweeper.dart';
 import 'strings/settings_strings.dart';
@@ -219,9 +218,6 @@ final class EditorProjectsStorageContributor extends EditorStorageContributor {
   IconData get icon => Icons.movie_edit;
 
   @override
-  Color get color => DanaviewColors.purple;
-
-  @override
   StorageOpenAction get openAction => StorageOpenAction(label: StorageStrings.openProjects, onOpen: onOpenProjects);
 
   /// Measured now, and again whenever the project list changes (rename, duplicate, delete, save).
@@ -264,9 +260,6 @@ final class EditorCacheStorageContributor extends EditorStorageContributor {
 
   @override
   IconData get icon => Icons.auto_awesome_motion_rounded;
-
-  @override
-  Color get color => DanaviewColors.cyan;
 
   /// The whole `<cache>/danaview/editor` folder: the app's own "Clear cache" never deletes it.
   @override

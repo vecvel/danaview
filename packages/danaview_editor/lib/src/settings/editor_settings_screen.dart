@@ -54,7 +54,6 @@ class EditorSettingsScreen extends ConsumerWidget {
                   _ChoiceSetting<ProxyMediaMode>(
                     key: const ValueKey('editor-settings-proxy'),
                     icon: Icons.speed_rounded,
-                    color: DanaviewColors.cyan,
                     title: SettingsStrings.proxyTitle,
                     description: SettingsStrings.proxyDescription,
                     hint: _proxyHint(proxyMode, tierDefault: defaults.proxyMedia),
@@ -68,7 +67,6 @@ class EditorSettingsScreen extends ConsumerWidget {
                   _ChoiceSetting<PreviewQualityPreference>(
                     key: const ValueKey('editor-settings-preview-quality'),
                     icon: Icons.high_quality_rounded,
-                    color: DanaviewColors.primaryLight,
                     title: SettingsStrings.previewQualityTitle,
                     description: SettingsStrings.previewQualityDescription,
                     value: prefs.previewQuality,
@@ -83,7 +81,7 @@ class EditorSettingsScreen extends ConsumerWidget {
                     children: [
                       DanaviewSwitchRow(
                         key: const ValueKey('editor-settings-center-playhead'),
-                        leading: const DanaviewTileIcon(Icons.center_focus_strong_rounded, color: DanaviewColors.purple, size: 40),
+                        leading: const DanaviewIconTile(Icons.center_focus_strong_rounded, size: 40),
                         title: SettingsStrings.centerPlayheadTitle,
                         subtitle: SettingsStrings.centerPlayheadSubtitle,
                         value: prefs.centerPlayheadOnTouch,
@@ -91,7 +89,7 @@ class EditorSettingsScreen extends ConsumerWidget {
                       ),
                       DanaviewSwitchRow(
                         key: const ValueKey('editor-settings-snapping-haptics'),
-                        leading: const DanaviewTileIcon(Icons.vibration_rounded, color: DanaviewColors.warning, size: 40),
+                        leading: const DanaviewIconTile(Icons.vibration_rounded, size: 40),
                         title: SettingsStrings.snappingHapticsTitle,
                         subtitle: SettingsStrings.snappingHapticsSubtitle,
                         value: prefs.snappingHaptics,
@@ -103,7 +101,6 @@ class EditorSettingsScreen extends ConsumerWidget {
                   _ChoiceSetting<NewProjectAspect>(
                     key: const ValueKey('editor-settings-aspect'),
                     icon: Icons.aspect_ratio_rounded,
-                    color: DanaviewColors.success,
                     title: SettingsStrings.aspectTitle,
                     description: SettingsStrings.aspectDescription,
                     value: prefs.newProjectAspect,
@@ -143,7 +140,6 @@ class _ChoiceSetting<T> extends StatelessWidget {
   const _ChoiceSetting({
     super.key,
     required this.icon,
-    required this.color,
     required this.title,
     required this.description,
     required this.value,
@@ -153,7 +149,6 @@ class _ChoiceSetting<T> extends StatelessWidget {
   });
 
   final IconData icon;
-  final Color color;
   final String title;
   final String description;
   final String? hint;
@@ -174,7 +169,7 @@ class _ChoiceSetting<T> extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DanaviewTileIcon(icon, color: color, size: 40),
+                DanaviewIconTile(icon, size: 40),
                 const SizedBox(width: DanaviewSpacing.md),
                 Expanded(
                   child: Column(

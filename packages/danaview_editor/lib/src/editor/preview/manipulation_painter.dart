@@ -349,7 +349,7 @@ class ManipulationPainter extends CustomPainter {
     if (top < 4) top = h.outline.map((p) => p.dy).reduce(math.max) + 12;
     top = top.clamp(4.0, math.max(4.0, size.height - ht - 4)).toDouble();
     final left = (h.center.dx - w / 2).clamp(4.0, math.max(4.0, size.width - w - 4)).toDouble();
-    final rect = RRect.fromRectAndRadius(Rect.fromLTWH(left, top, w, ht), const Radius.circular(DanaviewRadius.sm));
+    final rect = RRect.fromRectAndRadius(Rect.fromLTWH(left, top, w, ht), const Radius.circular(DanaviewRadius.tile));
     canvas.drawRRect(rect, Paint()..color = DanaviewColors.surfaceElevatedHigher);
     canvas.drawRRect(
       rect,

@@ -18,7 +18,6 @@ import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 import 'package:danaview_features/storage.dart';
 import 'package:danaview_transcription/danaview_transcription.dart';
-import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 
 import 'strings/captions_strings.dart';
 import 'strings/settings_strings.dart' show StorageStrings;
@@ -84,9 +83,6 @@ final class SpeechStorageContributor extends StorageContributor {
 
   @override
   IconData get icon => Icons.record_voice_over_rounded;
-
-  @override
-  Color get color => DanaviewColors.warning;
 
   @override
   StorageClearAction get clearAction => StorageClearAction(

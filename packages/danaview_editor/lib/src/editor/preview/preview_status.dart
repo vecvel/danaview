@@ -349,13 +349,13 @@ class _OfflineCard extends ConsumerWidget {
     final spec = registry.spec(EditorActionId.relink);
     final enabled = spec.isBound && spec.isVisible(ctx) && spec.isEnabled(ctx);
     return ClipRRect(
-      borderRadius: DanaviewRadius.lgAll,
+      borderRadius: DanaviewRadius.mediaAll,
       child: CustomPaint(
         painter: const _HatchPainter(),
         child: Container(
           padding: const EdgeInsets.all(DanaviewSpacing.lg),
           decoration: BoxDecoration(
-            borderRadius: DanaviewRadius.lgAll,
+            borderRadius: DanaviewRadius.mediaAll,
             border: const Border.fromBorderSide(DanaviewBorders.hairline),
             boxShadow: DanaviewShadows.soft,
           ),
