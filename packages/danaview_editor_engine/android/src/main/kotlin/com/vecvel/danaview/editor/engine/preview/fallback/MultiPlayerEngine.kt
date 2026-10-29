@@ -231,6 +231,10 @@ internal class MultiPlayerEngine(
         host.failed(EngineException(EngineErrorCode.decodeFailed, "preview deck failed (${error.errorCodeName})", cause = error))
     }
 
+    override fun awaitGpuReads() {
+        gl?.awaitReads()
+    }
+
     // ---- setup ----
 
     /** Creates the EGL context and compositor (open; throws when GL is unusable). */
