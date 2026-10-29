@@ -495,6 +495,15 @@ jobs:
           DANAVIEW_IOS_ONLY_TESTING: ${{ inputs.ios_only_testing }}
           DANAVIEW_IOS_RUNNER_LANE: gate
         run: bash scripts/ci/editor/ios.sh --no-device-build --runner-tests-only
+      - name: Keep the RunnerTests result bundle and crash reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-runner-tests-results
+          if-no-files-found: ignore
+          path: |
+            packages/danaview_editor_engine/example/build/RunnerTests.xcresult
+            ~/Library/Logs/DiagnosticReports/
 
   # Dispatch with device_lane=true: the nightly device lane on the dispatched ref, through
   # workflow_call (so it also runs on a branch before danaview-device.yml reaches main). Not a need
