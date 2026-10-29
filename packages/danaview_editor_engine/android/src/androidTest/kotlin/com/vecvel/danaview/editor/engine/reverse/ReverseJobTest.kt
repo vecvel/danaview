@@ -18,8 +18,11 @@
 // - cancel (direct and through the JobRegistry, mid-job): `cancelled`, no work directory, no
 //   `.part`, no output.
 // The intermediate Transformer runs software decoders first (ReverseDecoders: the goldfish decoder
-// drops a B-frame); `defaultDecodersStillReverse` runs the production choice and records what it
-// delivers. Every timing and memory number is an emulator measurement.
+// drops a B-frame); `defaultDecodersStillReverse` runs the production choice, whose lost B-frame the
+// job catches and transcodes again with software decoders. Every chunk of every run maps all its
+// frames into the intermediate and decodes all of them (0 unmapped, 0 not decoded: a frame missing
+// from a reversed clip is a correctness failure, not a log line). Every timing and memory number is
+// an emulator measurement.
 
 package com.vecvel.danaview.editor.engine.reverse
 
@@ -68,6 +71,9 @@ class ReverseJobTest {
 
     private val intermediateBytes = ArrayList<Long>()
 
+    /** The chunk reports of the last [reverse] run. */
+    private val chunkReports = java.util.concurrent.CopyOnWriteArrayList<com.vecvel.danaview.editor.engine.media.ReverseJob.ChunkReport>()
+
     private fun request(fixture: String, startUs: Long, endUs: Long, name: String, priority: JobPriorityMsg = JobPriorityMsg.INTERACTIVE) = JobRequestMsg(
         kind = JobKindMsg.REVERSE,
         media = ResolvedMediaMsg(uri = ReverseFixtures.file(fixture).absolutePath, fingerprint = "fp-$fixture", isProxy = false),
@@ -89,10 +95,17 @@ class ReverseJobTest {
         job.chunkDurationUs = chunkUs
         intermediateBytes.clear()
         job.onWorkSample = { stage, bytes -> if (stage == "intermediate" || stage == "wav") synchronized(intermediateBytes) { intermediateBytes += bytes } }
+        chunkReports.clear()
+        job.onChunk = { chunkReports += it }
         val started = System.nanoTime()
         try {
             val asset = job.run(request(fixture, startUs, endUs, name), control)
-            Log.i(TAG, "$name: ${(endUs - startUs) / 1000} ms of source reversed in ${(System.nanoTime() - started) / 1_000_000} ms [emulator]")
+            Log.i(TAG, "$name: ${(endUs - startUs) / 1000} ms of source reversed in ${(System.nanoTime() - started) / 1_000_000} ms [emulator]; chunks $chunkReports")
+            // Every frame of every chunk reaches the output: the intermediate holds it and the
+            // reverse decoder delivers it.
+            assertTrue("chunks reported: $chunkReports", chunkReports.isNotEmpty())
+            assertEquals("chunk frames missing from the intermediate: $chunkReports", emptyList<Any>(), chunkReports.filter { it.unmapped != 0 })
+            assertEquals("chunk frames not decoded: $chunkReports", emptyList<Any>(), chunkReports.filter { it.notDecoded != 0 })
             assertEquals(engine.output(name).absolutePath, asset.path)
             assertTrue(File(asset.path).isFile)
             assertEquals(File(asset.path).length(), asset.sizeBytes)
@@ -102,6 +115,7 @@ class ReverseJobTest {
             return asset
         } finally {
             job.onWorkSample = null
+            job.onChunk = null
             job.chunkDurationUs = ReverseMath.DEFAULT_CHUNK_US
         }
     }
@@ -339,13 +353,12 @@ class ReverseJobTest {
         job.assetLoaderFactory = null
         try {
             val asset = reverse("frame_counter_1080p30.mp4", 0, 2_000_000, "defaults")
-            val barcodes = Clip(File(asset.path)).barcodes()
-            Log.i(TAG, "production decoders [emulator]: ${barcodes.size} of 60 frames, barcodes $barcodes")
-            val readable = barcodes.filterNotNull()
-            for (i in 1 until readable.size) assertTrue("strictly decreasing", readable[i] < readable[i - 1])
-            assertEquals(59, readable.first())
-            assertEquals(0, readable.last())
-            assertTrue("at most the emulator's dropped B-frame is missing", barcodes.size >= 59)
+            val clip = Clip(File(asset.path))
+            val barcodes = clip.barcodes()
+            Log.i(TAG, "production decoders [emulator]: ${barcodes.size} of 60 frames, software retry ${chunkReports.count { it.softwareRetry }} chunks, barcodes $barcodes")
+            // The goldfish decoder's dropped B-frame is caught (software retry): every frame is there.
+            assertEquals("every frame in the output", 60, clip.videoPts.size)
+            assertStrictlyDecreasing(barcodes, 59, 0)
         } finally {
             job.assetLoaderFactory = saved
         }
