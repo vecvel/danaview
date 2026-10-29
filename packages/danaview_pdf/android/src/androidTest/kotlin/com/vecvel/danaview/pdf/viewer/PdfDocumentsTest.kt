@@ -240,7 +240,7 @@ class PdfDocumentsTest {
         assertTrue(caps.outline)
         assertEquals(api35, caps.passwords)
         assertTrue(caps.textExtraction)
-        assertTrue(caps.tools.isEmpty())
+        assertTrue(com.vecvel.danaview.pdf.pigeon.PdfToolKindMsg.COMPRESS in caps.tools) // HOM-31A
 
         var onMain = false
         val opened = awaitCall<PdfDocumentInfoMsg> { cb ->

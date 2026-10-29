@@ -92,7 +92,11 @@ data class ItemSpec(
     val keepPitch: Boolean = true,
     /** `EditedMediaItem.setFrameRate`: the output fps for images, gridFps for items faster than 1× (V-N17). */
     val frameRate: Int? = null,
-    /** MEDIA `hold` (pending freeze still; preview only, export plans never hold). */
+    /**
+     * MEDIA `hold`: shows the source frame at [clipStartUs] for the whole item. Either a plan `hold`
+     * layer (pending freeze still; preview only, export plans never hold) or the part of a layer
+     * past its source end, which holds the last source frame (CompositionMapper, ARCH §11.5).
+     */
     val hold: Boolean = false,
     /** AUDIO: source audio stream index (ARCH §11.2 `stream`). */
     val stream: Int = 0,
