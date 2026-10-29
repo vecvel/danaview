@@ -37,7 +37,10 @@
 # Environment:
 #   ANDROID_SERIAL     the device to use (default: the only/first device `adb devices` lists)
 #   DANAVIEW_GRADLE_ARGS  extra Gradle arguments (CI adds --no-daemon)
-#   DV_PERF_STRICT=1   absolute performance limits in the instrumented tests (harness/PerfGate.kt)
+#   DV_PERF_STRICT=1   absolute performance limits: the instrumented tests' timing, frame-count and
+#                      throughput limits (harness/PerfGate.kt) and, through --dart-define, the
+#                      integration_test suites' (conformance/preset_matrix ±25 % bitrate). For a real
+#                      device with a hardware encoder; CI's emulator runs without it
 #   DANAVIEW_EMULATOR_BATCHES  space-separated batches to run instead of every package, e.g.
 #                      "effects proxy"; join packages with a comma to run them as one batch
 #                      ("drop,harness")
@@ -278,6 +281,8 @@ push_qa03_media() {
 }
 
 suite_defines() {
+  # DV_PERF_STRICT=1 reaches the Dart suites as a define (conformance_test.dart perfStrict).
+  if [ "${DV_PERF_STRICT:-}" = 1 ]; then echo "--dart-define=DV_PERF_STRICT=1"; fi
   case "$1" in
     accuracy | av_sync) echo "--dart-define=QA03_MEDIA=$DEVICE_FILES/qa03_media" ;;
     parity)

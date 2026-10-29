@@ -432,6 +432,8 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+      # DV_PERF_STRICT is deliberately unset: absolute timing limits of the JVM unit tests apply
+      # only with DV_PERF_STRICT=1 (a quiet machine); see docs/v1.2/BUILD_STATE.md CI follow-ups.
       - name: Run android_unit.sh
         if: steps.script.outputs.present == 'true'
         run: bash scripts/ci/editor/android_unit.sh
@@ -510,6 +512,9 @@ jobs:
           DANAVIEW_EMULATOR_OPTIONS: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           DANAVIEW_EMULATOR_BOOT_TIMEOUT: 600
           ANDROID_SERIAL: emulator-5554
+          # DV_PERF_STRICT is deliberately unset here (software GPU and AVC encoder): the timing,
+          # frame-count and bitrate limits run loose (harness/PerfGate.kt, conformance_test.dart);
+          # correctness checks are unchanged. The strict run is a real device's (BUILD_STATE.md).
         with:
           api-level: 35
           arch: x86_64
