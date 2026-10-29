@@ -1,4 +1,8 @@
 // OWNER: HOM-28
+// EXTENDED: HOM-29 (the engine carries danaview_pdf's annotate engine; the PDF viewer's "Annotate"
+// appears where the platform reports the annotate tool: PDFKit on iOS and macOS; Android once
+// HOM-29A lands; never on Windows and Linux. Annotations are saved as "<name> (annotated).pdf"
+// through the same result sink.)
 //
 // S4 wiring of the PDF page tools (BUILD_PLAN v1.2 §1A slice S4; HOM plan §8.5), composed at the
 // app root behind DANAVIEW_FILES_HOME (S4 uses the same flag; default false, never flipped in
@@ -43,14 +47,17 @@ const int pdfMergeCandidateLimit = 2000;
 /// The danaview_pdf documents and page tools of this platform.
 @immutable
 final class PdfToolsEngine {
-  /// An engine of [documents] and [tools].
-  const PdfToolsEngine({required this.documents, required this.tools});
+  /// An engine of [documents], [tools] and [annotate].
+  const PdfToolsEngine({required this.documents, required this.tools, this.annotate});
 
   /// Read-only documents (thumbnails, passwords).
   final PdfDocuments documents;
 
   /// The page tools.
   final PdfPageTools tools;
+
+  /// Annotate mode and its save (HOM-29); the viewer shows it only where the tool is reported.
+  final PdfAnnotateEngine? annotate;
 }
 
 /// The engine of this platform, or null (no PDF tools); the app root overrides it.
@@ -80,6 +87,7 @@ final pdfToolsEnvironmentProvider = Provider<PdfToolsEnvironment?>((ref) {
     tools: engine.tools,
     sink: LibraryPdfResultSink(imports: imports, actions: actions, staging: pdfToolsStagingIn(staging)),
     pickMergeInputs: (context, current) => showPdfMergePicker(context, candidates: pdfMergeCandidates(store), current: current),
+    annotate: engine.annotate,
   );
 });
 
@@ -165,7 +173,8 @@ Widget withPdfTools(ProviderRead read, Widget viewer) {
 List<Override> pdfToolsOverrides({required TargetPlatform platform, PdfToolsEngine? engine}) {
   if (!pdfToolsWired) return const [];
   final native = platform == TargetPlatform.iOS || platform == TargetPlatform.macOS || platform == TargetPlatform.android;
-  final chosen = engine ?? (native ? PdfToolsEngine(documents: PlatformPdfDocuments(), tools: PlatformPdfPageTools()) : null);
+  final chosen = engine ??
+      (native ? PdfToolsEngine(documents: PlatformPdfDocuments(), tools: PlatformPdfPageTools(), annotate: PlatformPdfAnnotateEngine()) : null);
   return [
     if (chosen != null) pdfToolsEngineProvider.overrideWithValue(chosen),
     pdfPageToolsHandlerProvider.overrideWith((ref) {

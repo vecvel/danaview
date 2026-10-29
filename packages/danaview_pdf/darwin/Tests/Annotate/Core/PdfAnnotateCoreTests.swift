@@ -10,6 +10,7 @@
 // kept. Uses the HOM-28 helpers (RecordingControl, TestImages) and TestPdfs.
 
 import CoreGraphics
+import CoreText
 import Foundation
 import PDFKit
 import XCTest
@@ -145,16 +146,23 @@ final class PdfAnnotateCoreTests: XCTestCase {
     XCTAssertGreaterThan(second[1].bounds.height, PdfAnnotateCore.freeTextFontSize)
     XCTAssertEqual(second[2].contents, "A note")
 
-    // Still editable: another app (here PDFKit) changes, removes and writes them again.
+    // Still editable: read back they are annotation objects another app changes and removes (not
+    // drawn into the page: the page content has no trace of them) ...
     let document = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: written.path)))
     let page1 = try XCTUnwrap(document.page(at: 1))
     let text = try XCTUnwrap(page1.annotations.first { $0.type == "FreeText" })
     text.contents = "Edited"
+    XCTAssertEqual(page1.annotations.first { $0.type == "FreeText" }?.contents, "Edited")
     let page0 = try XCTUnwrap(document.page(at: 0))
     page0.removeAnnotation(try XCTUnwrap(page0.annotations.first { $0.type == "StrikeOut" }))
-    XCTAssertTrue(document.write(to: URL(fileURLWithPath: out("edited.pdf"))))
-    XCTAssertEqual(try annotations(out("edited.pdf"), page: 0).map(\.type), ["Highlight", "Underline"])
-    XCTAssertEqual(try annotations(out("edited.pdf"), page: 1).first { $0.type == "FreeText" }?.contents, "Edited")
+    XCTAssertEqual(page0.annotations.map(\.type), ["Highlight", "Underline"])
+    XCTAssertEqual(page0.annotations.map(\.type).count + 1, first.count)
+    // ... and a second writer keeps them when it adds its own.
+    let again = try PdfAnnotateCore.annotate(
+      PdfToolSource(path: written.path), annotations: [PdfAnnotationSpec(kind: .ink, pageIndex: 0, strokes: [[CGPoint(x: 5, y: 5), CGPoint(x: 9, y: 9)]])],
+      outPath: out("again.pdf"), control: RecordingControl())
+    XCTAssertEqual(try annotations(again.path, page: 0).map(\.type), ["Highlight", "Underline", "StrikeOut", "Ink"])
+    XCTAssertEqual(try annotations(again.path, page: 1).first { $0.type == "FreeText" }?.contents, "Check this figure")
   }
 
   func testMarkupIsVisibleAndTextStaysSelectableAndSearchable() throws {
@@ -177,19 +185,18 @@ final class PdfAnnotateCoreTests: XCTestCase {
   }
 
   func testTheFilesOwnAnnotationsStayIntact() throws {
-    // A source that already has a link-free square and a note.
+    // Sources that already have annotations: a note and a highlight from an earlier save (the test
+    // never writes a PDF itself, rule 27), and the HOM-27 fixture made by another writer.
     let plain = pdf("plain.pdf", pages: 1, prefix: "OWN")
-    let document = try XCTUnwrap(PDFDocument(url: plain))
-    let page = try XCTUnwrap(document.page(at: 0))
-    let square = PDFAnnotation(bounds: CGRect(x: 300, y: 300, width: 80, height: 40), forType: .square, withProperties: nil)
-    square.color = PdfAnnotateCore.color(0xFF00_AA00)
-    page.addAnnotation(square)
-    let note = PDFAnnotation(bounds: CGRect(x: 40, y: 40, width: 20, height: 20), forType: .text, withProperties: nil)
-    note.contents = "Original"
-    page.addAnnotation(note)
-    let source = dir.appendingPathComponent("owned.pdf")
-    XCTAssertTrue(document.write(to: source))
-    var sources = [source]
+    let rects = try lineRects(of: "OWN-P0001", page: 0, in: plain)
+    let source = try PdfAnnotateCore.annotate(
+      PdfToolSource(path: plain.path),
+      annotations: [
+        PdfAnnotationSpec(kind: .note, pageIndex: 0, rects: [CGRect(x: 40, y: 40, width: 0, height: 0)], text: "Original"),
+        PdfAnnotationSpec(kind: .highlight, pageIndex: 0, rects: rects, colorArgb: 0xFF00_AA00),
+      ],
+      outPath: out("owned.pdf"), control: RecordingControl())
+    var sources = [URL(fileURLWithPath: source.path)]
     if let fixture = TestPdfs.fixture("annotated_2p.pdf") { sources.append(fixture) }
     for (n, url) in sources.enumerated() {
       let original = try XCTUnwrap(PDFDocument(url: url)).page(at: 0)!.annotations.filter { $0.type != "Popup" }
@@ -292,17 +299,40 @@ final class PdfAnnotateCoreTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: out("x.pdf")))
   }
 
+  /// A 3-page text file with a crop box inset by 10 points and an outline (Chapter 1 → page 0).
+  private func croppedOutlinedPdf() -> URL {
+    let url = dir.appendingPathComponent("cropped.pdf")
+    var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+    let context = CGContext(url as CFURL, mediaBox: &box, nil)!
+    let font = CTFontCreateWithName("Helvetica" as CFString, 18, nil)
+    var crop = CGRect(x: 10, y: 10, width: 592, height: 772)
+    let cropData = withUnsafeBytes(of: &crop) { Data($0) }
+    for i in 0..<3 {
+      context.beginPDFPage([kCGPDFContextCropBox as String: cropData] as CFDictionary)
+      let attributed = NSAttributedString(string: TestPdfs.token("OUTL", i), attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font])
+      context.textPosition = CGPoint(x: 72, y: 700)
+      CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
+      context.endPDFPage()
+    }
+    let outline: [String: Any] = [
+      kCGPDFOutlineChildren as String: [[kCGPDFOutlineTitle as String: "Chapter 1", kCGPDFOutlineDestination as String: 1] as [String: Any]],
+    ]
+    CGPDFContextSetOutline(context, outline as CFDictionary)
+    context.closePDF()
+    return url
+  }
+
   func testBurnInDrawsIntoThePageAndKeepsTextBoxesRotationOutlineAndOwnAnnotations() throws {
-    let outlined = TestPdfs.writeOutlinedPdf(in: dir)
-    let document = try XCTUnwrap(PDFDocument(url: outlined))
-    let page0 = try XCTUnwrap(document.page(at: 0))
-    page0.rotation = 90
-    page0.setBounds(CGRect(x: 10, y: 10, width: 592, height: 772), for: .cropBox)
-    let note = PDFAnnotation(bounds: CGRect(x: 40, y: 40, width: 20, height: 20), forType: .text, withProperties: nil)
-    note.contents = "Kept"
-    page0.addAnnotation(note)
-    let source = dir.appendingPathComponent("prepared.pdf")
-    XCTAssertTrue(document.write(to: source))
+    // Prepared with the tools themselves (the test never writes a PDF, rule 27): page 1 turned
+    // 90°, then a note of its own.
+    let cropped = croppedOutlinedPdf()
+    let turned = try PdfPageToolsCore.organise(
+      PdfToolSource(path: cropped.path), plan: [PdfPagePlanItem(0, rotation: 90), PdfPagePlanItem(1), PdfPagePlanItem(2)],
+      outPath: out("turned.pdf"), control: RecordingControl())
+    let prepared = try PdfAnnotateCore.annotate(
+      PdfToolSource(path: turned.path), annotations: [PdfAnnotationSpec(kind: .note, pageIndex: 0, rects: [CGRect(x: 30, y: 30, width: 0, height: 0)], text: "Kept")],
+      outPath: out("prepared.pdf"), control: RecordingControl())
+    let source = URL(fileURLWithPath: prepared.path)
 
     let image = TestImages.writePng(to: dir.appendingPathComponent("sig.png"), width: 200, height: 100)
     // Pigeon page space starts at the crop box: (290, 190) is (300, 200) in PDF space.
