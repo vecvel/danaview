@@ -1,4 +1,6 @@
 // OWNER: HOM-29
+// EXTENDED: HOM-30 (the sign mode saves through [savePdfAnnotations] with its stamps burned in,
+// under its own [newName] "<name> (signed).pdf" and progress title.)
 //
 // Saving an annotate session (HOM plan §8.5, G-H6): the annotations are written by the engine as
 // real PDF annotations into a staged NEW file "<name> (annotated).pdf", which the HOM-28 result
@@ -44,8 +46,10 @@ Future<PdfSavedFile?> savePdfAnnotations(
   List<PdfStamp> stamps = const [],
   bool burnIn = false,
   Future<PdfSaveMode?> Function(BuildContext context, String newName)? chooseSaveMode,
+  String? newName,
+  String progressTitle = 'Saving annotations',
 }) async {
-  final newName = annotatedPdfName(file.displayName);
+  newName ??= annotatedPdfName(file.displayName);
   final entry = file.entryId;
   var mode = PdfSaveMode.newFile;
   if (canReplacePdf(file)) {
@@ -57,7 +61,7 @@ Future<PdfSavedFile?> savePdfAnnotations(
   final out = stagingPathFor(dir, newName);
   if (!context.mounted) return null;
   final job = engine.save(PdfToolInput.pdf(file.path, password: password), annotations: annotations, stamps: stamps, burnIn: burnIn, outPath: out);
-  final result = await runPdfTool(context, job, title: 'Saving annotations');
+  final result = await runPdfTool(context, job, title: progressTitle);
   if (result == null) return null;
   if (mode == PdfSaveMode.replace && entry != null) {
     return environment.sink.replace(entry, out, pageCount: result.pageCounts.isEmpty ? null : result.pageCounts.first);
