@@ -697,3 +697,15 @@ Future<void> until(bool Function() condition, {int rounds = 400}) async {
   }
   throw StateError('condition not met');
 }
+
+/// Reads [read] until it gives a value (real async, bounded): for state that lands through real
+/// file I/O, which a fixed number of event-loop turns ([settle]) does not wait for on a slow runner.
+Future<T> eventually<T extends Object>(Future<T?> Function() read, {Duration timeout = const Duration(seconds: 10)}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (true) {
+    final value = await read();
+    if (value != null) return value;
+    if (DateTime.now().isAfter(deadline)) throw StateError('no value within $timeout');
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}

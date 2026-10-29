@@ -10,6 +10,11 @@ import XCTest
 @testable import danaview_editor_engine
 
 enum MediaJobTestSupport {
+    enum Failure: Error {
+        /// A pixel buffer whose memory could not be locked (e.g. under memory pressure).
+        case unmappedBuffer
+    }
+
     /// Temporary roots and their Paths.
     static func paths(_ roots: TempRoots) throws -> Paths {
         try Paths(cacheRoot: roots.cache.path, supportRoot: roots.support.path)
@@ -144,9 +149,14 @@ enum MediaJobTestSupport {
             var buffer: CVPixelBuffer?
             CVPixelBufferPoolCreatePixelBuffer(nil, try XCTUnwrap(adaptor.pixelBufferPool), &buffer)
             let pixelBuffer = try XCTUnwrap(buffer)
-            CVPixelBufferLockBaseAddress(pixelBuffer, [])
+            guard CVPixelBufferLockBaseAddress(pixelBuffer, []) == kCVReturnSuccess else {
+                throw MediaJobTestSupport.Failure.unmappedBuffer
+            }
             let bpr = CVPixelBufferGetBytesPerRow(pixelBuffer)
-            let base = CVPixelBufferGetBaseAddress(pixelBuffer)!
+            guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else {
+                CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+                throw MediaJobTestSupport.Failure.unmappedBuffer
+            }
             // Grey background varying with the index, barcode band on top.
             memset(base, Int32(40 + (index * 7) % 160), bpr * height)
             let bandRows = FrameBarcode.bandHeight(frameHeight: height)

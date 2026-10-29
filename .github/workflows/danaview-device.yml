@@ -1,0 +1,328 @@
+# OWNER: INT-01 (CI round 6, docs/v1.2/CI_LANES.md)
+#
+# Danaview device lane: the nightly, NON-BLOCKING half of CI. It runs the suites whose result on a
+# shared runner depends on the runner (software GPU and encoder on the Android emulator,
+# AVFoundation on the iOS simulator, timing): the Android emulator, the iOS device build with the
+# D-41 check of the built app, every iOS integration_test suite, the soak / perf-heavy RunnerTests
+# classes listed in scripts/ci/editor/ios_device_lane_classes.txt and the nightly suites (fuzz, full
+# overflow matrix, AI eval). Nothing here is a required check. The required gate is
+# danaview-ci.yml (job `gate`).
+#
+# Runs at 02:30 UTC, on manual dispatch (`gh workflow run danaview-device.yml --ref <branch>`, once
+# this file is on main) and from danaview-ci.yml's dispatch input `device_lane` (any branch, also
+# before this file reaches main). A failed scheduled run opens or updates the one open issue
+# labelled `ci-nightly`; the next green scheduled run closes it.
+#
+# DV_PERF_STRICT is deliberately unset everywhere: the strict run is a real device's
+# (docs/v1.2/BUILD_STATE.md).
+name: Danaview device lane
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+    inputs:
+      android_emulator:
+        description: 'Run android-emulator'
+        type: boolean
+        default: true
+      ios:
+        description: 'Run ios-device and ios-soak'
+        type: boolean
+        default: true
+      nightly:
+        description: 'Run the nightly job (fuzz, full overflow matrix, AI eval)'
+        type: boolean
+        default: true
+      report_issue:
+        description: 'Open, update or close the ci-nightly issue (scheduled runs always do)'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      android_emulator:
+        type: boolean
+        default: true
+      ios:
+        type: boolean
+        default: true
+      nightly:
+        type: boolean
+        default: true
+      report_issue:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Never cancel a running device lane; a newer one on the same ref waits.
+concurrency:
+  group: danaview-device-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.44.2'
+  XCODE_VERSION: '26.6'
+  JAVA_VERSION: '17'
+
+jobs:
+  android-emulator:
+    name: android-emulator (API 35 x86_64)
+    if: github.event_name == 'schedule' || inputs.android_emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+      - name: Look for scripts/ci/editor/android_emulator.sh
+        id: script
+        run: |
+          if [ -f scripts/ci/editor/android_emulator.sh ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=android-emulator skipped::scripts/ci/editor/android_emulator.sh does not exist yet (owner: ENG-09)"
+          fi
+      - name: Enable KVM
+        if: steps.script.outputs.present == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then echo "::error title=KVM::/dev/kvm is not accessible"; exit 1; fi
+      - name: Set up Java
+        if: steps.script.outputs.present == 'true'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - name: Set up Flutter
+        if: steps.script.outputs.present == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      # A booted AVD snapshot, cached: later runs start from it instead of a cold boot.
+      - name: Cache the AVD
+        if: steps.script.outputs.present == 'true'
+        id: avd-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-35-x86_64-google_apis-pixel_6-r5
+      - name: Create the AVD and its snapshot
+        if: steps.script.outputs.present == 'true' && steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          cores: 4
+          ram-size: 4096M
+          disk-size: 8G
+          force-avd-creation: false
+          emulator-boot-timeout: 900
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: echo "AVD snapshot created"
+      - name: Run android_emulator.sh on an API 35 x86_64 emulator
+        if: steps.script.outputs.present == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # emulator_ready.sh: boot check with one relaunch, and a relaunch when the emulator stops
+          # answering during a batch or suite (same AVD and options).
+          DANAVIEW_EMULATOR_AVD: test
+          DANAVIEW_EMULATOR_OPTIONS: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          DANAVIEW_EMULATOR_BOOT_TIMEOUT: 600
+          ANDROID_SERIAL: emulator-5554
+          # DV_PERF_STRICT is deliberately unset here (software GPU and AVC encoder): the timing,
+          # frame-count and bitrate limits run loose (harness/PerfGate.kt, conformance_test.dart);
+          # correctness checks are unchanged. The strict run is a real device's (BUILD_STATE.md).
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          cores: 4
+          ram-size: 4096M
+          disk-size: 8G
+          force-avd-creation: false
+          emulator-boot-timeout: 900
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash scripts/ci/editor/emulator_ready.sh && bash scripts/ci/editor/android_emulator.sh
+      - name: Upload emulator batch and suite results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-emulator-results
+          if-no-files-found: ignore
+          path: |
+            packages/danaview_editor_engine/example/build/danaview_emulator_batches/
+            packages/danaview_editor_engine/example/build/danaview_emulator_suites/
+            /tmp/emulator-relaunch-*.log
+
+  ios-soak:
+    name: ios-soak (RunnerTests soak and perf-heavy classes)
+    if: github.event_name == 'schedule' || inputs.ios
+    # The classes of scripts/ci/editor/ios_device_lane_classes.txt only (the gate skips them).
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          xcodebuild -version
+          xcrun simctl list runtimes available | grep -i ios
+      - name: Cache CocoaPods
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            packages/danaview_editor_engine/example/ios/Pods
+          key: ios-pods-${{ runner.os }}-${{ hashFiles('packages/danaview_editor_engine/example/ios/Podfile.lock', 'packages/danaview_editor_engine/example/ios/Podfile', 'packages/*/ios/*.podspec') }}
+          restore-keys: ios-pods-${{ runner.os }}-
+      - name: Cache WhisperCore.xcframework
+        uses: actions/cache@v6
+        with:
+          path: packages/danaview_whisper/ios/Frameworks
+          key: whisper-xcframework-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('packages/danaview_whisper/tool/build_ios_xcframework.sh', 'packages/danaview_whisper/src/**', 'packages/danaview_whisper/third_party/**/CMakeLists.txt') }}
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run ios.sh (RunnerTests, device-lane classes)
+        env:
+          LANG: en_US.UTF-8
+          DANAVIEW_IOS_RUNNER_LANE: device
+        run: bash scripts/ci/editor/ios.sh --no-device-build --runner-tests-only
+
+  ios-device:
+    name: ios-device (device build, D-41, integration_test suites)
+    if: github.event_name == 'schedule' || inputs.ios
+    # The release device build of the engine example host and check_ios_min_os.sh on it (D-41), then
+    # every integration_test suite on the simulator; RunnerTests run in the gate and in ios-soak.
+    runs-on: macos-26
+    timeout-minutes: 150
+    env:
+      DANAVIEW_IOS_SUITES: 'smoke ios_preview accuracy av_sync parity conformance preset_matrix audio_mix'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          xcodebuild -version
+          xcrun simctl list runtimes available | grep -i ios
+      - name: Cache CocoaPods
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            packages/danaview_editor_engine/example/ios/Pods
+          key: ios-pods-${{ runner.os }}-${{ hashFiles('packages/danaview_editor_engine/example/ios/Podfile.lock', 'packages/danaview_editor_engine/example/ios/Podfile', 'packages/*/ios/*.podspec') }}
+          restore-keys: ios-pods-${{ runner.os }}-
+      - name: Cache WhisperCore.xcframework
+        uses: actions/cache@v6
+        with:
+          path: packages/danaview_whisper/ios/Frameworks
+          key: whisper-xcframework-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('packages/danaview_whisper/tool/build_ios_xcframework.sh', 'packages/danaview_whisper/src/**', 'packages/danaview_whisper/third_party/**/CMakeLists.txt') }}
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run ios.sh (device build, D-41, integration_test suites)
+        env:
+          LANG: en_US.UTF-8
+        run: bash scripts/ci/editor/ios.sh --no-runner-tests
+
+  nightly:
+    name: nightly
+    if: github.event_name == 'schedule' || inputs.nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      DANAVIEW_CI_CACHE_DIR: ${{ github.workspace }}/.ci-cache
+    steps:
+      - uses: actions/checkout@v7
+      - name: Look for scripts/ci/editor/nightly.sh
+        id: script
+        run: |
+          if [ -f scripts/ci/editor/nightly.sh ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=nightly skipped::scripts/ci/editor/nightly.sh does not exist yet (owner: INT-01)"
+          fi
+      - name: Set up Java
+        if: steps.script.outputs.present == 'true'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - name: Set up Flutter
+        if: steps.script.outputs.present == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Cache nightly inputs
+        if: steps.script.outputs.present == 'true'
+        uses: actions/cache@v6
+        with:
+          path: .ci-cache
+          key: nightly-${{ runner.os }}-${{ hashFiles('scripts/ci/editor/nightly.d/*.sh') }}
+      - name: Run nightly.sh (every nightly.d/*.sh)
+        if: steps.script.outputs.present == 'true'
+        run: bash scripts/ci/editor/nightly.sh
+
+  # Scheduled runs (and dispatches with report_issue): a failure opens or updates the one open
+  # `ci-nightly` issue; a green run closes it. Only this job may write issues.
+  report:
+    name: report (ci-nightly issue)
+    needs: [android-emulator, ios-soak, ios-device, nightly]
+    if: always() && (github.event_name == 'schedule' || inputs.report_issue)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      RESULTS: ${{ toJSON(needs) }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      REF: ${{ github.ref_name }}
+      SHA: ${{ github.sha }}
+    steps:
+      - name: Open, update or close the ci-nightly issue
+        run: |
+          # shellcheck disable=SC2016 # backticks in the jq programs and issue text are literal Markdown
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          failed="$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | "- `\(.key)`: \(.value.result)"')"
+          issue="$(gh issue list --label ci-nightly --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [ -z "$failed" ]; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --comment "Green again: $RUN_URL (\`$REF\` @ ${SHA:0:8})."
+            fi
+            echo "device lane green"
+            exit 0
+          fi
+          # shellcheck disable=SC2016 # the backticks are literal Markdown, not a command substitution
+          body="$(printf 'Device lane run %s on `%s` @ %s failed:\n\n%s\n\nThe device lane does not block merges (docs/v1.2/CI_LANES.md). This issue closes itself after the next green scheduled run.\n' "$RUN_URL" "$REF" "${SHA:0:8}" "$failed")"
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh label create ci-nightly --color B20710 --description 'Nightly device lane failures (danaview-device.yml)' 2>/dev/null || true
+            gh issue create --label ci-nightly --title 'Nightly device lane failing' --body "$body"
+          fi

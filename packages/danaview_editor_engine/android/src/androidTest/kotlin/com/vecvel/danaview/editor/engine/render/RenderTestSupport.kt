@@ -235,6 +235,14 @@ class CaptureSink(val width: Int, val height: Int, val fps: Int, private val reg
     val keep: MutableSet<Long> = java.util.Collections.newSetFromMap(ConcurrentHashMap())
     @Volatile var keepAll = false
 
+    /**
+     * Also keeps the pixels of the first [keepFirstCount] presented frames whose k is in
+     * [keepFirstIn], whichever frames a loaded emulator happens to present (not a fixed k list).
+     */
+    @Volatile var keepFirstIn: LongRange? = null
+    @Volatile var keepFirstCount = 0
+    private var keptFirst = 0
+
     init {
         reader.setOnImageAvailableListener({ r ->
             while (true) {
@@ -253,7 +261,9 @@ class CaptureSink(val width: Int, val height: Int, val fps: Int, private val reg
                     val readings = regions.associate { it.name to FrameBarcode.decode(bytes, img.width, img.height, stride, region = it.barcode) }
                     val pts = img.timestamp / 1000L
                     val k = FrameGrid.of(fps).frameIndexNearest(pts)
-                    val px = if (keepAll || k in keep) {
+                    val first = keepFirstIn?.let { k in it && keptFirst < keepFirstCount } == true
+                    if (first) keptFirst++
+                    val px = if (keepAll || first || k in keep) {
                         val tight = ByteArray(img.width * img.height * 4)
                         for (y in 0 until img.height) System.arraycopy(bytes, y * stride, tight, y * img.width * 4, img.width * 4)
                         tight
@@ -270,6 +280,19 @@ class CaptureSink(val width: Int, val height: Int, val fps: Int, private val reg
     }
 
     fun clear() = frames.clear()
+
+    /** Starts keeping the pixels of the first [count] presented frames with k in [range]. */
+    fun keepFirst(range: LongRange, count: Int) {
+        keepFirstCount = 0
+        keepFirstIn = null
+        keptFirst = 0
+        keepFirstCount = count
+        keepFirstIn = range
+    }
+
+    fun stopKeepingFirst() {
+        keepFirstIn = null
+    }
 
     fun awaitK(k: Long, timeoutMs: Long = 20_000): Shown {
         val deadline = System.currentTimeMillis() + timeoutMs

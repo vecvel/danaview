@@ -37,7 +37,10 @@
 # Environment:
 #   ANDROID_SERIAL     the device to use (default: the only/first device `adb devices` lists)
 #   DANAVIEW_GRADLE_ARGS  extra Gradle arguments (CI adds --no-daemon)
-#   DV_PERF_STRICT=1   absolute performance limits in the instrumented tests (harness/PerfGate.kt)
+#   DV_PERF_STRICT=1   absolute performance limits: the instrumented tests' timing, frame-count and
+#                      throughput limits (harness/PerfGate.kt) and, through --dart-define, the
+#                      integration_test suites' (conformance/preset_matrix ±25 % bitrate). For a real
+#                      device with a hardware encoder; CI's emulator runs without it
 #   DANAVIEW_EMULATOR_BATCHES  space-separated batches to run instead of every package, e.g.
 #                      "effects proxy"; join packages with a comma to run them as one batch
 #                      ("drop,harness")
@@ -179,6 +182,33 @@ xml_sum() {
       END { print n + 0 }'
 }
 
+# The failed tests of a batch: "<class>#<method>" from its JUnit XML.
+failed_tests() {
+  find "$1" -name '*.xml' -type f 2>/dev/null | grep -v '/testlog/' | while IFS= read -r f; do
+    awk '
+      /<testcase / {
+        n = ""; c = ""
+        if (match($0, / name="[^"]*"/)) n = substr($0, RSTART + 7, RLENGTH - 8)
+        if (match($0, / classname="[^"]*"/)) c = substr($0, RSTART + 12, RLENGTH - 13)
+      }
+      /<failure|<error/ { if (n != "") print c "#" n }' "$f" || true
+  done | sort -u || true
+}
+
+# Prints the device log of each failed test (UTP's logcat-<class>-<method>.txt in the batch's
+# results), warnings and errors plus the engine's own lines, so a failure that only reproduces on
+# the CI emulator can be read from the job log without the results directory.
+print_failed_logcat() {
+  local dir="$1" t m logs
+  failed_tests "$dir" | while IFS= read -r t; do
+    m="${t#*#}"
+    logs="$(find "$dir" -type f -name "logcat-*${m}*.txt" 2>/dev/null | head -n 1 || true)"
+    [ -n "$logs" ] || continue
+    echo "--- logcat of $t (warnings, errors and engine lines, last 150) ---"
+    grep -E ' [WEF] | [WEF]/|^[WEF]/|[Dd]anaview|AND[0-9]|Media3|FrameExtractor|VideoFrameProcessor|ExoPlayer' "$logs" | tail -n 150 || true
+  done
+}
+
 declare -a SUMMARY=()
 FAILED=0
 if [ "$DRY_RUN" != 1 ]; then rm -rf "$RESULTS_DST"; mkdir -p "$RESULTS_DST"; fi
@@ -217,6 +247,7 @@ for b in "${BATCHES[@]}"; do
     if [ "$f" = "?" ]; then failures="?"; else failures=$((f + e)); fi
     if [ "$status" = PASS ] && [ "$failures" != "?" ] && [ "$failures" -gt 0 ]; then status=FAIL; fi
     if [ "$status" = PASS ] && [ "$tests" = "?" ]; then status=FAIL; fi
+    if [ "$status" = FAIL ]; then print_failed_logcat "$RESULTS_DST/$label" || true; fi
   fi
   elapsed=$((SECONDS - started))
   if [ "$status" = FAIL ]; then
@@ -278,6 +309,8 @@ push_qa03_media() {
 }
 
 suite_defines() {
+  # DV_PERF_STRICT=1 reaches the Dart suites as a define (conformance_test.dart perfStrict).
+  if [ "${DV_PERF_STRICT:-}" = 1 ]; then echo "--dart-define=DV_PERF_STRICT=1"; fi
   case "$1" in
     accuracy | av_sync) echo "--dart-define=QA03_MEDIA=$DEVICE_FILES/qa03_media" ;;
     parity)

@@ -166,7 +166,7 @@ final class WaveformTests: XCTestCase {
         let elapsed = Date().timeIntervalSince(started)
         let speed = 10 / elapsed
         print("IOS-04 waveform throughput on the simulator: \(Int(speed))x realtime")
-        XCTAssertGreaterThanOrEqual(speed, 20)
+        PerfGate.assertAtLeast(speed, 20, "waveform x realtime")
         XCTAssertEqual(first.pairsPerSecond, 200)
         XCTAssertEqual(Double(first.durationUs) / 1_000_000, 10, accuracy: 0.05)
         let file = try XCTUnwrap(store.lookup(key: WaveformService.cacheKey(fingerprint: "speech10", audioStream: 0), ext: "dvpk"))
@@ -269,7 +269,7 @@ final class SpeechAudioTests: XCTestCase {
         }
         let speed = 10 / best
         print("IOS-04 speech audio throughput on the simulator: \(Int(speed))x realtime")
-        XCTAssertGreaterThanOrEqual(speed, 60)
+        PerfGate.assertAtLeast(speed, 60, "speech audio x realtime")
     }
 
     func testCancelDeletesPartialOutput() throws {

@@ -566,6 +566,10 @@ void main() {
     // signals (measured: SourceFrameCacheTest, PrecomposePlanner). Each read-back must match the
     // round trip of ONE matrix within 3 for every colour, and the freeze still the same one as the
     // preview decode.
+    // Why BT.601 is accepted (CI round 5, kept in round 6 by owner decision): the emulator's GL
+    // converts YUV with BT.601 regardless of the stream's colour metadata, while the real export
+    // is BT.709. A BT.601 read-back is therefore the emulator's decode of a correct BT.709 file,
+    // not an export bug; a colour off from BOTH round trips still fails, on every platform.
     final worstPreview = [0, 0], worstFreeze = [0, 0]; // [BT.709 read-back, BT.601 read-back]
     for (var i = 0; i < colors.length; i++) {
       final want = [(colors[i] >> 16) & 0xFF, (colors[i] >> 8) & 0xFF, colors[i] & 0xFF];

@@ -108,7 +108,11 @@ class ReverseJobTest {
 
     private fun assertStrictlyDecreasing(barcodes: List<Int?>, first: Int, last: Int) {
         assertTrue("every frame readable: $barcodes", barcodes.all { it != null })
-        for (i in 1 until barcodes.size) assertTrue("strictly decreasing at $i: ${barcodes[i - 1]} -> ${barcodes[i]}", barcodes[i]!! < barcodes[i - 1]!!)
+        for (i in 1 until barcodes.size) {
+            // The neighbourhood tells a wrong picture (a barcode repeated elsewhere) from a lost or reordered frame.
+            val around = barcodes.subList(maxOf(0, i - 8), minOf(barcodes.size, i + 8))
+            assertTrue("strictly decreasing at $i: ${barcodes[i - 1]} -> ${barcodes[i]} (frames ${maxOf(0, i - 8)}.. $around of ${barcodes.size})", barcodes[i]!! < barcodes[i - 1]!!)
+        }
         assertEquals(first, barcodes.first())
         assertEquals(last, barcodes.last())
     }

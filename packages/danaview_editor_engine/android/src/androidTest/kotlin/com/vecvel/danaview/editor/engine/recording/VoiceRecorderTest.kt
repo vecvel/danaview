@@ -27,6 +27,7 @@ import com.vecvel.danaview.editor.engine.pigeon.EngineEventKindMsg
 import com.vecvel.danaview.editor.engine.pigeon.MicPermissionMsg
 import com.vecvel.danaview.editor.engine.pigeon.RecordedAssetMsg
 import com.vecvel.danaview.editor.engine.pigeon.RecordingInterruptionMsg
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Until
 import org.junit.After
@@ -124,10 +125,13 @@ class VoiceRecorderTest {
         val h = assertValidWav(file)
         val frames = h.dataSize / 2
         assertEquals("duration from frames", (frames * 1_000_000L + 24_000) / 48_000, asset.durationUs)
-        assertTrue("duration ${asset.durationUs} µs", asset.durationUs in 1_000_000L..3_000_000L)
-        assertTrue("latency ${asset.startLatencyUs} µs", asset.startLatencyUs in 0L..1_000_000L)
+        // A 1.5 s recording: at least 1 s in both modes; the upper bounds and the start latency are
+        // timing (as written with DV_PERF_STRICT=1, 4x on a loaded emulator).
+        assertTrue("duration ${asset.durationUs} µs (${PerfGate.mode})", asset.durationUs in 1_000_000L..PerfGate.boundMs(3_000) * 1_000)
+        assertTrue("latency ${asset.startLatencyUs} µs (${PerfGate.mode})", asset.startLatencyUs in 0L..PerfGate.boundMs(1_000) * 1_000)
         val levels = collector.snapshot().filter { it.kind == EngineEventKindMsg.RECORDER_LEVEL && it.jobId == id }
-        assertTrue("levels ${levels.size} in 1.5 s", levels.size >= 10)
+        val minLevels = PerfGate.atLeast(10, 3)
+        assertTrue("levels ${levels.size} in 1.5 s (need $minLevels, ${PerfGate.mode})", levels.size >= minLevels)
         assertTrue(levels.all { (it.recorderLevel ?: -1.0) in 0.0..1.0 })
         Log.i(
             TAG,

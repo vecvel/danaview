@@ -326,12 +326,15 @@ final class FreezeFrameTests: XCTestCase {
     func testShowSourceFrameScalesAndHitsTheCache() throws {
         let cache = SourceFrameCache(tier: .low)
         let url = try ProbeFixtures.url("frame_counter_1080p30.mp4")
+        let missStarted = Date()
         let image = try cache.frame(url: url, media: "fc", sourceTimeUs: 2_000_000, maxLongSide: 640)
+        let missTime = Date().timeIntervalSince(missStarted)
         XCTAssertLessThanOrEqual(max(image.width, image.height), 640)
         XCTAssertEqual(FrameBarcode.read(cgImage: image).index, 60)
         let started = Date()
         _ = try cache.frame(url: url, media: "fc", sourceTimeUs: 2_000_000, maxLongSide: 640)
-        XCTAssertLessThan(Date().timeIntervalSince(started), 0.02)
+        // DV_PERF_STRICT=1: 20 ms; loose: 4×, or half the decode measured above.
+        PerfGate.assertAtMost(Date().timeIntervalSince(started), 0.02, baseline: missTime / 2, "cache hit")
         XCTAssertEqual(cache.decodeCount, 1)
         let still = try cache.lookStill(url: url, media: "fc", sourceTimeUs: 2_000_000, heightPx: 120)
         XCTAssertEqual(still.height, 120)

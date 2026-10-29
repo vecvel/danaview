@@ -409,7 +409,7 @@ final class VoiceRecorderTests: XCTestCase {
         let asset = try awaitReply(self) { real.stop(recordingId: id, reply: $0) }
         try WavInfo(output).assertValid()
         XCTAssertGreaterThan(asset.durationUs, 500_000)
-        XCTAssertLessThan(asset.startLatencyUs, 1_000_000, "simulator; the device budget is < 100 ms (deferred)")
+        PerfGate.assertAtMost(Double(asset.startLatencyUs), 1_000_000, "simulator; the device budget is < 100 ms (deferred)")
         print("IOS-14 simulator recording: \(asset.durationUs) us, start latency \(asset.startLatencyUs) us")
     }
 }
