@@ -362,8 +362,8 @@ object PdfAnnotateCore {
         val h = corners.maxOf { it.y } - minY
         if (w <= 0f || h <= 0f) return null
         val a = Matrix(rect.width / w, 0f, 0f, rect.height / h, rect.lowerLeftX - minX * rect.width / w, rect.lowerLeftY - minY * rect.height / h)
-        // The appearance's own matrix first, then the bbox-to-rect map.
-        return m.multiply(a)
+        // `Do` applies the form's own /Matrix itself; the content stream adds only the bbox-to-rect map.
+        return a
     }
 
     /**
