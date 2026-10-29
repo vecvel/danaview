@@ -34,12 +34,14 @@ Future<bool> Function(ViewerFile file) pdfViewerProbe(PdfDocuments documents) {
 }
 
 /// The [ViewerBuilder] of the PDF viewer over [documents]; [viewBuilder] replaces the native view
-/// (tests).
-ViewerBuilder pdfViewerBuilder(PdfDocuments documents, {PdfViewBuilder? viewBuilder}) => (context, viewer) => PdfViewer(
-      file: viewer.file,
-      documents: documents,
-      fileOut: viewer.fileOut,
-      onClose: viewer.onClose,
-      onUnavailable: viewer.unavailable,
-      viewBuilder: viewBuilder,
-    );
+/// (tests); [onCompress] adds "Compress…" to the viewer's menu (HOM-31).
+ViewerBuilder pdfViewerBuilder(PdfDocuments documents, {PdfViewBuilder? viewBuilder, PdfCompressLauncher? onCompress}) =>
+    (context, viewer) => PdfViewer(
+          file: viewer.file,
+          documents: documents,
+          fileOut: viewer.fileOut,
+          onClose: viewer.onClose,
+          onUnavailable: viewer.unavailable,
+          viewBuilder: viewBuilder,
+          onCompress: onCompress,
+        );
