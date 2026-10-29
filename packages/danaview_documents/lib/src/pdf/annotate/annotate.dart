@@ -1,9 +1,15 @@
 // OWNER: HOM-29
 //
-// Placeholder (D-33) created by INT-101. HOM-29 replaces this file:
-// the public entry of lib/src/pdf/annotate/, PDF annotate and highlight. The package barrel exports it; HOM-29 re-exports
-// the public files of its directory from here (barrels never change after INT-101).
-// Until then it declares no public names.
+// The public entry of lib/src/pdf/annotate/ (HOM plan §8.5, D-98j): annotate and highlight in the
+// PDF viewer. The session model with undo / redo, the Cinema B toolbar, the session that ties the
+// model to the native viewer's preview and events, and the save into a new file
+// "<name> (annotated).pdf" (Replace only for Danaview folder files). The viewer shows "Annotate"
+// when a PdfToolsScope above it carries an annotate engine and the platform reports the tool.
 
 /// The public entry of lib/src/pdf/annotate/: PDF annotate and highlight.
 library;
+
+export 'pdf_annotate_model.dart';
+export 'pdf_annotate_save.dart';
+export 'pdf_annotate_session.dart';
+export 'pdf_annotate_toolbar.dart';

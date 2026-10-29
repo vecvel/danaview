@@ -7,9 +7,14 @@
 //   PdfDocumentHostApi → Glue/PdfDocumentHostApiImpl  (over Viewer/PdfCore; HOM-24)
 //   PdfViewHostApi     → Viewer/PdfViewHostApiImpl    (HOM-24; texture views are Android's)
 //   PdfTextHostApi     → Text/PdfTextHostApiImpl      (HOM-24)
+//   PdfOrganiseHostApi → Glue/PdfToolsHostApiImpl     (HOM-28 amendment; Tools/PdfPageTools)
 //   PdfToolsHostApi    → Glue/PdfToolsHostApiImpl     (jobs; tools in Tools/ HOM-28,
 //                                                      Annotate/ HOM-29, Sign/ HOM-30,
 //                                                      Compress/ HOM-31)
+//   PdfCompressHostApi → Compress/PdfCompressHostApiImpl (estimates; HOM-31)
+//   PdfAnnotateHostApi → Annotate/PdfAnnotateHostApiImpl (HOM-29 amendment: annotate mode of a
+//                                                      viewer, the annotate save job; strokes and
+//                                                      taps back through PdfAnnotateEventsApi)
 //   view type `com.vecvel.danaview.pdf/view` → Viewer/PdfViewFactory
 //
 // Tool classes of later tickets start as placeholders answering `notSupportedOnDevice`.
@@ -30,12 +35,16 @@ public final class DanaviewPdfPlugin: NSObject, FlutterPlugin {
   let views: PdfViewHostApiImpl
   let text = PdfTextHostApiImpl()
   let tools: PdfToolsHostApiImpl
+  let compress: PdfCompressHostApiImpl
+  let annotate: PdfAnnotateHostApiImpl
 
   init(messenger: FlutterBinaryMessenger) {
     self.messenger = messenger
     documents = PdfDocumentHostApiImpl(store: store)
     views = PdfViewHostApiImpl(store: store, registry: registry)
     tools = PdfToolsHostApiImpl(events: events)
+    compress = PdfCompressHostApiImpl(compressor: tools.compressor)
+    annotate = PdfAnnotateHostApiImpl(registry: registry, tools: tools, events: PdfAnnotateEventsApi(binaryMessenger: messenger))
     super.init()
   }
 
@@ -45,6 +54,11 @@ public final class DanaviewPdfPlugin: NSObject, FlutterPlugin {
     PdfViewHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? views : nil)
     PdfTextHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? text : nil)
     PdfToolsHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? tools : nil)
+    // HOM-28 amendment: the one-pass page organiser, on the tools host (shared jobs and cancel).
+    PdfOrganiseHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? tools : nil)
+    PdfCompressHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? compress : nil)
+    // HOM-29 amendment: annotate mode and the annotate save (jobs on the tools registry).
+    PdfAnnotateHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? annotate : nil)
     if attach { PdfEventsStreamHandler.register(with: messenger, streamHandler: events) }
   }
 

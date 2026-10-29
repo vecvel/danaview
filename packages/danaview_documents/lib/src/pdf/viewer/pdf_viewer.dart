@@ -1,10 +1,17 @@
 // OWNER: HOM-24
+// EXTENDED: HOM-28 (with a PdfToolsScope above it, the top bar gets "Organise pages" and the menu
+// "Merge with…"; a Replace from the organiser reopens the file.)
+// EXTENDED: HOM-29 (with an annotate engine in the scope and the tool reported, the top bar gets
+// "Annotate": an annotate mode over the same native view, with the Cinema B toolbar under the
+// pages, undo / redo and Save in the top bar, "<name> (annotated).pdf" saved as a new file
+// (Replace for Danaview folder files), and a prompt before unsaved annotations are left.)
 //
 // The PDF viewer screen (HOM plan §8.4, V2-120; ARCH §10.1 "PDF open ≤ 500 ms"): opens the file
 // read-only through danaview_pdf (rule 27), asks for the password of an encrypted file in a kit
 // sheet, then shows the native view (PDFKit on Apple, the PdfRenderer texture on Android) under the
 // documents top bar with search (result list), page thumbnails (wrapping grid), the outline, copy
-// of the selected text and "Open in another app". Panels dock on the right on wide windows and
+// of the selected text, "Compress…" (HOM-31, when the app passes [PdfViewer.onCompress]) and
+// "Open in another app". Panels dock on the right on wide windows and
 // below the pages on narrow ones. A file the platform can't open calls [PdfViewer.onUnavailable]
 // so the router falls back (Quick Look, then the file card). Nothing here logs a name, a path, a
 // query, a password or document text (rule 30).
@@ -23,6 +30,12 @@ import '../../card/document_out.dart';
 import '../../card/viewer_bar.dart';
 import '../../router/viewer_file.dart';
 import '../../text/viewer_parts.dart';
+import '../annotate/pdf_annotate_model.dart';
+import '../annotate/pdf_annotate_save.dart';
+import '../annotate/pdf_annotate_session.dart';
+import '../annotate/pdf_annotate_toolbar.dart';
+import '../organiser/pdf_tool_launcher.dart';
+import '../organiser/pdf_tool_save.dart' show PdfSaveMode;
 import 'pdf_password_sheet.dart';
 import 'pdf_viewer_panels.dart';
 
@@ -31,6 +44,10 @@ typedef PdfViewBuilder = Widget Function(BuildContext context, PdfDocumentInfo d
 
 /// Shows the password sheet (tests replace it).
 typedef PdfPasswordPrompt = Future<bool> Function(BuildContext context, PdfPasswordAttempt tryPassword);
+
+/// Opens the compress sheet for the open file (HOM-31); [password] is the one it was unlocked
+/// with, if any (never logged).
+typedef PdfCompressLauncher = Future<void> Function(BuildContext context, ViewerFile file, {String? password});
 
 enum _Panel { none, search, pages, outline }
 
@@ -50,6 +67,9 @@ class PdfViewer extends StatefulWidget {
     this.onUnavailable,
     this.viewBuilder,
     this.passwordPrompt,
+    this.onCompress,
+    this.annotateTextPrompt,
+    this.chooseSaveMode,
   });
 
   /// The file.
@@ -76,6 +96,15 @@ class PdfViewer extends StatefulWidget {
   /// The password prompt (default [showPdfPasswordSheet]).
   final PdfPasswordPrompt? passwordPrompt;
 
+  /// Opens the compress sheet (HOM-31); null hides "Compress…" in the menu.
+  final PdfCompressLauncher? onCompress;
+
+  /// Asks for a text box's text while annotating (default a kit prompt; tests replace it).
+  final Future<String?> Function(BuildContext context, String? initial)? annotateTextPrompt;
+
+  /// Asks new file or Replace when saving annotations (default the organiser's sheet).
+  final Future<PdfSaveMode?> Function(BuildContext context, String newName)? chooseSaveMode;
+
   @override
   State<PdfViewer> createState() => _PdfViewerState();
 }
@@ -84,6 +113,9 @@ class _PdfViewerState extends State<PdfViewer> {
   PdfCapabilities _caps = PdfCapabilities.none;
   PdfDocumentInfo? _doc;
   bool _needsPassword = false;
+
+  /// The password the document was unlocked with, for the tools (HOM-28, HOM-31); never logged.
+  String? _password;
   bool _failed = false;
   PdfViewController? _view;
   StreamSubscription<PdfViewState>? _stateSub;
@@ -104,6 +136,11 @@ class _PdfViewerState extends State<PdfViewer> {
   /// Bumped when the file or documents change and on dispose, so a stale open closes its handle.
   int _openGeneration = 0;
 
+  // Annotate (HOM-29).
+  PdfAnnotateModel? _annotateModel;
+  PdfAnnotateSession? _annotateSession;
+  bool _annotateBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -114,30 +151,38 @@ class _PdfViewerState extends State<PdfViewer> {
   void didUpdateWidget(PdfViewer old) {
     super.didUpdateWidget(old);
     if (old.file != widget.file || old.documents != widget.documents) {
-      final doc = _doc;
-      if (doc != null) pdfIgnore(old.documents.close(doc.handle));
-      unawaited(_stateSub?.cancel());
-      _stateSub = null;
-      _searchGeneration++;
-      _openGeneration++;
-      setState(() {
-        _doc = null;
-        _view = null;
-        _state = null;
-        _outline = null;
-        _failed = false;
-        _needsPassword = false;
-        _panel = _Panel.none;
-        _hits = const [];
-        _currentHit = -1;
-        _searchStatus = PdfSearchStatus.idle;
-      });
-      unawaited(_open());
+      _password = null; // a new file asks for its own password
+      _reopen(old.documents);
     }
+  }
+
+  /// Closes the open document of [documents] and opens the file again from the start.
+  void _reopen(PdfDocuments documents) {
+    _endAnnotate();
+    final doc = _doc;
+    if (doc != null) pdfIgnore(documents.close(doc.handle));
+    unawaited(_stateSub?.cancel());
+    _stateSub = null;
+    _searchGeneration++;
+    _openGeneration++;
+    setState(() {
+      _doc = null;
+      _view = null;
+      _state = null;
+      _outline = null;
+      _failed = false;
+      _needsPassword = false;
+      _panel = _Panel.none;
+      _hits = const [];
+      _currentHit = -1;
+      _searchStatus = PdfSearchStatus.idle;
+    });
+    unawaited(_open());
   }
 
   @override
   void dispose() {
+    _endAnnotate(notify: false);
     unawaited(_stateSub?.cancel());
     _query.dispose();
     _queryFocus.dispose();
@@ -156,7 +201,7 @@ class _PdfViewerState extends State<PdfViewer> {
       if (stale()) return;
       _caps = caps;
       if (!_caps.canView) return _unavailable();
-      final doc = await documents.open(widget.file.path);
+      final doc = await documents.open(widget.file.path, password: _password);
       if (stale()) {
         pdfIgnore(documents.close(doc.handle));
         return;
@@ -195,6 +240,7 @@ class _PdfViewerState extends State<PdfViewer> {
     if (doc == null) return false;
     final unlocked = await widget.documents.unlock(doc.handle, password);
     if (unlocked == null || unlocked.locked) return false;
+    _password = password;
     if (mounted) {
       setState(() {
         _doc = unlocked;
@@ -223,6 +269,7 @@ class _PdfViewerState extends State<PdfViewer> {
   }
 
   void _onCreated(PdfViewController controller) {
+    if (_view != null && _view!.viewId != controller.viewId) _endAnnotate();
     _view = controller;
     unawaited(_stateSub?.cancel());
     _stateSub = controller.states.listen((s) {
@@ -295,6 +342,217 @@ class _PdfViewerState extends State<PdfViewer> {
     if (view != null) pdfIgnore(view.goToPage(page));
   }
 
+  Future<void> _organise(PdfToolsEnvironment tools) async {
+    final saved = await openPdfOrganiser(context, tools, widget.file, password: _password);
+    if (mounted && saved != null && saved.replaced) _reopen(widget.documents);
+  }
+
+  Future<void> _mergeWith(PdfToolsEnvironment tools) => openPdfMerge(context, tools, [PdfMergeItem.ofFile(widget.file, password: _password)], pickFirst: true);
+
+  // ---------------------------------------------------------------------------------------------
+  // Annotate (HOM-29)
+
+  bool get _annotating => _annotateModel != null;
+
+  /// "Annotate" shows where the scope has an engine and the platform reports the tool (its viewer
+  /// mode and save both work there).
+  bool _canAnnotate(PdfToolsEnvironment? tools) => tools?.annotate != null && _caps.tools.contains(PdfTool.annotate);
+
+  void _toast(String message, {bool error = false}) {
+    if (!mounted) return;
+    DanaviewToast.show(
+      context,
+      message,
+      kind: error ? DanaviewToastKind.error : DanaviewToastKind.success,
+      icon: error ? Icons.error_outline_rounded : null,
+    );
+  }
+
+  Future<String?> _askText(String? initial) {
+    final prompt = widget.annotateTextPrompt;
+    if (prompt != null) return prompt(context, initial);
+    return showDanaviewPrompt(
+      context,
+      title: initial == null ? 'Add text' : 'Edit text',
+      hint: 'Type your note',
+      initialValue: initial,
+      confirmLabel: initial == null ? 'Add' : 'Save',
+    );
+  }
+
+  Future<void> _startAnnotate(PdfToolsEnvironment tools) async {
+    final engine = tools.annotate;
+    final view = _view;
+    final doc = _doc;
+    if (engine == null || view == null || doc == null || _annotating) return;
+    if (_panel != _Panel.none) _togglePanel(_panel);
+    final model = PdfAnnotateModel();
+    final session = PdfAnnotateSession(
+      engine: engine,
+      viewId: view.viewId,
+      model: model,
+      pageSizes: doc.pageSizes,
+      askText: _askText,
+      onError: (_) => _toast('Annotations couldn’t be shown. Try again.', error: true),
+    );
+    model.addListener(_onAnnotateChanged);
+    setState(() {
+      _annotateModel = model;
+      _annotateSession = session;
+    });
+    try {
+      await session.start();
+    } on PdfException {
+      _endAnnotate();
+      _toast('Annotate isn’t available for this PDF.', error: true);
+    }
+  }
+
+  void _onAnnotateChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Leaves annotate mode without asking (the preview goes, the session is dropped).
+  void _endAnnotate({bool notify = true}) {
+    final model = _annotateModel;
+    final session = _annotateSession;
+    if (model == null) return;
+    _annotateModel = null;
+    _annotateSession = null;
+    _annotateBusy = false;
+    model.removeListener(_onAnnotateChanged);
+    unawaited(session?.stop().whenComplete(model.dispose) ?? Future<void>.sync(model.dispose));
+    if (notify && mounted) setState(() {});
+  }
+
+  /// True when nothing unsaved would be lost, or the user chose to discard it.
+  Future<bool> _confirmDiscardAnnotations() async {
+    final model = _annotateModel;
+    if (model == null || !model.isDirty) return true;
+    return showDanaviewConfirm(
+      context,
+      title: 'Discard annotations?',
+      message: 'Your annotations haven’t been saved.',
+      confirmLabel: 'Discard',
+      destructive: true,
+    );
+  }
+
+  Future<void> _leaveAnnotate() async {
+    if (_annotateBusy) return;
+    if (!await _confirmDiscardAnnotations() || !mounted) return;
+    _endAnnotate();
+  }
+
+  /// The viewer's back button and the system back: unsaved annotations ask first.
+  Future<void> _close() async {
+    if (_annotating) {
+      if (_annotateBusy || !await _confirmDiscardAnnotations() || !mounted) return;
+      _endAnnotate();
+    }
+    final close = widget.onClose;
+    if (close != null) {
+      close();
+    } else if (mounted) {
+      await Navigator.of(context).maybePop();
+    }
+  }
+
+  Future<void> _markup(PdfAnnotationKind kind) async {
+    final session = _annotateSession;
+    final view = _view;
+    if (session == null) return;
+    try {
+      final marked = await session.markup(kind);
+      if (marked == 0) {
+        _toast('Select some text first.');
+      } else if (view != null) {
+        pdfIgnore(view.clearSelection());
+      }
+    } on PdfException {
+      _toast('That didn’t work. Try again.', error: true);
+    }
+  }
+
+  void _deleteSelected() {
+    final model = _annotateModel;
+    final id = model?.selectedId;
+    if (model != null && id != null) model.remove(id);
+  }
+
+  void _editSelected() {
+    final id = _annotateModel?.selectedId;
+    final session = _annotateSession;
+    if (id != null && session != null) unawaited(session.editText(id));
+  }
+
+  Future<void> _saveAnnotations(PdfToolsEnvironment tools) async {
+    final model = _annotateModel;
+    final engine = tools.annotate;
+    if (model == null || engine == null || !model.isDirty || _annotateBusy) return;
+    setState(() => _annotateBusy = true);
+    try {
+      final saved = await savePdfAnnotations(
+        context,
+        environment: tools,
+        engine: engine,
+        file: widget.file,
+        password: _password,
+        annotations: [
+          for (final i in model.items)
+            if (i.annotation case final a?) a,
+        ],
+        chooseSaveMode: widget.chooseSaveMode,
+      );
+      if (saved == null || !mounted) return;
+      _endAnnotate();
+      _toast(saved.replaced ? 'Replaced ${saved.displayName}' : 'Saved as ${saved.displayName}');
+      if (saved.replaced) _reopen(widget.documents);
+    } on PdfException catch (e) {
+      _toast(pdfAnnotateErrorMessage(e), error: true);
+    } on Object {
+      _toast('The annotations couldn’t be saved. Try again.', error: true);
+    } finally {
+      if (mounted && _annotateBusy) setState(() => _annotateBusy = false);
+    }
+  }
+
+  Widget _annotateTopBar(PdfToolsEnvironment tools, PdfAnnotateModel model) {
+    final idle = !_annotateBusy;
+    return DocumentTopBar(
+      title: 'Annotate',
+      subtitle: widget.file.displayName,
+      onClose: () => unawaited(_leaveAnnotate()),
+      actions: [
+        DanaviewIconButton(
+          key: const ValueKey('pdf-annotate-undo'),
+          icon: Icons.undo_rounded,
+          size: 44,
+          semanticLabel: 'Undo',
+          tooltip: 'Undo',
+          onPressed: idle && model.canUndo ? model.undo : null,
+        ),
+        DanaviewIconButton(
+          key: const ValueKey('pdf-annotate-redo'),
+          icon: Icons.redo_rounded,
+          size: 44,
+          semanticLabel: 'Redo',
+          tooltip: 'Redo',
+          onPressed: idle && model.canRedo ? model.redo : null,
+        ),
+        const SizedBox(width: DanaviewSpacing.xs),
+        DanaviewButton.primary(
+          key: const ValueKey('pdf-annotate-save'),
+          label: 'Save',
+          size: DanaviewButtonSize.sm,
+          semanticLabel: 'Save annotations',
+          onPressed: idle && model.isDirty ? () => unawaited(_saveAnnotations(tools)) : null,
+        ),
+        const SizedBox(width: DanaviewSpacing.sm),
+      ],
+    );
+  }
+
   Future<void> _copy() async {
     final view = _view;
     if (view == null) return;
@@ -315,12 +573,22 @@ class _PdfViewerState extends State<PdfViewer> {
     return 'Page ${state.pageIndex + 1} of ${formatCount(doc.pageCount)}';
   }
 
-  List<DanaviewMenuEntry> _menu() {
+  List<DanaviewMenuEntry> _menu(PdfToolsEnvironment? tools) {
     final doc = _doc;
     final port = widget.fileOut;
     final open = doc != null && !doc.locked && _view != null;
     final mode = _state?.displayMode ?? PdfDisplayMode.continuous;
+    final canMerge = tools != null && tools.pickMergeInputs != null && _caps.tools.contains(PdfTool.merge);
     return [
+      if (canMerge) ...[
+        DanaviewMenuItem(
+          label: 'Merge with…',
+          icon: Icons.merge_rounded,
+          enabled: doc != null && !doc.locked,
+          onTap: () => unawaited(_mergeWith(tools)),
+        ),
+        const DanaviewMenuDivider(),
+      ],
       if (_caps.selection && doc != null && doc.allowsCopying)
         DanaviewMenuItem(
           label: 'Copy selected text',
@@ -337,6 +605,15 @@ class _PdfViewerState extends State<PdfViewer> {
           (PdfDisplayMode.twoUpContinuous, 'Two pages'),
         ])
           DanaviewMenuItem(label: label, selected: mode == m, enabled: open, onTap: () => pdfIgnore(_view!.setDisplayMode(m))),
+      ],
+      if (widget.onCompress case final compress? when _caps.tools.contains(PdfTool.compress)) ...[
+        const DanaviewMenuDivider(),
+        DanaviewMenuItem(
+          label: 'Compress…',
+          icon: Icons.compress_rounded,
+          enabled: doc != null && !doc.locked,
+          onTap: () => unawaited(compress(_menuKey.currentContext ?? context, widget.file, password: _password)),
+        ),
       ],
       if (port != null && port.capabilities.canOpenIn) ...[
         const DanaviewMenuDivider(),
@@ -362,26 +639,61 @@ class _PdfViewerState extends State<PdfViewer> {
   Widget build(BuildContext context) {
     final doc = _doc;
     final ready = doc != null && !doc.locked;
-    return ColoredBox(
-      color: DanaviewColors.background,
-      child: Column(
-        children: [
-          DocumentTopBar(
-            title: widget.file.displayName,
-            subtitle: _subtitle(),
-            onClose: widget.onClose,
-            actions: [
-              if (_caps.search) _barButton(_Panel.search, Icons.search_rounded, 'Search in PDF', enabled: ready),
-              _barButton(_Panel.pages, Icons.grid_view_rounded, 'Pages', enabled: ready),
-              if (_caps.outline && (_outline?.isNotEmpty ?? false)) _barButton(_Panel.outline, Icons.toc_rounded, 'Contents', enabled: ready),
-              ViewerOptionsButton(key: _menuKey, entries: _menu()),
-            ],
-          ),
-          Expanded(child: ClipRect(child: _body(context, doc))),
-        ],
+    final tools = PdfToolsScope.maybeOf(context);
+    final organise = tools != null && canOrganise(_caps.tools);
+    final annotate = _annotateModel;
+    final Widget topBar;
+    if (annotate != null && tools != null) {
+      topBar = _annotateTopBar(tools, annotate);
+    } else {
+      topBar = _viewerTopBar(tools, ready: ready, organise: organise);
+    }
+    return PopScope(
+      canPop: !(annotate?.isDirty ?? false) && !_annotateBusy,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_close());
+      },
+      child: ColoredBox(
+        color: DanaviewColors.background,
+        child: Column(
+          children: [
+            topBar,
+            Expanded(child: ClipRect(child: _body(context, doc))),
+          ],
+        ),
       ),
     );
   }
+
+  Widget _viewerTopBar(PdfToolsEnvironment? tools, {required bool ready, required bool organise}) => DocumentTopBar(
+        title: widget.file.displayName,
+        subtitle: _subtitle(),
+        onClose: widget.onClose == null ? null : () => unawaited(_close()),
+        actions: [
+          if (_caps.search) _barButton(_Panel.search, Icons.search_rounded, 'Search in PDF', enabled: ready),
+          _barButton(_Panel.pages, Icons.grid_view_rounded, 'Pages', enabled: ready),
+          if (_caps.outline && (_outline?.isNotEmpty ?? false)) _barButton(_Panel.outline, Icons.toc_rounded, 'Contents', enabled: ready),
+          if (organise)
+            DanaviewIconButton(
+              key: const ValueKey('pdf-viewer-organise'),
+              icon: Icons.dashboard_customize_outlined,
+              size: 44,
+              semanticLabel: 'Organise pages',
+              tooltip: 'Organise pages',
+              onPressed: ready ? () => unawaited(_organise(tools!)) : null,
+            ),
+          if (_canAnnotate(tools))
+            DanaviewIconButton(
+              key: const ValueKey('pdf-viewer-annotate'),
+              icon: Icons.edit_note_rounded,
+              size: 44,
+              semanticLabel: 'Annotate',
+              tooltip: 'Annotate',
+              onPressed: ready && _view != null ? () => unawaited(_startAnnotate(tools!)) : null,
+            ),
+          ViewerOptionsButton(key: _menuKey, entries: _menu(tools)),
+        ],
+      );
 
   Widget _body(BuildContext context, PdfDocumentInfo? doc) {
     if (_failed) {
@@ -418,7 +730,26 @@ class _PdfViewerState extends State<PdfViewer> {
     }
     final build = widget.viewBuilder ?? (context, d, onCreated) => PdfView(document: d, onCreated: onCreated);
     final view = KeyedSubtree(key: ValueKey('pdf-view-${doc.handle}'), child: build(context, doc, _onCreated));
-    if (_panel == _Panel.none) return view;
+    final annotate = _annotateModel;
+    // The view keeps its place in the tree when annotate mode adds the toolbar under it, so the
+    // native view (and its annotate session) survives.
+    if (_panel == _Panel.none) {
+      return Column(
+        children: [
+          Expanded(child: view),
+          if (annotate != null)
+            PdfAnnotateToolbar(
+              key: const ValueKey('pdf-annotate-toolbar'),
+              model: annotate,
+              hasTextSelection: _state?.hasSelection ?? false,
+              enabled: !_annotateBusy,
+              onMarkup: (kind) => unawaited(_markup(kind)),
+              onDeleteSelected: _deleteSelected,
+              onEditSelected: _editSelected,
+            ),
+        ],
+      );
+    }
     return LayoutBuilder(
       builder: (context, c) {
         final panel = DecoratedBox(

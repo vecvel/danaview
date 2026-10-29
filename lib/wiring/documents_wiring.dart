@@ -1,6 +1,12 @@
 // OWNER: S3-W
+// EXTENDED: HOM-28 (S4 PDF page tools: [documentsOverrides] adds lib/wiring/pdf_tools_wiring.dart's
+// overrides and [openDocumentViewer] puts the tools' scope around the viewers; still nothing with
+// DANAVIEW_FILES_HOME off.)
 // EXTENDED: HOM-21A (Android Open with / Share to Danaview: the NativeIncoming batches are
 // imported by IncomingIntentImporter and shown by the same opener and toasts as HOM-21's paths.)
+// EXTENDED: HOM-31 (PDF compress: "Compress…" in the PDF viewer's menu and in HOM-22's file menu
+// of a PDF, shown when the platform lists the compress tool; the result is imported as a NEW
+// library file "<name> (compressed).pdf" next to the original, which is never modified.)
 //
 // S3 wiring (BUILD_PLAN v1.2 §1A, slice S3 "Documents: view and share-in"; the slice's share of
 // INT-103): the Documents tab, the viewers and Open with / the iOS Share Extension, composed at the
@@ -41,7 +47,17 @@ import 'package:danaview_domain/danaview_domain.dart' as domain show LibraryFold
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/flags.dart';
 import 'package:danaview_features/src/library/file_actions/file_actions.dart'
-    show anchorOf, fileActionIcon, fileActionId, fileActionLabel, fileMenuActions, fileOutPortProvider, libraryFileActionsProvider, runFileAction;
+    show
+        CompressPdfHandler,
+        anchorOf,
+        compressPdfHandlerProvider,
+        fileActionIcon,
+        fileActionId,
+        fileActionLabel,
+        fileMenuActions,
+        fileOutPortProvider,
+        libraryFileActionsProvider,
+        runFileAction;
 import 'package:danaview_features/src/library/filters/filter_providers.dart' show linkedDocumentsProvider;
 import 'package:danaview_features/src/library/import/import_providers.dart';
 import 'package:danaview_features/src/library/import/incoming_intents.dart';
@@ -49,12 +65,15 @@ import 'package:danaview_features/src/library/organise/organise_providers.dart' 
 import 'package:danaview_features/src/player/danaview_player_actions.dart';
 import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_library_native/danaview_library_native.dart' show IncomingAction, NativeBackupFlags, NativeInbox;
-import 'package:danaview_pdf/danaview_pdf.dart' show PdfDocuments, PlatformPdfDocuments;
+import 'package:danaview_pdf/danaview_pdf.dart'
+    show PdfCapabilities, PdfCompressEngine, PdfDocuments, PdfTool, PlatformPdfCompressEngine, PlatformPdfDocuments;
 import 'package:danaview_platform/danaview_platform.dart' show IncomingMediaBridge;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'pdf_tools_wiring.dart' show pdfToolsOverrides, withPdfTools;
 
 /// Whether this build wires the S3 documents features (`DANAVIEW_FILES_HOME`, default false).
 bool get documentsWired => FeatureFlags.filesHomeEnabled;
@@ -84,15 +103,16 @@ final class DocumentViewerSetup {
 }
 
 /// The viewers of [platform] (ARCH v1.2 §3): PDF on iOS, macOS and Android, Quick Look on iOS and
-/// macOS; Windows and Linux have only the built-in viewers. [pdf] and [quickLook] are test seams.
-DocumentViewerSetup documentViewerSetupFor(TargetPlatform platform, {PdfDocuments? pdf, QuickLookPort? quickLook}) {
+/// macOS; Windows and Linux have only the built-in viewers. [pdf] and [quickLook] are test seams;
+/// [compress] adds "Compress…" to the PDF viewer's menu (HOM-31).
+DocumentViewerSetup documentViewerSetupFor(TargetPlatform platform, {PdfDocuments? pdf, QuickLookPort? quickLook, PdfCompressLauncher? compress}) {
   final apple = platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
   final android = platform == TargetPlatform.android;
   final pdfDocs = apple || android ? (pdf ?? PlatformPdfDocuments()) : null;
   final ql = apple ? (quickLook ?? NativeQuickLookPort()) : null;
   return DocumentViewerSetup(
     viewers: {
-      if (pdfDocs != null) ViewerKind.pdf: pdfViewerBuilder(pdfDocs),
+      if (pdfDocs != null) ViewerKind.pdf: pdfViewerBuilder(pdfDocs, onCompress: compress),
       if (ql != null) ViewerKind.quickLook: quickLookViewerBuilder(ql),
     },
     probes: FunctionProbes({
@@ -181,7 +201,7 @@ Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerF
         style: DanaviewTextStyles.body.copyWith(decoration: TextDecoration.none),
         child: _withFileMenu(
           fileMenuItem,
-          DocumentViewer(
+          withPdfTools(read, DocumentViewer(
             key: const ValueKey('s3-document-viewer'),
             file: file,
             viewers: setup.viewers,
@@ -189,7 +209,7 @@ Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerF
             fileOut: fileOut,
             onOpened: record,
             onClose: () => unawaited(Navigator.of(context).maybePop()),
-          ),
+          )),
         ),
       ),
     ),
@@ -255,6 +275,95 @@ Future<void> showViewerFileMenu(BuildContext context, WidgetRef ref, MediaItem i
   );
   if (chosen == null || !context.mounted) return;
   await runFileAction(context, ref, chosen, [item], anchor: anchor);
+}
+
+// ---------------------------------------------------------------------------------------------
+// PDF compress (HOM-31).
+// ---------------------------------------------------------------------------------------------
+
+/// What this device's PDF plugin offers; the app root overrides it on iOS, macOS and Android.
+final pdfCapabilitiesProvider = FutureProvider<PdfCapabilities>((ref) async => PdfCapabilities.none);
+
+/// The compress engine, or null where there is none (the app root overrides it).
+final pdfCompressEngineProvider = Provider<PdfCompressEngine?>((ref) => null);
+
+/// Saves the compressed file at [tempPath] as a NEW library file named [fileName] in [folder]
+/// (`Imported` when null) through the import path (G-H6: the original is never modified; a name
+/// clash gets " (2)"). The temporary file is the import's staged copy, deleted after the commit.
+/// Resolves to the entry's name.
+Future<String> saveCompressedPdf(ProviderRead read, {required String tempPath, required String fileName, FolderId? folder}) async {
+  final imports = read(importServiceProvider);
+  if (imports == null) throw StateError('no library');
+  final items = await imports.importAll(
+    [ImportSource.file(tempPath, displayName: fileName, mime: 'application/pdf', uti: 'com.adobe.pdf', stagedCopy: true)],
+    target: folder,
+    duplicates: DuplicatePolicy.keepBoth,
+  );
+  final entry = items.single.entry;
+  if (items.single.state != ImportItemState.done || entry == null) throw StateError('not saved');
+  return entry.displayName;
+}
+
+/// The folder a compressed copy of library entry [id] goes to (the original's), or null.
+FolderId? _folderOf(ProviderRead read, ItemId? id) => id == null ? null : read(libraryFileActionsProvider)?.liveEntry(id)?.folderId;
+
+/// The PDF viewer's "Compress…": the sheet over the open file; the result lands next to it.
+PdfCompressLauncher pdfCompressLauncher(ProviderRead read) => (context, file, {password}) async {
+      final engine = read(pdfCompressEngineProvider);
+      if (engine == null) return;
+      final folder = _folderOf(read, file.id);
+      await showPdfCompressSheet(
+        context,
+        path: file.path,
+        displayName: file.displayName,
+        engine: engine,
+        password: password,
+        save: (temp, name) => saveCompressedPdf(read, tempPath: temp, fileName: name, folder: folder),
+      );
+    };
+
+/// HOM-22's "Compress…" for a PDF in a list: a Danaview folder file or a readable linked one.
+CompressPdfHandler compressPdfHandler(ProviderRead read) => (context, item) async {
+      final engine = read(pdfCompressEngineProvider);
+      if (engine == null) return;
+      final target = FileActionTarget.of(item);
+      final actions = read(libraryFileActionsProvider);
+      final files = actions != null ? actions.outFiles([target]) : const <OutFile>[];
+      final path = files.isNotEmpty ? files.first.path : (target.isLibraryEntry ? null : target.localPath);
+      if (path == null || !File(path).existsSync()) {
+        if (context.mounted) DanaviewToast.show(context, 'The file is no longer there', kind: DanaviewToastKind.error);
+        return;
+      }
+      final folder = target.isLibraryEntry ? _folderOf(read, item.id) : null;
+      if (!context.mounted) return;
+      await showPdfCompressSheet(
+        context,
+        path: path,
+        displayName: item.name,
+        engine: engine,
+        save: (temp, name) => saveCompressedPdf(read, tempPath: temp, fileName: name, folder: folder),
+      );
+    };
+
+/// The compress overrides of [platform] (iOS, macOS, Android; nothing elsewhere). The file-menu
+/// action appears once the plugin lists the compress tool (Apple now, Android with HOM-31A).
+List<Override> _compressOverrides(TargetPlatform platform, {PdfDocuments? pdf, PdfCompressEngine? engine}) {
+  final supported = platform == TargetPlatform.iOS || platform == TargetPlatform.macOS || platform == TargetPlatform.android;
+  if (!supported) return const [];
+  return [
+    pdfCapabilitiesProvider.overrideWith((ref) async {
+      try {
+        return await (pdf ?? PlatformPdfDocuments()).capabilities();
+      } on Object {
+        return PdfCapabilities.none;
+      }
+    }),
+    pdfCompressEngineProvider.overrideWithValue(engine ?? PlatformPdfCompressEngine()),
+    compressPdfHandlerProvider.overrideWith((ref) {
+      final caps = ref.watch(pdfCapabilitiesProvider).valueOrNull;
+      return caps != null && caps.tools.contains(PdfTool.compress) ? compressPdfHandler(ref.read) : null;
+    }),
+  ];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -376,24 +485,35 @@ String inboxStagingIn(String support) => '$support${Platform.pathSeparator}Danav
 
 /// The S3 overrides of the app root: nothing with DANAVIEW_FILES_HOME off.
 ///
-/// With the flag on: the viewers of [platform], the linked-document scan, and on iOS the Share
-/// Extension inbox ([inbox] is a test seam) with its staging folder under [support]; on Android
-/// the incoming intents ([incoming] is a test seam).
+/// With the flag on: the viewers of [platform], the linked-document scan, PDF compress (HOM-31;
+/// [compressEngine] is a test seam), and on iOS the Share Extension inbox ([inbox] is a test seam)
+/// with its staging folder under [support]; on Android the incoming intents ([incoming] is a test
+/// seam). Where `danaview_pdf` runs (iOS, macOS, Android) the import records a PDF's page count
+/// ([pdf] is a test seam; FIX-S3Q-4).
 List<Override> documentsOverrides({
   required TargetPlatform platform,
   required String support,
   DocumentViewerSetup? viewers,
   NativeInbox? inbox,
   IncomingIntentPort? incoming,
+  PdfDocuments? pdf,
+  PdfCompressEngine? compressEngine,
   bool excludeStagingFromBackup = true,
 }) {
   if (!documentsWired) return const [];
   final ios = platform == TargetPlatform.iOS;
+  // The plugin's probe only on a real host of that platform (widget tests run as iOS or Android on
+  // the desktop VM, where no plugin answers), or through the [pdf] seam.
+  final macOS = platform == TargetPlatform.macOS;
+  final android = platform == TargetPlatform.android;
+  final pdfHost = (ios && Platform.isIOS) || (macOS && Platform.isMacOS) || (android && Platform.isAndroid);
+  final countPages = (ios || macOS || android) && (pdf != null || pdfHost);
   final staging = inboxStagingIn(support);
   final appGroup = ios ? (inbox ?? NativeInbox()) : null;
   if (appGroup != null && excludeStagingFromBackup) unawaited(_prepareStaging(staging));
   return [
-    documentViewerSetupProvider.overrideWithValue(viewers ?? documentViewerSetupFor(platform)),
+    documentViewerSetupProvider.overrideWith((ref) => viewers ?? documentViewerSetupFor(platform, pdf: pdf, compress: pdfCompressLauncher(ref.read))),
+    ..._compressOverrides(platform, pdf: pdf, engine: compressEngine),
     linkedDocumentsProvider.overrideWith((ref) => ref.watch(linkedDocumentScanProvider).valueOrNull ?? const <DocumentItem>[]),
     if (appGroup != null) ...[
       inboxPortProvider.overrideWithValue(NativeInboxPort(appGroup)),
@@ -403,8 +523,18 @@ List<Override> documentsOverrides({
     // The plugin's port only on a real Android host (widget tests run as Android on the desktop VM).
     if (platform == TargetPlatform.android && (incoming != null || Platform.isAndroid))
       incomingIntentPortProvider.overrideWithValue(incoming ?? NativeIncomingPort()),
+    if (countPages) importPageCounterProvider.overrideWithValue(pdfPageCounter(pdf ?? PlatformPdfDocuments())),
+    // S4: the PDF page tools (organiser, merge, file-menu and multi-select entries).
+    ...pdfToolsOverrides(platform: platform),
   ];
 }
+
+/// The import's page counter over [pdf]: the plugin's probe (PDFKit / `PdfRenderer`, on a native
+/// background thread, read-only); null for a locked or damaged file (FIX-S3Q-4).
+DocumentPageCounter pdfPageCounter(PdfDocuments pdf) => (path) async {
+      final probe = await pdf.probe(path);
+      return probe.canOpen && probe.pageCount > 0 ? probe.pageCount : null;
+    };
 
 Future<void> _prepareStaging(String staging) async {
   try {

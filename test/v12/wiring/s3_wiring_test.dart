@@ -29,9 +29,11 @@ import 'package:danaview/wiring/files_home_wiring.dart';
 import 'package:danaview_documents/danaview_documents.dart';
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/flags.dart';
+import 'package:danaview_features/src/library/import/import_providers.dart' show importPageCounterProvider;
 import 'package:danaview_features/src/library/filters/filter_providers.dart' show linkedDocumentsProvider;
 import 'package:danaview_features/src/player/danaview_player_actions.dart';
 import 'package:danaview_library/danaview_library.dart';
+import 'package:danaview_pdf/danaview_pdf.dart' show PdfDocuments, PdfProbe;
 import 'package:danaview_platform/danaview_platform.dart' show IncomingMediaBridge;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart';
@@ -159,6 +161,23 @@ Future<_App> _pumpApp(WidgetTester tester, {double textScale = 1.0, _Inbox? inbo
 
 Finder _row(String name) => find.text(name);
 
+/// A PDF store whose probe answers [probe] (the page counter uses nothing else).
+final class _ProbePdfs implements PdfDocuments {
+  _ProbePdfs(this.probeResult);
+
+  final PdfProbe probeResult;
+  final List<String> probed = [];
+
+  @override
+  Future<PdfProbe> probe(String path) async {
+    probed.add(path);
+    return probeResult;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnsupportedError('${invocation.memberName}');
+}
+
 void main() {
   tearDown(() {
     FeatureFlags.debugReset();
@@ -233,6 +252,32 @@ void main() {
         expect(c.read(inboxPortProvider), isNull, reason: p.name);
         expect(c.read(inboxStagingDirectoryProvider), isNull, reason: p.name);
       }
+    });
+
+    test('the import counts PDF pages where danaview_pdf runs (FIX-S3Q-4)', () async {
+      FeatureFlags.debugFilesHomeOverride = true;
+      ProviderContainer containerFor(TargetPlatform p, {PdfDocuments? pdf}) {
+        final c = ProviderContainer(overrides: documentsOverrides(platform: p, support: '/support', pdf: pdf, excludeStagingFromBackup: false));
+        addTearDown(c.dispose);
+        return c;
+      }
+
+      for (final p in [TargetPlatform.iOS, TargetPlatform.macOS, TargetPlatform.android]) {
+        final pdfs = _ProbePdfs(const PdfProbe(canOpen: true, pageCount: 14));
+        final count = containerFor(p, pdf: pdfs).read(importPageCounterProvider);
+        expect(count, isNotNull, reason: p.name);
+        expect(await count!('/lib/Report.pdf'), 14, reason: p.name);
+        expect(pdfs.probed, ['/lib/Report.pdf']);
+      }
+      for (final p in [TargetPlatform.windows, TargetPlatform.linux]) {
+        expect(containerFor(p).read(importPageCounterProvider), isNull, reason: p.name);
+      }
+      // A locked or unreadable PDF records no count.
+      expect(await pdfPageCounter(_ProbePdfs(const PdfProbe(canOpen: true, encrypted: true)))('/a.pdf'), isNull);
+      expect(await pdfPageCounter(_ProbePdfs(const PdfProbe(canOpen: false)))('/a.pdf'), isNull);
+      // Flag off: nothing.
+      FeatureFlags.debugFilesHomeOverride = false;
+      expect(documentsOverrides(platform: TargetPlatform.iOS, support: '/s', pdf: _ProbePdfs(const PdfProbe(canOpen: true))), isEmpty);
     });
 
     test('library documents become viewer files with their type for Quick Look and sharing', () {

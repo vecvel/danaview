@@ -1,4 +1,5 @@
 // OWNER: HOM-17
+// EXTENDED: HOM-28 (the Replace write crashes at every step too.)
 //
 // BUILD_PLAN HOM-17: "a crash injected at every step of move, delete and import leaves the
 // database and files consistent". For each operation the steps are counted, then for every step a
@@ -147,6 +148,14 @@ void main() {
   test('import and copy', () async {
     await _crashEverywhere('import', twoFoldersThreeFiles, (s, c) => importInto(s, 'y.txt', folder: FolderId.parse(c['b']!), bytes: 'new'.codeUnits));
     await _crashEverywhere('copy', twoFoldersThreeFiles, (s, c) => s.write((w, now) => w.copyEntry(EntryId.parse(c['y']!), FolderId.parse(c['a']!), now: now)));
+  });
+
+  // HOM-28: the PDF tools' Replace (part copy, one rename over the entry's file, then the row).
+  test('replace an entry file', () async {
+    final source = File('${tempRoot()}${Platform.pathSeparator}edited.txt')..writeAsStringSync('edited bytes');
+    await _crashEverywhere('replace', twoFoldersThreeFiles,
+        (s, c) => s.write((w, now) => w.replaceEntryFile(EntryId.parse(c['x']!), source.path, quickHash: 'q', pageCount: 3, now: now)));
+    expect(source.readAsStringSync(), 'edited bytes', reason: 'the source is only read');
   });
 
   test('an import that crashed before its row stays a resumable job', () async {

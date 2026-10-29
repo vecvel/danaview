@@ -72,6 +72,12 @@ internal interface DeckEnv {
 
     /** A deck failed for good (after its recoveries). */
     fun deckFailed(error: PlaybackException)
+
+    /**
+     * Called before a deck closes a frame (Image) that a composite may have sampled: returns once
+     * the GPU is done with every composite issued so far ([FallbackGl.awaitReads]).
+     */
+    fun awaitGpuReads() = Unit
 }
 
 /** Per-deck counters (diagnostics and tests). */
@@ -404,6 +410,9 @@ internal class VideoDeck(
             img.close()
             return false
         }
+        // The old frame may still be sampled by a queued composite: once its Image is closed the
+        // decoder can overwrite the buffer with a later frame (shown under the old frame's pts).
+        if (bound != null) env.awaitGpuReads()
         if (boundEgl != 0L) HwbImport.nativeDestroyImage(boundEgl)
         bound?.close()
         bound = img
@@ -504,6 +513,7 @@ internal class VideoDeck(
     }
 
     private fun unbind() {
+        if (bound != null) env.awaitGpuReads()
         if (boundEgl != 0L) HwbImport.nativeDestroyImage(boundEgl)
         boundEgl = 0L
         bound?.close()

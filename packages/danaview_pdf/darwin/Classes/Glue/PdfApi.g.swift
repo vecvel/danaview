@@ -55,6 +55,10 @@ private func wrapError(_ error: Any) -> [Any?] {
   ]
 }
 
+private func createConnectionError(withChannelName channelName: String) -> PdfPigeonError {
+  return PdfPigeonError(code: "channel-error", message: "Unable to establish connection on channel: '\(channelName)'.", details: "")
+}
+
 enum PdfApiPigeonInternal {
   static func isNullish(_ value: Any?) -> Bool {
     guard let innerValue = value else {
@@ -239,6 +243,21 @@ enum PdfEventKindMsg: Int, CaseIterable {
   case viewSelectionChanged = 2
   /// A tool job progressed; [PdfEventMsg.toolProgress] is set.
   case toolProgress = 3
+}
+
+/// What a touch on an annotating viewer does.
+enum PdfAnnotateInputMsg: Int, CaseIterable {
+  /// The viewer scrolls, zooms and selects text as usual; a tap on a session annotation reports
+  /// it (`PdfAnnotateEventsApi.tapped` with its id).
+  case select = 0
+  /// One finger, the pointer or Apple Pencil draws ink (PencilKit on iOS); two fingers scroll and
+  /// zoom (a finger scrolls when the system prefers Pencil-only drawing). Finished strokes arrive
+  /// through `PdfAnnotateEventsApi.inkStroke`.
+  case ink = 1
+  /// A tap reports its page point (`tapped`), where Dart places a text box.
+  case text = 2
+  /// A tap reports the session annotation under it (`tapped` with its id), which Dart removes.
+  case erase = 3
 }
 
 /// What this device's implementation offers; the Dart UI hides what is missing.
@@ -2159,6 +2178,373 @@ struct PdfEventMsg: Hashable, CustomStringConvertible {
   }
 }
 
+/// One page of an organised document: source page [sourcePage] turned by [rotation] more degrees.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PdfPagePlanMsg: Hashable, CustomStringConvertible {
+  /// The 0-based page of the input; each page appears at most once.
+  var sourcePage: Int64
+  /// Degrees clockwise added to the page's own rotation (a multiple of 90; may be negative).
+  var rotation: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PdfPagePlanMsg? {
+    let sourcePage = pigeonVar_list[0] as! Int64
+    let rotation = pigeonVar_list[1] as! Int64
+
+    return PdfPagePlanMsg(
+      sourcePage: sourcePage,
+      rotation: rotation
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      sourcePage,
+      rotation,
+    ]
+  }
+  static func == (lhs: PdfPagePlanMsg, rhs: PdfPagePlanMsg) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return PdfApiPigeonInternal.deepEquals(lhs.sourcePage, rhs.sourcePage) && PdfApiPigeonInternal.deepEquals(lhs.rotation, rhs.rotation)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PdfPagePlanMsg")
+    PdfApiPigeonInternal.deepHash(value: sourcePage, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: rotation, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PdfPagePlanMsg(sourcePage: \(String(describing: sourcePage)), rotation: \(String(describing: rotation)))"
+  }
+}
+
+/// Writes the input's pages in [pages] order (pages not listed are left out) into [outPath].
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PdfOrganiseRequestMsg: Hashable, CustomStringConvertible {
+  /// Caller-chosen id for progress events and `PdfToolsHostApi.cancel`.
+  var jobId: String
+  var input: PdfToolInputMsg
+  /// At least one page; no source page twice.
+  var pages: [PdfPagePlanMsg]
+  var outPath: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PdfOrganiseRequestMsg? {
+    let jobId = pigeonVar_list[0] as! String
+    let input = pigeonVar_list[1] as! PdfToolInputMsg
+    let pages = pigeonVar_list[2] as! [PdfPagePlanMsg]
+    let outPath = pigeonVar_list[3] as! String
+
+    return PdfOrganiseRequestMsg(
+      jobId: jobId,
+      input: input,
+      pages: pages,
+      outPath: outPath
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      jobId,
+      input,
+      pages,
+      outPath,
+    ]
+  }
+  static func == (lhs: PdfOrganiseRequestMsg, rhs: PdfOrganiseRequestMsg) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return PdfApiPigeonInternal.deepEquals(lhs.jobId, rhs.jobId) && PdfApiPigeonInternal.deepEquals(lhs.input, rhs.input) && PdfApiPigeonInternal.deepEquals(lhs.pages, rhs.pages) && PdfApiPigeonInternal.deepEquals(lhs.outPath, rhs.outPath)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PdfOrganiseRequestMsg")
+    PdfApiPigeonInternal.deepHash(value: jobId, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: input, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: pages, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: outPath, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PdfOrganiseRequestMsg(jobId: \(String(describing: jobId)), input: \(String(describing: input)), pages: \(String(describing: pages)), outPath: \(String(describing: outPath)))"
+  }
+}
+
+/// The sizes each compression preset would give for one file.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PdfCompressEstimateMsg: Hashable, CustomStringConvertible {
+  /// Size of the file now.
+  var sourceBytes: Int64
+  /// Expected size with [PdfCompressPresetMsg.high].
+  var highBytes: Int64
+  /// Expected size with [PdfCompressPresetMsg.medium].
+  var mediumBytes: Int64
+  /// Expected size with [PdfCompressPresetMsg.small].
+  var smallBytes: Int64
+  /// True when the sizes are extrapolated from a sample of pages (long files); false when every
+  /// page was compressed in memory (the sizes are then what a run writes).
+  var sampled: Bool
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PdfCompressEstimateMsg? {
+    let sourceBytes = pigeonVar_list[0] as! Int64
+    let highBytes = pigeonVar_list[1] as! Int64
+    let mediumBytes = pigeonVar_list[2] as! Int64
+    let smallBytes = pigeonVar_list[3] as! Int64
+    let sampled = pigeonVar_list[4] as! Bool
+
+    return PdfCompressEstimateMsg(
+      sourceBytes: sourceBytes,
+      highBytes: highBytes,
+      mediumBytes: mediumBytes,
+      smallBytes: smallBytes,
+      sampled: sampled
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      sourceBytes,
+      highBytes,
+      mediumBytes,
+      smallBytes,
+      sampled,
+    ]
+  }
+  static func == (lhs: PdfCompressEstimateMsg, rhs: PdfCompressEstimateMsg) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return PdfApiPigeonInternal.deepEquals(lhs.sourceBytes, rhs.sourceBytes) && PdfApiPigeonInternal.deepEquals(lhs.highBytes, rhs.highBytes) && PdfApiPigeonInternal.deepEquals(lhs.mediumBytes, rhs.mediumBytes) && PdfApiPigeonInternal.deepEquals(lhs.smallBytes, rhs.smallBytes) && PdfApiPigeonInternal.deepEquals(lhs.sampled, rhs.sampled)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PdfCompressEstimateMsg")
+    PdfApiPigeonInternal.deepHash(value: sourceBytes, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: highBytes, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: mediumBytes, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: smallBytes, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: sampled, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PdfCompressEstimateMsg(sourceBytes: \(String(describing: sourceBytes)), highBytes: \(String(describing: highBytes)), mediumBytes: \(String(describing: mediumBytes)), smallBytes: \(String(describing: smallBytes)), sampled: \(String(describing: sampled)))"
+  }
+}
+
+/// The annotate mode of a viewer.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PdfAnnotateModeMsg: Hashable, CustomStringConvertible {
+  var input: PdfAnnotateInputMsg
+  /// The live ink colour as 0xAARRGGBB.
+  var inkColorArgb: Int64
+  /// The live ink width in page points.
+  var inkWidth: Double
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PdfAnnotateModeMsg? {
+    let input = pigeonVar_list[0] as! PdfAnnotateInputMsg
+    let inkColorArgb = pigeonVar_list[1] as! Int64
+    let inkWidth = pigeonVar_list[2] as! Double
+
+    return PdfAnnotateModeMsg(
+      input: input,
+      inkColorArgb: inkColorArgb,
+      inkWidth: inkWidth
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      input,
+      inkColorArgb,
+      inkWidth,
+    ]
+  }
+  static func == (lhs: PdfAnnotateModeMsg, rhs: PdfAnnotateModeMsg) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return PdfApiPigeonInternal.deepEquals(lhs.input, rhs.input) && PdfApiPigeonInternal.deepEquals(lhs.inkColorArgb, rhs.inkColorArgb) && PdfApiPigeonInternal.deepEquals(lhs.inkWidth, rhs.inkWidth)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PdfAnnotateModeMsg")
+    PdfApiPigeonInternal.deepHash(value: input, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: inkColorArgb, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: inkWidth, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PdfAnnotateModeMsg(input: \(String(describing: input)), inkColorArgb: \(String(describing: inkColorArgb)), inkWidth: \(String(describing: inkWidth)))"
+  }
+}
+
+/// One item of an annotate session: exactly one of [annotation] and [stamp] is set.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PdfAnnotateItemMsg: Hashable, CustomStringConvertible {
+  /// Dart's id of the item (hit tests answer it).
+  var id: String
+  var annotation: PdfAnnotationMsg? = nil
+  /// An image stamp (HOM-30's signatures; previewed like an annotation).
+  var stamp: PdfSignatureStampMsg? = nil
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PdfAnnotateItemMsg? {
+    let id = pigeonVar_list[0] as! String
+    let annotation: PdfAnnotationMsg? = nilOrValue(pigeonVar_list[1])
+    let stamp: PdfSignatureStampMsg? = nilOrValue(pigeonVar_list[2])
+
+    return PdfAnnotateItemMsg(
+      id: id,
+      annotation: annotation,
+      stamp: stamp
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      id,
+      annotation,
+      stamp,
+    ]
+  }
+  static func == (lhs: PdfAnnotateItemMsg, rhs: PdfAnnotateItemMsg) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return PdfApiPigeonInternal.deepEquals(lhs.id, rhs.id) && PdfApiPigeonInternal.deepEquals(lhs.annotation, rhs.annotation) && PdfApiPigeonInternal.deepEquals(lhs.stamp, rhs.stamp)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PdfAnnotateItemMsg")
+    PdfApiPigeonInternal.deepHash(value: id, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: annotation, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: stamp, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PdfAnnotateItemMsg(id: \(String(describing: id)), annotation: \(String(describing: annotation)), stamp: \(String(describing: stamp)))"
+  }
+}
+
+/// Rects on one page (a text selection's lines).
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PdfPageRectsMsg: Hashable, CustomStringConvertible {
+  var pageIndex: Int64
+  var rects: [PdfRectMsg]
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PdfPageRectsMsg? {
+    let pageIndex = pigeonVar_list[0] as! Int64
+    let rects = pigeonVar_list[1] as! [PdfRectMsg]
+
+    return PdfPageRectsMsg(
+      pageIndex: pageIndex,
+      rects: rects
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      pageIndex,
+      rects,
+    ]
+  }
+  static func == (lhs: PdfPageRectsMsg, rhs: PdfPageRectsMsg) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return PdfApiPigeonInternal.deepEquals(lhs.pageIndex, rhs.pageIndex) && PdfApiPigeonInternal.deepEquals(lhs.rects, rhs.rects)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PdfPageRectsMsg")
+    PdfApiPigeonInternal.deepHash(value: pageIndex, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: rects, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PdfPageRectsMsg(pageIndex: \(String(describing: pageIndex)), rects: \(String(describing: rects)))"
+  }
+}
+
+/// Writes [input] with [annotations] and [stamps] into [outPath].
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PdfAnnotateSaveRequestMsg: Hashable, CustomStringConvertible {
+  /// Caller-chosen id for progress events and `PdfToolsHostApi.cancel`.
+  var jobId: String
+  var input: PdfToolInputMsg
+  var annotations: [PdfAnnotationMsg]
+  /// Image stamps: kept as Stamp annotations with the image as their appearance, or burned in.
+  var stamps: [PdfSignatureStampMsg]
+  /// Draw [annotations] and [stamps] into the page content instead of adding annotations (text
+  /// stays text; the page's existing annotations stay annotations).
+  var burnIn: Bool
+  var outPath: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PdfAnnotateSaveRequestMsg? {
+    let jobId = pigeonVar_list[0] as! String
+    let input = pigeonVar_list[1] as! PdfToolInputMsg
+    let annotations = pigeonVar_list[2] as! [PdfAnnotationMsg]
+    let stamps = pigeonVar_list[3] as! [PdfSignatureStampMsg]
+    let burnIn = pigeonVar_list[4] as! Bool
+    let outPath = pigeonVar_list[5] as! String
+
+    return PdfAnnotateSaveRequestMsg(
+      jobId: jobId,
+      input: input,
+      annotations: annotations,
+      stamps: stamps,
+      burnIn: burnIn,
+      outPath: outPath
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      jobId,
+      input,
+      annotations,
+      stamps,
+      burnIn,
+      outPath,
+    ]
+  }
+  static func == (lhs: PdfAnnotateSaveRequestMsg, rhs: PdfAnnotateSaveRequestMsg) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return PdfApiPigeonInternal.deepEquals(lhs.jobId, rhs.jobId) && PdfApiPigeonInternal.deepEquals(lhs.input, rhs.input) && PdfApiPigeonInternal.deepEquals(lhs.annotations, rhs.annotations) && PdfApiPigeonInternal.deepEquals(lhs.stamps, rhs.stamps) && PdfApiPigeonInternal.deepEquals(lhs.burnIn, rhs.burnIn) && PdfApiPigeonInternal.deepEquals(lhs.outPath, rhs.outPath)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PdfAnnotateSaveRequestMsg")
+    PdfApiPigeonInternal.deepHash(value: jobId, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: input, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: annotations, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: stamps, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: burnIn, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: outPath, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PdfAnnotateSaveRequestMsg(jobId: \(String(describing: jobId)), input: \(String(describing: input)), annotations: \(String(describing: annotations)), stamps: \(String(describing: stamps)), burnIn: \(String(describing: burnIn)), outPath: \(String(describing: outPath)))"
+  }
+}
+
 private class PdfApiPigeonCodecReader: FlutterStandardReader {
   override func readValue(ofType type: UInt8) -> Any? {
     switch type {
@@ -2193,75 +2579,95 @@ private class PdfApiPigeonCodecReader: FlutterStandardReader {
       }
       return nil
     case 134:
-      return PdfCapabilitiesMsg.fromList(self.readValue() as! [Any?])
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return PdfAnnotateInputMsg(rawValue: enumResultAsInt)
+      }
+      return nil
     case 135:
-      return PdfOpenRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfCapabilitiesMsg.fromList(self.readValue() as! [Any?])
     case 136:
-      return PdfPageSizeMsg.fromList(self.readValue() as! [Any?])
+      return PdfOpenRequestMsg.fromList(self.readValue() as! [Any?])
     case 137:
-      return PdfDocumentInfoMsg.fromList(self.readValue() as! [Any?])
+      return PdfPageSizeMsg.fromList(self.readValue() as! [Any?])
     case 138:
-      return PdfProbeMsg.fromList(self.readValue() as! [Any?])
+      return PdfDocumentInfoMsg.fromList(self.readValue() as! [Any?])
     case 139:
-      return PdfOutlineItemMsg.fromList(self.readValue() as! [Any?])
+      return PdfProbeMsg.fromList(self.readValue() as! [Any?])
     case 140:
-      return PdfThumbnailRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfOutlineItemMsg.fromList(self.readValue() as! [Any?])
     case 141:
-      return PdfImageMsg.fromList(self.readValue() as! [Any?])
+      return PdfThumbnailRequestMsg.fromList(self.readValue() as! [Any?])
     case 142:
-      return PdfRectMsg.fromList(self.readValue() as! [Any?])
+      return PdfImageMsg.fromList(self.readValue() as! [Any?])
     case 143:
-      return PdfSearchOptionsMsg.fromList(self.readValue() as! [Any?])
+      return PdfRectMsg.fromList(self.readValue() as! [Any?])
     case 144:
-      return PdfSearchHitMsg.fromList(self.readValue() as! [Any?])
+      return PdfSearchOptionsMsg.fromList(self.readValue() as! [Any?])
     case 145:
-      return PdfSearchResultMsg.fromList(self.readValue() as! [Any?])
+      return PdfSearchHitMsg.fromList(self.readValue() as! [Any?])
     case 146:
-      return PdfViewStateMsg.fromList(self.readValue() as! [Any?])
+      return PdfSearchResultMsg.fromList(self.readValue() as! [Any?])
     case 147:
-      return PdfTextureViewRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfViewStateMsg.fromList(self.readValue() as! [Any?])
     case 148:
-      return PdfTextureViewMsg.fromList(self.readValue() as! [Any?])
+      return PdfTextureViewRequestMsg.fromList(self.readValue() as! [Any?])
     case 149:
-      return PdfViewportMsg.fromList(self.readValue() as! [Any?])
+      return PdfTextureViewMsg.fromList(self.readValue() as! [Any?])
     case 150:
-      return PdfTextRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfViewportMsg.fromList(self.readValue() as! [Any?])
     case 151:
-      return PdfPageTextMsg.fromList(self.readValue() as! [Any?])
+      return PdfTextRequestMsg.fromList(self.readValue() as! [Any?])
     case 152:
-      return PdfTextResultMsg.fromList(self.readValue() as! [Any?])
+      return PdfPageTextMsg.fromList(self.readValue() as! [Any?])
     case 153:
-      return PdfToolInputMsg.fromList(self.readValue() as! [Any?])
+      return PdfTextResultMsg.fromList(self.readValue() as! [Any?])
     case 154:
-      return PdfPageRangeMsg.fromList(self.readValue() as! [Any?])
+      return PdfToolInputMsg.fromList(self.readValue() as! [Any?])
     case 155:
-      return PdfMergeRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfPageRangeMsg.fromList(self.readValue() as! [Any?])
     case 156:
-      return PdfSplitRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfMergeRequestMsg.fromList(self.readValue() as! [Any?])
     case 157:
-      return PdfReorderRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfSplitRequestMsg.fromList(self.readValue() as! [Any?])
     case 158:
-      return PdfRotateRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfReorderRequestMsg.fromList(self.readValue() as! [Any?])
     case 159:
-      return PdfDeletePagesRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfRotateRequestMsg.fromList(self.readValue() as! [Any?])
     case 160:
-      return PdfInkStrokeMsg.fromList(self.readValue() as! [Any?])
+      return PdfDeletePagesRequestMsg.fromList(self.readValue() as! [Any?])
     case 161:
-      return PdfAnnotationMsg.fromList(self.readValue() as! [Any?])
+      return PdfInkStrokeMsg.fromList(self.readValue() as! [Any?])
     case 162:
-      return PdfAnnotateRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfAnnotationMsg.fromList(self.readValue() as! [Any?])
     case 163:
-      return PdfSignatureStampMsg.fromList(self.readValue() as! [Any?])
+      return PdfAnnotateRequestMsg.fromList(self.readValue() as! [Any?])
     case 164:
-      return PdfSignRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfSignatureStampMsg.fromList(self.readValue() as! [Any?])
     case 165:
-      return PdfCompressRequestMsg.fromList(self.readValue() as! [Any?])
+      return PdfSignRequestMsg.fromList(self.readValue() as! [Any?])
     case 166:
-      return PdfToolResultMsg.fromList(self.readValue() as! [Any?])
+      return PdfCompressRequestMsg.fromList(self.readValue() as! [Any?])
     case 167:
-      return PdfToolProgressMsg.fromList(self.readValue() as! [Any?])
+      return PdfToolResultMsg.fromList(self.readValue() as! [Any?])
     case 168:
+      return PdfToolProgressMsg.fromList(self.readValue() as! [Any?])
+    case 169:
       return PdfEventMsg.fromList(self.readValue() as! [Any?])
+    case 170:
+      return PdfPagePlanMsg.fromList(self.readValue() as! [Any?])
+    case 171:
+      return PdfOrganiseRequestMsg.fromList(self.readValue() as! [Any?])
+    case 172:
+      return PdfCompressEstimateMsg.fromList(self.readValue() as! [Any?])
+    case 173:
+      return PdfAnnotateModeMsg.fromList(self.readValue() as! [Any?])
+    case 174:
+      return PdfAnnotateItemMsg.fromList(self.readValue() as! [Any?])
+    case 175:
+      return PdfPageRectsMsg.fromList(self.readValue() as! [Any?])
+    case 176:
+      return PdfAnnotateSaveRequestMsg.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
     }
@@ -2285,110 +2691,134 @@ private class PdfApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? PdfEventKindMsg {
       super.writeByte(133)
       super.writeValue(value.rawValue)
-    } else if let value = value as? PdfCapabilitiesMsg {
+    } else if let value = value as? PdfAnnotateInputMsg {
       super.writeByte(134)
-      super.writeValue(value.toList())
-    } else if let value = value as? PdfOpenRequestMsg {
+      super.writeValue(value.rawValue)
+    } else if let value = value as? PdfCapabilitiesMsg {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfPageSizeMsg {
+    } else if let value = value as? PdfOpenRequestMsg {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfDocumentInfoMsg {
+    } else if let value = value as? PdfPageSizeMsg {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfProbeMsg {
+    } else if let value = value as? PdfDocumentInfoMsg {
       super.writeByte(138)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfOutlineItemMsg {
+    } else if let value = value as? PdfProbeMsg {
       super.writeByte(139)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfThumbnailRequestMsg {
+    } else if let value = value as? PdfOutlineItemMsg {
       super.writeByte(140)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfImageMsg {
+    } else if let value = value as? PdfThumbnailRequestMsg {
       super.writeByte(141)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfRectMsg {
+    } else if let value = value as? PdfImageMsg {
       super.writeByte(142)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfSearchOptionsMsg {
+    } else if let value = value as? PdfRectMsg {
       super.writeByte(143)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfSearchHitMsg {
+    } else if let value = value as? PdfSearchOptionsMsg {
       super.writeByte(144)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfSearchResultMsg {
+    } else if let value = value as? PdfSearchHitMsg {
       super.writeByte(145)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfViewStateMsg {
+    } else if let value = value as? PdfSearchResultMsg {
       super.writeByte(146)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfTextureViewRequestMsg {
+    } else if let value = value as? PdfViewStateMsg {
       super.writeByte(147)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfTextureViewMsg {
+    } else if let value = value as? PdfTextureViewRequestMsg {
       super.writeByte(148)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfViewportMsg {
+    } else if let value = value as? PdfTextureViewMsg {
       super.writeByte(149)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfTextRequestMsg {
+    } else if let value = value as? PdfViewportMsg {
       super.writeByte(150)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfPageTextMsg {
+    } else if let value = value as? PdfTextRequestMsg {
       super.writeByte(151)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfTextResultMsg {
+    } else if let value = value as? PdfPageTextMsg {
       super.writeByte(152)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfToolInputMsg {
+    } else if let value = value as? PdfTextResultMsg {
       super.writeByte(153)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfPageRangeMsg {
+    } else if let value = value as? PdfToolInputMsg {
       super.writeByte(154)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfMergeRequestMsg {
+    } else if let value = value as? PdfPageRangeMsg {
       super.writeByte(155)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfSplitRequestMsg {
+    } else if let value = value as? PdfMergeRequestMsg {
       super.writeByte(156)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfReorderRequestMsg {
+    } else if let value = value as? PdfSplitRequestMsg {
       super.writeByte(157)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfRotateRequestMsg {
+    } else if let value = value as? PdfReorderRequestMsg {
       super.writeByte(158)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfDeletePagesRequestMsg {
+    } else if let value = value as? PdfRotateRequestMsg {
       super.writeByte(159)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfInkStrokeMsg {
+    } else if let value = value as? PdfDeletePagesRequestMsg {
       super.writeByte(160)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfAnnotationMsg {
+    } else if let value = value as? PdfInkStrokeMsg {
       super.writeByte(161)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfAnnotateRequestMsg {
+    } else if let value = value as? PdfAnnotationMsg {
       super.writeByte(162)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfSignatureStampMsg {
+    } else if let value = value as? PdfAnnotateRequestMsg {
       super.writeByte(163)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfSignRequestMsg {
+    } else if let value = value as? PdfSignatureStampMsg {
       super.writeByte(164)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfCompressRequestMsg {
+    } else if let value = value as? PdfSignRequestMsg {
       super.writeByte(165)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfToolResultMsg {
+    } else if let value = value as? PdfCompressRequestMsg {
       super.writeByte(166)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfToolProgressMsg {
+    } else if let value = value as? PdfToolResultMsg {
       super.writeByte(167)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfEventMsg {
+    } else if let value = value as? PdfToolProgressMsg {
       super.writeByte(168)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfEventMsg {
+      super.writeByte(169)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfPagePlanMsg {
+      super.writeByte(170)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfOrganiseRequestMsg {
+      super.writeByte(171)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfCompressEstimateMsg {
+      super.writeByte(172)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfAnnotateModeMsg {
+      super.writeByte(173)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfAnnotateItemMsg {
+      super.writeByte(174)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfPageRectsMsg {
+      super.writeByte(175)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfAnnotateSaveRequestMsg {
+      super.writeByte(176)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -3123,3 +3553,225 @@ class PdfEventsStreamHandler: PigeonEventChannelWrapper<PdfEventMsg> {
   }
 }
       
+/// The page organiser (HOM-28 Apple, HOM-28A Android). Jobs share `PdfToolsHostApi.cancel`.
+///
+/// Generated protocol from Pigeon that represents a handler of messages from Flutter.
+protocol PdfOrganiseHostApi {
+  func organise(request: PdfOrganiseRequestMsg, completion: @escaping (Result<PdfToolResultMsg, Error>) -> Void)
+}
+
+/// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
+class PdfOrganiseHostApiSetup {
+  static var codec: FlutterStandardMessageCodec { PdfApiPigeonCodec.shared }
+  /// Sets up an instance of `PdfOrganiseHostApi` to handle messages through the `binaryMessenger`.
+  static func setUp(binaryMessenger: FlutterBinaryMessenger, api: PdfOrganiseHostApi?, messageChannelSuffix: String = "") {
+    let channelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
+    let organiseChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.danaview_pdf.PdfOrganiseHostApi.organise\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      organiseChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let requestArg = args[0] as! PdfOrganiseRequestMsg
+        api.organise(request: requestArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      organiseChannel.setMessageHandler(nil)
+    }
+  }
+}
+/// Estimates for the compress sheet (HOM-31 Apple, HOM-31A Android).
+///
+/// Generated protocol from Pigeon that represents a handler of messages from Flutter.
+protocol PdfCompressHostApi {
+  /// What each preset would give for [input], off the main thread; nothing is written.
+  func estimate(input: PdfToolInputMsg, completion: @escaping (Result<PdfCompressEstimateMsg, Error>) -> Void)
+}
+
+/// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
+class PdfCompressHostApiSetup {
+  static var codec: FlutterStandardMessageCodec { PdfApiPigeonCodec.shared }
+  /// Sets up an instance of `PdfCompressHostApi` to handle messages through the `binaryMessenger`.
+  static func setUp(binaryMessenger: FlutterBinaryMessenger, api: PdfCompressHostApi?, messageChannelSuffix: String = "") {
+    let channelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
+    /// What each preset would give for [input], off the main thread; nothing is written.
+    let estimateChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.danaview_pdf.PdfCompressHostApi.estimate\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      estimateChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let inputArg = args[0] as! PdfToolInputMsg
+        api.estimate(input: inputArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      estimateChannel.setMessageHandler(nil)
+    }
+  }
+}
+/// Annotate mode of a viewer and the annotate save (HOM-29 Apple, HOM-29A Android).
+///
+/// Generated protocol from Pigeon that represents a handler of messages from Flutter.
+protocol PdfAnnotateHostApi {
+  /// Puts view [viewId] into annotate mode with [mode], or back to plain viewing with null (the
+  /// preview annotations are removed).
+  func setAnnotateMode(viewId: Int64, mode: PdfAnnotateModeMsg?) throws
+  /// Replaces the preview of view [viewId] with [items]; [selectedId] is drawn as selected.
+  func showAnnotations(viewId: Int64, items: [PdfAnnotateItemMsg], selectedId: String?) throws
+  /// The view's text selection as one rect per line, grouped by page (empty without one).
+  func selectionLines(viewId: Int64) throws -> [PdfPageRectsMsg]
+  /// Writes the request's new file off the main thread (a tool job, `tool: annotate`).
+  func save(request: PdfAnnotateSaveRequestMsg, completion: @escaping (Result<PdfToolResultMsg, Error>) -> Void)
+}
+
+/// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
+class PdfAnnotateHostApiSetup {
+  static var codec: FlutterStandardMessageCodec { PdfApiPigeonCodec.shared }
+  /// Sets up an instance of `PdfAnnotateHostApi` to handle messages through the `binaryMessenger`.
+  static func setUp(binaryMessenger: FlutterBinaryMessenger, api: PdfAnnotateHostApi?, messageChannelSuffix: String = "") {
+    let channelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
+    /// Puts view [viewId] into annotate mode with [mode], or back to plain viewing with null (the
+    /// preview annotations are removed).
+    let setAnnotateModeChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.setAnnotateMode\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setAnnotateModeChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let viewIdArg = args[0] as! Int64
+        let modeArg: PdfAnnotateModeMsg? = nilOrValue(args[1])
+        do {
+          try api.setAnnotateMode(viewId: viewIdArg, mode: modeArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setAnnotateModeChannel.setMessageHandler(nil)
+    }
+    /// Replaces the preview of view [viewId] with [items]; [selectedId] is drawn as selected.
+    let showAnnotationsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.showAnnotations\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      showAnnotationsChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let viewIdArg = args[0] as! Int64
+        let itemsArg = args[1] as! [PdfAnnotateItemMsg]
+        let selectedIdArg: String? = nilOrValue(args[2])
+        do {
+          try api.showAnnotations(viewId: viewIdArg, items: itemsArg, selectedId: selectedIdArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      showAnnotationsChannel.setMessageHandler(nil)
+    }
+    /// The view's text selection as one rect per line, grouped by page (empty without one).
+    let selectionLinesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.selectionLines\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      selectionLinesChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let viewIdArg = args[0] as! Int64
+        do {
+          let result = try api.selectionLines(viewId: viewIdArg)
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      selectionLinesChannel.setMessageHandler(nil)
+    }
+    /// Writes the request's new file off the main thread (a tool job, `tool: annotate`).
+    let saveChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.save\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      saveChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let requestArg = args[0] as! PdfAnnotateSaveRequestMsg
+        api.save(request: requestArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      saveChannel.setMessageHandler(nil)
+    }
+  }
+}
+
+/// What an annotating viewer reports (native → Dart).
+///
+/// Generated protocol from Pigeon that represents Flutter messages that can be called from Swift.
+protocol PdfAnnotateEventsApiProtocol {
+  /// A finished ink stroke on page [pageIndex], page-space points `[x0, y0, x1, y1, …]`.
+  @MainActor func inkStroke(viewId viewIdArg: Int64, pageIndex pageIndexArg: Int64, points pointsArg: [Double]) async throws
+  /// A tap at page point ([x], [y]) on [pageIndex]; [itemId] is the session item under it.
+  @MainActor func tapped(viewId viewIdArg: Int64, pageIndex pageIndexArg: Int64, x xArg: Double, y yArg: Double, itemId itemIdArg: String?) async throws
+}
+class PdfAnnotateEventsApi: PdfAnnotateEventsApiProtocol {
+  private let binaryMessenger: FlutterBinaryMessenger
+  private let messageChannelSuffix: String
+  init(binaryMessenger: FlutterBinaryMessenger, messageChannelSuffix: String = "") {
+    self.binaryMessenger = binaryMessenger
+    self.messageChannelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
+  }
+  var codec: PdfApiPigeonCodec {
+    return PdfApiPigeonCodec.shared
+  }
+  /// A finished ink stroke on page [pageIndex], page-space points `[x0, y0, x1, y1, …]`.
+  @MainActor func inkStroke(viewId viewIdArg: Int64, pageIndex pageIndexArg: Int64, points pointsArg: [Double]) async throws {
+    return try await withCheckedThrowingContinuation { continuation in
+      let channelName: String = "dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.inkStroke\(messageChannelSuffix)"
+      let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+      channel.sendMessage([viewIdArg, pageIndexArg, pointsArg] as [Any?]) { response in
+        guard let listResponse = response as? [Any?] else {
+          continuation.resume(throwing: createConnectionError(withChannelName: channelName))
+          return
+        }
+        if listResponse.count > 1 {
+          let code: String = listResponse[0] as! String
+          let message: String? = nilOrValue(listResponse[1])
+          let details: String? = nilOrValue(listResponse[2])
+          continuation.resume(throwing: PdfPigeonError(code: code, message: message, details: details))
+        } else {
+          continuation.resume()
+        }
+      }
+    }
+  }
+  /// A tap at page point ([x], [y]) on [pageIndex]; [itemId] is the session item under it.
+  @MainActor func tapped(viewId viewIdArg: Int64, pageIndex pageIndexArg: Int64, x xArg: Double, y yArg: Double, itemId itemIdArg: String?) async throws {
+    return try await withCheckedThrowingContinuation { continuation in
+      let channelName: String = "dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.tapped\(messageChannelSuffix)"
+      let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+      channel.sendMessage([viewIdArg, pageIndexArg, xArg, yArg, itemIdArg] as [Any?]) { response in
+        guard let listResponse = response as? [Any?] else {
+          continuation.resume(throwing: createConnectionError(withChannelName: channelName))
+          return
+        }
+        if listResponse.count > 1 {
+          let code: String = listResponse[0] as! String
+          let message: String? = nilOrValue(listResponse[1])
+          let details: String? = nilOrValue(listResponse[2])
+          continuation.resume(throwing: PdfPigeonError(code: code, message: message, details: details))
+        } else {
+          continuation.resume()
+        }
+      }
+    }
+  }
+}

@@ -819,3 +819,213 @@ abstract class PdfToolsHostApi {
 abstract class PdfEventsApi {
   PdfEventMsg pdfEvents();
 }
+
+// =============================================================================================
+// HOM-28 amendment [INTEGRATION] (2026-10-30, lead-approved): page organiser in one pass.
+//
+// The organiser (reorder + rotate + delete + extract selected pages) saves in one native write
+// instead of chaining three tools through temporary files. Its own host API, so the other S4
+// amendments (HOM-31 compress) merge without touching this block. Implemented by
+// Tools/PdfPageTools on Apple (HOM-28) and PdfBox-Android (HOM-28A). Progress events of an
+// organise job carry `tool: reorder`; the Dart side filters by job id only. Advertised through
+// `PdfCapabilitiesMsg.tools` containing reorder, rotate and deletePages (all three).
+// =============================================================================================
+
+/// One page of an organised document: source page [sourcePage] turned by [rotation] more degrees.
+class PdfPagePlanMsg {
+  PdfPagePlanMsg({required this.sourcePage, required this.rotation});
+
+  /// The 0-based page of the input; each page appears at most once.
+  int sourcePage;
+
+  /// Degrees clockwise added to the page's own rotation (a multiple of 90; may be negative).
+  int rotation;
+}
+
+/// Writes the input's pages in [pages] order (pages not listed are left out) into [outPath].
+class PdfOrganiseRequestMsg {
+  PdfOrganiseRequestMsg({required this.jobId, required this.input, required this.pages, required this.outPath});
+
+  /// Caller-chosen id for progress events and `PdfToolsHostApi.cancel`.
+  String jobId;
+  PdfToolInputMsg input;
+
+  /// At least one page; no source page twice.
+  List<PdfPagePlanMsg> pages;
+  String outPath;
+}
+
+/// The page organiser (HOM-28 Apple, HOM-28A Android). Jobs share `PdfToolsHostApi.cancel`.
+@HostApi()
+abstract class PdfOrganiseHostApi {
+  @asyncCallback
+  PdfToolResultMsg organise(PdfOrganiseRequestMsg request);
+}
+// ---- end of the HOM-28 amendment ------------------------------------------------------------
+
+// ---------------------------------------------------------------------------------------------
+// Compress estimates (HOM-31; [INTEGRATION] amendment, an additive block of its own)
+//
+// The compress job itself is `PdfToolsHostApi.compress` above. This API only tells the sheet
+// what each preset would give before the user runs one. Android (HOM-31A) may leave it
+// unregistered: the Dart wrapper maps the `channel-error` to "no estimate" and the sheet shows
+// sizes once a preset has run.
+// ---------------------------------------------------------------------------------------------
+
+/// The sizes each compression preset would give for one file.
+class PdfCompressEstimateMsg {
+  PdfCompressEstimateMsg({
+    required this.sourceBytes,
+    required this.highBytes,
+    required this.mediumBytes,
+    required this.smallBytes,
+    required this.sampled,
+  });
+
+  /// Size of the file now.
+  int sourceBytes;
+
+  /// Expected size with [PdfCompressPresetMsg.high].
+  int highBytes;
+
+  /// Expected size with [PdfCompressPresetMsg.medium].
+  int mediumBytes;
+
+  /// Expected size with [PdfCompressPresetMsg.small].
+  int smallBytes;
+
+  /// True when the sizes are extrapolated from a sample of pages (long files); false when every
+  /// page was compressed in memory (the sizes are then what a run writes).
+  bool sampled;
+}
+
+/// Estimates for the compress sheet (HOM-31 Apple, HOM-31A Android).
+@HostApi()
+abstract class PdfCompressHostApi {
+  /// What each preset would give for [input], off the main thread; nothing is written.
+  @asyncCallback
+  PdfCompressEstimateMsg estimate(PdfToolInputMsg input);
+}
+
+// =============================================================================================
+// HOM-29 amendment [INTEGRATION] (2026-10-30, lead-approved): annotate mode in the viewer, and the
+// stamp / burn-in hooks HOM-30 builds on.
+//
+// The annotations of an annotate session live in Dart (undo / redo, the unsaved-changes prompt);
+// the native viewer shows them as a preview on its in-memory document (never written), turns
+// touches into ink strokes and taps into page points, and reports the text selection line by
+// line. Saving is a tool job: `PdfAnnotateHostApi.save` writes the input's pages with the
+// session's annotations (real, editable PDF annotations) and optional image stamps, or burns them
+// into the page content (`burnIn`, HOM-30's signatures), into a NEW file. Its jobs share
+// `PdfToolsHostApi.cancel` and report `toolProgress` with `tool: annotate`. The frozen
+// `PdfToolsHostApi.annotate` is the same write without stamps and without burn-in. Implemented by
+// Annotate/ on Apple (HOM-29) and by PdfBox-Android (HOM-29A); Android may leave the view calls
+// unregistered until then (`channel-error` → notSupportedOnDevice). Advertised through
+// `PdfCapabilitiesMsg.tools` containing `annotate`.
+// =============================================================================================
+
+/// What a touch on an annotating viewer does.
+enum PdfAnnotateInputMsg {
+  /// The viewer scrolls, zooms and selects text as usual; a tap on a session annotation reports
+  /// it (`PdfAnnotateEventsApi.tapped` with its id).
+  select,
+
+  /// One finger, the pointer or Apple Pencil draws ink (PencilKit on iOS); two fingers scroll and
+  /// zoom (a finger scrolls when the system prefers Pencil-only drawing). Finished strokes arrive
+  /// through `PdfAnnotateEventsApi.inkStroke`.
+  ink,
+
+  /// A tap reports its page point (`tapped`), where Dart places a text box.
+  text,
+
+  /// A tap reports the session annotation under it (`tapped` with its id), which Dart removes.
+  erase,
+}
+
+/// The annotate mode of a viewer.
+class PdfAnnotateModeMsg {
+  PdfAnnotateModeMsg({required this.input, required this.inkColorArgb, required this.inkWidth});
+
+  PdfAnnotateInputMsg input;
+
+  /// The live ink colour as 0xAARRGGBB.
+  int inkColorArgb;
+
+  /// The live ink width in page points.
+  double inkWidth;
+}
+
+/// One item of an annotate session: exactly one of [annotation] and [stamp] is set.
+class PdfAnnotateItemMsg {
+  PdfAnnotateItemMsg({required this.id, this.annotation, this.stamp});
+
+  /// Dart's id of the item (hit tests answer it).
+  String id;
+
+  PdfAnnotationMsg? annotation;
+
+  /// An image stamp (HOM-30's signatures; previewed like an annotation).
+  PdfSignatureStampMsg? stamp;
+}
+
+/// Rects on one page (a text selection's lines).
+class PdfPageRectsMsg {
+  PdfPageRectsMsg({required this.pageIndex, required this.rects});
+
+  int pageIndex;
+  List<PdfRectMsg> rects;
+}
+
+/// Writes [input] with [annotations] and [stamps] into [outPath].
+class PdfAnnotateSaveRequestMsg {
+  PdfAnnotateSaveRequestMsg({
+    required this.jobId,
+    required this.input,
+    required this.annotations,
+    required this.stamps,
+    required this.burnIn,
+    required this.outPath,
+  });
+
+  /// Caller-chosen id for progress events and `PdfToolsHostApi.cancel`.
+  String jobId;
+  PdfToolInputMsg input;
+  List<PdfAnnotationMsg> annotations;
+
+  /// Image stamps: kept as Stamp annotations with the image as their appearance, or burned in.
+  List<PdfSignatureStampMsg> stamps;
+
+  /// Draw [annotations] and [stamps] into the page content instead of adding annotations (text
+  /// stays text; the page's existing annotations stay annotations).
+  bool burnIn;
+  String outPath;
+}
+
+/// Annotate mode of a viewer and the annotate save (HOM-29 Apple, HOM-29A Android).
+@HostApi()
+abstract class PdfAnnotateHostApi {
+  /// Puts view [viewId] into annotate mode with [mode], or back to plain viewing with null (the
+  /// preview annotations are removed).
+  void setAnnotateMode(int viewId, PdfAnnotateModeMsg? mode);
+
+  /// Replaces the preview of view [viewId] with [items]; [selectedId] is drawn as selected.
+  void showAnnotations(int viewId, List<PdfAnnotateItemMsg> items, String? selectedId);
+
+  /// The view's text selection as one rect per line, grouped by page (empty without one).
+  List<PdfPageRectsMsg> selectionLines(int viewId);
+
+  /// Writes the request's new file off the main thread (a tool job, `tool: annotate`).
+  @asyncCallback
+  PdfToolResultMsg save(PdfAnnotateSaveRequestMsg request);
+}
+
+/// What an annotating viewer reports (native → Dart).
+@FlutterApi()
+abstract class PdfAnnotateEventsApi {
+  /// A finished ink stroke on page [pageIndex], page-space points `[x0, y0, x1, y1, …]`.
+  void inkStroke(int viewId, int pageIndex, List<double> points);
+
+  /// A tap at page point ([x], [y]) on [pageIndex]; [itemId] is the session item under it.
+  void tapped(int viewId, int pageIndex, double x, double y, String? itemId);
+}
+// ---- end of the HOM-29 amendment ------------------------------------------------------------
