@@ -25,6 +25,8 @@ class HomeMediaCard extends StatelessWidget {
     this.onTap,
     this.trailing,
     this.semanticLabel,
+    this.thumbnail,
+    this.showPlay = true,
   });
 
   /// The media title (one line).
@@ -57,10 +59,16 @@ class HomeMediaCard extends StatelessWidget {
   /// Overrides the merged semantics of the card's text.
   final String? semanticLabel;
 
+  /// The thumbnail image (filling the 16:9 frame); null draws the neutral placeholder (§2.5).
+  final Widget? thumbnail;
+
+  /// Whether the play disc sits on the thumbnail (media); off for projects and documents.
+  final bool showPlay;
+
   @override
   Widget build(BuildContext context) {
     final showProgress = (progress ?? 0) > 0;
-    final thumbnail = AspectRatio(
+    final frame = AspectRatio(
       aspectRatio: 16 / 9,
       child: DanaviewDepth.clip(
         borderRadius: DanaviewRadius.thumbAll,
@@ -69,12 +77,9 @@ class HomeMediaCard extends StatelessWidget {
           children: [
             Opacity(
               opacity: dimmed ? 0.45 : 1,
-              child: ColoredBox(
-                color: DanaviewColors.mediaPlaceholder,
-                child: Center(child: Icon(icon, size: 20, color: DanaviewColors.textSecondary)),
-              ),
+              child: thumbnail ?? HomeMediaPlaceholder(icon: icon),
             ),
-            if (!dimmed)
+            if (!dimmed && showPlay)
               Center(
                 child: Container(
                   width: 30,
@@ -148,11 +153,39 @@ class HomeMediaCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [thumbnail, text],
+          children: [frame, text],
         ),
       ),
     );
   }
+}
+
+/// The neutral thumbnail placeholder (§2.5): a `#1C1C1E` tile with a centred 20 pt type glyph.
+class HomeMediaPlaceholder extends StatelessWidget {
+  /// A placeholder showing [icon].
+  const HomeMediaPlaceholder({super.key, required this.icon});
+
+  /// The type glyph.
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+        color: DanaviewColors.mediaPlaceholder,
+        child: Center(child: Icon(icon, size: 20, color: DanaviewColors.textSecondary)),
+      );
+}
+
+/// The height of a [HomeMediaCard] [width] wide with a footnote line in [context] (its text
+/// scale and pointer kind): the 5 pt padding inside the hairline, the 16:9 thumbnail and the two
+/// text lines, or the More button's target when [menu] is set and taller. Grids give every card
+/// this height, so the cards of a row are always equal.
+double homeMediaCardExtent(double width, BuildContext context, {bool menu = true}) {
+  final scaler = MediaQuery.textScalerOf(context);
+  const inset = 2 * (5 + DanaviewBorders.width);
+  final thumb = math.max(0.0, width - inset) * 9 / 16;
+  final text = scaler.scale(20) + 2 + scaler.scale(16);
+  final button = menu ? (context.isTouchPlatform ? DanaviewSpacing.minTapTarget : 40.0) : 0.0;
+  return (inset + thumb + 6 + math.max(text, button) + 2 + 1).ceilToDouble();
 }
 
 /// A duration or episode label on a thumbnail: black 55 %, radius 5.
