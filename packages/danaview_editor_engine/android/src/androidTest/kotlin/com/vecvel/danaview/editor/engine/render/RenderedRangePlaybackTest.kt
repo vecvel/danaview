@@ -328,6 +328,18 @@ class RenderedRangePlaybackTest {
                 "${after.size} frames presented after it (first k=${after.firstOrNull()?.k}), stale render frames after it ${stale.size} ${stale.take(3).map { it.k }}, " +
                 "swap dropped ${binding.swap.stats().dropped}, rebuilds ${binding.rebuilds}, dropped frames ${h.host.dropped.size}, range frames ${stats.rangeFrames}"
             log18(line)
+            // Diagnostics (no assertion): whether a wrong frame came from the render file itself
+            // (Media3's compositor) or from its playback (range deck latching).
+            for (k in shown.filter { it.k <= lastBefore && mismatches(plan, it.k, it.readings, pts).isNotEmpty() }.map { it.k }.distinct().take(5)) {
+                if (k !in first until end) {
+                    log18("wrong frame k=$k is live (outside the range)")
+                    continue
+                }
+                val b = RenderedFile(file).frames((k - first).toInt(), 1).first()
+                val fileReadings = q3.associate { it.name to FrameBarcode.decode(b, it.barcode) }
+                b.recycle()
+                log18("wrong frame k=$k: render file frame ${k - first} reads $fileReadings, want ${(0 until 3).associate { "s$it" to FallbackPlans.expectedIn(plan, it, k, pts) }}")
+            }
             assertTrue("published during playback inside the range: $line", lastBefore in fStart until end)
             assertEquals("before the patch every frame is right: $line", emptyList<String>(), beforeWrong)
             assertEquals("the range was dropped", 1, binding.swap.stats().dropped)

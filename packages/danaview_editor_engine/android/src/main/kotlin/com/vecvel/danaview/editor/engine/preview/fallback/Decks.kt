@@ -54,6 +54,7 @@ import androidx.media3.exoplayer.audio.ForwardingAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.vecvel.danaview.editor.engine.composition.AudioStreamTrackSelector
+import com.vecvel.danaview.editor.engine.core.EngineContext
 import com.vecvel.danaview.editor.engine.effects.SourceTexture
 import com.vecvel.danaview.editor.engine.plan.Keyframes
 import java.nio.ByteBuffer
@@ -82,6 +83,9 @@ class DeckStats {
     var staleImages = 0
     var reseeks = 0
     var recoveries = 0
+
+    /** Two frames released with the same timestamp (their images cannot be told apart: both are dropped). */
+    var tagCollisions = 0
 }
 
 /**
@@ -201,7 +205,27 @@ internal class VideoDeck(
             .build()
         player.setVideoSurface(surface)
         player.setVideoFrameMetadataListener { pts, releaseNs, _, _ ->
-            tags[releaseNs] = Tag(epoch, pts)
+            // A frame is identified by its image timestamp (= release time). Two frames released
+            // with the same timestamp (vsync-snapped release times while the player catches up)
+            // would give one image the other's pts and show it at the wrong output frame: the
+            // timestamp is marked ambiguous and its images are dropped (hold/miss: drop, never wrong).
+            var collidedWith = Long.MIN_VALUE
+            tags.compute(releaseNs) { _, prev ->
+                when {
+                    prev == null || prev.pts == pts -> Tag(epoch, pts)
+                    prev.epoch == AMBIGUOUS_EPOCH -> prev
+                    else -> {
+                        collidedWith = prev.pts
+                        Tag(AMBIGUOUS_EPOCH, pts)
+                    }
+                }
+            }
+            if (collidedWith != Long.MIN_VALUE) {
+                stats.tagCollisions++
+                if (stats.tagCollisions <= MAX_COLLISION_LOGS) {
+                    android.util.Log.w(EngineContext.TAG, "deck$index: frames pts $collidedWith and $pts released at the same time; both dropped")
+                }
+            }
             if (DEBUG) android.util.Log.d("AND16DBG", "deck$index e=$epoch frame pts=$pts")
             if (tags.size > MAX_TAGS) tags.keys.sorted().take(MAX_TAGS / 2).forEach { tags.remove(it) }
         }
@@ -508,6 +532,9 @@ internal class VideoDeck(
         @JvmStatic
         var DEBUG = false
         const val MAX_TAGS = 512
+        /** Epoch of an ambiguous release timestamp (never a deck's epoch). */
+        private const val AMBIGUOUS_EPOCH = Int.MIN_VALUE
+        private const val MAX_COLLISION_LOGS = 5
         const val MAX_RECOVERIES = 5
         const val READY_WITHOUT_FRAME_MS = 600L
         const val MIN_SPEED = 0.1f
