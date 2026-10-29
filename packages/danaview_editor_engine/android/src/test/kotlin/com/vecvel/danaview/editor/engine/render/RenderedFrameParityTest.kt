@@ -25,11 +25,17 @@
 // - Different source and project rates follow Media3's nearest choice, not the floor rule
 //   (AND-01 V-N15): 24 → 30 shows the next source frame (+1) on some output frames; 60 → 30 is
 //   exact. Never −1.
+// - A layer running past its source end (android-r9; K4/K5 of the six-layer chroma-key range want
+//   counter frames 130–249 and 160–279 of 240): live holds the last frame (the rule frame of any s
+//   past it). The render now plays the source at 1× up to the first output frame whose rule frame
+//   is the last one and holds that frame (a still at the output fps) to the layer's end, instead
+//   of SpeedFit slowing the remaining source over the whole layer. Render = live at every frame.
 
 package com.vecvel.danaview.editor.engine.render
 
 import com.vecvel.danaview.editor.engine.composition.CompositionMapper
 import com.vecvel.danaview.editor.engine.composition.ItemKind
+import com.vecvel.danaview.editor.engine.composition.ItemSpec
 import com.vecvel.danaview.editor.engine.composition.SourceTimeline
 import com.vecvel.danaview.editor.engine.plan.FrameGrid
 import com.vecvel.danaview.editor.engine.plan.MapSegment
@@ -53,6 +59,7 @@ import org.junit.Test
 class RenderedFrameParityTest {
     /** A source with the sample table [pts] (ascending, presentation order). */
     private class TableTimeline(val pts: LongArray, private val durUs: Long) : SourceTimeline {
+        // RuleFrameMath.rule is the live decks' lookup: past the last frame it answers the last one.
         override fun ruleFramePtsUs(uri: String, sourceUs: Long): Long = RuleFrameMath.rule(pts, sourceUs)
 
         override fun durationUs(uri: String): Long? = durUs
@@ -96,31 +103,40 @@ class RenderedFrameParityTest {
      * The frames the layer's sequence feeds the compositor for the range plan [range] rendered from
      * [pts] (production mapping), minus the source frames in [lost].
      */
-    private fun arrivals(range: RenderPlan, pts: LongArray, lost: Set<Int> = emptySet()): List<Arrival> {
+    private fun arrivals(range: RenderPlan, pts: LongArray, lost: Set<Int> = emptySet(), sourceDurUs: Long = pts.last() + 1): List<Arrival> {
         val export = RenderPreviewSpecs.exportPlan(range, null)
-        val spec = CompositionMapper(TableTimeline(pts, pts.last() + 1)).map(export, CompositionMapper.Options(useProxies = false))
+        val spec = CompositionMapper(TableTimeline(pts, sourceDurUs)).map(export, CompositionMapper.Options(useProxies = false))
         val out = FrameGrid.of(spec.outputFps)
         val seq = spec.layerSequences.single()
         val list = ArrayList<Arrival>()
+        /** Image frames (gap or held still) at the output fps, on P(m), showing [source]. */
+        fun images(item: ItemSpec, source: Int?) {
+            var m = out.frameIndexNearest(item.startUs)
+            while (true) {
+                val t = out.platformTimeOfFrame(m)
+                if (t >= item.endUs) break
+                if (t >= item.startUs) list += Arrival(t, source)
+                m++
+            }
+        }
         for (item in seq.items) {
-            when (item.kind) {
-                ItemKind.MEDIA -> {
+            when {
+                item.kind == ItemKind.MEDIA && item.hold -> {
+                    // The held last source frame: Media3Composition draws its still at the output fps.
+                    val j = java.util.Arrays.binarySearch(pts, item.clipStartUs)
+                    assertTrue("the held frame is a source frame", j >= 0)
+                    assertEquals("only the last source frame is held", pts.size - 1, j)
+                    images(item, j)
+                }
+                item.kind == ItemKind.MEDIA -> {
                     assertNull("1× items carry no speed provider", item.speed)
                     for ((j, p) in pts.withIndex()) {
                         if (p < item.clipStartUs || p >= item.clipEndUs || j in lost) continue
                         list += Arrival(item.startUs + (p - item.clipStartUs), j)
                     }
                 }
-                else -> {
-                    // Gap (transparent image) frames at the output fps, on P(m).
-                    var m = out.frameIndexNearest(item.startUs)
-                    while (true) {
-                        val t = out.platformTimeOfFrame(m)
-                        if (t >= item.endUs) break
-                        if (t >= item.startUs) list += Arrival(t, null)
-                        m++
-                    }
-                }
+                // Gap (transparent image) frames at the output fps, on P(m).
+                else -> images(item, null)
             }
         }
         return list.sortedBy { it.timeUs }
@@ -140,9 +156,9 @@ class RenderedFrameParityTest {
     }
 
     /** Output frames of [range]'s layer: (k, rendered source index or null for a gap, live index). */
-    private fun compare(range: RenderPlan, pts: LongArray, lost: Set<Int> = emptySet()): List<Triple<Long, Int?, Int>> {
+    private fun compare(range: RenderPlan, pts: LongArray, lost: Set<Int> = emptySet(), sourceDurUs: Long = pts.last() + 1): List<Triple<Long, Int?, Int>> {
         val g = FrameGrid.of(range.canvas.fps)
-        val frames = arrivals(range, pts, lost)
+        val frames = arrivals(range, pts, lost, sourceDurUs)
         val layer = range.layers.single()
         val k0 = g.frameIndexOf(layer.t0)
         val k1 = g.frameIndexOf(layer.t1)
@@ -227,6 +243,72 @@ class RenderedFrameParityTest {
             }
             if (source < project) assertTrue("$source→$project: Media3 shows the nearer next frame somewhere (V-N15)", ahead > 0)
             else assertEquals("$source→$project: exact", 0, ahead)
+        }
+    }
+
+    @Test
+    fun aLayerPastItsSourceEndHoldsTheLastSourceFrameExactlyAsLive() {
+        // An 8 s counter (n = 8·fps frames, the file 8 s long) and layers wanting frames past it.
+        // (first source frame, layer start k0, layer frames): the six-layer range's K4 and K5
+        // (130 and 160 over 120 frames at 30 fps, scaled to the rate), a layer starting on the last
+        // frame, one starting past the end (held throughout), and one ending exactly at the source
+        // end (no overrun: the clip plays to the end, the control).
+        val counterDurUs = 8_000_000L
+        var heldFrames = 0
+        var cases = 0
+        for (fps in listOf(24, 30, 60)) {
+            val n = 8 * fps
+            for (kind in Pts.values()) {
+                val pts = table(fps, n, kind)
+                val layouts = listOf(
+                    Triple(n - 110, 0L, 120L),
+                    Triple(n - 80, 1L, 120L),
+                    Triple(n - 30, 2L, 45L),
+                    Triple(n - 1, 0L, 12L),
+                    Triple(n + 5, 3L, 10L),
+                    Triple(n - 15, 0L, 15L),
+                )
+                for ((first, k0, frames) in layouts) {
+                    val s0 = Math.floorDiv(first.toLong() * FrameGrid.MICROS, fps.toLong())
+                    val range = plan(fps, k0 + frames + 5, k0, k0 + frames, s0)
+                    val rows = compare(range, pts, sourceDurUs = counterDurUs)
+                    val wrong = rows.filter { (_, r, l) -> r != l }
+                    assertEquals("fps $fps $kind first $first k0 $k0: (k, render, live)", emptyList<Any>(), wrong)
+                    // Every frame the layer wants at or past the last source frame shows the last one.
+                    for ((k, r, _) in rows) {
+                        val want = first + (k - k0).toInt()
+                        if (want >= n - 1) {
+                            assertEquals("fps $fps $kind first $first k $k holds the last frame", n - 1, r)
+                            heldFrames++
+                        }
+                    }
+                    cases++
+                }
+            }
+        }
+        assertEquals(36, cases)
+        assertTrue("frames held: $heldFrames", heldFrames > 300)
+    }
+
+    @Test
+    fun theSixLayerRangeLayersK4AndK5MapToAPlayedPartAndAHeldLastFrame() {
+        // K4: counter frames 130.. over 120 range frames at 30 fps; K5: 160.. (the counter has 240).
+        val pts = table(30, 240)
+        for ((first, kH) in listOf(130 to 109L, 160 to 79L)) {
+            val range = plan(30, 125, 0, 120, Math.floorDiv(first.toLong() * FrameGrid.MICROS, 30L))
+            val export = RenderPreviewSpecs.exportPlan(range, null)
+            val spec = CompositionMapper(TableTimeline(pts, 8_000_000L)).map(export, CompositionMapper.Options(useProxies = false))
+            val items = spec.layerSequences.single().items.filter { it.kind == ItemKind.MEDIA }
+            assertEquals("K$first: a played part and a held part", 2, items.size)
+            val (played, held) = items
+            assertNull("K$first: the played part runs at 1x (no SpeedFit slow-down)", played.speed)
+            assertEquals("K$first: played to the frame before the hold", kH, played.k1)
+            assertEquals("K$first: 1x clip", played.durationUs, played.clipEndUs - played.clipStartUs)
+            assertTrue("K$first: the played clip ends before the last frame", played.clipEndUs <= pts.last())
+            assertTrue("K$first: held", held.hold)
+            assertEquals("K$first: the hold starts where the play ends", played.endUs, held.startUs)
+            assertEquals("K$first: the held frame is the last one", pts.last(), held.clipStartUs)
+            assertEquals("K$first: held to the layer's end", 120L, held.k1)
         }
     }
 }

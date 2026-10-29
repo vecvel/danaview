@@ -96,6 +96,7 @@ import com.vecvel.danaview.editor.engine.core.succeed
 import com.vecvel.danaview.editor.engine.effects.EffectAssets
 import com.vecvel.danaview.editor.engine.effects.LayerEffectChainFactory
 import com.vecvel.danaview.editor.engine.media.DiskCache
+import com.vecvel.danaview.editor.engine.media.SourceFrameStills
 import com.vecvel.danaview.editor.engine.media.WorkExemptions
 import com.vecvel.danaview.editor.engine.pigeon.DetachedHandoffMsg
 import com.vecvel.danaview.editor.engine.pigeon.EncodeSettingsMsg
@@ -676,6 +677,8 @@ class ExportCoordinator(private val ctx: EngineContext) {
         val videoEnd = videoEndUs(plan.durUs, settings)
         val passConfig = TransformerExport.Config(settings = settings, selector = selector, encoderFactoryDecorator = encoderFactoryDecorator, audioEndUs = videoEnd)
         val images = PngCompositionImages(paths.engineAssets)
+        // Layers running past their source end hold its last frame (CompositionMapper, ARCH §11.5).
+        val stills = SourceFrameStills(ctx.appContext, File(paths.engineAssets, SourceFrameStills.DIR))
         val assets = effectAssets
         val baseLoader = assetLoaderFactory
         val job = ExportJob(
@@ -703,6 +706,7 @@ class ExportCoordinator(private val ctx: EngineContext) {
                         outputWidth = settings.width,
                         outputHeight = settings.height,
                         audioThroughUs = videoEnd + AUDIO_TAIL_US,
+                        frameStills = stills,
                     ),
                 )
             },

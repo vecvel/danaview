@@ -378,6 +378,52 @@ class CompositionMapperTest {
     }
 
     @Test
+    fun aLayerPastItsSourceEndHoldsTheLastFrameAndItsAudioFallsSilent() {
+        // 240 frames at 30 fps (the last at pts(239) = 7 966 667 µs) in a 7.99 s file; the layer and
+        // its audio want source 130..249 at 1x (K4 of the six-layer range). Live shows frame 239
+        // from k = 109 on and plays no audio past the file: so do the mapped items (no SpeedFit
+        // slow-down of the remaining source over the whole item).
+        val short = FakeSourceTimeline(fps = 30, durations = mapOf("file:///v.mp4" to 7_990_000L))
+        val m = CompositionMapper(short)
+        val g = FrameGrid.of(30)
+        val s0 = short.pts(130)
+        val t1 = g.timeOfFrame(120)
+        val audio = AudioSeg("it_k#a", "md_v", 0, 0, t1, listOf(MapSegment(0, t1, s0, s0 + t1)), Keyframes.constant(1.0))
+        val pl = plan(listOf(media("it_k#v", 10, 0, 0, t1, s0 = s0)), t1, audio = listOf(audio))
+        val spec = m.map(pl)
+        checkSpec("past the source end", pl, spec)
+
+        val visual = spec.slotSequences.single().items
+        assertEquals(2, visual.size)
+        val (played, held) = visual
+        assertFalse(played.hold)
+        assertNull("played at 1x", played.speed)
+        assertEquals(109L, played.k1)
+        assertEquals(s0, played.clipStartUs)
+        assertTrue("the played clip stops before the last frame", played.clipEndUs <= short.pts(239))
+        assertTrue(held.hold)
+        assertEquals(109L, held.k0)
+        assertEquals(120L, held.k1)
+        assertEquals(played.endUs, held.startUs)
+        assertEquals(t1, held.endUs)
+        assertEquals("the last source frame", short.pts(239), held.clipStartUs)
+
+        // Audio: 1x while the source lasts (s(t_109) = 7 966 667 <= 7.99 s < s(t_110)), then silence.
+        val sound = spec.audioSequences.single().items
+        assertEquals(listOf(ItemKind.AUDIO, ItemKind.AUDIO_GAP), sound.map { it.kind })
+        assertNull("audio at 1x", sound[0].speed)
+        assertEquals(109L, sound[0].k1)
+        assertTrue("audio clip inside the source", sound[0].clipEndUs <= 7_990_000L)
+        assertEquals(t1, sound[1].endUs)
+
+        // A layer starting past the source end holds the last frame throughout.
+        val after = plan(listOf(media("it_p#v", 10, 0, 0, t1, s0 = short.pts(245))), t1)
+        val only = m.map(after).slotSequences.single().items.single()
+        assertTrue(only.hold)
+        assertEquals(short.pts(239), only.clipStartUs)
+    }
+
+    @Test
     fun previewUsesProxiesOnlyWhenAskedAndExportNever() {
         val proxied = video.copy(proxyUri = "file:///proxy.mp4")
         val g = FrameGrid.of(30)
