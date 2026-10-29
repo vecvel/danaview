@@ -318,6 +318,7 @@ jobs:
             echo "device lane green"
             exit 0
           fi
+          # shellcheck disable=SC2016 # the backticks are literal Markdown, not a command substitution
           body="$(printf 'Device lane run %s on `%s` @ %s failed:\n\n%s\n\nThe device lane does not block merges (docs/v1.2/CI_LANES.md). This issue closes itself after the next green scheduled run.\n' "$RUN_URL" "$REF" "${SHA:0:8}" "$failed")"
           if [ -n "$issue" ]; then
             gh issue comment "$issue" --body "$body"
