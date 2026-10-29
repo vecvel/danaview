@@ -129,6 +129,38 @@ Widget danaviewLibrarySliverGrid({
   );
 }
 
+/// A lazy §8 grouped list of [itemCount] library rows: one `surface` card, radius 12, the rows
+/// split by inset dividers, built a row at a time so a long list costs only what is on screen.
+/// Each row draws its slice of the card (the first rounds the top, the last the bottom).
+Widget danaviewLibrarySliverGroup({
+  Key? key,
+  required int itemCount,
+  required IndexedWidgetBuilder itemBuilder,
+}) {
+  const r = Radius.circular(DanaviewRadius.control);
+  return SliverList.builder(
+    key: key,
+    itemCount: itemCount,
+    itemBuilder: (context, i) {
+      final first = i == 0;
+      final last = i == itemCount - 1;
+      return DecoratedBox(
+        decoration: ShapeDecoration(
+          color: DanaviewColors.surface,
+          shape: DanaviewDepth.shape(BorderRadius.vertical(top: first ? r : Radius.zero, bottom: last ? r : Radius.zero)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!first) const DanaviewRowDivider(),
+            itemBuilder(context, i),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 /// Thin rounded watched-progress bar.
 class DanaviewProgressLine extends StatelessWidget {
   const DanaviewProgressLine({

@@ -9,6 +9,11 @@
 // first visible photo in place. The tab remembers density, album and scroll offset for the app's
 // lifetime, so switching tabs and coming back lands on the same photo. The 1.1 Home is untouched:
 // HOM-05 shows this tab only with DANAVIEW_FILES_HOME on.
+//
+// DESIGN_SYSTEM §10.4: the grid is a full-width square grid with 2 pt gaps (3 / 5 / 8 columns by
+// width at the default density, [photoGridSquareColumns]); the masonry layout lays square cells
+// out row by row. The date-group header of the photos at the top stays pinned over the grid
+// (sticky month headers) until the next group's header pushes it away.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -21,6 +26,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../photos/photo_date_groups.dart' show PhotoDateGroup;
 import '../photos/photo_grid_item.dart';
 import '../photos/photo_masonry_layout.dart';
 import '../photos/photos_tab_providers.dart';
@@ -49,8 +55,8 @@ class PhotosTab extends ConsumerStatefulWidget {
   ConsumerState<PhotosTab> createState() => _PhotosTabState();
 }
 
-/// Horizontal inset and gap of the grid.
-const double _gridPadding = DanaviewSpacing.md;
+/// Horizontal inset (none: full width) and gap of the grid.
+const double _gridPadding = 0;
 const double _gridSpacing = 2;
 
 /// Pinch ratio that steps one density level.
@@ -157,6 +163,14 @@ class _PhotosTabState extends ConsumerState<PhotosTab> {
     return render is RenderSliver ? render.constraints.precedingScrollExtent : 0;
   }
 
+  /// [_gridStart] for the sticky header, which can build before the grid's first layout: the last
+  /// laid-out value until then (null before any).
+  double? _laidOutGridStart() {
+    final render = _gridKey.currentContext?.findRenderObject();
+    if (render is! RenderSliver || render.geometry == null) return null;
+    return render.constraints.precedingScrollExtent;
+  }
+
   int? _firstVisiblePhoto() {
     final layout = _memoLayout;
     if (layout == null || layout.photoCount == 0 || !_scroll.hasClients) return null;
@@ -215,7 +229,9 @@ class _PhotosTabState extends ConsumerState<PhotosTab> {
 
   PhotoMasonryLayout _layoutFor(PhotosGridModel model, double width, int columns, double header) {
     final memo = _memoLayout;
-    if (memo != null && identical(model, _memoModel) && width == _memoWidth && columns == _memoColumns && header == _memoHeader) return memo;
+    if (memo != null && identical(model, _memoModel) && width == _memoWidth && columns == _memoColumns && header == _memoHeader) {
+      return memo;
+    }
     final layout = PhotoMasonryLayout.compute(
       buckets: model.buckets,
       groups: model.groups,
@@ -224,6 +240,7 @@ class _PhotosTabState extends ConsumerState<PhotosTab> {
       headerExtent: header,
       padding: _gridPadding,
       spacing: _gridSpacing,
+      square: true,
     );
     _memoModel = model;
     _memoWidth = width;
@@ -260,60 +277,76 @@ class _PhotosTabState extends ConsumerState<PhotosTab> {
 
     final grid = LayoutBuilder(builder: (context, constraints) {
       final width = constraints.maxWidth;
-      final columns = photoGridColumnsFor(math.max(0.0, width - 2 * _gridPadding), density, spacing: _gridSpacing);
+      final columns = photoGridSquareColumns(math.max(0.0, width - 2 * _gridPadding), density, spacing: _gridSpacing);
       final layout = _layoutFor(model, width, columns, header);
       return Semantics(
         customSemanticsActions: {
           if (density > 0) const CustomSemanticsAction(label: 'Show larger photos'): () => _changeDensity(-1),
-          if (density < photoGridDensityTargets.length - 1) const CustomSemanticsAction(label: 'Show smaller photos'): () => _changeDensity(1),
+          if (density < photoGridDensityTargets.length - 1)
+            const CustomSemanticsAction(label: 'Show smaller photos'): () => _changeDensity(1),
         },
-        child: CustomScrollView(
-          key: const ValueKey('photos-grid'),
-          controller: _scroll,
-          slivers: [
-            if (libraryAvailable) SliverToBoxAdapter(child: PhotoLibraryOptInRow(onChanged: _setOptIn)),
-            if (model.isEmpty)
-              SliverToBoxAdapter(
-                child: Center(
-                  child: DanaviewEmptyState(
-                    key: const ValueKey('photos-empty'),
-                    icon: Icons.photo_library_outlined,
-                    title: album is AllPhotosSelection ? 'No photos yet' : 'No photos here',
-                    message: album is AllPhotosSelection
-                        ? (libraryAvailable && !optIn
-                            ? 'Import photos into a Danaview folder, or show your photo library.'
-                            : 'Import photos into a Danaview folder to see them here.')
-                        : 'Photos you add to this album appear here.',
+        child: Stack(children: [
+          CustomScrollView(
+            key: const ValueKey('photos-grid'),
+            controller: _scroll,
+            slivers: [
+              if (libraryAvailable) SliverToBoxAdapter(child: PhotoLibraryOptInRow(onChanged: _setOptIn)),
+              if (model.isEmpty)
+                SliverToBoxAdapter(
+                  child: Center(
+                    child: DanaviewEmptyState(
+                      key: const ValueKey('photos-empty'),
+                      icon: Icons.photo_library_outlined,
+                      title: album is AllPhotosSelection ? 'No photos yet' : 'No photos here',
+                      message: album is AllPhotosSelection
+                          ? (libraryAvailable && !optIn
+                              ? 'Import photos into a Danaview folder, or show your photo library.'
+                              : 'Import photos into a Danaview folder to see them here.')
+                          : 'Photos you add to this album appear here.',
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.only(top: DanaviewSpacing.xs, bottom: DanaviewSpacing.xl),
+                  sliver: SliverPhotoMasonry(
+                    key: _gridKey,
+                    layout: layout,
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (index >= layout.childCount) return null;
+                        if (layout.isHeader(index)) return PhotoDateHeader(group: model.groups[layout.groupOf(index)]);
+                        final p = layout.photoOf(index);
+                        final photo = model.photos[p];
+                        return PhotoGridCell(
+                          key: ValueKey(photo.id.value),
+                          photo: photo,
+                          cellWidth: layout.cellWidth,
+                          onTap: open == null ? null : () => open(model.photos, p),
+                          onLongPress: longPress == null ? null : () => longPress(photo),
+                        );
+                      },
+                      childCount: layout.childCount,
+                      addAutomaticKeepAlives: false,
+                    ),
                   ),
                 ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.only(top: DanaviewSpacing.xs, bottom: DanaviewSpacing.xl),
-                sliver: SliverPhotoMasonry(
-                  key: _gridKey,
-                  layout: layout,
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      if (index >= layout.childCount) return null;
-                      if (layout.isHeader(index)) return PhotoDateHeader(group: model.groups[layout.groupOf(index)]);
-                      final p = layout.photoOf(index);
-                      final photo = model.photos[p];
-                      return PhotoGridCell(
-                        key: ValueKey(photo.id.value),
-                        photo: photo,
-                        cellWidth: layout.cellWidth,
-                        onTap: open == null ? null : () => open(model.photos, p),
-                        onLongPress: longPress == null ? null : () => longPress(photo),
-                      );
-                    },
-                    childCount: layout.childCount,
-                    addAutomaticKeepAlives: false,
-                  ),
-                ),
+            ],
+          ),
+          if (!model.isEmpty)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _StickyGroupHeader(
+                scroll: _scroll,
+                layout: layout,
+                groups: model.groups,
+                extent: header,
+                gridStart: _laidOutGridStart,
               ),
-          ],
-        ),
+            ),
+        ]),
       );
     });
 
@@ -343,6 +376,60 @@ class _PhotosTabState extends ConsumerState<PhotosTab> {
               ),
             ),
           ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// The pinned date-group header over the grid (sticky month headers, §10.4): it shows the group of
+/// the photos at the top of the viewport once its own header has scrolled away, and the next
+/// group's header pushes it up. Paint only: it follows the scroll controller without rebuilding
+/// the grid, it takes no pointers (taps reach the photos) and screen readers hear the real headers
+/// in the grid instead.
+class _StickyGroupHeader extends StatelessWidget {
+  const _StickyGroupHeader({
+    required this.scroll,
+    required this.layout,
+    required this.groups,
+    required this.extent,
+    required this.gridStart,
+  });
+
+  final ScrollController scroll;
+  final PhotoMasonryLayout layout;
+  final List<PhotoDateGroup> groups;
+  final double extent;
+  final double? Function() gridStart;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ExcludeSemantics(
+        child: ListenableBuilder(
+          listenable: scroll,
+          builder: (context, _) {
+            if (!scroll.hasClients || layout.groupCount == 0) return const SizedBox.shrink();
+            final start = gridStart();
+            if (start == null) return const SizedBox.shrink();
+            final offset = scroll.offset - start;
+            if (offset <= 0) return const SizedBox.shrink();
+            final g = layout.groupAt(offset);
+            if (g < 0 || g >= groups.length) return const SizedBox.shrink();
+            var dy = 0.0;
+            if (g + 1 < layout.groupCount) {
+              final next = layout.topOf(layout.headerChildOf(g + 1));
+              dy = math.min(0.0, next - offset - extent);
+            }
+            return Transform.translate(
+              key: const ValueKey('photos-sticky-header'),
+              offset: Offset(0, dy),
+              child: SizedBox(
+                height: extent,
+                child: ColoredBox(color: DanaviewColors.background, child: PhotoDateHeader(group: groups[g])),
+              ),
+            );
+          },
         ),
       ),
     );

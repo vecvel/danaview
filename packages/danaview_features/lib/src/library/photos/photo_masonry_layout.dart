@@ -40,6 +40,18 @@ int photoGridColumnsFor(double width, int density, {double spacing = 2}) {
   return math.max(2, math.min(12, math.min(byTarget, byMin)));
 }
 
+/// Columns of the Photos tab's square grid (DESIGN_SYSTEM §10.4) for a full-width [width]: 3 on
+/// phones, 5 on tablets and 8 on wide windows at the default [density]; each density level away
+/// from the default removes or adds one column (two on wide windows). Cells never fall under the
+/// 44 pt target, and there are always at least 2 columns.
+int photoGridSquareColumns(double width, int density, {double spacing = 2}) {
+  final base = width < 600 ? 3 : (width < 1024 ? 5 : 8);
+  final level = density.clamp(0, photoGridDensityTargets.length - 1) - photoGridDefaultDensity;
+  final columns = base + level * (base >= 8 ? 2 : 1);
+  final fit = ((width + spacing) / (44 + spacing)).floor();
+  return math.max(2, math.min(columns, math.max(2, fit)));
+}
+
 /// The computed rects of every header and photo cell.
 final class PhotoMasonryLayout {
   PhotoMasonryLayout._({
@@ -55,8 +67,10 @@ final class PhotoMasonryLayout {
     required Float64List maxBottoms,
     required Int32List refs,
     required Int32List childOfPhoto,
+    required Int32List headerChildren,
     required this.totalExtent,
-  })  : _tops = tops,
+  })  : _headerChildren = headerChildren,
+        _tops = tops,
         _lefts = lefts,
         _widths = widths,
         _heights = heights,
@@ -67,7 +81,8 @@ final class PhotoMasonryLayout {
   /// Lays out photos of [buckets] (one [PhotoAspectBucket.index] per photo) in [groups] across
   /// [width] with [columns] columns. [headerExtent] is each group header's height; [padding] the
   /// horizontal inset, [spacing] the gap between cells, [groupGap] the space above every header but
-  /// the first.
+  /// the first. With [square] every cell is as tall as it is wide (the square grid, §10.4), so the
+  /// photos fill rows left to right in list order.
   factory PhotoMasonryLayout.compute({
     required Uint8List buckets,
     required List<PhotoDateGroup> groups,
@@ -77,6 +92,7 @@ final class PhotoMasonryLayout {
     double padding = 0,
     double spacing = 2,
     double groupGap = 8,
+    bool square = false,
   }) {
     assert(columns >= 1);
     final photos = buckets.length;
@@ -88,9 +104,11 @@ final class PhotoMasonryLayout {
     final maxBottoms = Float64List(n);
     final refs = Int32List(n);
     final childOfPhoto = Int32List(photos);
+    final headerChildren = Int32List(groups.length);
     final inner = math.max(0.0, width - 2 * padding);
     final cellWidth = math.max(0.0, (inner - spacing * (columns - 1)) / columns);
-    final bucketHeights = Float64List.fromList([for (final b in PhotoAspectBucket.values) b.heightPerWidth * cellWidth]);
+    final bucketHeights =
+        Float64List.fromList([for (final b in PhotoAspectBucket.values) square ? cellWidth : b.heightPerWidth * cellWidth]);
     final columnHeights = Float64List(columns);
     final columnLefts = Float64List.fromList([for (var c = 0; c < columns; c++) padding + c * (cellWidth + spacing)]);
     var y = 0.0;
@@ -104,6 +122,7 @@ final class PhotoMasonryLayout {
       widths[child] = width;
       heights[child] = headerExtent;
       refs[child] = -(g + 1);
+      headerChildren[g] = child;
       runningMax = math.max(runningMax, y + headerExtent);
       maxBottoms[child] = runningMax;
       child++;
@@ -158,6 +177,7 @@ final class PhotoMasonryLayout {
       maxBottoms: cut(maxBottoms),
       refs: child == n ? refs : Int32List.sublistView(refs, 0, child),
       childOfPhoto: childOfPhoto,
+      headerChildren: headerChildren,
       totalExtent: y,
     );
   }
@@ -187,6 +207,25 @@ final class PhotoMasonryLayout {
   final Float64List _maxBottoms;
   final Int32List _refs;
   final Int32List _childOfPhoto;
+  final Int32List _headerChildren;
+
+  /// The child index of group [g]'s header.
+  int headerChildOf(int g) => _headerChildren[g];
+
+  /// The group whose header is the last one starting at or above [offset] (the group a sticky
+  /// header shows at that scroll offset), or -1 above the first header.
+  int groupAt(double offset) {
+    var lo = 0, hi = groupCount;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (_tops[_headerChildren[mid]] <= offset) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo - 1;
+  }
 
   /// Headers plus photos.
   int get childCount => _tops.length;
