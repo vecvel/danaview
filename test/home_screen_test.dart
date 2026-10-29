@@ -262,7 +262,7 @@ void main() {
       await _finish(tester, env);
     });
 
-    testWidgets('scrolled content slides under an opaque status-bar backdrop', (tester) async {
+    testWidgets('scrolled content slides under the pinned header below an opaque status-bar backdrop', (tester) async {
       final surface = librarySurfaces[2];
       useSurface(tester, surface);
       final env = await LibraryTestEnv.create();
@@ -283,11 +283,20 @@ void main() {
           });
 
       expect(tester.getRect(find.byType(Scrollable).first).top, moreOrLessEquals(statusBar));
+      expect(backdrop(DanaviewColors.hairline), findsNothing, reason: 'no hairline before anything scrolls');
       await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));
       await pumpFrames(tester);
-      final strip = backdrop(DanaviewColors.hairline);
+      // The status bar keeps its opaque backdrop; the pinned top bar (DESIGN_SYSTEM §10.1) is the
+      // opaque surface content scrolls under, with the hairline at its bottom edge.
+      final strip = backdrop(DanaviewColors.hairline.withValues(alpha: 0));
       expect(strip, findsOneWidget);
       expect(tester.getRect(strip), Rect.fromLTWH(0, 0, surface.size.width, statusBar));
+      final header = backdrop(DanaviewColors.hairline);
+      expect(header, findsOneWidget);
+      final bar = tester.getRect(header);
+      expect(bar.top, moreOrLessEquals(statusBar));
+      expect(bar.width, surface.size.width);
+      expect(bar.bottom, moreOrLessEquals(tester.getRect(find.byKey(const ValueKey('home-top-bar'))).bottom));
       await _finish(tester, env);
     });
 

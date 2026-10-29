@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:danaview_domain/danaview_domain.dart';
 import 'package:danaview_features/danaview_features.dart';
+import 'package:danaview_features/src/library/library_widgets.dart' show DanaviewLibraryRow;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -200,11 +201,28 @@ Finder playlistsHeader(PlaylistsHost host) => inHost(
       find.ancestor(of: find.text('Playlists'), matching: _private('DanaviewLibrarySectionHeader')),
     ).first;
 
-/// P-4: the group of playlist rows.
-Finder playlistsGroup(PlaylistsHost host) => inHost(
-      host,
-      find.ancestor(of: find.text('Road Trip'), matching: _private('DanaviewLibraryCardGrid')),
-    ).first;
+/// P-4: the group of playlist rows: the grouped list on the Home, the card grid on the Playlists
+/// tab (DESIGN_SYSTEM §10.4: a grid of playlist cards).
+Finder playlistsGroup(PlaylistsHost host) => host == PlaylistsHost.playlistsTab
+    ? inHost(host, find.byKey(const ValueKey('home-playlists-grid'))).first
+    : inHost(
+        host,
+        find.ancestor(of: find.text('Road Trip'), matching: _private('DanaviewLibraryCardGrid')),
+      ).first;
+
+/// The widget type of one playlist in [host]: a grouped-list row, or a card on the Playlists tab.
+Type playlistItemType(PlaylistsHost host) =>
+    host == PlaylistsHost.playlistsTab ? HomePlaylistCard : DanaviewLibraryRow;
+
+/// The playlists shown in [host], in order, as (title, subtitle).
+List<(String, String?)> playlistItems(WidgetTester tester, PlaylistsHost host) => [
+      for (final w in tester.widgetList(find.descendant(of: playlistsGroup(host), matching: find.byType(playlistItemType(host)))))
+        switch (w) {
+          HomePlaylistCard(:final name, :final subtitle) => (name, subtitle),
+          DanaviewLibraryRow(:final title, :final subtitle) => (title, subtitle),
+          _ => throw StateError('unexpected $w'),
+        },
+    ];
 
 /// P-4: the empty state shown when there are no playlists.
 Finder playlistsEmpty(PlaylistsHost host) => inHost(
@@ -216,7 +234,7 @@ Finder playlistsEmpty(PlaylistsHost host) => inHost(
 Finder playlistMenu(PlaylistsHost host, String name) => inHost(
       host,
       find.descendant(
-        of: find.ancestor(of: find.text(name), matching: _private('DanaviewLibraryRow')).first,
+        of: find.ancestor(of: find.text(name), matching: find.byType(playlistItemType(host))).first,
         matching: find.byTooltip('More'),
       ),
     );
