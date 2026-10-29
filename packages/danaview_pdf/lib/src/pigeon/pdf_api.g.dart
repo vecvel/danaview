@@ -34,6 +34,16 @@ Object? _extractReplyValueOrThrow(
   return replyList.firstOrNull;
 }
 
+
+List<Object?> wrapResponse({Object? result, PlatformException? error, bool empty = false}) {
+  if (empty) {
+    return <Object?>[];
+  }
+  if (error == null) {
+    return <Object?>[result];
+  }
+  return <Object?>[error.code, error.message, error.details];
+}
 bool _deepEquals(Object? a, Object? b) {
   if (identical(a, b)) {
     return true;
@@ -152,6 +162,21 @@ enum PdfEventKindMsg {
   viewSelectionChanged,
   /// A tool job progressed; [PdfEventMsg.toolProgress] is set.
   toolProgress;
+}
+
+/// What a touch on an annotating viewer does.
+enum PdfAnnotateInputMsg {
+  /// The viewer scrolls, zooms and selects text as usual; a tap on a session annotation reports
+  /// it (`PdfAnnotateEventsApi.tapped` with its id).
+  select,
+  /// One finger, the pointer or Apple Pencil draws ink (PencilKit on iOS); two fingers scroll and
+  /// zoom (a finger scrolls when the system prefers Pencil-only drawing). Finished strokes arrive
+  /// through `PdfAnnotateEventsApi.inkStroke`.
+  ink,
+  /// A tap reports its page point (`tapped`), where Dart places a text box.
+  text,
+  /// A tap reports the session annotation under it (`tapped` with its id), which Dart removes.
+  erase;
 }
 
 /// What this device's implementation offers; the Dart UI hides what is missing.
@@ -2575,6 +2600,248 @@ class PdfCompressEstimateMsg {
   }
 }
 
+/// The annotate mode of a viewer.
+class PdfAnnotateModeMsg {
+  PdfAnnotateModeMsg({
+    required this.input,
+    required this.inkColorArgb,
+    required this.inkWidth,
+  });
+
+  PdfAnnotateInputMsg input;
+
+  /// The live ink colour as 0xAARRGGBB.
+  int inkColorArgb;
+
+  /// The live ink width in page points.
+  double inkWidth;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      input,
+      inkColorArgb,
+      inkWidth,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PdfAnnotateModeMsg decode(Object result) {
+    result as List<Object?>;
+    return PdfAnnotateModeMsg(
+      input: result[0]! as PdfAnnotateInputMsg,
+      inkColorArgb: result[1]! as int,
+      inkWidth: result[2]! as double,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PdfAnnotateModeMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(input, other.input) && _deepEquals(inkColorArgb, other.inkColorArgb) && _deepEquals(inkWidth, other.inkWidth);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'PdfAnnotateModeMsg(input: $input, inkColorArgb: $inkColorArgb, inkWidth: $inkWidth)';
+  }
+}
+
+/// One item of an annotate session: exactly one of [annotation] and [stamp] is set.
+class PdfAnnotateItemMsg {
+  PdfAnnotateItemMsg({
+    required this.id,
+    this.annotation,
+    this.stamp,
+  });
+
+  /// Dart's id of the item (hit tests answer it).
+  String id;
+
+  PdfAnnotationMsg? annotation;
+
+  /// An image stamp (HOM-30's signatures; previewed like an annotation).
+  PdfSignatureStampMsg? stamp;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      id,
+      annotation,
+      stamp,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PdfAnnotateItemMsg decode(Object result) {
+    result as List<Object?>;
+    return PdfAnnotateItemMsg(
+      id: result[0]! as String,
+      annotation: result[1] as PdfAnnotationMsg?,
+      stamp: result[2] as PdfSignatureStampMsg?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PdfAnnotateItemMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(id, other.id) && _deepEquals(annotation, other.annotation) && _deepEquals(stamp, other.stamp);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'PdfAnnotateItemMsg(id: $id, annotation: $annotation, stamp: $stamp)';
+  }
+}
+
+/// Rects on one page (a text selection's lines).
+class PdfPageRectsMsg {
+  PdfPageRectsMsg({
+    required this.pageIndex,
+    required this.rects,
+  });
+
+  int pageIndex;
+
+  List<PdfRectMsg> rects;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      pageIndex,
+      rects,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PdfPageRectsMsg decode(Object result) {
+    result as List<Object?>;
+    return PdfPageRectsMsg(
+      pageIndex: result[0]! as int,
+      rects: (result[1]! as List<Object?>).cast<PdfRectMsg>(),
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PdfPageRectsMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(pageIndex, other.pageIndex) && _deepEquals(rects, other.rects);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'PdfPageRectsMsg(pageIndex: $pageIndex, rects: $rects)';
+  }
+}
+
+/// Writes [input] with [annotations] and [stamps] into [outPath].
+class PdfAnnotateSaveRequestMsg {
+  PdfAnnotateSaveRequestMsg({
+    required this.jobId,
+    required this.input,
+    required this.annotations,
+    required this.stamps,
+    required this.burnIn,
+    required this.outPath,
+  });
+
+  /// Caller-chosen id for progress events and `PdfToolsHostApi.cancel`.
+  String jobId;
+
+  PdfToolInputMsg input;
+
+  List<PdfAnnotationMsg> annotations;
+
+  /// Image stamps: kept as Stamp annotations with the image as their appearance, or burned in.
+  List<PdfSignatureStampMsg> stamps;
+
+  /// Draw [annotations] and [stamps] into the page content instead of adding annotations (text
+  /// stays text; the page's existing annotations stay annotations).
+  bool burnIn;
+
+  String outPath;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      jobId,
+      input,
+      annotations,
+      stamps,
+      burnIn,
+      outPath,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PdfAnnotateSaveRequestMsg decode(Object result) {
+    result as List<Object?>;
+    return PdfAnnotateSaveRequestMsg(
+      jobId: result[0]! as String,
+      input: result[1]! as PdfToolInputMsg,
+      annotations: (result[2]! as List<Object?>).cast<PdfAnnotationMsg>(),
+      stamps: (result[3]! as List<Object?>).cast<PdfSignatureStampMsg>(),
+      burnIn: result[4]! as bool,
+      outPath: result[5]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PdfAnnotateSaveRequestMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(jobId, other.jobId) && _deepEquals(input, other.input) && _deepEquals(annotations, other.annotations) && _deepEquals(stamps, other.stamps) && _deepEquals(burnIn, other.burnIn) && _deepEquals(outPath, other.outPath);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'PdfAnnotateSaveRequestMsg(jobId: $jobId, input: $input, annotations: $annotations, stamps: $stamps, burnIn: $burnIn, outPath: $outPath)';
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -2598,119 +2865,134 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PdfEventKindMsg) {
       buffer.putUint8(133);
       writeValue(buffer, value.index);
-    }    else if (value is PdfCapabilitiesMsg) {
+    }    else if (value is PdfAnnotateInputMsg) {
       buffer.putUint8(134);
-      writeValue(buffer, value.encode());
-    }    else if (value is PdfOpenRequestMsg) {
+      writeValue(buffer, value.index);
+    }    else if (value is PdfCapabilitiesMsg) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfPageSizeMsg) {
+    }    else if (value is PdfOpenRequestMsg) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfDocumentInfoMsg) {
+    }    else if (value is PdfPageSizeMsg) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfProbeMsg) {
+    }    else if (value is PdfDocumentInfoMsg) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfOutlineItemMsg) {
+    }    else if (value is PdfProbeMsg) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfThumbnailRequestMsg) {
+    }    else if (value is PdfOutlineItemMsg) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfImageMsg) {
+    }    else if (value is PdfThumbnailRequestMsg) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfRectMsg) {
+    }    else if (value is PdfImageMsg) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfSearchOptionsMsg) {
+    }    else if (value is PdfRectMsg) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfSearchHitMsg) {
+    }    else if (value is PdfSearchOptionsMsg) {
       buffer.putUint8(144);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfSearchResultMsg) {
+    }    else if (value is PdfSearchHitMsg) {
       buffer.putUint8(145);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfViewStateMsg) {
+    }    else if (value is PdfSearchResultMsg) {
       buffer.putUint8(146);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfTextureViewRequestMsg) {
+    }    else if (value is PdfViewStateMsg) {
       buffer.putUint8(147);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfTextureViewMsg) {
+    }    else if (value is PdfTextureViewRequestMsg) {
       buffer.putUint8(148);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfViewportMsg) {
+    }    else if (value is PdfTextureViewMsg) {
       buffer.putUint8(149);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfTextRequestMsg) {
+    }    else if (value is PdfViewportMsg) {
       buffer.putUint8(150);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfPageTextMsg) {
+    }    else if (value is PdfTextRequestMsg) {
       buffer.putUint8(151);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfTextResultMsg) {
+    }    else if (value is PdfPageTextMsg) {
       buffer.putUint8(152);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfToolInputMsg) {
+    }    else if (value is PdfTextResultMsg) {
       buffer.putUint8(153);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfPageRangeMsg) {
+    }    else if (value is PdfToolInputMsg) {
       buffer.putUint8(154);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfMergeRequestMsg) {
+    }    else if (value is PdfPageRangeMsg) {
       buffer.putUint8(155);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfSplitRequestMsg) {
+    }    else if (value is PdfMergeRequestMsg) {
       buffer.putUint8(156);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfReorderRequestMsg) {
+    }    else if (value is PdfSplitRequestMsg) {
       buffer.putUint8(157);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfRotateRequestMsg) {
+    }    else if (value is PdfReorderRequestMsg) {
       buffer.putUint8(158);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfDeletePagesRequestMsg) {
+    }    else if (value is PdfRotateRequestMsg) {
       buffer.putUint8(159);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfInkStrokeMsg) {
+    }    else if (value is PdfDeletePagesRequestMsg) {
       buffer.putUint8(160);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfAnnotationMsg) {
+    }    else if (value is PdfInkStrokeMsg) {
       buffer.putUint8(161);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfAnnotateRequestMsg) {
+    }    else if (value is PdfAnnotationMsg) {
       buffer.putUint8(162);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfSignatureStampMsg) {
+    }    else if (value is PdfAnnotateRequestMsg) {
       buffer.putUint8(163);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfSignRequestMsg) {
+    }    else if (value is PdfSignatureStampMsg) {
       buffer.putUint8(164);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfCompressRequestMsg) {
+    }    else if (value is PdfSignRequestMsg) {
       buffer.putUint8(165);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfToolResultMsg) {
+    }    else if (value is PdfCompressRequestMsg) {
       buffer.putUint8(166);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfToolProgressMsg) {
+    }    else if (value is PdfToolResultMsg) {
       buffer.putUint8(167);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfEventMsg) {
+    }    else if (value is PdfToolProgressMsg) {
       buffer.putUint8(168);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfPagePlanMsg) {
+    }    else if (value is PdfEventMsg) {
       buffer.putUint8(169);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfOrganiseRequestMsg) {
+    }    else if (value is PdfPagePlanMsg) {
       buffer.putUint8(170);
       writeValue(buffer, value.encode());
-    }    else if (value is PdfCompressEstimateMsg) {
+    }    else if (value is PdfOrganiseRequestMsg) {
       buffer.putUint8(171);
+      writeValue(buffer, value.encode());
+    }    else if (value is PdfCompressEstimateMsg) {
+      buffer.putUint8(172);
+      writeValue(buffer, value.encode());
+    }    else if (value is PdfAnnotateModeMsg) {
+      buffer.putUint8(173);
+      writeValue(buffer, value.encode());
+    }    else if (value is PdfAnnotateItemMsg) {
+      buffer.putUint8(174);
+      writeValue(buffer, value.encode());
+    }    else if (value is PdfPageRectsMsg) {
+      buffer.putUint8(175);
+      writeValue(buffer, value.encode());
+    }    else if (value is PdfAnnotateSaveRequestMsg) {
+      buffer.putUint8(176);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -2736,81 +3018,92 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : PdfEventKindMsg.values[value];
       case 134:
-        return PdfCapabilitiesMsg.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : PdfAnnotateInputMsg.values[value];
       case 135:
-        return PdfOpenRequestMsg.decode(readValue(buffer)!);
+        return PdfCapabilitiesMsg.decode(readValue(buffer)!);
       case 136:
-        return PdfPageSizeMsg.decode(readValue(buffer)!);
+        return PdfOpenRequestMsg.decode(readValue(buffer)!);
       case 137:
-        return PdfDocumentInfoMsg.decode(readValue(buffer)!);
+        return PdfPageSizeMsg.decode(readValue(buffer)!);
       case 138:
-        return PdfProbeMsg.decode(readValue(buffer)!);
+        return PdfDocumentInfoMsg.decode(readValue(buffer)!);
       case 139:
-        return PdfOutlineItemMsg.decode(readValue(buffer)!);
+        return PdfProbeMsg.decode(readValue(buffer)!);
       case 140:
-        return PdfThumbnailRequestMsg.decode(readValue(buffer)!);
+        return PdfOutlineItemMsg.decode(readValue(buffer)!);
       case 141:
-        return PdfImageMsg.decode(readValue(buffer)!);
+        return PdfThumbnailRequestMsg.decode(readValue(buffer)!);
       case 142:
-        return PdfRectMsg.decode(readValue(buffer)!);
+        return PdfImageMsg.decode(readValue(buffer)!);
       case 143:
-        return PdfSearchOptionsMsg.decode(readValue(buffer)!);
+        return PdfRectMsg.decode(readValue(buffer)!);
       case 144:
-        return PdfSearchHitMsg.decode(readValue(buffer)!);
+        return PdfSearchOptionsMsg.decode(readValue(buffer)!);
       case 145:
-        return PdfSearchResultMsg.decode(readValue(buffer)!);
+        return PdfSearchHitMsg.decode(readValue(buffer)!);
       case 146:
-        return PdfViewStateMsg.decode(readValue(buffer)!);
+        return PdfSearchResultMsg.decode(readValue(buffer)!);
       case 147:
-        return PdfTextureViewRequestMsg.decode(readValue(buffer)!);
+        return PdfViewStateMsg.decode(readValue(buffer)!);
       case 148:
-        return PdfTextureViewMsg.decode(readValue(buffer)!);
+        return PdfTextureViewRequestMsg.decode(readValue(buffer)!);
       case 149:
-        return PdfViewportMsg.decode(readValue(buffer)!);
+        return PdfTextureViewMsg.decode(readValue(buffer)!);
       case 150:
-        return PdfTextRequestMsg.decode(readValue(buffer)!);
+        return PdfViewportMsg.decode(readValue(buffer)!);
       case 151:
-        return PdfPageTextMsg.decode(readValue(buffer)!);
+        return PdfTextRequestMsg.decode(readValue(buffer)!);
       case 152:
-        return PdfTextResultMsg.decode(readValue(buffer)!);
+        return PdfPageTextMsg.decode(readValue(buffer)!);
       case 153:
-        return PdfToolInputMsg.decode(readValue(buffer)!);
+        return PdfTextResultMsg.decode(readValue(buffer)!);
       case 154:
-        return PdfPageRangeMsg.decode(readValue(buffer)!);
+        return PdfToolInputMsg.decode(readValue(buffer)!);
       case 155:
-        return PdfMergeRequestMsg.decode(readValue(buffer)!);
+        return PdfPageRangeMsg.decode(readValue(buffer)!);
       case 156:
-        return PdfSplitRequestMsg.decode(readValue(buffer)!);
+        return PdfMergeRequestMsg.decode(readValue(buffer)!);
       case 157:
-        return PdfReorderRequestMsg.decode(readValue(buffer)!);
+        return PdfSplitRequestMsg.decode(readValue(buffer)!);
       case 158:
-        return PdfRotateRequestMsg.decode(readValue(buffer)!);
+        return PdfReorderRequestMsg.decode(readValue(buffer)!);
       case 159:
-        return PdfDeletePagesRequestMsg.decode(readValue(buffer)!);
+        return PdfRotateRequestMsg.decode(readValue(buffer)!);
       case 160:
-        return PdfInkStrokeMsg.decode(readValue(buffer)!);
+        return PdfDeletePagesRequestMsg.decode(readValue(buffer)!);
       case 161:
-        return PdfAnnotationMsg.decode(readValue(buffer)!);
+        return PdfInkStrokeMsg.decode(readValue(buffer)!);
       case 162:
-        return PdfAnnotateRequestMsg.decode(readValue(buffer)!);
+        return PdfAnnotationMsg.decode(readValue(buffer)!);
       case 163:
-        return PdfSignatureStampMsg.decode(readValue(buffer)!);
+        return PdfAnnotateRequestMsg.decode(readValue(buffer)!);
       case 164:
-        return PdfSignRequestMsg.decode(readValue(buffer)!);
+        return PdfSignatureStampMsg.decode(readValue(buffer)!);
       case 165:
-        return PdfCompressRequestMsg.decode(readValue(buffer)!);
+        return PdfSignRequestMsg.decode(readValue(buffer)!);
       case 166:
-        return PdfToolResultMsg.decode(readValue(buffer)!);
+        return PdfCompressRequestMsg.decode(readValue(buffer)!);
       case 167:
-        return PdfToolProgressMsg.decode(readValue(buffer)!);
+        return PdfToolResultMsg.decode(readValue(buffer)!);
       case 168:
-        return PdfEventMsg.decode(readValue(buffer)!);
+        return PdfToolProgressMsg.decode(readValue(buffer)!);
       case 169:
-        return PdfPagePlanMsg.decode(readValue(buffer)!);
+        return PdfEventMsg.decode(readValue(buffer)!);
       case 170:
-        return PdfOrganiseRequestMsg.decode(readValue(buffer)!);
+        return PdfPagePlanMsg.decode(readValue(buffer)!);
       case 171:
+        return PdfOrganiseRequestMsg.decode(readValue(buffer)!);
+      case 172:
         return PdfCompressEstimateMsg.decode(readValue(buffer)!);
+      case 173:
+        return PdfAnnotateModeMsg.decode(readValue(buffer)!);
+      case 174:
+        return PdfAnnotateItemMsg.decode(readValue(buffer)!);
+      case 175:
+        return PdfPageRectsMsg.decode(readValue(buffer)!);
+      case 176:
+        return PdfAnnotateSaveRequestMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -3604,5 +3897,170 @@ class PdfCompressHostApi {
     )
     ;
     return pigeonVar_replyValue! as PdfCompressEstimateMsg;
+  }
+}
+
+/// Annotate mode of a viewer and the annotate save (HOM-29 Apple, HOM-29A Android).
+class PdfAnnotateHostApi {
+  /// Constructor for [PdfAnnotateHostApi]. The [binaryMessenger] named argument is
+  /// available for dependency injection. If it is left null, the default
+  /// BinaryMessenger will be used which routes to the host platform.
+  PdfAnnotateHostApi({
+      BinaryMessenger? binaryMessenger, 
+      String messageChannelSuffix = '', 
+      })
+      : pigeonVar_binaryMessenger = binaryMessenger,
+        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+
+  final BinaryMessenger? pigeonVar_binaryMessenger;
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  final String pigeonVar_messageChannelSuffix;
+
+
+  /// Puts view [viewId] into annotate mode with [mode], or back to plain viewing with null (the
+  /// preview annotations are removed).
+  Future<void> setAnnotateMode(int viewId, PdfAnnotateModeMsg? mode) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.setAnnotateMode$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[viewId, mode]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Replaces the preview of view [viewId] with [items]; [selectedId] is drawn as selected.
+  Future<void> showAnnotations(int viewId, List<PdfAnnotateItemMsg> items, String? selectedId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.showAnnotations$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[viewId, items, selectedId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// The view's text selection as one rect per line, grouped by page (empty without one).
+  Future<List<PdfPageRectsMsg>> selectionLines(int viewId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.selectionLines$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[viewId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<PdfPageRectsMsg>();
+  }
+
+  /// Writes the request's new file off the main thread (a tool job, `tool: annotate`).
+  Future<PdfToolResultMsg> save(PdfAnnotateSaveRequestMsg request) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.danaview_pdf.PdfAnnotateHostApi.save$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as PdfToolResultMsg;
+  }
+}
+
+/// What an annotating viewer reports (native → Dart).
+abstract class PdfAnnotateEventsApi {
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  /// A finished ink stroke on page [pageIndex], page-space points `[x0, y0, x1, y1, …]`.
+  void inkStroke(int viewId, int pageIndex, List<double> points);
+
+  /// A tap at page point ([x], [y]) on [pageIndex]; [itemId] is the session item under it.
+  void tapped(int viewId, int pageIndex, double x, double y, String? itemId);
+
+  static void setUp(PdfAnnotateEventsApi? api, {
+    BinaryMessenger? binaryMessenger, 
+    String messageChannelSuffix = '',
+  }) 
+{
+    messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.inkStroke$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final int arg_viewId = args[0]! as int;
+          final int arg_pageIndex = args[1]! as int;
+          final List<double> arg_points = (args[2]! as List<Object?>).cast<double>();
+          try {
+            api.inkStroke(arg_viewId, arg_pageIndex, arg_points);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.tapped$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final int arg_viewId = args[0]! as int;
+          final int arg_pageIndex = args[1]! as int;
+          final double arg_x = args[2]! as double;
+          final double arg_y = args[3]! as double;
+          final String? arg_itemId = args[4] as String?;
+          try {
+            api.tapped(arg_viewId, arg_pageIndex, arg_x, arg_y, arg_itemId);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
   }
 }

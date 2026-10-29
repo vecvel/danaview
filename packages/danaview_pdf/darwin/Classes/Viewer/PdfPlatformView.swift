@@ -1,4 +1,7 @@
 // OWNER: HOM-24
+// EXTENDED: HOM-29 (a viewer can be in annotate mode: [PdfViewController.annotate] holds the
+// session of Annotate/PdfAnnotateView.swift, which previews annotations on the in-memory document
+// and is ended, previews removed, when the viewer goes.)
 //
 // The PDFKit viewer as a Flutter platform view (ARCH v1.2 §8 "PDF viewer", V2-120): a `PDFView` in a
 // `UiKitView` (iOS) or `AppKitView` (macOS), view type `com.vecvel.danaview.pdf/view`, creation
@@ -64,6 +67,9 @@ final class PdfViewController: NSObject {
   private var observers: [NSObjectProtocol] = []
   private(set) var displayMode: PdfDisplayModeMsg = .continuous
 
+  /// The annotate mode (HOM-29), or nil while plain viewing.
+  var annotate: PdfAnnotateSession?
+
   #if os(iOS)
   private let container: PdfContainerView
   #else
@@ -117,6 +123,7 @@ final class PdfViewController: NSObject {
   }
 
   deinit {
+    annotate?.end()
     observers.forEach(NotificationCenter.default.removeObserver)
     registry?.remove(viewId)
   }
