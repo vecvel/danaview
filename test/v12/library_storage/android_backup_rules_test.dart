@@ -10,9 +10,13 @@
 //   READ_EXTERNAL_STORAGE only up to API 32; no ACCESS_MEDIA_LOCATION and no write permission in the app
 //   manifest (the editor engine's plugin manifest still merges its WRITE_EXTERNAL_STORAGE ≤ 28).
 // CORE-28's packages/danaview_editor_core/test/store/gc/backup_rules_test.dart keeps the full list.
+// EXTENDED: HOM-30A, Windows lane (saved signatures, `files/signatures` = the Dart
+// FileSignatureStore's `<app support>/signatures`, are out of cloud backup, device transfer and the
+// API <= 30 Auto Backup).
 
 import 'dart:io';
 
+import 'package:danaview_documents/danaview_documents.dart' show SignatureStore;
 import 'package:danaview_library/danaview_library.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -70,6 +74,20 @@ void main() {
       'res/xml/danaview_backup_rules.xml',
     ]) {
       expect(_read(f), contains('EXTENDED: D-3, Windows lane'), reason: f);
+    }
+  });
+
+  test('HOM-30A: saved signatures (files/signatures) are in no Android backup', () {
+    // The store lives in the app support folder, which is filesDir on Android.
+    final folder = SignatureStore.signaturesPathIn('/data/user/0/app/files').replaceAll(r'\', '/');
+    expect(folder, '/data/user/0/app/files/signatures');
+    final rule = ('exclude', SignatureStore.folderName);
+    final extraction = _read('res/xml/danaview_data_extraction_rules.xml');
+    expect(_fileRules(_section(extraction, 'cloud-backup')), contains(rule));
+    expect(_fileRules(_section(extraction, 'device-transfer')), contains(rule));
+    expect(_fileRules(_read('res/xml/danaview_backup_rules.xml')), contains(rule));
+    for (final f in ['res/xml/danaview_data_extraction_rules.xml', 'res/xml/danaview_backup_rules.xml']) {
+      expect(_read(f), contains('EXTENDED: HOM-30A, Windows lane'), reason: f);
     }
   });
 

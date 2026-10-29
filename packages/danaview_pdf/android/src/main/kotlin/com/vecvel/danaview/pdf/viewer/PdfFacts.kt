@@ -7,6 +7,8 @@
 // [PdfFacts.read] must run before the text reader touches the document (it zeroes page rotations
 // in memory, PdfBoxText.kt). The outline walk is bounded (entries, depth, cycles) because a damaged
 // outline can be cyclic or huge. Nothing here logs titles or text (rule 30).
+// EXTENDED: HOM-29A ([PdfFacts.annotationPages]: the pages whose annotations the appearance layer
+// draws, viewer/PdfAppearanceLayer.kt).
 
 package com.vecvel.danaview.pdf.viewer
 
@@ -23,12 +25,21 @@ data class PdfFacts(
     val allowsCopying: Boolean,
     val allowsPrinting: Boolean,
     val pages: List<PageGeometry>,
+    /** Page index → subtypes of its annotations that [PdfAppearanceLayer] may draw (HOM-29A). */
+    val annotationPages: Map<Int, Set<String>> = emptyMap(),
 ) {
     companion object {
         /** The facts of [document] (call before any text is read from it). */
         fun read(document: PDDocument): PdfFacts {
             val pages = ArrayList<PageGeometry>(document.numberOfPages)
+            val annotated = HashMap<Int, Set<String>>()
             for (page in document.pages) {
+                try {
+                    val subtypes = page.annotations.mapNotNullTo(HashSet()) { a -> a.subtype?.takeIf { it in PdfAppearanceLayer.DRAWN } }
+                    if (subtypes.isNotEmpty()) annotated[pages.size] = subtypes
+                } catch (e: Exception) {
+                    // Unreadable annotations: the page shows as the platform draws it.
+                }
                 val geometry = try {
                     val box = page.cropBox
                     PageGeometry(box.width.toDouble(), box.height.toDouble(), PageGeometry.normalizeRotation(page.rotation))
@@ -49,6 +60,7 @@ data class PdfFacts(
                 allowsCopying = permission.canExtractContent(),
                 allowsPrinting = permission.canPrint(),
                 pages = pages,
+                annotationPages = annotated,
             )
         }
     }

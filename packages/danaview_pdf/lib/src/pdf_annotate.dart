@@ -1,6 +1,8 @@
 // OWNER: HOM-29
 // EXTENDED: HOM-30 (sign: [PdfAnnotateInput.place] and [PdfStampMovedEvent], the viewer's drag
 // and resize of a selected signature stamp; [PdfStamp.withRect].)
+// EXTENDED: HOM-29A (setMode / show also feed the texture views' Dart-side annotate input,
+// pdf_texture_annotate.dart, which makes the events on Android).
 //
 // Annotate and highlight (HOM plan §8.5, D-98j; BUILD_PLAN HOM-29, HOM-29A) over the Pigeon
 // surface: the HOM-29 amendment's `PdfAnnotateHostApi` (annotate mode of a viewer, the save job)
@@ -30,6 +32,7 @@ import 'dart:ui' show Offset;
 import 'package:flutter/foundation.dart';
 
 import 'pdf_document.dart';
+import 'pdf_texture_annotate.dart';
 import 'pdf_tools.dart';
 import 'pdf_view.dart' show PdfRect;
 import 'pigeon/pdf_api.g.dart';
@@ -447,30 +450,28 @@ final class PlatformPdfAnnotateEngine implements PdfAnnotateEngine {
   static PdfAnnotateEventsApi debugHub([String instanceName = '']) => _AnnotateEventsHub.forInstance(instanceName);
 
   @override
-  Future<void> setMode(int viewId, PdfAnnotateMode? mode) => guardPdf(
-        () => _annotate.setAnnotateMode(
-          viewId,
-          mode == null
-              ? null
-              : PdfAnnotateModeMsg(input: PdfAnnotateInputMsg.values[mode.input.index], inkColorArgb: mode.inkColorArgb, inkWidth: mode.inkWidth),
-        ),
-      );
+  Future<void> setMode(int viewId, PdfAnnotateMode? mode) {
+    final msg = mode == null
+        ? null
+        : PdfAnnotateModeMsg(input: PdfAnnotateInputMsg.values[mode.input.index], inkColorArgb: mode.inkColorArgb, inkWidth: mode.inkWidth);
+    // Texture views (Android) make their annotate events in Dart (HOM-29A, pdf_texture_annotate.dart).
+    PdfTextureAnnotateInput.instance.setMode(viewId, msg, events: _AnnotateEventsHub.forInstance(''), api: _annotate);
+    return guardPdf(() => _annotate.setAnnotateMode(viewId, msg));
+  }
 
   @override
-  Future<void> show(int viewId, List<PdfAnnotateItem> items, {String? selectedId}) => guardPdf(
-        () => _annotate.showAnnotations(
-          viewId,
-          [
-            for (final i in items)
-              PdfAnnotateItemMsg(
-                id: i.id,
-                annotation: i.annotation == null ? null : pdfAnnotationMsg(i.annotation!),
-                stamp: i.stamp == null ? null : _stampMsg(i.stamp!),
-              ),
-          ],
-          selectedId,
+  Future<void> show(int viewId, List<PdfAnnotateItem> items, {String? selectedId}) {
+    final msgs = [
+      for (final i in items)
+        PdfAnnotateItemMsg(
+          id: i.id,
+          annotation: i.annotation == null ? null : pdfAnnotationMsg(i.annotation!),
+          stamp: i.stamp == null ? null : _stampMsg(i.stamp!),
         ),
-      );
+    ];
+    PdfTextureAnnotateInput.instance.setItems(viewId, msgs, selectedId);
+    return guardPdf(() => _annotate.showAnnotations(viewId, msgs, selectedId));
+  }
 
   @override
   Future<List<PdfPageRects>> selectionLines(int viewId) async {

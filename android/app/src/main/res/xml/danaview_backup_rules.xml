@@ -12,4 +12,8 @@
          tell cloud backup from device transfer, so the Danaview library (files/library: library.db,
          files/, imports/) is left out entirely here. -->
     <exclude domain="file" path="library" />
+    <!-- EXTENDED: HOM-30A, Windows lane (BUILD_STATE S4 HOM-30A). Saved signatures
+         (files/signatures, the Dart FileSignatureStore in the app support folder) never leave the
+         device: no Auto Backup. -->
+    <exclude domain="file" path="signatures" />
 </full-backup-content>

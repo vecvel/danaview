@@ -1,4 +1,5 @@
 // OWNER: HOM-25
+// EXTENDED: HOM-29A (annotation appearances in the tiles; the annotate preview over them).
 //
 // One Android PDF texture view (ARCH v1.2 §8 "PDF viewer", D-98g; Pigeon `createTextureView` /
 // `setTextureViewport` / `disposeTextureView`). Dart owns scrolling and zoom and sends the
@@ -19,6 +20,10 @@
 // - Threads: create, setViewport, dispose and the producer callbacks run on the main thread (the
 //   thread Flutter's texture registry expects); everything else on the render thread. The view
 //   holds a reference to its document until it is disposed.
+//
+// HOM-29A: the file's own annotation appearances PdfRenderer leaves out are drawn into the tiles
+// and previews (viewer/PdfAppearanceLayer.kt), and an annotate session's preview items over them on
+// every frame (viewer/PdfAnnotatePreview.kt, set through PdfAnnotateHostApi.showAnnotations).
 //
 // Selection is not offered on Android (capabilities.selection false): the texture has no text
 // layer. Nothing here logs document content (rule 30).
@@ -64,6 +69,13 @@ class PdfTextureView(
 
     @Volatile var disposed = false
         private set
+
+    /** The annotate session shown over the pages (HOM-29A; [PreviewState.NONE] outside annotate mode). */
+    @Volatile var preview: PreviewState = PreviewState.NONE
+        private set
+
+    // Render thread only.
+    private val annotatePreview = PdfAnnotatePreview()
 
     private val surfaceLock = Any()
     private var surface: Surface? = null
@@ -171,6 +183,12 @@ class PdfTextureView(
         requestRender()
     }
 
+    /** Shows [state] over the pages (any thread; HOM-29A). */
+    fun setPreview(state: PreviewState) {
+        preview = state
+        requestRender()
+    }
+
     fun clearHighlight() {
         highlight = null
         requestRender()
@@ -186,6 +204,7 @@ class PdfTextureView(
         render.post {
             tiles.evictAll()
             previews.evictAll()
+            annotatePreview.clear()
             document.release()
         }
     }
@@ -289,6 +308,7 @@ class PdfTextureView(
         val bitmap = Bitmap.createBitmap(Tiles.SIZE, Tiles.SIZE, Bitmap.Config.ARGB_8888)
         val rs = Tiles.scaleOf(key.step)
         PdfPageRenderer.draw(platform, key.page, page, rs, key.col * Tiles.SIZE.toDouble(), key.row * Tiles.SIZE.toDouble(), bitmap)
+        drawAppearances(platform, key.page, bitmap, rs, key.col * Tiles.SIZE.toDouble(), key.row * Tiles.SIZE.toDouble())
         tiles.put(key, bitmap)
     }
 
@@ -300,7 +320,16 @@ class PdfTextureView(
         val h = max(1, (page.displayHeight * s).roundToInt())
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         PdfPageRenderer.draw(platform, index, page, s, 0.0, 0.0, bitmap)
+        drawAppearances(platform, index, bitmap, s, 0.0, 0.0)
         previews.put(index, bitmap)
+    }
+
+    /** The file's own annotations PdfRenderer didn't draw, onto [bitmap] (HOM-29A). */
+    private fun drawAppearances(platform: PlatformPdf, index: Int, bitmap: Bitmap, scale: Double, dx: Double, dy: Double) {
+        val layer = document.appearances() ?: return
+        if (!layer.covers(index)) return
+        val drawn = if (platform.annotationsEnabled) PdfAppearanceLayer.PLATFORM_FLAGGED else emptySet()
+        layer.draw(index, Canvas(bitmap), scale, dx, dy, drawn)
     }
 
     private fun drawFrame(v: Viewport, visible: List<TileKey>, complete: Boolean) {
@@ -354,6 +383,7 @@ class PdfTextureView(
         val step = visible.firstOrNull()?.step ?: Tiles.stepFor(v.scale)
         val rs = Tiles.scaleOf(step)
         val h = highlight
+        val session = preview
         for (page in layout.pagesIn(area.top, area.bottom)) {
             val pr = layout.pageRect(page)
             val sr = v.toScreen(pr).toRectF()
@@ -368,6 +398,10 @@ class PdfTextureView(
             }
             if (h != null && h.page == page) {
                 canvas.drawRect(v.toScreen(h.rect.offset(pr.left, pr.top)).toRectF(), highlightPaint)
+            }
+            if (session.items.isNotEmpty()) {
+                val geometry = layout.pages[page]
+                annotatePreview.draw(canvas, session, page, geometry, PdfAnnotatePreview.pageToScreen(geometry, pr, v))
             }
             canvas.restore()
         }

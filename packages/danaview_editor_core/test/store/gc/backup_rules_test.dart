@@ -9,6 +9,8 @@
 // (`files/library`) leaves cloud backup and Auto Backup on API ≤ 30, and stays in device transfer
 // except its import part files (`files/library/imports`). The library rules have their own test,
 // test/v12/library_storage/android_backup_rules_test.dart at the app root.
+// EXTENDED: HOM-30A, Windows lane: saved signatures (`files/signatures`) leave every backup (cloud,
+// device transfer, API <= 30); tested there too.
 
 import 'dart:io';
 
@@ -33,9 +35,9 @@ String _section(String xml, String tag) {
 const _editor = [('exclude', 'file', 'danaview/editor'), ('exclude', 'file', 'danaview/speech')];
 
 const _expected = {
-  'cloud-backup': [..._editor, ('exclude', 'file', 'library')],
-  'device-transfer': [..._editor, ('exclude', 'file', 'library/imports')],
-  'full-backup-content': [..._editor, ('exclude', 'file', 'library')],
+  'cloud-backup': [..._editor, ('exclude', 'file', 'library'), ('exclude', 'file', 'signatures')],
+  'device-transfer': [..._editor, ('exclude', 'file', 'library/imports'), ('exclude', 'file', 'signatures')],
+  'full-backup-content': [..._editor, ('exclude', 'file', 'library'), ('exclude', 'file', 'signatures')],
 };
 
 void main() {
@@ -45,7 +47,7 @@ void main() {
     for (final section in ['cloud-backup', 'device-transfer']) {
       expect(_rules(_section(xml, section)), _expected[section], reason: section);
     }
-    expect(_rules(xml), hasLength(6), reason: 'no include rules (everything else stays included)');
+    expect(_rules(xml), hasLength(8), reason: 'no include rules (everything else stays included)');
   });
 
   test('API ≤ 30: full-backup-content excludes the same trees (+ D-3: the whole library)', () {
