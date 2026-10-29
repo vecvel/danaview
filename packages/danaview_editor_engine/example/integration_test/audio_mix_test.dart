@@ -89,8 +89,7 @@ List<List<num>> _equalPower(int t0, int t1, {required bool fadeIn}) => [
 
 /// CI round 6: an export through AVFoundation's time-pitch unit has clean audio or fails typed.
 /// When every audio read had a dropout or a dropped seam crossfade, the iOS export fails with a
-/// retryable `decodeFailed` ('audio time-pitch fault …') instead of writing the gap (before, the
-/// third faulty read was shipped: run 40741900194 lost the ramp's tone, −18.4 dB). Returns whether
+/// retryable `decodeFailed` ('audio time-pitch fault …') instead of writing the gap. Returns whether
 /// [run] completed (measure it); the typed failure is logged and accepted, any other failure fails
 /// the test. A silent dropout in a completed export fails the measurements that follow.
 bool _cleanOrTypedFailure(qa.ExportRun run, String name) {
@@ -360,10 +359,27 @@ void main() {
     final worst = seams.reduce(math.max);
     final excess = worst - floor;
     final excessDb = excess > 0 ? 20 * math.log(excess) / math.ln10 : double.negativeInfinity;
-    final toneDb = qa.toneLevelDb(x, 1000, sr, at(100000), at(durUs - 100000));
+    // The tone level of every 20 ms window inside a piece, and the quietest one. Keep-pitch latency
+    // compensation reads each piece's source at its own offset, so the tone's phase steps at every
+    // seam by design (AudioMixLayout, FIX-IOS-PITCH-SYNC): one phase-coherent Goertzel over the
+    // whole ramp sums seven phases and reads −18.4 dB for a −12 dBFS tone with no gap at all
+    // (CI runs 40741900194 and 40906413424). Windows never straddle a seam, so a dropout, a quiet
+    // patch or a lost crossfade still pulls the quietest window down.
+    const winUs = 20000;
+    var toneDb = double.infinity;
+    var quietestUs = 0;
+    for (var k = 0; k < speeds.length; k++) {
+      for (var t = math.max(k * segUs, 100000); t + winUs <= math.min((k + 1) * segUs, durUs - 100000); t += winUs) {
+        final level = qa.toneLevelDb(x, 1000, sr, at(t), at(t + winUs));
+        if (level < toneDb) {
+          toneDb = level;
+          quietestUs = t;
+        }
+      }
+    }
     debugPrint('QA11|ramp|floor=${floor.toStringAsFixed(5)}|seams=${seams.map((v) => v.toStringAsFixed(5)).join(',')}'
-        '|worstExcessDbfs=${excessDb.toStringAsFixed(1)}|toneDb=${toneDb.toStringAsFixed(2)}');
-    expect(toneDb, greaterThan(-14), reason: 'the ramp keeps the tone audible');
+        '|worstExcessDbfs=${excessDb.toStringAsFixed(1)}|toneDb=${toneDb.toStringAsFixed(2)}|quietestUs=$quietestUs');
+    expect(toneDb, greaterThan(-14), reason: 'the ramp keeps the tone audible (quietest 20 ms window at $quietestUs µs)');
     expect(excess, lessThanOrEqualTo(0.01), reason: 'seam transient ${excessDb.toStringAsFixed(1)} dBFS above the tone floor');
     env.discard(run);
   }, timeout: const Timeout(Duration(minutes: 10)));
