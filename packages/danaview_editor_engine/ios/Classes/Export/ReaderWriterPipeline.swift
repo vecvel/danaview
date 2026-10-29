@@ -32,8 +32,9 @@
 //   at most four times, after a doubling back-off (0.25 s up to 2 s). The last attempt is accepted
 //   (sanitised) unless it hangs or fails, or still has a time-pitch fault: then the export fails
 //   with a typed, retryable `decodeFailed` (`timePitchFailure`) and no file is written; a dropout is
-//   never shipped (CI round 6). A fault every one of the five reads reproduces at the same place is
-//   the content, not a fault (`TimePitchFault.recurring`).
+//   never shipped (CI round 6). A fault every witness read reproduces at the same place (at least
+//   `minContentWitnesses` reads without another defect) is the content, not a fault
+//   (`TimePitchFault.recurring`).
 //
 // Reader threading and hangs (FIX-IOS-D7, QA-05 D7, QA-01 FIX-IOS-12-1). AVAssetReaderAudioMixOutput
 // over a keep-pitch scaled track sometimes blocks inside `copyNextSampleBuffer` for good
@@ -43,9 +44,16 @@
 //   (`MixReadSession`, `CompositionVideoSource`), and its queue closures hold the reader, its output
 //   and the composition, so nothing is cancelled or released while a call into it is outstanding;
 // - the audio watchdog only signals: a hung read is left blocked on its queue and its reader is
-//   never torn down (kept for the process, like IOS-17's abandoned pumps), and the read resumes on a fresh composition and reader from the frame after the last
-//   delivered buffer (`maxAudioResumes`), so the export completes; a stop request ends the wait at
-//   once (typed interruption);
+//   never torn down (kept for the process, like IOS-17's abandoned pumps), and the read resumes on
+//   a fresh composition and reader from the frame after the last delivered buffer
+//   (`maxAudioResumes`), so the export completes; a stop request ends the wait at once (typed
+//   interruption). A resumed reader starts inside the timeline, and such an
+//   AVAssetReaderAudioMixOutput stops at the end of the audio there (10.0 s or 17.0 s of the soak's
+//   39 s, CI round 6) instead of rendering the silence to its range end, so a resumed read that
+//   ends early continues from the plan's audio layout (`continuation`): a fresh reader where audio
+//   goes on, the silence up to the next audio segment, the silence after the last one. (Reading
+//   the whole range again instead replays the same render and hangs at the same frame.) A read that
+//   still ends more than `maxShortfallUs` early is rejected and never shipped (`shortRead`);
 // - each export segment reads its own anchored copy of the composition (no composition is mutated
 //   while a reader uses it), every audio read gets a fresh composition (never the video phase's),
 //   and each phase's readers are torn down, and their compositions released, before the next phase
@@ -220,10 +228,15 @@ final class ReaderWriterPipeline {
     /// (0.25 + 0.5 + 1 + 2 s over five reads: a loaded device gets time to settle).
     var audioRetryDelay: TimeInterval = 0.25
     var audioRetryDelayCap: TimeInterval = 2
-    // A time-pitch fault counts as the content only when every read of the job (all
-    // `maxAudioAttempts`) has it at the same place: AVFoundation's faults recur near ramp seams
-    // (seen 2.5 ms after a seam in two reads running) but not in five reads running, while a fresh
-    // unit renders digitally gated content identically every time.
+    // A time-pitch fault counts as the content only when every witness read of the job has it at
+    // the same place, the last read included, and there were at least `minContentWitnesses`:
+    // AVFoundation's faults recur near ramp seams (seen 2.5 ms after a seam in two reads running)
+    // but not in four or five reads running, while a fresh unit renders digitally gated content
+    // identically every time. A read rejected for another defect (NaN, silence, a tap range jump,
+    // an early end) is no witness: its scan saw a broken render (CI round 6: a read with a tap
+    // range jump missed the content's dropout and so no fault was ever kept as content).
+    /// Witness reads (the last one included) a recurring time-pitch fault needs to count as content.
+    var minContentWitnesses = 4
     /// Seconds one audio buffer may take before the read counts as hung (FIX-IOS-D7: the
     /// watchdog only signals; the read resumes on a fresh reader, see `MixAudioSource`).
     var audioWatchdog: TimeInterval = 8
@@ -345,9 +358,11 @@ final class ReaderWriterPipeline {
         let audible = ReaderWriterPipeline.hasAudibleAudio(plan)
         let factory = makeComposition
         var attempt = 0
-        // Time-pitch faults every scanned read so far had, and how many reads were scanned.
+        // Time-pitch faults every witness read so far had (`MixAudioSource.isTimePitchWitness`: a
+        // read rejected for NaN, silence, a tap range jump or an early end is no evidence of the
+        // content), and how many witnesses there were.
         var recurring: [TimePitchFault]?
-        var scannedReads = 0
+        var witnesses = 0
         while true {
             attempt += 1
             audioAttempts = attempt
@@ -368,15 +383,15 @@ final class ReaderWriterPipeline {
             source.watchdog = audioWatchdog
             source.maxResumes = maxAudioResumes
             source.reopen = { try factory(plan) }
-            if attempt == maxAudioAttempts, scannedReads == attempt - 1 { source.contentFaults = recurring ?? [] }
+            if attempt == maxAudioAttempts, witnesses + 1 >= minContentWitnesses { source.contentFaults = recurring ?? [] }
             audioSourceHook?(source, attempt)
             defer { ReaderWriterPipeline.retire(source, timeout: teardownTimeout) }
             do {
                 return try writer.writeAudio(source: source)
             } catch {
                 if control.isCancelled { throw EngineError.cancelled }
-                if source.scanned {
-                    scannedReads += 1
+                if source.isTimePitchWitness {
+                    witnesses += 1
                     recurring = TimePitchFault.recurring(recurring, source.timePitchFaults)
                 }
                 if source.timePitchFailed {
@@ -763,8 +778,8 @@ final class SilentAudioSource: SegmentAudioSource {
 ///   terms). A steady tone's good seams measure ≤ 1.4, the dropped crossfade 7.6.
 /// A false positive (a transient of the content right on a seam, digitally gated content) shows up
 /// at the same place in every read, a real fault mostly elsewhere: `TimePitchFault.recurring`
-/// keeps the faults every read so far had, and on the last attempt a fault every read reproduced
-/// is treated as content (accepted). Any other fault left after the last attempt fails the export
+/// keeps the faults every witness read so far had, and on the last attempt a fault every witness
+/// reproduced is treated as content (accepted). Any other fault left after the last attempt fails the export
 /// (`ReaderWriterPipeline.timePitchFailure`); a dropout is never shipped.
 struct TimePitchWatch: Equatable {
     struct Span: Equatable {
@@ -1051,6 +1066,10 @@ final class MixAudioSource: SegmentAudioSource {
     }
     /// Reader range end (resumes read to it).
     private var rangeEnd: CMTime = .invalid
+    /// Continuations of resumed sessions that ended early, and whether the rest of the range is
+    /// silence the source renders itself (no audio segment after the last delivered frame).
+    private(set) var continuations = 0
+    private var padsToEnd = false
     /// Absolute 48 kHz frame of the next frame the writer gets (continuity across a resume).
     private var nextFrame: Int64 = 0
     /// A real buffer held back while the silence of a resume gap goes first.
@@ -1112,6 +1131,17 @@ final class MixAudioSource: SegmentAudioSource {
     }
     /// Whether the read reached its end and was scanned (validation ran).
     private(set) var scanned = false
+    /// The read's defect other than a time-pitch fault (NaN, silent, tap range discontinuity,
+    /// ended early), nil when it had none. Such a read's time-pitch scan is no evidence of the
+    /// content (`isTimePitchWitness`).
+    private(set) var otherDefect: String?
+    /// Whether the read ended more than `maxShortfallUs` before its range end (never shipped).
+    private(set) var shortRead = false
+    /// A scanned read without another defect: its time-pitch faults count for
+    /// `TimePitchFault.recurring`.
+    var isTimePitchWitness: Bool { scanned && otherDefect == nil }
+    /// How far before the range end a read may stop (the mix output ends a few ms early).
+    static let maxShortfallUs: Int64 = 50_000
     /// Whether the read was refused for a time-pitch fault while not validating (the last attempt):
     /// the export fails rather than ship the dropout.
     private(set) var timePitchFailed = false
@@ -1155,6 +1185,18 @@ final class MixAudioSource: SegmentAudioSource {
             pending = nil
             return try sanitized(held, skip: 0)
         }
+        if padsToEnd {
+            let left = MixAudioSource.frame(rangeEnd) - nextFrame
+            guard left > 0 else {
+                padsToEnd = false
+                try finishValidation()
+                return nil
+            }
+            let silence = try ExportPCM.makeBuffer(
+                frames: Int(min(Int64(SilentAudioSource.chunkFrames), left)),
+                pts: CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate))) { _ in }
+            return try sanitized(silence, skip: 0, real: false)
+        }
         while true {
             guard let current = session else { return nil }
             let n = reads
@@ -1177,6 +1219,20 @@ final class MixAudioSource: SegmentAudioSource {
                 let skip = sessions.count > 1 ? Int(max(0, nextFrame - first)) : 0
                 return try sanitized(sample, skip: skip)
             case .end:
+                if sessions.count > 1, let reopen = reopen, let next = continuation() {
+                    // A resumed reader stopped at the end of the audio around it (see the header).
+                    continuations += 1
+                    takeSession(hung: false)?.close()
+                    guard let startUs = next else {
+                        Log.info(.export, "resumed audio read ended at \(resumeTime.seconds) s; silence to the end")
+                        padsToEnd = true
+                        return try nextAudio()
+                    }
+                    Log.info(.export, "resumed audio read ended at \(resumeTime.seconds) s; continuing from \(Double(startUs) / 1e6) s")
+                    continuationFrom = nextFrame
+                    try open(try reopen(), range: CMTimeRange(start: FrameGrid.cmTime(us: startUs), end: rangeEnd))
+                    continue
+                }
                 try finishValidation()
                 return nil
             case .failed(let error):
@@ -1203,6 +1259,28 @@ final class MixAudioSource: SegmentAudioSource {
     }
 
     private var resumeTime: CMTime { CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate)) }
+
+    /// Frame the last continuation started from (a continuation that delivered nothing is not
+    /// continued again).
+    private var continuationFrom: Int64?
+
+    /// Where a resumed session that ended at `nextFrame` (short of the range end) continues: `.some(t)`
+    /// opens a fresh reader at composition µs t (the frame itself when an audio segment still plays
+    /// there, else the next segment's start, the gap delivered as silence), `.some(nil)` renders
+    /// silence to the end (no audio segment after it), nil ends the read (at the range end, no
+    /// progress since the last continuation, or out of continuations; validation then judges it).
+    private func continuation() -> Int64?? {
+        let endFrame = MixAudioSource.frame(rangeEnd)
+        guard nextFrame < endFrame, continuationFrom != nextFrame else { return nil }
+        let plan = composition.built.plan
+        guard continuations < plan.audio.count + 2 else { return nil }
+        let nowUs = Int64((Double(nextFrame) * 1_000_000 / Double(ExportPCM.sampleRate)).rounded())
+        // A segment still playing (more than 1 ms of it left) continues right here.
+        if plan.audio.contains(where: { $0.t0 <= nowUs && $0.t1 - nowUs > 1_000 }) { return .some(nowUs) }
+        let nextStart = plan.audio.map(\.t0).filter { $0 > nowUs }.min()
+        guard let start = nextStart, MixAudioSource.frame(FrameGrid.cmTime(us: start)) < endFrame else { return .some(nil) }
+        return .some(start)
+    }
 
     /// Waits for [ticket] in short slices: at most `watchdog` seconds (then `.hung`), and never
     /// past a stop request (a cancel or background interruption ends the read at once, typed as
@@ -1257,16 +1335,24 @@ final class MixAudioSource: SegmentAudioSource {
         var reason: String?
         // A resumed session's taps start at its own range start (no discontinuity there).
         let jumps = sessions.flatMap { $0.composition.built.gainTaps }.map(\.rangeDiscontinuities).reduce(0, +)
-        if nanSamples > 0 {
-            reason = "NaN"
+        let shortfall = MixAudioSource.frame(rangeEnd) - nextFrame
+        if shortfall * 1_000_000 > MixAudioSource.maxShortfallUs * Int64(ExportPCM.sampleRate) {
+            shortRead = true
+            otherDefect = "ended early at \(Double(nextFrame) / Double(ExportPCM.sampleRate)) s of \(rangeEnd.seconds) s"
+        } else if nanSamples > 0 {
+            otherDefect = "NaN"
         } else if expectAudible && peak < MixAudioSource.silencePeak {
-            reason = "silent"
+            otherDefect = "silent"
         } else if jumps > 0 {
-            reason = "tap range discontinuity"
-        } else {
-            reason = timePitchReason
+            otherDefect = "tap range discontinuity"
         }
+        reason = otherDefect ?? timePitchReason
         guard let reason = reason else { return }
+        if shortRead {
+            // Never ship audio that stops early, not even on the last attempt.
+            rejection = reason
+            throw EngineError(.decodeFailed, "audio read rejected: \(reason)", retryable: true)
+        }
         if !validates, let timePitchReason = timePitchReason {
             // Never ship a dropout: the last attempt fails instead (the pipeline types the error).
             rejection = timePitchReason
