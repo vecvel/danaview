@@ -1,4 +1,7 @@
 // OWNER: HOM-29
+// EXTENDED: HOM-30 (a stamp turned a quarter (90° or 270°) still fills its rect: the image is drawn
+// with its sides swapped before the turn, so a signature placed upright on a rotated page covers
+// exactly the rect the viewer hit-tests, moves and resizes.)
 //
 // The Flutter-free core of annotate and highlight on iOS and macOS (HOM plan §8.5, D-98j; ARCH v1.2
 // rule 27): builds real PDFKit annotations (highlight, underline, strikeOut with one quadrilateral
@@ -300,13 +303,18 @@ enum PdfAnnotateCore {
     return CGRect(x: left, y: top - height, width: width, height: height)
   }
 
-  /// Draws [image] filling [rect], turned [rotation] degrees clockwise around its centre.
+  /// Draws [image] filling [rect], turned [rotation] degrees clockwise around its centre. A
+  /// quarter turn (90° or 270°) swaps the image's sides first, so it still fills [rect].
   static func drawImage(_ image: CGImage, in rect: CGRect, rotation: CGFloat, context: CGContext) {
     context.saveGState()
     context.translateBy(x: rect.midX, y: rect.midY)
     if rotation != 0 { context.rotate(by: -rotation * .pi / 180) }
     context.interpolationQuality = .high
-    context.draw(image, in: CGRect(x: -rect.width / 2, y: -rect.height / 2, width: rect.width, height: rect.height))
+    let quarter = Int((rotation / 90).rounded())
+    let swap = abs(rotation - CGFloat(quarter) * 90) < 0.01 && quarter % 2 != 0
+    let w = swap ? rect.height : rect.width
+    let h = swap ? rect.width : rect.height
+    context.draw(image, in: CGRect(x: -w / 2, y: -h / 2, width: w, height: h))
     context.restoreGState()
   }
 

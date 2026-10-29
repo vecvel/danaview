@@ -258,6 +258,13 @@ enum PdfAnnotateInputMsg: Int, CaseIterable {
   case text = 2
   /// A tap reports the session annotation under it (`tapped` with its id), which Dart removes.
   case erase = 3
+  /// HOM-30 amendment (sign): a tap reports its page point and the session item under it
+  /// (`tapped`), where Dart places or selects a signature stamp. A drag that starts on the
+  /// selected stamp moves it and one that starts on its corner handle (a neutral disc at the
+  /// stamp's lower trailing corner on screen) resizes it with its aspect ratio kept; both stay on
+  /// the stamp's page and are shown live, and the final rect is reported once when the drag ends
+  /// (`PdfAnnotateEventsApi.itemMoved`). Every other drag scrolls and zooms as usual.
+  case place = 4
 }
 
 /// What this device's implementation offers; the Dart UI hides what is missing.
@@ -3721,6 +3728,9 @@ protocol PdfAnnotateEventsApiProtocol {
   @MainActor func inkStroke(viewId viewIdArg: Int64, pageIndex pageIndexArg: Int64, points pointsArg: [Double]) async throws
   /// A tap at page point ([x], [y]) on [pageIndex]; [itemId] is the session item under it.
   @MainActor func tapped(viewId viewIdArg: Int64, pageIndex pageIndexArg: Int64, x xArg: Double, y yArg: Double, itemId itemIdArg: String?) async throws
+  /// HOM-30 amendment (sign): the user dragged or resized stamp [itemId] (input `place`) to
+  /// [rect] on [pageIndex] (page space); Dart replaces the item and shows the preview again.
+  @MainActor func itemMoved(viewId viewIdArg: Int64, itemId itemIdArg: String, pageIndex pageIndexArg: Int64, rect rectArg: PdfRectMsg) async throws
 }
 class PdfAnnotateEventsApi: PdfAnnotateEventsApiProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -3759,6 +3769,28 @@ class PdfAnnotateEventsApi: PdfAnnotateEventsApiProtocol {
       let channelName: String = "dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.tapped\(messageChannelSuffix)"
       let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
       channel.sendMessage([viewIdArg, pageIndexArg, xArg, yArg, itemIdArg] as [Any?]) { response in
+        guard let listResponse = response as? [Any?] else {
+          continuation.resume(throwing: createConnectionError(withChannelName: channelName))
+          return
+        }
+        if listResponse.count > 1 {
+          let code: String = listResponse[0] as! String
+          let message: String? = nilOrValue(listResponse[1])
+          let details: String? = nilOrValue(listResponse[2])
+          continuation.resume(throwing: PdfPigeonError(code: code, message: message, details: details))
+        } else {
+          continuation.resume()
+        }
+      }
+    }
+  }
+  /// HOM-30 amendment (sign): the user dragged or resized stamp [itemId] (input `place`) to
+  /// [rect] on [pageIndex] (page space); Dart replaces the item and shows the preview again.
+  @MainActor func itemMoved(viewId viewIdArg: Int64, itemId itemIdArg: String, pageIndex pageIndexArg: Int64, rect rectArg: PdfRectMsg) async throws {
+    return try await withCheckedThrowingContinuation { continuation in
+      let channelName: String = "dev.flutter.pigeon.danaview_pdf.PdfAnnotateEventsApi.itemMoved\(messageChannelSuffix)"
+      let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+      channel.sendMessage([viewIdArg, itemIdArg, pageIndexArg, rectArg] as [Any?]) { response in
         guard let listResponse = response as? [Any?] else {
           continuation.resume(throwing: createConnectionError(withChannelName: channelName))
           return

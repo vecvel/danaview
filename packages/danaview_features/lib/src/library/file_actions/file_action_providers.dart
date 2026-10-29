@@ -1,6 +1,7 @@
 // OWNER: HOM-22
 // EXTENDED: HOM-28 (the PDF page tools' single-file handler, [pdfPageToolsHandlerProvider], and the
 // labels of "Organise pages" and "Merge with…".)
+// EXTENDED: HOM-30 (the "Sign…" handler, [signPdfHandlerProvider], with its label, icon and id.)
 //
 // Providers of the file actions (ARCH v1.2 V2-117, V2-118; BUILD_PLAN HOM-22): the library-side
 // actions over the open store (null with DANAVIEW_FILES_HOME off: nothing opens the store), the
@@ -61,6 +62,13 @@ typedef CompressPdfHandler = Future<void> Function(BuildContext context, MediaIt
 /// The "Compress…" handler, or null (the action is hidden).
 final compressPdfHandlerProvider = Provider<CompressPdfHandler?>((ref) => null);
 
+/// Opens one PDF in the viewer's sign mode (HOM-30, wired by the app root behind
+/// DANAVIEW_FILES_HOME where the platform reports the sign tool).
+typedef SignPdfHandler = Future<void> Function(BuildContext context, MediaItem item);
+
+/// The "Sign…" handler, or null (the action is hidden).
+final signPdfHandlerProvider = Provider<SignPdfHandler?>((ref) => null);
+
 /// The label of [action]; [capabilities] names the save action, [favourite] says whether the
 /// single item is starred already, [group] picks the short multi-select labels.
 String fileActionLabel(FileAction action, {FileOutCapabilities? capabilities, bool favourite = false, bool group = false}) =>
@@ -78,6 +86,7 @@ String fileActionLabel(FileAction action, {FileOutCapabilities? capabilities, bo
       FileAction.organisePages => 'Organise pages',
       FileAction.mergeWith => 'Merge with…',
       FileAction.compressPdf => 'Compress…',
+      FileAction.signPdf => 'Sign…',
       FileAction.delete => 'Delete',
     };
 
@@ -96,6 +105,7 @@ IconData fileActionIcon(FileAction action, {bool favourite = false}) => switch (
       FileAction.organisePages => Icons.dashboard_customize_outlined,
       FileAction.mergeWith => Icons.merge_rounded,
       FileAction.compressPdf => Icons.compress_rounded,
+      FileAction.signPdf => Icons.history_edu_rounded,
       FileAction.delete => Icons.delete_outline_rounded,
     };
 
@@ -114,5 +124,6 @@ String fileActionId(FileAction action) => switch (action) {
       FileAction.organisePages => 'file-organise-pages',
       FileAction.mergeWith => 'file-merge-with',
       FileAction.compressPdf => 'file-compress-pdf',
+      FileAction.signPdf => 'file-sign-pdf',
       FileAction.delete => 'file-delete',
     };

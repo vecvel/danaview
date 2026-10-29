@@ -3,6 +3,7 @@
 // The page tools in the single-file menu (HOM plan §8.5 entry points): a readable PDF (a library
 // file or a linked file) gets "Organise pages" and "Merge with…" after "Open in another app" when
 // the tools are wired; never other documents, photos, unwired builds or files without a path.
+// EXTENDED: HOM-30 ("Sign…" right after them for a readable PDF when a sign handler is wired.)
 
 import 'package:danaview_library/danaview_library.dart';
 import 'package:test/test.dart';
@@ -18,13 +19,14 @@ DocumentItem _doc(String id, DocumentKind kind, {String uri = '/lib/d.pdf'}) => 
       docKind: kind,
     );
 
-List<FileAction> _menu(MediaItem item, {bool tools = true}) => fileActionsFor(
+List<FileAction> _menu(MediaItem item, {bool tools = true, bool sign = false}) => fileActionsFor(
       FileActionTarget.of(item),
       canShare: true,
       canOpenIn: true,
       canSaveOut: true,
       canSaveToPhotos: true,
       canPdfTools: tools,
+      canSign: sign,
     );
 
 void main() {
@@ -43,5 +45,15 @@ void main() {
     expect(_menu(_doc('ph:1', DocumentKind.pdf, uri: 'ph://asset')), isNot(contains(FileAction.mergeWith)));
     final photo = PhotoMediaItem(id: ItemId.opaque('fe_p'), uri: '/lib/p.jpg', name: 'p.jpg', modifiedAt: _t, mimeType: 'image/jpeg', width: 1, height: 1);
     expect(_menu(photo), isNot(contains(FileAction.organisePages)));
+  });
+
+  test('HOM-30: Sign… follows the page tools for a readable PDF with a sign handler only', () {
+    final library = _menu(_doc('fe_abc', DocumentKind.pdf), sign: true);
+    final merge = library.indexOf(FileAction.mergeWith);
+    expect(library[merge + 1], FileAction.signPdf);
+    expect(_menu(_doc('lk:r1/a.pdf', DocumentKind.pdf), tools: false, sign: true), contains(FileAction.signPdf));
+    expect(_menu(_doc('fe_abc', DocumentKind.pdf)), isNot(contains(FileAction.signPdf)), reason: 'no handler');
+    expect(_menu(_doc('fe_abc', DocumentKind.word), sign: true), isNot(contains(FileAction.signPdf)));
+    expect(_menu(_doc('ph:1', DocumentKind.pdf, uri: 'ph://asset'), sign: true), isNot(contains(FileAction.signPdf)));
   });
 }
