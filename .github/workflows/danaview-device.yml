@@ -71,7 +71,7 @@ jobs:
     name: android-emulator (API 35 x86_64)
     if: github.event_name == 'schedule' || inputs.android_emulator
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
       - name: Look for scripts/ci/editor/android_emulator.sh
@@ -157,6 +157,16 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: bash scripts/ci/editor/emulator_ready.sh && bash scripts/ci/editor/android_emulator.sh
+      - name: Upload emulator batch and suite results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-emulator-results
+          if-no-files-found: ignore
+          path: |
+            packages/danaview_editor_engine/example/build/danaview_emulator_batches/
+            packages/danaview_editor_engine/example/build/danaview_emulator_suites/
+            /tmp/emulator-relaunch-*.log
 
   ios-soak:
     name: ios-soak (RunnerTests soak and perf-heavy classes)
