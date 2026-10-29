@@ -234,9 +234,17 @@ void main() {
     await tester.pumpWidget(_app(env, PhotosTab(onOpenPhoto: (photos, i) => opened.add((photos.length, i))), store: lib.store));
     await pumpFrames(tester, count: 2);
     expect(tester.takeException(), isNull);
+    // The square grid (DESIGN_SYSTEM §10.4) is taller than the window here: scroll each group's
+    // header into view; the grid holds exactly one header per group (the pinned sticky header
+    // sits outside it).
+    final scrollable = find.descendant(of: find.byKey(const ValueKey('photos-grid')), matching: find.byType(Scrollable)).first;
     for (final label in ['Today', 'Yesterday', 'This month', 'August', 'March 2024']) {
-      expect(find.text(label), findsOneWidget, reason: label);
+      final header = find.descendant(of: find.byType(SliverPhotoMasonry), matching: find.text(label));
+      await tester.scrollUntilVisible(header, 120, scrollable: scrollable);
+      expect(header, findsOneWidget, reason: label);
     }
+    _gridPosition(tester).jumpTo(0);
+    await pumpFrames(tester, count: 2);
     expect(find.bySemanticsLabel(RegExp(r'^Photo yesterday\.jpg, 21 October 2026$')), findsOneWidget);
     // No system library on this device: no opt-in row.
     expect(find.byKey(const ValueKey('photos-show-library')), findsNothing);
@@ -572,7 +580,7 @@ void main() {
     expect(density(), photoGridDensityTargets.length - 1);
     expect(find.byKey(const ValueKey('photos-density-smaller')), findsOneWidget);
     final densest = _sliver(tester).masonry.columns;
-    expect(densest, photoGridColumnsFor(402 - 2 * 12, photoGridDensityTargets.length - 1));
+    expect(densest, photoGridSquareColumns(402, photoGridDensityTargets.length - 1));
 
     // Ctrl + = enlarges again (desktop).
     tester.widget<Focus>(find.byKey(const ValueKey('photos-tab-focus'))).focusNode!.requestFocus();

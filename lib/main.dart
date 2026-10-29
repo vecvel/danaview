@@ -33,6 +33,7 @@ import 'app.dart';
 import 'router/app_router.dart' show appExportHost, appNavigatorKey, openPrivacyPolicy, openProjects;
 import 'wiring/documents_wiring.dart' show installIncomingDocumentOpen;
 import 'wiring/files_home_wiring.dart' show filesHomeOverrides, openLibraryEntryWith;
+import 'wiring/projects_wiring.dart' show homeProjectsOverrides;
 
 Future<void> main([List<String> args = const []]) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -118,6 +119,8 @@ List<Override> editorAppOverrides(EditorRuntime runtime, {TranscriptionService? 
         onOpenPrivacyPolicy: openPrivacyPolicy,
         exportHost: appExportHost,
       ),
+      // The Home's Projects section and tab read the same store (DESIGN_SYSTEM §10.3 #3).
+      ...homeProjectsOverrides(),
     ];
 
 /// The Auto captions service of the app (ARCH §16): speech folders under

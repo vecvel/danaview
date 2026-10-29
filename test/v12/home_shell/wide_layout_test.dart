@@ -46,15 +46,6 @@ Future<void> _openTab(WidgetTester tester, HomeTab tab) async {
   await pumpFrames(tester);
 }
 
-/// The cards of the first row of the first grid on the page on screen.
-List<Rect> _firstRowCards(WidgetTester tester) {
-  final row = find.descendant(of: _grids.first, matching: find.byType(DanaviewLibraryGridRow)).first;
-  return [
-    for (final e in find.descendant(of: row, matching: find.byType(DanaviewLibraryCard)).evaluate())
-      tester.getRect(find.byWidget(e.widget)),
-  ];
-}
-
 Rect _pill(WidgetTester tester, HomeTab tab) => tester.getRect(
       find.descendant(of: find.byKey(homeTabKey(tab)), matching: find.byType(AnimatedContainer)).first,
     );
@@ -112,24 +103,30 @@ void main() {
       expect(danaviewLibraryGridColumns(1280 - 64), 4);
     });
 
-    for (final (width, columns) in [(600.0, 2), (1024.0, 3), (1280.0, 4)]) {
-      testWidgets('${width.toInt()} px Playlists tab: $columns columns, 12 pt gaps, equal heights per row', (tester) async {
+    // The Playlists tab (DESIGN_SYSTEM §10.4): playlist cards in the adaptive 2 / 4 / 6 column
+    // grid, 10 pt gaps, every card of a row the same height.
+    for (final (width, columns) in [(375.0, 2), (600.0, 2), (820.0, 4), (1024.0, 6), (1280.0, 6)]) {
+      testWidgets('${width.toInt()} px Playlists tab: $columns columns, 10 pt gaps, equal heights per row', (tester) async {
         final env = await _pump(tester, Size(width, 900));
         await _openTab(tester, HomeTab.playlists);
         final gutter = danaviewLibraryInsets(width).left;
-        final grid = tester.getRect(_grids.first);
+        final grid = tester.getRect(find.byKey(const ValueKey('home-playlists-grid')));
         expect(grid.left, moreOrLessEquals(gutter));
         expect(grid.right, moreOrLessEquals(width - gutter));
-        final cards = _firstRowCards(tester);
+        expect(homePlaylistColumns(grid.width), columns);
+        final cards = [for (final e in find.byType(HomePlaylistCard).evaluate()) tester.getRect(find.byWidget(e.widget))]
+          ..sort((a, b) => a.top != b.top ? a.top.compareTo(b.top) : a.left.compareTo(b.left));
+        final firstRow = cards.where((c) => c.top == cards.first.top).toList();
         // Three playlists: a row holds min(columns, 3) cards at the column width.
-        expect(cards, hasLength(columns < 3 ? columns : 3));
-        final cell = (grid.width - 12 * (columns - 1)) / columns;
-        for (var i = 0; i < cards.length; i++) {
-          expect(cards[i].width, moreOrLessEquals(cell));
+        expect(firstRow, hasLength(columns < 3 ? columns : 3));
+        final cell = (grid.width - 10 * (columns - 1)) / columns;
+        for (var i = 0; i < firstRow.length; i++) {
+          expect(firstRow[i].width, moreOrLessEquals(cell));
           if (i == 0) continue;
-          expect(cards[i].left - cards[i - 1].right, moreOrLessEquals(12));
-          expect(cards[i].height, moreOrLessEquals(cards[0].height));
+          expect(firstRow[i].left - firstRow[i - 1].right, moreOrLessEquals(10));
+          expect(firstRow[i].height, moreOrLessEquals(firstRow[0].height));
         }
+        expect(tester.takeException(), isNull);
         await finishHome(tester, env);
       });
     }
