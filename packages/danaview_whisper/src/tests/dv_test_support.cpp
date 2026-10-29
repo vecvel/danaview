@@ -632,6 +632,8 @@ std::string take_all_segments_json(dv_job *j) {
 
 void live_objects(int64_t *models, int64_t *jobs) { dv::debug_live_objects(models, jobs); }
 
+void wait_loaders_idle() { dv::Registry::get().wait_loaders_idle(); }
+
 // ---------------------------------------------------------------------------------------------------
 // JSON
 

@@ -142,6 +142,10 @@ std::string normalize_text(const std::string &s);
 /// Test-only access to the shim's live object counters (dv_registry.h).
 void live_objects(int64_t *models, int64_t *jobs);
 
+/// Waits until every detached model loader thread has finished. A loader drops its own reference
+/// just after it reports the load, so a model the test already released can still be live until then.
+void wait_loaders_idle();
+
 }  // namespace dvt_support
 
 #endif  // DV_TEST_SUPPORT_H
