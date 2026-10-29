@@ -8,6 +8,7 @@
 /// The public entry of lib/src/pdf/organiser/: the PDF page organiser.
 library;
 
+export 'pdf_merge_picker.dart';
 export 'pdf_merge_screen.dart';
 export 'pdf_organiser_grid.dart';
 export 'pdf_organiser_model.dart';

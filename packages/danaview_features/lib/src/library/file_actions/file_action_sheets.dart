@@ -1,4 +1,6 @@
 // OWNER: HOM-22
+// EXTENDED: HOM-28 (a PDF's menu lists "Organise pages" and "Merge with…" when the page tools are
+// wired.)
 //
 // The sheets of the file actions (ARCH v1.2 §1.4, V2-118; HOM plan §8.3), kit components only:
 // the single-file menu (long-press menus and viewer toolbars call [showFileActionsMenu]), the
@@ -14,7 +16,7 @@ import 'file_action_providers.dart';
 import 'file_action_runner.dart';
 
 /// The single-file actions [item] gets with [port] (null: nothing can leave the app).
-List<FileAction> fileMenuActions(MediaItem item, FileOutPort? port) {
+List<FileAction> fileMenuActions(MediaItem item, FileOutPort? port, {bool pdfTools = false}) {
   final caps = port?.capabilities ?? FileOutCapabilities.none;
   return fileActionsFor(
     FileActionTarget.of(item),
@@ -22,6 +24,7 @@ List<FileAction> fileMenuActions(MediaItem item, FileOutPort? port) {
     canOpenIn: caps.canOpenIn,
     canSaveOut: caps.primarySaveTarget != null,
     canSaveToPhotos: caps.canSaveToPhotos,
+    canPdfTools: pdfTools,
   );
 }
 
@@ -34,7 +37,7 @@ Future<void> showFileActionsMenu(BuildContext context, WidgetRef ref, MediaItem 
     title: item.name,
     builder: (sheetContext) => Consumer(builder: (context, ref, _) {
       final port = ref.watch(fileOutPortProvider);
-      final actions = fileMenuActions(item, port);
+      final actions = fileMenuActions(item, port, pdfTools: ref.watch(pdfPageToolsHandlerProvider) != null);
       final favourite = ref.watch(libraryFileActionsProvider)?.liveEntry(item.id)?.isFavourite ?? false;
       return SingleChildScrollView(
         child: Column(

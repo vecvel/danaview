@@ -1,4 +1,7 @@
 // OWNER: S3-W
+// EXTENDED: HOM-28 (S4 PDF page tools: [documentsOverrides] adds lib/wiring/pdf_tools_wiring.dart's
+// overrides and [openDocumentViewer] puts the tools' scope around the viewers; still nothing with
+// DANAVIEW_FILES_HOME off.)
 // EXTENDED: HOM-21A (Android Open with / Share to Danaview: the NativeIncoming batches are
 // imported by IncomingIntentImporter and shown by the same opener and toasts as HOM-21's paths.)
 //
@@ -55,6 +58,8 @@ import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'pdf_tools_wiring.dart' show pdfToolsOverrides, withPdfTools;
 
 /// Whether this build wires the S3 documents features (`DANAVIEW_FILES_HOME`, default false).
 bool get documentsWired => FeatureFlags.filesHomeEnabled;
@@ -181,7 +186,7 @@ Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerF
         style: DanaviewTextStyles.body.copyWith(decoration: TextDecoration.none),
         child: _withFileMenu(
           fileMenuItem,
-          DocumentViewer(
+          withPdfTools(read, DocumentViewer(
             key: const ValueKey('s3-document-viewer'),
             file: file,
             viewers: setup.viewers,
@@ -189,7 +194,7 @@ Future<void> openDocumentViewer(BuildContext context, ProviderRead read, ViewerF
             fileOut: fileOut,
             onOpened: record,
             onClose: () => unawaited(Navigator.of(context).maybePop()),
-          ),
+          )),
         ),
       ),
     ),
@@ -403,6 +408,8 @@ List<Override> documentsOverrides({
     // The plugin's port only on a real Android host (widget tests run as Android on the desktop VM).
     if (platform == TargetPlatform.android && (incoming != null || Platform.isAndroid))
       incomingIntentPortProvider.overrideWithValue(incoming ?? NativeIncomingPort()),
+    // S4: the PDF page tools (organiser, merge, file-menu and multi-select entries).
+    ...pdfToolsOverrides(platform: platform),
   ];
 }
 

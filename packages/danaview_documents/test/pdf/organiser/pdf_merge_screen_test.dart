@@ -114,6 +114,27 @@ void main() {
     expect(tools.calls, isEmpty);
   });
 
+  testWidgets('the picker lists, filters and adds library PDFs and photos', (tester) async {
+    List<PdfMergeItem>? result;
+    await tester.pumpWidget(docApp(Builder(
+      builder: (context) => DanaviewButton(
+        label: 'open',
+        onPressed: () async => result = await showPdfMergePicker(context, candidates: [_a, _b, _photo], current: [_a]),
+      ),
+    )));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Already in the merge'), findsOneWidget);
+    await tester.enterText(find.byType(EditableText), 'c.h');
+    await tester.pump(const Duration(milliseconds: 400)); // the search field debounces
+    expect(find.text('A.pdf'), findsNothing);
+    await tester.tap(find.text('C.heic'));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('pdf-merge-picker-add')));
+    await tester.pumpAndSettle();
+    expect(result, [_photo]);
+  });
+
   group('surface matrix: 280 / 375 / 1280 px × text scale 0.85 / 1.35', () {
     for (final size in const [Size(280, 560), Size(375, 812), Size(1280, 800)]) {
       for (final scale in const [0.85, 1.35]) {
