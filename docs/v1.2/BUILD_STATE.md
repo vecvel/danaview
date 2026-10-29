@@ -8,7 +8,7 @@ Last update: 2026-10-22 (S2 Mac half complete).
 | **S1** Foundations + speed test | **Done on both platforms** (owner items open) | Mac: AIS-01, INT-101, HOM-01, HOM-16, ST-01…ST-05, S1-W, S1-Q Mac half, S1-R iOS candidate. **Android (Windows, 968a10e):** S1-Q Android half green (v1.1 suite 17/18 + 4/4 extras with every 1.2 flag off; s13 only on emulator mic silence, accepted), S1-R Android candidate 1.0.0 (1) AAB 95.4 MB passes check_native_libs.sh, release APK smoke green. Device observations to confirm: OBS-S1A-1 (release player barely advanced the 1080p fixture on the emulator), OBS-S1A-2 (VIEW intent to the running app stays on Home). Windows-host test portability FIX-S1Q-A1…A5 being fixed on the Mac. Owner items: legal date, Q-S1 wording, M-Lab store answers, signing, upload (at the 1.0.0 release). Report: `qa/S1-QA.md` |
 | **S2** Photos & Files Home | **Done on both platforms** (owner items open) | Mac half as before (S2-Q green, S2-R iOS candidate, FIX-S2R-1, D-7). **Android (Windows, `f125f8c`):** D-3, HOM-02A, HOM-04A, HOM-20A, HOM-22A; D-7 verified; S2-Q Android half green (S2 E2E on API 35, full v1.1 suite with the flag 17/18 + 7/7, bmgr backup checks); S2-R Android AAB 101.0 MB (+5.5 MB), native-lib checks pass, release smoke green. Open, low: FIX-S2Q-A1 (E2E expects the platform's primary save target), FIX-S2Q-A2 (e2e_android.sh define pass-through), OBS-S2A-1 (picker names), OBS-S2A-3 (video-only album chips). Report: `qa/S2-QA.md` |
 | **S3** Documents: view and share-in | **Done on both platforms** (2026-10-23) | Mac half as recorded (S3-Q green, iOS RC 26.06 MB). **Android (Windows, 90c7a5b7):** HOM-25, HOM-21A (flag-gated alias); S3-Q Android green (S3 E2E with real intents, v1.1 suite with the flag, flag-off check, tablet grids); S3-R Android AAB 108.2 MB (+7.2 MB), native-lib checks pass. FIX-S3Q-A1 (Office MIME by extension) and A2 (PdfBox-Android + Bouncy Castle licences) fixed. Low items carried to S4. Report: `qa/S3-QA.md` |
-| **S4** Documents: PDF tools | **In progress** | Mac half: HOM-31 compress built on `s4-hom31` (see "S4: HOM-31 compress" below); HOM-28 in parallel. |
+| **S4** Documents: PDF tools | **In progress** | Mac half: HOM-31 compress (see "S4: HOM-31 compress" below); **HOM-28 page tools built** on `s4-hom28` (see "S4: HOM-28 page tools" below). Android: HOM-28A, HOM-31A to do (contracts below). |
 | S5–S9 | Not started | |
 
 ## S4: HOM-31 compress (Mac half, 2026-10-30, branch `s4-hom31`)
@@ -106,6 +106,69 @@ measurement print (`hom31MeasurementLine`, counts only).
 Very large files are processed in memory (stage 1's file is read into memory and the output is
 built there). The compressed copy's source label in File info is "Files" (no PDF-tool source hint in
 the library schema).
+
+## S4: HOM-28 page tools (Mac half, 2026-10-30, branch `s4-hom28`)
+
+**Built.** Behind `DANAVIEW_FILES_HOME` (`lib/wiring/pdf_tools_wiring.dart`; nothing with the flag off).
+- **Native (iOS/macOS, PDFKit):** `darwin/Classes/Tools/PdfPageToolsCore.swift` (Flutter-free) and
+  `PdfPageTools.swift`: merge (PDFs, and images as pages: orientation applied, ≤ 4096 px, page long
+  side 842 pt, opaque images embedded as JPEG), split (ranges), reorder / rotate / delete, and a
+  one-pass **organise** (any mix of reorder, rotate, delete, extract). Background queue, per-page
+  cancel and progress, sources opened read-only, outputs must not exist and are deleted on cancel
+  or failure; permissions that forbid page assembly answer `unsupported`. Capabilities report
+  merge, split, reorder, rotate, deletePages.
+- **Pigeon amendment** (own block, lead-approved): `PdfPagePlanMsg`, `PdfOrganiseRequestMsg`,
+  `PdfOrganiseHostApi.organise`; jobs share `PdfToolsHostApi.cancel`; progress events carry
+  `tool: reorder`.
+- **Dart API** (`danaview_pdf/lib/src/pdf_tools.dart`): `PdfPageTools` (merge, split, reorder,
+  rotate, deletePages, organise) returning `PdfToolJob` (id, progress stream, result, cancel);
+  shared validation (`invalidArgument` before the engine), `parsePageRanges`, `rangesEvery`,
+  `reorderPlan` / `rotatePlan` / `deletePlan`, `canOrganise(tools)`.
+- **UI** (`danaview_documents/lib/src/pdf/organiser/`): the page organiser (thumbnail grid from the
+  viewer's thumbnail API, selection, drag to reorder with pointer or long press, screen-reader
+  move/rotate actions, toolbar Select all / Rotate / Delete / Extract / Split, Save), the Split
+  sheet (ranges, every N pages), the merge screen (order, remove, Add files picker, passwords) and
+  the progress sheet with Cancel. Entry points: the PDF viewer's "Organise pages" button and
+  "Merge with…" menu item (`PdfToolsScope`), a PDF's file menu ("Organise pages", "Merge with…",
+  `FileAction.organisePages` / `mergeWith`), and the multi-select "Merge into PDF".
+- **Saving:** results are imported as NEW files next to the original (`Report (edited).pdf`,
+  `Report (pages 1–3).pdf`, `Report (merged).pdf`), linked/incoming files into `Imported`. "Replace"
+  only for a Danaview folder file: `LibraryWriter.replaceEntryFile` copies the finished file into an
+  `imports/` part and renames it over the entry's file (same id, name, folder, favourite, refs;
+  crash-tested at every step).
+
+**Tests.** XCTests for every operation on macOS and the iOS Simulator (`run_xctests.sh macos |
+ios-sim`, iPhone 17): text stays selectable after merge, split and organise (PDFKit finds and
+selects each page's token), sources unchanged, cancel/failure leave no file, HOM-27 fixtures
+(200 pages + `/Rotate` partner) keep text and rotation; glue tests through Pigeon. Dart: API
+contract with fake host APIs, organiser/merge widget tests, save rules over a real library, the
+280/375/1280 px × 0.85/1.35 overflow and a11y matrix, root S4 wiring test.
+
+**Android contract for Windows' HOM-28A** (PdfBox-Android 2.0.27.0 per HOM-27), in
+`android/.../pdf/tools/PdfPageTools.kt` (rule 27's tool directory):
+- Implement `PdfToolsHostApi.merge / split / reorder / rotate / deletePages` and register
+  **`PdfOrganiseHostApi`** (`organise`) in `DanaviewPdfPlugin.kt`; organise jobs use the same job
+  registry so `PdfToolsHostApi.cancel(jobId)` stops them.
+- Every request: open inputs read-only (`PdfToolInputMsg.password` for encrypted files; a missing or
+  wrong one → `passwordRequired`); each output path must not exist (`invalidArgument`) and its
+  folder must (`notFound`); write each output once at the end; on cancel (poll per page) or failure
+  delete every output and answer `cancelled` / a typed code; reply
+  `PdfToolResultMsg(outPaths, pageCounts, sizesBytes)` in request order; emit `toolProgress` events
+  (`jobId`, `fraction` 0…1, `pagesDone`, `pagesTotal`; organise uses `tool: reorder`).
+- Semantics (match `PdfPageToolsCore.swift`): merge needs ≥ 2 inputs, keeps the first PDF's metadata,
+  `isImage` inputs become one page each (EXIF orientation applied, longer side 842 pt, ≤ 4096 px,
+  opaque → JPEG); split writes `ranges[i]` (`[start, end)`, may overlap) to `outPaths[i]`; reorder's
+  `order` is a permutation; rotate adds `degrees` (multiple of 90, may be negative) to the pages'
+  `/Rotate`; delete keeps ≥ 1 page; organise writes `pages` in order, each `rotation` added, pages not
+  listed dropped, no page twice, ≥ 1 page. Text must stay text (page content streams copied, never
+  rasterised). Respect "no page assembly" permissions with `unsupported`.
+- Report merge, split, reorder, rotate, deletePages in `capabilities().tools`: the Android UI
+  (viewer button, file menu, Merge into PDF) appears only then; Dart already validates requests and
+  handles everything else.
+
+**Open.** An encrypted source's output is written without encryption (PDFKit `write(to:)` without
+owner password); decide in S4-Q whether to re-encrypt with the user password. Very large merges
+are built in memory by PDFKit. Real-world PDFs to be measured on a device in S4-Q. Android HOM-28A.
 
 ## Spikes
 

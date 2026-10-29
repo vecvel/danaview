@@ -2231,6 +2231,108 @@ data class PdfEventMsg (
 }
 
 /**
+ * One page of an organised document: source page [sourcePage] turned by [rotation] more degrees.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PdfPagePlanMsg (
+  /** The 0-based page of the input; each page appears at most once. */
+  val sourcePage: Long,
+  /** Degrees clockwise added to the page's own rotation (a multiple of 90; may be negative). */
+  val rotation: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PdfPagePlanMsg {
+      val sourcePage = pigeonVar_list[0] as Long
+      val rotation = pigeonVar_list[1] as Long
+      return PdfPagePlanMsg(sourcePage, rotation)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      sourcePage,
+      rotation,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as PdfPagePlanMsg
+    return PdfApiPigeonUtils.deepEquals(this.sourcePage, other.sourcePage) && PdfApiPigeonUtils.deepEquals(this.rotation, other.rotation)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.sourcePage)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.rotation)
+    return result
+  }
+  override fun toString(): String {
+    return "PdfPagePlanMsg(sourcePage=$sourcePage, rotation=$rotation)"
+  }
+}
+
+/**
+ * Writes the input's pages in [pages] order (pages not listed are left out) into [outPath].
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PdfOrganiseRequestMsg (
+  /** Caller-chosen id for progress events and `PdfToolsHostApi.cancel`. */
+  val jobId: String,
+  val input: PdfToolInputMsg,
+  /** At least one page; no source page twice. */
+  val pages: List<PdfPagePlanMsg>,
+  val outPath: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PdfOrganiseRequestMsg {
+      val jobId = pigeonVar_list[0] as String
+      val input = pigeonVar_list[1] as PdfToolInputMsg
+      val pages = pigeonVar_list[2] as List<PdfPagePlanMsg>
+      val outPath = pigeonVar_list[3] as String
+      return PdfOrganiseRequestMsg(jobId, input, pages, outPath)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      jobId,
+      input,
+      pages,
+      outPath,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as PdfOrganiseRequestMsg
+    return PdfApiPigeonUtils.deepEquals(this.jobId, other.jobId) && PdfApiPigeonUtils.deepEquals(this.input, other.input) && PdfApiPigeonUtils.deepEquals(this.pages, other.pages) && PdfApiPigeonUtils.deepEquals(this.outPath, other.outPath)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.jobId)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.input)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.pages)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.outPath)
+    return result
+  }
+  override fun toString(): String {
+    return "PdfOrganiseRequestMsg(jobId=$jobId, input=$input, pages=$pages, outPath=$outPath)"
+  }
+}
+
+/**
  * The sizes each compression preset would give for one file.
  *
  * Generated class from Pigeon that represents data sent in messages.
@@ -2499,6 +2601,16 @@ private open class PdfApiPigeonCodec : StandardMessageCodec() {
       }
       169.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          PdfPagePlanMsg.fromList(it)
+        }
+      }
+      170.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PdfOrganiseRequestMsg.fromList(it)
+        }
+      }
+      171.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           PdfCompressEstimateMsg.fromList(it)
         }
       }
@@ -2667,8 +2779,16 @@ private open class PdfApiPigeonCodec : StandardMessageCodec() {
         stream.write(168)
         writeValue(stream, value.toList())
       }
-      is PdfCompressEstimateMsg -> {
+      is PdfPagePlanMsg -> {
         stream.write(169)
+        writeValue(stream, value.toList())
+      }
+      is PdfOrganiseRequestMsg -> {
+        stream.write(170)
+        writeValue(stream, value.toList())
+      }
+      is PdfCompressEstimateMsg -> {
+        stream.write(171)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -3475,6 +3595,46 @@ override fun onListen(p0: Any?, sink: PigeonEventSink<PdfEventMsg>) {}
 override fun onCancel(p0: Any?) {}
 }
       
+/**
+ * The page organiser (HOM-28 Apple, HOM-28A Android). Jobs share `PdfToolsHostApi.cancel`.
+ *
+ * Generated interface from Pigeon that represents a handler of messages from Flutter.
+ */
+interface PdfOrganiseHostApi {
+  fun organise(request: PdfOrganiseRequestMsg, callback: (Result<PdfToolResultMsg>) -> Unit)
+
+  companion object {
+    /** The codec used by PdfOrganiseHostApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      PdfApiPigeonCodec()
+    }
+    /** Sets up an instance of `PdfOrganiseHostApi` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: PdfOrganiseHostApi?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.danaview_pdf.PdfOrganiseHostApi.organise$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val requestArg = args[0] as PdfOrganiseRequestMsg
+            api.organise(requestArg) { result: Result<PdfToolResultMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PdfApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PdfApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
 /**
  * Estimates for the compress sheet (HOM-31 Apple, HOM-31A Android).
  *

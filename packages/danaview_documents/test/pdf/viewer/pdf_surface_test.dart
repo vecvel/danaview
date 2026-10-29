@@ -1,4 +1,6 @@
 // OWNER: HOM-24
+// EXTENDED: HOM-28 (the lead-approved PdfOrganiseHostApi amendment is declared and routed; the page
+// tools are no longer placeholders: they advertise their tools and the core is Flutter-free.)
 //
 // The frozen danaview_pdf surface (BUILD_PLAN HOM-24, ARCH v1.2 V2-25), checked from here because
 // HOM-24 owns no test directory inside packages/danaview_pdf: the Pigeon file declares exactly the
@@ -20,6 +22,10 @@ const _pkg = '../danaview_pdf';
 // PdfCompressHostApi: HOM-31's additive estimate block ([INTEGRATION] amendment).
 const _hostApis = ['PdfDocumentHostApi', 'PdfViewHostApi', 'PdfTextHostApi', 'PdfToolsHostApi', 'PdfCompressHostApi'];
 
+/// Host APIs added by lead-approved [INTEGRATION] amendments, each in its own block: API → owner.
+/// They are served by an existing Impl (an extension), so only their setUp is checked.
+const _amendmentApis = {'PdfOrganiseHostApi': 'HOM-28'};
+
 const _outputs = [
   'lib/src/pigeon/pdf_api.g.dart',
   'darwin/Classes/Glue/PdfApi.g.swift',
@@ -28,7 +34,6 @@ const _outputs = [
 
 /// Tool placeholders of later tickets: file → owner (HOM-31's compressor has landed).
 const _placeholders = {
-  'darwin/Classes/Tools/PdfPageTools.swift': 'HOM-28',
   'darwin/Classes/Annotate/PdfAnnotator.swift': 'HOM-29',
   'darwin/Classes/Sign/PdfSigner.swift': 'HOM-30',
 };
@@ -75,7 +80,10 @@ void main() {
 
   test('the Pigeon file declares exactly the planned APIs and is marked frozen', () {
     final declared = RegExp(r'@HostApi\(\)\s*abstract class (\w+)').allMatches(pigeon).map((m) => m[1]).toList();
-    expect(declared, _hostApis);
+    expect(declared, unorderedEquals([..._hostApis, ..._amendmentApis.keys]));
+    for (final entry in _amendmentApis.entries) {
+      expect(pigeon, contains('${entry.value} amendment [INTEGRATION]'), reason: '${entry.key} sits in its marked block');
+    }
     expect(RegExp(r'@EventChannelApi\(\)\s*abstract class PdfEventsApi').hasMatch(pigeon), isTrue);
     expect(pigeon, startsWith('// OWNER: HOM-24'));
     expect(pigeon, contains('FROZEN'));
@@ -103,7 +111,8 @@ void main() {
       'annotate',
       'sign',
       'compress',
-      'cancel'
+      'cancel',
+      'organise',
     ]) {
       expect(RegExp('\\b$method\\(').hasMatch(pigeon), isTrue, reason: method);
     }
@@ -113,7 +122,7 @@ void main() {
     for (final path in _outputs) {
       expect(_f(path).existsSync(), isTrue, reason: path);
       final text = _f(path).readAsStringSync();
-      for (final api in _hostApis) {
+      for (final api in [..._hostApis, ..._amendmentApis.keys]) {
         expect(text, contains(api), reason: '$path lacks $api');
       }
     }
@@ -148,6 +157,11 @@ void main() {
       final defined = _files('darwin/Classes', {'.swift'}).where((f) => f.readAsStringSync().contains('final class ${api}Impl: $api'));
       expect(defined, hasLength(1), reason: '${api}Impl is defined once');
     }
+    for (final api in _amendmentApis.keys) {
+      expect(glue, contains('${api}Setup.setUp('), reason: api);
+      final served = _files('darwin/Classes', {'.swift'}).where((f) => f.readAsStringSync().contains(': $api {'));
+      expect(served, hasLength(1), reason: '$api is served once');
+    }
     expect(glue, contains('PdfEventsStreamHandler.register('));
     expect(glue, contains('registrar.register(plugin.makeViewFactory(), withId: PdfViewFactory.viewType)'));
     final view = _f('darwin/Classes/Viewer/PdfPlatformView.swift').readAsStringSync();
@@ -156,7 +170,7 @@ void main() {
     expect(dart, contains("const String pdfViewType = 'com.vecvel.danaview.pdf/view';"));
   });
 
-  test('every tool placeholder carries its owner and answers notSupportedOnDevice everywhere', () {
+  test('every tool placeholder carries its owner and answers notSupportedOnDevice everywhere; landed tools advertise themselves', () {
     for (final entry in _placeholders.entries) {
       final text = _f(entry.key).readAsStringSync();
       expect(text, startsWith('// OWNER: ${entry.value}\n'), reason: entry.key);
@@ -166,6 +180,11 @@ void main() {
       expect(answers, methods, reason: '${entry.key}: every method answers notSupportedOnDevice');
       expect(text, contains('static let supported: [PdfToolKindMsg] = []'), reason: entry.key);
     }
+    // HOM-28 landed: the page tools advertise their five tools and none answers notSupported.
+    final pageTools = _f('darwin/Classes/Tools/PdfPageTools.swift').readAsStringSync();
+    expect(pageTools, startsWith('// OWNER: HOM-28\n'));
+    expect(pageTools, contains('static let supported: [PdfToolKindMsg] = [.merge, .split, .reorder, .rotate, .deletePages]'));
+    expect(pageTools, isNot(contains('PdfErrors.notSupported(')));
     final views = _f('darwin/Classes/Viewer/PdfViewHostApiImpl.swift').readAsStringSync();
     expect(RegExp(r'PdfErrors\.notSupported\("HOM-25"\)').allMatches(views), hasLength(3), reason: 'texture views are Android only');
   });
@@ -178,8 +197,13 @@ void main() {
     }
   });
 
-  test('the viewer and text cores are Flutter-free (XCTest runs them without an app host)', () {
-    for (final path in ['darwin/Classes/Viewer/PdfCore.swift', 'darwin/Classes/Text/PdfTextCore.swift', 'darwin/Classes/Compress/PdfCompressCore.swift']) {
+  test('the viewer, text, page-tool and compress cores are Flutter-free (XCTest runs them without an app host)', () {
+    for (final path in [
+      'darwin/Classes/Viewer/PdfCore.swift',
+      'darwin/Classes/Text/PdfTextCore.swift',
+      'darwin/Classes/Tools/PdfPageToolsCore.swift',
+      'darwin/Classes/Compress/PdfCompressCore.swift',
+    ]) {
       expect(_f(path).readAsStringSync(), isNot(matches(RegExp(r'^import Flutter', multiLine: true))), reason: path);
     }
   });

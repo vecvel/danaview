@@ -2159,6 +2159,104 @@ struct PdfEventMsg: Hashable, CustomStringConvertible {
   }
 }
 
+/// One page of an organised document: source page [sourcePage] turned by [rotation] more degrees.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PdfPagePlanMsg: Hashable, CustomStringConvertible {
+  /// The 0-based page of the input; each page appears at most once.
+  var sourcePage: Int64
+  /// Degrees clockwise added to the page's own rotation (a multiple of 90; may be negative).
+  var rotation: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PdfPagePlanMsg? {
+    let sourcePage = pigeonVar_list[0] as! Int64
+    let rotation = pigeonVar_list[1] as! Int64
+
+    return PdfPagePlanMsg(
+      sourcePage: sourcePage,
+      rotation: rotation
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      sourcePage,
+      rotation,
+    ]
+  }
+  static func == (lhs: PdfPagePlanMsg, rhs: PdfPagePlanMsg) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return PdfApiPigeonInternal.deepEquals(lhs.sourcePage, rhs.sourcePage) && PdfApiPigeonInternal.deepEquals(lhs.rotation, rhs.rotation)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PdfPagePlanMsg")
+    PdfApiPigeonInternal.deepHash(value: sourcePage, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: rotation, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PdfPagePlanMsg(sourcePage: \(String(describing: sourcePage)), rotation: \(String(describing: rotation)))"
+  }
+}
+
+/// Writes the input's pages in [pages] order (pages not listed are left out) into [outPath].
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct PdfOrganiseRequestMsg: Hashable, CustomStringConvertible {
+  /// Caller-chosen id for progress events and `PdfToolsHostApi.cancel`.
+  var jobId: String
+  var input: PdfToolInputMsg
+  /// At least one page; no source page twice.
+  var pages: [PdfPagePlanMsg]
+  var outPath: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> PdfOrganiseRequestMsg? {
+    let jobId = pigeonVar_list[0] as! String
+    let input = pigeonVar_list[1] as! PdfToolInputMsg
+    let pages = pigeonVar_list[2] as! [PdfPagePlanMsg]
+    let outPath = pigeonVar_list[3] as! String
+
+    return PdfOrganiseRequestMsg(
+      jobId: jobId,
+      input: input,
+      pages: pages,
+      outPath: outPath
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      jobId,
+      input,
+      pages,
+      outPath,
+    ]
+  }
+  static func == (lhs: PdfOrganiseRequestMsg, rhs: PdfOrganiseRequestMsg) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return PdfApiPigeonInternal.deepEquals(lhs.jobId, rhs.jobId) && PdfApiPigeonInternal.deepEquals(lhs.input, rhs.input) && PdfApiPigeonInternal.deepEquals(lhs.pages, rhs.pages) && PdfApiPigeonInternal.deepEquals(lhs.outPath, rhs.outPath)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("PdfOrganiseRequestMsg")
+    PdfApiPigeonInternal.deepHash(value: jobId, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: input, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: pages, hasher: &hasher)
+    PdfApiPigeonInternal.deepHash(value: outPath, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "PdfOrganiseRequestMsg(jobId: \(String(describing: jobId)), input: \(String(describing: input)), pages: \(String(describing: pages)), outPath: \(String(describing: outPath)))"
+  }
+}
+
 /// The sizes each compression preset would give for one file.
 ///
 /// Generated class from Pigeon that represents data sent in messages.
@@ -2326,6 +2424,10 @@ private class PdfApiPigeonCodecReader: FlutterStandardReader {
     case 168:
       return PdfEventMsg.fromList(self.readValue() as! [Any?])
     case 169:
+      return PdfPagePlanMsg.fromList(self.readValue() as! [Any?])
+    case 170:
+      return PdfOrganiseRequestMsg.fromList(self.readValue() as! [Any?])
+    case 171:
       return PdfCompressEstimateMsg.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -2455,8 +2557,14 @@ private class PdfApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? PdfEventMsg {
       super.writeByte(168)
       super.writeValue(value.toList())
-    } else if let value = value as? PdfCompressEstimateMsg {
+    } else if let value = value as? PdfPagePlanMsg {
       super.writeByte(169)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfOrganiseRequestMsg {
+      super.writeByte(170)
+      super.writeValue(value.toList())
+    } else if let value = value as? PdfCompressEstimateMsg {
+      super.writeByte(171)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -3191,6 +3299,38 @@ class PdfEventsStreamHandler: PigeonEventChannelWrapper<PdfEventMsg> {
   }
 }
       
+/// The page organiser (HOM-28 Apple, HOM-28A Android). Jobs share `PdfToolsHostApi.cancel`.
+///
+/// Generated protocol from Pigeon that represents a handler of messages from Flutter.
+protocol PdfOrganiseHostApi {
+  func organise(request: PdfOrganiseRequestMsg, completion: @escaping (Result<PdfToolResultMsg, Error>) -> Void)
+}
+
+/// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
+class PdfOrganiseHostApiSetup {
+  static var codec: FlutterStandardMessageCodec { PdfApiPigeonCodec.shared }
+  /// Sets up an instance of `PdfOrganiseHostApi` to handle messages through the `binaryMessenger`.
+  static func setUp(binaryMessenger: FlutterBinaryMessenger, api: PdfOrganiseHostApi?, messageChannelSuffix: String = "") {
+    let channelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
+    let organiseChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.danaview_pdf.PdfOrganiseHostApi.organise\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      organiseChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let requestArg = args[0] as! PdfOrganiseRequestMsg
+        api.organise(request: requestArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      organiseChannel.setMessageHandler(nil)
+    }
+  }
+}
 /// Estimates for the compress sheet (HOM-31 Apple, HOM-31A Android).
 ///
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.

@@ -1,4 +1,6 @@
 // OWNER: HOM-17
+// EXTENDED: HOM-28 ([LibraryWriter.replaceEntryFile]: the PDF tools' Replace, part copy then one
+// rename over the entry's file.)
 //
 // The one writer of `library.db` (ARCH v1.2 V2-06, V2-08, §5.3, §5.4). It owns the read-write
 // connection and LibraryFs; the store runs it on a background isolate. Every multi-row change is
@@ -16,6 +18,7 @@
 // Times come from the caller (`now`), so a fake clock drives every test and a clock moved
 // backwards never changes an `expires_at` already written (V2-08).
 
+import 'dart:io';
 import 'dart:math';
 
 import 'package:path/path.dart' as p;
@@ -712,6 +715,54 @@ final class LibraryWriter {
       ),
       now: now,
     );
+  }
+
+  /// Replaces the file of the live entry [id] with the finished file at [sourcePath] (the PDF
+  /// tools' "Replace", only for Danaview folder files; ARCH v1.2 §9.3, D-98j): the bytes are first
+  /// copied into a stray part `imports/rpl_<token>.part` on the library's volume, then one atomic
+  /// rename puts them over `files/<id>/<name>`, then the row gets the new size, [quickHash] and
+  /// modification time ([pageCount] goes into `entry_meta` when given). The entry keeps its id,
+  /// name, folder, favourite and references. A crash before the rename leaves the old file and a
+  /// stray part (the open-time reconcile deletes it); a crash after it, the new bytes with the old
+  /// size until the next replace or rescan. [sourcePath] is only read.
+  FileEntry replaceEntryFile(EntryId id, String sourcePath, {required String quickHash, int? pageCount, required DateTime now}) {
+    _writable();
+    final e = _liveEntry(id);
+    if (!File(sourcePath).existsSync()) throw const LibraryWriteException(LibraryWriteError.notFound);
+    if (!fs.entryFileExists(id, e.displayName)) throw const LibraryWriteException(LibraryWriteError.notFound);
+    final part = 'imports/rpl_${_newJobId()}.part';
+    try {
+      fs.copyIntoPart(sourcePath, part);
+      fs.movePartOverEntry(part, id, e.displayName);
+    } catch (_) {
+      fs.deletePart(part);
+      rethrow;
+    }
+    final size = fs.entryFileSize(id, e.displayName) ?? 0;
+    transaction(() {
+      db.execute(
+        'UPDATE entries SET size_bytes = ?, quick_hash = ?, content_sha256 = NULL, modified_at = ? WHERE id = ?',
+        [size, quickHash, msOf(now), id.value],
+      );
+      if (pageCount != null) {
+        final old = reader.meta(id);
+        _writeMeta(
+          id,
+          EntryMeta(
+            width: old?.width,
+            height: old?.height,
+            duration: old?.duration,
+            fps: old?.fps,
+            codec: old?.codec,
+            pageCount: pageCount,
+            takenAt: old?.takenAt,
+            camera: old?.camera,
+            flags: old?.flags ?? 0,
+          ),
+        );
+      }
+    });
+    return reader.entry(id)!;
   }
 
   static String? _ext(String name) {

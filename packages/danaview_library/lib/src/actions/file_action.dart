@@ -1,4 +1,6 @@
 // OWNER: HOM-22
+// EXTENDED: HOM-28 (a PDF's single-file menu gets "Organise pages" and "Merge with…" when the page
+// tools are wired, [fileActionsFor]'s `canPdfTools`.)
 //
 // Which file actions an item or a selection gets (ARCH v1.2 V2-118, V2-08; HOM plan §8.3, D-98e):
 //
@@ -52,6 +54,12 @@ enum FileAction {
   /// Merge the selected PDFs and photos into a new PDF (HOM-28).
   mergeIntoPdf,
 
+  /// Open a PDF in the page organiser (HOM-28): reorder, rotate, delete, extract, split.
+  organisePages,
+
+  /// Merge a PDF with other PDFs and photos (HOM-28).
+  mergeWith,
+
   /// Compress one PDF into a new, smaller file (HOM-31).
   compressPdf,
 
@@ -89,7 +97,7 @@ final class FileActionTarget {
   /// Photo or video.
   bool get isMedia => item is PhotoMediaItem || item is VideoMediaItem;
 
-  /// A PDF (Compress, HOM-31).
+  /// A PDF document (the page tools' input, HOM-28; Compress, HOM-31).
   bool get isPdf => switch (item) {
         DocumentItem(docKind: DocumentKind.pdf) => true,
         _ => item.mimeType == 'application/pdf',
@@ -121,14 +129,16 @@ String? localPathOf(String uri, {bool? windows}) {
 }
 
 /// The single-file menu of [target], in menu order, for a platform offering [canShare],
-/// [canOpenIn], [canSaveOut] and [canSaveToPhotos]. [canCompress] is whether a compress handler
-/// exists (HOM-31 wired); a readable PDF then gets "Compress…".
+/// [canOpenIn], [canSaveOut] and [canSaveToPhotos]; [canPdfTools] (the page tools are wired, HOM-28)
+/// adds "Organise pages" and "Merge with…" for a readable PDF; [canCompress] (a compress handler
+/// exists, HOM-31) adds "Compress…".
 List<FileAction> fileActionsFor(
   FileActionTarget target, {
   required bool canShare,
   required bool canOpenIn,
   required bool canSaveOut,
   required bool canSaveToPhotos,
+  bool canPdfTools = false,
   bool canCompress = false,
 }) {
   final out = target.canLeave;
@@ -140,6 +150,8 @@ List<FileAction> fileActionsFor(
     if (lib) FileAction.rename,
     FileAction.info,
     if (out && canOpenIn) FileAction.openIn,
+    if (out && canPdfTools && target.isPdf) FileAction.organisePages,
+    if (out && canPdfTools && target.isPdf) FileAction.mergeWith,
     if (lib) FileAction.favourite,
     if (out && canSaveOut) FileAction.saveOut,
     if (out && canSaveToPhotos && target.isMedia) FileAction.saveToPhotos,

@@ -7,6 +7,7 @@
 //   PdfDocumentHostApi → Glue/PdfDocumentHostApiImpl  (over Viewer/PdfCore; HOM-24)
 //   PdfViewHostApi     → Viewer/PdfViewHostApiImpl    (HOM-24; texture views are Android's)
 //   PdfTextHostApi     → Text/PdfTextHostApiImpl      (HOM-24)
+//   PdfOrganiseHostApi → Glue/PdfToolsHostApiImpl     (HOM-28 amendment; Tools/PdfPageTools)
 //   PdfToolsHostApi    → Glue/PdfToolsHostApiImpl     (jobs; tools in Tools/ HOM-28,
 //                                                      Annotate/ HOM-29, Sign/ HOM-30,
 //                                                      Compress/ HOM-31)
@@ -48,6 +49,8 @@ public final class DanaviewPdfPlugin: NSObject, FlutterPlugin {
     PdfViewHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? views : nil)
     PdfTextHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? text : nil)
     PdfToolsHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? tools : nil)
+    // HOM-28 amendment: the one-pass page organiser, on the tools host (shared jobs and cancel).
+    PdfOrganiseHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? tools : nil)
     PdfCompressHostApiSetup.setUp(binaryMessenger: messenger, api: attach ? compress : nil)
     if attach { PdfEventsStreamHandler.register(with: messenger, streamHandler: events) }
   }

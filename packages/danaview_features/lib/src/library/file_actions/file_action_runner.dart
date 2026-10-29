@@ -1,4 +1,5 @@
 // OWNER: HOM-22
+// EXTENDED: HOM-28 (Organise pages and Merge with… go to the app root's PDF page tools handler.)
 //
 // Runs one file action on one item or a selection (ARCH v1.2 V2-08, V2-117, V2-118; HOM plan
 // §8.3), shared by the single-file menu and the multi-select bar: the getting-files-out actions
@@ -97,6 +98,11 @@ Future<bool> runFileAction(BuildContext context, WidgetRef ref, FileAction actio
         final merge = ref.read(mergeIntoPdfHandlerProvider);
         if (merge == null) return false;
         await merge(context, items);
+        return true;
+      case FileAction.organisePages || FileAction.mergeWith:
+        final tools = ref.read(pdfPageToolsHandlerProvider);
+        if (tools == null) return false;
+        await tools(context, action, items.first);
         return true;
       case FileAction.compressPdf:
         final compress = ref.read(compressPdfHandlerProvider);

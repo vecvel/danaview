@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # OWNER: HOM-24
+# EXTENDED: HOM-28 (the page tools' tests in Tests/Tools/: Core/ joins the core target, Glue/ the glue
+# target; the `ios-sim` mode runs the Flutter-free core tests, page tools included, on an iOS
+# Simulator: DV_PDF_SIMULATOR names it, default "iPhone 17").
 #
 # XCTests of danaview_pdf's PDFKit viewer, text and glue (BUILD_PLAN HOM-24) without the Danaview
 # app, assembled in a temporary directory from the pod sources (locally generated PDFs plus the
@@ -11,9 +14,11 @@
 #                    FlutterMacOS.framework for Tests/Viewer/Glue/ (platform view, host APIs).
 #   ios-typecheck    type-checks every plugin source for the iOS Simulator SDK against
 #                    Flutter.xcframework (no simulator).
+#   ios-sim          the Flutter-free core tests (viewer core, text core, page tools) as a Swift
+#                    package on the iOS Simulator named by DV_PDF_SIMULATOR (xcodebuild test).
 #
 # The temporary directory is removed on exit. Usage:
-#   packages/danaview_pdf/darwin/Tests/Viewer/run_xctests.sh macos | ios-typecheck
+#   packages/danaview_pdf/darwin/Tests/Viewer/run_xctests.sh macos | ios-typecheck | ios-sim
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,7 +32,10 @@ ios_fw="$flutter_root/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm
 
 all_sources=()
 while IFS= read -r f; do all_sources+=("$f"); done < <(find "$darwin/Classes" -name '*.swift' | sort)
-core_sources=("$darwin/Classes/Viewer/PdfCore.swift" "$darwin/Classes/Text/PdfTextCore.swift")
+core_sources=("$darwin/Classes/Viewer/PdfCore.swift" "$darwin/Classes/Text/PdfTextCore.swift" "$darwin/Classes/Tools/PdfPageToolsCore.swift")
+tools="$darwin/Tests/Tools"
+core_tests=("$here"/Core/*.swift "$tools"/Core/*.swift)
+glue_tests=("$here"/Glue/*.swift "$tools"/Glue/*.swift)
 
 if [ "$mode" = "ios-typecheck" ]; then
   [ -d "$ios_fw/Flutter.framework" ] || { echo "Flutter.framework not found under $ios_fw (run flutter precache --ios)" >&2; exit 1; }
@@ -37,8 +45,41 @@ if [ "$mode" = "ios-typecheck" ]; then
   exit 0
 fi
 
+if [ "$mode" = "ios-sim" ]; then
+  simulator="${DV_PDF_SIMULATOR:-iPhone 17}"
+  work="$(mktemp -d "${TMPDIR:-/tmp}/dv_pdf_ios_xctests.XXXXXX")"
+  trap 'rm -rf "$work"' EXIT
+  mkdir -p "$work/Sources/DanaviewPdfCore" "$work/Tests/DanaviewPdfCoreTests"
+  for f in "${core_sources[@]}"; do cp "$f" "$work/Sources/DanaviewPdfCore/"; done
+  for f in "${core_tests[@]}"; do
+    { echo "@testable import DanaviewPdfCore"; cat "$f"; } > "$work/Tests/DanaviewPdfCoreTests/$(basename "$f")"
+  done
+  cat > "$work/Package.swift" <<'PKG'
+// swift-tools-version:5.7
+import PackageDescription
+let package = Package(
+  name: "DanaviewPdfCore",
+  platforms: [.macOS(.v11), .iOS(.v15)],
+  products: [.library(name: "DanaviewPdfCore", targets: ["DanaviewPdfCore"])],
+  targets: [
+    .target(name: "DanaviewPdfCore"),
+    .testTarget(name: "DanaviewPdfCoreTests", dependencies: ["DanaviewPdfCore"]),
+  ]
+)
+PKG
+  # The copied tests can't find the fixtures by walking up from #filePath; the runner passes the
+  # TEST_RUNNER_-prefixed variable into the simulator's test process (it reads host paths).
+  export TEST_RUNNER_DV_PDF_FIXTURES="$repo/spikes/android_pdf/fixtures"
+  (cd "$work" && xcodebuild test -scheme DanaviewPdfCore -destination "platform=iOS Simulator,name=$simulator" \
+    -derivedDataPath "$work/dd" 2>&1) > "$work/test.log" || true
+  grep -E "Test Case.*(passed|failed|skipped)|error:|Executed|TEST (SUCCEEDED|FAILED)" "$work/test.log" || tail -40 "$work/test.log"
+  if grep -q "TEST SUCCEEDED" "$work/test.log"; then exit 0; fi
+  tail -60 "$work/test.log"
+  exit 1
+fi
+
 if [ "$mode" != "macos" ]; then
-  echo "unknown mode $mode (macos | ios-typecheck)" >&2
+  echo "unknown mode $mode (macos | ios-typecheck | ios-sim)" >&2
   exit 2
 fi
 
@@ -54,9 +95,9 @@ link_dir() { # <target dir> <source files...>
 }
 
 link_dir "$work/Sources/DanaviewPdfCore" "${core_sources[@]}"
-link_dir "$work/Tests/DanaviewPdfCoreTests" "$here"/Core/*.swift
+link_dir "$work/Tests/DanaviewPdfCoreTests" "${core_tests[@]}"
 link_dir "$work/Sources/danaview_pdf" "${all_sources[@]}"
-link_dir "$work/Tests/PdfGlueTests" "$here"/Glue/*.swift "$here/Core/TestPdfs.swift" \
+link_dir "$work/Tests/PdfGlueTests" "${glue_tests[@]}" "$here/Core/TestPdfs.swift" \
   "$here"/../Compress/Glue/*.swift "$here/../Compress/CompressFixtures.swift"
 cat > "$work/Package.swift" <<PKG
 // swift-tools-version:5.7
@@ -78,7 +119,7 @@ let package = Package(
 )
 PKG
 # The core tests use the core's internal types: prepend `@testable import DanaviewPdfCore`.
-for f in "$here"/Core/*.swift; do
+for f in "${core_tests[@]}"; do
   rm "$work/Tests/DanaviewPdfCoreTests/$(basename "$f")"
   { echo "@testable import DanaviewPdfCore"; cat "$f"; } > "$work/Tests/DanaviewPdfCoreTests/$(basename "$f")"
 done
