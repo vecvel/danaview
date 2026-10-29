@@ -49,6 +49,13 @@ String editorLocation(ProjectId id, {TimeUs? initialPlayhead}) {
 /// Opens the Projects screen (Home edit button, Settings › Storage "Open projects").
 void openProjects(BuildContext context) => context.push(projectsLocation);
 
+/// The Home's New project (the Projects tab's primary button): the editor's New project sheet,
+/// then the created project in the editor, as on the Projects screen.
+Future<void> createProjectFromHome(BuildContext context) async {
+  final id = await showNewProjectSheet(context);
+  if (id != null && context.mounted) unawaited(context.push(editorLocation(id)));
+}
+
 /// The root navigator of the app's router, for navigation that has no widget context (the editor
 /// flows' hosts, INT-04).
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'app');
@@ -197,6 +204,8 @@ GoRouter createAppRouter() => GoRouter(
             onOpenSettings: () => context.push('/settings'),
             onOpenEditor: editorReachable(context) ? () => openProjects(context) : null,
             onOpenProjects: editorReachable(context) ? () => openProjects(context) : null,
+            onOpenProject: editorReachable(context) ? (id) => context.push(editorLocation(ProjectId(id))) : null,
+            onNewProject: editorReachable(context) ? () => unawaited(createProjectFromHome(context)) : null,
           ),
           routes: [
             GoRoute(

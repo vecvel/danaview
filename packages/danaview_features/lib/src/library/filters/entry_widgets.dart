@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../badges/media_badge_overlay.dart';
 import '../badges/media_badges.dart';
 import '../files/library_store_providers.dart';
+import '../home/home_media_card.dart';
 import '../library_format.dart';
 import '../library_widgets.dart';
 import '../organise/organise_widgets.dart';
@@ -140,6 +141,86 @@ class LibraryEntryLeading extends ConsumerWidget {
   }
 }
 
+/// The menu of a Danaview entry's row or card: Open, Rename…, Move to…, More actions… and Delete,
+/// as [actions] allow.
+List<DanaviewMenuEntry> libraryEntryMenu(FileEntry entry, LibraryEntryActions actions) => [
+      if (actions.onOpen case final open?) DanaviewMenuItem(label: 'Open', icon: Icons.open_in_new_rounded, onTap: () => open(entry)),
+      if (actions.onRename case final rename?) DanaviewMenuItem(label: 'Rename…', icon: Icons.edit_rounded, onTap: () => rename(entry)),
+      if (actions.onMove case final move?)
+        DanaviewMenuItem(label: 'Move to…', glyph: DanaviewGlyphKind.folderOpen, onTap: () => move(entry)),
+      if (actions.onMore case final more?)
+        DanaviewMenuItem(label: 'More actions…', icon: Icons.more_horiz_rounded, onTap: () => more(entry)),
+      if (actions.onDelete case final delete?) ...[
+        const DanaviewMenuDivider(),
+        DanaviewMenuItem(label: 'Delete', icon: Icons.delete_outline_rounded, destructive: true, onTap: () => delete(entry)),
+      ],
+    ];
+
+/// The type glyph of an entry (the document sub-kind's, else the kind's).
+IconData libraryEntryIcon(FileEntry entry) {
+  final doc = entry.docKind;
+  return doc != null ? documentKindIcon(doc) : organiseKindIcon(entry.kind);
+}
+
+/// An entry's thumbnail filling its box (photos, videos and PDFs' first page), or the neutral
+/// placeholder with the type glyph (§2.5) until, or unless, one exists.
+class LibraryEntryThumb extends ConsumerWidget {
+  /// The thumbnail of [entry].
+  const LibraryEntryThumb({super.key, required this.entry});
+
+  /// The entry.
+  final FileEntry entry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final placeholder = HomeMediaPlaceholder(icon: libraryEntryIcon(entry));
+    final store = ref.watch(libraryStoreProvider);
+    final thumbable = entry.kind == FileKind.photo || entry.kind == FileKind.video || entry.docKind == DocumentKind.pdf;
+    if (store == null || !thumbable) return placeholder;
+    return LibraryThumbnail(
+      itemId: entry.id.value,
+      source: store.paths.entryFile(entry.id, entry.displayName),
+      modifiedAt: entry.modifiedAt,
+      kind: entry.kind == FileKind.document ? ThumbSourceKind.document : ThumbSourceKind.media,
+      placeholder: placeholder,
+    );
+  }
+}
+
+/// One Danaview entry as a card of the All tab's mixed grid (DESIGN_SYSTEM §10.4): a 16:9
+/// thumbnail (a media card for photos and videos, a document tile for the rest), the name, the
+/// size · date line and the same menu, key and spoken label as [LibraryEntryRow].
+class LibraryEntryCard extends ConsumerWidget {
+  /// The card of [entry]; [actions] decide the menu.
+  const LibraryEntryCard({super.key, required this.entry, this.actions = LibraryEntryActions.none});
+
+  /// The entry.
+  final FileEntry entry;
+
+  /// The menu's actions.
+  final LibraryEntryActions actions;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final meta = entry.kind == FileKind.document ? ref.watch(libraryEntryMetaProvider(entry.id)) : null;
+    final subtitle = libraryFileSubtitle(sizeBytes: entry.sizeBytes, date: entry.addedAt, pageCount: meta?.pageCount);
+    final menu = libraryEntryMenu(entry, actions);
+    return KeyedSubtree(
+      key: ValueKey('library-entry-${entry.id.value}'),
+      child: HomeMediaCard(
+        title: entry.displayName,
+        subtitle: subtitle,
+        icon: libraryEntryIcon(entry),
+        showPlay: entry.kind == FileKind.video,
+        thumbnail: LibraryEntryThumb(entry: entry),
+        semanticLabel: '${organiseKindLabel(entry.kind)} ${entry.displayName}, $subtitle',
+        onTap: actions.onOpen == null ? null : () => actions.onOpen!(entry),
+        trailing: menu.isEmpty ? null : DanaviewMenuIconTrigger(icon: Icons.more_horiz_rounded, tooltip: 'More', entries: menu),
+      ),
+    );
+  }
+}
+
 /// One Danaview entry: leading tile, name, size, date, page count, and its menu.
 class LibraryEntryRow extends ConsumerWidget {
   /// The row of [entry]; [actions] decide the menu.
@@ -155,18 +236,7 @@ class LibraryEntryRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final meta = entry.kind == FileKind.document ? ref.watch(libraryEntryMetaProvider(entry.id)) : null;
     final subtitle = libraryFileSubtitle(sizeBytes: entry.sizeBytes, date: entry.addedAt, pageCount: meta?.pageCount);
-    final menu = <DanaviewMenuEntry>[
-      if (actions.onOpen case final open?) DanaviewMenuItem(label: 'Open', icon: Icons.open_in_new_rounded, onTap: () => open(entry)),
-      if (actions.onRename case final rename?) DanaviewMenuItem(label: 'Rename…', icon: Icons.edit_rounded, onTap: () => rename(entry)),
-      if (actions.onMove case final move?)
-        DanaviewMenuItem(label: 'Move to…', glyph: DanaviewGlyphKind.folderOpen, onTap: () => move(entry)),
-      if (actions.onMore case final more?)
-        DanaviewMenuItem(label: 'More actions…', icon: Icons.more_horiz_rounded, onTap: () => more(entry)),
-      if (actions.onDelete case final delete?) ...[
-        const DanaviewMenuDivider(),
-        DanaviewMenuItem(label: 'Delete', icon: Icons.delete_outline_rounded, destructive: true, onTap: () => delete(entry)),
-      ],
-    ];
+    final menu = libraryEntryMenu(entry, actions);
     return KeyedSubtree(
       key: ValueKey('library-entry-${entry.id.value}'),
       child: DanaviewLibraryRow(
@@ -215,9 +285,10 @@ class LinkedDocumentRow extends StatelessWidget {
   }
 }
 
-/// One video of the Videos tab's grid: thumbnail with HOM-13's badge overlay (duration pill,
-/// resolution, frame rate >= 50 and HDR, V2-110) and the name below. The tile speaks the badges in
-/// its own label, so the overlay's semantics are excluded.
+/// One video of the Videos tab's grid (DESIGN_SYSTEM §10.4): a 16:9 media card with the
+/// thumbnail, HOM-13's badge overlay (duration pill, resolution, frame rate >= 50 and HDR, V2-110)
+/// and the name. The tile speaks the badges in its own label, so the overlay's semantics are
+/// excluded.
 class LibraryVideoTile extends ConsumerWidget {
   /// The tile of [entry].
   const LibraryVideoTile({super.key, required this.entry, this.onOpen});
@@ -235,34 +306,20 @@ class LibraryVideoTile extends ConsumerWidget {
     final spoken = badges.semanticsLabel;
     return KeyedSubtree(
       key: ValueKey('library-video-${entry.id.value}'),
-      child: DanaviewPressable(
-        onTap: onOpen == null ? null : () => onOpen!(entry),
-        borderRadius: DanaviewRadius.mdAll,
-        semanticLabel: spoken.isEmpty ? 'Video ${entry.displayName}' : 'Video ${entry.displayName}, $spoken',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: HomeMediaCard(
+        title: entry.displayName,
+        subtitle: libraryFileSubtitle(sizeBytes: entry.sizeBytes, date: entry.addedAt),
+        icon: Icons.movie_rounded,
+        showPlay: false,
+        thumbnail: Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: DanaviewRadius.mdAll,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    LibraryEntryLeading(entry: entry, size: 200),
-                    MediaBadgeOverlay(badges: badges, excludeSemantics: true),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: DanaviewSpacing.xs),
-            Text(
-              entry.displayName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: DanaviewTextStyles.caption.copyWith(color: DanaviewColors.textPrimary),
-            ),
+            LibraryEntryThumb(entry: entry),
+            MediaBadgeOverlay(badges: badges, excludeSemantics: true),
           ],
         ),
+        semanticLabel: spoken.isEmpty ? 'Video ${entry.displayName}' : 'Video ${entry.displayName}, $spoken',
+        onTap: onOpen == null ? null : () => onOpen!(entry),
       ),
     );
   }

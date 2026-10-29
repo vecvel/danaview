@@ -27,7 +27,11 @@ import '../player/danaview_player_actions.dart';
 import 'add_to_playlist_sheet.dart';
 import 'home/home_callbacks.dart';
 import 'home/home_chrome.dart';
+import 'home/home_content.dart';
+import 'home/home_grid.dart';
 import 'home/home_media_card.dart';
+import 'home/home_playlists.dart';
+import 'home/home_projects.dart';
 import 'home/home_tab_host.dart';
 import 'home/home_tab_strip.dart';
 import 'home/home_tabs.dart';
@@ -42,7 +46,22 @@ import 'media_picker.dart';
 import 'open_link_dialog.dart';
 
 export 'home/home_callbacks.dart' show HomeCallbacks, HomeCallbacksScope;
-export 'home/home_chrome.dart' show HomeChromeLabels, HomePhoneTabBar, homeIsCompact;
+export 'home/home_chrome.dart'
+    show HomeChromeLabels, HomePhoneTabBar, HomeTopBar, homeIsCompact, homeTitleCollapseFor, homeTitleCollapseDistance;
+export 'home/home_content.dart' show homeHasFilesContentProvider;
+export 'home/home_grid.dart' show HomeCardGrid, homeAdaptiveColumns, homeCardGridGap;
+export 'home/home_playlists.dart' show HomePlaylistCard, homePlaylistColumns;
+export 'home/home_projects.dart'
+    show
+        HomeProject,
+        HomeProjectCard,
+        HomeProjectsSection,
+        HomeProjectsTab,
+        homeProjectColumns,
+        homeProjectEditedLabel,
+        homeProjectsOverviewLimit,
+        homeProjectsClockProvider,
+        homeProjectsProvider;
 export 'home/home_media_card.dart' show HomeMediaCard, HomeMediaCardGrid, HomeMediaCardRow;
 export 'home/home_tab_strip.dart' show homeTabKey;
 export 'home/home_tabs.dart' show HomeSlotBuilder, HomeTab, HomeTabSlots, homeEditorPlatform, visibleHomeTabs;
@@ -100,6 +119,33 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
 
   /// The selected tab with DANAVIEW_FILES_HOME on.
   late HomeTab _tab = widget.initialTab;
+
+  /// How far the top bar's large title has collapsed (0 to 1) with DANAVIEW_FILES_HOME on: the
+  /// visible page's scroll drives it, and only the top bar listens, so a scroll frame rebuilds
+  /// nothing else (§10.1).
+  final ValueNotifier<double> _titleCollapse = ValueNotifier(0);
+
+  /// The last collapse of each tab's page, restored when the tab is shown again.
+  final Map<HomeTab, double> _tabCollapse = {};
+
+  @override
+  void dispose() {
+    _titleCollapse.dispose();
+    super.dispose();
+  }
+
+  /// Records [tab]'s page scroll; the top bar follows the visible page only.
+  bool _onPageScroll(HomeTab tab, ScrollNotification notification) {
+    if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) return false;
+    final metrics = notification.metrics;
+    final collapse = homeTitleCollapseFor(
+      metrics.pixels - metrics.minScrollExtent,
+      reduceMotion: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
+    );
+    _tabCollapse[tab] = collapse;
+    if (tab == _tab) _titleCollapse.value = collapse;
+    return false;
+  }
 
   /// The laid-out height of the selection bar slot (0 while it shows nothing). The tab host gets it
   /// as bottom MediaQuery padding so the last row of every page scrolls out from under the bar.
@@ -289,9 +335,10 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
           ),
       ];
 
-  Widget _topBar(BuildContext context, {required bool compact}) => HomeTopBar(
+  Widget _topBar(BuildContext context, {required bool compact, double collapse = 0}) => HomeTopBar(
         key: const ValueKey('home-top-bar'),
         compact: compact,
+        collapse: collapse,
         actions: _topBarActions(compact: compact, canImport: ref.watch(importServiceProvider) != null),
       );
 
@@ -352,21 +399,32 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
           body: LayoutBuilder(
             builder: (context, constraints) {
               final insets = danaviewLibraryInsets(constraints.maxWidth);
-              return CustomScrollView(
-                slivers: [
-                  SliverPadding(
-                    padding: insets.copyWith(
-                      top: DanaviewSpacing.lg,
-                      bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
+              // The header draws its own hairline once content scrolls under it, so the frame's
+              // scrolled edge (meant for a header outside the scroll view) stays off.
+              return NotificationListener<ScrollNotification>(
+                onNotification: (_) => true,
+                child: CustomScrollView(
+                  slivers: [
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _HomeHeaderDelegate(
+                        insets: insets,
+                        rowHeight: homeTopBarRowHeight(context),
+                        reduceMotion: MediaQuery.disableAnimationsOf(context),
+                        bar: (collapse) => _topBar(context, compact: compact, collapse: collapse),
+                      ),
                     ),
-                    sliver: SliverList.list(
-                      children: [
-                        _topBar(context, compact: compact),
-                        ..._overviewSections(state, width: constraints.maxWidth - insets.horizontal),
-                      ],
+                    SliverPadding(
+                      padding: insets.copyWith(
+                        top: 0,
+                        bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
+                      ),
+                      sliver: SliverList.list(
+                        children: _overviewSections(state, width: constraints.maxWidth - insets.horizontal),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               );
             },
           ),
@@ -377,7 +435,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
 
   /// The Home sections below the top bar (§10.3). With [slots] (DANAVIEW_FILES_HOME on) the Files
   /// Home rows join them; the 1.1 sections are the same widgets either way.
-  List<Widget> _overviewSections(LibraryState state, {required double width, HomeTabSlots? slots}) {
+  List<Widget> _overviewSections(LibraryState state, {required double width, HomeTabSlots? slots, bool filesContent = false}) {
     return [
       _NowPlayingCard(onOpen: widget.onOpenPlayer),
       if (state.error != null)
@@ -396,14 +454,18 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
             ),
           ),
         ),
-      if (state.hasLoaded) _overviewLayout(state, width: width, slots: slots),
+      if (state.hasLoaded) _overviewLayout(state, width: width, slots: slots, filesContent: filesContent),
     ];
   }
 
   /// Lays the sections out for [width]: one column on phones, the grouped lists 2-up on tablets
   /// in portrait, and two columns (media ≈ 60 %, lists ≈ 40 %) from [homeTwoColumnMinWidth].
-  Widget _overviewLayout(LibraryState state, {required double width, HomeTabSlots? slots}) {
-    final empty = state.recent.isEmpty && state.playlists.isEmpty && state.roots.isEmpty;
+  ///
+  /// The one empty state shows only when every content type is empty: the 1.1 history, playlists
+  /// and folders and, with the Files Home ([filesContent], see [homeHasFilesContentProvider]),
+  /// its videos, photos, documents, Danaview folders and projects.
+  Widget _overviewLayout(LibraryState state, {required double width, HomeTabSlots? slots, bool filesContent = false}) {
+    final empty = state.recent.isEmpty && state.playlists.isEmpty && state.roots.isEmpty && !filesContent;
     final media = <Widget>[
       if (empty) _HomeEmptyState(actions: _quickActions),
       if (_recentSection(state.recent) case final recent?) recent,
@@ -463,7 +525,9 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
       );
 
   void _selectTab(HomeTab tab) {
-    if (tab != _tab) setState(() => _tab = tab);
+    if (tab == _tab) return;
+    setState(() => _tab = tab);
+    _titleCollapse.value = _tabCollapse[tab] ?? 0;
   }
 
   /// The filter menu: one row per visible tab, the selected one checked.
@@ -494,7 +558,13 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Padding(padding: insets.copyWith(top: DanaviewSpacing.md), child: _topBar(context, compact: compact)),
+                    Padding(
+                      padding: insets.copyWith(top: DanaviewSpacing.md),
+                      child: ValueListenableBuilder<double>(
+                        valueListenable: _titleCollapse,
+                        builder: (context, collapse, _) => _topBar(context, compact: compact, collapse: collapse),
+                      ),
+                    ),
                     if (search != null)
                       Padding(
                         padding: insets.copyWith(top: DanaviewSpacing.md),
@@ -534,7 +604,10 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
                         final host = HomeTabHost(
                           tabs: tabs,
                           selected: selected,
-                          pageBuilder: _tabPage,
+                          pageBuilder: (context, tab) => NotificationListener<ScrollNotification>(
+                            onNotification: (notification) => _onPageScroll(tab, notification),
+                            child: _tabPage(context, tab),
+                          ),
                         );
                         final barHeight = selectionBar == null ? 0.0 : _selectionBarHeight;
                         // Always wrapped (same tree shape) so the tab pages keep their state when
@@ -586,12 +659,18 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
           builder: (context, ref, _) {
             final state = ref.watch(libraryControllerProvider);
             final sections = switch (tab) {
-              HomeTab.home => _overviewSections(state, width: width, slots: widget.tabSlots),
-              HomeTab.playlists => state.hasLoaded ? [_playlistSection(state.playlists)!] : const <Widget>[],
+              HomeTab.home => _overviewSections(
+                  state,
+                  width: width,
+                  slots: widget.tabSlots,
+                  filesContent: ref.watch(homeHasFilesContentProvider),
+                ),
+              HomeTab.playlists => state.hasLoaded ? [_playlistTabSection(state.playlists)] : const <Widget>[],
               HomeTab.folders => state.hasLoaded ? [_folderSection(state.roots)!] : const <Widget>[],
               _ => null,
             };
             if (sections == null) {
+              if (tab == HomeTab.projects && widget.callbacks.onOpenProject != null) return const HomeProjectsTab();
               if (tab == HomeTab.projects && widget.callbacks.onOpenProjects != null) {
                 return HomeProjectsPane(onOpenProjects: widget.callbacks.onOpenProjects!, padding: padding);
               }
@@ -717,43 +796,76 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
               DanaviewLibraryRow(
                 leading: const DanaviewIconTile(Icons.queue_music_rounded),
                 title: playlist.name,
-                subtitle: playlist.itemCount == 0 ? 'No videos yet' : formatCount(playlist.itemCount, 'video'),
+                subtitle: _playlistSubtitle(playlist),
                 onTap: () => widget.onOpenPlaylist(playlist.name),
-                trailing: DanaviewMenuIconTrigger(
-                  icon: Icons.more_horiz_rounded,
-                  tooltip: 'More',
-                  entries: [
-                    DanaviewMenuItem(
-                      label: 'Play',
-                      icon: Icons.play_arrow_rounded,
-                      enabled: playlist.itemCount > 0,
-                      onTap: () => _playPlaylist(playlist.name),
-                    ),
-                    DanaviewMenuItem(
-                      label: 'Shuffle',
-                      icon: Icons.shuffle_rounded,
-                      enabled: playlist.itemCount > 1,
-                      onTap: () => _playPlaylist(playlist.name, shuffle: true),
-                    ),
-                    const DanaviewMenuDivider(),
-                    DanaviewMenuItem(
-                      label: 'Rename',
-                      icon: Icons.edit_rounded,
-                      onTap: () => _renamePlaylist(playlist.name),
-                    ),
-                    DanaviewMenuItem(
-                      label: 'Delete',
-                      icon: Icons.delete_outline_rounded,
-                      destructive: true,
-                      onTap: () => _deletePlaylist(playlist.name),
-                    ),
-                  ],
-                ),
+                trailing: _playlistMenu(playlist),
               ),
           ],
         ),
     ]);
   }
+
+  /// The More menu of a playlist row or card: Play, Shuffle, Rename and Delete.
+  Widget _playlistMenu(PlaylistSummary playlist) => DanaviewMenuIconTrigger(
+        icon: Icons.more_horiz_rounded,
+        tooltip: 'More',
+        entries: [
+          DanaviewMenuItem(
+            label: 'Play',
+            icon: Icons.play_arrow_rounded,
+            enabled: playlist.itemCount > 0,
+            onTap: () => _playPlaylist(playlist.name),
+          ),
+          DanaviewMenuItem(
+            label: 'Shuffle',
+            icon: Icons.shuffle_rounded,
+            enabled: playlist.itemCount > 1,
+            onTap: () => _playPlaylist(playlist.name, shuffle: true),
+          ),
+          const DanaviewMenuDivider(),
+          DanaviewMenuItem(
+            label: 'Rename',
+            icon: Icons.edit_rounded,
+            onTap: () => _renamePlaylist(playlist.name),
+          ),
+          DanaviewMenuItem(
+            label: 'Delete',
+            icon: Icons.delete_outline_rounded,
+            destructive: true,
+            onTap: () => _deletePlaylist(playlist.name),
+          ),
+        ],
+      );
+
+  /// The Playlists tab (§10.4): playlist cards (a 2×2 mosaic, the name and the count) in the
+  /// adaptive grid, New in the header; the same empty state as the section when there are none.
+  Widget _playlistTabSection(List<PlaylistSummary> playlists) {
+    if (playlists.isEmpty) return _playlistSection(playlists)!;
+    return _section(key: const ValueKey('home-playlists'), [
+      DanaviewLibrarySectionHeader(
+        'Playlists',
+        prominent: true,
+        action: DanaviewButton.text(label: 'New', size: DanaviewButtonSize.sm, onPressed: _newPlaylist),
+      ),
+      HomeCardGrid(
+        key: const ValueKey('home-playlists-grid'),
+        columnsFor: homePlaylistColumns,
+        children: [
+          for (final playlist in playlists)
+            HomePlaylistCard(
+              name: playlist.name,
+              subtitle: _playlistSubtitle(playlist),
+              items: _library.playlistItems(playlist.name),
+              onOpen: () => widget.onOpenPlaylist(playlist.name),
+              trailing: _playlistMenu(playlist),
+            ),
+        ],
+      ),
+    ]);
+  }
+
+  static String _playlistSubtitle(PlaylistSummary playlist) =>
+      playlist.itemCount == 0 ? 'No videos yet' : formatCount(playlist.itemCount, 'video');
 
   /// Folders as a grouped list with Add in the header. Empty: hidden on Home ([hideEmpty]), an
   /// empty state with Add folder on the Folders tab.
@@ -834,6 +946,62 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
       ),
     );
   }
+}
+
+/// The flag-off Home's pinned header (§10.1): the top bar on the background, its large title
+/// collapsing into the inline title as the sections scroll under it. Only the top padding
+/// shrinks; a hairline appears under the bar once content is beneath it.
+class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _HomeHeaderDelegate({required this.insets, required this.rowHeight, required this.reduceMotion, required this.bar});
+
+  /// The page gutters.
+  final EdgeInsets insets;
+
+  /// The bar row's height (homeTopBarRowHeight).
+  final double rowHeight;
+
+  /// Reduce Motion: the title jumps to its end state.
+  final bool reduceMotion;
+
+  /// Builds the bar at a collapse.
+  final Widget Function(double collapse) bar;
+
+  static const double _expandedTop = DanaviewSpacing.lg;
+  static const double _collapsedTop = DanaviewSpacing.xs;
+
+  @override
+  double get maxExtent => _expandedTop + rowHeight;
+
+  @override
+  double get minExtent => _collapsedTop + rowHeight;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final range = maxExtent - minExtent;
+    final collapse = homeTitleCollapseFor(
+      range <= 0 ? shrinkOffset : shrinkOffset / range * homeTitleCollapseDistance,
+      reduceMotion: reduceMotion,
+    );
+    final top = _expandedTop - (_expandedTop - _collapsedTop) * (shrinkOffset / range).clamp(0.0, 1.0);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DanaviewColors.background,
+        border: Border(
+          bottom: BorderSide(
+            color: shrinkOffset > 0 || overlapsContent ? DanaviewColors.hairline : DanaviewColors.hairline.withValues(alpha: 0),
+            width: DanaviewBorders.width,
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: insets.copyWith(top: top, bottom: 0),
+        child: Align(alignment: Alignment.bottomCenter, child: bar(collapse)),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_HomeHeaderDelegate oldDelegate) => true;
 }
 
 /// Reports [child]'s laid-out size after each layout in which it changed (HOM-05 selection bar).

@@ -4,7 +4,8 @@
 // (`All documents`, `PDF`, `Word`, `Excel`, `PowerPoint`, `Text/CSV`, `Other`) over the Danaview
 // folder documents (type icon or first-page thumbnail, name, size, date, page count where known)
 // and the documents of the user's linked folders, which are read-only: they open, and nothing
-// renames, moves or deletes them (§8.1).
+// renames, moves or deletes them (§8.1). DESIGN_SYSTEM §10.4: a grouped list on phones (one card,
+// inset dividers), a 2-up grid of row cards on tablets and wider.
 //
 // Slice S2 hides this tab: [documentsFilterShown] (filters/library_filters.dart) is false, so
 // [libraryFilterTabSlots] never hands this body to the Home. It is built and tested now so S3
@@ -20,6 +21,10 @@ import '../filters/filter_providers.dart';
 import '../filters/library_filters.dart';
 import '../library_widgets.dart';
 import 'all_tab.dart' show LibraryFilterEmpty;
+
+/// The Documents tab's columns for a content [width] (§10.4): 1 (a grouped list) on phones, 2 from
+/// the library grid's tablet width; never more.
+int documentsTabColumns(double width) => danaviewLibraryGridColumns(width) > 1 ? 2 : 1;
 
 /// The `Documents` tab.
 class DocumentsTab extends ConsumerStatefulWidget {
@@ -62,7 +67,7 @@ class _DocumentsTabState extends ConsumerState<DocumentsTab> {
         final insets = danaviewLibraryInsets(constraints.maxWidth);
         final padding = insets.copyWith(top: DanaviewSpacing.lg, bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl);
         final side = padding.copyWith(top: 0, bottom: 0);
-        final columns = danaviewLibraryGridColumns(constraints.maxWidth - side.horizontal);
+        final columns = documentsTabColumns(constraints.maxWidth - side.horizontal);
         return CustomScrollView(
           key: const PageStorageKey('library-documents-tab'),
           slivers: [
@@ -120,8 +125,8 @@ class _DocumentsTabState extends ConsumerState<DocumentsTab> {
     );
   }
 
-  /// List rows on phones, a card grid where more than one column fits.
+  /// A grouped list on phones, a 2-up grid where two columns fit.
   static Widget _list(int columns, int count, IndexedWidgetBuilder builder) => columns > 1
       ? danaviewLibrarySliverGrid(columns: columns, itemCount: count, itemBuilder: builder)
-      : SliverList.builder(itemCount: count, itemBuilder: builder);
+      : danaviewLibrarySliverGroup(itemCount: count, itemBuilder: builder);
 }

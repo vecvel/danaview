@@ -479,6 +479,8 @@ Widget appHomeScreen({
   VoidCallback? onOpenSettings,
   VoidCallback? onOpenEditor,
   VoidCallback? onOpenProjects,
+  ValueChanged<String>? onOpenProject,
+  VoidCallback? onNewProject,
 }) {
   if (!filesHomeWired) {
     return DanaviewHomeScreen(
@@ -496,6 +498,8 @@ Widget appHomeScreen({
     onOpenSettings: onOpenSettings,
     onOpenEditor: onOpenEditor,
     onOpenProjects: onOpenProjects,
+    onOpenProject: onOpenProject,
+    onNewProject: onNewProject,
   );
 }
 
@@ -513,6 +517,8 @@ class FilesHome extends StatefulWidget {
     this.onOpenSettings,
     this.onOpenEditor,
     this.onOpenProjects,
+    this.onOpenProject,
+    this.onNewProject,
   });
 
   /// Shows the player.
@@ -532,6 +538,13 @@ class FilesHome extends StatefulWidget {
 
   /// The Projects tab (null hides it; the editor's platforms only).
   final VoidCallback? onOpenProjects;
+
+  /// Opens a project in the editor by id: the Overview's Projects section and the Projects tab's
+  /// cards (null hides the section and keeps the tab's single Open projects pane).
+  final ValueChanged<String>? onOpenProject;
+
+  /// Opens the New project sheet: the Projects tab's primary button (null hides it).
+  final VoidCallback? onNewProject;
 
   @override
   State<FilesHome> createState() => FilesHomeState();
@@ -618,6 +631,10 @@ class FilesHomeState extends State<FilesHome> {
               actions: _rowActions(context, ref),
             )),
         base: HomeTabSlots(
+          // The editor's projects (§10.3 #3, §10.4), only where the editor runs and was wired;
+          // the list comes from homeProjectsProvider (lib/wiring/projects_wiring.dart).
+          projects: widget.onOpenProject == null ? null : (_) => const HomeProjectsTab(),
+          projectsOverview: widget.onOpenProject == null ? null : (_) => const HomeProjectsSection(),
           photos: _consumer((context, ref) => FilesHomePhotosPane(
                 photos: PhotosTab(
                 onOpenPhoto: (photos, index) {
@@ -684,7 +701,13 @@ class FilesHomeState extends State<FilesHome> {
         onOpenPlaylist: widget.onOpenPlaylist,
         onOpenSettings: widget.onOpenSettings,
         onOpenEditor: widget.onOpenEditor,
-        callbacks: HomeCallbacks(onOpenProjects: widget.onOpenProjects),
+        // onOpenAiStudio stays null until slice S6 adds the AI Studio screen and its route; the
+        // phone tab bar's AI Studio item is hidden until then (see HomeCallbacks.onOpenAiStudio).
+        callbacks: HomeCallbacks(
+          onOpenProjects: widget.onOpenProjects,
+          onOpenProject: widget.onOpenProject,
+          onNewProject: widget.onNewProject,
+        ),
         tabSlots: slots,
       ),
     );
