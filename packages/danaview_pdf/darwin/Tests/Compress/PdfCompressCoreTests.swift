@@ -42,6 +42,13 @@ final class PdfCompressCoreTests: XCTestCase {
     #endif
   }
 
+  /// Prints one `HOM31|<platform>|…` measurement line: fixture kinds, presets and byte counts only
+  /// (rule 30; the one allow-listed log call of these tests).
+  private func measured(_ fields: [String]) {
+    let hom31MeasurementLine = (["HOM31", platform()] + fields).joined(separator: "|")
+    print(hom31MeasurementLine)
+  }
+
   /// Mean absolute difference (0…255) of page 0 of [a] and [b] rendered at 200 × 260 px.
   private func pageDifference(_ a: URL, _ b: URL) throws -> Double {
     func pixels(_ url: URL) throws -> [UInt8] {
@@ -81,7 +88,8 @@ final class PdfCompressCoreTests: XCTestCase {
         XCTAssertTrue(document.page(at: 2)?.string?.contains(CompressFixtures.token("IMG", 2)) ?? false, "the text line survives")
         let difference = try pageDifference(source, out)
         XCTAssertLessThan(difference, 12, "\(kind) \(preset) still shows the same picture")
-        print("HOM31|\(platform())|\(kind)|\(preset)|before=\(before)|after=\(after)|saving=\(String(format: "%.1f", 100 - Double(after) * 100 / Double(before)))%|replaced=\(outcome.imagesReplaced)/\(outcome.imagesSeen)|diff=\(String(format: "%.1f", difference))")
+        measured([kind, "\(preset)", "before=\(before)", "after=\(after)", "saving=\(String(format: "%.1f", 100 - Double(after) * 100 / Double(before)))%",
+                  "replaced=\(outcome.imagesReplaced)/\(outcome.imagesSeen)", "diff=\(String(format: "%.1f", difference))"])
         sizes.append(after)
       }
       XCTAssertGreaterThan(sizes[0], sizes[1], "\(kind): High keeps more than Medium")
@@ -107,7 +115,7 @@ final class PdfCompressCoreTests: XCTestCase {
       let selection = page.selection(for: CGRect(x: 60, y: 710, width: 400, height: 24))
       XCTAssertTrue(selection?.string?.contains("TXT-P0001") ?? false, "\(preset): the first line selects as text")
       XCTAssertEqual(outcome.imagesSeen, 0)
-      print("HOM31|\(platform())|text|\(preset)|before=\(before)|after=\(outcome.sizeBytes)|text=selectable,searchable")
+      measured(["text", "\(preset)", "before=\(before)", "after=\(outcome.sizeBytes)", "text=selectable,searchable"])
     }
   }
 
@@ -121,12 +129,12 @@ final class PdfCompressCoreTests: XCTestCase {
     XCTAssertEqual(result.replaced, 2)
     XCTAssertLessThan(Double(result.data.count), Double(data.count) * 0.2)
     let out = url("flate-rewritten.pdf")
-    try result.data.write(to: out)
+    XCTAssertTrue(FileManager.default.createFile(atPath: out.path, contents: result.data))
     let document = try XCTUnwrap(PDFDocument(url: out))
     XCTAssertEqual(document.pageCount, 2)
     XCTAssertTrue(document.page(at: 1)?.string?.contains(CompressFixtures.token("IMG", 1)) ?? false)
     XCTAssertLessThan(try pageDifference(source, out), 12)
-    print("HOM31|\(platform())|rewriter-only-flate|medium-fallback|before=\(data.count)|after=\(result.data.count)")
+    measured(["rewriter-only-flate", "medium-fallback", "before=\(data.count)", "after=\(result.data.count)"])
   }
 
   func testRewriterLeavesFilesItCannotParse() throws {
@@ -134,10 +142,8 @@ final class PdfCompressCoreTests: XCTestCase {
   }
 
   func testEncryptedPdfStaysEncrypted() throws {
-    let plain = CompressFixtures.writeImagePdf(to: url("plain.pdf"), pages: 1, jpeg: true, pixelsPerInch: 200)
-    let document = try XCTUnwrap(PDFDocument(url: plain))
-    let locked = url("locked.pdf")
-    XCTAssertTrue(document.write(to: locked, withOptions: [.userPasswordOption: "pw", .ownerPasswordOption: "pw"]))
+    let locked = CompressFixtures.writeImagePdf(to: url("locked.pdf"), pages: 1, jpeg: true, pixelsPerInch: 200, userPassword: "pw")
+    XCTAssertTrue(try XCTUnwrap(PDFDocument(url: locked)).isLocked)
     XCTAssertThrowsError(try compress(locked, .medium)) { XCTAssertEqual(($0 as? PdfFailure)?.code, .passwordRequired) }
     let (out, outcome) = try compress(locked, .medium, password: "pw")
     XCTAssertLessThan(outcome.sizeBytes, CompressFixtures.size(locked))
@@ -169,7 +175,7 @@ final class PdfCompressCoreTests: XCTestCase {
     let (_, medium) = try compress(long, .medium)
     XCTAssertEqual(Double(sampled.presetBytes[1]), Double(medium.sizeBytes), accuracy: Double(medium.sizeBytes) * 0.35,
                    "a sampled estimate is within 35 % of the run")
-    print("HOM31|\(platform())|estimate|long9|medium estimate=\(sampled.presetBytes[1])|actual=\(medium.sizeBytes)")
+    measured(["estimate", "long9", "medium estimate=\(sampled.presetBytes[1])", "actual=\(medium.sizeBytes)"])
   }
 
   func testCancelLeavesNoFileAndNoTemporaryDirectory() throws {
@@ -212,7 +218,7 @@ final class PdfCompressCoreTests: XCTestCase {
       XCTAssertEqual(($0 as? PdfFailure)?.code, .notFound)
     }
     let damaged = url("damaged.pdf")
-    try Data("%PDF-1.4 garbage".utf8).write(to: damaged)
+    XCTAssertTrue(FileManager.default.createFile(atPath: damaged.path, contents: Data("%PDF-1.4 garbage".utf8)))
     XCTAssertThrowsError(try PdfCompressCore.compress(path: damaged.path, password: nil, preset: .high, outPath: url("o2.pdf").path)) {
       XCTAssertEqual(($0 as? PdfFailure)?.code, .damaged)
     }

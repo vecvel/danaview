@@ -56,10 +56,18 @@ enum CompressFixtures {
   /// [pages] US-letter pages, each a 7.5 × 9 in picture at 300 dpi above one line of text.
   /// [jpeg] stores the pictures as JPEG (camera style), else Quartz Flate-encodes the bitmap
   /// (scanner style).
+  /// With [userPassword] the file is encrypted by Core Graphics and needs it to open.
   @discardableResult
-  static func writeImagePdf(to url: URL, pages: Int, jpeg: Bool, prefix: String = "IMG", pixelsPerInch: Int = 300) -> URL {
+  static func writeImagePdf(
+    to url: URL, pages: Int, jpeg: Bool, prefix: String = "IMG", pixelsPerInch: Int = 300, userPassword: String? = nil
+  ) -> URL {
     var box = CGRect(x: 0, y: 0, width: 612, height: 792)
-    let context = CGContext(url as CFURL, mediaBox: &box, nil)!
+    var info: [CFString: Any] = [:]
+    if let userPassword {
+      info[kCGPDFContextUserPassword] = userPassword as CFString
+      info[kCGPDFContextOwnerPassword] = userPassword as CFString
+    }
+    let context = CGContext(url as CFURL, mediaBox: &box, info as CFDictionary)!
     for i in 0..<pages {
       context.beginPDFPage(nil)
       var image = photo(width: 15 * pixelsPerInch / 2, height: 9 * pixelsPerInch, seed: i)

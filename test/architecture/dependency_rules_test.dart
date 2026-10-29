@@ -839,8 +839,12 @@ const v12FlagFiles = <String, Set<String>>{
 
 /// Native and Dart log-call arguments rule 30 accepts although they are not plain literals (exact
 /// source text, trimmed). Each entry must log nothing but counts, ids, status codes or durations;
-/// add one only with a comment naming the call site. Empty: every log is a literal.
-const v12LogFormatAllowList = <String>{};
+/// add one only with a comment naming the call site.
+const v12LogFormatAllowList = <String>{
+  // HOM-31: PdfCompressCoreTests.measured (packages/danaview_pdf/darwin/Tests/Compress/), the XCTest
+  // measurement lines for BUILD_STATE: fixture kinds, preset names and byte counts only.
+  'hom31MeasurementLine',
+};
 
 /// The shipped files of [pkg] with [extensions] (fixture suffix stripped).
 Iterable<SourceFileView> _shippedSources(PackageView pkg, Set<String> extensions) =>
