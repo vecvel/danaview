@@ -19,6 +19,11 @@
 // track otherwise ended 41-49 ms before the video). The exporter trims the AAC track at the
 // video's end (TransformerExport `audioEndUs`). The spec itself is unchanged (no gating, no
 // compositor input: the sequence is audio only and comes after every video sequence).
+// Held source frames (CompositionMapper: a layer whose map runs past its source end holds the last
+// source frame, ARCH §11.5): a MEDIA `hold` item of a layer that is not itself a plan `hold`
+// (pending freeze still) is an image item of [FrameStills]' still of the frame at its clip start,
+// at the output fps like every generated image, with the layer's effects. The still is the exact
+// source frame (FreezeFrameJob's extraction), so the held part shows what live playback holds.
 
 package com.vecvel.danaview.editor.engine.composition
 
@@ -60,7 +65,15 @@ object Media3Composition {
          * this time (µs; silence past the spec's end, file header "Audio tail"). Export only.
          */
         val audioThroughUs: Long? = null,
+        /** Stills of held source frames (file header); without it a held item is `planInvalid`. */
+        val frameStills: FrameStills? = null,
     )
+
+    /** Still images of exact source frames, for held MEDIA items (file header). */
+    fun interface FrameStills {
+        /** A `file://` URI of a still of the video frame of [uri] presented at [ptsUs]. Blocking; throws EngineException. */
+        fun still(uri: String, ptsUs: Long): String
+    }
 
     /** The built composition and the gating settings it uses. */
     class Built(val composition: Composition, val compositorSettings: LayerGatingCompositorSettings, val spec: CompositionSpec) {
@@ -74,7 +87,10 @@ object Media3Composition {
     /** Output sample rate of the composition audio (ARCH §11.6 Audio). */
     const val OUTPUT_SAMPLE_RATE = 48_000
 
-    /** Builds [spec]; throws `planInvalid` for an empty plan or a `hold` layer (export never holds). */
+    /**
+     * Builds [spec]; throws `planInvalid` for an empty plan, a plan `hold` layer (export never
+     * holds) or a held source frame without [Options.frameStills].
+     */
     fun build(
         spec: CompositionSpec,
         images: CompositionImages,
@@ -83,7 +99,7 @@ object Media3Composition {
         options: Options = Options(),
     ): Built {
         if (spec.isEmpty) throw EngineErrors.invalidPlan("an empty plan has nothing to compose")
-        val sequences = spec.sequences.map { sequence(spec, it, images, effects, snapshot) }.toMutableList()
+        val sequences = spec.sequences.map { sequence(spec, it, images, effects, snapshot, options.frameStills) }.toMutableList()
         audioTailUs(spec, options)?.let { sequences += EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO)).addGap(it).build() }
         val settings = LayerGatingCompositorSettings(
             spec,
@@ -162,6 +178,7 @@ object Media3Composition {
         images: CompositionImages,
         effects: EffectChainFactory,
         snapshot: AtomicReference<ParamSnapshot>,
+        stills: FrameStills?,
     ): EditedMediaItemSequence {
         val b = EditedMediaItemSequence.Builder(trackTypes(s.trackTypes))
         for (item in s.items) {
@@ -169,7 +186,7 @@ object Media3Composition {
                 b.addGap(item.durationUs)
                 continue
             }
-            b.addItem(editedItem(spec, s, item, images, effects, snapshot))
+            b.addItem(editedItem(spec, s, item, images, effects, snapshot, stills))
         }
         return b.build()
     }
@@ -193,6 +210,7 @@ object Media3Composition {
         images: CompositionImages,
         effects: EffectChainFactory,
         snapshot: AtomicReference<ParamSnapshot>,
+        stills: FrameStills?,
     ): EditedMediaItem {
         val fps = spec.outputFps
         fun visualEffects(): List<Effect> {
@@ -221,7 +239,13 @@ object Media3Composition {
             )
             ItemKind.IMAGE -> imageItem(requireNotNull(item.uri), item.durationUs, fps, visualEffects())
             ItemKind.MEDIA -> {
-                if (item.hold) throw EngineErrors.invalidPlan("a pending freeze still cannot be composed")
+                if (item.hold) {
+                    val layer = item.layerId?.let { spec.layers[it] }
+                    if (layer == null || layer.hold) throw EngineErrors.invalidPlan("a pending freeze still cannot be composed")
+                    // The layer holds its last source frame past the source end (file header).
+                    val frameStills = stills ?: throw EngineErrors.invalidPlan("a held source frame needs its still")
+                    return imageItem(frameStills.still(requireNotNull(item.uri), item.clipStartUs), item.durationUs, fps, visualEffects())
+                }
                 val sourceDuration = item.sourceDurationUs ?: throw EngineErrors.invalidPlan("media duration unknown")
                 val mediaItem = MediaItem.Builder()
                     .setUri(requireNotNull(item.uri).toUri())
