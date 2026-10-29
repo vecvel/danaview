@@ -47,9 +47,16 @@
 #                                e.g. RunnerTests/ChannelRoundTripTests; comma-separated for several,
 #                                e.g. RunnerTests/A,RunnerTests/B). Failure messages of step
 #                                6 are printed from its result bundle (example/build/RunnerTests.xcresult)
+#   DV_PERF_STRICT=1             absolute timing budgets (a quiet dev Mac): forwarded to RunnerTests
+#                                as TEST_RUNNER_DV_PERF_STRICT (Support/PerfGate.swift) and to the
+#                                step-7/8 suites as --dart-define=DV_PERF_STRICT=1
 #   DANAVIEW_IOS_DRY_RUN=1       print the step-7/8 commands (and check the inputs) without a
 #                                toolchain, a build or a simulator
 set -euo pipefail
+
+# Absolute timing budgets of the RunnerTests only with DV_PERF_STRICT=1 (xcodebuild hands
+# TEST_RUNNER_<name> to the test process as <name>).
+if [ "${DV_PERF_STRICT:-}" = 1 ]; then export TEST_RUNNER_DV_PERF_STRICT=1; fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CI_DIR="$ROOT/scripts/ci/editor"
@@ -109,6 +116,7 @@ suite_file() {
 # suite_defines <suite>: one --dart-define per line (QA-03 reads the ENG-05 media from the host's
 # disk; an iOS simulator reads host paths directly).
 suite_defines() {
+  if [ "${DV_PERF_STRICT:-}" = 1 ]; then echo "--dart-define=DV_PERF_STRICT=1"; fi
   case "$1" in
     accuracy | av_sync) echo "--dart-define=QA03_MEDIA=$MEDIA" ;;
     parity)
