@@ -418,6 +418,17 @@ final class LibraryWriter {
     _writeMeta(entryId, meta);
   }
 
+  /// Records [entryId]'s page count, keeping its other facts (FIX-S3Q-4's backfill).
+  void setPageCount(EntryId entryId, int pageCount) {
+    _writable();
+    _liveEntry(entryId);
+    db.execute(
+      'INSERT INTO entry_meta(entry_id, page_count, flags) VALUES (?, ?, 0) '
+      'ON CONFLICT(entry_id) DO UPDATE SET page_count = excluded.page_count',
+      [entryId.value, pageCount],
+    );
+  }
+
   void _writeMeta(EntryId id, EntryMeta meta) {
     db.execute(
       'INSERT OR REPLACE INTO entry_meta(entry_id, width, height, duration_us, fps, codec, page_count, taken_at, camera, flags) '

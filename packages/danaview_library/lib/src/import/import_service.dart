@@ -33,6 +33,7 @@ import '../model/file_kind.dart';
 import '../model/ids.dart';
 import '../store/library_store.dart';
 import '../store/library_writer.dart';
+import 'document_facts.dart';
 import 'import_copier.dart';
 import 'import_source.dart';
 import 'photo_facts.dart';
@@ -201,15 +202,18 @@ final class _Work {
 final class ImportService {
   /// A service over [store]. [copiers] are asked in order which one reads a source (local files
   /// by default; the app adds the native copier for platform URIs). [onImported] runs for every
-  /// new entry; [release] gives up security-scoped grants.
+  /// new entry; [release] gives up security-scoped grants; [countPages] reads a PDF's page count
+  /// before the commit (FIX-S3Q-4; none: no page count is recorded).
   ImportService({
     required this.store,
     List<ImportCopier> copiers = const [FileImportCopier()],
     List<ImportHook> onImported = const [],
     ImportReleaser? release,
+    DocumentPageCounter? countPages,
   })  : _copiers = List.unmodifiable(copiers),
         _hooks = List.of(onImported),
-        _release = release;
+        _release = release,
+        _countPages = countPages;
 
   /// The library.
   final LibraryStore store;
@@ -217,6 +221,7 @@ final class ImportService {
   final List<ImportCopier> _copiers;
   final List<ImportHook> _hooks;
   final ImportReleaser? _release;
+  final DocumentPageCounter? _countPages;
   final List<_Work> _queue = [];
   final StreamController<List<ImportItem>> _updates = StreamController<List<ImportItem>>.broadcast(sync: true);
   int _next = 0;
@@ -522,7 +527,13 @@ final class ImportService {
     final kind = classify(uti: source.uti, mime: source.mime, fileName: name);
     // Photo facts (size, date taken, camera, orientation) from the copy's header, written in the
     // commit's transaction (FIX-S2Q-3). Read-only, bounded, never throws.
-    final meta = kind.kind == FileKind.photo ? photoEntryMeta(partPath, fileName: name) : null;
+    // A PDF's page count, read by the platform's PDF reader off the UI isolate (FIX-S3Q-4);
+    // bounded, never throws.
+    final meta = kind.kind == FileKind.photo
+        ? photoEntryMeta(partPath, fileName: name)
+        : await documentEntryMeta(partPath, kind, _countPages);
+    if (_disposed) return;
+    if (w.cancelRequested) return _fail(w, ImportFailure.cancelled);
     final FileEntry entry;
     try {
       entry = await store.write(_commitOp(
