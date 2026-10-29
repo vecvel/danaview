@@ -301,7 +301,7 @@ class _ModelRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: DanaviewSpacing.sm),
         child: Row(
           children: [
-            DanaviewTileIcon(
+            DanaviewIconTile(
               installed ? Icons.record_voice_over_rounded : Icons.cloud_outlined,
               size: 36,
               color: offer.available ? (installed ? DanaviewColors.success : DanaviewColors.textSecondary) : DanaviewColors.textMuted,
@@ -369,7 +369,7 @@ class _LayoutSetting extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const DanaviewTileIcon(Icons.subtitles_rounded, color: DanaviewColors.primaryLight, size: 40),
+                const DanaviewIconTile(Icons.subtitles_rounded, size: 40),
                 const SizedBox(width: DanaviewSpacing.md),
                 Expanded(
                   child: Column(

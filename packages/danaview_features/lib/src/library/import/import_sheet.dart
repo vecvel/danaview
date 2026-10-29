@@ -137,7 +137,7 @@ class _ImportSheetState extends ConsumerState<ImportSheet> {
         DanaviewSurface(
           child: DanaviewListTile(
             key: const ValueKey('import-target'),
-            leading: const DanaviewTileIcon(Icons.folder_outlined),
+            leading: const DanaviewIconTile(Icons.folder_outlined),
             title: targetName,
             subtitle: 'Save to',
             showChevron: true,
@@ -329,10 +329,10 @@ class _FolderChooser extends StatelessWidget {
       return DanaviewListTile(
         key: ValueKey('import-folder-${id?.value ?? 'imported'}'),
         padding: EdgeInsetsDirectional.only(start: 12 + 16.0 * (depth > 4 ? 4 : depth), end: 12, top: 6, bottom: 6),
-        leading: DanaviewTileIcon(f == null ? Icons.move_to_inbox_outlined : Icons.folder_outlined),
+        leading: DanaviewIconTile(f == null ? Icons.move_to_inbox_outlined : Icons.folder_outlined),
         title: name,
         selected: isSelected,
-        trailing: isSelected ? const Icon(Icons.check_rounded, size: 20, color: DanaviewColors.primaryLight) : null,
+        trailing: isSelected ? const Icon(Icons.check_rounded, size: 20) : null,
         semanticLabel: 'Save to $name',
         onTap: () => Navigator.of(context).pop(_FolderChoice(id)),
       );

@@ -5,6 +5,12 @@
     "dart": "3.12.2"
   },
   "mode": "aot",
+  "calibrationUs": {
+    "compute": 1243,
+    "codec": 3932,
+    "planEncode": 2640,
+    "autosave": 850
+  },
   "metrics": {
     "apply_1000": {
       "label": "apply one lane at 1,000 items",

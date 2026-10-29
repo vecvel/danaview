@@ -231,10 +231,13 @@ void main() {
       h.runtime.transcribeScript = (job) async {
         job.chunk(0, [fixtureSegments.first]);
         job.status(chunksCompleted: 1, processed: const Duration(seconds: 3), fraction: 0.3);
-        await settle();
-        final replay = await h.service.checkpoints.replay(h.key());
-        expect(replay, isNotNull);
-        expect(replay!.chunks.single.segments.single.text, 'Welcome to the harbour tour.');
+        // The chunk's checkpoint is appended through real file I/O while the job keeps running:
+        // wait for the write itself (a whole chunk line), not a fixed number of event-loop turns.
+        final replay = await eventually(() async {
+          final r = await h.service.checkpoints.replay(h.key());
+          return r == null || r.chunks.isEmpty ? null : r;
+        });
+        expect(replay.chunks.single.segments.single.text, 'Welcome to the harbour tour.');
         running!.cancel();
       };
       running = h.start().$1;
@@ -356,8 +359,10 @@ void main() {
     test('a failed download surfaces as its typed failure', () async {
       h.store.ready.remove(SpeechModelCatalog.balanced.id);
       final download = h.store.beginDownload(SpeechModelCatalog.balanced.id);
-      final job = h.start().$1;
-      await settle();
+      final (job, samples) = h.start();
+      // Fail the download while the job waits on it (a fixed settle() raced the job's prologue on
+      // a slow runner, so the failure landed before the job listened).
+      await until(() => samples.any((s) => s.phase == TranscriptionPhase.downloadingModel));
       download.completer.completeError(const ModelDownloadFailure(ModelDownloadFailureKind.offline));
       await expectLater(job.result, throwsA(isA<ModelDownloadFailure>().having((f) => f.kind, 'kind', ModelDownloadFailureKind.offline)));
     });

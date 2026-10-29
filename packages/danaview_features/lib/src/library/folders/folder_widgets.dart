@@ -56,7 +56,7 @@ class DanaviewFolderRow extends StatelessWidget {
     return KeyedSubtree(
       key: ValueKey('danaview-folder-${folder.id.value}'),
       child: DanaviewLibraryRow(
-        leading: const DanaviewTileIcon.glyph(DanaviewGlyphKind.folder, color: DanaviewColors.primaryLight, size: 40),
+        leading: const DanaviewIconTile.glyph(DanaviewGlyphKind.folder),
         title: folder.name,
         subtitle: subtitle ?? (folder.isSystem ? 'Danaview folder · kept by Danaview' : 'Danaview folder'),
         semanticLabel: 'Folder ${folder.name}',
@@ -173,7 +173,7 @@ class RecentlyDeletedEntryRow extends StatelessWidget {
     final subtitle = itemCount == 0 ? 'Empty' : '${formatCount(itemCount, 'item')} · ${formatFileSize(usage.trashedBytes)}';
     return DanaviewLibraryRow(
       key: const ValueKey('recently-deleted-row'),
-      leading: const DanaviewTileIcon(Icons.delete_outline_rounded, color: DanaviewColors.textSecondary, size: 40),
+      leading: const DanaviewIconTile(Icons.delete_outline_rounded, color: DanaviewColors.textSecondary),
       title: 'Recently deleted',
       subtitle: subtitle,
       semanticLabel: 'Recently deleted, $subtitle',
@@ -209,8 +209,8 @@ class TrashedItemRow extends StatelessWidget {
       key: ValueKey('trashed-${item.id.value}'),
       child: DanaviewLibraryRow(
         leading: item.isFolder
-            ? const DanaviewTileIcon.glyph(DanaviewGlyphKind.folder, color: DanaviewColors.textSecondary, size: 40)
-            : DanaviewTileIcon(Icons.insert_drive_file_outlined, color: DanaviewColors.textSecondary, size: 40),
+            ? const DanaviewIconTile.glyph(DanaviewGlyphKind.folder, color: DanaviewColors.textSecondary)
+            : DanaviewIconTile(Icons.insert_drive_file_outlined, color: DanaviewColors.textSecondary),
         title: item.name,
         subtitle: subtitle,
         semanticLabel: '${item.isFolder ? 'Folder' : 'File'} ${item.name}, $subtitle',
@@ -295,7 +295,7 @@ class _LinkedFoldersGroupState extends ConsumerState<LinkedFoldersGroup> {
           'Linked folders',
           prominent: true,
           action: canPickFolders && roots.isNotEmpty
-              ? DanaviewButton.ghost(label: 'Add', icon: Icons.add_rounded, size: DanaviewButtonSize.sm, onPressed: _addFolder)
+              ? DanaviewButton.text(label: 'Add', size: DanaviewButtonSize.sm, onPressed: _addFolder)
               : null,
         ),
         if (!state.hasLoaded)
@@ -303,13 +303,12 @@ class _LinkedFoldersGroupState extends ConsumerState<LinkedFoldersGroup> {
         else if (roots.isEmpty)
           DanaviewInlineEmpty(
             glyph: DanaviewGlyphKind.folderVideo,
-            iconColor: DanaviewColors.primaryLight,
             title: 'No folders yet',
             message: canPickFolders
                 ? 'Add a folder to browse its videos here. Nothing is copied or moved.'
                 : 'Use Open file to add videos from your device.',
             action: canPickFolders
-                ? DanaviewButton.tonal(label: 'Add folder', glyph: DanaviewGlyphKind.folderAdd, size: DanaviewButtonSize.sm, onPressed: _addFolder)
+                ? DanaviewButton.secondary(label: 'Add folder', glyph: DanaviewGlyphKind.folderAdd, size: DanaviewButtonSize.sm, onPressed: _addFolder)
                 : null,
           )
         else
@@ -323,7 +322,7 @@ class _LinkedFoldersGroupState extends ConsumerState<LinkedFoldersGroup> {
   Widget _row(domain.LibraryFolder folder) {
     if (folder.isDevice) {
       return DanaviewLibraryRow(
-        leading: const DanaviewTileIcon.glyph(DanaviewGlyphKind.device, color: DanaviewColors.cyan, size: 40),
+        leading: const DanaviewIconTile.glyph(DanaviewGlyphKind.device),
         title: folder.label,
         subtitle: Theme.of(context).platform == TargetPlatform.iOS
             ? 'Files app › ${data.LibraryStorage.iosFilesLocation(tablet: data.LibraryStorage.isTabletWidth(MediaQuery.sizeOf(context).shortestSide))}'
@@ -332,12 +331,12 @@ class _LinkedFoldersGroupState extends ConsumerState<LinkedFoldersGroup> {
         onTap: () => widget.onOpenFolder(folder.path),
         trailing: const Padding(
           padding: EdgeInsets.all(DanaviewSpacing.sm),
-          child: Icon(Icons.chevron_right_rounded, size: 22, color: DanaviewColors.textMuted),
+          child: Icon(Icons.chevron_right_rounded, size: 20, color: DanaviewColors.chevron),
         ),
       );
     }
     return DanaviewLibraryRow(
-      leading: const DanaviewTileIcon.glyph(DanaviewGlyphKind.folderVideo, size: 40),
+      leading: const DanaviewIconTile.glyph(DanaviewGlyphKind.folderVideo),
       title: folder.label,
       subtitle: folder.path,
       onTap: () => widget.onOpenFolder(folder.path),

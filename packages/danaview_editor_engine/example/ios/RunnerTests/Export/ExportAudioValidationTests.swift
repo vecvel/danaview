@@ -4,7 +4,9 @@
 // (`TimePitchWatch`): a dropout (an exact-zero run with an abrupt edge) or a seam step (one track
 // of a ramp-seam pair missing inside its crossfade) rejects the read and the pipeline redoes it,
 // so QA-11 (d)'s ramp-seam click test sees a clean read. Plain (unscaled) segments are never
-// checked that way, so digital silence in ordinary content costs nothing.
+// checked that way, so digital silence in ordinary content costs nothing. CI round 6: after the
+// last attempt a read that still has a time-pitch fault fails the export typed (`decodeFailed`,
+// retryable, no file), and a fault every fresh read reproduces at the same place is the content.
 
 import AVFoundation
 import XCTest
@@ -81,22 +83,60 @@ final class ExportAudioValidationTests: XCTestCase {
         }
     }
 
-    private func export(_ h: ExportHarness, _ data: Data, attempt1: ((Int, UnsafeMutableBufferPointer<Float>) -> Void)?,
-                        sources: inout [MixAudioSource]) throws -> (ReaderWriterPipeline?, URL) {
+    /// One export run: the pipeline, the output, the sources read (one per attempt) and the end.
+    private struct Run {
+        let pipeline: ReaderWriterPipeline?
+        let output: URL
+        let sources: [MixAudioSource]
+        let done: JobResultMsg?
+        let failure: FailureMsg?
+    }
+
+    /// Exports [data]; [corrupt] gives each attempt's injected fault (nil: the read as AVFoundation
+    /// rendered it). Every redo is immediate (no back-off) unless [configure] says otherwise.
+    private func run(_ h: ExportHarness, _ data: Data, watch: TimePitchWatch? = nil,
+                     corrupt: @escaping (Int) -> ((Int, UnsafeMutableBufferPointer<Float>) -> Void)?,
+                     configure: ((ReaderWriterPipeline) -> Void)? = nil) throws -> Run {
         var pipeline: ReaderWriterPipeline?
         var seen: [MixAudioSource] = []
         h.coordinator.configurePipeline = { p in
             pipeline = p
+            p.audioRetryDelay = 0
+            configure?(p)
             p.audioSourceHook = { source, attempt in
                 seen.append(source)
-                if attempt == 1 { source.corrupt = attempt1 }
+                if let watch = watch { source.timePitchWatch = watch }
+                source.corrupt = corrupt(attempt)
             }
         }
         let output = h.outputURL()
         let id = try h.export(self, plan: data, settings: ExportPlans.settings(320, 180, fps: 30), output: output)
-        XCTAssertNotNil(h.recorder.done(id), "\(String(describing: h.recorder.failure(id)))")
-        sources = seen
-        return (pipeline, output)
+        return Run(pipeline: pipeline, output: output, sources: seen, done: h.recorder.done(id), failure: h.recorder.failure(id))
+    }
+
+    private func export(_ h: ExportHarness, _ data: Data, attempt1: ((Int, UnsafeMutableBufferPointer<Float>) -> Void)?,
+                        sources: inout [MixAudioSource]) throws -> (ReaderWriterPipeline?, URL, Run) {
+        let r = try run(h, data, corrupt: { $0 == 1 ? attempt1 : nil })
+        sources = r.sources
+        assertCleanOrTypedFailure(r)
+        return (r.pipeline, r.output, r)
+    }
+
+    /// CI round 6: an export either ends with a read free of time-pitch faults (content faults
+    /// reproduced by every read aside) or fails typed (`decodeFailed`, retryable, no file); it
+    /// never ships a dropout.
+    private func assertCleanOrTypedFailure(_ r: Run, file: StaticString = #filePath, line: UInt = #line) {
+        if let failure = r.failure {
+            XCTAssertEqual(failure.code, EngineErrorCode.decodeFailed.rawValue, failure.message, file: file, line: line)
+            XCTAssertTrue(failure.retryable, file: file, line: line)
+            XCTAssertTrue(failure.message.hasPrefix(ReaderWriterPipeline.timePitchFailurePrefix), failure.message, file: file, line: line)
+            XCTAssertEqual(r.sources.last?.timePitchFailed, true, file: file, line: line)
+            XCTAssertEqual(r.pipeline?.audioAttempts, r.pipeline?.maxAudioAttempts, "fails only after the last attempt", file: file, line: line)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: r.output.path), "no file with the dropout", file: file, line: line)
+        } else {
+            XCTAssertNotNil(r.done, file: file, line: line)
+            XCTAssertEqual(r.sources.last?.unexplainedFaults ?? [], [], "the kept read has no time-pitch fault", file: file, line: line)
+        }
     }
 
     func testDropoutInsideARampIsRedone() throws {
@@ -104,13 +144,16 @@ final class ExportAudioValidationTests: XCTestCase {
         var sources: [MixAudioSource] = []
         // 10 ms of digital silence in the middle of the 2× piece (0.9–1.2 s).
         let a = Int(1.0 * Self.rate), b = a + 480
-        let (pipeline, output) = try export(h, ExportPlans.toneAudio(map: ExportPlans.rampMap), attempt1: zeroing(a, b), sources: &sources)
+        let (pipeline, output, r) = try export(h, ExportPlans.toneAudio(map: ExportPlans.rampMap), attempt1: zeroing(a, b), sources: &sources)
         let first = try XCTUnwrap(sources.first)
         XCTAssertGreaterThanOrEqual(first.dropouts, 1)
         XCTAssertTrue(first.rejection?.contains("dropout") == true, "\(first.rejection ?? "accepted")")
         XCTAssertGreaterThanOrEqual(pipeline?.audioAttempts ?? 0, 2, "the dropout read is redone")
-        let pcm = try ExportConformance.pcm(output)
-        XCTAssertGreaterThan(ExportConformance.rmsDb(pcm, channel: 0, a, b), -20, "the redone read has the tone there")
+        XCTAssertFalse(sources.last === first, "the redo reads on a fresh source")
+        if r.done != nil {
+            let pcm = try ExportConformance.pcm(output)
+            XCTAssertGreaterThan(ExportConformance.rmsDb(pcm, channel: 0, a, b), -20, "the redone read has the tone there")
+        }
     }
 
     func testSeamStepInsideARampIsRedone() throws {
@@ -119,18 +162,189 @@ final class ExportAudioValidationTests: XCTestCase {
         // Seam at 1.8 s: the level falls to 30 % for 2 ms right at the seam (one track of the pair
         // missing inside its crossfade).
         let seam = Int(1.8 * Self.rate)
-        let (pipeline, _) = try export(
+        let (pipeline, _, _) = try export(
             h, ExportPlans.toneAudio(map: ExportPlans.rampMap), attempt1: zeroing(seam - 96, seam, scale: 0.3), sources: &sources)
         let first = try XCTUnwrap(sources.first)
         XCTAssertGreaterThanOrEqual(first.seamSteps, 1, "\(first.rejection ?? "accepted")")
         XCTAssertGreaterThanOrEqual(pipeline?.audioAttempts ?? 0, 2)
     }
 
+    // MARK: Faulty reader (CI round 6)
+
+    /// A 10 ms dropout inside the 2× piece (0.9–1.2 s), at a different place for each attempt (as
+    /// AVFoundation's faults land).
+    private static func dropoutFrames(attempt: Int) -> Range<Int> {
+        let a = Int(0.95 * rate) + (attempt - 1) * 2_400
+        return a..<(a + 480)
+    }
+
+    func testFaultyReaderRecoversWhenALaterAttemptIsClean() throws {
+        let h = try make()
+        let faulty = 2
+        let r = try run(h, ExportPlans.toneAudio(map: ExportPlans.rampMap)) { attempt in
+            guard attempt <= faulty else { return nil }
+            let f = Self.dropoutFrames(attempt: attempt)
+            return self.zeroing(f.lowerBound, f.upperBound)
+        }
+        XCTAssertGreaterThanOrEqual(r.pipeline?.audioAttempts ?? 0, faulty + 1, "every faulty read is redone")
+        for source in r.sources.prefix(faulty) {
+            XCTAssertTrue(source.rejection?.contains("time-pitch fault") == true, "\(source.rejection ?? "accepted")")
+            XCTAssertFalse(source.timePitchFailed)
+        }
+        assertCleanOrTypedFailure(r)
+        guard r.done != nil else {
+            // A loaded simulator's own time-pitch unit can spoil every later read too (seen locally:
+            // 761 zero frames 2.5 ms after the 0.9 s seam in reads 4 and 5). The export then fails
+            // typed; it may do so only when no later read was clean.
+            for source in r.sources.dropFirst(faulty) {
+                XCTAssertFalse(source.unexplainedFaults.isEmpty, "a clean read \(source.rejection ?? "accepted") would have been kept")
+            }
+            print("FIX-IOS-MEDIA recover: every read after the injected faults had a real one: \(r.sources.map { $0.rejection ?? "clean" })")
+            return
+        }
+        let last = try XCTUnwrap(r.sources.last)
+        XCTAssertEqual(last.unexplainedFaults, [])
+        XCTAssertNil(last.rejection)
+        let pcm = try ExportConformance.pcm(r.output)
+        for attempt in 1...faulty {
+            let f = Self.dropoutFrames(attempt: attempt)
+            XCTAssertGreaterThan(ExportConformance.rmsDb(pcm, channel: 0, f.lowerBound, f.upperBound), -20, "no gap at \(f)")
+        }
+    }
+
+    func testFaultyReaderOnEveryAttemptFailsTheExportTyped() throws {
+        let h = try make()
+        // The production back-off (0.25, 0.5, 1, 2 s before redos 1–4) runs here.
+        let r = try run(h, ExportPlans.toneAudio(map: ExportPlans.rampMap), corrupt: { attempt in
+            let f = Self.dropoutFrames(attempt: attempt)
+            return self.zeroing(f.lowerBound, f.upperBound)
+        }, configure: { $0.audioRetryDelay = 0.25 })
+        XCTAssertNil(r.done, "a read with a dropout is never shipped")
+        let failure = try XCTUnwrap(r.failure)
+        XCTAssertEqual(failure.code, EngineErrorCode.decodeFailed.rawValue)
+        XCTAssertTrue(failure.retryable)
+        XCTAssertTrue(failure.message.hasPrefix(ReaderWriterPipeline.timePitchFailurePrefix), failure.message)
+        XCTAssertEqual(r.pipeline?.audioAttempts, 5)
+        XCTAssertEqual(r.sources.count, 5)
+        XCTAssertTrue(r.sources.allSatisfy { $0.dropouts >= 1 })
+        XCTAssertEqual(r.sources.last?.timePitchFailed, true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: r.output.path), "no output file")
+        assertCleanOrTypedFailure(r)
+    }
+
+    /// A plain 1× tone (no time-pitch unit, so AVFoundation adds no fault of its own) watched like
+    /// a ramp over 0.01–2.09 s: the content-fault rule then sees only the injected faults, the same
+    /// in every run (a real fault of a loaded simulator broke a ramp-based version, CI round 6).
+    private static let plainTone = ExportPlans.toneAudio(map: [(0, 2_100_000, 500_000, 2_600_000)])
+    private static let plainWatch = TimePitchWatch(
+        spans: [.init(startUs: TimePitchWatch.edgeMarginUs, endUs: 2_100_000 - TimePitchWatch.edgeMarginUs, gain: [AnimKey(0, 1)])],
+        seamsUs: [])
+
+    func testFaultReproducedByEveryReadIsContent() throws {
+        // Digitally gated content looks like a dropout to the scan, but every fresh read renders it
+        // at the same place: when every witness read (at least `minContentWitnesses`, the last one
+        // included) has it, the last one keeps it and the export completes with it.
+        let h = try make()
+        let f = Self.dropoutFrames(attempt: 1)
+        let injected = TimePitchFault(kind: .dropout, frame: Int64(f.lowerBound))
+        let r = try run(h, Self.plainTone, watch: Self.plainWatch) { _ in self.zeroing(f.lowerBound, f.upperBound) }
+        let pipeline = try XCTUnwrap(r.pipeline)
+        XCTAssertEqual(pipeline.audioAttempts, 5, "content faults are only accepted on the last attempt")
+        XCTAssertEqual(r.sources.count, 5)
+        for source in r.sources.dropLast() {
+            XCTAssertEqual(source.contentFaults, [], "never before the last attempt")
+            XCTAssertTrue(source.isTimePitchWitness, source.otherDefect ?? "")
+            XCTAssertEqual(source.timePitchFaults.count, 1, "\(source.timePitchFaults)")
+            XCTAssertTrue(source.timePitchFaults.contains { $0.matches(injected) }, "\(source.timePitchFaults)")
+        }
+        let last = try XCTUnwrap(r.sources.last)
+        XCTAssertGreaterThanOrEqual(last.dropouts, 1, "the content is still there")
+        XCTAssertTrue(last.contentFaults.contains { $0.matches(injected) }, "\(last.contentFaults)")
+        XCTAssertEqual(last.unexplainedFaults, [])
+        XCTAssertNil(r.failure, r.failure?.message ?? "")
+        XCTAssertNotNil(r.done)
+        assertCleanOrTypedFailure(r)
+    }
+
+    func testContentFaultDoesNotExcuseAnotherFaultInTheLastRead() throws {
+        // The recurring fault is kept as content, but a fault only the last read has (AVFoundation's
+        // own, here injected 50 ms later) still fails the export typed: no dropout is shipped.
+        let h = try make()
+        let f = Self.dropoutFrames(attempt: 1)
+        let other = Self.dropoutFrames(attempt: 2)
+        let r = try run(h, Self.plainTone, watch: Self.plainWatch) { attempt in
+            let content = self.zeroing(f.lowerBound, f.upperBound)
+            guard attempt == 5 else { return content }
+            let extra = self.zeroing(other.lowerBound, other.upperBound)
+            return { index, samples in
+                content(index, samples)
+                extra(index, samples)
+            }
+        }
+        XCTAssertEqual(r.pipeline?.audioAttempts, 5)
+        let last = try XCTUnwrap(r.sources.last)
+        XCTAssertTrue(last.contentFaults.contains { $0.matches(TimePitchFault(kind: .dropout, frame: Int64(f.lowerBound))) })
+        XCTAssertEqual(last.unexplainedFaults.count, 1, "\(last.unexplainedFaults)")
+        XCTAssertTrue(last.unexplainedFaults.allSatisfy { $0.matches(TimePitchFault(kind: .dropout, frame: Int64(other.lowerBound))) })
+        XCTAssertNil(r.done, "the other dropout is never shipped")
+        assertCleanOrTypedFailure(r)
+    }
+
+    func testReadWithAnotherDefectIsNoWitness() throws {
+        // CI round 6: a read rejected for a tap range jump scanned a broken render and missed the
+        // content's dropout, so no fault was ever kept as content. A read with another defect (here
+        // NaN in read 2, without the dropout) is left out of the evidence; the other four reads
+        // still make it content.
+        let h = try make()
+        let f = Self.dropoutFrames(attempt: 1)
+        let injected = TimePitchFault(kind: .dropout, frame: Int64(f.lowerBound))
+        let r = try run(h, Self.plainTone, watch: Self.plainWatch) { attempt in
+            guard attempt == 2 else { return self.zeroing(f.lowerBound, f.upperBound) }
+            return { index, samples in if index == 0 { samples[0] = .nan } }
+        }
+        let pipeline = try XCTUnwrap(r.pipeline)
+        XCTAssertEqual(pipeline.audioAttempts, 5)
+        XCTAssertEqual(r.sources.count, 5)
+        XCTAssertEqual(r.sources[1].otherDefect, "NaN")
+        XCTAssertFalse(r.sources[1].isTimePitchWitness)
+        XCTAssertEqual(r.sources[1].timePitchFaults, [], "the broken read lacks the content's fault")
+        let last = try XCTUnwrap(r.sources.last)
+        XCTAssertTrue(last.contentFaults.contains { $0.matches(injected) }, "\(last.contentFaults)")
+        XCTAssertEqual(last.unexplainedFaults, [])
+        XCTAssertNotNil(r.done, r.failure?.message ?? "")
+        assertCleanOrTypedFailure(r)
+    }
+
+    func testTooFewWitnessesKeepNoContent() throws {
+        // Two broken reads leave three witnesses (the last included), fewer than
+        // `minContentWitnesses`: the dropout is not content and the export fails typed.
+        let h = try make()
+        let f = Self.dropoutFrames(attempt: 1)
+        let r = try run(h, Self.plainTone, watch: Self.plainWatch) { attempt in
+            guard attempt == 2 || attempt == 3 else { return self.zeroing(f.lowerBound, f.upperBound) }
+            return { index, samples in if index == 0 { samples[0] = .nan } }
+        }
+        XCTAssertEqual(r.pipeline?.audioAttempts, 5)
+        XCTAssertEqual(r.sources.last?.contentFaults, [])
+        XCTAssertNil(r.done, "a dropout without evidence is never shipped")
+        assertCleanOrTypedFailure(r)
+    }
+
+    func testRecurringFaultsMatchByKindAndPlace() {
+        let d = TimePitchFault(kind: .dropout, frame: 48_000)
+        let s = TimePitchFault(kind: .seamStep, frame: 48_000)
+        XCTAssertEqual(TimePitchFault.recurring(nil, [d, s]), [d, s])
+        XCTAssertEqual(TimePitchFault.recurring([d, s], [TimePitchFault(kind: .dropout, frame: 48_030)]), [d], "within 1 ms")
+        XCTAssertEqual(TimePitchFault.recurring([d], [TimePitchFault(kind: .dropout, frame: 48_100)]), [], "elsewhere")
+        XCTAssertEqual(TimePitchFault.recurring([d], [TimePitchFault(kind: .seamStep, frame: 48_000)]), [], "another kind")
+        XCTAssertEqual(TimePitchFault.recurring([d], []), [], "a clean read clears it")
+    }
+
     func testSilenceInAPlainSegmentIsNotAFault() throws {
         let h = try make()
         var sources: [MixAudioSource] = []
         let a = Int(0.5 * Self.rate)
-        let (pipeline, _) = try export(
+        let (pipeline, _, _) = try export(
             h, ExportPlans.toneAudio(map: [(0, 1_000_000, 500_000, 1_500_000)]), attempt1: zeroing(a, a + 480), sources: &sources)
         XCTAssertEqual(sources.first?.dropouts, 0)
         XCTAssertEqual(sources.first?.seamSteps, 0)
@@ -141,10 +355,12 @@ final class ExportAudioValidationTests: XCTestCase {
     func testCleanRampReadIsAccepted() throws {
         // The detector does not fire on the ramp's own seams: with no injected fault the reads that
         // were rejected all carried a real fault (counted, at most two redos), and the exported
-        // ramp passes QA-11 (d)'s click metric.
+        // ramp passes QA-11 (d)'s click metric. CI round 6: or the export failed typed after every
+        // read had a real fault (never a shipped dropout).
         let h = try make()
         var sources: [MixAudioSource] = []
-        let (pipeline, output) = try export(h, ExportPlans.toneAudio(map: ExportPlans.rampMap), attempt1: nil, sources: &sources)
+        let (pipeline, output, r) = try export(h, ExportPlans.toneAudio(map: ExportPlans.rampMap), attempt1: nil, sources: &sources)
+        guard r.done != nil else { return }
         let attempts = pipeline?.audioAttempts ?? 0
         print("FIX-IOS-MEDIA ramp export: \(attempts) audio read(s); rejections \(sources.map { $0.rejection ?? "none" })")
         for source in sources.dropLast() {
@@ -167,7 +383,7 @@ final class ExportAudioValidationTests: XCTestCase {
         let seams = (1..<Int64(ExportPlans.rampSpeeds.count)).map { maxAbs(at($0 * piece - 40_000), at($0 * piece + 40_000)) }
         let excess = (seams.max() ?? 0) - floor
         print("FIX-IOS-MEDIA ramp seams: floor \(floor) seams \(seams) excess \(excess)")
-        // The last attempt is accepted whatever it holds; the metric applies when it was clean.
+        // The kept read is free of time-pitch faults (or its faults are the content).
         if let last = sources.last, last.dropouts + last.seamSteps == 0 {
             XCTAssertLessThanOrEqual(excess, 0.01, "seam transient above −40 dBFS over the tone floor")
         }

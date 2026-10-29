@@ -229,7 +229,7 @@ class _SeekBarPainter extends CustomPainter {
     if (abLoop != null && durMs > 0) {
       final a = (abLoop!.a.inMilliseconds / durMs).clamp(0.0, 1.0);
       final b = abLoop!.b != null ? (abLoop!.b!.inMilliseconds / durMs).clamp(0.0, 1.0) : 1.0;
-      if (b > a) canvas.drawRRect(bar(a, b), Paint()..color = DanaviewColors.cyan.withValues(alpha: 0.35));
+      if (b > a) canvas.drawRRect(bar(a, b), Paint()..color = DanaviewColors.primaryLight.withValues(alpha: 0.35));
     }
 
     if (bufferFraction > 0) {

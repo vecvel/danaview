@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/danaview_depth.dart';
 import '../theme/danaview_theme.dart';
 import '../theme/danaview_tokens.dart';
 import 'danaview_icon_button.dart';
@@ -26,6 +27,7 @@ class DanaviewTextField extends StatefulWidget {
     this.onChanged,
     this.onSubmitted,
     this.semanticLabel,
+    this.trailing,
   });
 
   final TextEditingController? controller;
@@ -48,6 +50,9 @@ class DanaviewTextField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final String? semanticLabel;
+
+  /// Compact widget after the text (and the clear button), e.g. a mic glyph on a search field.
+  final Widget? trailing;
 
   @override
   State<DanaviewTextField> createState() => _DanaviewTextFieldState();
@@ -106,15 +111,20 @@ class _DanaviewTextFieldState extends State<DanaviewTextField> {
     // Focus shows as the tinted fill and errors as the message below; the outline stays a neutral
     // hairline in every state.
     const border = DanaviewBorders.hairline;
-    final fill = focused ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevatedHigher;
+    final fill = focused ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevated;
 
     final field = AnimatedContainer(
       duration: DanaviewMotion.fast,
       curve: DanaviewMotion.curve,
-      constraints: const BoxConstraints(minHeight: DanaviewSpacing.minTapTarget),
-      padding: EdgeInsets.only(left: widget.prefixIcon != null ? 10 : 12, right: showClear ? 2 : 12),
-      decoration: BoxDecoration(color: fill, borderRadius: DanaviewRadius.mdAll),
-      foregroundDecoration: BoxDecoration(borderRadius: DanaviewRadius.mdAll, border: Border.fromBorderSide(border)),
+      constraints: const BoxConstraints(minHeight: DanaviewSpacing.controlHeight),
+      padding: EdgeInsets.only(
+        left: widget.prefixIcon != null ? 10 : 12,
+        right: showClear || widget.trailing != null ? 2 : 12,
+      ),
+      decoration: ShapeDecoration(color: fill, shape: DanaviewDepth.shape(DanaviewRadius.controlAll)),
+      foregroundDecoration: ShapeDecoration(
+        shape: DanaviewDepthBorder(borderRadius: DanaviewRadius.controlAll, side: border, highlight: DanaviewColors.highlight),
+      ),
       child: Row(
         children: [
           if (widget.prefixIcon != null) ...[
@@ -175,6 +185,7 @@ class _DanaviewTextFieldState extends State<DanaviewTextField> {
               semanticLabel: 'Clear',
               onPressed: _clear,
             ),
+          if (widget.trailing != null) widget.trailing!,
         ],
       ),
     );

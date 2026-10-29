@@ -263,6 +263,8 @@ class ReverseJob(private val ctx: EngineContext) {
         val latch = CountDownLatch(1)
         var failure: Throwable? = null
         var transformer: Transformer? = null
+        // QA-05 D9: the internal thread quits lazily after cancel(); joined before the chunk ends.
+        var internalThreads: List<Thread> = emptyList()
         val stop = Runnable {
             transformer?.cancel()
             latch.countDown()
@@ -309,7 +311,7 @@ class ReverseJob(private val ctx: EngineContext) {
                 val composition = Composition.Builder(EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_VIDEO)).addItem(edited).build())
                     .setHdrMode(source.hdrMode)
                     .build()
-                t.start(composition, out.absolutePath)
+                internalThreads = TransformerThreads.startedBy { t.start(composition, out.absolutePath) }
             } catch (e: Throwable) {
                 failure = e
                 latch.countDown()
@@ -324,6 +326,7 @@ class ReverseJob(private val ctx: EngineContext) {
             val drained = CountDownLatch(1)
             handler.post { drained.countDown() }
             drained.await(STOP_POLL_MS * 20, TimeUnit.MILLISECONDS)
+            TransformerThreads.awaitEnd(internalThreads)
         }
         control.throwIfCancelled()
         failure?.let { throw if (it is ExportException) ProxyJob.mapError(it) else EngineErrors.from(it) }
@@ -903,6 +906,15 @@ private class ReverseWriter(
     private var closedMuxer = false
     private var loggedLayout = false
 
+    /**
+     * Diagnostics (CI: ReverseJobTest saw one frame out of order): the output times fed to the
+     * decoder in the current all-intra run, in feed order, checked against the order the decoder
+     * delivers them. A decoder that reorders by picture order count delivers them out of feed order.
+     */
+    private val fedPts = ArrayDeque<Long>()
+    private var outOfFeedOrder = 0
+    private var chunkIndex = 0
+
     // Audio.
     private var aac: MediaCodec? = null
     private var aacDelay = 0
@@ -948,6 +960,14 @@ private class ReverseWriter(
                 Log.i(EngineContext.TAG, "reverse intermediate: ${samples.size} samples, ${samples.count { it.second }} sync" + if (allIntra) " (all-intra)" else " (decoding from sync per frame)")
             }
             val mapping = IntermediateMapping.of(sorted.toLongArray(), timeline.frames.subList(chunk.first, chunk.last + 1).map { it.ptsUs }.toLongArray(), chunk.clipStartUs)
+            chunkIndex++
+            val mapped = mapping.intermediatePts.filterNotNull()
+            Log.i(
+                EngineContext.TAG,
+                "reverse: chunk $chunkIndex frames [${chunk.first}, ${chunk.last}] clip [${chunk.clipStartUs}, ${chunk.clipEndUs}) us, " +
+                    "intermediate ${samples.size} samples from ${sorted.first()} us, ${chunk.frameCount - mapped.size} unmapped, " +
+                    "${mapped.size - mapped.toSet().size} mapped twice",
+            )
             ensureEncoder(format)
             while (true) {
                 ensureDecoder(format)
@@ -1022,6 +1042,7 @@ private class ReverseWriter(
         encoder = codec
         encoderWidth = w
         encoderHeight = h
+        Log.i(EngineContext.TAG, "reverse: encoder ${codec.name}")
     }
 
     private fun anyEncoder(mime: String): Boolean =
@@ -1059,6 +1080,7 @@ private class ReverseWriter(
             throw EngineException(EngineErrorCode.decoderInitFailed, "decoder did not start", cause = e)
         }
         decoder = codec
+        Log.i(EngineContext.TAG, "reverse: decoder ${codec.name}")
         decoderMime = mime
         decoderSize = size
         decoderHasInput = false
@@ -1080,6 +1102,7 @@ private class ReverseWriter(
         extractor.seekTo(q, MediaExtractorCompat.SEEK_TO_PREVIOUS_SYNC)
         if (extractor.sampleTime != q) return feedBlock(extractor, listOf(Pair(q, outPts)))
         queueSample(extractor, outPts)
+        fedPts.addLast(outPts)
         drainDecoder(false)
         drainEncoder(false)
         return 0
@@ -1190,7 +1213,10 @@ private class ReverseWriter(
                         }
                         try {
                             val sink = collect
-                            if (sink != null) sink(image, pts) else encodeFrame(image, pts)
+                            if (sink != null) sink(image, pts) else {
+                                noteDecoded(pts)
+                                encodeFrame(image, pts)
+                            }
                         } finally {
                             image.close()
                         }
@@ -1239,6 +1265,21 @@ private class ReverseWriter(
         drainDecoder(true)
         codec.flush()
         decoderHasInput = false
+        fedPts.clear()
+    }
+
+    /** Diagnostics: checks a decoded frame's time against the feed order (see [fedPts]). */
+    private fun noteDecoded(pts: Long) {
+        val head = fedPts.firstOrNull() ?: return
+        if (head == pts) {
+            fedPts.removeFirst()
+            return
+        }
+        outOfFeedOrder++
+        if (outOfFeedOrder <= MAX_ORDER_LOGS) {
+            Log.w(EngineContext.TAG, "reverse: chunk $chunkIndex: the decoder delivered output time $pts before $head (feed order; ${fedPts.size} pending)")
+        }
+        fedPts.remove(pts)
     }
 
     /** Writes encoded video; returns whether anything was written. With [untilEos] waits for the end of stream. */
@@ -1264,6 +1305,11 @@ private class ReverseWriter(
                             val flags = if (encoderInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0) C.BUFFER_FLAG_KEY_FRAME else 0
                             write(videoTrack, buffer, BufferInfo(encoderInfo.presentationTimeUs, encoderInfo.size, flags))
                             lastVideoPts = encoderInfo.presentationTimeUs
+                        } else {
+                            outOfFeedOrder++
+                            if (outOfFeedOrder <= MAX_ORDER_LOGS) {
+                                Log.w(EngineContext.TAG, "reverse: chunk $chunkIndex: encoded frame at ${encoderInfo.presentationTimeUs} us not after $lastVideoPts us; not written")
+                            }
                         }
                         encodedVideo++
                         wrote = true
@@ -1492,6 +1538,9 @@ private class ReverseWriter(
         /** YUV memory of one block-mode pass (16 MB: 5 frames at 1080p, 11 at 720p, 1 at 4K). */
         private const val BLOCK_BYTES = 16L * 1024 * 1024
         private const val MAX_BLOCK_FRAMES = 16
+
+        /** Feed-order diagnostics logged per job. */
+        private const val MAX_ORDER_LOGS = 8
     }
 }
 

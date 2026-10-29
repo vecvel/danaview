@@ -63,8 +63,9 @@ class VadModel {
   VadModel(const VadModel &) = delete;
   VadModel &operator=(const VadModel &) = delete;
 
-  /// DV_OK, or DV_ERR_VAD_MODEL when the file is missing or not a ggml VAD model.
-  int32_t load(const std::string &path, int32_t n_threads);
+  /// DV_OK, or DV_ERR_VAD_MODEL when the file is missing or not a ggml VAD model. The model always runs
+  /// on one thread (see dv_vad.cpp), whatever the job's thread count.
+  int32_t load(const std::string &path);
   bool loaded() const { return ctx_ != nullptr; }
 
   /// Speech spans of [samples]; DV_OK or DV_ERR_INFERENCE.

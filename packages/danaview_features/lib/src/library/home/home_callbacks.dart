@@ -20,8 +20,11 @@ class HomeCallbacks {
     this.onBatchEditPhotos,
     this.onMakeMontage,
     this.onOpenProjects,
+    this.onOpenProject,
+    this.onNewProject,
     this.onSearchWithAi,
     this.onOpenAiSettings,
+    this.onOpenAiStudio,
   });
 
   /// No callbacks: the Home shows none of the optional entry points.
@@ -40,11 +43,30 @@ class HomeCallbacks {
   /// only when this is set and the platform runs the editor (iOS and Android, ARCH v1.2 §3).
   final VoidCallback? onOpenProjects;
 
+  /// Opens one project in the editor by its id (the router's `/editor/<id>`): the cards of the
+  /// Overview's Projects section and of the Projects tab (DESIGN_SYSTEM §10.3 #3, §10.4). Null
+  /// hides the Projects section; the list itself comes from `homeProjectsProvider`.
+  final ValueChanged<String>? onOpenProject;
+
+  /// Opens the editor's New project sheet (and the created project): the Projects tab's one
+  /// primary button. Null hides the button.
+  final VoidCallback? onNewProject;
+
   /// Starts an AI search with the current query (AIS-51; wired by INT-103).
   final ValueChanged<String>? onSearchWithAi;
 
   /// Opens the AI settings (AIS-51's "Set up AI" link; wired by INT-103).
   final VoidCallback? onOpenAiSettings;
+
+  /// Opens AI Studio: the phone tab bar's AI Studio item (DESIGN_SYSTEM §10.5), shown only with
+  /// DANAVIEW_AI_STUDIO on and this set.
+  ///
+  /// Wiring point (slice S6): no AI Studio screen exists yet, so the app passes null and the item
+  /// stays hidden whatever the flag says. When S6 adds the screen and its route, set this in
+  /// `FilesHome.build` (lib/wiring/files_home_wiring.dart) and in the flag-off `appHomeScreen`
+  /// path, e.g. `onOpenAiStudio: () => context.push(aiStudioLocation)`; nothing in this package
+  /// changes. `DanaviewHomeScreen._phoneTabBar` already places the item between Editor and More.
+  final VoidCallback? onOpenAiStudio;
 
   @override
   bool operator ==(Object other) =>
@@ -54,12 +76,25 @@ class HomeCallbacks {
           other.onBatchEditPhotos == onBatchEditPhotos &&
           other.onMakeMontage == onMakeMontage &&
           other.onOpenProjects == onOpenProjects &&
+          other.onOpenProject == onOpenProject &&
+          other.onNewProject == onNewProject &&
           other.onSearchWithAi == onSearchWithAi &&
-          other.onOpenAiSettings == onOpenAiSettings;
+          other.onOpenAiSettings == onOpenAiSettings &&
+          other.onOpenAiStudio == onOpenAiStudio;
 
   @override
   int get hashCode =>
-      Object.hash(onEditPhoto, onBatchEditPhotos, onMakeMontage, onOpenProjects, onSearchWithAi, onOpenAiSettings);
+      Object.hash(
+        onEditPhoto,
+        onBatchEditPhotos,
+        onMakeMontage,
+        onOpenProjects,
+        onOpenProject,
+        onNewProject,
+        onSearchWithAi,
+        onOpenAiSettings,
+        onOpenAiStudio,
+      );
 }
 
 /// Makes the Home's [HomeCallbacks] available to every tab, tray and bar below it, so the slot

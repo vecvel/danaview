@@ -215,6 +215,12 @@ internal class MultiPlayerEngine(
     private var seekTarget: Long? = null
     /** An exact seek's frame composed without a window, and the seek's token (QA-05 D10); -1: none. */
     private var unpresentedSeek = -1L
+
+    /**
+     * The output frame the canvas holds when it was composed without a window (playback went on
+     * while the Surface was away), or -1 when the canvas holds a presented frame or a NEAREST one.
+     */
+    private var composedUnshown = -1L
     private var unpresentedToken = 0
     private var prerollTarget: Long? = null
     private var ticks = 0
@@ -457,7 +463,16 @@ internal class MultiPlayerEngine(
             pollExact(held, token)
             return
         }
-        if (lastShown >= 0 && g.canvasSize != null) {
+        val unshown = composedUnshown
+        if (unshown >= 0 && g.canvasSize != null) {
+            // Playback composed frames while the Surface was away (it may even have ended): the
+            // canvas holds the newest of them, so the recovered Surface shows that frame, not the
+            // older one presented before the loss (or nothing, when none was presented yet).
+            if (g.present(grid.platformTimeOfFrame(unshown))) {
+                composedUnshown = -1L
+                lastShown = unshown
+            }
+        } else if (lastShown >= 0 && g.canvasSize != null) {
             // A recovered, resized or re-handed Surface shows the last frame again at once (scaled
             // to the new size); playback replaces it with its next frame.
             g.present(grid.platformTimeOfFrame(lastShown))
@@ -1200,6 +1215,7 @@ internal class MultiPlayerEngine(
         if (range != null) stats.rangeFrames++
         if (stillFallbackUsed) stats.exactStillFallbacks++
         if (stats.compositeMs.size < MAX_TIMINGS) stats.compositeMs += (System.nanoTime() - started) / 1e6
+        composedUnshown = if (!presented && purpose != Purpose.NEAREST) k else -1L
         if (!presented) {
             dbg("not presented k=$k")
             return Outcome.NOT_PRESENTED

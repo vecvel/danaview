@@ -104,7 +104,7 @@ class _RenderPreviewSettingsSectionState extends ConsumerState<RenderPreviewSett
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const DanaviewTileIcon(Icons.movie_filter_rounded, color: DanaviewColors.success, size: 40),
+                        const DanaviewIconTile(Icons.movie_filter_rounded, size: 40),
                         const SizedBox(width: DanaviewSpacing.md),
                         Expanded(
                           child: Column(

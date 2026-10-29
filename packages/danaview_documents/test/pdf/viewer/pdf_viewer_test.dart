@@ -12,10 +12,12 @@ import 'dart:async';
 import 'package:danaview_documents/danaview_documents.dart';
 import 'package:danaview_library/danaview_library.dart';
 import 'package:danaview_pdf/danaview_pdf.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../card/doc_harness.dart';
+import '../../row_heights.dart';
 import 'pdf_fakes.dart';
 
 const _file = ViewerFile(path: '/tmp/doc.pdf', displayName: 'Quarterly report.pdf', kind: FileKind.document, docKind: DocumentKind.pdf);
@@ -66,6 +68,9 @@ void main() {
 
     // TOKEN-1, TOKEN-10, TOKEN-11, TOKEN-12.
     expect(find.text('1 of 4 matches'), findsOneWidget);
+    expectEqualRowHeights(
+        tester, [find.byType(DanaviewSearchField), find.byTooltip('Previous match'), find.byTooltip('Next match')],
+        height: DanaviewSpacing.controlHeight);
     expect(find.text('Page 1'), findsOneWidget);
     expect(find.text('Page 12'), findsOneWidget);
     expect(view.calls, contains('showHit:0'));
@@ -103,6 +108,8 @@ void main() {
 
     expect(find.text('Password required'), findsOneWidget);
     expect(find.byKey(const ValueKey('fake-native-pdf')), findsNothing);
+    expectEqualRowHeights(tester, [find.byType(DanaviewTextField), find.widgetWithText(DanaviewButton, 'Unlock')],
+        height: DanaviewSpacing.controlHeight);
 
     await tester.enterText(find.byType(EditableText), 'guess');
     await tester.tap(find.text('Unlock'));

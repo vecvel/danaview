@@ -28,8 +28,13 @@
 //   the duration (`endSession`). IOS-01 saw about one read in 70 come back silent or NaN, so a
 //   read is validated (NaN, fully silent while the plan has audible audio, a tap range
 //   discontinuity, a hung read, and a dropout or a seam step inside a speed-ramp or time-pitch
-//   segment, see `TimePitchWatch`) and redone with a fresh composition, at most twice; the last attempt is
-//   accepted (sanitised) unless it hangs or fails.
+//   segment, see `TimePitchWatch`) and redone with a fresh composition (so a fresh time-pitch unit),
+//   at most four times, after a doubling back-off (0.25 s up to 2 s). The last attempt is accepted
+//   (sanitised) unless it hangs or fails, or still has a time-pitch fault: then the export fails
+//   with a typed, retryable `decodeFailed` (`timePitchFailure`) and no file is written; a dropout is
+//   never shipped (CI round 6). A fault every witness read reproduces at the same place (at least
+//   `minContentWitnesses` reads without another defect) is the content, not a fault
+//   (`TimePitchFault.recurring`).
 //
 // Reader threading and hangs (FIX-IOS-D7, QA-05 D7, QA-01 FIX-IOS-12-1). AVAssetReaderAudioMixOutput
 // over a keep-pitch scaled track sometimes blocks inside `copyNextSampleBuffer` for good
@@ -39,9 +44,18 @@
 //   (`MixReadSession`, `CompositionVideoSource`), and its queue closures hold the reader, its output
 //   and the composition, so nothing is cancelled or released while a call into it is outstanding;
 // - the audio watchdog only signals: a hung read is left blocked on its queue and its reader is
-//   never torn down (kept for the process, like IOS-17's abandoned pumps), and the read resumes on a fresh composition and reader from the frame after the last
-//   delivered buffer (`maxAudioResumes`), so the export completes; a stop request ends the wait at
-//   once (typed interruption);
+//   never torn down (kept for the process, like IOS-17's abandoned pumps), and the read resumes on
+//   a fresh composition and reader, the writer getting the frames after the last delivered buffer
+//   (`maxAudioResumes`), so the export completes; a stop request ends the wait at once (typed
+//   interruption). The resumed reader reads from the timeline start again and the frames already
+//   delivered are dropped: an AVAssetReaderAudioMixOutput whose range starts inside the timeline
+//   stops at the end of whichever track's media ends first after that point instead of rendering
+//   silence to its range end (soak, iOS 26.5 simulator: from 9 s it ended at 10.0 s, from 11 s and
+//   14 s at 17.0 s, from 10 s and 18 s it delivered nothing; from 0 it always reads the whole 39 s;
+//   CI round 6 shipped a 9.95 s audio track under a 39 s video). For the same reason a source opened
+//   on a range that starts after 0 reads from 0 and drops the frames before its start (the export
+//   itself always reads [0, end)). A read that still ends more than `maxShortfallUs` early is
+//   rejected and never shipped (`shortRead`);
 // - each export segment reads its own anchored copy of the composition (no composition is mutated
 //   while a reader uses it), every audio read gets a fresh composition (never the video phase's),
 //   and each phase's readers are torn down, and their compositions released, before the next phase
@@ -209,8 +223,22 @@ final class ReaderWriterPipeline {
     let control: PipelineControl
     let makeComposition: ExportCompositionFactory
     var segmentDurationUs = SegmentedWriter.defaultSegmentDurationUs
-    /// Audio reads per job (the first plus at most two redos).
-    var maxAudioAttempts = 3
+    /// Audio reads per job (the first plus at most four redos). Every read is a fresh composition,
+    /// reader and so a fresh time-pitch unit.
+    var maxAudioAttempts = 5
+    /// Seconds before the first redo; doubled for each further redo, at most `audioRetryDelayCap`
+    /// (0.25 + 0.5 + 1 + 2 s over five reads: a loaded device gets time to settle).
+    var audioRetryDelay: TimeInterval = 0.25
+    var audioRetryDelayCap: TimeInterval = 2
+    // A time-pitch fault counts as the content only when every witness read of the job has it at
+    // the same place, the last read included, and there were at least `minContentWitnesses`:
+    // AVFoundation's faults recur near ramp seams (seen 2.5 ms after a seam in two reads running)
+    // but not in four or five reads running, while a fresh unit renders digitally gated content
+    // identically every time. A read rejected for another defect (NaN, silence, a tap range jump,
+    // an early end) is no witness: its scan saw a broken render (CI round 6: a read with a tap
+    // range jump missed the content's dropout and so no fault was ever kept as content).
+    /// Witness reads (the last one included) a recurring time-pitch fault needs to count as content.
+    var minContentWitnesses = 4
     /// Seconds one audio buffer may take before the read counts as hung (FIX-IOS-D7: the
     /// watchdog only signals; the read resumes on a fresh reader, see `MixAudioSource`).
     var audioWatchdog: TimeInterval = 8
@@ -332,9 +360,15 @@ final class ReaderWriterPipeline {
         let audible = ReaderWriterPipeline.hasAudibleAudio(plan)
         let factory = makeComposition
         var attempt = 0
+        // Time-pitch faults every witness read so far had (`MixAudioSource.isTimePitchWitness`: a
+        // read rejected for NaN, silence, a tap range jump or an early end is no evidence of the
+        // content), and how many witnesses there were.
+        var recurring: [TimePitchFault]?
+        var witnesses = 0
         while true {
             attempt += 1
             audioAttempts = attempt
+            if attempt > 1, try backOff(redo: attempt - 1) == .interrupted { return .interrupted }
             control.enter(.finishing) // a heartbeat per attempt
             // FIX-IOS-D7: every read gets its own fresh composition (never the video phase's, never
             // the one a hung read still holds).
@@ -351,16 +385,49 @@ final class ReaderWriterPipeline {
             source.watchdog = audioWatchdog
             source.maxResumes = maxAudioResumes
             source.reopen = { try factory(plan) }
+            if attempt == maxAudioAttempts, witnesses + 1 >= minContentWitnesses { source.contentFaults = recurring ?? [] }
             audioSourceHook?(source, attempt)
             defer { ReaderWriterPipeline.retire(source, timeout: teardownTimeout) }
             do {
                 return try writer.writeAudio(source: source)
             } catch {
                 if control.isCancelled { throw EngineError.cancelled }
+                if source.isTimePitchWitness {
+                    witnesses += 1
+                    recurring = TimePitchFault.recurring(recurring, source.timePitchFaults)
+                }
+                if source.timePitchFailed {
+                    throw ReaderWriterPipeline.timePitchFailure(reads: attempt, first: source.firstTimePitchFault)
+                }
                 guard let reason = source.rejection, attempt < maxAudioAttempts else { throw error }
                 Log.info(.export, "audio read \(attempt) rejected (\(reason)); reading again")
             }
         }
+    }
+
+    /// The export's failure when AVFoundation's time-pitch unit spoiled every audio read: typed
+    /// `decodeFailed` (the UI's generic "The export didn't finish / Try again"), retryable (the
+    /// faults are random), never a file with the dropout in it.
+    static func timePitchFailure(reads: Int, first: String?) -> EngineError {
+        EngineError(.decodeFailed, "\(timePitchFailurePrefix) in all \(reads) audio reads (last: \(first ?? "?"))", retryable: true)
+    }
+
+    static let timePitchFailurePrefix = "audio time-pitch fault"
+
+    /// Waits before redo [redo] (1-based): `audioRetryDelay`·2^(redo−1), capped, in short slices
+    /// that end at once on a stop request.
+    private func backOff(redo: Int) throws -> SegmentedWriter.Outcome {
+        let delay = min(audioRetryDelayCap, audioRetryDelay * pow(2, Double(redo - 1)))
+        let deadline = Date().addingTimeInterval(delay)
+        while Date() < deadline {
+            if control.shouldStop {
+                if control.isCancelled { throw EngineError.cancelled }
+                return .interrupted
+            }
+            Thread.sleep(forTimeInterval: min(0.05, max(0, deadline.timeIntervalSinceNow)))
+        }
+        control.enter(.finishing) // a heartbeat after the wait
+        return .completed
     }
 
     // MARK: Teardown (FIX-IOS-D7)
@@ -711,8 +778,11 @@ final class SilentAudioSource: SegmentAudioSource {
 ///   second difference of the mono mix within ±`seamWindowUs` that exceeds `seamStepRatio` times
 ///   the peak in the reference windows 10–40 ms on either side (and `abruptEdge` in absolute
 ///   terms). A steady tone's good seams measure ≤ 1.4, the dropped crossfade 7.6.
-/// A false positive (a transient of the content right on a seam) only costs a redo: the last
-/// attempt is accepted.
+/// A false positive (a transient of the content right on a seam, digitally gated content) shows up
+/// at the same place in every read, a real fault mostly elsewhere: `TimePitchFault.recurring`
+/// keeps the faults every witness read so far had, and on the last attempt a fault every witness
+/// reproduced is treated as content (accepted). Any other fault left after the last attempt fails the export
+/// (`ReaderWriterPipeline.timePitchFailure`); a dropout is never shipped.
 struct TimePitchWatch: Equatable {
     struct Span: Equatable {
         /// Composition µs, already shrunk by `edgeMarginUs` at both ends.
@@ -778,88 +848,38 @@ struct TimePitchWatch: Equatable {
     }
 }
 
-/// The audio mix of the export composition (AVAssetReaderAudioMixOutput with IOS-18 gain taps),
-/// clamped to [−1, 1] and validated (see the file comment).
-final class MixAudioSource: SegmentAudioSource {
-    private let composition: ExportComposition
-    private let expectAudible: Bool
-    private let control: PipelineControl?
-    /// The reader in use; its AVAssetReader lives on the session's own queue. `session`,
-    /// `sessions` and `hung` are lock-protected: the pump reads, the work queue closes and retires
-    /// (also when IOS-17 abandoned a pump that is still inside `nextAudio`).
-    private var _session: MixReadSession?
-    /// Sessions opened by this source (the first plus resumes), for validation and teardown.
-    private var _sessions: [MixReadSession] = []
-    private let lock = NSLock()
+/// One `TimePitchWatch` fault of a read (composition frame at 48 kHz).
+struct TimePitchFault: Equatable {
+    enum Kind: Equatable { case dropout, seamStep }
+    let kind: Kind
+    /// Dropout: first zero frame; seam step: the seam's frame.
+    let frame: Int64
 
-    private func locked<T>(_ body: () -> T) -> T {
-        lock.lock()
-        defer { lock.unlock() }
-        return body()
+    /// Frames two reads' dropouts may differ by and still be the same fault (1 ms).
+    static let matchFrames: Int64 = 48
+
+    func matches(_ other: TimePitchFault) -> Bool {
+        kind == other.kind && abs(frame - other.frame) <= TimePitchFault.matchFrames
     }
 
-    private var session: MixReadSession? { locked { _session } }
-    private var sessions: [MixReadSession] { locked { _sessions } }
-
-    /// Takes the current session out (nil afterwards) and marks it as left behind when [hung].
-    private func takeSession(hung leftBehind: Bool) -> MixReadSession? {
-        locked {
-            let s = _session
-            _session = nil
-            if leftBehind, let s = s { _hung.append(s) }
-            return s
-        }
+    /// The faults of [previous] (nil: no read yet) that [read] has too.
+    static func recurring(_ previous: [TimePitchFault]?, _ read: [TimePitchFault]) -> [TimePitchFault] {
+        guard let previous = previous else { return read }
+        return previous.filter { p in read.contains { $0.matches(p) } }
     }
-    /// Reader range end (resumes read to it).
-    private var rangeEnd: CMTime = .invalid
-    /// Absolute 48 kHz frame of the next frame the writer gets (continuity across a resume).
-    private var nextFrame: Int64 = 0
-    /// A real buffer held back while the silence of a resume gap goes first.
-    private var pending: CMSampleBuffer?
+}
 
-    /// Reject bad reads (false on the last attempt: the read is accepted, sanitised).
-    var validates = true
-    /// Seconds one buffer may take before the read counts as hung (the watchdog only signals: the
-    /// blocked reader is never cancelled or released while its call is outstanding).
-    var watchdog: TimeInterval = 8
-    /// A fresh export composition for a resume after a hung read (nil: a hung read fails the read).
-    var reopen: (() throws -> ExportComposition)?
-    /// Resumes per read after hung reads (each on a fresh composition and reader from the frame
-    /// after the last delivered buffer).
-    var maxResumes = 3
-    /// Test hook: rewrites the floats of buffer n (0-based) before validation.
-    var corrupt: ((Int, UnsafeMutableBufferPointer<Float>) -> Void)?
-    /// Test hook: runs on the reader's queue right before read n (0-based, over all sessions)
-    /// calls copyNextSampleBuffer (block it to simulate AVFoundation's hung read).
-    var readGate: ((Int) -> Void)?
-    /// Test hook: called on a session's queue once its reader is cancelled and released.
-    var onTeardown: (() -> Void)?
-    /// Test hook: called when the watchdog gives up on a read (the pump queue).
-    var onHung: (() -> Void)?
-    private var reads = 0
-
-    /// Resumes done after hung reads.
-    private(set) var resumes = 0
-    /// Hung reads seen (each one left alone on its own queue).
-    private(set) var hungReads = 0
-    private var _hung: [MixReadSession] = []
-
-    /// Why the read was rejected (nil = accepted or not finished).
-    private(set) var rejection: String?
-    private(set) var frames = 0
-    private(set) var nanSamples = 0
-    private(set) var clippedSamples = 0
-    private(set) var peak: Float = 0
-    private var buffers = 0
-
-    /// Dropout and seam-step checks (none = not checked).
-    var timePitchWatch = TimePitchWatch.none {
-        didSet { seamStats = timePitchWatch.seamsUs.map { SeamStats(seamUs: $0) } }
-    }
-    /// Dropouts and seam steps found (the first one described in `firstTimePitchFault`).
+/// The `TimePitchWatch` scan of one audio read (FIX-IOS-MEDIA): the export's MixAudioSource feeds
+/// it every sanitised buffer, and the RunnerTests mix reads run the same scan, so both redo the
+/// reads AVFoundation's time-pitch unit spoils (dropouts, dropped seam crossfades).
+struct TimePitchScan {
+    let watch: TimePitchWatch
+    /// Dropouts and seam steps found (the first one described in `firstFault`).
     private(set) var dropouts = 0
     private(set) var seamSteps = 0
-    private(set) var firstTimePitchFault: String?
+    private(set) var firstFault: String?
+    /// Every fault found, in the order found.
+    private(set) var faults: [TimePitchFault] = []
     /// Scan state: absolute frame of the next expected frame, the current exact-zero run and the
     /// magnitude of the frame before it, the last two mono samples (second difference).
     private var scanNext: Int64?
@@ -870,7 +890,7 @@ final class MixAudioSource: SegmentAudioSource {
     private var pendingRun: (start: Int64, end: Int64)?
     private var mono1: Float?
     private var mono2: Float?
-    private var seamStats: [SeamStats] = []
+    private var seamStats: [SeamStats]
     private var seamCursor = 0
     private var seamsEvaluated = false
 
@@ -883,217 +903,35 @@ final class MixAudioSource: SegmentAudioSource {
         var complete = false
     }
 
-    /// Peak below which a whole read counts as silent.
-    static let silencePeak: Float = 1e-5
-
-    init(composition: ExportComposition, expectAudible: Bool, control: PipelineControl?) {
-        self.composition = composition
-        self.expectAudible = expectAudible
-        self.control = control
-    }
-
-    func openAudio(startUs: Int64, endUs: Int64) throws {
-        closeAudio()
-        guard composition.built.audioMix != nil, !composition.audioTracks.isEmpty else {
-            // D-38: never construct a mix output over zero tracks.
-            throw EngineError(.internal, "audio mix without tracks")
-        }
-        let range = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: composition.built.plan)
-        rangeEnd = range.end
-        nextFrame = MixAudioSource.frame(range.start)
-        try open(composition, range: range)
-    }
-
-    private func open(_ composition: ExportComposition, range: CMTimeRange) throws {
-        let s = try MixReadSession(composition: composition, range: range, onTeardown: onTeardown)
-        locked {
-            _session = s
-            _sessions.append(s)
-        }
-    }
-
-    static func frame(_ time: CMTime) -> Int64 {
-        Int64((time.seconds * Double(ExportPCM.sampleRate)).rounded())
-    }
-
-    func nextAudio() throws -> CMSampleBuffer? {
-        control?.waitWhileThermalCritical()
-        if let held = pending {
-            pending = nil
-            return try sanitized(held, skip: 0)
-        }
-        while true {
-            guard let current = session else { return nil }
-            let n = reads
-            reads += 1
-            switch try waitFor(current.read(gate: readGate, index: n)) {
-            case .sample(let sample):
-                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-                guard pts.isNumeric else { return try sanitized(sample, skip: 0) }
-                let first = MixAudioSource.frame(pts)
-                let count = Int64(CMSampleBufferGetNumSamples(sample))
-                if first + count <= nextFrame && sessions.count > 1 { continue } // read again after a resume
-                if first > nextFrame && sessions.count > 1 {
-                    // A resumed reader started late: silence for the gap, then the buffer.
-                    pending = sample
-                    let gap = Int(first - nextFrame)
-                    let silence = try ExportPCM.makeBuffer(
-                        frames: gap, pts: CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate))) { _ in }
-                    return try sanitized(silence, skip: 0, real: false)
-                }
-                let skip = sessions.count > 1 ? Int(max(0, nextFrame - first)) : 0
-                return try sanitized(sample, skip: skip)
-            case .end:
-                try finishValidation()
-                return nil
-            case .failed(let error):
-                rejection = "failed"
-                throw error.map(EngineError.from) ?? EngineError(.decodeFailed, "audio reader failed")
-            case .hung:
-                hungReads += 1
-                onHung?()
-                // The watchdog only signals: the blocked call keeps its reader, and the reader is
-                // never cancelled or released, not even once the call returns (tearing down an
-                // audio mix reader whose render threads got stuck crashed inside AudioToolbox under
-                // Thread Sanitizer). It is left behind with its composition, like IOS-17's
-                // abandoned pumps.
-                takeSession(hung: true)?.abandon()
-                guard let reopen = reopen, resumes < maxResumes, CMTimeCompare(resumeTime, rangeEnd) < 0 else {
-                    rejection = "hung"
-                    throw EngineError(.decodeFailed, "audio read hung", retryable: true)
-                }
-                resumes += 1
-                Log.info(.export, "audio read hung at \(resumeTime.seconds) s; resuming on a fresh reader (\(resumes))")
-                try open(try reopen(), range: CMTimeRange(start: resumeTime, end: rangeEnd))
-            }
-        }
-    }
-
-    private var resumeTime: CMTime { CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate)) }
-
-    /// Waits for [ticket] in short slices: at most `watchdog` seconds (then `.hung`), and never
-    /// past a stop request (a cancel or background interruption ends the read at once, typed as
-    /// an interruption; the blocked call is left to its queue).
-    private func waitFor(_ ticket: MixReadSession.Ticket) throws -> MixReadSession.Outcome {
-        let deadline = Date().addingTimeInterval(watchdog)
-        while true {
-            if let outcome = ticket.wait(SegmentedWriter.waitSlice) { return outcome }
-            if control?.shouldStop == true {
-                // Left behind like a hung read: its call may still be inside AVFoundation.
-                takeSession(hung: true)?.close()
-                throw EngineError(.interrupted, "audio read stopped", retryable: true)
-            }
-            if Date() >= deadline { return .hung }
-        }
-    }
-
-    /// Closes every reader of this source (each teardown queued behind any outstanding call) and
-    /// releases each reader's composition once that reader is gone: at once for the readers that
-    /// tear down within [timeout], later (on the reader's queue) for one still blocked inside
-    /// AVFoundation, which is never waited for. Returns whether every reader was torn down.
-    @discardableResult
-    func retireReaders(timeout: TimeInterval) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        var all = true
-        let (opened, leftBehind) = locked { (_sessions, _hung) }
-        for s in opened {
-            s.close()
-            // A hung reader is not waited for (its call may never return).
-            if !leftBehind.contains(where: { $0 === s }), s.waitClosed(until: deadline) {
-                s.composition.release()
-            } else {
-                all = false
-                s.afterTeardown { s.composition.release() }
-            }
-        }
-        return all
-    }
-
-    /// The compositions this source read (the first plus one per resume).
-    var compositions: [ExportComposition] { sessions.map(\.composition) }
-
-    private func finishValidation() throws {
-        var reason: String?
-        // A resumed session's taps start at its own range start (no discontinuity there).
-        let jumps = sessions.flatMap { $0.composition.built.gainTaps }.map(\.rangeDiscontinuities).reduce(0, +)
-        if nanSamples > 0 {
-            reason = "NaN"
-        } else if expectAudible && peak < MixAudioSource.silencePeak {
-            reason = "silent"
-        } else if jumps > 0 {
-            reason = "tap range discontinuity"
-        } else {
-            evaluateSeams()
-            if dropouts + seamSteps > 0 {
-                reason = "time-pitch fault (\(dropouts) dropout(s), \(seamSteps) seam step(s); first: \(firstTimePitchFault ?? "?"))"
-            }
-        }
-        guard let reason = reason else { return }
-        guard validates else {
-            Log.info(.export, "audio read accepted on the last attempt despite: \(reason)")
-            return
-        }
-        rejection = reason
-        throw EngineError(.decodeFailed, "audio read rejected: \(reason)", retryable: true)
-    }
-
-    /// A copy of [sample] without its first [skip] frames, NaN → 0 and every sample clamped to
-    /// [−1, 1]. [real] false: generated silence (not counted as a read buffer for `corrupt`).
-    private func sanitized(_ sample: CMSampleBuffer, skip: Int, real: Bool = true) throws -> CMSampleBuffer {
-        guard let block = CMSampleBufferGetDataBuffer(sample) else { throw EngineError(.decodeFailed, "audio buffer without data") }
-        let length = CMBlockBufferGetDataLength(block)
-        let count = length / MemoryLayout<Float>.size
-        let total = count / ExportPCM.channels
-        let frameCount = total - skip
-        var pts = CMSampleBufferGetPresentationTimeStamp(sample)
-        if skip > 0 { pts = CMTimeAdd(pts, CMTime(value: CMTimeValue(skip), timescale: CMTimeScale(ExportPCM.sampleRate))) }
-        guard frameCount > 0 else { return try ExportPCM.makeBuffer(frames: 1, pts: pts) { _ in } }
-        let index = buffers
-        if real { buffers += 1 }
-        var nan = 0
-        var clipped = 0
-        var localPeak: Float = 0
-        let offset = skip * ExportPCM.channels * 4
-        let out = try ExportPCM.makeBuffer(frames: frameCount, pts: pts) { dst in
-            _ = dst.withMemoryRebound(to: UInt8.self) { bytes in
-                CMBlockBufferCopyDataBytes(block, atOffset: offset, dataLength: frameCount * ExportPCM.channels * 4, destination: bytes.baseAddress!)
-            }
-            if real { corrupt?(index, dst) }
-            for i in 0..<dst.count {
-                var v = dst[i]
-                if v.isNaN {
-                    nan += 1
-                    v = 0
-                } else if v > 1 {
-                    clipped += 1
-                    v = 1
-                } else if v < -1 {
-                    clipped += 1
-                    v = -1
-                }
-                dst[i] = v
-                let a = abs(v)
-                if a > localPeak { localPeak = a }
-            }
-        }
-        frames += frameCount
-        if pts.isNumeric { nextFrame = MixAudioSource.frame(pts) + Int64(frameCount) }
-        nanSamples += nan
-        clippedSamples += clipped
-        peak = max(peak, localPeak)
-        if !timePitchWatch.isEmpty { scanTimePitch(out, frames: frameCount) }
-        return out
+    init(watch: TimePitchWatch) {
+        self.watch = watch
+        seamStats = watch.seamsUs.map { SeamStats(seamUs: $0) }
     }
 
     /// Scans one sanitised buffer for `TimePitchWatch` faults: exact-zero runs (across buffer
     /// boundaries; a PTS gap between buffers resets the scan) and the second-difference peaks
     /// around the watched seams.
-    private func scanTimePitch(_ sample: CMSampleBuffer, frames frameCount: Int) {
+    mutating func scan(_ sample: CMSampleBuffer, frames frameCount: Int) {
         guard let block = CMSampleBufferGetDataBuffer(sample) else { return }
-        let rate = Double(ExportPCM.sampleRate)
         let pts = CMSampleBufferGetPresentationTimeStamp(sample)
         guard pts.isNumeric else { return }
-        let first = Int64((pts.seconds * rate).rounded())
+        let first = Int64((pts.seconds * Double(ExportPCM.sampleRate)).rounded())
+        var pointer: UnsafeMutablePointer<Int8>?
+        var length = 0
+        guard CMBlockBufferGetDataPointer(block, atOffset: 0, lengthAtOffsetOut: &length, totalLengthOut: nil,
+                                          dataPointerOut: &pointer) == kCMBlockBufferNoErr, let base = pointer else { return }
+        let channels = ExportPCM.channels
+        let count = min(frameCount, length / (4 * channels))
+        base.withMemoryRebound(to: Float.self, capacity: count * channels) { samples in
+            scan(UnsafeBufferPointer(start: samples, count: count * channels), firstFrame: first, channels: channels)
+        }
+    }
+
+    /// Scans [samples] (interleaved Float32, [channels] per frame, 48 kHz) whose first frame is
+    /// composition frame [first]; consecutive calls continue the scan.
+    mutating func scan(_ samples: UnsafeBufferPointer<Float>, firstFrame first: Int64, channels: Int) {
+        let rate = Double(ExportPCM.sampleRate)
+        let count = samples.count / channels
         if let expected = scanNext, abs(first - expected) > 1 {
             runStart = nil
             lastLoud = nil
@@ -1101,16 +939,10 @@ final class MixAudioSource: SegmentAudioSource {
             mono1 = nil
             mono2 = nil
         }
-        scanNext = first + Int64(frameCount)
-        var pointer: UnsafeMutablePointer<Int8>?
-        var length = 0
-        guard CMBlockBufferGetDataPointer(block, atOffset: 0, lengthAtOffsetOut: &length, totalLengthOut: nil,
-                                          dataPointerOut: &pointer) == kCMBlockBufferNoErr, let base = pointer else { return }
-        let channels = ExportPCM.channels
-        let count = min(frameCount, length / (4 * channels))
+        scanNext = first + Int64(count)
         let framesPerUs = rate / 1_000_000
         func frame(_ us: Int64) -> Int64 { Int64((Double(us) * framesPerUs).rounded()) }
-        base.withMemoryRebound(to: Float.self, capacity: count * channels) { samples in
+        do {
             for f in 0..<count {
                 var magnitude: Float = 0
                 var sum: Float = 0
@@ -1121,7 +953,7 @@ final class MixAudioSource: SegmentAudioSource {
                 }
                 let index = first + Int64(f)
                 // Dropouts.
-                if !timePitchWatch.spans.isEmpty {
+                if !watch.spans.isEmpty {
                     let loud = magnitude >= TimePitchWatch.abruptEdge
                     if let pending = pendingRun {
                         if index >= pending.end + TimePitchWatch.edgeFrames {
@@ -1175,28 +1007,378 @@ final class MixAudioSource: SegmentAudioSource {
         }
     }
 
-    private func flagDropout(start: Int64, end: Int64, rate: Double) {
+    private mutating func flagDropout(start: Int64, end: Int64, rate: Double) {
         let startUs = Int64((Double(start) * 1_000_000 / rate).rounded(.down))
         let endUs = Int64((Double(end) * 1_000_000 / rate).rounded(.up))
-        guard timePitchWatch.watches(startUs: startUs, endUs: endUs) else { return }
+        guard watch.watches(startUs: startUs, endUs: endUs) else { return }
         dropouts += 1
-        if firstTimePitchFault == nil {
-            firstTimePitchFault = "dropout of \(end - start) frames at \(startUs) µs"
+        faults.append(TimePitchFault(kind: .dropout, frame: start))
+        if firstFault == nil {
+            firstFault = "dropout of \(end - start) frames at \(startUs) µs"
         }
     }
 
     /// Counts the seam steps of the seams the read covered completely.
-    private func evaluateSeams() {
+    mutating func evaluateSeams() {
         guard !seamsEvaluated else { return }
         seamsEvaluated = true
         for stats in seamStats where stats.complete {
             guard stats.window >= TimePitchWatch.abruptEdge,
                   stats.window > TimePitchWatch.seamStepRatio * stats.reference else { continue }
             seamSteps += 1
-            if firstTimePitchFault == nil {
-                firstTimePitchFault = "seam step at \(stats.seamUs) µs, peak \(stats.window) vs \(stats.reference)"
+            faults.append(TimePitchFault(kind: .seamStep, frame: Int64((Double(stats.seamUs) * Double(ExportPCM.sampleRate) / 1_000_000).rounded())))
+            if firstFault == nil {
+                firstFault = "seam step at \(stats.seamUs) µs, peak \(stats.window) vs \(stats.reference)"
             }
         }
+    }
+}
+
+/// The audio mix of the export composition (AVAssetReaderAudioMixOutput with IOS-18 gain taps),
+/// clamped to [−1, 1] and validated (see the file comment).
+final class MixAudioSource: SegmentAudioSource {
+    private let composition: ExportComposition
+    private let expectAudible: Bool
+    private let control: PipelineControl?
+    /// The reader in use; its AVAssetReader lives on the session's own queue. `session`,
+    /// `sessions` and `hung` are lock-protected: the pump reads, the work queue closes and retires
+    /// (also when IOS-17 abandoned a pump that is still inside `nextAudio`).
+    private var _session: MixReadSession?
+    /// Sessions opened by this source (the first plus resumes), for validation and teardown.
+    private var _sessions: [MixReadSession] = []
+    private let lock = NSLock()
+
+    private func locked<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
+    }
+
+    private var session: MixReadSession? { locked { _session } }
+    private var sessions: [MixReadSession] { locked { _sessions } }
+
+    /// Takes the current session out (nil afterwards) and marks it as left behind when [hung].
+    private func takeSession(hung leftBehind: Bool) -> MixReadSession? {
+        locked {
+            let s = _session
+            _session = nil
+            if leftBehind, let s = s { _hung.append(s) }
+            return s
+        }
+    }
+    /// The range the writer gets (every reader reads `readRange`, see the header).
+    private var range: CMTimeRange = .invalid
+    private var rangeEnd: CMTime { range.end }
+    /// Absolute 48 kHz frame of the next frame the writer gets (continuity across a resume).
+    private var nextFrame: Int64 = 0
+    /// A real buffer held back while the silence of a resume gap goes first.
+    private var pending: CMSampleBuffer?
+
+    /// Reject bad reads (false on the last attempt: a NaN, silent or tap-discontinuity read is
+    /// accepted, sanitised; a time-pitch fault still fails the read, `timePitchFailed`).
+    var validates = true
+    /// Faults every earlier read of the job reproduced (set on the last attempt only): the content,
+    /// not a time-pitch fault; ignored.
+    var contentFaults: [TimePitchFault] = []
+    /// Seconds one buffer may take before the read counts as hung (the watchdog only signals: the
+    /// blocked reader is never cancelled or released while its call is outstanding).
+    var watchdog: TimeInterval = 8
+    /// A fresh export composition for a resume after a hung read (nil: a hung read fails the read).
+    var reopen: (() throws -> ExportComposition)?
+    /// Resumes per read after hung reads (each on a fresh composition and reader from the frame
+    /// after the last delivered buffer).
+    var maxResumes = 3
+    /// Test hook: rewrites the floats of buffer n (0-based) before validation.
+    var corrupt: ((Int, UnsafeMutableBufferPointer<Float>) -> Void)?
+    /// Test hook: runs on the reader's queue right before read n (0-based, over all sessions)
+    /// calls copyNextSampleBuffer (block it to simulate AVFoundation's hung read).
+    var readGate: ((Int) -> Void)?
+    /// Test hook: called on a session's queue once its reader is cancelled and released.
+    var onTeardown: (() -> Void)?
+    /// Test hook: called when the watchdog gives up on a read (the pump queue).
+    var onHung: (() -> Void)?
+    private var reads = 0
+
+    /// Resumes done after hung reads.
+    private(set) var resumes = 0
+    /// Hung reads seen (each one left alone on its own queue).
+    private(set) var hungReads = 0
+    private var _hung: [MixReadSession] = []
+
+    /// Why the read was rejected (nil = accepted or not finished).
+    private(set) var rejection: String?
+    private(set) var frames = 0
+    private(set) var nanSamples = 0
+    private(set) var clippedSamples = 0
+    private(set) var peak: Float = 0
+    private var buffers = 0
+
+    /// Dropout and seam-step checks (none = not checked).
+    var timePitchWatch = TimePitchWatch.none {
+        didSet { timePitchScan = TimePitchScan(watch: timePitchWatch) }
+    }
+    private var timePitchScan = TimePitchScan(watch: .none)
+    /// Dropouts and seam steps found (the first one described in `firstTimePitchFault`).
+    var dropouts: Int { timePitchScan.dropouts }
+    var seamSteps: Int { timePitchScan.seamSteps }
+    var firstTimePitchFault: String? { timePitchScan.firstFault }
+    /// Every time-pitch fault of the read (content faults included).
+    var timePitchFaults: [TimePitchFault] { timePitchScan.faults }
+    /// The faults that are not `contentFaults`.
+    var unexplainedFaults: [TimePitchFault] {
+        timePitchFaults.filter { f in !contentFaults.contains { $0.matches(f) } }
+    }
+    /// Whether the read reached its end and was scanned (validation ran).
+    private(set) var scanned = false
+    /// The read's defect other than a time-pitch fault (NaN, silent, tap range discontinuity,
+    /// ended early), nil when it had none. Such a read's time-pitch scan is no evidence of the
+    /// content (`isTimePitchWitness`).
+    private(set) var otherDefect: String?
+    /// Whether the read ended more than `maxShortfallUs` before its range end (never shipped).
+    private(set) var shortRead = false
+    /// A scanned read without another defect: its time-pitch faults count for
+    /// `TimePitchFault.recurring`.
+    var isTimePitchWitness: Bool { scanned && otherDefect == nil }
+    /// How far before the range end a read may stop (the mix output ends a few ms early).
+    static let maxShortfallUs: Int64 = 50_000
+    /// Whether the read was refused for a time-pitch fault while not validating (the last attempt):
+    /// the export fails rather than ship the dropout.
+    private(set) var timePitchFailed = false
+
+    /// Peak below which a whole read counts as silent.
+    static let silencePeak: Float = 1e-5
+
+    init(composition: ExportComposition, expectAudible: Bool, control: PipelineControl?) {
+        self.composition = composition
+        self.expectAudible = expectAudible
+        self.control = control
+    }
+
+    func openAudio(startUs: Int64, endUs: Int64) throws {
+        closeAudio()
+        guard composition.built.audioMix != nil, !composition.audioTracks.isEmpty else {
+            // D-38: never construct a mix output over zero tracks.
+            throw EngineError(.internal, "audio mix without tracks")
+        }
+        let range = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: composition.built.plan)
+        self.range = range
+        nextFrame = MixAudioSource.frame(range.start)
+        try open(composition, range: readRange)
+    }
+
+    /// What every reader of this source reads: from the timeline start to the range end. A mix
+    /// reader whose range starts inside the timeline stops early (see the header), so a range that
+    /// starts later is read from 0 and the frames before its start are dropped (`realigns`). The
+    /// export always reads [0, end); the pre-roll only costs a source opened later.
+    private var readRange: CMTimeRange { CMTimeRange(start: .zero, end: range.end) }
+
+    /// Whether the session's buffers are aligned to `nextFrame` (frames already written or before
+    /// the range start dropped, a late start filled with silence): after a resume, or for a range
+    /// that starts after 0.
+    private var realigns: Bool { sessions.count > 1 || nextFrameMayLead }
+    private var nextFrameMayLead: Bool { range.start.isNumeric && CMTimeCompare(range.start, .zero) > 0 }
+
+    private func open(_ composition: ExportComposition, range: CMTimeRange) throws {
+        let s = try MixReadSession(composition: composition, range: range, onTeardown: onTeardown)
+        locked {
+            _session = s
+            _sessions.append(s)
+        }
+    }
+
+    static func frame(_ time: CMTime) -> Int64 {
+        Int64((time.seconds * Double(ExportPCM.sampleRate)).rounded())
+    }
+
+    func nextAudio() throws -> CMSampleBuffer? {
+        control?.waitWhileThermalCritical()
+        if let held = pending {
+            pending = nil
+            return try sanitized(held, skip: 0)
+        }
+        while true {
+            guard let current = session else { return nil }
+            let n = reads
+            reads += 1
+            switch try waitFor(current.read(gate: readGate, index: n)) {
+            case .sample(let sample):
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                guard pts.isNumeric else { return try sanitized(sample, skip: 0) }
+                let first = MixAudioSource.frame(pts)
+                let count = Int64(CMSampleBufferGetNumSamples(sample))
+                let realigns = self.realigns
+                if first + count <= nextFrame && realigns { continue } // written already, or before the range
+                if first > nextFrame && realigns {
+                    // The reader started late: silence for the gap, then the buffer.
+                    pending = sample
+                    let gap = Int(first - nextFrame)
+                    let silence = try ExportPCM.makeBuffer(
+                        frames: gap, pts: CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate))) { _ in }
+                    return try sanitized(silence, skip: 0, real: false)
+                }
+                let skip = realigns ? Int(max(0, nextFrame - first)) : 0
+                return try sanitized(sample, skip: skip)
+            case .end:
+                try finishValidation()
+                return nil
+            case .failed(let error):
+                rejection = "failed"
+                throw error.map(EngineError.from) ?? EngineError(.decodeFailed, "audio reader failed")
+            case .hung:
+                hungReads += 1
+                onHung?()
+                // The watchdog only signals: the blocked call keeps its reader, and the reader is
+                // never cancelled or released, not even once the call returns (tearing down an
+                // audio mix reader whose render threads got stuck crashed inside AudioToolbox under
+                // Thread Sanitizer). It is left behind with its composition, like IOS-17's
+                // abandoned pumps.
+                takeSession(hung: true)?.abandon()
+                guard let reopen = reopen, resumes < maxResumes, CMTimeCompare(resumeTime, rangeEnd) < 0 else {
+                    rejection = "hung"
+                    throw EngineError(.decodeFailed, "audio read hung", retryable: true)
+                }
+                resumes += 1
+                Log.info(.export, "audio read hung at \(resumeTime.seconds) s; reading again on a fresh reader from \(range.start.seconds) s (\(resumes))")
+                // From the range start, never from the resume point (see the header); the frames
+                // before `nextFrame` are dropped above.
+                try open(try reopen(), range: readRange)
+            }
+        }
+    }
+
+    private var resumeTime: CMTime { CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate)) }
+
+    /// Waits for [ticket] in short slices: at most `watchdog` seconds (then `.hung`), and never
+    /// past a stop request (a cancel or background interruption ends the read at once, typed as
+    /// an interruption; the blocked call is left to its queue).
+    private func waitFor(_ ticket: MixReadSession.Ticket) throws -> MixReadSession.Outcome {
+        let deadline = Date().addingTimeInterval(watchdog)
+        while true {
+            if let outcome = ticket.wait(SegmentedWriter.waitSlice) { return outcome }
+            if control?.shouldStop == true {
+                // Left behind like a hung read: its call may still be inside AVFoundation.
+                takeSession(hung: true)?.close()
+                throw EngineError(.interrupted, "audio read stopped", retryable: true)
+            }
+            if Date() >= deadline { return .hung }
+        }
+    }
+
+    /// Closes every reader of this source (each teardown queued behind any outstanding call) and
+    /// releases each reader's composition once that reader is gone: at once for the readers that
+    /// tear down within [timeout], later (on the reader's queue) for one still blocked inside
+    /// AVFoundation, which is never waited for. Returns whether every reader was torn down.
+    @discardableResult
+    func retireReaders(timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        var all = true
+        let (opened, leftBehind) = locked { (_sessions, _hung) }
+        for s in opened {
+            s.close()
+            // A hung reader is not waited for (its call may never return).
+            if !leftBehind.contains(where: { $0 === s }), s.waitClosed(until: deadline) {
+                s.composition.release()
+            } else {
+                all = false
+                s.afterTeardown { s.composition.release() }
+            }
+        }
+        return all
+    }
+
+    /// The compositions this source read (the first plus one per resume).
+    var compositions: [ExportComposition] { sessions.map(\.composition) }
+
+    private func finishValidation() throws {
+        scanned = true
+        timePitchScan.evaluateSeams()
+        let unexplained = unexplainedFaults
+        let timePitchReason = unexplained.isEmpty ? nil
+            : "time-pitch fault (\(dropouts) dropout(s), \(seamSteps) seam step(s), \(unexplained.count) not content; first: \(firstTimePitchFault ?? "?"))"
+        if timePitchFaults.count > unexplained.count {
+            Log.info(.export, "audio read: \(timePitchFaults.count - unexplained.count) time-pitch fault(s) reproduced by every read; kept as content")
+        }
+        var reason: String?
+        // A resumed session's taps start at its own range start (no discontinuity there).
+        let jumps = sessions.flatMap { $0.composition.built.gainTaps }.map(\.rangeDiscontinuities).reduce(0, +)
+        let shortfall = MixAudioSource.frame(rangeEnd) - nextFrame
+        if shortfall * 1_000_000 > MixAudioSource.maxShortfallUs * Int64(ExportPCM.sampleRate) {
+            shortRead = true
+            otherDefect = "ended early at \(Double(nextFrame) / Double(ExportPCM.sampleRate)) s of \(rangeEnd.seconds) s"
+        } else if nanSamples > 0 {
+            otherDefect = "NaN"
+        } else if expectAudible && peak < MixAudioSource.silencePeak {
+            otherDefect = "silent"
+        } else if jumps > 0 {
+            otherDefect = "tap range discontinuity"
+        }
+        reason = otherDefect ?? timePitchReason
+        guard let reason = reason else { return }
+        if shortRead {
+            // Never ship audio that stops early, not even on the last attempt.
+            rejection = reason
+            throw EngineError(.decodeFailed, "audio read rejected: \(reason)", retryable: true)
+        }
+        if !validates, let timePitchReason = timePitchReason {
+            // Never ship a dropout: the last attempt fails instead (the pipeline types the error).
+            rejection = timePitchReason
+            timePitchFailed = true
+            throw EngineError(.decodeFailed, "audio read rejected: \(timePitchReason)", retryable: true)
+        }
+        guard validates else {
+            Log.info(.export, "audio read accepted on the last attempt despite: \(reason)")
+            return
+        }
+        rejection = reason
+        throw EngineError(.decodeFailed, "audio read rejected: \(reason)", retryable: true)
+    }
+
+    /// A copy of [sample] without its first [skip] frames, NaN → 0 and every sample clamped to
+    /// [−1, 1]. [real] false: generated silence (not counted as a read buffer for `corrupt`).
+    private func sanitized(_ sample: CMSampleBuffer, skip: Int, real: Bool = true) throws -> CMSampleBuffer {
+        guard let block = CMSampleBufferGetDataBuffer(sample) else { throw EngineError(.decodeFailed, "audio buffer without data") }
+        let length = CMBlockBufferGetDataLength(block)
+        let count = length / MemoryLayout<Float>.size
+        let total = count / ExportPCM.channels
+        let frameCount = total - skip
+        var pts = CMSampleBufferGetPresentationTimeStamp(sample)
+        if skip > 0 { pts = CMTimeAdd(pts, CMTime(value: CMTimeValue(skip), timescale: CMTimeScale(ExportPCM.sampleRate))) }
+        guard frameCount > 0 else { return try ExportPCM.makeBuffer(frames: 1, pts: pts) { _ in } }
+        let index = buffers
+        if real { buffers += 1 }
+        var nan = 0
+        var clipped = 0
+        var localPeak: Float = 0
+        let offset = skip * ExportPCM.channels * 4
+        let out = try ExportPCM.makeBuffer(frames: frameCount, pts: pts) { dst in
+            _ = dst.withMemoryRebound(to: UInt8.self) { bytes in
+                CMBlockBufferCopyDataBytes(block, atOffset: offset, dataLength: frameCount * ExportPCM.channels * 4, destination: bytes.baseAddress!)
+            }
+            if real { corrupt?(index, dst) }
+            for i in 0..<dst.count {
+                var v = dst[i]
+                if v.isNaN {
+                    nan += 1
+                    v = 0
+                } else if v > 1 {
+                    clipped += 1
+                    v = 1
+                } else if v < -1 {
+                    clipped += 1
+                    v = -1
+                }
+                dst[i] = v
+                let a = abs(v)
+                if a > localPeak { localPeak = a }
+            }
+        }
+        frames += frameCount
+        if pts.isNumeric { nextFrame = MixAudioSource.frame(pts) + Int64(frameCount) }
+        nanSamples += nan
+        clippedSamples += clipped
+        peak = max(peak, localPeak)
+        if !timePitchWatch.isEmpty { timePitchScan.scan(out, frames: frameCount) }
+        return out
     }
 
     func closeAudio() {

@@ -134,17 +134,45 @@ written by `benchmark/src/large_project.dart` (deterministic) and regenerated wi
 
 ```sh
 dart run benchmark/run.dart                    # measure and print
-dart run benchmark/run.dart --check            # CI gate (core.sh): budgets + ≤ 25 % p90 regression
-dart run benchmark/run.dart --update-baseline  # rewrite benchmark/baseline.json (on the CI host)
+dart run benchmark/run.dart --check            # CI gate (core.sh): ≤ 25 % p90 regression (+ budgets with DV_PERF_STRICT=1)
+dart run benchmark/run.dart --update-baseline  # rewrite benchmark/baseline.json (on the dev Mac)
 dart run benchmark/run.dart --json out.json    # also write the results
 ```
 
 `--check` fails when any of these hold:
 
-- a gated row misses its budget;
-- a row's p90 exceeds `baseline × 1.25` by more than 50 µs;
-- the fixture loses its shape, validity or D-14 limits.
+- a row's p90 exceeds `baseline × f × 1.25` by more than 50 µs (always on, CI included);
+- a probe's host factor exceeds the `codec` factor × 1.6 (always on; see below);
+- the fixture loses its shape, validity or D-14 limits;
+- with `DV_PERF_STRICT=1` only: a gated row's p90 exceeds its ARCH §18.2 budget, unscaled.
 
-A failing row is measured again up to twice, and the best run counts. Refresh the baseline only on
-the CI host, and only for an intended change. The device numbers (one mid-tier Android, one iPhone)
-are recorded through QA-04.
+A failing row is measured again up to twice, and the best run counts.
+
+**Absolute budgets are strict only with `DV_PERF_STRICT=1`.** The §18.2 budgets (dryRun 1 ms,
+incremental compile 3 ms, …) are device budgets, verified on the dev Mac and by QA-04 on devices. A
+slower CI host misses them with no regression in the code, so CI (`core.sh`) reports a budget miss
+without failing and gates on the relative regression rule. Run
+`DV_PERF_STRICT=1 dart run benchmark/run.dart --check` on the dev Mac (a quiet machine) before a
+change to a hot path lands.
+
+**Host factor f.** `baseline.json` is recorded on the dev Mac (Apple M2, 8 cores, macOS 26.6.2,
+AOT); no CI runner matches it (ubuntu-latest runs 1.2–1.6× slower depending on the kind of work,
+and its machines differ from run to run). Each run therefore times calibration workloads before
+and after the rows, and a row's f = the lower of the two p50s of its kind ÷ the baseline's
+`calibrationUs` of that kind:
+
+| Kind | Workload | Rows |
+|---|---|---|
+| `compute` | pure-Dart object churn, maps, sorting (`benchmark/src/calibration.dart`) | apply, dryRun, compiles |
+| `codec` | pure-Dart JSON parse/encode, string and byte building | open |
+| `planEncode` | probe: `PlanJson.encodePlanBytes` of a 300-clip one-lane plan | plan encode |
+| `autosave` | probe: `ProjectJsonCodec.encodeBytes` of a 2,000-clip one-lane project | autosave |
+
+The encoders slow down on x86_64 more than any generic workload predicts (ubuntu: codec 1.16×,
+the encode rows ≈ 1.5×), so their rows are calibrated by a probe of the same encoder on a smaller,
+differently shaped input. A probe runs package code, so an encoder change that slows every input
+alike would move the probe with its row; the probe rule catches that: a probe's factor may exceed
+the `codec` factor by at most 1.6× (ubuntu ≈ 1.3×). On the dev Mac every f ≈ 1. Refresh the
+baseline on the dev Mac, on a quiet machine, and only for an intended change (`--update-baseline`
+writes the calibration too). The device numbers (one mid-tier Android, one iPhone) are recorded
+through QA-04.

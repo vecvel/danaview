@@ -173,7 +173,7 @@ final class CompatibilityTests: XCTestCase {
         for (name, entry) in manifest.sorted(by: { $0.key < $1.key }) {
             let (answer, elapsed) = try check(try ProbeFixtures.url(name))
             slowest = max(slowest, elapsed)
-            XCTAssertLessThanOrEqual(elapsed, 0.3, "\(name) took \(Int(elapsed * 1000)) ms")
+            PerfGate.assertAtMost(elapsed, 0.3, "\(name) took \(Int(elapsed * 1000)) ms")
             if entry["iosRefusal"] as? Bool ?? false {
                 XCTAssertFalse(answer.editable, name)
                 XCTAssertEqual(answer.code, "container_unsupported_ios", name)

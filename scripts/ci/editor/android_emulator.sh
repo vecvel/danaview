@@ -37,6 +37,10 @@
 # Environment:
 #   ANDROID_SERIAL     the device to use (default: the only/first device `adb devices` lists)
 #   DANAVIEW_GRADLE_ARGS  extra Gradle arguments (CI adds --no-daemon)
+#   DV_PERF_STRICT=1   absolute performance limits: the instrumented tests' timing, frame-count and
+#                      throughput limits (harness/PerfGate.kt) and, through --dart-define, the
+#                      integration_test suites' (conformance/preset_matrix ±25 % bitrate). For a real
+#                      device with a hardware encoder; CI's emulator runs without it
 #   DANAVIEW_EMULATOR_BATCHES  space-separated batches to run instead of every package, e.g.
 #                      "effects proxy"; join packages with a comma to run them as one batch
 #                      ("drop,harness")
@@ -140,6 +144,11 @@ if [ "$DRY_RUN" != 1 ]; then
   done
   [ "$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] || die "$SERIAL did not finish booting"
   echo "device $SERIAL, API $("$ADB" -s "$SERIAL" shell getprop ro.build.version.sdk | tr -d '\r'), $("$ADB" -s "$SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')"
+  # Emulator readiness (emulator_ensure / emulator_booted / emulator_relaunch): an emulator that
+  # stops answering during a batch or suite is relaunched (CI sets DANAVIEW_EMULATOR_AVD) and that
+  # batch or suite runs once more; a device that is not an emulator is only waited for.
+  # shellcheck source=emulator_ready.sh
+  source "$ROOT/scripts/ci/editor/emulator_ready.sh"
   endgroup
 else
   SERIAL="${ANDROID_SERIAL:-<serial>}"
@@ -148,6 +157,8 @@ fi
 
 declare -a GRADLE_ARGS=()
 if [ "$GHA" = true ]; then GRADLE_ARGS+=(--no-daemon); fi
+# Absolute performance limits of the instrumented tests only with DV_PERF_STRICT=1 (PerfGate.kt).
+if [ "${DV_PERF_STRICT:-}" = 1 ]; then GRADLE_ARGS+=("-Pandroid.testInstrumentationRunnerArguments.DV_PERF_STRICT=1"); fi
 for a in ${DANAVIEW_GRADLE_ARGS:-}; do GRADLE_ARGS+=("$a"); done
 
 group "flutter pub get + Gradle config (example)"
@@ -171,6 +182,33 @@ xml_sum() {
       END { print n + 0 }'
 }
 
+# The failed tests of a batch: "<class>#<method>" from its JUnit XML.
+failed_tests() {
+  find "$1" -name '*.xml' -type f 2>/dev/null | grep -v '/testlog/' | while IFS= read -r f; do
+    awk '
+      /<testcase / {
+        n = ""; c = ""
+        if (match($0, / name="[^"]*"/)) n = substr($0, RSTART + 7, RLENGTH - 8)
+        if (match($0, / classname="[^"]*"/)) c = substr($0, RSTART + 12, RLENGTH - 13)
+      }
+      /<failure|<error/ { if (n != "") print c "#" n }' "$f" || true
+  done | sort -u || true
+}
+
+# Prints the device log of each failed test (UTP's logcat-<class>-<method>.txt in the batch's
+# results), warnings and errors plus the engine's own lines, so a failure that only reproduces on
+# the CI emulator can be read from the job log without the results directory.
+print_failed_logcat() {
+  local dir="$1" t m logs
+  failed_tests "$dir" | while IFS= read -r t; do
+    m="${t#*#}"
+    logs="$(find "$dir" -type f -name "logcat-*${m}*.txt" 2>/dev/null | head -n 1 || true)"
+    [ -n "$logs" ] || continue
+    echo "--- logcat of $t (warnings, errors and engine lines, last 150) ---"
+    grep -E ' [WEF] | [WEF]/|^[WEF]/|[Dd]anaview|AND[0-9]|Media3|FrameExtractor|VideoFrameProcessor|ExoPlayer' "$logs" | tail -n 150 || true
+  done
+}
+
 declare -a SUMMARY=()
 FAILED=0
 if [ "$DRY_RUN" != 1 ]; then rm -rf "$RESULTS_DST"; mkdir -p "$RESULTS_DST"; fi
@@ -186,11 +224,21 @@ for b in "${BATCHES[@]}"; do
       "-Pandroid.testInstrumentationRunnerArguments.package=$pkgs"
     tests="-" failures="-" status=DRY
   else
-    rm -rf "$RESULTS_SRC"
-    if ! run "$EXAMPLE/android" ./gradlew "${GRADLE_ARGS[@]+"${GRADLE_ARGS[@]}"}" :danaview_editor_engine:connectedDebugAndroidTest \
-      "-Pandroid.testInstrumentationRunnerArguments.package=$pkgs"; then
-      status=FAIL
-    fi
+    for attempt in 1 2; do
+      status=PASS
+      emulator_ensure || true
+      rm -rf "$RESULTS_SRC"
+      if ! run "$EXAMPLE/android" ./gradlew "${GRADLE_ARGS[@]+"${GRADLE_ARGS[@]}"}" :danaview_editor_engine:connectedDebugAndroidTest \
+        "-Pandroid.testInstrumentationRunnerArguments.package=$pkgs"; then
+        status=FAIL
+      fi
+      # The emulator went away during the batch: relaunch it and run the batch once more.
+      if [ "$status" = FAIL ] && [ "$attempt" = 1 ] && ! emulator_booted; then
+        fail_note "the emulator stopped answering during batch $label; relaunching it and running the batch again"
+        emulator_ensure && continue
+      fi
+      break
+    done
     mkdir -p "$RESULTS_DST/$label"
     if [ -d "$RESULTS_SRC" ]; then cp -R "$RESULTS_SRC/." "$RESULTS_DST/$label/"; fi
     tests="$(xml_sum "$RESULTS_DST/$label" tests)"
@@ -199,6 +247,7 @@ for b in "${BATCHES[@]}"; do
     if [ "$f" = "?" ]; then failures="?"; else failures=$((f + e)); fi
     if [ "$status" = PASS ] && [ "$failures" != "?" ] && [ "$failures" -gt 0 ]; then status=FAIL; fi
     if [ "$status" = PASS ] && [ "$tests" = "?" ]; then status=FAIL; fi
+    if [ "$status" = FAIL ]; then print_failed_logcat "$RESULTS_DST/$label" || true; fi
   fi
   elapsed=$((SECONDS - started))
   if [ "$status" = FAIL ]; then
@@ -260,6 +309,8 @@ push_qa03_media() {
 }
 
 suite_defines() {
+  # DV_PERF_STRICT=1 reaches the Dart suites as a define (conformance_test.dart perfStrict).
+  if [ "${DV_PERF_STRICT:-}" = 1 ]; then echo "--dart-define=DV_PERF_STRICT=1"; fi
   case "$1" in
     accuracy | av_sync) echo "--dart-define=QA03_MEDIA=$DEVICE_FILES/qa03_media" ;;
     parity)
@@ -289,10 +340,22 @@ else
       run "$EXAMPLE" flutter test "integration_test/$f" -d "$SERIAL" --no-uninstall ${D[@]+"${D[@]}"}
       status=DRY passed="-" failures="-" skipped="-"
     else
-      status=PASS
-      if ! (cd "$EXAMPLE" && flutter test "integration_test/$f" -d "$SERIAL" --no-uninstall ${D[@]+"${D[@]}"}) 2>&1 | tee "$logf"; then
-        status=FAIL
-      fi
+      for attempt in 1 2; do
+        status=PASS
+        emulator_ensure || true
+        if ! (cd "$EXAMPLE" && flutter test "integration_test/$f" -d "$SERIAL" --no-uninstall ${D[@]+"${D[@]}"}) 2>&1 | tee "$logf"; then
+          status=FAIL
+        fi
+        # The emulator went away during the suite: relaunch it (media pushed again) and rerun once.
+        if [ "$status" = FAIL ] && [ "$attempt" = 1 ] && ! emulator_booted; then
+          fail_note "the emulator stopped answering during integration_test/$f; relaunching it and running the suite again"
+          if emulator_ensure; then
+            if needs_media "$s"; then MEDIA_PUSHED=false; push_qa03_media; fi
+            continue
+          fi
+        fi
+        break
+      done
       read -r passed failures skipped < <(progress_counts "$logf")
       if [ "$status" = FAIL ]; then
         SUITES_FAILED=$((SUITES_FAILED + 1))

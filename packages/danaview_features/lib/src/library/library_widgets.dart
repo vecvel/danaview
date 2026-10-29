@@ -29,7 +29,8 @@ int danaviewLibraryGridColumns(double contentWidth) {
   );
 }
 
-/// One opaque card of a library grid (the grid form of a [DanaviewLibraryGroup] row).
+/// One card of a library grid (the grid form of a [DanaviewLibraryGroup] row): a §8 `surface`
+/// card, radius 12, with the hairline-depth recipe.
 class DanaviewLibraryCard extends StatelessWidget {
   const DanaviewLibraryCard({super.key, required this.child});
 
@@ -37,11 +38,9 @@ class DanaviewLibraryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DanaviewSurface(
-      color: DanaviewColors.surface,
-      padding: const EdgeInsets.all(DanaviewSpacing.xs),
-      // Unclipped so a row's keyboard focus ring is never cut off.
-      clip: false,
+    // Unclipped so a row's keyboard focus ring is never cut off.
+    return DecoratedBox(
+      decoration: DanaviewDepth.card(borderRadius: DanaviewRadius.controlAll, shadows: DanaviewShadows.none),
       child: child,
     );
   }
@@ -80,6 +79,12 @@ class DanaviewLibraryCardGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Its own layer wherever it sits (a Home column, a tab's sliver), so the rows rasterize the same
+    // in every host (HOM-07/HOM-08 pixel-equality).
+    return RepaintBoundary(child: _grid());
+  }
+
+  Widget _grid() {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = danaviewLibraryGridColumns(constraints.maxWidth);
@@ -124,6 +129,38 @@ Widget danaviewLibrarySliverGrid({
   );
 }
 
+/// A lazy §8 grouped list of [itemCount] library rows: one `surface` card, radius 12, the rows
+/// split by inset dividers, built a row at a time so a long list costs only what is on screen.
+/// Each row draws its slice of the card (the first rounds the top, the last the bottom).
+Widget danaviewLibrarySliverGroup({
+  Key? key,
+  required int itemCount,
+  required IndexedWidgetBuilder itemBuilder,
+}) {
+  const r = Radius.circular(DanaviewRadius.control);
+  return SliverList.builder(
+    key: key,
+    itemCount: itemCount,
+    itemBuilder: (context, i) {
+      final first = i == 0;
+      final last = i == itemCount - 1;
+      return DecoratedBox(
+        decoration: ShapeDecoration(
+          color: DanaviewColors.surface,
+          shape: DanaviewDepth.shape(BorderRadius.vertical(top: first ? r : Radius.zero, bottom: last ? r : Radius.zero)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!first) const DanaviewRowDivider(),
+            itemBuilder(context, i),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 /// Thin rounded watched-progress bar.
 class DanaviewProgressLine extends StatelessWidget {
   const DanaviewProgressLine({
@@ -157,8 +194,9 @@ class DanaviewProgressLine extends StatelessWidget {
   }
 }
 
-/// A list row for media, folders and playlists: leading tile, two text lines, an optional
-/// episode badge and progress bar, and a compact trailing control.
+/// A grouped-list row for media, folders and playlists (§8): a neutral icon tile, a 17 pt title,
+/// a footnote line with an optional episode badge, an optional progress bar and a compact trailing
+/// control.
 class DanaviewLibraryRow extends StatelessWidget {
   const DanaviewLibraryRow({
     super.key,
@@ -212,16 +250,15 @@ class DanaviewLibraryRow extends StatelessWidget {
                 title,
                 maxLines: titleMaxLines,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  height: 1.25,
-                  letterSpacing: -0.1,
+                // Whole-pixel line boxes (22 + 2 + 16), so rows land on the same pixel grid in
+                // every host and the HOM-08 crops compare equal.
+                style: DanaviewTextStyles.bodyLarge.copyWith(
+                  height: 22 / 17,
                   color: dimmed ? DanaviewColors.textSecondary : DanaviewColors.textPrimary,
                 ),
               ),
               if (subtitle != null || badge != null) ...[
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Row(
                   children: [
                     if (badge != null) ...[
@@ -234,10 +271,9 @@ class DanaviewLibraryRow extends StatelessWidget {
                           subtitle!,
                           maxLines: subtitleMaxLines,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.3,
-                            color: dimmed ? DanaviewColors.errorLight : DanaviewColors.textMuted,
+                          style: DanaviewTextStyles.footnote.copyWith(
+                            height: 16 / 13,
+                            color: dimmed ? DanaviewColors.errorLight : DanaviewColors.textSecondary,
                           ),
                         ),
                       ),
@@ -263,20 +299,15 @@ class DanaviewLibraryRow extends StatelessWidget {
         final background = state.focused
             ? DanaviewColors.hairlineSubtle
             : highlighted
-                    ? DanaviewColors.primarySoft
-                    : const Color(0x00FFFFFF);
+                ? DanaviewColors.primarySoft
+                : const Color(0x00FFFFFF);
         return AnimatedContainer(
           duration: DanaviewMotion.fast,
           curve: DanaviewMotion.curve,
-          constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 6, 10),
-          decoration: BoxDecoration(color: background, borderRadius: DanaviewRadius.mdAll),
-          foregroundDecoration: BoxDecoration(
-            borderRadius: DanaviewRadius.mdAll,
-            border: Border.fromBorderSide(
-              state.focused ? DanaviewBorders.focus : DanaviewBorders.focus.copyWith(color: const Color(0x00FFFFFF)),
-            ),
-          ),
+          constraints: const BoxConstraints(minHeight: 52),
+          padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 4, 8),
+          decoration: ShapeDecoration(color: background, shape: DanaviewDepth.shape(DanaviewRadius.controlAll)),
+          foregroundDecoration: DanaviewDepth.focusRing(focused: state.focused),
           child: Row(
             children: [
               Expanded(child: content),
@@ -284,7 +315,7 @@ class DanaviewLibraryRow extends StatelessWidget {
                 const SizedBox(width: DanaviewSpacing.xs),
                 trailing!,
               ] else
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
             ],
           ),
         );
@@ -293,25 +324,25 @@ class DanaviewLibraryRow extends StatelessWidget {
   }
 }
 
-/// Hairline between rows, indented to line up with the row text after a 40pt leading tile.
+/// Inset hairline between grouped-list rows: it starts after the 28 pt icon tile (12 + 28 + 12).
 class DanaviewRowDivider extends StatelessWidget {
-  const DanaviewRowDivider({super.key, this.indent = 64});
+  const DanaviewRowDivider({super.key, this.indent = 52});
 
   final double indent;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsetsDirectional.only(start: indent, end: 12),
+      padding: EdgeInsetsDirectional.only(start: indent),
       child: const SizedBox(
         height: DanaviewBorders.width,
-        child: ColoredBox(color: DanaviewColors.hairlineSubtle),
+        child: ColoredBox(color: DanaviewColors.divider),
       ),
     );
   }
 }
 
-/// An opaque card that groups library rows, separated by hairlines.
+/// A §8 grouped list of library rows: one `surface` card, radius 12, rows split by inset dividers.
 class DanaviewLibraryGroup extends StatelessWidget {
   const DanaviewLibraryGroup({super.key, required this.children, this.dividers = true});
 
@@ -320,9 +351,8 @@ class DanaviewLibraryGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DanaviewSurface(
-      color: DanaviewColors.surface,
-      padding: const EdgeInsets.all(DanaviewSpacing.xs),
+    return DecoratedBox(
+      decoration: DanaviewDepth.card(borderRadius: DanaviewRadius.controlAll, shadows: DanaviewShadows.none),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -336,7 +366,8 @@ class DanaviewLibraryGroup extends StatelessWidget {
   }
 }
 
-/// A compact explanatory state that sits inside a section instead of a list.
+/// A compact explanatory state that sits inside a section instead of a list (§8 empty state:
+/// a neutral icon tile, a 17/600 title, a 15/400 body and one secondary action).
 class DanaviewInlineEmpty extends StatelessWidget {
   const DanaviewInlineEmpty({
     super.key,
@@ -345,7 +376,7 @@ class DanaviewInlineEmpty extends StatelessWidget {
     required this.title,
     this.message,
     this.action,
-    this.iconColor = DanaviewColors.primaryLight,
+    this.iconColor = DanaviewColors.textPrimary,
   }) : assert(icon != null || glyph != null, 'Pass an icon or a glyph');
 
   final IconData? icon;
@@ -355,20 +386,23 @@ class DanaviewInlineEmpty extends StatelessWidget {
   final String title;
   final String? message;
   final Widget? action;
+
+  /// The glyph colour: white by default; status icons (an error) pass their status colour.
   final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
     return DanaviewSurface(
       color: DanaviewColors.surface,
+      borderRadius: DanaviewRadius.controlAll,
       padding: const EdgeInsets.all(DanaviewSpacing.lg),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (glyph != null)
-            DanaviewTileIcon.glyph(glyph!, color: iconColor, size: 40)
+            DanaviewIconTile.glyph(glyph!, color: iconColor, size: 40)
           else
-            DanaviewTileIcon(icon!, color: iconColor, size: 40),
+            DanaviewIconTile(icon!, color: iconColor, size: 40),
           const SizedBox(width: DanaviewSpacing.md),
           Expanded(
             child: Column(
@@ -376,10 +410,10 @@ class DanaviewInlineEmpty extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 2),
-                Text(title, style: DanaviewTextStyles.headline),
+                Text(title, style: DanaviewTextStyles.rowTitle),
                 if (message != null) ...[
                   const SizedBox(height: 4),
-                  Text(message!, style: DanaviewTextStyles.caption.copyWith(fontSize: 13, height: 1.35)),
+                  Text(message!, style: DanaviewTextStyles.subhead),
                 ],
                 if (action != null) ...[
                   const SizedBox(height: DanaviewSpacing.md),
@@ -527,13 +561,14 @@ class DanaviewLibraryTopBar extends StatelessWidget {
 }
 
 /// Section title with an optional compact action (capped at half the width). [prominent]
-/// gives the large white Home style; otherwise it is the quiet list-header style.
+/// gives the §6 `sectionHeader` style of Home and the tabs (20/700 white, 24 above, 8 below);
+/// otherwise it is the quiet list-header style.
 class DanaviewLibrarySectionHeader extends StatelessWidget {
   const DanaviewLibrarySectionHeader(
     this.title, {
     super.key,
     this.action,
-    this.topSpacing = 28,
+    this.topSpacing = DanaviewSpacing.xl,
     this.prominent = false,
   });
 
@@ -551,31 +586,10 @@ class DanaviewLibrarySectionHeader extends StatelessWidget {
         padding: EdgeInsets.fromLTRB(4, topSpacing, 0, DanaviewSpacing.sm),
       );
     }
-    final text = Semantics(
-      header: true,
-      child: Text(
-        title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: DanaviewTextStyles.title.copyWith(fontSize: 19, fontWeight: FontWeight.w700, letterSpacing: -0.4),
-      ),
-    );
-    return Padding(
-      padding: EdgeInsets.fromLTRB(4, topSpacing, 0, 10),
-      child: action == null
-          ? Align(alignment: AlignmentDirectional.centerStart, child: text)
-          : LayoutBuilder(
-              builder: (context, constraints) => Row(
-                children: [
-                  Expanded(child: text),
-                  const SizedBox(width: DanaviewSpacing.md),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
-                    child: action,
-                  ),
-                ],
-              ),
-            ),
+    return DanaviewSectionHeader.large(
+      title,
+      action: action,
+      padding: EdgeInsets.fromLTRB(0, topSpacing, 0, DanaviewSpacing.sm),
     );
   }
 }

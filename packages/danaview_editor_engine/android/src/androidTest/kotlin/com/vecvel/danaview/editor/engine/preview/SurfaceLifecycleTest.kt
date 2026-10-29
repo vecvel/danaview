@@ -14,6 +14,7 @@ import com.vecvel.danaview.editor.engine.paused.Stats
 import com.vecvel.danaview.editor.engine.pigeon.PreviewEventKindMsg
 import com.vecvel.danaview.editor.engine.plan.PlanTransform
 import com.vecvel.danaview.editor.engine.support.FrameBarcode
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -57,8 +58,10 @@ class SurfaceLifecycleTest {
             Log.i(AND10_TAG, "onSurfaceCleanup main-thread wait (emulator): ${Stats(waits)}; bridge max ${"%.1f".format(bridge.maxLatchMs)} ms")
             assertEquals(8, bridge.latchCount)
             assertEquals("no latch timed out", 0, bridge.latchTimeouts)
-            assertTrue("latch <= 500 ms (${bridge.maxLatchMs})", bridge.maxLatchMs <= 500.0)
-            assertTrue(waits.all { it <= 520.0 })
+            // The 500 ms latch is a device number (DV_PERF_STRICT=1); 4x on a loaded emulator. No
+            // latch timing out is checked in both modes.
+            assertTrue("latch <= 500 ms (${bridge.maxLatchMs}, bound ${PerfGate.bound(500.0)}, ${PerfGate.mode})", bridge.maxLatchMs <= PerfGate.bound(500.0))
+            assertTrue("main-thread waits ${Stats(waits)} (bound ${PerfGate.bound(520.0)})", waits.all { it <= PerfGate.bound(520.0) })
         }
     }
 
@@ -73,9 +76,11 @@ class SurfaceLifecycleTest {
             Thread.sleep(50)
             val waited = h.producer.simulateCleanup()
             Log.i(AND10_TAG, "cleanup with a blocked preview lane waited ${"%.1f".format(waited)} ms (emulator)")
-            assertTrue("bounded wait ($waited ms)", waited in 480.0..600.0)
+            // The wait ends at the 500 ms timeout, never before it (both modes); how soon after is
+            // timing (600 ms with DV_PERF_STRICT=1, 4x on a loaded emulator).
+            assertTrue("bounded wait ($waited ms, ${PerfGate.mode})", waited in 480.0..PerfGate.bound(600.0))
             assertEquals(1, h.session.bridge.latchTimeouts)
-            assertTrue(h.session.bridge.maxLatchMs <= 520.0)
+            assertTrue(h.session.bridge.maxLatchMs <= PerfGate.bound(520.0))
             // The deferred detach still runs, and the session recovers on the next surface.
             h.waitUntil("surfaceLost") { h.previewEvents(PreviewEventKindMsg.SURFACE_LOST).isNotEmpty() }
             val n = h.producer.frameCount

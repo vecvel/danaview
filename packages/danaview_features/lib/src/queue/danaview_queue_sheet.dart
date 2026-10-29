@@ -95,7 +95,7 @@ class DanaviewQueueSheet extends ConsumerWidget {
                       type: MaterialType.transparency,
                       child: DanaviewSurface(
                         color: DanaviewColors.surfaceElevatedHigher,
-                        borderRadius: DanaviewRadius.mdAll,
+                        borderRadius: DanaviewRadius.controlAll,
                         shadow: DanaviewShadow.soft,
                         child: child,
                       ),
@@ -150,7 +150,7 @@ class _QueueRow extends StatelessWidget {
         subtitle: isCurrent ? (duration == null ? 'Now playing' : 'Now playing · $duration') : duration,
         padding: const EdgeInsets.fromLTRB(8, 4, 0, 4),
         leading: isCurrent
-            ? const DanaviewTileIcon(Icons.play_arrow_rounded, size: 28)
+            ? const DanaviewIconTile(Icons.play_arrow_rounded, size: 28)
             : SizedBox(
                 width: 28,
                 child: Text(

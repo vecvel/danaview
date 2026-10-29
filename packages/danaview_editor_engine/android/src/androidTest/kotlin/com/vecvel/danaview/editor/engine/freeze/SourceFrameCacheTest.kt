@@ -12,6 +12,9 @@
 //   AND-09's LayerLookEffect (the API-03 every-effect layer with its LUT); an identity look matches
 //   the unprocessed still and the looks of one call switch correctly;
 // - async requests complete, and a cancelled one ends `cancelled`.
+// Waits (extractor closes, async completions) are timing: their limits apply as written only with
+// DV_PERF_STRICT=1 and are 4x longer on a loaded emulator (harness/PerfGate.kt); every frame,
+// colour, budget and decode-count check is the same in both modes.
 
 package com.vecvel.danaview.editor.engine.freeze
 
@@ -23,6 +26,7 @@ import com.vecvel.danaview.editor.engine.core.EngineException
 import com.vecvel.danaview.editor.engine.effects.EffectAssets
 import com.vecvel.danaview.editor.engine.effects.RenderGeometry
 import com.vecvel.danaview.editor.engine.harness.FixtureTree
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import com.vecvel.danaview.editor.engine.harness.TestFixtures
 import com.vecvel.danaview.editor.engine.pigeon.CacheTrimLevelMsg
 import com.vecvel.danaview.editor.engine.plan.ParamSnapshot
@@ -223,7 +227,7 @@ class SourceFrameCacheTest {
             result = it
             latch.countDown()
         }
-        assertTrue(latch.await(60, TimeUnit.SECONDS))
+        assertTrue("async request completed", latch.await(PerfGate.boundMs(60_000), TimeUnit.MILLISECONDS))
         assertEquals(200, FrameBarcode.decode(result!!.getOrThrow()))
 
         val cancelled = CountDownLatch(1)
@@ -233,7 +237,7 @@ class SourceFrameCacheTest {
             cancelled.countDown()
         }
         handle.cancel()
-        assertTrue(cancelled.await(60, TimeUnit.SECONDS))
+        assertTrue("cancelled request ended", cancelled.await(PerfGate.boundMs(60_000), TimeUnit.MILLISECONDS))
         val error = outcome!!.exceptionOrNull()
         assertNotNull(error)
         assertEquals(EngineErrorCode.cancelled, (error as EngineException).code)
@@ -257,10 +261,12 @@ class SourceFrameCacheTest {
         }
     }
 
+    /** Waits for [condition]; [timeoutMs] applies with DV_PERF_STRICT=1, 4x it otherwise (a loaded worker). */
     private fun awaitTrue(what: String, timeoutMs: Long = 5_000, condition: () -> Boolean) {
-        val deadline = System.currentTimeMillis() + timeoutMs
+        val limit = PerfGate.boundMs(timeoutMs)
+        val deadline = System.currentTimeMillis() + limit
         while (!condition()) {
-            if (System.currentTimeMillis() > deadline) fail("timed out: $what")
+            if (System.currentTimeMillis() > deadline) fail("timed out after $limit ms (${PerfGate.mode}): $what")
             Thread.sleep(20)
         }
     }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../foundation/danaview_internal.dart';
+import '../theme/danaview_depth.dart';
 import '../theme/danaview_theme.dart';
 import '../theme/danaview_tokens.dart';
 import 'danaview_glyph.dart';
@@ -292,7 +293,7 @@ class _DanaviewMenuAnchorState extends State<DanaviewMenuAnchor> with SingleTick
     var height = 12.0;
     for (final entry in entries) {
       height += switch (entry) {
-        DanaviewMenuItem(:final subtitle) => (touch ? 44.0 : 36.0) + (subtitle != null ? 16 * textScale : 0),
+        DanaviewMenuItem(:final subtitle) => 44.0 + (subtitle != null ? 16 * textScale : 0),
         DanaviewMenuHeader() => 28 * textScale,
         DanaviewMenuDivider() => 9,
       };
@@ -395,6 +396,7 @@ class _DanaviewMenuPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return DanaviewSurface(
       color: DanaviewColors.surfaceElevatedHigher,
+      borderRadius: DanaviewRadius.mediaAll,
       shadow: DanaviewShadow.soft,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(6),
@@ -422,7 +424,7 @@ class _DanaviewMenuPanel extends StatelessWidget {
                 DanaviewMenuDivider() => Container(
                     height: DanaviewBorders.width,
                     margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    color: DanaviewColors.hairline,
+                    color: DanaviewColors.divider,
                   ),
               },
           ],
@@ -438,10 +440,13 @@ class _DanaviewMenuItemTile extends StatelessWidget {
   final DanaviewMenuItem item;
   final VoidCallback onSelected;
 
+  /// The widest a trailing hint may be, as a share of the row's content width.
+  static const double _trailingShare = 0.4;
+
   @override
   Widget build(BuildContext context) {
     final touch = context.isTouchPlatform;
-    final fg = item.destructive ? DanaviewColors.errorLight : DanaviewColors.textPrimary;
+    final fg = item.destructive ? DanaviewColors.destructive : DanaviewColors.textPrimary;
     return DanaviewPressable.builder(
       onTap: item.enabled
           ? () {
@@ -458,54 +463,68 @@ class _DanaviewMenuItemTile extends StatelessWidget {
           AnimatedContainer(
             duration: DanaviewMotion.fast,
             curve: DanaviewMotion.curve,
-            constraints: BoxConstraints(minHeight: touch ? 44 : 36),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: background, borderRadius: DanaviewRadius.smAll),
-            child: Row(
-              children: [
-                if (item.icon != null || item.glyph != null) ...[
-                  danaviewIconOrGlyph(
-                    item.icon,
-                    item.glyph,
-                    size: 18,
-                    color: item.destructive ? DanaviewColors.errorLight : DanaviewColors.textSecondary,
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: item.selected ? FontWeight.w600 : FontWeight.w500,
-                          color: fg,
-                        ),
-                      ),
-                      if (item.subtitle != null)
+            // §8: menu rows are 44 pt everywhere.
+            constraints: const BoxConstraints(minHeight: DanaviewSpacing.minTapTarget),
+            padding: EdgeInsets.symmetric(horizontal: touch ? 12 : 10, vertical: 6),
+            decoration: ShapeDecoration(color: background, shape: DanaviewDepth.shape(DanaviewRadius.tileAll)),
+            // The trailing hint (a shortcut, a value) gets at most 40 % of the row and ellipsizes, so
+            // a long hint or a large text scale never pushes the row past the menu width; the label
+            // keeps the rest.
+            child: LayoutBuilder(
+              builder: (context, constraints) => Row(
+                children: [
+                  if (item.icon != null || item.glyph != null) ...[
+                    danaviewIconOrGlyph(
+                      item.icon,
+                      item.glyph,
+                      size: 18,
+                      color: item.destructive ? DanaviewColors.destructive : DanaviewColors.textSecondary,
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          item.subtitle!,
+                          item.label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: DanaviewColors.textMuted),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: item.selected ? FontWeight.w600 : FontWeight.w500,
+                            color: fg,
+                          ),
                         ),
-                    ],
+                        if (item.subtitle != null)
+                          Text(
+                            item.subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, color: DanaviewColors.textMuted),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                if (item.trailing != null) ...[
-                  const SizedBox(width: 8),
-                  item.trailing!,
+                  if (item.trailing != null) ...[
+                    const SizedBox(width: 8),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: constraints.maxWidth * _trailingShare),
+                      child: DefaultTextStyle.merge(
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        child: item.trailing!,
+                      ),
+                    ),
+                  ],
+                  if (item.selected) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.check_rounded, size: 18, color: DanaviewColors.primaryLight),
+                  ],
                 ],
-                if (item.selected) ...[
-                  const SizedBox(width: 8),
-                  const Icon(Icons.check_rounded, size: 18, color: DanaviewColors.primaryLight),
-                ],
-              ],
+              ),
             ),
           ),
         );
@@ -523,6 +542,7 @@ class DanaviewDropdown<T> extends StatelessWidget {
     this.label,
     this.icon,
     this.compact = false,
+    this.field = false,
     this.expand = false,
     this.enabled = true,
     this.menuWidth = 200,
@@ -539,6 +559,10 @@ class DanaviewDropdown<T> extends StatelessWidget {
   final String? label;
   final IconData? icon;
   final bool compact;
+
+  /// Sizes the trigger to [DanaviewSpacing.controlHeight] so it lines up with a text or search
+  /// field in the same row (ignored when [compact]).
+  final bool field;
 
   /// Fills the available width; requires bounded width constraints.
   final bool expand;
@@ -584,6 +608,7 @@ class DanaviewDropdown<T> extends StatelessWidget {
         label: compact ? null : label,
         icon: icon ?? current?.icon,
         compact: compact,
+        field: field,
         expand: expand,
         isOpen: isOpen,
         tooltip: tooltip,
@@ -600,6 +625,7 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.compact,
+    required this.field,
     required this.expand,
     required this.isOpen,
     required this.tooltip,
@@ -611,6 +637,7 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
   final String? label;
   final IconData? icon;
   final bool compact;
+  final bool field;
   final bool expand;
   final bool isOpen;
   final String? tooltip;
@@ -619,7 +646,7 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = compact ? DanaviewRadius.smAll : DanaviewRadius.mdAll;
+    final radius = compact ? DanaviewRadius.thumbAll : DanaviewRadius.controlAll;
     final fontSize = compact ? 13.0 : 14.0;
     return DanaviewPressable.builder(
       onTap: onTap,
@@ -630,19 +657,22 @@ class _DanaviewDropdownTrigger extends StatelessWidget {
         Widget visual = AnimatedContainer(
           duration: DanaviewMotion.fast,
           curve: DanaviewMotion.curve,
-          constraints: BoxConstraints(minHeight: compact ? 32 : 40),
+          constraints: BoxConstraints(minHeight: compact ? 32 : (field ? DanaviewSpacing.controlHeight : 40)),
           padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12, vertical: 4),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: danaviewInteractiveFill(
-              highlighted ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevatedHigher,
+              highlighted ? DanaviewColors.fieldActive : DanaviewColors.surfaceElevated,
               state,
             ),
-            borderRadius: radius,
+            shape: DanaviewDepth.shape(radius),
           ),
-          foregroundDecoration: BoxDecoration(
-            borderRadius: radius,
-            // Open shows as the tinted fill; only keyboard focus draws the ring.
-            border: Border.fromBorderSide(state.focused ? DanaviewBorders.focus : DanaviewBorders.hairline),
+          // Open shows as the brighter fill; only keyboard focus draws the ring.
+          foregroundDecoration: ShapeDecoration(
+            shape: DanaviewDepthBorder(
+              borderRadius: radius,
+              side: state.focused ? DanaviewBorders.focus : DanaviewBorders.hairline,
+              highlight: DanaviewColors.highlight,
+            ),
           ),
           child: Row(
             mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,

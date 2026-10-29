@@ -1,6 +1,6 @@
 // OWNER: CORE-35
 //
-// The core rows of ARCH §18.2, measured on the CI host (AOT, see run.dart):
+// The core rows of ARCH §18.2, measured in AOT and host-normalized (see run.dart):
 //
 // | id                         | what is timed                                                      | p90 budget |
 // |----------------------------|--------------------------------------------------------------------|------------|
@@ -28,7 +28,9 @@ import 'package:danaview_editor_core/ops.dart';
 import 'package:danaview_editor_core/plan.dart';
 import 'package:danaview_editor_core/store.dart';
 
+import 'calibration.dart';
 import 'harness.dart';
+import 'large_project.dart';
 
 /// ARCH §18.2 budgets (low tier, p90), µs.
 abstract final class CoreBudgets {
@@ -215,6 +217,21 @@ List<MetricResult> planBenchmarks(EditProject large, BenchSizes sizes) {
     MetricResult('plan_encode_2000', encode, budgetUs: CoreBudgets.encode, label: 'plan JSON encode at 2,000 items'),
     MetricResult('autosave_block_2000', autosave, budgetUs: CoreBudgets.autosave, label: 'autosave block on the main isolate', budgetGated: false),
   ];
+}
+
+/// Probe workloads of the encoder rows (see [CalibrationKind.isProbe]): the plan encoder and the
+/// project body encoder on one-lane projects (300 and 2,000 clips; ≈ 2.6 ms and ≈ 0.85 ms on the
+/// dev Mac), smaller than and shaped unlike the large fixture the rows encode.
+Map<CalibrationKind, Object? Function(int)> encodeProbes() {
+  final small = buildOneLaneProject(clips: 300, seed: 300);
+  final plan = PlanMemo().compile(small, PlanTarget.preview, benchResolver(small)).plan;
+  if (plan.layers.isEmpty) throw StateError('probe compile produced no layers');
+  final body = buildOneLaneProject(clips: 2000, seed: 301);
+  final codec = ProjectJsonCodec();
+  return {
+    CalibrationKind.planEncode: (_) => PlanJson.encodePlanBytes(plan),
+    CalibrationKind.autosave: (_) => codec.encodeBytes(body),
+  };
 }
 
 /// The `.dnproj` document of [body] as the repository writes it.

@@ -165,7 +165,7 @@ class _FavouriteTile extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                icon == null ? const DanaviewTileIcon.glyph(DanaviewGlyphKind.folder, size: 48) : DanaviewTileIcon(icon, size: 48),
+                icon == null ? const DanaviewIconTile.glyph(DanaviewGlyphKind.folder, size: 48) : DanaviewIconTile(icon, size: 48),
                 const SizedBox(height: DanaviewSpacing.sm),
                 Text(
                   item.name,
@@ -224,7 +224,7 @@ class RecentFilesSection extends ConsumerWidget {
             key: ValueKey('recent-${e.id.value}'),
             title: e.displayName,
             subtitle: organiseKindLabel(e.kind),
-            leading: DanaviewTileIcon(organiseKindIcon(e.kind)),
+            leading: DanaviewIconTile(organiseKindIcon(e.kind)),
             semanticLabel: '${organiseKindLabel(e.kind)} ${e.displayName}, opened recently',
             onTap: () => onOpen(e),
           ),

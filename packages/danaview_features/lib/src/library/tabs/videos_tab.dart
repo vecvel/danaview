@@ -1,11 +1,13 @@
 // OWNER: HOM-18
 //
-// The `Videos` filter tab (ARCH v1.2 V2-114; HOM plan §5.2): pure video focus. From the top: the
-// Now Playing strip (opens the player), Continue watching (the 1.1 history; plays through
-// `danaviewPlayItems`, so the player still receives `MediaRef`, ARCH §1.5), the playlists, the
-// video folders (linked folders; they open the 1.1 browser), then a grid of the Danaview library's
-// videos with HOM-13's badge overlay (duration pill, resolution, frame rate >= 50, HDR; V2-110). The 1.1 sections themselves stay on the Overview tab
-// unchanged; this tab only reads the same providers.
+// The `Videos` filter tab (ARCH v1.2 V2-114; HOM plan §5.2; DESIGN_SYSTEM §10.4): pure video
+// focus. From the top: the Now Playing strip (opens the player), Continue watching as a row of
+// 16:9 media cards with progress (the 1.1 history; plays through `danaviewPlayItems`, so the
+// player still receives `MediaRef`, ARCH §1.5; Show all wraps it into a grid), the playlists and
+// the video folders as compact grouped lists (linked folders open the 1.1 browser), then the
+// Danaview library's videos as a grid of 16:9 media cards (2 / 4 / 6 columns) with HOM-13's badge
+// overlay (duration pill, resolution, frame rate >= 50, HDR; V2-110). The 1.1 sections themselves
+// stay on the Overview tab unchanged; this tab only reads the same providers.
 
 import 'package:danaview_domain/danaview_domain.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -16,6 +18,8 @@ import '../../controllers/providers.dart';
 import '../filters/entry_widgets.dart';
 import '../filters/filter_providers.dart';
 import '../filters/library_filters.dart';
+import '../home/home_grid.dart';
+import '../home/home_media_card.dart';
 import '../library_actions.dart';
 import '../library_controller.dart';
 import '../library_format.dart';
@@ -23,8 +27,8 @@ import '../library_providers.dart';
 import '../library_widgets.dart';
 import 'all_tab.dart' show LibraryFilterEmpty;
 
-/// Continue watching rows shown before "Show all".
-const int videosTabRecentPreview = 3;
+/// Continue watching cards shown in the row before "Show all".
+const int videosTabRecentPreview = 6;
 
 /// The `Videos` tab.
 class VideosTab extends ConsumerStatefulWidget {
@@ -80,7 +84,7 @@ class _VideosTabState extends ConsumerState<VideosTab> {
         final padding = insets.copyWith(top: DanaviewSpacing.lg, bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl);
         final side = padding.copyWith(top: 0, bottom: 0);
         final gridWidth = constraints.maxWidth - side.horizontal;
-        final columns = (gridWidth / 180).floor().clamp(2, 6);
+        final columns = homeAdaptiveColumns(gridWidth);
         final recent = state.recent;
         final shownRecent = _showAllRecent ? recent : recent.take(videosTabRecentPreview).toList();
         final folders = state.roots;
@@ -88,25 +92,15 @@ class _VideosTabState extends ConsumerState<VideosTab> {
           _NowPlayingStrip(onOpen: widget.onOpenPlayer),
           if (recent.isNotEmpty) ...[
             const DanaviewLibrarySectionHeader('Continue watching', topSpacing: 0),
-            DanaviewLibraryCardGrid(
-              children: [
-                for (final item in shownRecent)
-                  DanaviewLibraryRow(
-                    leading: DanaviewTileIcon(mediaIcon(item.media), color: mediaIconColor(item.media), size: 40),
-                    title: item.media.title,
-                    badge: episodeLabel(item.media),
-                    subtitle: mediaSubtitle(item.media, item.resume, exists: item.exists, fallback: parentFolderName(item.media.pathOrUri)),
-                    progress: item.exists ? item.progress : null,
-                    dimmed: !item.exists,
-                    onTap: () => _playRecent(item),
-                  ),
-              ],
-            ),
+            if (_showAllRecent)
+              HomeMediaCardGrid(children: [for (final item in shownRecent) _recentCard(item)])
+            else
+              HomeMediaCardRow(children: [for (final item in shownRecent) _recentCard(item)]),
             if (recent.length > videosTabRecentPreview)
-              Center(
-                child: DanaviewButton.ghost(
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: DanaviewButton.text(
                   label: _showAllRecent ? 'Show less' : 'Show all ${recent.length}',
-                  trailingIcon: _showAllRecent ? Icons.expand_less_rounded : Icons.expand_more_rounded,
                   size: DanaviewButtonSize.sm,
                   onPressed: () => setState(() => _showAllRecent = !_showAllRecent),
                 ),
@@ -118,7 +112,7 @@ class _VideosTabState extends ConsumerState<VideosTab> {
               children: [
                 for (final p in state.playlists)
                   DanaviewLibraryRow(
-                    leading: const DanaviewTileIcon(Icons.queue_music_rounded, color: DanaviewColors.purple, size: 40),
+                    leading: const DanaviewIconTile(Icons.queue_music_rounded),
                     title: p.name,
                     subtitle: p.itemCount == 0 ? 'No videos yet' : formatCount(p.itemCount, 'video'),
                     onTap: widget.onOpenPlaylist == null ? null : () => widget.onOpenPlaylist!(p.name),
@@ -132,10 +126,8 @@ class _VideosTabState extends ConsumerState<VideosTab> {
               children: [
                 for (final f in folders)
                   DanaviewLibraryRow(
-                    leading: DanaviewTileIcon.glyph(
+                    leading: DanaviewIconTile.glyph(
                       f.isDevice ? DanaviewGlyphKind.device : DanaviewGlyphKind.folderVideo,
-                      color: f.isDevice ? DanaviewColors.cyan : DanaviewColors.primaryLight,
-                      size: 40,
                     ),
                     title: f.label,
                     subtitle: f.isDevice ? 'Device storage' : f.path,
@@ -154,17 +146,12 @@ class _VideosTabState extends ConsumerState<VideosTab> {
             if (videos.length > 0)
               SliverPadding(
                 padding: side.copyWith(top: DanaviewSpacing.xs),
-                sliver: SliverGrid.builder(
+                sliver: homeSliverCardGrid(
                   key: const ValueKey('videos-grid'),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    mainAxisSpacing: DanaviewSpacing.md,
-                    crossAxisSpacing: DanaviewSpacing.sm,
-                    // 16:9 frame plus the name line, which grows with the text scale.
-                    mainAxisExtent: (gridWidth - (columns - 1) * DanaviewSpacing.sm) / columns * 9 / 16 +
-                        DanaviewSpacing.xs +
-                        MediaQuery.textScalerOf(context).scale(DanaviewTextStyles.caption.fontSize ?? 12) * 1.6,
-                  ),
+                  columns: columns,
+                  width: gridWidth,
+                  // A 16:9 media card with the name and the size · date line; no menu.
+                  extent: (cell, context) => homeMediaCardExtent(cell, context, menu: false),
                   itemCount: videos.length,
                   itemBuilder: (context, i) {
                     final entry = videos.at(i);
@@ -177,6 +164,25 @@ class _VideosTabState extends ConsumerState<VideosTab> {
           ],
         );
       },
+    );
+  }
+}
+
+extension on _VideosTabState {
+  /// One Continue watching card: the 16:9 placeholder with play disc, length and progress.
+  Widget _recentCard(LibraryRecentItem item) {
+    final media = item.media;
+    final resumeLength = item.resume?.duration ?? Duration.zero;
+    final length = resumeLength > Duration.zero ? resumeLength : media.duration;
+    return HomeMediaCard(
+      icon: mediaIcon(media),
+      title: media.title,
+      badge: episodeLabel(media),
+      subtitle: mediaSubtitle(media, item.resume, exists: item.exists, fallback: parentFolderName(media.pathOrUri)),
+      duration: length > Duration.zero ? formatClock(length) : null,
+      progress: item.exists ? item.progress : null,
+      dimmed: !item.exists,
+      onTap: () => _playRecent(item),
     );
   }
 }
@@ -201,7 +207,7 @@ class _NowPlayingStrip extends ConsumerWidget {
         children: [
           DanaviewLibraryRow(
             key: const ValueKey('videos-now-playing'),
-            leading: const DanaviewTileIcon(Icons.graphic_eq_rounded, color: DanaviewColors.primaryLight, size: 40),
+            leading: const DanaviewIconTile(Icons.graphic_eq_rounded),
             title: media.title,
             badge: 'Now playing',
             subtitle: subtitle,

@@ -468,8 +468,8 @@ abstract class StorageContributor {
   /// Row icon.
   IconData get icon;
 
-  /// Icon tint.
-  Color get color => DanaviewColors.primaryLight;
+  /// Glyph colour on the neutral icon tile (§7): white unless the row carries a status.
+  Color get color => DanaviewColors.textPrimary;
 
   /// The current usage first, then a new value whenever it changes (e.g. after [clearAction]). Each
   /// call starts a fresh measurement.

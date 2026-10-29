@@ -219,7 +219,7 @@ class _Message extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Align(alignment: AlignmentDirectional.centerStart, child: DanaviewTileIcon(icon, size: 40, color: iconColor)),
+          Align(alignment: AlignmentDirectional.centerStart, child: DanaviewIconTile(icon, size: 40, color: iconColor)),
           const SizedBox(height: DanaviewSpacing.sm),
           Semantics(header: true, child: Text(copy.title, key: const ValueKey('captions-message-title'), style: CaptionsText.headline)),
           const SizedBox(height: DanaviewSpacing.xs),

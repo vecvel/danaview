@@ -107,9 +107,27 @@ final documentViewerSetupProvider = Provider<DocumentViewerSetup>((ref) => Docum
 
 /// The MIME type and UTType the classifier knows for [name] (for Quick Look and sharing).
 ({String? mime, String? uti}) documentTypeOf(String name) {
+  // A classifier row (e.g. Word) lists several types; pick the one of this file's extension so a
+  // .docx goes out as the OOXML type, not the row's first (application/msword) (FIX-S3Q-A1).
+  final dot = name.lastIndexOf('.');
+  final exact = dot < 0 ? null : _officeTypes[name.substring(dot + 1).toLowerCase()];
+  if (exact != null) return exact;
   final row = classify(fileName: name).row;
   return (mime: row.mimes.isEmpty ? null : row.mimes.first, uti: row.utis.isEmpty ? null : row.utis.first);
 }
+
+const Map<String, ({String? mime, String? uti})> _officeTypes = {
+  'doc': (mime: 'application/msword', uti: 'com.microsoft.word.doc'),
+  'docx': (mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', uti: 'org.openxmlformats.wordprocessingml.document'),
+  'xls': (mime: 'application/vnd.ms-excel', uti: 'com.microsoft.excel.xls'),
+  'xlsx': (mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', uti: 'org.openxmlformats.spreadsheetml.sheet'),
+  'ppt': (mime: 'application/vnd.ms-powerpoint', uti: 'com.microsoft.powerpoint.ppt'),
+  'pptx': (mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', uti: 'org.openxmlformats.presentationml.presentation'),
+  'odt': (mime: 'application/vnd.oasis.opendocument.text', uti: 'org.oasis-open.opendocument.text'),
+  'ods': (mime: 'application/vnd.oasis.opendocument.spreadsheet', uti: 'org.oasis-open.opendocument.spreadsheet'),
+  'odp': (mime: 'application/vnd.oasis.opendocument.presentation', uti: 'org.oasis-open.opendocument.presentation'),
+  'rtf': (mime: 'application/rtf', uti: 'public.rtf'),
+};
 
 /// The viewer file of a Danaview folder [entry] whose file is at [path].
 ViewerFile viewerFileOfEntry(FileEntry entry, String path) {
@@ -226,7 +244,7 @@ Future<void> showViewerFileMenu(BuildContext context, WidgetRef ref, MediaItem i
             for (final action in fileMenuActions(item, port).where(viewerFileActions.contains))
               DanaviewListTile(
                 key: ValueKey(fileActionId(action)),
-                leading: DanaviewTileIcon(fileActionIcon(action, favourite: favourite), color: DanaviewColors.primaryLight),
+                leading: DanaviewIconTile(fileActionIcon(action, favourite: favourite)),
                 title: fileActionLabel(action, capabilities: port?.capabilities, favourite: favourite),
                 onTap: () => Navigator.of(sheetContext).pop(action),
               ),

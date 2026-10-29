@@ -117,14 +117,22 @@ final class PitchSyncTests: XCTestCase {
     }
 
     /// Reads [plan] built by CompositionBuilder through the export mix output (redoing bad reads,
-    /// as IOS-12 does); returns the left channel at 48 kHz.
-    private func exportRead(_ plan: RenderPlan, url: URL) async throws -> [Float] {
+    /// as IOS-12 does); returns the left channel at 48 kHz. [watchTimePitch]: also redo the reads
+    /// the export's `TimePitchWatch` rejects (dropouts, dropped seam crossfades of AVFoundation's
+    /// time-pitch unit; only for continuous sources: digitally gated clicks look like dropouts),
+    /// and fail when no read came back good.
+    private func exportRead(_ plan: RenderPlan, url: URL, watchTimePitch: Bool = false) async throws -> [Float] {
         let frames = Int(Double(plan.durUs) * 0.048)
         let options = try options(url)
-        let (read, _) = try await AudioTapSupport.readValidated(expectFrames: frames - 4_800) {
+        let watch = watchTimePitch ? TimePitchWatch.of(plan) : .none
+        let (read, reads) = try await AudioTapSupport.readValidated(expectFrames: frames - 4_800, watch: watch, attempts: watchTimePitch ? 6 : 4) {
             let built = try await CompositionBuilder.build(plan: plan, options: options)
             keep.append(built)
             return (built.composition, try XCTUnwrap(built.audioMix), [], built.gainTaps)
+        }
+        if watchTimePitch {
+            let bad = AudioTapSupport.badReason(read, expectFrames: frames - 4_800, audible: [], watch: watch)
+            XCTAssertNil(bad, "no good export read in \(reads)")
         }
         return read.leftChannel
     }
@@ -300,7 +308,7 @@ final class PitchSyncTests: XCTestCase {
         }
         let seg = AudioSeg(id: "a", asset: "t", t0: 0, t1: 2_100_000, map: map, gain: [AnimKey(0, 1)], pitch: true)
         let p = plan(seg, asset: PlanAsset(kind: .audio, uri: tone.absoluteString, durUs: 10_000_000), durUs: 2_100_000)
-        let x = try await exportRead(p, url: tone)
+        let x = try await exportRead(p, url: tone, watchTimePitch: true)
         let e = AudioTapSupport.toneResidual(x, freqHz: 1_000)
         var floor: Float = 0
         var levels: [Double] = []

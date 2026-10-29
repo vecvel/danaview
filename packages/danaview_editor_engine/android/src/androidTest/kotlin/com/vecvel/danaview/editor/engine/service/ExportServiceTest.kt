@@ -400,7 +400,7 @@ class ExportServiceTest {
         val current = relay.activity.taskId
         val am = ServiceTest.app.getSystemService(android.app.ActivityManager::class.java)
         for (t in am.appTasks) if (t.taskInfo.taskId != current) t.finishAndRemoveTask()
-        for (attempt in 0 until 4) {
+        for (attempt in 0 until RECENTS_ATTEMPTS) {
             if (attempt > 0) {
                 // A retry: bring our task back on top first (Recents may still be showing).
                 device.pressHome()
@@ -412,19 +412,96 @@ class ExportServiceTest {
                 Thread.sleep(2_000)
             }
             assertTrue("recents", device.pressRecentApps())
-            Thread.sleep(3_000)
+            // Wait for Recents to show the task card (Launcher3 quickstep's thumbnail view) instead
+            // of a fixed pause: on a loaded emulator the overview can take several seconds, and the
+            // first press is sometimes swallowed while the launcher is still busy: press once more.
+            var card = device.wait(Until.findObject(By.res(Pattern.compile(".*:id/snapshot"))), RECENTS_TIMEOUT_MS)
+            if (card == null) {
+                Log.i(SERVICE_TEST_TAG, "no task card in Recents after $RECENTS_TIMEOUT_MS ms (attempt ${attempt + 1}); pressing Recents again")
+                device.pressRecentApps()
+                card = device.wait(Until.findObject(By.res(Pattern.compile(".*:id/snapshot"))), RECENTS_TIMEOUT_MS)
+            }
+            device.waitForIdle(2_000)
+            // The overview animates the cards in: swipe only once the card has stopped moving.
+            val settled = awaitCardSettled(card)
             val w = device.displayWidth
             val hgt = device.displayHeight
-            // The current task's card is centred; a 400 ms swipe up dismisses it (Launcher3 quickstep).
+            // The current task's card is centred; a swipe up dismisses it (Launcher3 quickstep).
             // `input swipe` (as a person's finger through the shell): UiDevice.swipe's injected
-            // gesture did not dismiss the card on the API 35 launcher.
-            ServiceTest.shell("input swipe ${w / 2} ${hgt * 3 / 5} ${w / 2} ${hgt / 20} 400")
-            if (ServiceTest.waitFor(3_000) { relay.activity.isDestroyed }) {
-                Log.i(SERVICE_TEST_TAG, "swiped the task away in Recents (attempt ${attempt + 1})")
-                return
+            // gesture did not dismiss the card on the API 35 launcher. A loaded emulator can miss
+            // the first fling (no task removal), so the gesture is retried once, slower, before
+            // the whole attempt starts over.
+            val cx = settled?.x ?: (w / 2)
+            val cy = settled?.y ?: (hgt * 3 / 5)
+            for ((gesture, durationMs) in listOf(400, 700).withIndex()) {
+                ServiceTest.shell("input swipe $cx $cy $cx ${hgt / 20} $durationMs")
+                if (awaitSwipedAway(relay, am, current)) {
+                    Log.i(SERVICE_TEST_TAG, "swiped the task away in Recents (attempt ${attempt + 1}, gesture ${gesture + 1})")
+                    return
+                }
+                Log.i(SERVICE_TEST_TAG, "task $current still in Recents after a $durationMs ms swipe (attempt ${attempt + 1}, gesture ${gesture + 1})")
             }
             device.takeScreenshot(File(ServiceTest.app.filesDir, "and12_recents_$attempt.png"))
         }
-        error("the task is still in Recents")
+        // The CI emulator's launcher (software GPU, loaded host) often never takes the fling at all.
+        // The dismissal then goes through the same system call the launcher's swipe ends in: the
+        // task's root task removed with its process kill and Recents removal (ActivityTaskManager
+        // removeRootTask -> removeTask(killProcess = true, REMOVE_FROM_RECENTS)), which is what
+        // ExportService.onTaskRemoved and the detach answer to. The assertions after this are
+        // unchanged.
+        device.pressHome()
+        val root = rootTaskOf(current)
+        Log.i(SERVICE_TEST_TAG, "the Recents gesture did not remove task $current; removing root task $root as the launcher does")
+        ServiceTest.shell("am stack remove $root")
+        if (awaitSwipedAway(relay, am, current)) return
+        error("the task is still in Recents (gesture and am stack remove $root):\n" + ServiceTest.shell("am stack list"))
+    }
+
+    /** The root task holding [taskId] (`am stack list`: "RootTask id=N ..." then "taskId=M: ..."). */
+    private fun rootTaskOf(taskId: Int): Int {
+        var root: Int? = null
+        for (line in ServiceTest.shell("am stack list").lines()) {
+            Regex("""^\s*RootTask id=(\d+)""").find(line)?.let { root = it.groupValues[1].toInt() }
+            if (Regex("""\btaskId=$taskId:""").containsMatchIn(line)) return root ?: taskId
+        }
+        return taskId
+    }
+
+    /** The card's centre once two looks 250 ms apart agree (up to 3 s); null without a card. */
+    private fun awaitCardSettled(card: androidx.test.uiautomator.UiObject2?): android.graphics.Point? {
+        if (card == null) return null
+        var last = runCatching { card.visibleCenter }.getOrNull() ?: return null
+        val end = System.currentTimeMillis() + 3_000
+        while (System.currentTimeMillis() < end) {
+            Thread.sleep(250)
+            val now = runCatching { card.visibleCenter }.getOrNull() ?: return last
+            if (now == last) return now
+            last = now
+        }
+        return last
+    }
+
+    /**
+     * Waits for the swipe to take effect: the relay activity destroyed, or its task gone from the
+     * activity manager (the destroy then follows; on a loaded emulator it can take a while longer,
+     * so it gets [TASK_DESTROY_TIMEOUT_MS] more, and the caller's destroy assertion decides). Once
+     * the task is gone no further gesture is sent.
+     */
+    private fun awaitSwipedAway(relay: FragmentRequests, am: android.app.ActivityManager, taskId: Int): Boolean {
+        fun taskGone() = runCatching { am.appTasks.none { it.taskInfo.taskId == taskId } }.getOrDefault(false)
+        if (!ServiceTest.waitFor(RECENTS_TIMEOUT_MS) { relay.activity.isDestroyed || taskGone() }) return false
+        if (!relay.activity.isDestroyed) ServiceTest.waitFor(TASK_DESTROY_TIMEOUT_MS) { relay.activity.isDestroyed }
+        return true
+    }
+
+    private companion object {
+        /** How long Recents may take to show the card, and the task to be removed after the swipe. */
+        const val RECENTS_TIMEOUT_MS = 10_000L
+
+        /** Recents gesture rounds before the dismissal goes through the launcher's system call. */
+        const val RECENTS_ATTEMPTS = 2
+
+        /** How long the activity may take to be destroyed once its task left Recents. */
+        const val TASK_DESTROY_TIMEOUT_MS = 20_000L
     }
 }

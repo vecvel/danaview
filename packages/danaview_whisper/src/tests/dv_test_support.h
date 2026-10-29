@@ -92,7 +92,7 @@ dv_model *load_model_blocking(const std::string &path, int32_t *state, int dtw_p
 /// Returns a process-lifetime copy of [s] (for the const char * fields of dv_job_params).
 const char *intern(const std::string &s);
 
-/// Defaults matching ai.md §4.5 (language "en", 4 threads, greedy, token timestamps, suppress_nst).
+/// Defaults matching ai.md §4.5 (language "en", min(4, hardware cores) threads, greedy, token timestamps, suppress_nst).
 dv_job_params default_job_params(const std::string &wav, const std::string &language = "en");
 
 /// Polls dv_job_status_get every [poll_ms] until a terminal state or [timeout_ms]; returns the last status.
@@ -141,6 +141,10 @@ std::string normalize_text(const std::string &s);
 
 /// Test-only access to the shim's live object counters (dv_registry.h).
 void live_objects(int64_t *models, int64_t *jobs);
+
+/// Waits until every detached model loader thread has finished. A loader drops its own reference
+/// just after it reports the load, so a model the test already released can still be live until then.
+void wait_loaders_idle();
 
 }  // namespace dvt_support
 

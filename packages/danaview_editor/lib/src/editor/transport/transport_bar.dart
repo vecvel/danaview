@@ -445,7 +445,7 @@ class _TimecodeButton extends StatelessWidget {
         onTap: enabled ? () => unawaited(_enterTime(context)) : null,
         semanticLabel: TransportStrings.time,
         tooltip: TransportStrings.timeHint,
-        borderRadius: DanaviewRadius.smAll,
+        borderRadius: DanaviewRadius.controlAll,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: TransportBar.timecodePadding, vertical: DanaviewSpacing.sm),
           child: TimecodeText(playhead: playhead, duration: duration, frameRate: frameRate, compact: compact, semanticsLabel: false),

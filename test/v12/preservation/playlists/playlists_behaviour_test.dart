@@ -9,6 +9,7 @@
 import 'dart:io';
 
 import 'package:danaview_domain/danaview_domain.dart';
+import 'package:danaview_features/danaview_features.dart' show HomeMediaCard;
 import 'package:danaview_features/src/library/library_widgets.dart';
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
 import 'package:flutter/material.dart' hide RepeatMode;
@@ -78,10 +79,7 @@ Future<List<Object?>> _runScript(WidgetTester tester, Directory tree, PlaylistsH
   record('delete');
 
   // The rows left, in order, with their subtitles.
-  final rows = tester.widgetList<DanaviewLibraryRow>(
-    find.descendant(of: playlistsGroup(host), matching: find.byType(DanaviewLibraryRow)),
-  );
-  log.add(['rows', for (final row in rows) '${row.title} · ${row.subtitle}']);
+  log.add(['rows', for (final (title, subtitle) in playlistItems(tester, host)) '$title · $subtitle']);
 
   expect(tester.takeException(), isNull);
   await finishHome(tester, env);
@@ -145,11 +143,9 @@ void main() {
       testWidgets('P-4: rows in creation order with counts; empty and single disable Play/Shuffle', (tester) async {
         final calls = PlaylistCalls();
         final env = await pumpPlaylistsHome(tester, host: host, tree: tree, calls: calls);
-        final rows = tester.widgetList<DanaviewLibraryRow>(
-          find.descendant(of: playlistsGroup(host), matching: find.byType(DanaviewLibraryRow)),
-        );
-        expect([for (final r in rows) r.title], ['Road Trip', longPlaylistName, 'Single', 'Empty']);
-        expect([for (final r in rows) r.subtitle], ['4 videos', '4 videos', '1 video', 'No videos yet']);
+        final rows = playlistItems(tester, host);
+        expect([for (final r in rows) r.$1], ['Road Trip', longPlaylistName, 'Single', 'Empty']);
+        expect([for (final r in rows) r.$2], ['4 videos', '4 videos', '1 video', 'No videos yet']);
 
         // Empty: Play and Shuffle are disabled; Single: Shuffle is disabled.
         await playlistMenuAction(tester, host, 'Empty', 'Play');
@@ -186,16 +182,28 @@ void main() {
       testWidgets('P-4: with no playlists the empty state creates the first one', (tester) async {
         final calls = PlaylistCalls();
         final env = await pumpPlaylistsHome(tester, host: host, tree: tree, calls: calls, seed: false);
-        await scrollToInHost(tester, host, playlistsEmpty(host));
-        expect(find.descendant(of: playlistsEmpty(host), matching: find.text('Collect videos and links to play them in order.')),
-            findsOneWidget);
-        expect(find.descendant(of: playlistsHeader(host), matching: find.text('New')), findsNothing);
-        await tester.tap(find.descendant(of: playlistsEmpty(host), matching: find.text('New playlist')));
+        if (host == PlaylistsHost.playlistsTab) {
+          await scrollToInHost(tester, host, playlistsEmpty(host));
+          expect(
+              find.descendant(of: playlistsEmpty(host), matching: find.text('Collect videos and links to play them in order.')),
+              findsOneWidget);
+          expect(find.descendant(of: playlistsHeader(host), matching: find.text('New')), findsNothing);
+          await tester.tap(find.descendant(of: playlistsEmpty(host), matching: find.text('New playlist')));
+        } else {
+          // The Home hides an empty Playlists section (DESIGN_SYSTEM §10.3); New playlist is in
+          // the top bar's Import (+) menu.
+          expect(inHost(host, find.text('No playlists yet')), findsNothing);
+          expect(inHost(host, find.text('Playlists')), findsNothing);
+          await tester.tap(find.byTooltip('Import'));
+          await pumpFrames(tester);
+          await tester.tap(find.text('New playlist').last);
+        }
         await pumpFrames(tester);
         await _enterName(tester, 'First', 'Create');
         expect(calls.opened, ['First']);
         expect(env.library.getSavedPlaylistNames(), ['First']);
         expect(inHost(host, find.text('No playlists yet')), findsNothing);
+        expect(inHost(host, find.text('First')), findsOneWidget);
         await finishHome(tester, env);
       });
 
@@ -255,7 +263,7 @@ void main() {
     });
   }
 
-  // The add-to-playlist sheet is reached from the Continue watching menu, which lives in the 1.1
+  // The add-to-playlist sheet is reached from the Continue watching card menu, which lives in the
   // Home and, with the flag on, in the Home tab.
   for (final host in [PlaylistsHost.flagOff, PlaylistsHost.homeTab]) {
     group(host.label, () {
@@ -263,10 +271,12 @@ void main() {
         final menu = inHost(
           host,
           find.descendant(
-            of: find.ancestor(of: find.text('Day 1 - Leaving Town.mp4'), matching: find.byType(DanaviewLibraryRow)).first,
+            of: find.ancestor(of: find.text('Day 1 - Leaving Town.mp4'), matching: find.byType(HomeMediaCard)).first,
             matching: find.byTooltip('More'),
           ),
         );
+        await tester.ensureVisible(menu);
+        await tester.pump();
         await tester.tap(menu);
         await pumpFrames(tester);
         await tester.tap(find.text('Add to playlist…'));

@@ -99,6 +99,7 @@ class _PdfPasswordFormState extends State<PdfPasswordForm> {
     final unlock = DanaviewButton.primary(
       label: _busy ? 'Unlocking' : 'Unlock',
       semanticLabel: 'Unlock',
+      size: DanaviewButtonSize.field,
       onPressed: _busy ? null : () => unawaited(_submit()),
     );
     return Column(

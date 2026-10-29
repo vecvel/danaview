@@ -1,13 +1,16 @@
 // OWNER: HOM-07
 //
-// BUILD_PLAN HOM-07 acceptance ("goldens as HOM-06"): the 1.1 Playlists section (header, rows,
-// empty state), the add-to-playlist sheet and the playlist screen are pixel-equal between
-// DANAVIEW_FILES_HOME off and the flag on (the `Home` tab and the `Playlists` tab for the section,
-// the Home tab for the sheet), at three widths.
+// BUILD_PLAN HOM-07 acceptance ("goldens as HOM-06"): the Playlists section (header, rows), the
+// add-to-playlist sheet and the playlist screen are pixel-equal between DANAVIEW_FILES_HOME off
+// and the flag on (the `Home` tab for the section and the sheet), at three widths.
 //
-// Every host matches the same golden file per part and width. The goldens in goldens/ are written
-// from the flag-off runs only:
-//   flutter test test/v12/preservation/playlists/playlists_golden_test.dart --update-goldens --name "^flag off"
+// Since the Cinema B Home (DESIGN_SYSTEM §10.3) the Home hides an empty Playlists section and, on
+// wide screens, puts the grouped lists in a right-hand column, so the `Playlists` tab (full width,
+// with the empty state, each part in its own sliver layer) has goldens of its own
+// (`playlists_tab_*`).
+//
+// The goldens in goldens/ are written with:
+//   flutter test test/v12/preservation/playlists/playlists_golden_test.dart --update-goldens
 // and then the whole file must pass without --update-goldens. The flag-on tests also compare the
 // raw pixels with a flag-off capture made in the same test, so the equality holds even while the
 // goldens are being refreshed.
@@ -16,7 +19,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:danaview_features/src/library/library_widgets.dart';
+import 'package:danaview_features/danaview_features.dart' show HomeMediaCard;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -48,21 +51,26 @@ Future<Uint8List> _check(WidgetTester tester, Finder finder, String golden) asyn
 
 Finder get _sheet => find.byWidgetPredicate((w) => w.runtimeType.toString() == '_DanaviewAddToPlaylistSheet');
 
-/// The Playlists section in [host]: header and rows over the seeded library, then header and
-/// empty state over an empty one.
+/// The Playlists section in [host]: header and rows over the seeded library; then, over an empty
+/// one, the header and empty state on the Playlists tab (the Home hides the empty section).
 Future<Map<String, Uint8List>> _captureSection(WidgetTester tester, Directory tree, double width, PlaylistsHost host) async {
   final w = width.toInt();
+  final prefix = host == PlaylistsHost.playlistsTab ? 'playlists_tab' : 'playlists';
   var env = await pumpPlaylistsHome(tester, host: host, tree: tree, surface: _surface(width));
   final pixels = <String, Uint8List>{
-    'playlists_header': await _check(tester, playlistsHeader(host), 'playlists_header_$w'),
-    'playlists_rows': await _check(tester, playlistsGroup(host), 'playlists_rows_$w'),
+    'playlists_header': await _check(tester, playlistsHeader(host), '${prefix}_header_$w'),
+    'playlists_rows': await _check(tester, playlistsGroup(host), '${prefix}_rows_$w'),
   };
   expect(tester.takeException(), isNull);
   await finishHome(tester, env);
 
   env = await pumpPlaylistsHome(tester, host: host, tree: tree, surface: _surface(width), seed: false);
-  pixels['playlists_empty_header'] = await _check(tester, playlistsHeader(host), 'playlists_empty_header_$w');
-  pixels['playlists_empty'] = await _check(tester, playlistsEmpty(host), 'playlists_empty_$w');
+  if (host == PlaylistsHost.playlistsTab) {
+    pixels['playlists_empty_header'] = await _check(tester, playlistsHeader(host), '${prefix}_empty_header_$w');
+    pixels['playlists_empty'] = await _check(tester, playlistsEmpty(host), '${prefix}_empty_$w');
+  } else {
+    expect(inHost(host, find.text('No playlists yet')), findsNothing, reason: 'the Home hides an empty section');
+  }
   expect(tester.takeException(), isNull);
   await finishHome(tester, env);
   return pixels;
@@ -74,7 +82,7 @@ Future<Uint8List> _captureSheet(WidgetTester tester, Directory tree, double widt
   await tester.tap(inHost(
     host,
     find.descendant(
-      of: find.ancestor(of: find.text('Day 1 - Leaving Town.mp4'), matching: find.byType(DanaviewLibraryRow)).first,
+      of: find.ancestor(of: find.text('Day 1 - Leaving Town.mp4'), matching: find.byType(HomeMediaCard)).first,
       matching: find.byTooltip('More'),
     ),
   ));
@@ -117,16 +125,17 @@ void main() {
       await _captureScreen(tester, tree, width, filesHome: false);
     });
 
-    testWidgets('flag on: the Playlists section in the Home and Playlists tabs is pixel-equal to flag off at $w px',
-        (tester) async {
+    testWidgets('flag on: the Playlists section in the Home tab is pixel-equal to flag off at $w px', (tester) async {
       final off = await _captureSection(tester, tree, width, PlaylistsHost.flagOff);
-      for (final host in [PlaylistsHost.homeTab, PlaylistsHost.playlistsTab]) {
-        final on = await _captureSection(tester, tree, width, host);
-        expect(on.keys, off.keys);
-        for (final name in off.keys) {
-          expect(on[name], off[name], reason: '$name differs between flag off and ${host.label}');
-        }
+      final on = await _captureSection(tester, tree, width, PlaylistsHost.homeTab);
+      expect(on.keys, off.keys);
+      for (final name in off.keys) {
+        expect(on[name], off[name], reason: '$name differs between flag off and the Home tab');
       }
+    });
+
+    testWidgets('flag on: the Playlists tab matches its goldens at $w px', (tester) async {
+      await _captureSection(tester, tree, width, PlaylistsHost.playlistsTab);
     });
 
     testWidgets('flag on: the add-to-playlist sheet is pixel-equal to flag off at $w px', (tester) async {

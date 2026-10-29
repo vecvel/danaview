@@ -129,16 +129,40 @@ Finder _private(String type) => find.byWidgetPredicate((w) => w.runtimeType.toSt
 /// P-1: the Now Playing card.
 Finder get nowPlayingCard => _private('_NowPlayingCard');
 
-/// P-3: the quick actions row.
+/// P-3: the quick actions: the empty Home's buttons (with content they are the first rows of the
+/// top bar's Import menu, see [tapQuickAction]).
 Finder get quickActions => _private('_QuickActions');
 
-/// P-2: the Continue watching header, rows and Show all button.
+/// The top bar's Import (+) button.
+Finder get importButton => find.byTooltip('Import');
+
+/// P-3: taps the quick action [label]: the empty state's button when it shows, else the Import
+/// menu's row (the menu is opened first).
+Future<void> tapQuickAction(WidgetTester tester, String label) async {
+  final button = find.descendant(of: quickActions, matching: find.text(label));
+  if (button.evaluate().isEmpty) {
+    await tester.tap(importButton);
+    await pumpFrames(tester);
+    await tester.tap(find.text(label).last);
+  } else {
+    await tester.tap(button);
+  }
+  await pumpFrames(tester);
+}
+
+/// P-2: the Continue watching header, cards (a row, or a grid once expanded) and Show all button.
 Finder get continueWatchingHeader =>
     find.ancestor(of: find.text('Continue watching'), matching: _private('DanaviewLibrarySectionHeader'));
 
 Finder get continueWatchingRows => find
-    .ancestor(of: find.textContaining('Show.S01E01'), matching: _private('DanaviewLibraryCardGrid'))
+    .ancestor(
+      of: find.textContaining('Show.S01E01'),
+      matching: find.byWidgetPredicate((w) => w is HomeMediaCardRow || w is HomeMediaCardGrid),
+    )
     .first;
+
+/// P-1: the empty Home's one empty state (Open file / Open folder / Open link).
+Finder get homeEmptyState => find.byKey(const ValueKey('home-empty-state'));
 
 /// The Show all N / Show less button.
 Finder get showAllButton => find

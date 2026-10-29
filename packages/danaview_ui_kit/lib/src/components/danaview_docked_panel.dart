@@ -195,7 +195,7 @@ class _DanaviewDockedPanelState extends State<DanaviewDockedPanel> {
       width: 36,
       height: 5,
       decoration: BoxDecoration(
-        color: _handleFocused ? DanaviewColors.primaryLight : const Color(0x33FFFFFF),
+        color: _handleFocused ? DanaviewColors.primaryLight : const Color(0x4DFFFFFF),
         borderRadius: BorderRadius.circular(2.5),
       ),
     );

@@ -63,7 +63,7 @@ final class MediaAccessTests: XCTestCase {
         try handle.close()
         let started = Date()
         let hash = try MediaAccess.quickHash(of: url)
-        XCTAssertLessThan(Date().timeIntervalSince(started), 0.5)
+        PerfGate.assertAtMost(Date().timeIntervalSince(started), 0.5, "32 MiB quick hash")
         var head = Data("head".utf8)
         head.append(Data(count: 64 * 1024 - 4))
         XCTAssertEqual(hash, MediaAccess.quickHash(head: head, tail: Data(count: 64 * 1024), size: UInt64(32 << 20)))

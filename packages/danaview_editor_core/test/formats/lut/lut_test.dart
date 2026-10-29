@@ -5,6 +5,13 @@ import 'dart:typed_data';
 import 'package:test/test.dart';
 import 'package:danaview_editor_core/formats.dart';
 
+/// DV_PERF_STRICT=1 (a quiet dev Mac) asserts the absolute budget; otherwise (a loaded CI runner)
+/// [_looseFactor] times it.
+final bool _perfStrict = Platform.environment['DV_PERF_STRICT'] == '1';
+const int _looseFactor = 4;
+num _limit(num budget) => _perfStrict ? budget : budget * _looseFactor;
+String get _perfMode => _perfStrict ? 'DV_PERF_STRICT=1' : 'loose ×$_looseFactor, no DV_PERF_STRICT';
+
 Uint8List fx(String name) => File('test/fixtures/luts/$name').readAsBytesSync();
 
 LutFormatException parseError(String name) {
@@ -165,7 +172,9 @@ void main() {
       sw.stop();
       expect(lut.size, 65);
       expect(lut.rgb.last, 1);
-      expect(sw.elapsedMilliseconds, lessThanOrEqualTo(400), reason: '${sw.elapsedMilliseconds} ms');
+      // ignore: avoid_print
+      print('parse 65^3 .cube: ${sw.elapsedMilliseconds} ms');
+      expect(sw.elapsedMilliseconds, lessThanOrEqualTo(_limit(400)), reason: '${sw.elapsedMilliseconds} ms ($_perfMode)');
     });
   });
 

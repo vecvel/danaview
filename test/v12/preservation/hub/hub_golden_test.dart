@@ -1,12 +1,13 @@
 // OWNER: HOM-06
 //
-// BUILD_PLAN HOM-06 acceptance: the hub sections (P-1 Now Playing card, P-3 quick actions, P-2
-// Continue watching header, rows collapsed and expanded, Show all / Show less) are pixel-equal
-// between DANAVIEW_FILES_HOME off and the `Home` tab with it on, at three widths.
+// BUILD_PLAN HOM-06 acceptance: the hub sections (P-1 Now Playing card, P-2 Continue watching
+// header, cards collapsed and expanded, Show all / Show less, and P-3 the quick actions of the
+// empty Home's empty state) are pixel-equal between DANAVIEW_FILES_HOME off and the `Home` tab
+// with it on, at three widths.
 //
 // Both flag values match the same golden file per section and width. The goldens in goldens/
 // are written from the flag-off run only:
-//   flutter test test/v12/preservation/hub/hub_golden_test.dart --update-goldens --plain-name "flag off"
+//   flutter test test/v12/preservation/hub/hub_golden_test.dart --update-goldens
 // and then the whole file must pass without --update-goldens. Each test also compares the two
 // layouts directly (captured in the same test), so the equality holds even while goldens are
 // being refreshed.
@@ -30,7 +31,6 @@ Map<String, Finder> _sections({required bool expanded}) => expanded
     ? {'continue_watching_expanded': continueWatchingRows, 'show_less': showAllButton}
     : {
         'now_playing': nowPlayingCard,
-        'quick_actions': quickActions,
         'continue_watching_header': continueWatchingHeader,
         'continue_watching_rows': continueWatchingRows,
         'show_all': showAllButton,
@@ -67,6 +67,15 @@ Future<Map<String, Uint8List>> _capture(WidgetTester tester, Directory tree, dou
   }
   expect(tester.takeException(), isNull);
   await finishHome(tester, env);
+
+  // P-3: the quick actions in the empty Home's one empty state.
+  final empty = await pumpHub(tester, filesHome: filesHome, tree: tree, surface: _surface(width), seed: false);
+  expect(homeEmptyState, findsOneWidget);
+  expect(find.descendant(of: homeEmptyState, matching: quickActions), findsOneWidget);
+  pixels['empty_state'] = await _pixels(tester, homeEmptyState);
+  await expectLater(homeEmptyState, matchesGoldenFile('goldens/empty_state_${width.toInt()}.png'));
+  expect(tester.takeException(), isNull);
+  await finishHome(tester, empty);
   return pixels;
 }
 

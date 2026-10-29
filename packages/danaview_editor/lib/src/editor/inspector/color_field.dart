@@ -98,7 +98,7 @@ class ColorField extends StatelessWidget {
       enabled: enabled,
       semanticLabel: '$label, ${ColorFieldStrings.value(color, alpha: showOpacity)}',
       tooltip: label,
-      borderRadius: DanaviewRadius.smAll,
+      borderRadius: DanaviewRadius.tileAll,
       child: ConstrainedBox(
         constraints: BoxConstraints(minWidth: target, minHeight: target),
         child: Center(
@@ -110,7 +110,7 @@ class ColorField extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: DanaviewRadius.smAll,
+                borderRadius: DanaviewRadius.tileAll,
                 border: const Border.fromBorderSide(DanaviewBorders.hairline),
                 boxShadow: DanaviewShadows.subtle,
               ),

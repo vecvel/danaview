@@ -454,11 +454,14 @@ void main() {
     }
   });
 
-  test('tile extent: about three on a phone, never under 88 px', () {
-    expect(recentPhotosTileExtent(248), 88);
-    expect(recentPhotosTileExtent(370), closeTo(112, 0.5));
-    expect(recentPhotosTileExtent(1200), lessThanOrEqualTo(148));
-    expect(recentPhotosTileExtent(double.infinity), 112);
+  test('tile extent: 4 cells fill a phone strip, 8 a tablet one (3 pt gaps), never under 64 px', () {
+    expect(recentPhotosVisibleCells(370), 4);
+    expect(recentPhotosVisibleCells(720), 8);
+    expect(recentPhotosTileExtent(370), closeTo((370 - 3 * 3) / 4, 0.01));
+    expect(recentPhotosTileExtent(720), closeTo((720 - 7 * 3) / 8, 0.01));
+    expect(recentPhotosTileExtent(1200), closeTo((1200 - 7 * 3) / 8, 0.01));
+    expect(recentPhotosTileExtent(200), 64);
+    expect(recentPhotosTileExtent(double.infinity), 88);
   });
 
   test('the See all tile text has computed contrast >= 4.5:1', () {

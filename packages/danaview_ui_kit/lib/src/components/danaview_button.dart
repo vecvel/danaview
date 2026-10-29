@@ -1,14 +1,25 @@
 import 'package:flutter/material.dart';
 
 import '../foundation/danaview_internal.dart';
+import '../theme/danaview_depth.dart';
 import '../theme/danaview_theme.dart';
 import '../theme/danaview_tokens.dart';
 import 'danaview_glyph.dart';
 import 'danaview_pressable.dart';
 
-enum DanaviewButtonVariant { primary, secondary, tonal, ghost, destructive }
+/// §8 buttons. [primary] is the one filled red control per view; [secondary] is the neutral
+/// raised sibling; [text] is the `primaryLight` text action ("See all", "New", "Add").
+enum DanaviewButtonVariant { primary, secondary, tonal, ghost, destructive, text }
 
-enum DanaviewButtonSize { sm, md, lg }
+enum DanaviewButtonSize {
+  sm,
+  md,
+  lg,
+
+  /// Matches a text or search field beside it: [DanaviewSpacing.controlHeight] tall with the
+  /// field's corner radius and md typography.
+  field,
+}
 
 class DanaviewButton extends StatelessWidget {
   const DanaviewButton({
@@ -77,6 +88,20 @@ class DanaviewButton extends StatelessWidget {
     this.semanticLabel,
   }) : variant = DanaviewButtonVariant.ghost;
 
+  /// Text action (§8): `primaryLight` 15/600 label, no background. Keeps the 44 pt target.
+  const DanaviewButton.text({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.size = DanaviewButtonSize.md,
+    this.icon,
+    this.glyph,
+    this.trailingIcon,
+    this.expand = false,
+    this.tooltip,
+    this.semanticLabel,
+  }) : variant = DanaviewButtonVariant.text;
+
   const DanaviewButton.destructive({
     super.key,
     required this.label,
@@ -112,12 +137,23 @@ class DanaviewButton extends StatelessWidget {
           foreground: DanaviewColors.foregroundOn(DanaviewColors.primary),
         ),
       DanaviewButtonVariant.secondary => (
-          fill: DanaviewColors.surfaceElevatedHigher,
-          foreground: DanaviewColors.foregroundOn(DanaviewColors.surfaceElevatedHigher),
+          fill: DanaviewColors.surfaceElevated,
+          foreground: DanaviewColors.foregroundOn(DanaviewColors.surfaceElevated),
         ),
       DanaviewButtonVariant.tonal => (fill: DanaviewColors.primaryTonal, foreground: DanaviewColors.primaryLight),
       DanaviewButtonVariant.ghost => (fill: const Color(0x00FFFFFF), foreground: DanaviewColors.textPrimary),
-      DanaviewButtonVariant.destructive => (fill: const Color(0x29EF4444), foreground: DanaviewColors.errorLight),
+      DanaviewButtonVariant.destructive => (fill: DanaviewColors.destructiveSoft, foreground: DanaviewColors.destructive),
+      DanaviewButtonVariant.text => (fill: const Color(0x00FFFFFF), foreground: DanaviewColors.primaryLight),
+    };
+  }
+
+  /// The resting frame of [variant]: hairline depth on secondary, the raised highlight and shadow
+  /// on primary, a bare continuous-corner fill on the rest.
+  static ShapeDecoration _frame(DanaviewButtonVariant variant, Color fill, BorderRadius radius) {
+    return switch (variant) {
+      DanaviewButtonVariant.primary => DanaviewDepth.primary(color: fill, borderRadius: radius),
+      DanaviewButtonVariant.secondary => DanaviewDepth.raised(color: fill, borderRadius: radius),
+      _ => ShapeDecoration(color: fill, shape: DanaviewDepth.shape(radius)),
     };
   }
 
@@ -126,9 +162,10 @@ class DanaviewButton extends StatelessWidget {
     final enabled = onPressed != null;
     final colors = _colorsFor(variant);
     final (height, hPad, fontSize, iconSize, gap, radius) = switch (size) {
-      DanaviewButtonSize.sm => (32.0, 12.0, 13.0, 16.0, 6.0, DanaviewRadius.smAll),
-      DanaviewButtonSize.md => (40.0, 16.0, 14.0, 18.0, 8.0, DanaviewRadius.mdAll),
-      DanaviewButtonSize.lg => (48.0, 20.0, 15.0, 20.0, 8.0, DanaviewRadius.mdAll),
+      DanaviewButtonSize.sm => (32.0, 12.0, 13.0, 16.0, 6.0, DanaviewRadius.thumbAll),
+      DanaviewButtonSize.md => (40.0, 16.0, 15.0, 18.0, 8.0, DanaviewRadius.controlAll),
+      DanaviewButtonSize.lg => (48.0, 20.0, 15.0, 20.0, 8.0, DanaviewRadius.controlAll),
+      DanaviewButtonSize.field => (DanaviewSpacing.controlHeight, 16.0, 15.0, 18.0, 8.0, DanaviewRadius.controlAll),
     };
     final fg = colors.foreground;
 
@@ -141,14 +178,10 @@ class DanaviewButton extends StatelessWidget {
           duration: DanaviewMotion.fast,
           curve: DanaviewMotion.curve,
           constraints: BoxConstraints(minHeight: height, minWidth: height),
-          padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 4),
-          decoration: BoxDecoration(color: danaviewInteractiveFill(colors.fill, state), borderRadius: radius),
-          foregroundDecoration: BoxDecoration(
-            borderRadius: radius,
-            border: Border.fromBorderSide(
-              state.focused ? DanaviewBorders.focus : DanaviewBorders.focus.copyWith(color: Colors.transparent),
-            ),
-          ),
+          // A text action sits close to its edge (section headers, toasts).
+          padding: EdgeInsets.symmetric(horizontal: variant == DanaviewButtonVariant.text ? 6 : hPad, vertical: 4),
+          decoration: _frame(variant, danaviewInteractiveFill(colors.fill, state), radius),
+          foregroundDecoration: DanaviewDepth.focusRing(focused: state.focused, borderRadius: radius),
           child: Row(
             mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,

@@ -3,11 +3,82 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../foundation/danaview_internal.dart';
+import '../theme/danaview_depth.dart';
 import '../theme/danaview_theme.dart';
 import '../theme/danaview_tokens.dart';
 import 'danaview_menu.dart';
 import 'danaview_pressable.dart';
 
+/// The §8 pill look shared by [DanaviewChoiceChip] and [DanaviewTabPill]: a capsule; selected is
+/// the [DanaviewColors.primary] fill with a 12 % hairline and an 18 % top highlight and a white
+/// 600 label; idle is [DanaviewColors.surfaceElevated] with a [DanaviewColors.textSecondary] label.
+ShapeDecoration _pillDecoration(bool selected, Color fill) {
+  return ShapeDecoration(
+    color: fill,
+    shape: DanaviewDepthBorder(
+      borderRadius: DanaviewRadius.capsuleAll,
+      side: selected ? DanaviewBorders.bright : DanaviewBorders.hairline,
+      highlight: selected ? DanaviewColors.highlightStrong : DanaviewColors.highlight,
+    ),
+  );
+}
+
+Widget _pill(
+  BuildContext context, {
+  required String label,
+  required bool selected,
+  required bool active,
+  required VoidCallback? onTap,
+  required IconData? icon,
+  required double fontSize,
+  required double minHeight,
+  required EdgeInsets padding,
+  String? semanticLabel,
+}) {
+  final fill = selected ? DanaviewColors.primary : DanaviewColors.surfaceElevated;
+  final fg = selected ? DanaviewColors.foregroundOn(DanaviewColors.primary) : DanaviewColors.textSecondary;
+  return DanaviewPressable.builder(
+    onTap: active ? onTap : null,
+    selected: selected,
+    semanticLabel: semanticLabel,
+    builder: (context, state) {
+      final visual = AnimatedContainer(
+        duration: DanaviewMotion.fast,
+        curve: DanaviewMotion.curve,
+        constraints: BoxConstraints(minHeight: minHeight),
+        padding: padding,
+        decoration: _pillDecoration(selected, danaviewInteractiveFill(fill, state)),
+        foregroundDecoration: DanaviewDepth.focusRing(focused: state.focused, borderRadius: DanaviewRadius.capsuleAll),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: fontSize + 2, color: fg),
+              const SizedBox(width: 6),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  height: 1.2,
+                  color: fg,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      return danaviewDimmed(active, danaviewTapTarget(context, visual));
+    },
+  );
+}
+
+/// A filter or sort chip: a §8 capsule pill, 32 pt visual inside a 44 pt target on touch.
 class DanaviewChoiceChip extends StatelessWidget {
   const DanaviewChoiceChip({
     super.key,
@@ -26,55 +97,54 @@ class DanaviewChoiceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = enabled && onTap != null;
-    final fill = selected ? DanaviewColors.primary : DanaviewColors.surfaceElevatedHigher;
-    final fg = selected ? DanaviewColors.foregroundOn(DanaviewColors.primary) : DanaviewColors.textSecondary;
-    return DanaviewPressable.builder(
-      onTap: active ? onTap : null,
+    return _pill(
+      context,
+      label: label,
       selected: selected,
-      builder: (context, state) {
-        final visual = AnimatedContainer(
-          duration: DanaviewMotion.fast,
-          curve: DanaviewMotion.curve,
-          constraints: const BoxConstraints(minHeight: 32),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: BoxDecoration(color: danaviewInteractiveFill(fill, state), borderRadius: DanaviewRadius.smAll),
-          foregroundDecoration: BoxDecoration(
-            borderRadius: DanaviewRadius.smAll,
-            border: Border.fromBorderSide(
-              state.focused
-                  ? DanaviewBorders.focus
-                  : selected
-                      ? DanaviewBorders.hairline.copyWith(color: Colors.transparent)
-                      : DanaviewBorders.hairline,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 15, color: fg),
-                const SizedBox(width: 6),
-              ],
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    height: 1.2,
-                    color: fg,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-        return danaviewDimmed(active, danaviewTapTarget(context, visual));
-      },
+      active: enabled && onTap != null,
+      onTap: onTap,
+      icon: icon,
+      fontSize: 13,
+      minHeight: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+    );
+  }
+}
+
+/// A tab in a capsule tab strip (§8, §10.2): padding 13 x 6, sized to its label, 15 pt label.
+/// The visual is shorter than 44 pt, so touch platforms keep an invisible 44 pt hit area. The
+/// strip that holds these scrolls sideways and owns arrow-key selection.
+class DanaviewTabPill extends StatelessWidget {
+  const DanaviewTabPill({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+    this.enabled = true,
+    this.semanticLabel,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+  final IconData? icon;
+  final bool enabled;
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return _pill(
+      context,
+      label: label,
+      selected: selected,
+      active: enabled && onTap != null,
+      onTap: onTap,
+      icon: icon,
+      fontSize: 15,
+      minHeight: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
+      semanticLabel: semanticLabel,
     );
   }
 }
@@ -188,11 +258,8 @@ class DanaviewSegmentedControl<T> extends StatelessWidget {
         // tap target and screen-reader frame (44 px on touch); the vertical inset is drawn inside
         // the segment and the indicator, so the control looks the same.
         padding: const EdgeInsets.symmetric(horizontal: _inset),
-        decoration: const BoxDecoration(
-          color: DanaviewColors.surfaceElevatedHigher,
-          borderRadius: DanaviewRadius.mdAll,
-        ),
-        foregroundDecoration: const BoxDecoration(borderRadius: DanaviewRadius.mdAll, border: DanaviewBorders.all),
+        decoration: ShapeDecoration(color: DanaviewColors.surfaceElevated, shape: DanaviewDepth.shape(DanaviewRadius.capsuleAll)),
+        foregroundDecoration: ShapeDecoration(shape: DanaviewDepth.border(borderRadius: DanaviewRadius.capsuleAll)),
         child: Stack(
           children: [
             if (index >= 0)
@@ -203,12 +270,7 @@ class DanaviewSegmentedControl<T> extends StatelessWidget {
                 top: _inset,
                 bottom: _inset,
                 width: segment,
-                child: const DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: DanaviewColors.primary,
-                    borderRadius: BorderRadius.all(Radius.circular(DanaviewRadius.md - _inset)),
-                  ),
-                ),
+                child: DecoratedBox(decoration: _pillDecoration(true, DanaviewColors.primary)),
               ),
             Row(
               children: [
@@ -260,9 +322,9 @@ class _Segment<T> extends StatelessWidget {
           curve: DanaviewMotion.curve,
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: DanaviewSegmentedControl._hPad),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: tint ? DanaviewColors.hover : const Color(0x00FFFFFF),
-            borderRadius: const BorderRadius.all(Radius.circular(DanaviewRadius.md - DanaviewSegmentedControl._inset)),
+            shape: DanaviewDepth.shape(DanaviewRadius.capsuleAll),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

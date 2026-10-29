@@ -10,4 +10,5 @@ export 'fake_project_repository.dart';
 export 'neutral_borders.dart';
 export 'no_press_effects.dart';
 export 'owner_ui_rules.dart';
+export 'row_heights.dart';
 export 'surface_matrix.dart';

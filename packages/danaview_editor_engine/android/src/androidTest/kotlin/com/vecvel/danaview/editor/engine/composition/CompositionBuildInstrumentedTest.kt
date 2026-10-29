@@ -35,6 +35,7 @@ import com.vecvel.danaview.editor.engine.plan.PlanValidator
 import com.vecvel.danaview.editor.engine.plan.ParamSnapshot
 import com.vecvel.danaview.editor.engine.plan.PlanReader
 import com.vecvel.danaview.editor.engine.plan.RenderPlan
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -190,7 +191,8 @@ class CompositionBuildInstrumentedTest {
         Log.i("AND08Build", "2,000-item plan (${layers.size + audio.size} items, $items sequence items): map %.1f ms, Media3 build %.1f ms (emulator)".format(mapMs, buildMs))
         assertTrue(layers.size + audio.size >= 2000)
         assertEquals(spec!!.sequences.size, built.composition.sequences.size)
-        assertTrue("mapping regressed grossly: $mapMs ms on the emulator", mapMs < 2_000)
+        val mapBound = PerfGate.bound(2_000.0)
+        assertTrue("mapping regressed grossly: $mapMs ms on the emulator (bound $mapBound, ${PerfGate.mode})", mapMs < mapBound)
     }
 
     @Test

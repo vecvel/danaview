@@ -65,7 +65,7 @@ class ModelConsentView extends StatelessWidget {
         const SizedBox(height: DanaviewSpacing.md),
         const Align(
           alignment: AlignmentDirectional.centerStart,
-          child: DanaviewTileIcon(Icons.cloud_download_rounded, size: 40),
+          child: DanaviewIconTile(Icons.cloud_download_rounded, size: 40),
         ),
         const SizedBox(height: DanaviewSpacing.sm),
         Semantics(
@@ -131,7 +131,7 @@ class _Details extends StatelessWidget {
       padding: const EdgeInsets.all(DanaviewSpacing.md),
       decoration: const BoxDecoration(
         color: DanaviewColors.surfaceElevatedHigher,
-        borderRadius: DanaviewRadius.mdAll,
+        borderRadius: DanaviewRadius.controlAll,
         border: DanaviewBorders.all,
       ),
       child: Column(

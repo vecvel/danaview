@@ -39,7 +39,7 @@ class PrivacySettingsSection extends ConsumerWidget {
           children: [
             DanaviewSwitchRow(
               key: const ValueKey('privacy-open-network-speed-test'),
-              leading: const DanaviewTileIcon(Icons.public_rounded, color: DanaviewColors.primaryLight, size: 40),
+              leading: const DanaviewIconTile(Icons.public_rounded, size: 40),
               title: title,
               subtitle: subtitle,
               value: allowed,

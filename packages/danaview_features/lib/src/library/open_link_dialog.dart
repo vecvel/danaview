@@ -83,7 +83,6 @@ class _DanaviewOpenLinkDialogState extends State<_DanaviewOpenLinkDialog> {
   Widget build(BuildContext context) {
     return DanaviewDialog(
       icon: Icons.link_rounded,
-      iconColor: DanaviewColors.cyan,
       title: widget.title,
       message: 'Paste the address of a video or live stream: HTTP(S), HLS, DASH, RTSP, RTMP and more.',
       content: Column(

@@ -833,13 +833,13 @@ class _MediaCard extends StatelessWidget {
     final data = MediaDragData(project: projectId, media: [asset.id], label: name);
     final card = DanaviewSurface(
       color: DanaviewColors.surfaceElevated,
-      borderRadius: DanaviewRadius.mdAll,
+      borderRadius: DanaviewRadius.mediaAll,
       shadow: DanaviewShadow.subtle,
       borderColor: previewed ? DanaviewColors.primaryLight : DanaviewColors.hairline,
       child: DanaviewPressable(
         onTap: onTap,
         isButton: false,
-        borderRadius: DanaviewRadius.mdAll,
+        borderRadius: DanaviewRadius.mediaAll,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1023,7 +1023,7 @@ class _DragFeedback extends StatelessWidget {
             offset: const Offset(-24, -48),
             child: DanaviewSurface(
               color: DanaviewColors.surfaceElevatedHigher,
-              borderRadius: DanaviewRadius.smAll,
+              borderRadius: DanaviewRadius.controlAll,
               shadow: DanaviewShadow.soft,
               padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.sm, vertical: DanaviewSpacing.xs),
               constraints: const BoxConstraints(maxWidth: 200),
@@ -1079,7 +1079,7 @@ class _PreviewStrip extends StatelessWidget {
       label: '${MediaStrings.previewRegion}, ${asset.displayName}',
       child: DanaviewSurface(
         color: DanaviewColors.surfaceElevated,
-        borderRadius: DanaviewRadius.lgAll,
+        borderRadius: DanaviewRadius.mediaAll,
         shadow: DanaviewShadow.subtle,
         padding: const EdgeInsets.all(DanaviewSpacing.md),
         child: Column(
@@ -1090,7 +1090,7 @@ class _PreviewStrip extends StatelessWidget {
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: ClipRRect(
-                  borderRadius: DanaviewRadius.smAll,
+                  borderRadius: DanaviewRadius.thumbAll,
                   child: _MediaThumb(
                       projectId: projectId, asset: asset, heightPx: 192, store: thumbs, fallback: _kindPlaceholder(asset.kind, size: 40)),
                 ),

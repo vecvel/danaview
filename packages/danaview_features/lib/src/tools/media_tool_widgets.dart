@@ -306,7 +306,7 @@ class _Stat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: const BoxDecoration(color: DanaviewColors.surfaceElevatedHigher, borderRadius: DanaviewRadius.mdAll),
+      decoration: const BoxDecoration(color: DanaviewColors.surfaceElevatedHigher, borderRadius: DanaviewRadius.controlAll),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

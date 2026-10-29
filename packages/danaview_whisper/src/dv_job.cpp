@@ -259,7 +259,7 @@ class Runner {
     state_ = init_state();
     if (state_ == nullptr) return DV_ERR_OOM;
     if (c.vad_enabled) {
-      rc = vad_.load(c.vad_model_path, j_->threads_requested.load());
+      rc = vad_.load(c.vad_model_path);
       if (rc != DV_OK) return rc;
     }
     const bool no_space = is_no_space_language(c.language.c_str());
@@ -434,7 +434,7 @@ class Runner {
     }
     int64_t speech = -1;
     if (c.vad_enabled) {
-      rc = vad_.load(c.vad_model_path, j_->threads_requested.load());
+      rc = vad_.load(c.vad_model_path);
       if (rc != DV_OK) return rc;
       j_->phase.store(DV_PHASE_VAD);
       std::vector<float> buf;

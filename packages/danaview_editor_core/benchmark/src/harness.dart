@@ -55,11 +55,13 @@ final class MetricResult {
         if (!budgetGated) 'budgetGated': false,
       };
 
-  /// One aligned text line for the console.
-  String describe() {
+  /// One aligned text line for the console; the verdict compares [p90] with the absolute budget,
+  /// which fails the check only when [gated] (DV_PERF_STRICT=1) and the row is [budgetGated].
+  String describe({bool gated = true}) {
     String ms(int us) => (us / 1000).toStringAsFixed(us < 10000 ? 3 : 1).padLeft(8);
+    final ok = p90 <= budgetUs;
     return '${id.padRight(30)} p50 ${ms(p50)} ms  p90 ${ms(p90)} ms  max ${ms(max)} ms  '
-        'budget ${ms(budgetUs)} ms  ${withinBudget ? 'ok' : budgetGated ? 'OVER BUDGET' : 'over budget (not gated here)'}';
+        'budget ${ms(budgetUs)} ms  ${ok ? 'ok' : gated && budgetGated ? 'OVER BUDGET' : 'over budget (not gated here)'}';
   }
 }
 

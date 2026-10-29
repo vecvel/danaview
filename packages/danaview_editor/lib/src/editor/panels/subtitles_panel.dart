@@ -571,7 +571,7 @@ class _SubtitlesPanelState extends ConsumerState<SubtitlesPanel> {
                 sliver: SliverToBoxAdapter(
                   child: Container(
                     key: _editorKey,
-                    decoration: const BoxDecoration(color: DanaviewColors.surfaceElevated, borderRadius: DanaviewRadius.smAll),
+                    decoration: const BoxDecoration(color: DanaviewColors.surfaceElevated, borderRadius: DanaviewRadius.controlAll),
                     child: _CueEditor(
                       key: SubtitlesPanelKeys.editor,
                       cue: cues[focusedIndex],
@@ -993,10 +993,10 @@ class _CueRow extends StatelessWidget {
           value: isCurrent ? SubtitleStrings.current : null,
           child: Container(
             margin: const EdgeInsets.symmetric(vertical: _RowLayout.margin),
-            decoration: BoxDecoration(color: background, borderRadius: DanaviewRadius.smAll),
+            decoration: BoxDecoration(color: background, borderRadius: DanaviewRadius.controlAll),
             child: DanaviewPressable(
               onTap: onTap,
-              borderRadius: DanaviewRadius.smAll,
+              borderRadius: DanaviewRadius.controlAll,
               selected: expanded,
               semanticLabel: label,
               child: Padding(

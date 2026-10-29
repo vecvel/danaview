@@ -30,6 +30,8 @@
 #   scripts/ci/editor/ios.sh --no-device-build  # skip 4-5 (simulator tests only)
 #   scripts/ci/editor/ios.sh --no-sim-tests     # skip 6-8 (device build + D-41 check only)
 #   scripts/ci/editor/ios.sh --smoke-only       # step 7 runs engine_smoke_test.dart only
+#   scripts/ci/editor/ios.sh --runner-tests-only  # stop after step 6 (RunnerTests)
+#   scripts/ci/editor/ios.sh --no-runner-tests    # skip step 6 (device build and step 7-8 only)
 #
 # Environment:
 #   DANAVIEW_IOS_SIMULATOR          simulator name or UDID (default: the first available iPhone on
@@ -42,9 +44,24 @@
 #                                the folder with the tiny speech models for scenario 8, and
 #                                DANAVIEW_E2E_TARGET picks the files (e2e_host.sh run target,
 #                                default all)
+#   DANAVIEW_IOS_ONLY_TESTING    xcodebuild -only-testing filter of step 6 (default RunnerTests;
+#                                e.g. RunnerTests/ChannelRoundTripTests; comma-separated for several,
+#                                e.g. RunnerTests/A,RunnerTests/B). Failure messages of step
+#                                6 are printed from its result bundle (example/build/RunnerTests.xcresult)
+#   DANAVIEW_IOS_SKIP_TESTING    xcodebuild -skip-testing filter of step 6 (comma-separated)
+#   DANAVIEW_IOS_RUNNER_LANE     gate: step 6 skips every class of ios_device_lane_classes.txt;
+#                                device: step 6 runs only those classes (docs/v1.2/CI_LANES.md);
+#                                unset: every RunnerTests class (local runs)
+#   DV_PERF_STRICT=1             absolute timing budgets (a quiet dev Mac): forwarded to RunnerTests
+#                                as TEST_RUNNER_DV_PERF_STRICT (Support/PerfGate.swift) and to the
+#                                step-7/8 suites as --dart-define=DV_PERF_STRICT=1
 #   DANAVIEW_IOS_DRY_RUN=1       print the step-7/8 commands (and check the inputs) without a
 #                                toolchain, a build or a simulator
 set -euo pipefail
+
+# Absolute timing budgets of the RunnerTests only with DV_PERF_STRICT=1 (xcodebuild hands
+# TEST_RUNNER_<name> to the test process as <name>).
+if [ "${DV_PERF_STRICT:-}" = 1 ]; then export TEST_RUNNER_DV_PERF_STRICT=1; fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CI_DIR="$ROOT/scripts/ci/editor"
@@ -62,12 +79,16 @@ DRY_RUN="${DANAVIEW_IOS_DRY_RUN:-}"
 
 DEVICE_BUILD=true
 SIM_TESTS=true
+RUNNER_TESTS_ONLY=false
+RUNNER_TESTS=true
 SUITES="${DANAVIEW_IOS_SUITES:-$ALL_SUITES}"
 for arg in "$@"; do
   case "$arg" in
     --no-device-build) DEVICE_BUILD=false ;;
     --no-sim-tests) SIM_TESTS=false ;;
     --smoke-only) SUITES=smoke ;;
+    --runner-tests-only) RUNNER_TESTS_ONLY=true ;;
+    --no-runner-tests) RUNNER_TESTS=false ;;
     -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     *) echo "unknown argument $arg" >&2; exit 2 ;;
   esac
@@ -102,6 +123,7 @@ suite_file() {
 # suite_defines <suite>: one --dart-define per line (QA-03 reads the ENG-05 media from the host's
 # disk; an iOS simulator reads host paths directly).
 suite_defines() {
+  if [ "${DV_PERF_STRICT:-}" = 1 ]; then echo "--dart-define=DV_PERF_STRICT=1"; fi
   case "$1" in
     accuracy | av_sync) echo "--dart-define=QA03_MEDIA=$MEDIA" ;;
     parity)
@@ -181,7 +203,26 @@ if [ "$DRY_RUN" = 1 ]; then
   exit 0
 fi
 # Fail on a bad suite selection or missing media before the long builds.
-if [ "$SIM_TESTS" = true ]; then check_suites; fi
+if [ "$SIM_TESTS" = true ] && [ "$RUNNER_TESTS_ONLY" != true ]; then check_suites; fi
+
+# Step 6's -only-testing / -skip-testing lists. The device-lane classes have one source of truth,
+# ios_device_lane_classes.txt (docs/v1.2/CI_LANES.md).
+LANE_FILE="$CI_DIR/ios_device_lane_classes.txt"
+lane_classes() { grep -vE '^[[:space:]]*(#|$)' "$LANE_FILE" | sed 's/[[:space:]]//g' | paste -sd, -; }
+ONLY_TESTING="${DANAVIEW_IOS_ONLY_TESTING:-RunnerTests}"
+SKIP_TESTING="${DANAVIEW_IOS_SKIP_TESTING:-}"
+case "${DANAVIEW_IOS_RUNNER_LANE:-}" in
+  '') ;;
+  gate) SKIP_TESTING="${SKIP_TESTING:+$SKIP_TESTING,}$(lane_classes)" ;;
+  device)
+    [ -z "${DANAVIEW_IOS_ONLY_TESTING:-}" ] || die "DANAVIEW_IOS_RUNNER_LANE=device sets the -only-testing list; unset DANAVIEW_IOS_ONLY_TESTING"
+    ONLY_TESTING="$(lane_classes)"
+    ;;
+  *) die "DANAVIEW_IOS_RUNNER_LANE must be gate, device or unset (got ${DANAVIEW_IOS_RUNNER_LANE})" ;;
+esac
+if [ -n "${DANAVIEW_IOS_RUNNER_LANE:-}" ]; then
+  [ -n "$(lane_classes)" ] || die "${LANE_FILE#"$ROOT"/} lists no classes"
+fi
 
 # --- 1. Toolchain -----------------------------------------------------------------------------
 group "toolchain"
@@ -259,6 +300,22 @@ boot_simulator() {
   [ "$booted" = true ] || die "simulator $UDID did not boot within 180 s"
 }
 
+# Prints every test failure (test, message, source location) of the result bundle $1.
+print_test_failures() {
+  [ -d "$1" ] || { echo "no result bundle at $1"; return 0; }
+  xcrun xcresulttool get test-results summary --path "$1" --format json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    print("xcresulttool printed no summary"); sys.exit(0)
+fails = data.get("testFailures", [])
+print("%d test failure(s):" % len(fails))
+for f in fails:
+    print("FAIL %s: %s" % (f.get("testIdentifierString") or f.get("testName"), f.get("failureText", "").strip()))
+' || true
+}
+
 if [ "$SIM_TESTS" = true ]; then
   group "pick a simulator"
   SIM="${DANAVIEW_IOS_SIMULATOR:-}"
@@ -289,18 +346,41 @@ if best:
   boot_simulator
   endgroup
 
+  if [ "$RUNNER_TESTS" = true ]; then
   group "RunnerTests (xcodebuild test)"
   (cd "$EXAMPLE" && flutter build ios --simulator --debug --config-only)
-  (cd "$EXAMPLE/ios" && xcodebuild test \
+  # -quiet hides the assertion messages, so they are printed from the result bundle on failure.
+  BUNDLE="$EXAMPLE/build/RunnerTests.xcresult"
+  rm -rf "$BUNDLE"
+  declare -a FILTER=()
+  IFS=',' read -r -a ONLY_LIST <<< "$ONLY_TESTING"
+  for t in "${ONLY_LIST[@]}"; do FILTER+=("-only-testing:$t"); done
+  if [ -n "$SKIP_TESTING" ]; then
+    IFS=',' read -r -a SKIP_LIST <<< "$SKIP_TESTING"
+    for t in "${SKIP_LIST[@]}"; do FILTER+=("-skip-testing:$t"); done
+  fi
+  echo "xcodebuild test filter: ${FILTER[*]}"
+  if ! (cd "$EXAMPLE/ios" && xcodebuild test \
     -workspace Runner.xcworkspace \
     -scheme Runner \
     -configuration Debug \
     -destination "id=$UDID" \
-    -only-testing:RunnerTests \
+    "${FILTER[@]}" \
     -parallel-testing-enabled NO \
+    -resultBundlePath "$BUNDLE" \
     CODE_SIGNING_ALLOWED=NO \
-    -quiet)
+    -quiet); then
+    print_test_failures "$BUNDLE"
+    die "RunnerTests failed (failure messages above; result bundle ${BUNDLE#"$ROOT"/})"
+  fi
   endgroup
+  else
+    notice "RunnerTests not run (--no-runner-tests)"
+  fi
+  if [ "$RUNNER_TESTS_ONLY" = true ]; then
+    echo "ios: OK (RunnerTests only)"
+    exit 0
+  fi
 
   # --- 7. integration_test suites (one flutter test per file; a failure does not stop the rest) ---
   rm -rf "$SUITE_OUT"

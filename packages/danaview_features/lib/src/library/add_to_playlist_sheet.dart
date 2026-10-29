@@ -43,7 +43,7 @@ class _DanaviewAddToPlaylistSheet extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DanaviewLibraryRow(
-          leading: const DanaviewTileIcon(Icons.add_rounded, size: 40),
+          leading: const DanaviewIconTile(Icons.add_rounded),
           title: 'New playlist…',
           onTap: () => _createAndAdd(context, ref),
         ),
@@ -59,7 +59,7 @@ class _DanaviewAddToPlaylistSheet extends ConsumerWidget {
           for (final playlist in playlists) ...[
             const DanaviewRowDivider(),
             DanaviewLibraryRow(
-              leading: const DanaviewTileIcon(Icons.queue_music_rounded, color: DanaviewColors.purple, size: 40),
+              leading: const DanaviewIconTile(Icons.queue_music_rounded),
               title: playlist.name,
               subtitle: playlist.itemCount == 0 ? 'No videos yet' : formatCount(playlist.itemCount, 'video'),
               onTap: () => _add(context, ref, playlist.name),

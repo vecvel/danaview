@@ -150,7 +150,7 @@ class _DanaviewMediaInfoScreenState extends ConsumerState<DanaviewMediaInfoScree
     return DanaviewLibraryGroup(
       children: [
         DanaviewLibraryRow(
-          leading: const DanaviewTileIcon(Icons.video_file_rounded, color: DanaviewColors.purple, size: 40),
+          leading: const DanaviewIconTile(Icons.video_file_rounded, size: 40),
           title: 'Choose a video',
           subtitle: _info == null ? 'Pick a file to inspect' : 'Inspect another file',
           onTap: busy ? null : _choose,
@@ -158,7 +158,7 @@ class _DanaviewMediaInfoScreenState extends ConsumerState<DanaviewMediaInfoScree
         ),
         if (current != null)
           DanaviewLibraryRow(
-            leading: const DanaviewTileIcon(Icons.play_circle_rounded, size: 40),
+            leading: const DanaviewIconTile(Icons.play_circle_rounded, size: 40),
             title: current.title,
             titleMaxLines: 2,
             subtitle: 'Now in the player',
@@ -273,7 +273,7 @@ class _DanaviewMediaInfoScreenState extends ConsumerState<DanaviewMediaInfoScree
       if (t.encrypted) 'Encrypted',
     ];
     return DanaviewLibraryRow(
-      leading: const DanaviewTileIcon(Icons.subtitles_rounded, color: DanaviewColors.cyan, size: 40),
+      leading: const DanaviewIconTile(Icons.subtitles_rounded, size: 40),
       title: t.language == null ? 'Unknown language' : formatLanguage(t.language!),
       titleMaxLines: 2,
       subtitle: details.join(' · '),
@@ -330,10 +330,10 @@ class _SummaryCard extends StatelessWidget {
         video?.width != null && video?.height != null ? resolutionName(video!.width!, video.height!) : null;
     final surround = surroundName(audioChannels);
     return [
-      if (resolution != null) DanaviewBadge(resolution),
-      if (video?.hdr != null) DanaviewBadge(video!.hdr!, color: DanaviewColors.warning),
-      if ((video?.bitDepth ?? 0) > 8) DanaviewBadge('${video!.bitDepth}-bit', color: DanaviewColors.cyan),
-      if (surround != null) DanaviewBadge(surround, color: DanaviewColors.purple),
+      if (resolution != null) DanaviewBadge(resolution, color: DanaviewColors.textSecondary),
+      if (video?.hdr != null) DanaviewBadge(video!.hdr!, color: DanaviewColors.textSecondary),
+      if ((video?.bitDepth ?? 0) > 8) DanaviewBadge('${video!.bitDepth}-bit', color: DanaviewColors.textSecondary),
+      if (surround != null) DanaviewBadge(surround, color: DanaviewColors.textSecondary),
       if (info.fastStart == true) const DanaviewBadge('Fast start', color: DanaviewColors.success),
       if (info.tracks.any((t) => t.encrypted)) const DanaviewBadge('Encrypted', color: DanaviewColors.errorLight),
     ];
@@ -356,7 +356,7 @@ class _SummaryCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const DanaviewTileIcon(Icons.movie_rounded, color: DanaviewColors.purple, size: 44),
+              const DanaviewIconTile(Icons.movie_rounded, size: 44),
               const SizedBox(width: DanaviewSpacing.md),
               Expanded(
                 child: Column(

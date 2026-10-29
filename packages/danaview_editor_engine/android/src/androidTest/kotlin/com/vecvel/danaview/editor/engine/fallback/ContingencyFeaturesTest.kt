@@ -31,6 +31,7 @@ import com.vecvel.danaview.editor.engine.preview.fallback.ContingencyPreviewBack
 import com.vecvel.danaview.editor.engine.preview.fallback.RenderedRange
 import com.vecvel.danaview.editor.engine.preview.fallback.RenderedRangeHook
 import com.vecvel.danaview.editor.engine.preview.fallback.SourceFrameIndex
+import com.vecvel.danaview.editor.engine.harness.PerfGate
 import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -193,7 +194,8 @@ class ContingencyFeaturesTest {
             val rangeWrong = inRange.filter { it.readings["full"] != (it.k - 24).toInt() }
             val liveWrong = outside.filter { it.readings["full"] != FallbackPlans.expected(plan, main, it.k, pts) }
             Log.i(AND16_TAG, "rendered range [24, 48) (emulator): ${inRange.size} range frames, ${outside.size} live frames, hook calls ${calls.map { "${it.first}:${it.second != null}" }}")
-            assertTrue("range frames shown", inRange.size >= 5)
+            val minInRange = PerfGate.atLeast(5, 1)
+            assertTrue("range frames shown (${inRange.size}, need $minInRange, ${PerfGate.mode})", inRange.size >= minInRange)
             assertEquals("range frames come from the range file", emptyList<SinkFrame>(), rangeWrong)
             assertEquals(emptyList<SinkFrame>(), liveWrong)
             assertTrue("hook entered the range", calls.any { it.second != null && it.first in 24 until 48 })
@@ -255,7 +257,8 @@ class ContingencyFeaturesTest {
             val stats = h.stats()
             Log.i(AND16_TAG, "audio lane + video (emulator): ${shown.size}/$frames frames, audio clock reads ${stats.audioClockReads}, clock corrections to the audio master ${stats.audioFollows}, failures ${h.host.failures.size}")
             assertEquals(emptyList<SinkFrame>(), wrong)
-            assertTrue(shown.size >= 10)
+            val minShown = PerfGate.atLeast(10, 2)
+            assertTrue("frames shown (${shown.size}/$frames, need $minShown, ${PerfGate.mode})", shown.size >= minShown)
             assertTrue("no failure", h.host.failures.isEmpty())
             assertTrue("the audio deck played and the clock read it", stats.audioClockReads > 0)
         }

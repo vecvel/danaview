@@ -20,7 +20,7 @@
 //   named-sort store (HOM-19), the file group of the selection bar (HOM-22), the photo viewer's
 //   share hook (HOM-11 over HOM-22's port) and, on Windows and Linux, the save-dialog file-out port;
 // * fills the Home's tab slots: All, Videos, Folders (HOM-18), Photos (HOM-10), the Overview's
-//   Import and search row (HOM-20, HOM-19), Recent photos tray (HOM-09), favourites and recents
+//   top-bar search field (HOM-19; Import is the top bar's menu, HOM-20), Recent photos tray (HOM-09), favourites and recents
 //   (HOM-19) and the selection bar (HOM-12, HOM-22); from S3 also the Documents tab (HOM-18,
 //   [s3DocumentsShown]);
 // * shows Settings › Library storage (HOM-17) after Settings › Privacy;
@@ -38,7 +38,6 @@
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:danaview_data/danaview_data.dart' show AppStorage, LibraryRepository;
 import 'package:danaview_domain/danaview_domain.dart' show MediaRef;
@@ -48,10 +47,10 @@ import 'package:danaview_features/src/library/file_actions/file_actions.dart';
 import 'package:danaview_features/src/library/files/library_store_providers.dart';
 import 'package:danaview_features/src/library/filters/entry_widgets.dart' show LibraryEntryActions;
 import 'package:danaview_features/src/library/filters/library_filters.dart';
+import 'package:danaview_features/src/library/home/home_documents_section.dart';
 import 'package:danaview_features/src/library/home/recent_photos_tray.dart';
 import 'package:danaview_features/src/library/import/import_pickers.dart';
 import 'package:danaview_features/src/library/import/import_providers.dart';
-import 'package:danaview_features/src/library/import/import_sheet.dart';
 import 'package:danaview_features/src/library/organise/organise_providers.dart';
 import 'package:danaview_features/src/library/organise/organise_widgets.dart';
 import 'package:danaview_features/src/library/photo_viewer/photo_viewer_actions.dart';
@@ -480,6 +479,8 @@ Widget appHomeScreen({
   VoidCallback? onOpenSettings,
   VoidCallback? onOpenEditor,
   VoidCallback? onOpenProjects,
+  ValueChanged<String>? onOpenProject,
+  VoidCallback? onNewProject,
 }) {
   if (!filesHomeWired) {
     return DanaviewHomeScreen(
@@ -497,6 +498,8 @@ Widget appHomeScreen({
     onOpenSettings: onOpenSettings,
     onOpenEditor: onOpenEditor,
     onOpenProjects: onOpenProjects,
+    onOpenProject: onOpenProject,
+    onNewProject: onNewProject,
   );
 }
 
@@ -514,6 +517,8 @@ class FilesHome extends StatefulWidget {
     this.onOpenSettings,
     this.onOpenEditor,
     this.onOpenProjects,
+    this.onOpenProject,
+    this.onNewProject,
   });
 
   /// Shows the player.
@@ -533,6 +538,13 @@ class FilesHome extends StatefulWidget {
 
   /// The Projects tab (null hides it; the editor's platforms only).
   final VoidCallback? onOpenProjects;
+
+  /// Opens a project in the editor by id: the Overview's Projects section and the Projects tab's
+  /// cards (null hides the section and keeps the tab's single Open projects pane).
+  final ValueChanged<String>? onOpenProject;
+
+  /// Opens the New project sheet: the Projects tab's primary button (null hides it).
+  final VoidCallback? onNewProject;
 
   @override
   State<FilesHome> createState() => FilesHomeState();
@@ -619,6 +631,10 @@ class FilesHomeState extends State<FilesHome> {
               actions: _rowActions(context, ref),
             )),
         base: HomeTabSlots(
+          // The editor's projects (§10.3 #3, §10.4), only where the editor runs and was wired;
+          // the list comes from homeProjectsProvider (lib/wiring/projects_wiring.dart).
+          projects: widget.onOpenProject == null ? null : (_) => const HomeProjectsTab(),
+          projectsOverview: widget.onOpenProject == null ? null : (_) => const HomeProjectsSection(),
           photos: _consumer((context, ref) => FilesHomePhotosPane(
                 photos: PhotosTab(
                 onOpenPhoto: (photos, index) {
@@ -636,16 +652,20 @@ class FilesHomeState extends State<FilesHome> {
                 },
               ),
               )),
-          recentPhotos: _consumer((context, ref) => Column(
-                key: const ValueKey('s2-overview-library'),
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FilesHomeToolsRow(onOpenHit: (hit) => _openHit(context, ref, hit)),
-                  // See all bubbles a tab request up to the shell (HOM-09, HOM-05).
-                  RecentPhotosTray(onOpenPhoto: (photos, index) => _openPhotos(context, photos, index)),
-                ],
+          // The search field sits in the top bar beside the filter button (DESIGN_SYSTEM §10.1);
+          // Import is the top bar's (+) menu.
+          search: _consumer((context, ref) => LibrarySearchField(
+                key: const ValueKey('s2-search'),
+                hint: 'Search videos, photos, docs',
+                onOpen: (hit) => _openHit(context, ref, hit),
               )),
+          // See all bubbles a tab request up to the shell (HOM-09, HOM-05).
+          recentPhotos: _consumer((context, ref) => RecentPhotosTray(
+                key: const ValueKey('s2-overview-library'),
+                onOpenPhoto: (photos, index) => _openPhotos(context, photos, index),
+              )),
+          // The Overview's Documents section (§10.3 #6); dropped with the Documents tab in S2.
+          documentsOverview: _consumer((context, ref) => HomeDocumentsSection(onOpenEntry: (e) => _openEntry(context, ref, e))),
           favourites: _consumer((context, ref) => Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
@@ -681,7 +701,13 @@ class FilesHomeState extends State<FilesHome> {
         onOpenPlaylist: widget.onOpenPlaylist,
         onOpenSettings: widget.onOpenSettings,
         onOpenEditor: widget.onOpenEditor,
-        callbacks: HomeCallbacks(onOpenProjects: widget.onOpenProjects),
+        // onOpenAiStudio stays null until slice S6 adds the AI Studio screen and its route; the
+        // phone tab bar's AI Studio item is hidden until then (see HomeCallbacks.onOpenAiStudio).
+        callbacks: HomeCallbacks(
+          onOpenProjects: widget.onOpenProjects,
+          onOpenProject: widget.onOpenProject,
+          onNewProject: widget.onNewProject,
+        ),
         tabSlots: slots,
       ),
     );
@@ -743,70 +769,6 @@ class FilesHomePhotosPane extends StatelessWidget {
       },
     );
   }
-}
-
-/// The Overview's library row (D-4): the name search (HOM-19) with its hits, taking all the free
-/// width, and Import (HOM-20) right beside it; below [compactWidth] Import is a 44 pt icon button.
-class FilesHomeToolsRow extends ConsumerWidget {
-  /// The row; [onOpenHit] opens a search hit.
-  const FilesHomeToolsRow({super.key, required this.onOpenHit});
-
-  /// Opens a search hit.
-  final ValueChanged<SearchHit> onOpenHit;
-
-  /// The Import button's label.
-  static const String importLabel = 'Import';
-
-  /// Below this row width Import shows only its icon.
-  static const double compactWidth = 480;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final canImport = ref.watch(importServiceProvider) != null;
-    final search = LibrarySearchField(key: const ValueKey('s2-search'), onOpen: onOpenHit);
-    return Padding(
-      padding: const EdgeInsets.only(top: DanaviewSpacing.xl),
-      child: !canImport
-          ? search
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                void open() => unawaited(showImportSheet(context));
-                final import = constraints.maxWidth < compactWidth
-                    ? DanaviewIconButton(
-                        key: const ValueKey('s2-import'),
-                        icon: Icons.add_rounded,
-                        variant: DanaviewIconButtonVariant.primary,
-                        size: DanaviewSpacing.minTapTarget,
-                        tooltip: importLabel,
-                        semanticLabel: importLabel,
-                        onPressed: open,
-                      )
-                    : DanaviewButton.primary(
-                        key: const ValueKey('s2-import'),
-                        label: importLabel,
-                        icon: Icons.add_rounded,
-                        size: DanaviewButtonSize.sm,
-                        onPressed: open,
-                      );
-                return Row(
-                  // The hits open below the field; Import stays level with the field.
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: search),
-                    const SizedBox(width: DanaviewSpacing.md),
-                    SizedBox(height: _fieldHeight(context), child: Center(child: import)),
-                  ],
-                );
-              },
-            ),
-    );
-  }
-
-  /// The search field's height at the current text scale (its line plus padding), at least 44.
-  static double _fieldHeight(BuildContext context) => math.max(
-        DanaviewSpacing.minTapTarget,
-        MediaQuery.textScalerOf(context).scale(15) * 1.3 + 2 * DanaviewSpacing.md,
-      );
 }
 
 /// HOM-18's package default for the Documents tab (false); the app shows it from S3 on through

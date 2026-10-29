@@ -3,7 +3,13 @@
 # EXTENDED: INT-101 (v12-dart, v12-flutter and home-preservation jobs with path filters;
 # scripts/ci/v12/README.md)
 #
-# Danaview CI (ARCH §22; named "Editor CI" in editor-ci.yml until 2026-10-23). Every job checks
+# Danaview CI: the REQUIRED GATE (CI round 6, docs/v1.2/CI_LANES.md). Fast, deterministic suites
+# only, on push to main, pull requests and manual dispatch; branch protection requires the `gate`
+# job. The emulator, the iOS device build and integration_test suites, the soak / perf-heavy
+# RunnerTests classes (scripts/ci/editor/ios_device_lane_classes.txt) and the nightly suites run in
+# the nightly device lane, danaview-device.yml, which reports in an issue and never blocks.
+#
+# (ARCH §22; named "Editor CI" in editor-ci.yml until 2026-10-23). Every job checks
 # out the repo, then runs its script under scripts/ci/editor/ when that script exists and prints a
 # skip notice otherwise (the owning ticket creates the script; owners are listed in
 # scripts/ci/editor/README.md). The release workflows (android-release.yml, android-internal.yml,
@@ -19,6 +25,7 @@ on:
       - 'test/architecture/**'
       - 'scripts/ci/editor/**'
       - '.github/workflows/danaview-ci.yml'
+      - '.github/workflows/danaview-device.yml'
       # The architecture test also guards danaview_features (ARCH §4.2 rule 1 and the ARCH §1.3
       # Material scan) and reads the BUILD_PLAN owns lists, so changes there run it too.
       - 'packages/danaview_features/**'
@@ -48,6 +55,7 @@ on:
       - 'test/architecture/**'
       - 'scripts/ci/editor/**'
       - '.github/workflows/danaview-ci.yml'
+      - '.github/workflows/danaview-device.yml'
       - 'packages/danaview_features/**'
       - 'docs/v1.1/editor/BUILD_PLAN.md'
       - 'packages/danaview_ai*/**'
@@ -61,22 +69,17 @@ on:
       - 'test/home_screen_test.dart'
       - 'scripts/ci/v12/**'
       - 'docs/v1.2/ARCHITECTURE.md'
-  schedule:
-    # Nightly suites (fuzz, full overflow matrix, AI eval): 02:30 UTC.
-    - cron: '30 2 * * *'
+  # The nightly schedule moved to danaview-device.yml (the device lane).
   workflow_dispatch:
     inputs:
-      runner:
-        description: 'macOS runner for the ios and whisper-host (macOS) jobs; macos-15 is the hosted fallback'
-        type: choice
-        default: self-hosted
-        options:
-          - self-hosted
-          - macos-15
-      nightly:
-        description: 'Also run the nightly job'
+      device_lane:
+        description: 'Also run the device lane (danaview-device.yml; non-blocking, not part of `gate`)'
         type: boolean
         default: false
+      ios_only_testing:
+        description: 'ios job: xcodebuild -only-testing filter for RunnerTests (e.g. RunnerTests/ChannelRoundTripTests; comma-separated for several; the device-lane classes stay skipped)'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -87,24 +90,27 @@ concurrency:
 
 env:
   FLUTTER_VERSION: '3.44.2'
+  # GitHub-hosted Apple-silicon image for the ios job and the macOS leg of whisper-host (no
+  # self-hosted Mac is registered). macos-26 ships Xcode 26.6 (default) with the iOS 26.5 simulator.
+  XCODE_VERSION: '26.6'
   JAVA_VERSION: '17'
 
 jobs:
   workflow-lint:
     name: actionlint
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: actionlint (with shellcheck) on danaview-ci.yml and android-internal.yml
+      - name: actionlint (with shellcheck) on danaview-ci.yml, danaview-device.yml and android-internal.yml
         run: |
-          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color .github/workflows/danaview-ci.yml .github/workflows/android-internal.yml
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color -config-file scripts/ci/editor/actionlint.yaml .github/workflows/danaview-ci.yml .github/workflows/danaview-device.yml .github/workflows/android-internal.yml
 
   dart-core:
     name: dart-core
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
+    # macOS: the compile-lowering JSON goldens are written on the Mac lane (arm64) and carry
+    # last-digit float results that differ on x86_64 Linux; CI computes them on the same image.
+    runs-on: macos-26
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -124,14 +130,47 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
-      - name: Run core.sh
+      - name: Run core.sh test
         if: steps.script.outputs.present == 'true'
-        run: bash scripts/ci/editor/core.sh
+        run: bash scripts/ci/editor/core.sh test
+
+  dart-core-benchmark:
+    name: dart-core-benchmark
+    # The core benchmark gate (CORE-35). benchmark/baseline.json is recorded on the dev Mac (Apple M2,
+    # 8 cores); no CI runner matches it, so run.dart scales the baseline by a per-row-kind host factor
+    # measured in the same run (benchmark/src/calibration.dart). The absolute ARCH §18.2 budgets are
+    # device budgets, gated only with DV_PERF_STRICT=1 (dev Mac); CI gates regressions. ubuntu-latest because
+    # its 4 vCPUs time steadily (p90/p50 1.03-1.25); the 3-vCPU macos-26 VM dart-core needs for its
+    # JSON goldens is noisier (p90/p50 up to 1.7).
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Look for scripts/ci/editor/core.sh
+        id: script
+        run: |
+          if [ -f scripts/ci/editor/core.sh ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=dart-core-benchmark skipped::scripts/ci/editor/core.sh does not exist yet (owner: CORE-01)"
+          fi
+      - name: Set up Flutter (Dart SDK)
+        if: steps.script.outputs.present == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run core.sh benchmark
+        if: steps.script.outputs.present == 'true'
+        run: bash scripts/ci/editor/core.sh benchmark
 
   flutter-packages:
     name: flutter-packages
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
+    # macOS: this job compares goldens, which the Mac lane renders on macOS; CI renders on the
+    # same hosted image so text and antialiasing match pixel for pixel (no tolerance, no Linux goldens).
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -157,7 +196,6 @@ jobs:
 
   ai-dart:
     name: ai-dart
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -183,7 +221,7 @@ jobs:
         run: bash scripts/ci/editor/ai.sh
 
   # 1.2.0 (INT-101): which 1.2.0 jobs a pull request needs (scripts/ci/v12/README.md). Pushes to
-  # main, the nightly schedule and manual dispatches run all of them.
+  # main and manual dispatches run all of them.
   changes:
     name: changes (1.2.0 path filters)
     if: github.event_name == 'pull_request'
@@ -246,7 +284,7 @@ jobs:
     name: v12-dart (library, search, core photo)
     needs: changes
     # `needs` with a skipped `changes` (push, dispatch) still runs thanks to always().
-    if: always() && github.event_name != 'schedule' && (github.event_name != 'pull_request' || needs.changes.outputs.v12_dart == 'true')
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.v12_dart == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -263,8 +301,10 @@ jobs:
   v12-flutter:
     name: v12-flutter (documents, features, face tracking)
     needs: changes
-    if: always() && github.event_name != 'schedule' && (github.event_name != 'pull_request' || needs.changes.outputs.v12_flutter == 'true')
-    runs-on: ubuntu-latest
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.v12_flutter == 'true')
+    # macOS: this job compares goldens, which the Mac lane renders on macOS; CI renders on the
+    # same hosted image so text and antialiasing match pixel for pixel (no tolerance, no Linux goldens).
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -282,8 +322,10 @@ jobs:
   home-preservation:
     name: home-preservation (HOM-15 merge gate)
     needs: changes
-    if: always() && github.event_name != 'schedule' && (github.event_name != 'pull_request' || needs.changes.outputs.home_preservation == 'true')
-    runs-on: ubuntu-latest
+    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.home_preservation == 'true')
+    # macOS: this job compares goldens, which the Mac lane renders on macOS; CI renders on the
+    # same hosted image so text and antialiasing match pixel for pixel (no tolerance, no Linux goldens).
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -309,10 +351,9 @@ jobs:
 
   whisper-host:
     name: whisper-host (${{ matrix.name }})
-    if: github.event_name != 'schedule'
-    # Linux legs on ubuntu-latest; the macOS leg on the self-hosted Mac unless the dispatch input
-    # `runner` or the repository variable EDITOR_MACOS_RUNNER selects the hosted macos-15 fallback.
-    runs-on: ${{ matrix.host == 'linux' && 'ubuntu-latest' || (inputs.runner == 'macos-15' || vars.EDITOR_MACOS_RUNNER == 'macos-15') && 'macos-15' || fromJSON('["self-hosted", "macOS"]') }}
+    # Linux legs on ubuntu-latest; the macOS leg on the GitHub-hosted macos-26 (Apple silicon). The
+    # real-model tests download the two pinned models (sha256-checked) once and reuse the cache.
+    runs-on: ${{ matrix.host == 'linux' && 'ubuntu-latest' || 'macos-26' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -350,13 +391,15 @@ jobs:
         with:
           path: .ci-cache/whisper
           key: whisper-host-${{ runner.os }}-${{ hashFiles('scripts/ci/editor/whisper_host.sh') }}
+      - name: Select Xcode ${{ env.XCODE_VERSION }} (macOS)
+        if: steps.script.outputs.present == 'true' && matrix.host == 'macos'
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app" && xcodebuild -version
       - name: Run whisper_host.sh (sanitizer ${{ matrix.sanitizer }})
         if: steps.script.outputs.present == 'true'
         run: bash scripts/ci/editor/whisper_host.sh
 
   android-unit:
     name: android-unit
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -384,65 +427,21 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+      # DV_PERF_STRICT is deliberately unset: absolute timing limits of the JVM unit tests apply
+      # only with DV_PERF_STRICT=1 (a quiet machine); see docs/v1.2/BUILD_STATE.md CI follow-ups.
       - name: Run android_unit.sh
         if: steps.script.outputs.present == 'true'
         run: bash scripts/ci/editor/android_unit.sh
 
-  android-emulator:
-    name: android-emulator (API 35 x86_64)
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - name: Look for scripts/ci/editor/android_emulator.sh
-        id: script
-        run: |
-          if [ -f scripts/ci/editor/android_emulator.sh ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=android-emulator skipped::scripts/ci/editor/android_emulator.sh does not exist yet (owner: ENG-09)"
-          fi
-      - name: Enable KVM
-        if: steps.script.outputs.present == 'true'
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Set up Java
-        if: steps.script.outputs.present == 'true'
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
-      - name: Set up Flutter
-        if: steps.script.outputs.present == 'true'
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-      - name: Run android_emulator.sh on an API 35 x86_64 emulator
-        if: steps.script.outputs.present == 'true'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          profile: pixel_6
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash scripts/ci/editor/android_emulator.sh
-
   ios:
     name: ios (Xcode 26.6, iOS 26 simulator)
-    if: github.event_name != 'schedule'
-    # Self-hosted Mac (scripts/ci/editor/README.md) unless the dispatch input `runner` or the
-    # repository variable EDITOR_MACOS_RUNNER selects the hosted macos-15 fallback.
-    runs-on: ${{ (inputs.runner == 'macos-15' || vars.EDITOR_MACOS_RUNNER == 'macos-15') && 'macos-15' || fromJSON('["self-hosted", "macOS"]') }}
-    timeout-minutes: 90
+    # GitHub-hosted macos-26 (Apple silicon, Xcode 26.6, iOS 26.5 simulator). The gate runs the
+    # deterministic RunnerTests classes only: every class except those in
+    # scripts/ci/editor/ios_device_lane_classes.txt (DANAVIEW_IOS_RUNNER_LANE=gate). The device build,
+    # the D-41 check of the built app, the lane's classes and every integration_test suite run in
+    # danaview-device.yml. ios.sh picks the first iPhone on the newest iOS runtime.
+    runs-on: macos-26
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - name: Look for scripts/ci/editor/ios.sh
@@ -461,67 +460,93 @@ jobs:
             echo "::error title=D-41::scripts/ci/editor/ios.sh must run scripts/ci/editor/check_ios_min_os.sh"
             exit 1
           fi
-      - name: Select Xcode 26.6
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
         if: steps.script.outputs.present == 'true'
         run: |
-          for app in /Applications/Xcode_26.6.app /Applications/Xcode-26.6.app /Applications/Xcode.app; do
-            if [ -d "$app" ] && DEVELOPER_DIR="$app/Contents/Developer" xcodebuild -version | grep -q '^Xcode 26\.6'; then
-              echo "DEVELOPER_DIR=$app/Contents/Developer" >> "$GITHUB_ENV"
-              echo "Using $app"
-              exit 0
-            fi
-          done
-          echo "::warning title=Xcode::Xcode 26.6 not found; using $(xcodebuild -version | head -n 1)"
-      - name: Set up Flutter
-        if: steps.script.outputs.present == 'true'
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-      - name: Run ios.sh
-        if: steps.script.outputs.present == 'true'
-        env:
-          LANG: en_US.UTF-8
-        run: bash scripts/ci/editor/ios.sh
-
-  nightly:
-    name: nightly
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.nightly)
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
-    env:
-      DANAVIEW_CI_CACHE_DIR: ${{ github.workspace }}/.ci-cache
-    steps:
-      - uses: actions/checkout@v7
-      - name: Look for scripts/ci/editor/nightly.sh
-        id: script
-        run: |
-          if [ -f scripts/ci/editor/nightly.sh ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=nightly skipped::scripts/ci/editor/nightly.sh does not exist yet (owner: INT-01)"
-          fi
-      - name: Set up Java
-        if: steps.script.outputs.present == 'true'
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-      - name: Set up Flutter
-        if: steps.script.outputs.present == 'true'
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-      - name: Cache nightly inputs
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          xcodebuild -version
+          xcrun simctl list runtimes available | grep -i ios
+      - name: Cache CocoaPods
         if: steps.script.outputs.present == 'true'
         uses: actions/cache@v6
         with:
-          path: .ci-cache
-          key: nightly-${{ runner.os }}-${{ hashFiles('scripts/ci/editor/nightly.d/*.sh') }}
-      - name: Run nightly.sh (every nightly.d/*.sh)
+          path: |
+            ~/Library/Caches/CocoaPods
+            packages/danaview_editor_engine/example/ios/Pods
+          key: ios-pods-${{ runner.os }}-${{ hashFiles('packages/danaview_editor_engine/example/ios/Podfile.lock', 'packages/danaview_editor_engine/example/ios/Podfile', 'packages/*/ios/*.podspec') }}
+          restore-keys: ios-pods-${{ runner.os }}-
+      - name: Cache WhisperCore.xcframework
         if: steps.script.outputs.present == 'true'
-        run: bash scripts/ci/editor/nightly.sh
+        uses: actions/cache@v6
+        with:
+          path: packages/danaview_whisper/ios/Frameworks
+          key: whisper-xcframework-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('packages/danaview_whisper/tool/build_ios_xcframework.sh', 'packages/danaview_whisper/src/**', 'packages/danaview_whisper/third_party/**/CMakeLists.txt') }}
+      - name: Set up Flutter
+        if: steps.script.outputs.present == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Run ios.sh (RunnerTests, gate classes)
+        if: steps.script.outputs.present == 'true'
+        env:
+          LANG: en_US.UTF-8
+          DANAVIEW_IOS_ONLY_TESTING: ${{ inputs.ios_only_testing }}
+          DANAVIEW_IOS_RUNNER_LANE: gate
+        run: bash scripts/ci/editor/ios.sh --no-device-build --runner-tests-only
+      - name: Keep the RunnerTests result bundle and crash reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-runner-tests-results
+          if-no-files-found: ignore
+          path: |
+            packages/danaview_editor_engine/example/build/RunnerTests.xcresult
+            ~/Library/Logs/DiagnosticReports/
+
+  # Dispatch with device_lane=true: the nightly device lane on the dispatched ref, through
+  # workflow_call (so it also runs on a branch before danaview-device.yml reaches main). Not a need
+  # of `gate`. issues: write only because a called workflow may not ask for more than its caller
+  # grants (its `report` job); report_issue stays false here, so no issue is touched.
+  device-lane:
+    name: device lane
+    if: github.event_name == 'workflow_dispatch' && inputs.device_lane
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/danaview-device.yml
+    with:
+      report_issue: false
+
+  # The one required check (branch protection): fails when any gate job failed or was cancelled.
+  # Jobs a pull request's path filters skip count as passed.
+  gate:
+    name: gate
+    needs:
+      - workflow-lint
+      - dart-core
+      - dart-core-benchmark
+      - flutter-packages
+      - ai-dart
+      - changes
+      - v12-dart
+      - v12-flutter
+      - home-preservation
+      - whisper-host
+      - android-unit
+      - ios
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every gate job passed or was skipped
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          bad="$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key')"
+          if [ -n "$bad" ]; then
+            echo "::error title=gate::not green: $(echo "$bad" | paste -sd, - | sed 's/,/, /g')"
+            exit 1
+          fi

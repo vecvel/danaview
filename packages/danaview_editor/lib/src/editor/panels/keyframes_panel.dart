@@ -480,7 +480,7 @@ class _StripPainter extends CustomPainter {
     final left = KeyframeStrip.pad;
     final right = size.width - KeyframeStrip.pad;
     canvas.drawRRect(
-      RRect.fromLTRBR(left, cy - 1.5, math.max(left, right), cy + 1.5, const Radius.circular(1.5)),
+      RRect.fromLTRBR(left, cy - 1.5, math.max(left, right), cy + 1.5, const Radius.circular(DanaviewRadius.capsule)),
       Paint()..color = DanaviewColors.trackBackground,
     );
     final head = playhead.value - itemStart;
@@ -488,7 +488,7 @@ class _StripPainter extends CustomPainter {
     if (headInside) {
       final x = KeyframeStrip.xOf(size.width, head, duration);
       canvas.drawRRect(
-        RRect.fromLTRBR(x - 1, 6, x + 1, size.height - 6, const Radius.circular(1)),
+        RRect.fromLTRBR(x - 1, 6, x + 1, size.height - 6, const Radius.circular(DanaviewRadius.capsule)),
         Paint()..color = DanaviewColors.primaryLight.withValues(alpha: 0.7),
       );
     }
@@ -925,7 +925,7 @@ class _PropertyBlockState extends ConsumerState<_PropertyBlock> {
 
     return DanaviewSurface(
       color: DanaviewColors.surfaceElevated,
-      borderRadius: DanaviewRadius.mdAll,
+      borderRadius: DanaviewRadius.controlAll,
       padding: const EdgeInsets.fromLTRB(DanaviewSpacing.md, DanaviewSpacing.sm, DanaviewSpacing.xs, DanaviewSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1080,7 +1080,7 @@ class _SelectedKeyframe extends StatelessWidget {
 
     return DanaviewSurface(
       color: DanaviewColors.surfaceElevatedHigher,
-      borderRadius: DanaviewRadius.smAll,
+      borderRadius: DanaviewRadius.controlAll,
       padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.md, vertical: DanaviewSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1147,7 +1147,7 @@ class _SelectedKeyframe extends StatelessWidget {
                     key: const ValueKey<String>('kf.interpolation'),
                     decoration: BoxDecoration(
                       color: DanaviewColors.surfaceElevated,
-                      borderRadius: DanaviewRadius.smAll,
+                      borderRadius: DanaviewRadius.controlAll,
                       border: Border.all(color: DanaviewColors.border, width: DanaviewBorders.width),
                     ),
                     child: Padding(

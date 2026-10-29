@@ -208,6 +208,12 @@ final List<RawSegment> fixtureSegments = [
 // ---------------------------------------------------------------------------------------------
 
 final class FakeDownload implements ModelDownload {
+  /// Like ModelDownloadTask, [done] carries a no-op error handler, so a download that fails before
+  /// anyone awaits it is not an unhandled error (the job still sees the failure when it awaits).
+  FakeDownload() {
+    completer.future.then<void>((_) {}, onError: (Object _) {});
+  }
+
   final StreamController<ModelDownloadProgress> controller = StreamController<ModelDownloadProgress>.broadcast(sync: true);
   final Completer<InstalledSpeechModel> completer = Completer<InstalledSpeechModel>();
   bool cancelled = false;
@@ -690,4 +696,16 @@ Future<void> until(bool Function() condition, {int rounds = 400}) async {
     await Future<void>.delayed(const Duration(milliseconds: 1));
   }
   throw StateError('condition not met');
+}
+
+/// Reads [read] until it gives a value (real async, bounded): for state that lands through real
+/// file I/O, which a fixed number of event-loop turns ([settle]) does not wait for on a slow runner.
+Future<T> eventually<T extends Object>(Future<T?> Function() read, {Duration timeout = const Duration(seconds: 10)}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (true) {
+    final value = await read();
+    if (value != null) return value;
+    if (DateTime.now().isAfter(deadline)) throw StateError('no value within $timeout');
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
 }
