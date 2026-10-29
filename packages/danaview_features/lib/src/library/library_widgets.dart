@@ -79,6 +79,12 @@ class DanaviewLibraryCardGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Its own layer wherever it sits (a Home column, a tab's sliver), so the rows rasterize the same
+    // in every host (HOM-07/HOM-08 pixel-equality).
+    return RepaintBoundary(child: _grid());
+  }
+
+  Widget _grid() {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = danaviewLibraryGridColumns(constraints.maxWidth);

@@ -295,7 +295,7 @@ class _LinkedFoldersGroupState extends ConsumerState<LinkedFoldersGroup> {
           'Linked folders',
           prominent: true,
           action: canPickFolders && roots.isNotEmpty
-              ? DanaviewButton.ghost(label: 'Add', icon: Icons.add_rounded, size: DanaviewButtonSize.sm, onPressed: _addFolder)
+              ? DanaviewButton.text(label: 'Add', size: DanaviewButtonSize.sm, onPressed: _addFolder)
               : null,
         ),
         if (!state.hasLoaded)

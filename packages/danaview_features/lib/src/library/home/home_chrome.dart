@@ -160,7 +160,9 @@ class HomeFilterButton extends StatelessWidget {
         onTap: open,
         tooltip: HomeChromeLabels.filter,
         semanticLabel: semanticLabel ?? HomeChromeLabels.filter,
-        builder: (context, state) => Container(
+        builder: (context, state) => AnimatedContainer(
+          duration: DanaviewMotion.fast,
+          curve: DanaviewMotion.curve,
           alignment: Alignment.center,
           decoration: DanaviewDepth.raised(),
           foregroundDecoration: DanaviewDepth.focusRing(focused: state.focused),

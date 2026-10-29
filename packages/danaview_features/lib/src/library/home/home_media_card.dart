@@ -83,8 +83,7 @@ class HomeMediaCard extends StatelessWidget {
                   child: const Icon(Icons.play_arrow_rounded, size: 18, color: DanaviewColors.textPrimary),
                 ),
               ),
-            if (badge case final badge?)
-              PositionedDirectional(top: 6, start: 6, child: _ThumbLabel(badge)),
+            if (badge case final badge?) PositionedDirectional(top: 6, start: 6, child: _ThumbLabel(badge)),
             if (duration case final duration?)
               PositionedDirectional(bottom: showProgress ? 13 : 6, end: 6, child: _ThumbLabel(duration)),
             if (showProgress)
@@ -209,11 +208,11 @@ double homeMediaCardWidth(double width) {
 }
 
 /// How many columns the expanded (Show all) grid uses in [width]: cards of at least 160 pt.
-int homeMediaGridColumns(double width) =>
-    math.max(1, ((width + homeMediaCardGap) / (160 + homeMediaCardGap)).floor());
+int homeMediaGridColumns(double width) => math.max(1, ((width + homeMediaCardGap) / (160 + homeMediaCardGap)).floor());
 
-/// Continue watching collapsed: one horizontal, scrollable row of equal-height cards. The row
-/// is not clipped vertically, so a card's focus ring is never cut.
+/// Continue watching collapsed: one horizontal, scrollable row of equal-height cards. The row is
+/// clipped to its column at the sides (it never paints under a neighbouring column) but not above
+/// or below, so a card's focus ring is never cut.
 class HomeMediaCardRow extends StatelessWidget {
   /// A row of [children] (usually [HomeMediaCard]s).
   const HomeMediaCardRow({super.key, required this.children});
@@ -226,24 +225,38 @@ class HomeMediaCardRow extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = homeMediaCardWidth(constraints.maxWidth);
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          clipBehavior: Clip.none,
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < children.length; i++) ...[
-                  if (i > 0) const SizedBox(width: homeMediaCardGap),
-                  SizedBox(width: cardWidth, child: children[i]),
+        return ClipRect(
+          clipper: const _SidesClipper(),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < children.length; i++) ...[
+                    if (i > 0) const SizedBox(width: homeMediaCardGap),
+                    SizedBox(width: cardWidth, child: children[i]),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );
       },
     );
   }
+}
+
+/// Clips at the left and right edges only, with room above and below for focus rings.
+class _SidesClipper extends CustomClipper<Rect> {
+  const _SidesClipper();
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(0, -DanaviewSpacing.sm, size.width, size.height + DanaviewSpacing.sm);
+
+  @override
+  bool shouldReclip(_SidesClipper oldClipper) => false;
 }
 
 /// Continue watching expanded: the cards as a grid, each row of equal height.

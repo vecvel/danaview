@@ -103,10 +103,10 @@ class _VideosTabState extends ConsumerState<VideosTab> {
               ],
             ),
             if (recent.length > videosTabRecentPreview)
-              Center(
-                child: DanaviewButton.ghost(
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: DanaviewButton.text(
                   label: _showAllRecent ? 'Show less' : 'Show all ${recent.length}',
-                  trailingIcon: _showAllRecent ? Icons.expand_less_rounded : Icons.expand_more_rounded,
                   size: DanaviewButtonSize.sm,
                   onPressed: () => setState(() => _showAllRecent = !_showAllRecent),
                 ),
