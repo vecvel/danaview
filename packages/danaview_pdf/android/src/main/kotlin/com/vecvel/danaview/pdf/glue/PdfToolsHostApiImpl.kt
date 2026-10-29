@@ -1,6 +1,7 @@
 // OWNER: HOM-25
 // EXTENDED: HOM-28A (jobs with cancel and progress events, glue/PdfJobs.kt; the page tools and
 // PdfOrganiseHostApi on the tools thread).
+// EXTENDED: HOM-29A (annotate: the frozen annotate and PdfAnnotateHostApi.save as tool jobs).
 //
 // PdfToolsHostApi on Android: routes each tool to the class of its ticket - tools/PdfPageTools
 // (HOM-28A: merge, split, reorder, rotate, delete, and PdfOrganiseHostApi.organise; jobs here, in
@@ -79,8 +80,9 @@ class PdfToolsHostApiImpl(
     override fun organise(request: PdfOrganiseRequestMsg, callback: (Result<PdfToolResultMsg>) -> Unit) =
         run(request.jobId, PdfToolKindMsg.REORDER, "organise", callback) { PdfPageTools.organise(request, it) }
 
+    /** The frozen annotate (HOM-29A): the annotate save without stamps and burn-in. */
     override fun annotate(request: PdfAnnotateRequestMsg, callback: (Result<PdfToolResultMsg>) -> Unit) =
-        unsupported(PdfAnnotator.OWNER, callback)
+        run(request.jobId, PdfToolKindMsg.ANNOTATE, "annotate", callback) { PdfAnnotator.annotate(request, it) }
 
     override fun sign(request: PdfSignRequestMsg, callback: (Result<PdfToolResultMsg>) -> Unit) = unsupported(PdfSigner.OWNER, callback)
 
