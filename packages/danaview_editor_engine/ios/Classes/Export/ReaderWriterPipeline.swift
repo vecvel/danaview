@@ -28,8 +28,12 @@
 //   the duration (`endSession`). IOS-01 saw about one read in 70 come back silent or NaN, so a
 //   read is validated (NaN, fully silent while the plan has audible audio, a tap range
 //   discontinuity, a hung read, and a dropout or a seam step inside a speed-ramp or time-pitch
-//   segment, see `TimePitchWatch`) and redone with a fresh composition, at most twice; the last attempt is
-//   accepted (sanitised) unless it hangs or fails.
+//   segment, see `TimePitchWatch`) and redone with a fresh composition (so a fresh time-pitch unit),
+//   at most four times, after a doubling back-off (0.25 s up to 2 s). The last attempt is accepted
+//   (sanitised) unless it hangs or fails, or still has a time-pitch fault: then the export fails
+//   with a typed, retryable `decodeFailed` (`timePitchFailure`) and no file is written; a dropout is
+//   never shipped (CI round 6). A fault every one of the five reads reproduces at the same place is
+//   the content, not a fault (`TimePitchFault.recurring`).
 //
 // Reader threading and hangs (FIX-IOS-D7, QA-05 D7, QA-01 FIX-IOS-12-1). AVAssetReaderAudioMixOutput
 // over a keep-pitch scaled track sometimes blocks inside `copyNextSampleBuffer` for good
@@ -209,8 +213,17 @@ final class ReaderWriterPipeline {
     let control: PipelineControl
     let makeComposition: ExportCompositionFactory
     var segmentDurationUs = SegmentedWriter.defaultSegmentDurationUs
-    /// Audio reads per job (the first plus at most two redos).
-    var maxAudioAttempts = 3
+    /// Audio reads per job (the first plus at most four redos). Every read is a fresh composition,
+    /// reader and so a fresh time-pitch unit.
+    var maxAudioAttempts = 5
+    /// Seconds before the first redo; doubled for each further redo, at most `audioRetryDelayCap`
+    /// (0.25 + 0.5 + 1 + 2 s over five reads: a loaded device gets time to settle).
+    var audioRetryDelay: TimeInterval = 0.25
+    var audioRetryDelayCap: TimeInterval = 2
+    // A time-pitch fault counts as the content only when every read of the job (all
+    // `maxAudioAttempts`) has it at the same place: AVFoundation's faults recur near ramp seams
+    // (seen 2.5 ms after a seam in two reads running) but not in five reads running, while a fresh
+    // unit renders digitally gated content identically every time.
     /// Seconds one audio buffer may take before the read counts as hung (FIX-IOS-D7: the
     /// watchdog only signals; the read resumes on a fresh reader, see `MixAudioSource`).
     var audioWatchdog: TimeInterval = 8
@@ -332,9 +345,13 @@ final class ReaderWriterPipeline {
         let audible = ReaderWriterPipeline.hasAudibleAudio(plan)
         let factory = makeComposition
         var attempt = 0
+        // Time-pitch faults every scanned read so far had, and how many reads were scanned.
+        var recurring: [TimePitchFault]?
+        var scannedReads = 0
         while true {
             attempt += 1
             audioAttempts = attempt
+            if attempt > 1, try backOff(redo: attempt - 1) == .interrupted { return .interrupted }
             control.enter(.finishing) // a heartbeat per attempt
             // FIX-IOS-D7: every read gets its own fresh composition (never the video phase's, never
             // the one a hung read still holds).
@@ -351,16 +368,49 @@ final class ReaderWriterPipeline {
             source.watchdog = audioWatchdog
             source.maxResumes = maxAudioResumes
             source.reopen = { try factory(plan) }
+            if attempt == maxAudioAttempts, scannedReads == attempt - 1 { source.contentFaults = recurring ?? [] }
             audioSourceHook?(source, attempt)
             defer { ReaderWriterPipeline.retire(source, timeout: teardownTimeout) }
             do {
                 return try writer.writeAudio(source: source)
             } catch {
                 if control.isCancelled { throw EngineError.cancelled }
+                if source.scanned {
+                    scannedReads += 1
+                    recurring = TimePitchFault.recurring(recurring, source.timePitchFaults)
+                }
+                if source.timePitchFailed {
+                    throw ReaderWriterPipeline.timePitchFailure(reads: attempt, first: source.firstTimePitchFault)
+                }
                 guard let reason = source.rejection, attempt < maxAudioAttempts else { throw error }
                 Log.info(.export, "audio read \(attempt) rejected (\(reason)); reading again")
             }
         }
+    }
+
+    /// The export's failure when AVFoundation's time-pitch unit spoiled every audio read: typed
+    /// `decodeFailed` (the UI's generic "The export didn't finish / Try again"), retryable (the
+    /// faults are random), never a file with the dropout in it.
+    static func timePitchFailure(reads: Int, first: String?) -> EngineError {
+        EngineError(.decodeFailed, "\(timePitchFailurePrefix) in all \(reads) audio reads (last: \(first ?? "?"))", retryable: true)
+    }
+
+    static let timePitchFailurePrefix = "audio time-pitch fault"
+
+    /// Waits before redo [redo] (1-based): `audioRetryDelay`·2^(redo−1), capped, in short slices
+    /// that end at once on a stop request.
+    private func backOff(redo: Int) throws -> SegmentedWriter.Outcome {
+        let delay = min(audioRetryDelayCap, audioRetryDelay * pow(2, Double(redo - 1)))
+        let deadline = Date().addingTimeInterval(delay)
+        while Date() < deadline {
+            if control.shouldStop {
+                if control.isCancelled { throw EngineError.cancelled }
+                return .interrupted
+            }
+            Thread.sleep(forTimeInterval: min(0.05, max(0, deadline.timeIntervalSinceNow)))
+        }
+        control.enter(.finishing) // a heartbeat after the wait
+        return .completed
     }
 
     // MARK: Teardown (FIX-IOS-D7)
@@ -711,8 +761,11 @@ final class SilentAudioSource: SegmentAudioSource {
 ///   second difference of the mono mix within ±`seamWindowUs` that exceeds `seamStepRatio` times
 ///   the peak in the reference windows 10–40 ms on either side (and `abruptEdge` in absolute
 ///   terms). A steady tone's good seams measure ≤ 1.4, the dropped crossfade 7.6.
-/// A false positive (a transient of the content right on a seam) only costs a redo: the last
-/// attempt is accepted.
+/// A false positive (a transient of the content right on a seam, digitally gated content) shows up
+/// at the same place in every read, a real fault mostly elsewhere: `TimePitchFault.recurring`
+/// keeps the faults every read so far had, and on the last attempt a fault every read reproduced
+/// is treated as content (accepted). Any other fault left after the last attempt fails the export
+/// (`ReaderWriterPipeline.timePitchFailure`); a dropout is never shipped.
 struct TimePitchWatch: Equatable {
     struct Span: Equatable {
         /// Composition µs, already shrunk by `edgeMarginUs` at both ends.
@@ -778,6 +831,27 @@ struct TimePitchWatch: Equatable {
     }
 }
 
+/// One `TimePitchWatch` fault of a read (composition frame at 48 kHz).
+struct TimePitchFault: Equatable {
+    enum Kind: Equatable { case dropout, seamStep }
+    let kind: Kind
+    /// Dropout: first zero frame; seam step: the seam's frame.
+    let frame: Int64
+
+    /// Frames two reads' dropouts may differ by and still be the same fault (1 ms).
+    static let matchFrames: Int64 = 48
+
+    func matches(_ other: TimePitchFault) -> Bool {
+        kind == other.kind && abs(frame - other.frame) <= TimePitchFault.matchFrames
+    }
+
+    /// The faults of [previous] (nil: no read yet) that [read] has too.
+    static func recurring(_ previous: [TimePitchFault]?, _ read: [TimePitchFault]) -> [TimePitchFault] {
+        guard let previous = previous else { return read }
+        return previous.filter { p in read.contains { $0.matches(p) } }
+    }
+}
+
 /// The `TimePitchWatch` scan of one audio read (FIX-IOS-MEDIA): the export's MixAudioSource feeds
 /// it every sanitised buffer, and the RunnerTests mix reads run the same scan, so both redo the
 /// reads AVFoundation's time-pitch unit spoils (dropouts, dropped seam crossfades).
@@ -787,6 +861,8 @@ struct TimePitchScan {
     private(set) var dropouts = 0
     private(set) var seamSteps = 0
     private(set) var firstFault: String?
+    /// Every fault found, in the order found.
+    private(set) var faults: [TimePitchFault] = []
     /// Scan state: absolute frame of the next expected frame, the current exact-zero run and the
     /// magnitude of the frame before it, the last two mono samples (second difference).
     private var scanNext: Int64?
@@ -919,6 +995,7 @@ struct TimePitchScan {
         let endUs = Int64((Double(end) * 1_000_000 / rate).rounded(.up))
         guard watch.watches(startUs: startUs, endUs: endUs) else { return }
         dropouts += 1
+        faults.append(TimePitchFault(kind: .dropout, frame: start))
         if firstFault == nil {
             firstFault = "dropout of \(end - start) frames at \(startUs) µs"
         }
@@ -932,6 +1009,7 @@ struct TimePitchScan {
             guard stats.window >= TimePitchWatch.abruptEdge,
                   stats.window > TimePitchWatch.seamStepRatio * stats.reference else { continue }
             seamSteps += 1
+            faults.append(TimePitchFault(kind: .seamStep, frame: Int64((Double(stats.seamUs) * Double(ExportPCM.sampleRate) / 1_000_000).rounded())))
             if firstFault == nil {
                 firstFault = "seam step at \(stats.seamUs) µs, peak \(stats.window) vs \(stats.reference)"
             }
@@ -978,8 +1056,12 @@ final class MixAudioSource: SegmentAudioSource {
     /// A real buffer held back while the silence of a resume gap goes first.
     private var pending: CMSampleBuffer?
 
-    /// Reject bad reads (false on the last attempt: the read is accepted, sanitised).
+    /// Reject bad reads (false on the last attempt: a NaN, silent or tap-discontinuity read is
+    /// accepted, sanitised; a time-pitch fault still fails the read, `timePitchFailed`).
     var validates = true
+    /// Faults every earlier read of the job reproduced (set on the last attempt only): the content,
+    /// not a time-pitch fault; ignored.
+    var contentFaults: [TimePitchFault] = []
     /// Seconds one buffer may take before the read counts as hung (the watchdog only signals: the
     /// blocked reader is never cancelled or released while its call is outstanding).
     var watchdog: TimeInterval = 8
@@ -1022,6 +1104,17 @@ final class MixAudioSource: SegmentAudioSource {
     var dropouts: Int { timePitchScan.dropouts }
     var seamSteps: Int { timePitchScan.seamSteps }
     var firstTimePitchFault: String? { timePitchScan.firstFault }
+    /// Every time-pitch fault of the read (content faults included).
+    var timePitchFaults: [TimePitchFault] { timePitchScan.faults }
+    /// The faults that are not `contentFaults`.
+    var unexplainedFaults: [TimePitchFault] {
+        timePitchFaults.filter { f in !contentFaults.contains { $0.matches(f) } }
+    }
+    /// Whether the read reached its end and was scanned (validation ran).
+    private(set) var scanned = false
+    /// Whether the read was refused for a time-pitch fault while not validating (the last attempt):
+    /// the export fails rather than ship the dropout.
+    private(set) var timePitchFailed = false
 
     /// Peak below which a whole read counts as silent.
     static let silencePeak: Float = 1e-5
@@ -1153,6 +1246,14 @@ final class MixAudioSource: SegmentAudioSource {
     var compositions: [ExportComposition] { sessions.map(\.composition) }
 
     private func finishValidation() throws {
+        scanned = true
+        timePitchScan.evaluateSeams()
+        let unexplained = unexplainedFaults
+        let timePitchReason = unexplained.isEmpty ? nil
+            : "time-pitch fault (\(dropouts) dropout(s), \(seamSteps) seam step(s), \(unexplained.count) not content; first: \(firstTimePitchFault ?? "?"))"
+        if timePitchFaults.count > unexplained.count {
+            Log.info(.export, "audio read: \(timePitchFaults.count - unexplained.count) time-pitch fault(s) reproduced by every read; kept as content")
+        }
         var reason: String?
         // A resumed session's taps start at its own range start (no discontinuity there).
         let jumps = sessions.flatMap { $0.composition.built.gainTaps }.map(\.rangeDiscontinuities).reduce(0, +)
@@ -1163,12 +1264,15 @@ final class MixAudioSource: SegmentAudioSource {
         } else if jumps > 0 {
             reason = "tap range discontinuity"
         } else {
-            timePitchScan.evaluateSeams()
-            if dropouts + seamSteps > 0 {
-                reason = "time-pitch fault (\(dropouts) dropout(s), \(seamSteps) seam step(s); first: \(firstTimePitchFault ?? "?"))"
-            }
+            reason = timePitchReason
         }
         guard let reason = reason else { return }
+        if !validates, let timePitchReason = timePitchReason {
+            // Never ship a dropout: the last attempt fails instead (the pipeline types the error).
+            rejection = timePitchReason
+            timePitchFailed = true
+            throw EngineError(.decodeFailed, "audio read rejected: \(timePitchReason)", retryable: true)
+        }
         guard validates else {
             Log.info(.export, "audio read accepted on the last attempt despite: \(reason)")
             return
