@@ -18,7 +18,10 @@
 //    a. a Media3 Transformer transcodes the chunk's source range into an ALL-INTRA H.264
 //       intermediate (`work/reverse-<job>/chunk.mp4`, I-frame interval 0, no audio). Its clip end
 //       is moved past any sample that precedes a needed frame in decode order (B-frame reordering
-//       would otherwise end the clipped stream early); those extra frames are skipped below;
+//       would otherwise end the clipped stream early); those extra frames are skipped below. An
+//       intermediate that lacks a frame of the chunk (a decoder that drops frames: the x86_64
+//       emulator's goldfish H.264 decoder drops a B-frame of the ENG-05 fixtures, AND-05/AND-08)
+//       is written again with software decoders first, which then serve the rest of the job;
 //    b. the intermediate is read back with MediaExtractorCompat and fed to ONE MediaCodec decoder in
 //       reverse frame order (one sample per frame: every sample is a sync sample; an intermediate
 //       whose encoder ignored the all-intra request is decoded from the previous sync per frame),
@@ -43,9 +46,11 @@
 // KNOWN LIMITATION (same open investigation as ProxyJob's): on the API 29 emulator the Transformer
 // intermediate loses the first 5-6 frames of every chunk with both OMX H.264 decoders (measured
 // 2026-10-14; frames that are lost leave the previous output frame on screen longer, the order stays
-// mirrored), and OMX.google.h264.encoder ignores the all-intra request (block mode below). On the
-// API 35 emulator with software decoders first every frame arrives; frame-exactness of the
-// production decoders on real API 29 and mid-tier devices is QA-04's check.
+// mirrored; the software retry of step 2a cannot help there, both decoders lose them), and
+// OMX.google.h264.encoder ignores the all-intra request (block mode below). On the API 35 emulator
+// with software decoders first every frame arrives, and with the default decoders the goldfish
+// decoder's dropped B-frame is caught by the retry; frame-exactness of the production decoders on
+// real API 29 and mid-tier devices is QA-04's check.
 //
 // Preflight (ARCH §15): ranges over 10 min are refused (`unsupportedMedia` with the message token
 // "limitExceeded reverseRange 600000000", like iOS; the Dart side maps it to
@@ -80,15 +85,20 @@ import androidx.media3.common.ColorInfo
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.Clock
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.MediaFormatUtil
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.container.Mp4OrientationData
+import androidx.media3.datasource.DataSourceBitmapLoader
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.inspector.MediaExtractorCompat
 import androidx.media3.muxer.BufferInfo
 import androidx.media3.muxer.Mp4Muxer
 import androidx.media3.transformer.AssetLoader
 import androidx.media3.transformer.Composition
+import androidx.media3.transformer.DefaultAssetLoaderFactory
+import androidx.media3.transformer.DefaultDecoderFactory
 import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -130,6 +140,23 @@ class ReverseJob(private val ctx: EngineContext) {
     @VisibleForTesting
     @Volatile
     var assetLoaderFactory: ((Context) -> AssetLoader.Factory)? = null
+
+    /** What one chunk's video delivered (test hook [onChunk]; diagnostics). */
+    data class ChunkReport(
+        val first: Int,
+        val last: Int,
+        /** Chunk frames the intermediate lacked (after a software retry, when one ran). */
+        val unmapped: Int,
+        /** Mapped frames the reverse decoder did not deliver. */
+        val notDecoded: Int,
+        /** Whether this chunk's intermediate was written with software decoders after a loss. */
+        val softwareRetry: Boolean,
+    )
+
+    /** Test hook: called after each chunk's video is written. */
+    @VisibleForTesting
+    @Volatile
+    var onChunk: ((ChunkReport) -> Unit)? = null
 
     /** Test hook: overrides the free-space query of the preflight. */
     @VisibleForTesting
@@ -204,14 +231,29 @@ class ReverseJob(private val ctx: EngineContext) {
             ReverseWriter(part, outputRate, source.fps, audio, control).use { writer ->
                 val intermediate = File(work, "chunk.mp4")
                 val wav = File(work, "chunk.wav")
+                // Set once an intermediate lost frames with the default decoders (kept for the job).
+                var softwareDecoders = false
                 for ((index, chunk) in chunks.withIndex()) {
                     control.throwIfCancelled()
                     // a. all-intra intermediate of the chunk.
-                    writeIntermediate(uri, chunk, intermediate, intermediateRate, source, looper.looper, control)
+                    writeIntermediate(uri, chunk, intermediate, intermediateRate, source, looper.looper, control, softwareDecoders)
                     sample("intermediate", work)
+                    var unmapped = unmappedFrames(context, intermediate, timeline, chunk)
+                    var retried = false
+                    if (unmapped > 0 && !softwareDecoders) {
+                        // The decoder dropped frames (the goldfish H.264 decoder drops a B-frame):
+                        // the chunk is transcoded again with software decoders first.
+                        Log.w(EngineContext.TAG, "reverse: the intermediate lacks $unmapped frames of a chunk; writing it again with software decoders")
+                        softwareDecoders = true
+                        retried = true
+                        writeIntermediate(uri, chunk, intermediate, intermediateRate, source, looper.looper, control, softwareDecoders)
+                        sample("intermediate", work)
+                        unmapped = unmappedFrames(context, intermediate, timeline, chunk)
+                    }
                     // b. frames in reverse order -> encoder.
                     val lost = writer.writeVideoChunk(context, intermediate, timeline, chunk)
                     if (lost > 0) Log.w(EngineContext.TAG, "reverse: $lost frames of a chunk were not decoded")
+                    onChunk?.invoke(ChunkReport(chunk.first, chunk.last, unmapped, lost - unmapped, retried))
                     intermediate.delete()
                     // c. audio of the chunk's output span.
                     if (audio != null) {
@@ -247,6 +289,37 @@ class ReverseJob(private val ctx: EngineContext) {
         onWorkSample?.let { hook -> hook(stage, ReverseMath.directoryBytes(work)) }
     }
 
+    /** Frames of [chunk] that [intermediate] lacks (its samples mapped as the writer maps them). */
+    private fun unmappedFrames(context: Context, intermediate: File, timeline: ReverseTimeline, chunk: ReverseTimeline.Chunk): Int {
+        val extractor = MediaSources.extractor(context, intermediate.absolutePath)
+        try {
+            val track = (0 until extractor.trackCount).firstOrNull {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
+            } ?: return chunk.frameCount
+            extractor.selectTrack(track)
+            val times = ArrayList<Long>()
+            while (true) {
+                val t = extractor.sampleTime
+                if (t < 0) break
+                times += t
+                if (!extractor.advance()) break
+            }
+            val chunkPts = timeline.frames.subList(chunk.first, chunk.last + 1).map { it.ptsUs }.toLongArray()
+            return IntermediateMapping.of(times.sorted().toLongArray(), chunkPts, chunk.clipStartUs).intermediatePts.count { it == null }
+        } finally {
+            extractor.release()
+        }
+    }
+
+    /** Transformer decoders with the software ones first (Media3's defaults otherwise). */
+    private fun softwareFirstLoader(context: Context): AssetLoader.Factory = DefaultAssetLoaderFactory(
+        context,
+        DefaultDecoderFactory.Builder(context).setMediaCodecSelector(ExactFrames.softwareFirst).build(),
+        Clock.DEFAULT,
+        DefaultMediaSourceFactory(context),
+        DataSourceBitmapLoader.Builder(context).build(),
+    )
+
     // ---- stage a: the all-intra intermediate (Transformer) ----
 
     private fun writeIntermediate(
@@ -257,6 +330,7 @@ class ReverseJob(private val ctx: EngineContext) {
         source: SourceFacts,
         looper: Looper,
         control: JobControl,
+        softwareDecoders: Boolean,
     ) {
         out.delete()
         val handler = Handler(looper)
@@ -286,7 +360,8 @@ class ReverseJob(private val ctx: EngineContext) {
                     .setLooper(looper)
                     .setVideoMimeType(MimeTypes.VIDEO_H264)
                     .setEncoderFactory(encoders)
-                assetLoaderFactory?.let { builder.setAssetLoaderFactory(it(ctx.appContext)) }
+                val loader = if (softwareDecoders) softwareFirstLoader(ctx.appContext) else assetLoaderFactory?.invoke(ctx.appContext)
+                loader?.let { builder.setAssetLoaderFactory(it) }
                 val t = builder.addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                         latch.countDown()
