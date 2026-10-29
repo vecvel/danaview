@@ -48,6 +48,7 @@ int run_all(int argc, char **argv) {
     }
     // Every test releases what it creates: a live model or job afterwards is a leak (dv_job_free /
     // dv_model_release must free everything). Reset with dv_shutdown_all so one leak fails one test.
+    dvt_support::wait_loaders_idle();  // a finished loader still holds its model reference briefly
     int64_t live_models = 0, live_jobs = 0;
     dvt_support::live_objects(&live_models, &live_jobs);
     if (live_models != 0 || live_jobs != 0) {
