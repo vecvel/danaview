@@ -132,20 +132,26 @@ enum FrameBarcode {
     }
 
     /// Reads a CVPixelBuffer: 32BGRA/32RGBA directly, 8- and 10-bit bi-planar 4:2:0 from the luma plane.
+    /// A buffer whose memory cannot be mapped (a failed lock, e.g. under memory pressure) reads as
+    /// `.noSignal`: a test then fails on the missing index instead of trapping on a nil base address.
     static func read(pixelBuffer: CVPixelBuffer, region: FrameBarcodeRegion? = nil) -> FrameBarcodeReading {
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        guard CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly) == kCVReturnSuccess else {
+            return FrameBarcodeReading(status: .noSignal, index: nil)
+        }
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
         let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
         let w = CVPixelBufferGetWidth(pixelBuffer), h = CVPixelBufferGetHeight(pixelBuffer)
         switch format {
         case kCVPixelFormatType_32BGRA, kCVPixelFormatType_32RGBA:
             let bpr = CVPixelBufferGetBytesPerRow(pixelBuffer)
-            let raw = UnsafeRawBufferPointer(start: CVPixelBufferGetBaseAddress(pixelBuffer), count: bpr * h)
+            guard let address = CVPixelBufferGetBaseAddress(pixelBuffer) else { return FrameBarcodeReading(status: .noSignal, index: nil) }
+            let raw = UnsafeRawBufferPointer(start: address, count: bpr * h)
             return read(pixels: raw, width: w, height: h, bytesPerRow: bpr,
                         order: format == kCVPixelFormatType_32BGRA ? .bgra : .rgba, region: region)
         case kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
             let bpr = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-            let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0)!.assumingMemoryBound(to: UInt8.self)
+            guard let plane = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else { return FrameBarcodeReading(status: .noSignal, index: nil) }
+            let base = plane.assumingMemoryBound(to: UInt8.self)
             let r = region ?? FrameBarcodeRegion(x: 0, y: 0, width: w, height: h)
             return decodeCells(region: r) { x0, x1, y0, y1 in
                 var sum = 0, n = 0
@@ -154,7 +160,7 @@ enum FrameBarcode {
             }
         case kCVPixelFormatType_420YpCbCr10BiPlanarFullRange, kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange:
             let bpr = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-            let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0)!
+            guard let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else { return FrameBarcodeReading(status: .noSignal, index: nil) }
             let r = region ?? FrameBarcodeRegion(x: 0, y: 0, width: w, height: h)
             return decodeCells(region: r) { x0, x1, y0, y1 in
                 var sum = 0, n = 0
