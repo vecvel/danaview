@@ -27,6 +27,7 @@ import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:danaview_editor_core/model.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewRadius;
 
 import '../caches/paragraph_cache.dart';
 import '../state/editor_state.dart' show EditorSelection;
@@ -593,8 +594,8 @@ class TimelineCanvasPainter {
       final stroke = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2
-        ..color = style.playhead;
-      final fill = Paint()..color = style.playhead;
+        ..color = style.mark;
+      final fill = Paint()..color = style.mark;
       final selectedFill = Paint()..color = style.selection;
       final from = _firstKeyAtOrAfter(item, geometry.viewport.timeAt(-half) - item.start);
       for (var k = from; k < item.keyframeTimes.length; k++) {
@@ -622,7 +623,7 @@ class TimelineCanvasPainter {
       }
     }
     if (selected && item.hasAudio && !lane.locked) {
-      final handleFill = Paint()..color = style.playhead;
+      final handleFill = Paint()..color = style.mark;
       final handleStroke = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5
@@ -672,7 +673,7 @@ class TimelineCanvasPainter {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
-      ..color = style.playhead.withAlpha(0xCC);
+      ..color = style.mark.withAlpha(0xCC);
     final keys = item.volumeKeys;
     if (keys.isEmpty) {
       final y = yOf(item.volume);
@@ -749,7 +750,7 @@ class TimelineCanvasPainter {
     for (final b in shown.reversed) {
       final bw = widthOf(b);
       final rect = Rect.fromLTWH(x - bw, top, bw, size);
-      canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), bg);
+      canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(DanaviewRadius.xs)), bg);
       final p = paragraphs.paragraph(b.$2, b.$3 ? glyph : text);
       if (p != null) {
         canvas.save();
@@ -829,7 +830,7 @@ class TimelineCanvasPainter {
   }
 
   void _bowtie(Canvas canvas, Rect rect, {required bool selected}) {
-    final chip = RRect.fromRectAndRadius(rect, const Radius.circular(5));
+    final chip = RRect.fromRectAndRadius(rect, const Radius.circular(DanaviewRadius.xs));
     canvas.drawRRect(chip, Paint()..color = style.labelChip);
     final c = rect.center;
     const s = 5.0;

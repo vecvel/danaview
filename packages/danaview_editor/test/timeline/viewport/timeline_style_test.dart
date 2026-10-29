@@ -3,7 +3,10 @@
 // TimelineStyle (ux.md §6.8): tokens derived from DanaviewColors exactly as specified, the six marker
 // colours, and computed foregrounds that keep painted text readable.
 
+import 'dart:math' as math;
 import 'dart:ui' show Color;
+
+import 'package:flutter/painting.dart' show HSVColor;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:danaview_editor/src/editor/timeline/timeline_style.dart';
@@ -17,15 +20,19 @@ void main() {
   test('tokens are the ux.md §6.8 table', () {
     expect(s.laneBackground, DanaviewColors.background);
     expect(s.laneSeparator, DanaviewColors.hairlineSubtle);
-    expect(s.videoAccent, DanaviewColors.primary);
-    expect(s.overlayAccent, DanaviewColors.purple);
-    expect(s.audioFill, DanaviewColors.cyan.withAlpha(0x29));
-    expect(s.audioWave, DanaviewColors.cyan.withAlpha(0xCC));
-    expect(s.textFill, DanaviewColors.warning.withAlpha(0x33));
-    expect(s.subtitleFill, DanaviewColors.success.withAlpha(0x29));
+    expect(s.videoAccent, TimelineStyle.steel);
+    expect(s.overlayAccent, TimelineStyle.mauve);
+    expect(s.audioAccent, TimelineStyle.teal);
+    expect(s.textAccent, TimelineStyle.sand);
+    expect(s.subtitleAccent, TimelineStyle.sage);
+    expect(s.audioFill, TimelineStyle.teal.withAlpha(0x29));
+    expect(s.audioWave, TimelineStyle.teal.withAlpha(0xCC));
+    expect(s.textFill, TimelineStyle.sand.withAlpha(0x33));
+    expect(s.subtitleFill, TimelineStyle.sage.withAlpha(0x29));
     expect(s.selection, DanaviewColors.primaryLight);
-    expect(s.playhead, DanaviewColors.textPrimary);
-    expect(s.snapGuide, DanaviewColors.primaryLight);
+    expect(s.playhead, DanaviewColors.primaryLight);
+    expect(s.mark, DanaviewColors.textPrimary);
+    expect(s.snapGuide, DanaviewColors.textPrimary);
     expect(s.offlineFill, DanaviewColors.error.withAlpha(0x33));
     expect(s.offlineHatch, const Color(0x14FFFFFF));
     expect(s.marker, DanaviewColors.warning);
@@ -49,9 +56,22 @@ void main() {
     expect(s.clipFill(TrackKind.audio), s.audioFill);
     expect(s.clipFill(TrackKind.text), s.textFill);
     expect(s.clipFill(TrackKind.subtitle), s.subtitleFill);
-    expect(s.laneAccent(TrackKind.video), DanaviewColors.primary);
-    expect(s.laneAccent(TrackKind.overlay), DanaviewColors.purple);
+    expect(s.laneAccent(TrackKind.video), TimelineStyle.steel);
+    expect(s.laneAccent(TrackKind.overlay), TimelineStyle.mauve);
     expect({for (final k in TrackKind.values) s.laneAccent(k)}, hasLength(TrackKind.values.length));
+  });
+
+  test('lane colours are muted, read on black, and never look like the red accent or the old indigo', () {
+    double hue(Color c) => HSVColor.fromColor(c).hue;
+    double hueGap(double a, double b) => math.min((a - b).abs(), 360 - (a - b).abs());
+    const oldIndigo = Color(0xFF5E60EE);
+    for (final k in TrackKind.values) {
+      final c = s.laneAccent(k);
+      expect(hueGap(hue(c), hue(DanaviewColors.primary)), greaterThan(40), reason: '$k is not red');
+      expect(hueGap(hue(c), hue(oldIndigo)), greaterThan(25), reason: '$k is not indigo');
+      expect(HSVColor.fromColor(c).saturation, lessThanOrEqualTo(0.5), reason: '$k is muted');
+      expect(DanaviewColors.contrastRatio(c, DanaviewColors.surfaceElevated), greaterThanOrEqualTo(3), reason: '$k icon on its header');
+    }
   });
 
   test('clip labels keep >= 7:1 on the overlayDark chip over any thumbnail', () {

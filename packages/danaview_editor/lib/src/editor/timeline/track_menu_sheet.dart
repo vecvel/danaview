@@ -279,7 +279,7 @@ class TrackMenuView extends StatelessWidget {
         key: const ValueKey('track-name'),
         title: TrackStrings.nameRow,
         subtitle: lane.displayName,
-        leading: DanaviewTileIcon(trackKindIcon(lane.kind)),
+        leading: DanaviewIconTile(trackKindIcon(lane.kind)),
         trailing: const Icon(Icons.edit_rounded, size: 18, color: DanaviewColors.textMuted),
         enabled: editLane,
         onTap: editLane ? () => _rename(context) : null,
@@ -352,7 +352,7 @@ class TrackMenuView extends StatelessWidget {
         key: const ValueKey('track-move-up'),
         title: TrackStrings.moveUp,
         subtitle: model.moveUpTo == null ? model.moveUpReason : null,
-        leading: const DanaviewTileIcon(Icons.arrow_upward_rounded),
+        leading: const DanaviewIconTile(Icons.arrow_upward_rounded),
         enabled: edit && model.moveUpTo != null,
         onTap: edit && model.moveUpTo != null ? () => actions.move(lane.id, model.moveUpTo!) : null,
       ),
@@ -360,7 +360,7 @@ class TrackMenuView extends StatelessWidget {
         key: const ValueKey('track-move-down'),
         title: TrackStrings.moveDown,
         subtitle: model.moveDownTo == null ? model.moveDownReason : null,
-        leading: const DanaviewTileIcon(Icons.arrow_downward_rounded),
+        leading: const DanaviewIconTile(Icons.arrow_downward_rounded),
         enabled: edit && model.moveDownTo != null,
         onTap: edit && model.moveDownTo != null ? () => actions.move(lane.id, model.moveDownTo!) : null,
       ),
@@ -368,7 +368,7 @@ class TrackMenuView extends StatelessWidget {
         key: const ValueKey('track-select-all'),
         title: TrackStrings.selectAll,
         subtitle: model.itemCount == 0 ? TrackStrings.selectAllEmpty : null,
-        leading: const DanaviewTileIcon(Icons.select_all_rounded),
+        leading: const DanaviewIconTile(Icons.select_all_rounded),
         enabled: model.itemCount > 0,
         onTap: model.itemCount > 0
             ? () {
@@ -404,7 +404,7 @@ class TrackMenuView extends StatelessWidget {
         title: TrackStrings.delete,
         subtitle: model.deleteReason,
         destructive: true,
-        leading: const DanaviewTileIcon(Icons.delete_outline_rounded, color: DanaviewColors.errorLight),
+        leading: const DanaviewIconTile(Icons.delete_outline_rounded, color: DanaviewColors.destructive),
         enabled: edit && model.canDelete,
         onTap: edit && model.canDelete ? () => _delete(context) : null,
       ),
@@ -451,7 +451,7 @@ class TrackMenuView extends StatelessWidget {
       key: ValueKey('track-slot-${id.name}'),
       title: label,
       subtitle: enabled ? null : slot?.reason,
-      leading: DanaviewTileIcon(icon),
+      leading: DanaviewIconTile(icon),
       enabled: enabled,
       onTap: enabled ? () => onSlot?.call(id) : null,
     );
@@ -570,7 +570,7 @@ class AddTrackSheet extends ConsumerWidget {
             title: TrackStrings.addTrack(kind),
             subtitle: TrackStrings.addTrackHint(kind),
             subtitleMaxLines: 2,
-            leading: DanaviewTileIcon(trackKindIcon(kind)),
+            leading: DanaviewIconTile(trackKindIcon(kind)),
             enabled: !controller.readOnly,
             onTap: controller.readOnly
                 ? null

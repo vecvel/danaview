@@ -40,6 +40,7 @@ import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 import 'package:danaview_editor_core/model.dart';
 import 'package:danaview_editor_core/ops.dart';
+import 'package:danaview_ui_kit/danaview_ui_kit.dart' show DanaviewColors;
 
 import '../state/editor_controller.dart';
 import '../state/editor_state.dart' show EditorState, SelectMode;
@@ -1200,7 +1201,7 @@ class _BasicInteractionPainter extends CustomPainter {
     if (ghosts.isNotEmpty) {
       final g = TimelineCanvasGeometry(snapshot: layer.snapshot, metrics: layer.metrics, viewport: viewport);
       final bad = interaction.rejected;
-      final color = bad ? const Color(0xFFEF4444) : style.selection;
+      final color = bad ? DanaviewColors.error : style.selection;
       final pointerY = start.position.dy;
       ghosts.forEach((id, p) {
         final li = layer.snapshot.laneIndexOf(p.track);
