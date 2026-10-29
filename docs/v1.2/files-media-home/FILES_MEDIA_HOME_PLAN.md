@@ -422,7 +422,7 @@ Tools in 1.2.0, all on-device, all saving the result as a **new file** next to t
 | Rotate | rotate selected pages 90° | `PDFPage.rotation` | per HOM-27 |
 | Delete pages | select pages, Delete | `removePage(at:)` | per HOM-27 |
 | Annotate and highlight | highlight, underline, strike-through on text; freehand ink; text notes | `PDFAnnotation` (highlight, underline, strikeOut, ink, freeText); PencilKit for ink on iPad | per HOM-27 |
-| Sign | draw, type or import a signature, place and resize it on a page | stamp annotation with the signature image, burned into the page on save **[VERIFY: HOM-30]** | per HOM-27 |
+| Sign | draw, type or import a signature, place and resize it on a page | stamp annotation with the signature image, burned into the page on save (verified HOM-30, BUILD_STATE S4: drawn into the page content, no annotation left, text kept) | per HOM-27 |
 | Compress | presets High / Medium / Small, showing the before and after size | `write(to:withOptions:)` with image JPEG and screen-optimisation options (iOS 16+, macOS 13+) **[VERIFY: HOM-31]** | per HOM-27 |
 
 - **One plugin:** the native code sits in a new `danaview_pdf` package (Pigeon API, iOS/macOS Swift, Android Kotlin), so the 1.3.0 camera's scan-to-PDF, image-to-PDF and merge reuse it instead of duplicating it (NATIVE_CAMERA_PLAN D-115e).
