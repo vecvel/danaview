@@ -47,13 +47,15 @@
 //   never torn down (kept for the process, like IOS-17's abandoned pumps), and the read resumes on
 //   a fresh composition and reader, the writer getting the frames after the last delivered buffer
 //   (`maxAudioResumes`), so the export completes; a stop request ends the wait at once (typed
-//   interruption). The resumed reader reads the read's whole range again and the frames already
+//   interruption). The resumed reader reads from the timeline start again and the frames already
 //   delivered are dropped: an AVAssetReaderAudioMixOutput whose range starts inside the timeline
 //   stops at the end of whichever track's media ends first after that point instead of rendering
 //   silence to its range end (soak, iOS 26.5 simulator: from 9 s it ended at 10.0 s, from 11 s and
 //   14 s at 17.0 s, from 10 s and 18 s it delivered nothing; from 0 it always reads the whole 39 s;
-//   CI round 6 shipped a 9.95 s audio track under a 39 s video). A read that still ends more than
-//   `maxShortfallUs` early is rejected and never shipped (`shortRead`);
+//   CI round 6 shipped a 9.95 s audio track under a 39 s video). For the same reason a source opened
+//   on a range that starts after 0 reads from 0 and drops the frames before its start (the export
+//   itself always reads [0, end)). A read that still ends more than `maxShortfallUs` early is
+//   rejected and never shipped (`shortRead`);
 // - each export segment reads its own anchored copy of the composition (no composition is mutated
 //   while a reader uses it), every audio read gets a fresh composition (never the video phase's),
 //   and each phase's readers are torn down, and their compositions released, before the next phase
@@ -1064,7 +1066,7 @@ final class MixAudioSource: SegmentAudioSource {
             return s
         }
     }
-    /// The read's range (a resume reads all of it again, see the header).
+    /// The range the writer gets (every reader reads `readRange`, see the header).
     private var range: CMTimeRange = .invalid
     private var rangeEnd: CMTime { range.end }
     /// Absolute 48 kHz frame of the next frame the writer gets (continuity across a resume).
@@ -1161,8 +1163,20 @@ final class MixAudioSource: SegmentAudioSource {
         let range = ExportTime.readerRange(startUs: startUs, endUs: endUs, plan: composition.built.plan)
         self.range = range
         nextFrame = MixAudioSource.frame(range.start)
-        try open(composition, range: range)
+        try open(composition, range: readRange)
     }
+
+    /// What every reader of this source reads: from the timeline start to the range end. A mix
+    /// reader whose range starts inside the timeline stops early (see the header), so a range that
+    /// starts later is read from 0 and the frames before its start are dropped (`realigns`). The
+    /// export always reads [0, end); the pre-roll only costs a source opened later.
+    private var readRange: CMTimeRange { CMTimeRange(start: .zero, end: range.end) }
+
+    /// Whether the session's buffers are aligned to `nextFrame` (frames already written or before
+    /// the range start dropped, a late start filled with silence): after a resume, or for a range
+    /// that starts after 0.
+    private var realigns: Bool { sessions.count > 1 || nextFrameMayLead }
+    private var nextFrameMayLead: Bool { range.start.isNumeric && CMTimeCompare(range.start, .zero) > 0 }
 
     private func open(_ composition: ExportComposition, range: CMTimeRange) throws {
         let s = try MixReadSession(composition: composition, range: range, onTeardown: onTeardown)
@@ -1192,16 +1206,17 @@ final class MixAudioSource: SegmentAudioSource {
                 guard pts.isNumeric else { return try sanitized(sample, skip: 0) }
                 let first = MixAudioSource.frame(pts)
                 let count = Int64(CMSampleBufferGetNumSamples(sample))
-                if first + count <= nextFrame && sessions.count > 1 { continue } // read again after a resume
-                if first > nextFrame && sessions.count > 1 {
-                    // A resumed reader started late: silence for the gap, then the buffer.
+                let realigns = self.realigns
+                if first + count <= nextFrame && realigns { continue } // written already, or before the range
+                if first > nextFrame && realigns {
+                    // The reader started late: silence for the gap, then the buffer.
                     pending = sample
                     let gap = Int(first - nextFrame)
                     let silence = try ExportPCM.makeBuffer(
                         frames: gap, pts: CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate))) { _ in }
                     return try sanitized(silence, skip: 0, real: false)
                 }
-                let skip = sessions.count > 1 ? Int(max(0, nextFrame - first)) : 0
+                let skip = realigns ? Int(max(0, nextFrame - first)) : 0
                 return try sanitized(sample, skip: skip)
             case .end:
                 try finishValidation()
@@ -1226,7 +1241,7 @@ final class MixAudioSource: SegmentAudioSource {
                 Log.info(.export, "audio read hung at \(resumeTime.seconds) s; reading again on a fresh reader from \(range.start.seconds) s (\(resumes))")
                 // From the range start, never from the resume point (see the header); the frames
                 // before `nextFrame` are dropped above.
-                try open(try reopen(), range: range)
+                try open(try reopen(), range: readRange)
             }
         }
     }

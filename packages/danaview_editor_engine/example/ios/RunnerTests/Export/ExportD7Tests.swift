@@ -396,6 +396,39 @@ final class ExportD7Tests: XCTestCase {
         assertReleased(h)
     }
 
+    func testRangeReadStartingInsideTheTimelineReadsToItsEnd() throws {
+        // A mix reader whose range starts at 11 s stops at 17.0 s (the end of the clap's track),
+        // 22 s short of the soak's end. The source reads from 0 and drops the frames before 11 s.
+        let h = try make()
+        let plan = try RenderPlanDecoder.decodePlan(D7Plans.soak800())
+        let paths = h.paths
+        let source = MixAudioSource(composition: try ExportD7Tests.buildComposition(paths, plan), expectAudible: false, control: nil)
+        source.reopen = { try ExportD7Tests.buildComposition(paths, plan) }
+        defer { _ = source.retireReaders(timeout: 5) }
+        let startUs: Int64 = 11_000_000
+        let started = Date()
+        try source.openAudio(startUs: startUs, endUs: plan.durUs)
+        var first: Int64?
+        var end: Int64 = 0
+        var frames: Int64 = 0
+        while let b = try source.nextAudio() {
+            let pts = MixAudioSource.frame(CMSampleBufferGetPresentationTimeStamp(b))
+            let n = Int64(CMSampleBufferGetNumSamples(b))
+            if first == nil { first = pts }
+            XCTAssertEqual(pts, first! + frames, "contiguous")
+            frames += n
+            end = pts + n
+        }
+        let rangeEnd = MixAudioSource.frame(ExportTime.gridEnd(plan))
+        print("FIX-IOS-D7 range read from 11 s: \(Double(frames) / 48_000) s in \(Date().timeIntervalSince(started)) s, resumes \(source.resumes)")
+        XCTAssertEqual(first, MixAudioSource.frame(FrameGrid.cmTime(us: startUs)), "starts at the range start")
+        // The mix output's last buffer runs past the range end (a full read from 0 too); the writer
+        // ends the file on the grid end.
+        XCTAssertGreaterThanOrEqual(end, rangeEnd - 48_000 * 50 / 1_000, "reads to the range end, not to 17.0 s: \(Double(end) / 48_000) s")
+        XCTAssertFalse(source.shortRead, source.otherDefect ?? "")
+        XCTAssertNil(source.rejection)
+    }
+
     func testHungMixReadWithoutResumesIsRedoneOnAFreshComposition() throws {
         let h = try make()
         let log = D7Log()
