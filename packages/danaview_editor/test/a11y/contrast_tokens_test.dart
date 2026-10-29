@@ -77,10 +77,10 @@ void main() {
     }
   });
 
-  test('tinted badges (16 % fill) keep 4.5:1 on the cards they sit on', () {
+  test('tinted badges (10 % fill, DanaviewBadge.tintFor) keep 4.5:1 on the cards they sit on', () {
     for (final color in _badgeColors.entries) {
       for (final card in const [DanaviewColors.cardGlass, DanaviewColors.surface, DanaviewColors.surfaceElevated]) {
-        final bg = Color.alphaBlend(color.value.withValues(alpha: 0.16), card);
+        final bg = Color.alphaBlend(DanaviewBadge.tintFor(color.value), card);
         expect(DanaviewColors.contrastRatio(color.value, bg), greaterThanOrEqualTo(_minText), reason: '${color.key} on $card');
       }
     }

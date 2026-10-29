@@ -32,9 +32,10 @@ void main() {
     expect(DanaviewColors.success, const Color(0xFF30D158));
     expect(DanaviewColors.warning, const Color(0xFFFFD60A));
     expect(DanaviewColors.error, const Color(0xFFFF9F0A), reason: 'errors are orange: red is the accent');
-    expect(DanaviewColors.destructive, const Color(0xFFF2444D));
+    expect(DanaviewColors.destructive, const Color(0xFFFF5A62));
+    expect(DanaviewColors.destructive, DanaviewColors.primaryLight, reason: 'Delete keeps 4.5:1 on menus');
     expect(DanaviewColors.textSecondary, const Color(0xFF9A9A9A));
-    expect(DanaviewColors.textMuted, const Color(0xFF8A8A8A));
+    expect(DanaviewColors.textMuted, const Color(0xFF929292));
     expect(DanaviewColors.focusRing.withValues(alpha: 1), const Color(0xFFFF5A62));
     expect(DanaviewColors.focusRing.a, closeTo(0.55, 0.01));
     expect(
@@ -49,9 +50,8 @@ void main() {
     for (final bg in [DanaviewColors.background, DanaviewColors.surface, DanaviewColors.surfaceElevated, DanaviewColors.surfaceElevatedHigher]) {
       expect(DanaviewColors.contrastRatio(DanaviewColors.textSecondary, bg), greaterThanOrEqualTo(4.5));
       expect(DanaviewColors.contrastRatio(DanaviewColors.textPrimary, bg), greaterThanOrEqualTo(4.5));
-      // Placeholders and disabled labels (#8A8A8A): 4.5:1 up to the field fill, 4:1 on icon tiles.
-      expect(DanaviewColors.contrastRatio(DanaviewColors.textMuted, bg),
-          greaterThanOrEqualTo(bg == DanaviewColors.surfaceElevatedHigher ? 4.0 : 4.5));
+      // Placeholders, captions and disabled labels (#929292): 4.5:1 up to menus and icon tiles.
+      expect(DanaviewColors.contrastRatio(DanaviewColors.textMuted, bg), greaterThanOrEqualTo(4.5));
     }
     expect(DanaviewColors.contrastRatio(Colors.white, Colors.black), closeTo(21, 0.01));
   });

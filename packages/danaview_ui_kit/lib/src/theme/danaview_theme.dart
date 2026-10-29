@@ -121,19 +121,21 @@ abstract final class DanaviewColors {
   /// Error text and icons on dark surfaces.
   static const Color errorLight = Color(0xFFFFB340);
 
-  /// Delete and remove actions (always with a trash icon and a confirm dialog).
-  static const Color destructive = Color(0xFFF2444D);
+  /// Delete and remove actions (always with a trash icon and a confirm dialog). The same red as
+  /// [primaryLight] so a Delete row keeps 4.5:1 on menus ([surfaceElevatedHigher], 4.7:1).
+  static const Color destructive = Color(0xFFFF5A62);
 
   /// Fill behind a destructive button: [destructive] at 10 % (its label keeps 4.5:1 on cards).
-  static const Color destructiveSoft = Color(0x1AF2444D);
+  static const Color destructiveSoft = Color(0x1AFF5A62);
 
   static const Color textPrimary = Color(0xFFFFFFFF);
 
   /// Metadata, idle tab labels, counts.
   static const Color textSecondary = Color(0xFF9A9A9A);
 
-  /// Placeholders and disabled labels. #8A8A8A keeps 4.5:1 on field fills ([surfaceElevated]).
-  static const Color textMuted = Color(0xFF8A8A8A);
+  /// Placeholders, captions and disabled labels. #929292 keeps 4.5:1 on every chrome surface up to
+  /// [surfaceElevatedHigher] and the focused field fill ([fieldActive]), 4.6:1 there.
+  static const Color textMuted = Color(0xFF929292);
 
   /// Chevrons in rows.
   static const Color chevron = Color(0xFF5A5A5A);

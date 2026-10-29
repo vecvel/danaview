@@ -40,7 +40,7 @@ radius or shadow.
 | `scrim` | `#000000` at 60 % | Behind sheets and dialogs |
 | `textPrimary` | `#FFFFFF` | Titles, body |
 | `textSecondary` | `#9A9A9A` | Metadata, idle tab labels, counts |
-| `textMuted` | `#8A8A8A` | Placeholders, disabled labels; chevrons use `#5A5A5A`. Lifted from `#6E6E6E` so placeholders reach 4.5:1 on the `#222222` field fill. |
+| `textMuted` | `#929292` | Placeholders, captions, disabled labels; chevrons use `#5A5A5A`. Lifted from `#6E6E6E` (then `#8A8A8A`) so it keeps 4.5:1 on every surface up to `#2A2A2C` (menus, the focused field): 4.6:1 there. |
 
 ### 2.2 Accent
 
@@ -66,10 +66,12 @@ Red is the accent, so errors are **not** red.
 | `success` | `#30D158` | Saved, done, connected |
 | `warning` | `#FFD60A` | Unsaved, attention, low storage |
 | `error` | `#FF9F0A` | Failed, invalid input, clipping on audio meters |
-| `destructive` | `#F2444D` | Delete and remove actions: always with a trash icon and a confirm dialog |
+| `destructive` | `#FF5A62` (= `primaryLight`) | Delete and remove actions: always with a trash icon and a confirm dialog. 4.7:1 on menus (`#2A2A2C`); `#F2444D` was 3.9:1 there. |
+| `destructiveSoft` | `#FF5A62` at 10 % | Fill behind a destructive button; its label keeps 4.5:1 on cards |
 
 - A status colour appears as a **dot or icon plus words**. It is never a border or a full-card fill.
 - Banners use the status colour at 14 % on `surfaceElevated`, with the text in `textPrimary`.
+- Tinted badges use their text colour at 10 % as the fill, so every badge colour keeps 4.5:1 on `surfaceElevated`.
 
 ### 2.4 Product accents (logo flap only)
 
@@ -323,8 +325,8 @@ and desktops keep the editor and settings buttons in the top bar and have no tab
 | `primaryLight #818CF8` | `#FF5A62` (was `#F2444D` in the first Cinema B cut; lifted for 4.5:1 on raised items) |
 | `primaryTonal`, `primarySoft` (indigo washes) | red at 22 % / 16 % |
 | `focusRing` (indigo 28 %) | `#FF5A62` at 55 % |
-| `textSecondary #A0A6BC`, `textMuted #8B91A9` (blue-grey) | `#9A9A9A`, `#8A8A8A` (neutral; `textMuted` lifted from `#6E6E6E` so placeholders reach 4.5:1 on `#222222`) |
-| `error #EF4444` | `#FF9F0A` (orange); `destructive` `#F2444D` |
+| `textSecondary #A0A6BC`, `textMuted #8B91A9` (blue-grey) | `#9A9A9A`, `#929292` (neutral; `textMuted` lifted from `#6E6E6E`, then from `#8A8A8A`, so it keeps 4.5:1 up to `#2A2A2C`) |
+| `error #EF4444` | `#FF9F0A` (orange); `destructive` `#FF5A62` (was `#F2444D` in the first Cinema B cut; lifted for 4.5:1 on menus) |
 | `warning #F59E0B` | `#FFD60A` |
 | `success #10B981` | `#30D158` |
 | `DanaviewBorders.width 0.8`, hairline 8 % | 0.5, 7 %, plus the top highlight |
