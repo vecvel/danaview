@@ -143,11 +143,13 @@ void main() {
         ),
         surface: const TestSurface(Size(402, 2400), 1.0),
       );
-      for (final label in ['Open file', 'Open folder', 'Open link', 'Continue watching', 'Playlists', 'Folders']) {
+      for (final label in ['Continue watching', 'Playlists', 'Folders']) {
         expect(find.descendant(of: _page(HomeTab.home), matching: find.text(label)), findsWidgets, reason: label);
       }
-      // The header stays in the top bar.
+      // The header stays in the top bar, with Open file / folder / link in its Import (+) menu.
       expect(find.text('Danaview'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('home-files-top-bar')), matching: find.byTooltip('Import')),
+          findsOneWidget);
       double y(String text) =>
           tester.getTopLeft(find.descendant(of: _page(HomeTab.home), matching: find.text(text)).first).dy;
       expect(y('Continue watching'), lessThan(y('TRAY')));

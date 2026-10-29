@@ -299,21 +299,18 @@ class _DanaviewStorageScreenState extends ConsumerState<DanaviewStorageScreen> {
             children: [
               _actionRow(
                 icon: Icons.history_rounded,
-                color: DanaviewColors.warning,
                 title: 'Clear watch history',
                 subtitle: library.recent.isEmpty ? 'History is empty' : 'Continue watching and its resume points',
                 onTap: library.recent.isEmpty ? null : () => _clearHistory(library.recent.length),
               ),
               _actionRow(
                 icon: Icons.restart_alt_rounded,
-                color: DanaviewColors.primaryLight,
                 title: 'Clear resume points',
                 subtitle: resumable.isEmpty ? 'No saved positions' : 'Start videos from the beginning; history stays',
                 onTap: resumable.isEmpty ? null : () => _clearResumePoints(resumable),
               ),
               _actionRow(
                 icon: Icons.cleaning_services_rounded,
-                color: DanaviewColors.cyan,
                 title: 'Clear cache',
                 subtitle: switch (cache) {
                   null when _measuring => 'Calculating…',
@@ -396,7 +393,7 @@ class _DanaviewStorageScreenState extends ConsumerState<DanaviewStorageScreen> {
     final size = _contributorSize(contributor);
     return DanaviewLibraryRow(
       key: ValueKey('storage-contributor-${contributor.id}'),
-      leading: DanaviewTileIcon(contributor.icon, color: contributor.color, size: 40),
+      leading: DanaviewIconTile(contributor.icon, color: contributor.color, size: 40),
       title: contributor.title,
       subtitle: size,
       subtitleMaxLines: 2,
@@ -424,7 +421,7 @@ class _DanaviewStorageScreenState extends ConsumerState<DanaviewStorageScreen> {
       key: ValueKey('storage-contributor-${contributor.id}-clear'),
       child: _actionRow(
         icon: action.icon ?? Icons.cleaning_services_rounded,
-        color: action.destructive ? DanaviewColors.errorLight : contributor.color,
+        color: action.destructive ? DanaviewColors.destructive : contributor.color,
         title: action.label,
         subtitle: subtitle,
         onTap: enabled ? () => _clearContributor(contributor, action) : null,
@@ -438,7 +435,7 @@ class _DanaviewStorageScreenState extends ConsumerState<DanaviewStorageScreen> {
         DanaviewLibraryGroup(
           children: [
             DanaviewLibraryRow(
-              leading: const DanaviewTileIcon.glyph(DanaviewGlyphKind.device, size: 40),
+              leading: const DanaviewIconTile.glyph(DanaviewGlyphKind.device, size: 40),
               title: 'Videos',
               subtitle: _measuring ? 'Calculating…' : "Couldn't be measured",
               trailing: _measuring
@@ -455,7 +452,7 @@ class _DanaviewStorageScreenState extends ConsumerState<DanaviewStorageScreen> {
         DanaviewLibraryGroup(
           children: [
             DanaviewLibraryRow(
-              leading: DanaviewTileIcon.glyph(DanaviewGlyphKind.folderVideo, size: 40),
+              leading: DanaviewIconTile.glyph(DanaviewGlyphKind.folderVideo, size: 40),
               title: 'Nothing is copied',
               subtitle: 'On this computer Danaview plays videos from their own folders, '
                   'so they take no extra space.',
@@ -469,7 +466,7 @@ class _DanaviewStorageScreenState extends ConsumerState<DanaviewStorageScreen> {
       DanaviewLibraryGroup(
         children: [
           DanaviewLibraryRow(
-            leading: const DanaviewTileIcon.glyph(DanaviewGlyphKind.device, size: 40),
+            leading: const DanaviewIconTile.glyph(DanaviewGlyphKind.device, size: 40),
             title: LibraryRepository.deviceFolderLabel,
             subtitle: videos.files == 0
                 ? 'No videos yet'
@@ -498,7 +495,7 @@ class _DanaviewStorageScreenState extends ConsumerState<DanaviewStorageScreen> {
 
   Widget _actionRow({
     required IconData icon,
-    required Color color,
+    Color color = DanaviewColors.textPrimary,
     required String title,
     required String subtitle,
     required VoidCallback? onTap,
@@ -507,7 +504,7 @@ class _DanaviewStorageScreenState extends ConsumerState<DanaviewStorageScreen> {
     return Opacity(
       opacity: onTap == null ? 0.55 : 1,
       child: DanaviewLibraryRow(
-        leading: DanaviewTileIcon(icon, color: color, size: 40),
+        leading: DanaviewIconTile(icon, color: color, size: 40),
         title: title,
         subtitle: subtitle,
         subtitleMaxLines: 2,

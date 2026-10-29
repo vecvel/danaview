@@ -64,41 +64,35 @@ class DanaviewSettingsScreen extends StatelessWidget {
                       'Speed test',
                       'Internet download, upload and ping',
                       Icons.speed_rounded,
-                      DanaviewColors.cyan,
                     ),
                     _row(
                       SettingsDestination.streamCheck,
                       'Stream check',
                       'Test a video link before you play it',
                       Icons.network_check_rounded,
-                      DanaviewColors.primaryLight,
                     ),
                     _row(
                       SettingsDestination.mediaInfo,
                       'Media info',
                       'Format, size and details of a video file',
                       Icons.movie_filter_rounded,
-                      DanaviewColors.purple,
                     ),
                     _row(
                       SettingsDestination.dataUsage,
                       'Data usage',
                       'Estimate data used by streaming',
                       Icons.data_usage_rounded,
-                      DanaviewColors.warning,
                     ),
                     _row(
                       SettingsDestination.storage,
                       'Storage & history',
                       'History, resume points and saved data',
                       Icons.storage_rounded,
-                      DanaviewColors.success,
                     ),
                     if (onOpenEditorSettings case final openEditorSettings?)
                       SettingsNavRow(
                         key: const ValueKey('settings-video-editor'),
                         icon: Icons.movie_edit,
-                        color: DanaviewColors.purple,
                         title: 'Video editor',
                         subtitle: 'Proxy media, preview quality and new projects',
                         onTap: openEditorSettings,
@@ -126,14 +120,12 @@ class DanaviewSettingsScreen extends StatelessWidget {
                       'Privacy Policy',
                       null,
                       Icons.privacy_tip_rounded,
-                      DanaviewColors.success,
                     ),
                     _row(
                       SettingsDestination.terms,
                       'Terms of Use',
                       null,
                       Icons.gavel_rounded,
-                      DanaviewColors.textSecondary,
                     ),
                   ],
                 ),
@@ -151,10 +143,9 @@ class DanaviewSettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _row(SettingsDestination destination, String title, String? subtitle, IconData icon, Color color) {
+  Widget _row(SettingsDestination destination, String title, String? subtitle, IconData icon) {
     return SettingsNavRow(
       icon: icon,
-      color: color,
       title: title,
       subtitle: subtitle,
       onTap: () => onNavigate(destination),
@@ -185,7 +176,7 @@ class _ProfileCard extends ConsumerWidget {
 
     return DanaviewPressable(
       onTap: onTap,
-      borderRadius: DanaviewRadius.lgAll,
+      borderRadius: DanaviewRadius.mediaAll,
       semanticLabel: empty ? 'Set up your profile' : 'Profile: $title. $subtitle',
       child: DanaviewSurface(
         shadow: DanaviewShadow.subtle,
@@ -243,7 +234,7 @@ class _DoubleTapSeekSetting extends ConsumerWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const DanaviewTileIcon(Icons.touch_app_rounded, color: DanaviewColors.primaryLight, size: 40),
+                const DanaviewIconTile(Icons.touch_app_rounded, size: 40),
                 const SizedBox(width: DanaviewSpacing.md),
                 Expanded(
                   child: Column(

@@ -47,7 +47,7 @@ class ExportStatusHeader extends StatelessWidget {
             if (spinner)
               const SizedBox(width: 40, height: 40, child: Center(child: DanaviewSpinner(size: 24, semanticLabel: 'Working')))
             else
-              ExcludeSemantics(child: DanaviewTileIcon(icon ?? Icons.ios_share_rounded, color: color, size: 40)),
+              ExcludeSemantics(child: DanaviewIconTile(icon ?? Icons.ios_share_rounded, color: color, size: 40)),
             const SizedBox(width: DanaviewSpacing.md),
             Expanded(
               child: Column(

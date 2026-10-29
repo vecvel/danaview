@@ -29,6 +29,7 @@ import 'package:danaview_features/src/flags.dart';
 import 'package:danaview_features/src/library/desktop/desktop_drop_target.dart';
 import 'package:danaview_features/src/library/file_actions/file_actions.dart';
 import 'package:danaview_features/src/library/files/library_store_providers.dart';
+import 'package:danaview_features/src/library/home/home_tab_host.dart' show HomeTabHost;
 import 'package:danaview_features/src/library/home/recent_photos_tray.dart' show HomeTabRequestNotification;
 import 'package:danaview_features/src/library/import/import_pickers.dart';
 import 'package:danaview_features/src/library/import/import_providers.dart';
@@ -307,10 +308,19 @@ void main() {
       expect(find.byKey(homeTabKey(HomeTab.projects)), findsNothing, reason: 'the editor is not wired in tests');
       expect(s2DocumentsShown, isFalse, reason: "HOM-18's package default");
       expect(s3DocumentsShown, isTrue);
-      // The 1.1 sections stay on Home, with the Import and search row added.
-      expect(find.text('Open file'), findsOneWidget);
-      expect(find.byKey(const ValueKey('s2-import')), findsOneWidget);
+      // The top bar holds Import (+) (Open file / folder / link and Import to Danaview…) and, under
+      // the title, the search field with the filter button (DESIGN_SYSTEM §10.1).
+      expect(find.byKey(const ValueKey('home-import')), findsOneWidget);
       expect(find.byKey(const ValueKey('s2-search')), findsOneWidget);
+      expect(find.byKey(const ValueKey('home-filter')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('home-import')));
+      await pumpFrames(tester);
+      // (The empty library also shows Open file / folder / link in its one empty state.)
+      for (final label in [HomeChromeLabels.importToLibrary, 'Open file', 'Open folder', 'Open link']) {
+        expect(find.text(label), findsWidgets, reason: label);
+      }
+      await tester.tapAt(Offset.zero);
+      await pumpFrames(tester);
       await app.dispose();
     });
 
@@ -427,7 +437,9 @@ void main() {
     testWidgets('the import sheet opens from Home', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 844), 1.0));
       final app = await _pumpApp(tester, filesHome: true);
-      await tester.tap(find.byKey(const ValueKey('s2-import')));
+      await tester.tap(find.byKey(const ValueKey('home-import')));
+      await pumpFrames(tester);
+      await tester.tap(find.text(HomeChromeLabels.importToLibrary));
       await pumpFrames(tester, count: 8);
       expect(find.byKey(const ValueKey('import-sheet')), findsOneWidget);
       await app.dispose();
@@ -448,39 +460,42 @@ void main() {
     });
   });
 
-  group('flag on: the search and Import row (D-4, owner 2026-10-23)', () {
+  group('flag on: the search and filter row (DESIGN_SYSTEM §10.1)', () {
     final field = find.byKey(const ValueKey('library-search-field'));
-    final import = find.byKey(const ValueKey('s2-import'));
+    final filter = find.byKey(const ValueKey('home-filter'));
 
-    testWidgets('1280 px: the field takes the free width, Import sits 12 pt to its right, level with it', (tester) async {
-      useSurface(tester, const TestSurface(Size(1280, 800), 1.0));
-      final app = await _pumpApp(tester, filesHome: true);
-      final f = tester.getRect(field);
-      final i = tester.getRect(import);
-      expect(find.descendant(of: import, matching: find.text(FilesHomeToolsRow.importLabel)), findsOneWidget);
-      expect(i.left - f.right, moreOrLessEquals(DanaviewSpacing.md, epsilon: 0.5));
-      expect(i.right, moreOrLessEquals(1280 - DanaviewSpacing.xxl, epsilon: 0.5), reason: 'no max-width cap');
-      expect(f.left, moreOrLessEquals(DanaviewSpacing.xxl, epsilon: 0.5));
-      expect(i.center.dy, moreOrLessEquals(f.center.dy, epsilon: 1));
-      expectEqualRowHeights(tester, [field, import], height: DanaviewSpacing.controlHeight);
-      await app.dispose();
-    });
+    for (final (width, gutter) in [(1280.0, DanaviewSpacing.xxl), (375.0, DanaviewSpacing.lg)]) {
+      testWidgets('${width.toInt()} px: the field takes the free width, the square filter button sits 8 pt to its right',
+          (tester) async {
+        useSurface(tester, TestSurface(Size(width, 812), 1.0, padding: const EdgeInsets.only(top: 47, bottom: 34)));
+        final app = await _pumpApp(tester, filesHome: true);
+        final f = tester.getRect(field);
+        final b = tester.getRect(filter);
+        expect(b.left - f.right, moreOrLessEquals(DanaviewSpacing.sm, epsilon: 0.5));
+        expect(b.right, moreOrLessEquals(width - gutter, epsilon: 0.5), reason: 'no max-width cap');
+        expect(f.left, moreOrLessEquals(gutter, epsilon: 0.5));
+        expect(b.width, moreOrLessEquals(b.height));
+        expect(b.center.dy, moreOrLessEquals(f.center.dy, epsilon: 1));
+        expectEqualRowHeights(tester, [field, filter], height: DanaviewSpacing.controlHeight);
+        expect(find.byTooltip(HomeChromeLabels.filter), findsOneWidget);
+        // Import is the title row's 44 pt (+) target with a tooltip and an "Import" label.
+        final import = find.byKey(const ValueKey('home-import'));
+        expect(tester.getSize(import), const Size(44, 44));
+        expect(find.byTooltip(HomeChromeLabels.import), findsOneWidget);
+        await app.dispose();
+      });
+    }
 
-    testWidgets('375 px: Import is a 44 pt icon button with a tooltip and an "Import" label', (tester) async {
-      useSurface(tester, const TestSurface(Size(375, 812), 1.0, padding: EdgeInsets.only(top: 47, bottom: 34)));
+    testWidgets('the filter menu selects a library tab', (tester) async {
+      useSurface(tester, const TestSurface(Size(390, 844), 1.0, padding: EdgeInsets.only(top: 47, bottom: 34)));
       final app = await _pumpApp(tester, filesHome: true);
-      final f = tester.getRect(field);
-      final i = tester.getRect(import);
-      expect(find.descendant(of: import, matching: find.text(FilesHomeToolsRow.importLabel)), findsNothing);
-      expect(find.descendant(of: import, matching: find.byType(Tooltip)), findsOneWidget);
-      final label = find.bySemanticsLabel(FilesHomeToolsRow.importLabel);
-      expect(label, findsOneWidget);
-      expect(tester.getRect(label).center, i.center);
-      expect(i.size, const Size(44, 44));
-      expect(i.left - f.right, moreOrLessEquals(DanaviewSpacing.md, epsilon: 0.5));
-      expect(i.right, moreOrLessEquals(375 - DanaviewSpacing.lg, epsilon: 0.5));
-      expect(i.center.dy, moreOrLessEquals(f.center.dy, epsilon: 1));
-      expectEqualRowHeights(tester, [field, import], height: DanaviewSpacing.controlHeight);
+      await tester.tap(filter);
+      await pumpFrames(tester);
+      expect(find.text('Show'), findsOneWidget);
+      // The menu row (it covers the tab strip's pill of the same name).
+      await tester.tap(find.text('Videos').hitTestable().first);
+      await pumpFrames(tester);
+      expect(tester.widget<HomeTabHost>(find.byType(HomeTabHost)).selected, HomeTab.videos);
       await app.dispose();
     });
   });
@@ -492,7 +507,7 @@ void main() {
           useSurface(tester, TestSurface(Size(width, width > 1000 ? 800 : 640), scale));
           final app = await _pumpApp(tester, filesHome: true, textScale: scale, seed: (lib) => _seedMixed(lib, tester));
           expect(tester.takeException(), isNull);
-          final import = find.byKey(const ValueKey('s2-import'));
+          final import = find.byKey(const ValueKey('home-import'));
           await tester.ensureVisible(import);
           await pumpFrames(tester);
           expect(tester.getSize(import).height, greaterThanOrEqualTo(44));

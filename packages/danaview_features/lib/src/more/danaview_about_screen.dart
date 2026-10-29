@@ -56,21 +56,18 @@ class DanaviewAboutScreen extends ConsumerWidget {
                   children: [
                     SettingsNavRow(
                       icon: Icons.privacy_tip_rounded,
-                      color: DanaviewColors.success,
                       title: 'Privacy Policy',
                       subtitle: 'Everything stays on your device',
                       onTap: onOpenPrivacy,
                     ),
                     SettingsNavRow(
                       icon: Icons.gavel_rounded,
-                      color: DanaviewColors.textSecondary,
                       title: 'Terms of Use',
                       onTap: onOpenTerms,
                     ),
                     if (onOpenLicenses case final open?)
                       SettingsNavRow(
                         icon: Icons.description_rounded,
-                        color: DanaviewColors.primaryLight,
                         title: 'Open-source licences',
                         subtitle: 'Software, fonts and models in Danaview',
                         onTap: open,
@@ -83,7 +80,6 @@ class DanaviewAboutScreen extends ConsumerWidget {
                     children: [
                       SettingsNavRow(
                         icon: Icons.mail_rounded,
-                        color: DanaviewColors.cyan,
                         title: 'Contact support',
                         subtitle: email,
                         subtitleMaxLines: 1,

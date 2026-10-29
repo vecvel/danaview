@@ -315,7 +315,7 @@ class _Banner extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: DanaviewColors.overlayDark,
-            borderRadius: DanaviewRadius.smAll,
+            borderRadius: DanaviewRadius.controlAll,
             border: const Border.fromBorderSide(DanaviewBorders.hairline),
             boxShadow: DanaviewShadows.subtle,
           ),

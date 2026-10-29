@@ -431,7 +431,7 @@ class _DropHighlight extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                DanaviewTileIcon(Icons.file_download_rounded, size: 40),
+                DanaviewIconTile(Icons.file_download_rounded, size: 40),
                 SizedBox(width: 14),
                 Flexible(
                   child: Text(

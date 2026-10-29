@@ -104,7 +104,7 @@ void main() {
       final surface = tester.widget<DanaviewSurface>(find.byKey(const ValueKey('recovery-banner')));
       expect(surface.borderColor, DanaviewColors.hairline);
       expect(surface.color, DanaviewColors.surface);
-      final tile = tester.widget<DanaviewTileIcon>(find.byType(DanaviewTileIcon));
+      final tile = tester.widget<DanaviewIconTile>(find.byType(DanaviewIconTile));
       expect(tile.color, DanaviewColors.warning);
       for (final s in tester.widgetList<DanaviewSurface>(find.byType(DanaviewSurface))) {
         expect(s.borderColor.a, lessThan(0.2), reason: 'only near-transparent borders');

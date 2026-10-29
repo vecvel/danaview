@@ -557,7 +557,7 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
           onTap: () => _pickLut(item, lut),
           onRename: () => _rename(lut),
           onRemove: () => _remove(lut),
-          thumb: _Thumb(bytes: _stills[lut.id], colors: const [Color(0xFF2A2D3E), Color(0xFF5E60EE), Color(0xFFC7CAFB)]),
+          thumb: _Thumb(bytes: _stills[lut.id], colors: const [DanaviewColors.mediaPlaceholder, DanaviewColors.surfaceElevatedHigher, DanaviewColors.textSecondary]),
         ),
     ];
 
@@ -684,7 +684,7 @@ class _MessageView extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(DanaviewSpacing.md, DanaviewSpacing.xs, DanaviewSpacing.xs, DanaviewSpacing.xs),
         decoration: BoxDecoration(
           color: DanaviewColors.surfaceElevated,
-          borderRadius: DanaviewRadius.mdAll,
+          borderRadius: DanaviewRadius.controlAll,
           // Errors read from the icon and text colour; the edge stays a neutral hairline.
           border: const Border.fromBorderSide(DanaviewBorders.hairline),
         ),
@@ -763,7 +763,7 @@ const double _tileWidth = _thumbWidth + 2 * _ringInset;
 
 /// The ring's corner radius: the picture's radius grown by the ring's inset, so both curves share
 /// a centre and the ring hugs the picture with an even gap.
-const BorderRadius _ringRadius = BorderRadius.all(Radius.circular(DanaviewRadius.md + _ringInset));
+const BorderRadius _ringRadius = BorderRadius.all(Radius.circular(DanaviewRadius.thumb + _ringInset));
 
 class _LookTile extends StatelessWidget {
   const _LookTile({
@@ -817,10 +817,10 @@ class _LookTile extends StatelessWidget {
                     child: DecoratedBox(
                       position: DecorationPosition.foreground,
                       decoration: BoxDecoration(
-                        borderRadius: DanaviewRadius.mdAll,
+                        borderRadius: DanaviewRadius.thumbAll,
                         border: Border.all(color: DanaviewColors.border, width: DanaviewBorders.width),
                       ),
-                      child: ClipRRect(borderRadius: DanaviewRadius.mdAll, child: thumb),
+                      child: ClipRRect(borderRadius: DanaviewRadius.thumbAll, child: thumb),
                     ),
                   ),
                 ),

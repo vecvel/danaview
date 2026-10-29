@@ -14,7 +14,7 @@ The mark is **6B, the page-fold Dv**: a solid white D-shaped page whose top-righ
 | Knockout | the page is cut 44 around the flap. The flap's fold edge is set 20 in from AB and drawn with a 4 round stroke, leaving a **40 visible gap** |
 | Safe areas | the mark sits within r 296 of the centre. That is inside the iOS 80% square and the 66% circle (r 338). On Android the adaptive foreground draws the mark at 2/3 scale, well inside the 66 dp safe zone |
 
-The icon background is a linear gradient from #7C7FF5 to #5141DD (top-left to bottom-right), plus a white radial glow centred at (225, 143) with r 799, fading from 10% through 3.5% to 0. The page carries a soft drop shadow: blur 25.6, offset y 15.4, black at 16%.
+The icon background is a linear gradient from #2A2A2A to #0A0A0A (top-left to bottom-right), plus a top highlight band in white at 5% that fades out by the middle (y 512). The tile has an edge hairline of 8 on the 1024 grid (0.5 pt at icon scale) in white at 14%, drawn inside its outline (the squircle for icons, the r 229 rounded square for placements; the Android adaptive background has none, since the launcher picks the mask). The page carries a soft drop shadow: blur 25.6, offset y 15.4, black at 16%.
 
 ## Clear space and minimum size
 
@@ -25,24 +25,29 @@ The icon background is a linear gradient from #7C7FF5 to #5141DD (top-left to bo
 
 ## Colour
 
+Colourway **R3** (owner decision, 2026-10-29): black tile, white page, red fold. It replaces the
+indigo tile (#7C7FF5 to #5141DD) and lavender flap (#C9CBFF). The shape is unchanged.
+
 | Role | Hex |
 |---|---|
-| Gradient start | `#7C7FF5` |
-| Gradient end | `#5141DD` |
+| Tile gradient start | `#2A2A2A` |
+| Tile gradient end | `#0A0A0A` |
+| Tile edge | white at 14%, 8/1024 (0.5 pt at icon scale) |
+| Top highlight band | white at 5% |
 | Page (glyph) | `#FFFFFF` |
-| Flap tone (master) | `#C9CBFF` |
-| UI background / surface | `#07080C` / `#0F1118` |
-| App tokens | primaryLight `#818CF8`, primary `#5E60EE`, primaryDark `#4F46E5` |
+| Fold, the v (master / Player) | `#E50914` |
+| UI background / surface | `#000000` / `#141414` |
+| App tokens | see `docs/design/DESIGN_SYSTEM.md` §2 (Cinema B: primary `#B20710`, primaryLight `#F2444D`) |
 
 The mono glyph (`danaview_glyph_mono.svg`) uses `currentColor`, with the page and flap in one colour. The 40-unit knockout keeps the v visible. Use it for Android themed icons and notifications, the macOS menu bar, and single-colour print.
 
 ## Product family
 
-Every product uses the same indigo tile. **Only the flap** changes colour: see `products/*.svg`.
+Every product uses the same black tile. **Only the flap** (the fold) changes colour: see `products/*.svg`.
 
 | Product | Flap |
 |---|---|
-| Player (master) | `#C9CBFF` |
+| Player (master) | `#E50914` |
 | Editor | `#8B5CF6` |
 | Camera | `#06B6D4` |
 | Photos | `#F59E0B` |
@@ -50,7 +55,7 @@ Every product uses the same indigo tile. **Only the flap** changes colour: see `
 
 ## Wordmark
 
-"Danaview" in **Figtree 700**, the app font, with tracking −1% and the font's own GPOS kerning. The lockups in `wordmark/` are **outlined paths**: `ttf_outline.py` reads the bundled `packages/danaview_ui_kit/fonts/Figtree-Bold.ttf` directly, so the SVGs need no installed font. There are four: horizontal and stacked, each with a `_light` version that has dark text (#0F1118). No live-text version is kept.
+"Danaview" in **Figtree 700**, the app font, with tracking −1% and the font's own GPOS kerning. The lockups in `wordmark/` are **outlined paths**: `ttf_outline.py` reads the bundled `packages/danaview_ui_kit/fonts/Figtree-Bold.ttf` directly, so the SVGs need no installed font. There are four: horizontal and stacked, each with a `_light` version that has dark text (#0B0C10); the dark versions use white text. No live-text version is kept.
 
 Lockup construction, for a tile of side t (t = 128 in the files):
 
@@ -64,13 +69,13 @@ Lockup construction, for a tile of side t (t = 128 in the files):
 
 ## Store graphics
 
-`store/feature_graphic.svg` is the source of the Google Play feature graphic (`android/fastlane/metadata/android/en-US/images/featureGraphic.png`, 1024 × 500, RGB without alpha). It has the master tile on the right with a soft indigo glow, and on the left the eyebrow "VECVEL PRESENTS", the outlined wordmark, the tagline "Your photos, videos and docs. View, edit and create. All in one place." (no em dash) and three borderless pills: "VIEW & PLAY", "EDIT & CREATE" and "PRIVATE BY DEFAULT". All text is outlined. Important content stays at least 64 px from the edges and out of the centre-bottom (x 352 to 672, y 380 and below).
+`store/feature_graphic.svg` is the source of the Google Play feature graphic (`android/fastlane/metadata/android/en-US/images/featureGraphic.png`, 1024 × 500, RGB without alpha). It has the master tile on the right with a soft red glow on black, and on the left the eyebrow "VECVEL PRESENTS", the outlined wordmark, the tagline "Your photos, videos and docs. View, edit and create. All in one place." (no em dash) and three borderless pills: "VIEW & PLAY", "EDIT & CREATE" and "PRIVATE BY DEFAULT". All text is outlined. Important content stays at least 64 px from the edges and out of the centre-bottom (x 352 to 672, y 380 and below).
 
 The store screenshots were removed because they showed the old name and play icon. Each screenshots folder has a README: regenerate them as real captures of the current app before the store launch. The iOS `metadata`, `screenshots` and `mac_screenshots` lanes refuse to run while their folder has no images, because they upload with `overwrite_screenshots`.
 
 ## Do
 
-- Use the master icon on the indigo gradient, and the mono glyph anywhere a single colour is needed.
+- Use the master icon on its black tile, and the mono glyph anywhere a single colour is needed.
 - Keep the 35° fold, the 40 gap and the proportions exactly as generated.
 - Put the product accent on the flap only.
 
@@ -88,9 +93,10 @@ The store screenshots were removed because they showed the old name and play ico
 | `danaview_icon.svg/.png` | full-bleed square master (iOS source, opaque) |
 | `danaview_icon_rounded.svg/.png` | squircle tile with shadow on transparent (macOS source) |
 | `danaview_glyph.svg/.png` | white mark with shadow at 2/3 scale (Android adaptive foreground) |
-| `danaview_background.svg/.png` | gradient and glow (Android adaptive background) |
+| `danaview_background.svg/.png` | gradient and highlight band (Android adaptive background) |
 | `danaview_glyph_mono.svg` | single-colour mark |
 | `products/`, `wordmark/` | product tiles and outlined lockups |
 | `store/feature_graphic.svg` | Google Play feature graphic source |
 | `ttf_outline.py` | pure-Python TrueType reader that outlines text (glyf, loca, cmap, hmtx, GPOS pair kerning) |
+| `linux/danaview_256.png` | squircle tile at 256 (Linux .deb icon) |
 | `preview_sheet.png`, `brand_sheet.png` | previews |

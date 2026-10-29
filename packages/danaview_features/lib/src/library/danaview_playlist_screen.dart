@@ -188,7 +188,6 @@ class _DanaviewPlaylistScreenState extends ConsumerState<DanaviewPlaylistScreen>
     if (items.isEmpty) {
       return DanaviewEmptyState(
         icon: Icons.queue_music_rounded,
-        iconColor: DanaviewColors.purple,
         title: 'This playlist is empty',
         message: 'Add videos from your device or paste a link to a stream.',
         actions: [
@@ -246,7 +245,7 @@ class _DanaviewPlaylistScreenState extends ConsumerState<DanaviewPlaylistScreen>
     final exists = LibraryRepository.mediaExists(media);
     final resume = ref.read(libraryControllerProvider.notifier).resumeInfoFor(media);
     final row = DanaviewLibraryRow(
-      leading: DanaviewTileIcon(mediaIcon(media), color: mediaIconColor(media), size: 40),
+      leading: DanaviewIconTile(mediaIcon(media)),
       title: media.title,
       titleMaxLines: 2,
       badge: episodeLabel(media),
@@ -323,7 +322,7 @@ class _PlaylistHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              const DanaviewTileIcon(Icons.queue_music_rounded, color: DanaviewColors.purple, size: 56),
+              const DanaviewIconTile(Icons.queue_music_rounded, size: 56),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(

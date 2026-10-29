@@ -64,7 +64,7 @@ class SettingsChevron extends StatelessWidget {
   }
 }
 
-/// A library row with a tinted icon tile that opens another page.
+/// A library row with a neutral icon tile (§7) that opens another page.
 class SettingsNavRow extends StatelessWidget {
   const SettingsNavRow({
     super.key,
@@ -72,7 +72,6 @@ class SettingsNavRow extends StatelessWidget {
     this.subtitle,
     this.icon,
     this.leading,
-    this.color = DanaviewColors.primaryLight,
     this.trailing,
     this.semanticLabel,
     this.subtitleMaxLines = 2,
@@ -85,7 +84,6 @@ class SettingsNavRow extends StatelessWidget {
 
   /// Drawn instead of the [icon] tile when set; 40pt square to line up with the dividers.
   final Widget? leading;
-  final Color color;
 
   /// Replaces the chevron.
   final Widget? trailing;
@@ -98,7 +96,7 @@ class SettingsNavRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DanaviewLibraryRow(
-      leading: leading ?? DanaviewTileIcon(icon!, color: color, size: 40),
+      leading: leading ?? DanaviewIconTile(icon!, size: 40),
       title: title,
       titleMaxLines: 2,
       subtitle: subtitle,

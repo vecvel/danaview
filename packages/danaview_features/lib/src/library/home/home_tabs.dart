@@ -100,6 +100,9 @@ class HomeTabSlots {
     this.recentPhotos,
     this.favourites,
     this.selectionBar,
+    this.search,
+    this.documentsOverview,
+    this.projectsOverview,
     this.showDocuments = true,
   });
 
@@ -132,6 +135,18 @@ class HomeTabSlots {
 
   /// The multi-select bar drawn over the bottom of every tab (HOM-12).
   final HomeSlotBuilder? selectionBar;
+
+  /// The search field of the top bar (HOM-19; DESIGN_SYSTEM §10.1): it takes the full width left
+  /// of the filter button. Null hides the search row.
+  final HomeSlotBuilder? search;
+
+  /// The Documents section of the Overview (§10.3 #6, Files Home only); shown with
+  /// [showDocuments]. It hides itself when there are no documents.
+  final HomeSlotBuilder? documentsOverview;
+
+  /// The Projects section of the Overview (§10.3 #3, editor only); the app fills it where the
+  /// editor runs. It hides itself when there are no projects.
+  final HomeSlotBuilder? projectsOverview;
 
   /// Whether the `Documents` tab is shown (slice S2 passes false; S3 shows it).
   final bool showDocuments;

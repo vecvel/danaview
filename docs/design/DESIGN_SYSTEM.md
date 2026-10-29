@@ -40,7 +40,7 @@ radius or shadow.
 | `scrim` | `#000000` at 60 % | Behind sheets and dialogs |
 | `textPrimary` | `#FFFFFF` | Titles, body |
 | `textSecondary` | `#9A9A9A` | Metadata, idle tab labels, counts |
-| `textMuted` | `#6E6E6E` | Placeholders, disabled labels, chevrons (`#5A5A5A`) |
+| `textMuted` | `#929292` | Placeholders, captions, disabled labels; chevrons use `#5A5A5A`. Lifted from `#6E6E6E` (then `#8A8A8A`) so it keeps 4.5:1 on every surface up to `#2A2A2C` (menus, the focused field): 4.6:1 there. |
 
 ### 2.2 Accent
 
@@ -48,9 +48,9 @@ radius or shadow.
 |---|---|---|
 | `primary` | `#B20710` | Selected tab, primary button, progress fill, slider track, switch on |
 | `onPrimary` | `#FFFFFF` | Text and icons on `primary` (contrast 7.2:1) |
-| `primaryLight` | `#F2444D` | Accent **text and icons on dark**: links, section actions, the selected tab-bar item, active toolbar icon |
+| `primaryLight` | `#FF5A62` | Accent **text and icons on dark**: links, section actions, the selected tab-bar item, active toolbar icon. Lifted from `#F2444D` so it keeps 4.5:1 on raised items too (5.2:1 on `#222222`, 6.9:1 on black). |
 | `primarySoft` | `#B20710` at 16 % | Selected row wash, keyboard focus fill |
-| `focusRing` | `#F2444D` at 55 % | Keyboard-only focus ring (2 pt) |
+| `focusRing` | `#FF5A62` (`primaryLight`) at 55 % | Keyboard-only focus ring (2 pt) |
 
 Rules:
 - At most **one filled red control per view**. Siblings are `surfaceElevated` with white text.
@@ -66,10 +66,12 @@ Red is the accent, so errors are **not** red.
 | `success` | `#30D158` | Saved, done, connected |
 | `warning` | `#FFD60A` | Unsaved, attention, low storage |
 | `error` | `#FF9F0A` | Failed, invalid input, clipping on audio meters |
-| `destructive` | `#F2444D` | Delete and remove actions: always with a trash icon and a confirm dialog |
+| `destructive` | `#FF5A62` (= `primaryLight`) | Delete and remove actions: always with a trash icon and a confirm dialog. 4.7:1 on menus (`#2A2A2C`); `#F2444D` was 3.9:1 there. |
+| `destructiveSoft` | `#FF5A62` at 10 % | Fill behind a destructive button; its label keeps 4.5:1 on cards |
 
 - A status colour appears as a **dot or icon plus words**. It is never a border or a full-card fill.
 - Banners use the status colour at 14 % on `surfaceElevated`, with the text in `textPrimary`.
+- Tinted badges use their text colour at 10 % as the fill, so every badge colour keeps 4.5:1 on `surfaceElevated`.
 
 ### 2.4 Product accents (logo flap only)
 
@@ -320,11 +322,11 @@ and desktops keep the editor and settings buttons in the top bar and have no tab
 | `surfaceElevated #181B26` | `#222222` |
 | `surfaceElevatedHigher #222636` | `#2A2A2C` |
 | `primary #5E60EE`, `primaryDark #4F46E5` | `#B20710` |
-| `primaryLight #818CF8` | `#F2444D` |
+| `primaryLight #818CF8` | `#FF5A62` (was `#F2444D` in the first Cinema B cut; lifted for 4.5:1 on raised items) |
 | `primaryTonal`, `primarySoft` (indigo washes) | red at 22 % / 16 % |
-| `focusRing` (indigo 28 %) | `#F2444D` at 55 % |
-| `textSecondary #A0A6BC`, `textMuted #8B91A9` (blue-grey) | `#9A9A9A`, `#6E6E6E` (neutral) |
-| `error #EF4444` | `#FF9F0A` (orange); `destructive` `#F2444D` |
+| `focusRing` (indigo 28 %) | `#FF5A62` at 55 % |
+| `textSecondary #A0A6BC`, `textMuted #8B91A9` (blue-grey) | `#9A9A9A`, `#929292` (neutral; `textMuted` lifted from `#6E6E6E`, then from `#8A8A8A`, so it keeps 4.5:1 up to `#2A2A2C`) |
+| `error #EF4444` | `#FF9F0A` (orange); `destructive` `#FF5A62` (was `#F2444D` in the first Cinema B cut; lifted for 4.5:1 on menus) |
 | `warning #F59E0B` | `#FFD60A` |
 | `success #10B981` | `#30D158` |
 | `DanaviewBorders.width 0.8`, hairline 8 % | 0.5, 7 %, plus the top highlight |

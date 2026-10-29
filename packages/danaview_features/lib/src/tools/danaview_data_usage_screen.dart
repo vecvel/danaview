@@ -192,7 +192,7 @@ class _DanaviewDataUsageScreenState extends State<DanaviewDataUsageScreen> {
         : '${formatDataSize(DataUsageMath.bytesPerHour(mbps))} per hour';
     final subtitle = [if (description != null) description, figure, formatMbps(mbps)].join(' · ');
     return DanaviewLibraryRow(
-      leading: DanaviewTileIcon(icon, color: selected ? DanaviewColors.primaryLight : DanaviewColors.textSecondary, size: 40),
+      leading: DanaviewIconTile(icon, color: selected ? DanaviewColors.primaryLight : DanaviewColors.textSecondary, size: 40),
       title: title,
       subtitle: subtitle,
       subtitleMaxLines: 2,

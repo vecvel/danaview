@@ -197,7 +197,7 @@ class _OverlayRow extends StatelessWidget {
       child: DanaviewListTile(
         title: name,
         subtitle: OverlayStrings.rowSubtitle(entry.laneName, clip.start, clip.end),
-        leading: DanaviewTileIcon(video ? Icons.videocam_rounded : Icons.image_rounded),
+        leading: DanaviewIconTile(video ? Icons.videocam_rounded : Icons.image_rounded),
         trailing: entry.lane.locked ? const Icon(Icons.lock_rounded, size: 16, color: DanaviewColors.textMuted) : null,
         selected: selected,
         dense: true,

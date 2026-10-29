@@ -45,7 +45,7 @@ void main() {
       // The flag takes the marker's palette colour.
       final flag =
           tester.widget<Icon>(find.descendant(of: key(rowKey(named(rig, 'Intro'))), matching: find.byIcon(Icons.bookmark_rounded)));
-      expect(flag.color, const Color(0xFFEF4444));
+      expect(flag.color, DanaviewColors.error, reason: 'palette index 1 is the error token (orange in Cinema B)');
     });
 
     testWidgets('the selected marker is marked selected', (tester) async {

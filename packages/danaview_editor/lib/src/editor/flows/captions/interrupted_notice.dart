@@ -369,7 +369,7 @@ class _InterruptedNoticeState extends ConsumerState<InterruptedNotice> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const DanaviewTileIcon(Icons.closed_caption_rounded, size: 36, color: DanaviewColors.warning),
+                const DanaviewIconTile(Icons.closed_caption_rounded, size: 36, color: DanaviewColors.warning),
                 const SizedBox(width: DanaviewSpacing.md),
                 Expanded(
                   child: Column(

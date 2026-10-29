@@ -22,6 +22,7 @@ class DanaviewSearchField extends StatefulWidget {
     this.onChanged,
     this.onSubmitted,
     this.semanticLabel = 'Search',
+    this.trailing,
   });
 
   final TextEditingController? controller;
@@ -35,6 +36,9 @@ class DanaviewSearchField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final String semanticLabel;
+
+  /// Compact widget at the end of the field, e.g. the iOS mic glyph (§8).
+  final Widget? trailing;
 
   @override
   State<DanaviewSearchField> createState() => _DanaviewSearchFieldState();
@@ -92,6 +96,7 @@ class _DanaviewSearchFieldState extends State<DanaviewSearchField> {
       onChanged: _onChanged,
       onSubmitted: _onSubmitted,
       semanticLabel: widget.semanticLabel,
+      trailing: widget.trailing,
     );
   }
 }

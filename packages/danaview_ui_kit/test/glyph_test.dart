@@ -173,8 +173,8 @@ void main() {
         );
     for (final color in const [
       DanaviewColors.cyan,
-      DanaviewColors.primaryLight,
       DanaviewColors.errorLight,
+      DanaviewColors.primaryLight,
       DanaviewColors.warning,
       DanaviewColors.textSecondary,
       DanaviewColors.textPrimary,
@@ -183,10 +183,16 @@ void main() {
       expect(alpha, inInclusiveRange(DanaviewGlyphPainter.backAlpha, DanaviewGlyphPainter.maxBackAlpha));
       expect(onTile(color, alpha), greaterThanOrEqualTo(3), reason: '$color');
     }
-    // Purple is too dark to reach 3:1 without losing the two tones; it gets the strongest plate.
+    // Purple and the deep red are too dark to reach 3:1 without losing the two tones; they get the
+    // strongest plate (and §7 puts glyphs on neutral tiles anyway).
     expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.purple), DanaviewGlyphPainter.maxBackAlpha);
-    expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.primaryLight),
+    expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.primary), DanaviewGlyphPainter.maxBackAlpha);
+    expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.primary),
         greaterThan(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.cyan)));
+    // Destructive is #FF5A62 (= primaryLight) since it was lifted for 4.5:1 on menus: its plate
+    // reaches 3:1 like the other light colours.
+    expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.destructive), DanaviewGlyphPainter.backAlphaFor(DanaviewColors.primaryLight));
+    expect(onTile(DanaviewColors.destructive, DanaviewGlyphPainter.backAlphaFor(DanaviewColors.destructive)), greaterThanOrEqualTo(3));
     // Only the colour's hue and lightness count, not its alpha.
     expect(DanaviewGlyphPainter.backAlphaFor(DanaviewColors.purple.withValues(alpha: 0.4)), DanaviewGlyphPainter.maxBackAlpha);
   });
@@ -418,7 +424,7 @@ void main() {
     await tester.pumpAndSettle();
     await expectSettled(DanaviewGlyphKind.folderOff, 22);
     final dialogGlyph = tester.widget<DanaviewGlyph>(find.byType(DanaviewGlyph));
-    expect(dialogGlyph.color, DanaviewColors.errorLight);
+    expect(dialogGlyph.color, DanaviewColors.destructive);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(await confirmed, isFalse);
@@ -623,7 +629,7 @@ void main() {
         expectInside(tester, glyphButton, surface.size);
       }
       expect(tester.getSize(find.descendant(of: find.byType(DanaviewEmptyState), matching: find.byType(DanaviewGlyph))),
-          const Size.square(26));
+          const Size.square(24));
     });
   }
 }

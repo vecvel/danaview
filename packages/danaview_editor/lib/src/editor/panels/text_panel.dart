@@ -826,7 +826,7 @@ class _LiveTextChip extends StatelessWidget {
         excludeSemantics: true,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: DanaviewSpacing.md, vertical: DanaviewSpacing.xs),
-          decoration: BoxDecoration(color: fill, borderRadius: DanaviewRadius.smAll),
+          decoration: BoxDecoration(color: fill, borderRadius: DanaviewRadius.controlAll),
           child: EditorContentTextRegion(
             child: Text(
               item.text.replaceAll('\n', ' '),

@@ -19,6 +19,7 @@
 //   with access not yet decided leaves the library unlisted until the Photos tab asks (V2-103).
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:danaview_library_native/danaview_library_native.dart' show LibraryNativeException, SystemPhotoFilter;
 import 'package:danaview_ui_kit/danaview_ui_kit.dart';
@@ -115,16 +116,21 @@ final recentPhotosProvider = Provider.autoDispose.family<RecentPhotos, int>((ref
   return RecentPhotos(items, danaview.length + system.totalCount + desktop.length);
 });
 
-/// The square tile side of the tray for a [width]-wide Overview: about three tiles on a phone,
-/// more on wider screens, never under the 88 px that keeps the target well above 44 px.
+/// How many square cells fill the visible strip [width] wide (§10.3 #2): 4 on phones, 8 on
+/// tablets and desktops.
+int recentPhotosVisibleCells(double width) => width < 600 ? 4 : 8;
+
+/// The square tile side of the tray for a [width]-wide Overview: [recentPhotosVisibleCells] cells
+/// and their 3 pt gaps fill the width edge to edge, never under the 64 px that keeps the target
+/// well above 44 px.
 double recentPhotosTileExtent(double width) {
-  if (!width.isFinite || width <= 0) return 112;
-  final perRow = width < 480 ? 3.3 : (width < 900 ? 4.6 : 6.6);
-  return (width / perRow).clamp(88.0, 148.0);
+  if (!width.isFinite || width <= 0) return 88;
+  final cells = recentPhotosVisibleCells(width);
+  return math.max(64.0, (width - _tileGap * (cells - 1)) / cells);
 }
 
-/// The gap between tiles.
-const double _tileGap = DanaviewSpacing.sm;
+/// The gap between cells of the strip (§5: 3 between photos in a strip).
+const double _tileGap = 3;
 
 /// The Recent photos tray.
 class RecentPhotosTray extends ConsumerStatefulWidget {
@@ -209,7 +215,8 @@ class _RecentPhotosTrayState extends ConsumerState<RecentPhotosTray> {
         children: [
           DanaviewLibrarySectionHeader(
             'Recent photos',
-            action: DanaviewButton.ghost(
+            prominent: true,
+            action: DanaviewButton.text(
               key: const ValueKey('recent-photos-see-all'),
               label: 'See all',
               size: DanaviewButtonSize.sm,
@@ -221,7 +228,10 @@ class _RecentPhotosTrayState extends ConsumerState<RecentPhotosTray> {
             final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
             final sizeClass = extent * dpr <= ThumbSizeClass.s.pixels ? ThumbSizeClass.s : ThumbSizeClass.m;
             final count = shown + (more ? 1 : 0);
-            return SizedBox(
+            // One media-radius container, edge to edge; the strip scrolls inside it.
+            return DanaviewDepth.clip(
+              borderRadius: DanaviewRadius.mediaAll,
+              child: SizedBox(
               height: extent,
               child: ListView.separated(
                 key: const PageStorageKey('recent-photos-list'),
@@ -247,6 +257,7 @@ class _RecentPhotosTrayState extends ConsumerState<RecentPhotosTray> {
                   );
                 },
               ),
+            ),
             );
           }),
         ],
@@ -270,16 +281,15 @@ class _RecentPhotoTile extends StatelessWidget {
         child: DanaviewPressable(
           onTap: onTap,
           semanticLabel: photoCellLabel(photo),
-          borderRadius: DanaviewRadius.mdAll,
-          child: ClipRRect(
-            borderRadius: DanaviewRadius.mdAll,
+          child: ColoredBox(
+            color: DanaviewColors.mediaPlaceholder,
             child: Stack(fit: StackFit.expand, children: [
               LibraryThumbnail(
                 itemId: photo.id.value,
                 source: photo.thumbSource,
                 modifiedAt: photo.modifiedAt,
                 sizeClass: sizeClass,
-                placeholder: const Icon(Icons.image_outlined, size: 24, color: DanaviewColors.textMuted),
+                placeholder: const Icon(Icons.image_outlined, size: 20, color: DanaviewColors.textSecondary),
               ),
               if (photo.isFavourite)
                 const PositionedDirectional(
@@ -312,9 +322,8 @@ class _SeeAllTile extends StatelessWidget {
       child: DanaviewPressable(
         onTap: onTap,
         semanticLabel: 'See all photos, $remaining more',
-        borderRadius: DanaviewRadius.mdAll,
         child: DecoratedBox(
-          decoration: const BoxDecoration(color: fill, borderRadius: DanaviewRadius.mdAll),
+          decoration: const BoxDecoration(color: fill),
           child: Padding(
             padding: const EdgeInsets.all(DanaviewSpacing.sm),
             child: Center(
@@ -324,8 +333,8 @@ class _SeeAllTile extends StatelessWidget {
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Icon(Icons.photo_library_outlined, size: 24, color: foreground),
                     const SizedBox(height: DanaviewSpacing.xs),
-                    Text('+$remaining', maxLines: 1, style: DanaviewTextStyles.title.copyWith(color: foreground)),
-                    Text('See all', maxLines: 1, style: DanaviewTextStyles.caption.copyWith(color: foreground)),
+                    Text('+$remaining', maxLines: 1, style: DanaviewTextStyles.rowTitle.copyWith(color: foreground)),
+                    Text('See all', maxLines: 1, style: DanaviewTextStyles.footnote.copyWith(color: foreground)),
                   ]),
                 ),
               ),

@@ -819,7 +819,7 @@ class CropPainter extends CustomPainter {
         canvas.drawCircle(p, r, fill);
       } else {
         final bar = h.sx == 0 ? Rect.fromCenter(center: p, width: 22, height: 6) : Rect.fromCenter(center: p, width: 6, height: 22);
-        final rr = RRect.fromRectAndRadius(bar, const Radius.circular(3));
+        final rr = RRect.fromRectAndRadius(bar, const Radius.circular(DanaviewRadius.capsule));
         canvas.drawRRect(rr.inflate(1), shadow);
         canvas.drawRRect(rr, fill);
       }

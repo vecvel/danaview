@@ -47,7 +47,7 @@ class SpeedConsentSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const ExcludeSemantics(
-              child: DanaviewTileIcon(Icons.public_rounded, color: DanaviewColors.primaryLight, size: 44),
+              child: DanaviewIconTile(Icons.public_rounded, size: 44),
             ),
             const SizedBox(width: DanaviewSpacing.md),
             Expanded(

@@ -889,7 +889,7 @@ class _RoundRecordButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
-    final base = recording ? DanaviewColors.error : DanaviewColors.primary;
+    final base = DanaviewColors.primary;
     final fill = enabled ? base : DanaviewColors.disabled(base);
     final fg = DanaviewColors.foregroundOn(base);
     return DanaviewPressable(
@@ -953,7 +953,7 @@ class _ElapsedState extends State<_Elapsed> with SingleTickerProviderStateMixin 
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const DecoratedBox(
-            decoration: BoxDecoration(shape: BoxShape.circle, color: DanaviewColors.error),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: DanaviewColors.primaryLight),
             child: SizedBox.square(dimension: 10),
           ),
           const SizedBox(width: DanaviewSpacing.sm),
@@ -1079,7 +1079,7 @@ class _Note extends StatelessWidget {
   Widget build(BuildContext context) => DecoratedBox(
         decoration: BoxDecoration(
           color: DanaviewColors.surfaceElevatedHigher,
-          borderRadius: DanaviewRadius.smAll,
+          borderRadius: DanaviewRadius.controlAll,
           border: Border.fromBorderSide(DanaviewBorders.hairline),
         ),
         child: Padding(

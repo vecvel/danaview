@@ -51,7 +51,7 @@ final class ProjectBadge {
         if (summary.health == ProjectHealth.needsNewerApp)
           const ProjectBadge(ProjectsStrings.needsUpdateBadge, DanaviewColors.warning, Icons.system_update_rounded),
         if (summary.health == ProjectHealth.readOnlyNewer)
-          const ProjectBadge(ProjectsStrings.readOnlyBadge, DanaviewColors.cyan, Icons.lock_outline_rounded),
+          const ProjectBadge(ProjectsStrings.readOnlyBadge, DanaviewColors.textSecondary, Icons.lock_outline_rounded),
         if (summary.missingMediaCount > 0)
           ProjectBadge(ProjectsStrings.missingBadge(summary.missingMediaCount), DanaviewColors.errorLight, Icons.link_off_rounded),
         if (summary.hasRecovery) const ProjectBadge(ProjectsStrings.recoveryBadge, DanaviewColors.warning, Icons.restore_rounded),
@@ -152,7 +152,7 @@ class ProjectCard extends StatelessWidget {
           onTap: onOpen,
           onLongPress: openMenu,
           semanticLabel: label,
-          borderRadius: DanaviewRadius.lgAll,
+          borderRadius: DanaviewRadius.mediaAll,
           child: DanaviewSurface(
             color: DanaviewColors.surface,
             shadow: DanaviewShadow.subtle,
@@ -230,7 +230,7 @@ class _RowBody extends StatelessWidget {
           SizedBox(
             width: 96,
             child: ClipRRect(
-              borderRadius: DanaviewRadius.smAll,
+              borderRadius: DanaviewRadius.thumbAll,
               child: AspectRatio(
                   aspectRatio: 16 / 9, child: ExcludeSemantics(child: ProjectPoster(path: summary.thumbnailPath, aspect: summary.aspect))),
             ),
@@ -378,7 +378,7 @@ class _PosterPlaceholder extends StatelessWidget {
           return Center(
             child: Semantics(
               label: ProjectsStrings.noPoster,
-              child: DanaviewTileIcon(Icons.movie_edit, size: math.min(40, side * 0.7)),
+              child: DanaviewIconTile(Icons.movie_edit, size: math.min(40, side * 0.7)),
             ),
           );
         },

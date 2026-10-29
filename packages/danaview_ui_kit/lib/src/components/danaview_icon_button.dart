@@ -3,11 +3,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../foundation/danaview_internal.dart';
+import '../theme/danaview_depth.dart';
 import '../theme/danaview_theme.dart';
 import '../theme/danaview_tokens.dart';
 import 'danaview_pressable.dart';
 
-enum DanaviewIconButtonVariant { plain, filled, tonal, primary }
+/// [toolbar] is the §7 round toolbar button: a 34 pt `surfaceElevated` circle with a 6 % top
+/// highlight and a 17 pt glyph (use `DanaviewIconButton.toolbar`).
+enum DanaviewIconButtonVariant { plain, filled, tonal, primary, toolbar }
 
 class DanaviewIconButton extends StatelessWidget {
   const DanaviewIconButton({
@@ -23,6 +26,26 @@ class DanaviewIconButton extends StatelessWidget {
     this.selected = false,
     this.onLongPress,
   });
+
+  /// §7 round toolbar button: 34 pt [DanaviewColors.surfaceElevated] circle, 17 pt glyph, 44 pt
+  /// hit area on touch. [accent] colours the glyph [DanaviewColors.primaryLight] (the add/import
+  /// button). Give it a [tooltip].
+  const DanaviewIconButton.toolbar({
+    super.key,
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+    this.semanticLabel,
+    this.selected = false,
+    this.onLongPress,
+    bool accent = false,
+  })  : variant = DanaviewIconButtonVariant.toolbar,
+        size = toolbarSize,
+        iconSize = 17,
+        color = accent ? DanaviewColors.primaryLight : null;
+
+  /// Visual diameter of [DanaviewIconButton.toolbar].
+  static const double toolbarSize = 34;
 
   final IconData icon;
   final VoidCallback? onPressed;
@@ -42,7 +65,7 @@ class DanaviewIconButton extends StatelessWidget {
     if (selected && variant == DanaviewIconButtonVariant.plain) return DanaviewColors.primaryTonal;
     return switch (variant) {
       DanaviewIconButtonVariant.plain => const Color(0x00FFFFFF),
-      DanaviewIconButtonVariant.filled => DanaviewColors.surfaceElevatedHigher,
+      DanaviewIconButtonVariant.filled || DanaviewIconButtonVariant.toolbar => DanaviewColors.surfaceElevated,
       DanaviewIconButtonVariant.tonal => DanaviewColors.primaryTonal,
       DanaviewIconButtonVariant.primary => DanaviewColors.primary,
     };
@@ -54,6 +77,18 @@ class DanaviewIconButton extends StatelessWidget {
       DanaviewIconButtonVariant.plain => selected ? DanaviewColors.primaryLight : DanaviewColors.textPrimary,
       DanaviewIconButtonVariant.tonal => DanaviewColors.primaryLight,
       DanaviewIconButtonVariant.filled || DanaviewIconButtonVariant.primary => DanaviewColors.foregroundOn(_background),
+      DanaviewIconButtonVariant.toolbar => selected ? DanaviewColors.primaryLight : DanaviewColors.textPrimary,
+    };
+  }
+
+  /// Raised circles (filled, toolbar) get the hairline and top highlight; primary gets the
+  /// strong highlight; plain and tonal are a bare fill.
+  ShapeDecoration _decoration(Color fill) {
+    return switch (variant) {
+      DanaviewIconButtonVariant.filled || DanaviewIconButtonVariant.toolbar => DanaviewDepth.circle(color: fill),
+      DanaviewIconButtonVariant.primary =>
+        DanaviewDepth.circle(color: fill, side: BorderSide.none, highlight: DanaviewColors.highlightStrong),
+      _ => ShapeDecoration(color: fill, shape: const CircleBorder()),
     };
   }
 
@@ -77,16 +112,8 @@ class DanaviewIconButton extends StatelessWidget {
           width: size,
           height: size,
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: danaviewInteractiveFill(background, state),
-          ),
-          foregroundDecoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.fromBorderSide(
-              state.focused ? DanaviewBorders.focus : DanaviewBorders.focus.copyWith(color: Colors.transparent),
-            ),
-          ),
+          decoration: _decoration(danaviewInteractiveFill(background, state)),
+          foregroundDecoration: DanaviewDepth.focusRing(focused: state.focused, circle: true),
           child: Icon(icon, size: iconSize ?? size * 0.5, color: foreground),
         );
         return danaviewDimmed(

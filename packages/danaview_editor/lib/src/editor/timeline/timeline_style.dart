@@ -21,19 +21,20 @@ final class TimelineStyle {
   TimelineStyle({
     this.laneBackground = DanaviewColors.background,
     this.laneSeparator = DanaviewColors.hairlineSubtle,
-    this.videoAccent = DanaviewColors.primary,
-    this.overlayAccent = DanaviewColors.purple,
-    this.audioAccent = DanaviewColors.cyan,
-    this.textAccent = DanaviewColors.warning,
-    this.subtitleAccent = DanaviewColors.success,
+    this.videoAccent = steel,
+    this.overlayAccent = mauve,
+    this.audioAccent = teal,
+    this.textAccent = sand,
+    this.subtitleAccent = sage,
     this.videoFill = DanaviewColors.surfaceElevatedHigher,
     Color? audioFill,
     Color? audioWave,
     Color? textFill,
     Color? subtitleFill,
     this.selection = DanaviewColors.primaryLight,
-    this.playhead = DanaviewColors.textPrimary,
-    this.snapGuide = DanaviewColors.primaryLight,
+    this.playhead = DanaviewColors.primaryLight,
+    this.mark = DanaviewColors.textPrimary,
+    this.snapGuide = DanaviewColors.textPrimary,
     Color? offlineFill,
     this.offlineHatch = const Color(0x14FFFFFF),
     this.lockedHatch = const Color(0x14FFFFFF),
@@ -48,10 +49,10 @@ final class TimelineStyle {
     this.fontFamily = DanaviewFonts.family,
     this.lockedOpacity = 0.6,
     this.hiddenOpacity = 0.4,
-  })  : audioFill = audioFill ?? DanaviewColors.cyan.withAlpha(0x29),
-        audioWave = audioWave ?? DanaviewColors.cyan.withAlpha(0xCC),
-        textFill = textFill ?? DanaviewColors.warning.withAlpha(0x33),
-        subtitleFill = subtitleFill ?? DanaviewColors.success.withAlpha(0x29),
+  })  : audioFill = audioFill ?? teal.withAlpha(0x29),
+        audioWave = audioWave ?? teal.withAlpha(0xCC),
+        textFill = textFill ?? sand.withAlpha(0x33),
+        subtitleFill = subtitleFill ?? sage.withAlpha(0x29),
         offlineFill = offlineFill ?? DanaviewColors.error.withAlpha(0x33),
         markerPalette = List.unmodifiable(markerPalette ?? defaultMarkerPalette) {
     assert(this.markerPalette.isNotEmpty, 'the marker palette needs at least the default colour');
@@ -60,15 +61,35 @@ final class TimelineStyle {
   /// The editor's timeline style.
   static final TimelineStyle standard = TimelineStyle();
 
+  // ---- Categorical lane palette (Cinema B) -------------------------------------------------------
+  // Muted, distinct hues that read on true black without competing with the red accent: none sits
+  // near red (the accent, selection and playhead) or the retired indigo. Status keeps its own
+  // tokens (offline media is `error` orange).
+
+  /// Video lanes: muted steel blue.
+  static const Color steel = Color(0xFF7FA3C7);
+
+  /// Overlay/PiP lanes: dusty mauve.
+  static const Color mauve = Color(0xFFBE9CC4);
+
+  /// Audio lanes and waveforms: muted teal.
+  static const Color teal = Color(0xFF6FB8AE);
+
+  /// Text lanes: warm sand.
+  static const Color sand = Color(0xFFD4B06A);
+
+  /// Subtitle lanes: sage green.
+  static const Color sage = Color(0xFF8DBB7A);
+
   /// The six marker colours (ux.md §8.5); index 0 is the default `warning`. `Marker.colorIndex`
   /// (core, `markerPaletteSize` = 6) indexes this list.
   static const List<Color> defaultMarkerPalette = [
     DanaviewColors.warning,
     DanaviewColors.error,
     DanaviewColors.success,
-    DanaviewColors.cyan,
+    teal,
     DanaviewColors.primaryLight,
-    DanaviewColors.purple,
+    mauve,
   ];
 
   // ---- Lanes ------------------------------------------------------------------------------------
@@ -79,19 +100,19 @@ final class TimelineStyle {
   /// The 1 px line between lanes (`hairlineSubtle`).
   final Color laneSeparator;
 
-  /// Main video lane header icon and the selected tool's tint (`primary`).
+  /// Main video lane header icon and the selected tool's tint ([steel]).
   final Color videoAccent;
 
-  /// Overlay/PiP clips: the 3 px top stripe (`purple`).
+  /// Overlay/PiP clips: the 3 px top stripe ([mauve]).
   final Color overlayAccent;
 
-  /// Audio lane icon tint (`cyan`).
+  /// Audio lane icon tint ([teal]).
   final Color audioAccent;
 
-  /// Text lane icon tint (`warning`).
+  /// Text lane icon tint ([sand]).
   final Color textAccent;
 
-  /// Subtitle lane icon tint (`success`).
+  /// Subtitle lane icon tint ([sage]).
   final Color subtitleAccent;
 
   // ---- Clips ------------------------------------------------------------------------------------
@@ -99,25 +120,29 @@ final class TimelineStyle {
   /// Video, image and freeze clip bodies and missing thumbnail cells (`surfaceElevatedHigher`).
   final Color videoFill;
 
-  /// Audio clip bodies (`cyan @ 0x29`).
+  /// Audio clip bodies ([teal] `@ 0x29`).
   final Color audioFill;
 
-  /// Waveform lines (`cyan @ 0xCC`).
+  /// Waveform lines ([teal] `@ 0xCC`).
   final Color audioWave;
 
-  /// Text clip bodies (`warning @ 0x33`).
+  /// Text clip bodies ([sand] `@ 0x33`).
   final Color textFill;
 
-  /// Subtitle cue bodies (`success @ 0x29`).
+  /// Subtitle cue bodies ([sage] `@ 0x29`).
   final Color subtitleFill;
 
   /// The 2 px inner outline of selected items and the accent of their handles (`primaryLight`).
   final Color selection;
 
-  /// The 2 px playhead line and its knob (`textPrimary`).
+  /// The 2 px playhead line and its knob (`primaryLight`).
   final Color playhead;
 
-  /// The 1 px snap guide and its time pill (`primaryLight`).
+  /// Neutral marks painted on clips: keyframe diamond outlines and the diamond at the playhead,
+  /// fade handles and the volume line (`textPrimary`).
+  final Color mark;
+
+  /// The 1 px snap guide and its time pill (`textPrimary`, so it never reads as the playhead).
   final Color snapGuide;
 
   /// Missing-media fill (`error @ 0x33`).
@@ -238,6 +263,7 @@ final class TimelineStyle {
         subtitleFill: subtitleFill,
         selection: selection,
         playhead: playhead,
+        mark: mark,
         snapGuide: snapGuide,
         offlineFill: offlineFill,
         offlineHatch: offlineHatch,
@@ -272,6 +298,7 @@ final class TimelineStyle {
       other.subtitleFill == subtitleFill &&
       other.selection == selection &&
       other.playhead == playhead &&
+      other.mark == mark &&
       other.snapGuide == snapGuide &&
       other.offlineFill == offlineFill &&
       other.offlineHatch == offlineHatch &&
@@ -304,6 +331,7 @@ final class TimelineStyle {
         subtitleFill,
         selection,
         playhead,
+        mark,
         snapGuide,
         offlineFill,
         offlineHatch,

@@ -98,7 +98,7 @@ class _DanaviewSettingsPanelState extends ConsumerState<DanaviewSettingsPanel> {
       child: Row(
         children: [
           if (isMain)
-            const DanaviewTileIcon(Icons.tune_rounded, size: 28)
+            const DanaviewIconTile(Icons.tune_rounded, size: 28)
           else
             DanaviewIconButton(
               icon: Icons.arrow_back_ios_new_rounded,
@@ -145,7 +145,7 @@ class _DanaviewSettingsPanelState extends ConsumerState<DanaviewSettingsPanel> {
 
     Widget tile(IconData icon, String title, String subtitle, SettingsCategory category) {
       return DanaviewListTile(
-        leading: DanaviewTileIcon(icon),
+        leading: DanaviewIconTile(icon),
         title: title,
         subtitle: subtitle,
         showChevron: true,
@@ -290,7 +290,7 @@ class _DanaviewSettingsPanelState extends ConsumerState<DanaviewSettingsPanel> {
         _section('Processing'),
         DanaviewSurface(
           color: DanaviewColors.surface,
-          borderRadius: DanaviewRadius.mdAll,
+          borderRadius: DanaviewRadius.controlAll,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

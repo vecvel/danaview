@@ -1,9 +1,18 @@
 // EXTENDED: HOM-05 (Files & Media Home tab shell behind DANAVIEW_FILES_HOME; ARCH v1.2 V2-101, V2-32)
+// EXTENDED: UI pivot (DESIGN_SYSTEM §10: Cinema B Home structure)
 //
-// With DANAVIEW_FILES_HOME off [DanaviewHomeScreen] builds exactly the 1.1 tree (pinned by
-// test/home_screen_test.dart and the goldens of test/v12/home_shell/). With it on, the header and a
-// tab strip sit in the top bar and a tab host shows one tab: `Home` holds the 1.1 sections
-// unchanged plus the Recent photos and Favourites slots; the other tabs come from [HomeTabSlots].
+// [DanaviewHomeScreen] builds the §10 Home. The top bar holds the logo tile, the "Danaview" large
+// title and the round toolbar buttons (Import on phones; Video editor, Import and Settings on
+// tablets and desktops); on phones the editor and settings move to the bottom tab bar (§10.5).
+// The Home sections follow §10.3: Now Playing, Continue watching (16:9 media cards), Recent
+// photos, Projects, Playlists, Folders and Documents. Empty sections are hidden; when everything
+// is empty one empty state offers Open file / Open folder / Open link. Wide layouts split the
+// sections into two columns, tablets in portrait put the grouped lists 2-up.
+//
+// With DANAVIEW_FILES_HOME off the header scrolls with the sections and there are no tabs (pinned
+// by test/home_screen_test.dart and the goldens of test/v12/home_shell/). With it on, the header,
+// the search row and a tab strip sit in the top bar and a tab host shows one tab: `Home` holds the
+// same sections plus the Files Home slots; the other tabs come from [HomeTabSlots].
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -17,9 +26,13 @@ import '../flags.dart';
 import '../player/danaview_player_actions.dart';
 import 'add_to_playlist_sheet.dart';
 import 'home/home_callbacks.dart';
+import 'home/home_chrome.dart';
+import 'home/home_media_card.dart';
 import 'home/home_tab_host.dart';
 import 'home/home_tab_strip.dart';
 import 'home/home_tabs.dart';
+import 'import/import_providers.dart';
+import 'import/import_sheet.dart';
 import 'library_actions.dart';
 import 'library_controller.dart';
 import 'library_format.dart';
@@ -29,10 +42,18 @@ import 'media_picker.dart';
 import 'open_link_dialog.dart';
 
 export 'home/home_callbacks.dart' show HomeCallbacks, HomeCallbacksScope;
+export 'home/home_chrome.dart' show HomeChromeLabels, HomePhoneTabBar, homeIsCompact;
+export 'home/home_media_card.dart' show HomeMediaCard, HomeMediaCardGrid, HomeMediaCardRow;
 export 'home/home_tab_strip.dart' show homeTabKey;
 export 'home/home_tabs.dart' show HomeSlotBuilder, HomeTab, HomeTabSlots, homeEditorPlatform, visibleHomeTabs;
 
-/// Start screen: now playing, quick open actions, continue watching, playlists and folders.
+/// The content width from which the Home splits into two columns (iPad landscape, desktop).
+const double homeTwoColumnMinWidth = 1100;
+
+/// The content width from which the Home's grouped lists sit 2-up (tablets in portrait).
+const double homeTwoUpListsMinWidth = 600 - 2 * DanaviewSpacing.xl;
+
+/// Start screen: now playing, continue watching, recent photos, playlists, folders and documents.
 class DanaviewHomeScreen extends ConsumerStatefulWidget {
   const DanaviewHomeScreen({
     super.key,
@@ -50,15 +71,15 @@ class DanaviewHomeScreen extends ConsumerStatefulWidget {
   final ValueChanged<String> onOpenFolder;
   final ValueChanged<String> onOpenPlaylist;
 
-  /// Shows a settings button at the end of the header when set.
+  /// Shows a settings button at the end of the top bar when set (the tab bar's More on phones).
   final VoidCallback? onOpenSettings;
 
-  /// Shows the video editor button immediately left of the settings button when set; null hides
-  /// it (the app passes null where the editor is unavailable). This package never imports the
-  /// editor: the router supplies the navigation.
+  /// Shows the video editor button left of Import when set (the tab bar's Editor on phones); null
+  /// hides it (the app passes null where the editor is unavailable). This package never imports
+  /// the editor: the router supplies the navigation.
   final VoidCallback? onOpenEditor;
 
-  /// The optional 1.2.0 entry points (editor, projects, AI); used only with DANAVIEW_FILES_HOME on.
+  /// The optional 1.2.0 entry points (editor, projects, AI).
   final HomeCallbacks callbacks;
 
   /// The bodies of the 1.2.0 tabs and Overview slots; used only with DANAVIEW_FILES_HOME on.
@@ -220,14 +241,113 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
     if (confirmed) await _library.removeFolder(folder.path);
   }
 
+  // ---- Chrome (§10.1, §10.5) ----
+
+  /// The quick actions: the empty state's buttons and the Import menu's first rows.
+  List<_QuickAction> get _quickActions => [
+        _QuickAction('Open file', _openFile, icon: Icons.video_file_rounded),
+        _QuickAction('Open folder', _openFolder, glyph: DanaviewGlyphKind.folderOpen),
+        _QuickAction('Open link', _openLink, icon: Icons.link_rounded),
+      ];
+
+  /// The Import (+) menu: import into the library (Files Home), the quick actions, then New
+  /// playlist and Add folder, so every 1.1 entry point stays one menu away when its section is
+  /// hidden.
+  List<DanaviewMenuEntry> _importEntries({required bool canImport}) => [
+        if (canImport) ...[
+          DanaviewMenuItem(
+            label: HomeChromeLabels.importToLibrary,
+            icon: Icons.download_rounded,
+            onTap: () => showImportSheet(context),
+          ),
+          const DanaviewMenuDivider(),
+        ],
+        for (final action in _quickActions)
+          DanaviewMenuItem(label: action.label, icon: action.icon, glyph: action.glyph, onTap: action.onTap),
+        const DanaviewMenuDivider(),
+        DanaviewMenuItem(label: 'New playlist', icon: Icons.playlist_add_rounded, onTap: _newPlaylist),
+        if (canPickFolders) DanaviewMenuItem(label: 'Add folder', glyph: DanaviewGlyphKind.folderAdd, onTap: _addFolder),
+      ];
+
+  /// The top bar's round buttons: Import only on phones; Video editor, Import and Settings on
+  /// tablets and desktops.
+  List<Widget> _topBarActions({required bool compact, required bool canImport}) => [
+        if (!compact && widget.onOpenEditor != null)
+          DanaviewIconButton.toolbar(
+            icon: Icons.movie_edit,
+            tooltip: HomeChromeLabels.editor,
+            semanticLabel: HomeChromeLabels.editorSemantics,
+            onPressed: widget.onOpenEditor,
+          ),
+        HomeImportButton(entries: _importEntries(canImport: canImport)),
+        if (!compact && widget.onOpenSettings != null)
+          DanaviewIconButton.toolbar(
+            icon: Icons.settings_rounded,
+            tooltip: HomeChromeLabels.settings,
+            semanticLabel: HomeChromeLabels.settings,
+            onPressed: widget.onOpenSettings,
+          ),
+      ];
+
+  Widget _topBar(BuildContext context, {required bool compact}) => HomeTopBar(
+        key: const ValueKey('home-top-bar'),
+        compact: compact,
+        actions: _topBarActions(compact: compact, canImport: ref.watch(importServiceProvider) != null),
+      );
+
+  /// The phone tab bar (compact widths only): Library · Editor · AI Studio · More, or null when it
+  /// would hold Library alone.
+  Widget? _phoneTabBar(BuildContext context, {required bool compact}) {
+    if (!compact) return null;
+    final aiStudio = widget.callbacks.onOpenAiStudio;
+    final items = [
+      HomeTabBarItem(
+        key: const ValueKey('home-tabbar-library'),
+        label: 'Library',
+        icon: Icons.video_library_rounded,
+        selected: true,
+        onTap: () => _selectTab(HomeTab.home),
+      ),
+      if (widget.onOpenEditor case final openEditor?)
+        HomeTabBarItem(
+          key: const ValueKey('home-tabbar-editor'),
+          label: 'Editor',
+          icon: Icons.movie_edit,
+          tooltip: HomeChromeLabels.editor,
+          semanticLabel: HomeChromeLabels.editorSemantics,
+          onTap: openEditor,
+        ),
+      if (FeatureFlags.aiStudioEnabled && aiStudio != null)
+        HomeTabBarItem(
+          key: const ValueKey('home-tabbar-ai-studio'),
+          label: 'AI Studio',
+          icon: Icons.auto_awesome_rounded,
+          onTap: aiStudio,
+        ),
+      if (widget.onOpenSettings case final openSettings?)
+        HomeTabBarItem(
+          key: const ValueKey('home-tabbar-more'),
+          label: 'More',
+          icon: Icons.more_horiz_rounded,
+          tooltip: HomeChromeLabels.settings,
+          semanticLabel: 'More: ${HomeChromeLabels.settings}',
+          onTap: openSettings,
+        ),
+    ];
+    if (items.length < 2) return null;
+    return HomePhoneTabBar(key: const ValueKey('home-phone-tab-bar'), items: items);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(libraryControllerProvider);
-    if (FeatureFlags.filesHomeEnabled) return _buildFilesHome(context);
+    final compact = homeIsCompact(MediaQuery.sizeOf(context).width);
+    if (FeatureFlags.filesHomeEnabled) return _buildFilesHome(context, compact: compact);
     return DanaviewRefreshOnReturn(
       onReturn: () => _library.refresh(),
       child: Scaffold(
         backgroundColor: DanaviewColors.background,
+        bottomNavigationBar: _phoneTabBar(context, compact: compact),
         body: DanaviewLibraryFrame(
           body: LayoutBuilder(
             builder: (context, constraints) {
@@ -236,14 +356,13 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
                 slivers: [
                   SliverPadding(
                     padding: insets.copyWith(
-                      top: DanaviewSpacing.xl,
+                      top: DanaviewSpacing.lg,
                       bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
                     ),
                     sliver: SliverList.list(
                       children: [
-                        _HomeHeader(onOpenSettings: widget.onOpenSettings, onOpenEditor: widget.onOpenEditor),
-                        const SizedBox(height: DanaviewSpacing.xl),
-                        ..._overviewSections(state),
+                        _topBar(context, compact: compact),
+                        ..._overviewSections(state, width: constraints.maxWidth - insets.horizontal),
                       ],
                     ),
                   ),
@@ -256,62 +375,83 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
     );
   }
 
-  /// The 1.1 Home sections below the header, in 1.1 order. With [slots] (DANAVIEW_FILES_HOME on)
-  /// the Overview's additive rows (Recent photos, Favourites) follow Continue watching; the 1.1
-  /// sections themselves are the same widgets either way.
-  List<Widget> _overviewSections(LibraryState state, {HomeTabSlots? slots}) {
+  /// The Home sections below the top bar (§10.3). With [slots] (DANAVIEW_FILES_HOME on) the Files
+  /// Home rows join them; the 1.1 sections are the same widgets either way.
+  List<Widget> _overviewSections(LibraryState state, {required double width, HomeTabSlots? slots}) {
     return [
       _NowPlayingCard(onOpen: widget.onOpenPlayer),
-      _QuickActions(
-        actions: [
-          _QuickAction(
-            'Open file',
-            'Pick videos to play',
-            DanaviewColors.primaryLight,
-            _openFile,
-            icon: Icons.video_file_rounded,
-          ),
-          _QuickAction(
-            'Open folder',
-            canPickFolders ? 'Browse a folder' : 'Videos on this device',
-            DanaviewColors.purple,
-            _openFolder,
-            glyph: DanaviewGlyphKind.folderOpen,
-          ),
-          _QuickAction(
-            'Open link',
-            'Stream from a URL',
-            DanaviewColors.cyan,
-            _openLink,
-            icon: Icons.link_rounded,
-          ),
-        ],
-      ),
-      if (state.error != null) ...[
-        const SizedBox(height: DanaviewSpacing.xl),
-        DanaviewInlineEmpty(
-          icon: Icons.error_outline_rounded,
-          iconColor: DanaviewColors.errorLight,
-          title: state.error!,
-          message: 'Your files are safe. Try loading the library again.',
-          action: DanaviewButton.secondary(
-            label: 'Try again',
-            icon: Icons.refresh_rounded,
-            size: DanaviewButtonSize.sm,
-            onPressed: () => _library.refresh(),
+      if (state.error != null)
+        Padding(
+          padding: const EdgeInsets.only(top: DanaviewSpacing.lg),
+          child: DanaviewInlineEmpty(
+            icon: Icons.error_outline_rounded,
+            iconColor: DanaviewColors.error,
+            title: state.error!,
+            message: 'Your files are safe. Try loading the library again.',
+            action: DanaviewButton.secondary(
+              label: 'Try again',
+              icon: Icons.refresh_rounded,
+              size: DanaviewButtonSize.sm,
+              onPressed: () => _library.refresh(),
+            ),
           ),
         ),
-      ],
-      if (state.hasLoaded) ...[
-        ..._recentSection(state.recent),
-        if (slots?.recentPhotos case final tray?)
-          KeyedSubtree(key: const ValueKey('home-slot-recent-photos'), child: Builder(builder: tray)),
-        if (slots?.favourites case final favourites?)
-          KeyedSubtree(key: const ValueKey('home-slot-favourites'), child: Builder(builder: favourites)),
-        ..._playlistSection(state.playlists),
-        ..._folderSection(state.roots),
-      ],
+      if (state.hasLoaded) _overviewLayout(state, width: width, slots: slots),
     ];
+  }
+
+  /// Lays the sections out for [width]: one column on phones, the grouped lists 2-up on tablets
+  /// in portrait, and two columns (media ≈ 60 %, lists ≈ 40 %) from [homeTwoColumnMinWidth].
+  Widget _overviewLayout(LibraryState state, {required double width, HomeTabSlots? slots}) {
+    final empty = state.recent.isEmpty && state.playlists.isEmpty && state.roots.isEmpty;
+    final media = <Widget>[
+      if (empty) _HomeEmptyState(actions: _quickActions),
+      if (_recentSection(state.recent) case final recent?) recent,
+      if (slots?.recentPhotos case final tray?)
+        KeyedSubtree(key: const ValueKey('home-slot-recent-photos'), child: Builder(builder: tray)),
+      if (slots?.favourites case final favourites?)
+        KeyedSubtree(key: const ValueKey('home-slot-favourites'), child: Builder(builder: favourites)),
+      if (slots?.projectsOverview case final projects?)
+        KeyedSubtree(key: const ValueKey('home-slot-projects'), child: Builder(builder: projects)),
+    ];
+    final lists = <Widget>[
+      if (_playlistSection(state.playlists, hideEmpty: true) case final playlists?) playlists,
+      if (_folderSection(state.roots, hideEmpty: true) case final folders?) folders,
+      if (slots != null && slots.showDocuments)
+        if (slots.documentsOverview case final documents?)
+          KeyedSubtree(key: const ValueKey('home-slot-documents'), child: Builder(builder: documents)),
+    ];
+    Widget column(List<Widget> children) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        );
+    if (width >= homeTwoColumnMinWidth && media.isNotEmpty && lists.isNotEmpty) {
+      return Row(
+        key: const ValueKey('home-two-columns'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 3, child: column(media)),
+          const SizedBox(width: DanaviewSpacing.xl),
+          Expanded(flex: 2, child: column(lists)),
+        ],
+      );
+    }
+    if (width >= homeTwoUpListsMinWidth && lists.length > 1) {
+      return column([
+        ...media,
+        for (var i = 0; i < lists.length; i += 2)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: lists[i]),
+              const SizedBox(width: DanaviewSpacing.lg),
+              Expanded(child: i + 1 < lists.length ? lists[i + 1] : const SizedBox.shrink()),
+            ],
+          ),
+      ]);
+    }
+    return column([...media, ...lists]);
   }
 
   // ---- DANAVIEW_FILES_HOME on (HOM-05) ----
@@ -326,16 +466,25 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
     if (tab != _tab) setState(() => _tab = tab);
   }
 
-  Widget _buildFilesHome(BuildContext context) {
+  /// The filter menu: one row per visible tab, the selected one checked.
+  List<DanaviewMenuEntry> _filterEntries(List<HomeTab> tabs, HomeTab selected) => [
+        const DanaviewMenuHeader('Show'),
+        for (final tab in tabs)
+          DanaviewMenuItem(label: tab.label, selected: tab == selected, onTap: () => _selectTab(tab)),
+      ];
+
+  Widget _buildFilesHome(BuildContext context, {required bool compact}) {
     final tabs = _visibleTabs(context);
     final selected = tabs.contains(_tab) ? _tab : HomeTab.home;
     final selectionBar = widget.tabSlots.selectionBar;
+    final search = widget.tabSlots.search;
     return HomeCallbacksScope(
       callbacks: widget.callbacks,
       child: DanaviewRefreshOnReturn(
         onReturn: () => _library.refresh(),
         child: Scaffold(
           backgroundColor: DanaviewColors.background,
+          bottomNavigationBar: _phoneTabBar(context, compact: compact),
           body: DanaviewLibraryFrame(
             topBar: LayoutBuilder(
               builder: (context, constraints) {
@@ -345,11 +494,20 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Padding(
-                      padding: insets.copyWith(top: DanaviewSpacing.lg),
-                      child: _HomeHeader(onOpenSettings: widget.onOpenSettings, onOpenEditor: widget.onOpenEditor),
-                    ),
-                    const SizedBox(height: DanaviewSpacing.sm),
+                    Padding(padding: insets.copyWith(top: DanaviewSpacing.md), child: _topBar(context, compact: compact)),
+                    if (search != null)
+                      Padding(
+                        padding: insets.copyWith(top: DanaviewSpacing.md),
+                        child: HomeSearchRow(
+                          search: KeyedSubtree(key: const ValueKey('home-slot-search'), child: Builder(builder: search)),
+                          filter: HomeFilterButton(
+                            entries: _filterEntries(tabs, selected),
+                            active: selected != HomeTab.home,
+                            semanticLabel: 'Filter: showing ${selected.label}',
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: DanaviewSpacing.xs),
                     HomeTabStrip(
                       key: const ValueKey('home-tab-strip'),
                       tabs: tabs,
@@ -357,7 +515,6 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
                       onSelected: _selectTab,
                       padding: insets,
                     ),
-                    const SizedBox(height: DanaviewSpacing.xs),
                   ],
                 );
               },
@@ -420,17 +577,18 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
       builder: (context, constraints) {
         final insets = danaviewLibraryInsets(constraints.maxWidth);
         final padding = insets.copyWith(
-          top: DanaviewSpacing.lg,
+          top: DanaviewSpacing.xs,
           bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
         );
+        final width = constraints.maxWidth - insets.horizontal;
         // Each page reads the latest library state itself: pages built once stay alive.
         return Consumer(
           builder: (context, ref, _) {
             final state = ref.watch(libraryControllerProvider);
             final sections = switch (tab) {
-              HomeTab.home => _overviewSections(state, slots: widget.tabSlots),
-              HomeTab.playlists => state.hasLoaded ? _playlistSection(state.playlists) : const <Widget>[],
-              HomeTab.folders => state.hasLoaded ? _folderSection(state.roots) : const <Widget>[],
+              HomeTab.home => _overviewSections(state, width: width, slots: widget.tabSlots),
+              HomeTab.playlists => state.hasLoaded ? [_playlistSection(state.playlists)!] : const <Widget>[],
+              HomeTab.folders => state.hasLoaded ? [_folderSection(state.roots)!] : const <Widget>[],
               _ => null,
             };
             if (sections == null) {
@@ -449,44 +607,61 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
     );
   }
 
-  List<Widget> _recentSection(List<LibraryRecentItem> recent) {
-    if (recent.isEmpty) return const [];
+  // ---- Sections (§10.3) ----
+
+  Widget _section(List<Widget> children, {Key? key}) => Column(
+        key: key,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      );
+
+  /// Continue watching: a horizontal row of media cards (all of them in a grid once expanded),
+  /// or null when there is no history.
+  Widget? _recentSection(List<LibraryRecentItem> recent) {
+    if (recent.isEmpty) return null;
     final visible = _showAllRecent ? recent : recent.take(_recentPreviewCount);
-    return [
+    final cards = [for (final item in visible) _recentCard(item)];
+    return _section(key: const ValueKey('home-continue-watching'), [
       DanaviewLibrarySectionHeader(
         'Continue watching',
         prominent: true,
-        action: DanaviewButton.ghost(label: 'Clear', size: DanaviewButtonSize.sm, onPressed: _clearHistory),
+        action: DanaviewButton.text(label: 'Clear', size: DanaviewButtonSize.sm, onPressed: _clearHistory),
       ),
-      DanaviewLibraryCardGrid(children: [for (final item in visible) _recentRow(item)]),
+      if (_showAllRecent) HomeMediaCardGrid(children: cards) else HomeMediaCardRow(children: cards),
       if (recent.length > _recentPreviewCount)
         Padding(
-          padding: const EdgeInsets.only(top: DanaviewSpacing.sm),
-          child: Center(
-            child: DanaviewButton.ghost(
+          padding: const EdgeInsets.only(top: DanaviewSpacing.xs),
+          child: Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: DanaviewButton.text(
               label: _showAllRecent ? 'Show less' : 'Show all ${recent.length}',
-              trailingIcon: _showAllRecent ? Icons.expand_less_rounded : Icons.expand_more_rounded,
               size: DanaviewButtonSize.sm,
               onPressed: () => setState(() => _showAllRecent = !_showAllRecent),
             ),
           ),
         ),
-    ];
+    ]);
   }
 
-  Widget _recentRow(LibraryRecentItem item) {
+  Widget _recentCard(LibraryRecentItem item) {
     final media = item.media;
-    return DanaviewLibraryRow(
-      leading: DanaviewTileIcon(mediaIcon(media), color: mediaIconColor(media), size: 40),
+    final resumeLength = item.resume?.duration ?? Duration.zero;
+    final length = resumeLength > Duration.zero ? resumeLength : media.duration;
+    return HomeMediaCard(
+      icon: mediaIcon(media),
       title: media.title,
       badge: episodeLabel(media),
       subtitle: mediaSubtitle(media, item.resume, exists: item.exists, fallback: parentFolderName(media.pathOrUri)),
+      duration: length > Duration.zero ? formatClock(length) : null,
       progress: item.exists ? item.progress : null,
       dimmed: !item.exists,
       onTap: () => _playRecent(item),
       trailing: DanaviewMenuIconTrigger(
         icon: Icons.more_horiz_rounded,
         tooltip: 'More',
+        size: 32,
+        iconSize: 18,
         entries: [
           DanaviewMenuItem(
             label: 'Play',
@@ -511,27 +686,24 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
     );
   }
 
-  List<Widget> _playlistSection(List<PlaylistSummary> playlists) {
-    return [
+  /// Playlists as a grouped list with New in the header. Empty: hidden on Home ([hideEmpty]), an
+  /// empty state with New playlist on the Playlists tab.
+  Widget? _playlistSection(List<PlaylistSummary> playlists, {bool hideEmpty = false}) {
+    if (playlists.isEmpty && hideEmpty) return null;
+    return _section(key: const ValueKey('home-playlists'), [
       DanaviewLibrarySectionHeader(
         'Playlists',
         prominent: true,
         action: playlists.isEmpty
             ? null
-            : DanaviewButton.ghost(
-                label: 'New',
-                icon: Icons.add_rounded,
-                size: DanaviewButtonSize.sm,
-                onPressed: _newPlaylist,
-              ),
+            : DanaviewButton.text(label: 'New', size: DanaviewButtonSize.sm, onPressed: _newPlaylist),
       ),
       if (playlists.isEmpty)
         DanaviewInlineEmpty(
           icon: Icons.queue_music_rounded,
-          iconColor: DanaviewColors.purple,
           title: 'No playlists yet',
           message: 'Collect videos and links to play them in order.',
-          action: DanaviewButton.tonal(
+          action: DanaviewButton.secondary(
             label: 'New playlist',
             icon: Icons.add_rounded,
             size: DanaviewButtonSize.sm,
@@ -543,7 +715,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
           children: [
             for (final playlist in playlists)
               DanaviewLibraryRow(
-                leading: const DanaviewTileIcon(Icons.queue_music_rounded, color: DanaviewColors.purple, size: 40),
+                leading: const DanaviewIconTile(Icons.queue_music_rounded),
                 title: playlist.name,
                 subtitle: playlist.itemCount == 0 ? 'No videos yet' : formatCount(playlist.itemCount, 'video'),
                 onTap: () => widget.onOpenPlaylist(playlist.name),
@@ -580,33 +752,30 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
               ),
           ],
         ),
-    ];
+    ]);
   }
 
-  List<Widget> _folderSection(List<LibraryFolder> roots) {
-    return [
+  /// Folders as a grouped list with Add in the header. Empty: hidden on Home ([hideEmpty]), an
+  /// empty state with Add folder on the Folders tab.
+  Widget? _folderSection(List<LibraryFolder> roots, {bool hideEmpty = false}) {
+    if (roots.isEmpty && hideEmpty) return null;
+    return _section(key: const ValueKey('home-folders'), [
       DanaviewLibrarySectionHeader(
         'Folders',
         prominent: true,
         action: canPickFolders && roots.isNotEmpty
-            ? DanaviewButton.ghost(
-                label: 'Add',
-                icon: Icons.add_rounded,
-                size: DanaviewButtonSize.sm,
-                onPressed: _addFolder,
-              )
+            ? DanaviewButton.text(label: 'Add', size: DanaviewButtonSize.sm, onPressed: _addFolder)
             : null,
       ),
       if (roots.isEmpty)
         DanaviewInlineEmpty(
           glyph: DanaviewGlyphKind.folderVideo,
-          iconColor: DanaviewColors.primaryLight,
           title: 'No folders yet',
           message: canPickFolders
               ? 'Add a folder to browse its videos here. Nothing is copied or moved.'
               : 'Use Open file to add videos from your device.',
           action: canPickFolders
-              ? DanaviewButton.tonal(
+              ? DanaviewButton.secondary(
                   label: 'Add folder',
                   glyph: DanaviewGlyphKind.folderAdd,
                   size: DanaviewButtonSize.sm,
@@ -616,13 +785,13 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
         )
       else
         DanaviewLibraryCardGrid(children: [for (final folder in roots) _folderRow(folder)]),
-    ];
+    ]);
   }
 
   Widget _folderRow(LibraryFolder folder) {
     if (folder.isDevice) {
       return DanaviewLibraryRow(
-        leading: const DanaviewTileIcon.glyph(DanaviewGlyphKind.device, color: DanaviewColors.cyan, size: 40),
+        leading: const DanaviewIconTile.glyph(DanaviewGlyphKind.device),
         title: folder.label,
         subtitle: Theme.of(context).platform == TargetPlatform.iOS
             ? 'Files app › ${LibraryStorage.iosFilesLocation(tablet: LibraryStorage.isTabletWidth(MediaQuery.sizeOf(context).shortestSide))}'
@@ -631,12 +800,12 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
         onTap: () => widget.onOpenFolder(folder.path),
         trailing: const Padding(
           padding: EdgeInsets.all(DanaviewSpacing.sm),
-          child: Icon(Icons.chevron_right_rounded, size: 22, color: DanaviewColors.textMuted),
+          child: Icon(Icons.chevron_right_rounded, size: 20, color: DanaviewColors.chevron),
         ),
       );
     }
     return DanaviewLibraryRow(
-      leading: const DanaviewTileIcon.glyph(DanaviewGlyphKind.folderVideo, size: 40),
+      leading: const DanaviewIconTile.glyph(DanaviewGlyphKind.folderVideo),
       title: folder.label,
       subtitle: folder.path,
       onTap: () => widget.onOpenFolder(folder.path),
@@ -696,58 +865,8 @@ class _RenderSizeReporter extends RenderProxyBox {
   }
 }
 
-class _HomeHeader extends StatelessWidget {
-  const _HomeHeader({this.onOpenSettings, this.onOpenEditor});
-
-  final VoidCallback? onOpenSettings;
-  final VoidCallback? onOpenEditor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const DanaviewLogo(size: 36),
-        const SizedBox(width: DanaviewSpacing.md),
-        Expanded(
-          child: Semantics(
-            header: true,
-            child: Text(
-              'Danaview',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: DanaviewTextStyles.largeTitle.copyWith(fontSize: 26, height: 1.15),
-            ),
-          ),
-        ),
-        // Fixed-size buttons: the title ellipsizes first (it keeps 96 px at 280 px wide).
-        if (onOpenEditor != null) ...[
-          const SizedBox(width: DanaviewSpacing.sm),
-          DanaviewIconButton(
-            icon: Icons.movie_edit,
-            variant: DanaviewIconButtonVariant.tonal,
-            size: 44,
-            iconSize: 22,
-            tooltip: 'Video editor',
-            semanticLabel: 'Open video editor',
-            onPressed: onOpenEditor,
-          ),
-        ],
-        if (onOpenSettings != null) ...[
-          const SizedBox(width: DanaviewSpacing.sm),
-          DanaviewIconButton(
-            icon: Icons.settings_rounded,
-            variant: DanaviewIconButtonVariant.tonal,
-            size: 44,
-            iconSize: 22,
-            tooltip: 'Settings',
-            onPressed: onOpenSettings,
-          ),
-        ],
-      ],
-    );
-  }
-}
-
+/// The Now Playing card: a `surface` card with the current media, its play/pause (the view's one
+/// filled red control), Retry on errors and Clear; a tap returns to the player.
 class _NowPlayingCard extends ConsumerWidget {
   const _NowPlayingCard({required this.onOpen});
 
@@ -772,27 +891,27 @@ class _NowPlayingCard extends ConsumerWidget {
     };
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: DanaviewSpacing.md),
+      padding: const EdgeInsets.only(top: DanaviewSpacing.lg),
       child: DanaviewPressable(
         onTap: onOpen,
-        borderRadius: DanaviewRadius.lgAll,
+        borderRadius: DanaviewRadius.cardAll,
         semanticLabel: isError
             ? 'Playback error: ${media.title}. Open player'
             : 'Now playing: ${media.title}. Open player',
-        child: DanaviewSurface(
-          shadow: DanaviewShadow.subtle,
-          padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 10, 12),
+        child: Container(
+          decoration: DanaviewDepth.card(),
+          padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 8, 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
-                  DanaviewTileIcon(
+                  DanaviewIconTile(
                     isError
                         ? Icons.error_outline_rounded
                         : (playing ? Icons.graphic_eq_rounded : mediaIcon(media)),
-                    color: isError ? DanaviewColors.errorLight : DanaviewColors.primaryLight,
+                    color: isError ? DanaviewColors.error : DanaviewColors.textPrimary,
                     size: 44,
                   ),
                   const SizedBox(width: DanaviewSpacing.md),
@@ -802,13 +921,12 @@ class _NowPlayingCard extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isError ? 'COULD NOT PLAY' : 'NOW PLAYING',
+                          isError ? "Couldn't play" : 'Now playing',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: DanaviewTextStyles.micro.copyWith(
-                            color: isError ? DanaviewColors.errorLight : DanaviewColors.primaryLight,
+                          style: DanaviewTextStyles.footnote.copyWith(
+                            color: isError ? DanaviewColors.error : DanaviewColors.primaryLight,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: 0.8,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -816,14 +934,14 @@ class _NowPlayingCard extends ConsumerWidget {
                           media.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: DanaviewTextStyles.headline,
+                          style: DanaviewTextStyles.rowTitle,
                         ),
                         const SizedBox(height: 2),
                         Text(
                           subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: DanaviewTextStyles.caption.copyWith(
+                          style: DanaviewTextStyles.footnote.copyWith(
                             color: isError ? DanaviewColors.errorLight : null,
                           ),
                         ),
@@ -834,7 +952,7 @@ class _NowPlayingCard extends ConsumerWidget {
                   if (isError)
                     DanaviewIconButton(
                       icon: Icons.refresh_rounded,
-                      variant: DanaviewIconButtonVariant.tonal,
+                      variant: DanaviewIconButtonVariant.filled,
                       size: 40,
                       tooltip: 'Retry',
                       onPressed: () => ref.read(playerControllerProvider.notifier).openMedia(media),
@@ -870,126 +988,105 @@ class _NowPlayingCard extends ConsumerWidget {
 }
 
 class _QuickAction {
-  const _QuickAction(this.label, this.caption, this.color, this.onTap, {this.icon, this.glyph})
-      : assert(icon != null || glyph != null);
+  const _QuickAction(this.label, this.onTap, {this.icon, this.glyph}) : assert(icon != null || glyph != null);
 
   final String label;
-  final String caption;
-  final Color color;
   final VoidCallback onTap;
   final IconData? icon;
   final DanaviewGlyphKind? glyph;
-
-  Widget tile(double size) => glyph != null
-      ? DanaviewTileIcon.glyph(glyph!, color: color, size: size)
-      : DanaviewTileIcon(icon!, color: color, size: size);
 }
 
-/// Three equal tiles in a row: icon beside the text when tiles are wide, icon above the
-/// label when narrow, and two columns (last tile full width) when labels would not fit.
+/// The one empty state of an empty Home (§8, §10.3): a neutral icon tile, a title, a line of body
+/// text and the three quick actions.
+class _HomeEmptyState extends StatelessWidget {
+  const _HomeEmptyState({required this.actions});
+
+  final List<_QuickAction> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: const ValueKey('home-empty-state'),
+      padding: const EdgeInsets.only(top: DanaviewSpacing.xl),
+      child: Container(
+        decoration: DanaviewDepth.card(),
+        padding: const EdgeInsets.all(DanaviewSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const DanaviewIconTile(Icons.video_library_rounded, size: 48, iconSize: 24),
+            const SizedBox(height: DanaviewSpacing.md),
+            Semantics(
+              header: true,
+              child: Text(
+                'Nothing here yet',
+                textAlign: TextAlign.center,
+                style: DanaviewTextStyles.rowTitle,
+              ),
+            ),
+            const SizedBox(height: DanaviewSpacing.xs),
+            Text(
+              'Open a video, a folder or a link to start watching.',
+              textAlign: TextAlign.center,
+              style: DanaviewTextStyles.subhead,
+            ),
+            const SizedBox(height: DanaviewSpacing.lg),
+            _QuickActions(actions: actions),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The quick actions as equal secondary buttons: one row when the labels fit, else stacked.
 class _QuickActions extends StatelessWidget {
   const _QuickActions({required this.actions});
 
   final List<_QuickAction> actions;
 
-  static const _gap = 10.0;
-  static const _minTileWidth = 96.0;
-  static const _wideTileWidth = 190.0;
+  static const _gap = DanaviewSpacing.sm;
+  static const _minButtonWidth = 132.0;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
-        final width = constraints.maxWidth;
-        final tileWidth = (width - _gap * (actions.length - 1)) / actions.length;
-        if (width >= actions.length * _minTileWidth * scale + (actions.length - 1) * _gap) {
-          final horizontal = tileWidth >= _wideTileWidth * scale;
-          return _row([for (final action in actions) _QuickActionTile(action: action, horizontal: horizontal)]);
+        final buttons = [
+          for (final action in actions)
+            DanaviewButton.secondary(
+              label: action.label,
+              icon: action.icon,
+              glyph: action.glyph,
+              expand: true,
+              onPressed: action.onTap,
+            ),
+        ];
+        final fits = constraints.maxWidth >= actions.length * _minButtonWidth * scale + (actions.length - 1) * _gap;
+        if (fits) {
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < buttons.length; i++) ...[
+                  if (i > 0) const SizedBox(width: _gap),
+                  Expanded(child: buttons[i]),
+                ],
+              ],
+            ),
+          );
         }
-        final tiles = [for (final action in actions) _QuickActionTile(action: action, horizontal: false)];
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (var i = 0; i < tiles.length; i += 2) ...[
+            for (var i = 0; i < buttons.length; i++) ...[
               if (i > 0) const SizedBox(height: _gap),
-              _row(tiles.sublist(i, i + 2 > tiles.length ? tiles.length : i + 2)),
+              buttons[i],
             ],
           ],
         );
       },
-    );
-  }
-
-  Widget _row(List<Widget> tiles) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < tiles.length; i++) ...[
-            if (i > 0) const SizedBox(width: _gap),
-            Expanded(child: tiles[i]),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickActionTile extends StatelessWidget {
-  const _QuickActionTile({required this.action, required this.horizontal});
-
-  final _QuickAction action;
-  final bool horizontal;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = Text(
-      action.label,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      textAlign: horizontal ? TextAlign.start : TextAlign.center,
-      style: DanaviewTextStyles.headline.copyWith(fontSize: horizontal ? 15 : 14),
-    );
-    return DanaviewPressable(
-      onTap: action.onTap,
-      borderRadius: DanaviewRadius.lgAll,
-      semanticLabel: action.label,
-      child: DanaviewSurface(
-        padding: horizontal ? const EdgeInsets.all(14) : const EdgeInsets.fromLTRB(10, 16, 10, 14),
-        child: horizontal
-            ? Row(
-                children: [
-                  action.tile(40),
-                  const SizedBox(width: DanaviewSpacing.md),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        label,
-                        const SizedBox(height: 2),
-                        Text(
-                          action.caption,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: DanaviewTextStyles.caption,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  action.tile(44),
-                  const SizedBox(height: 10),
-                  label,
-                ],
-              ),
-      ),
     );
   }
 }

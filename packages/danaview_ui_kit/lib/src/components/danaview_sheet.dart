@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../foundation/danaview_internal.dart';
+import '../theme/danaview_depth.dart';
 import '../theme/danaview_theme.dart';
 import '../theme/danaview_tokens.dart';
 import 'danaview_icon_button.dart';
@@ -195,15 +196,17 @@ class _DanaviewSheetState extends State<_DanaviewSheet> with SingleTickerProvide
 
     final sheet = DecoratedBox(
       key: _sheetKey,
-      decoration: const BoxDecoration(
-        color: DanaviewColors.surfaceElevated,
-        borderRadius: DanaviewRadius.sheetTop,
+      // §8 bottom sheet: surface, continuous top radius 24, hairline depth.
+      decoration: ShapeDecoration(
+        color: DanaviewColors.surface,
+        shape: DanaviewDepth.shape(DanaviewRadius.sheetTop),
+        shadows: DanaviewShadows.card,
       ),
       position: DecorationPosition.background,
       child: DecoratedBox(
         position: DecorationPosition.foreground,
-        decoration: const BoxDecoration(borderRadius: DanaviewRadius.sheetTop, border: DanaviewBorders.all),
-        child: ClipRRect(
+        decoration: ShapeDecoration(shape: DanaviewDepth.border(borderRadius: DanaviewRadius.sheetTop)),
+        child: ClipRSuperellipse(
           borderRadius: DanaviewRadius.sheetTop,
           child: MediaQuery.removePadding(
             context: context,
@@ -223,8 +226,9 @@ class _DanaviewSheetState extends State<_DanaviewSheet> with SingleTickerProvide
                         child: Container(
                           width: 36,
                           height: 5,
+                          // Grabber: 36 x 5, white 30 %.
                           decoration: BoxDecoration(
-                            color: const Color(0x33FFFFFF),
+                            color: const Color(0x4DFFFFFF),
                             borderRadius: BorderRadius.circular(2.5),
                           ),
                         ),
@@ -244,16 +248,16 @@ class _DanaviewSheetState extends State<_DanaviewSheet> with SingleTickerProvide
                                 widget.title!,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: DanaviewTextStyles.title,
+                                style: DanaviewTextStyles.sheetTitle,
                               ),
                             ),
                           ),
                           const SizedBox(width: 8),
                           DanaviewIconButton(
                             icon: Icons.close_rounded,
-                            size: 32,
-                            iconSize: 18,
-                            variant: DanaviewIconButtonVariant.filled,
+                            size: 30,
+                            iconSize: 17,
+                            variant: DanaviewIconButtonVariant.toolbar,
                             tooltip: 'Close',
                             onPressed: () => Navigator.of(context).maybePop(),
                           ),
