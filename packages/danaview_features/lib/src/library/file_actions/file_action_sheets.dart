@@ -13,8 +13,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'file_action_providers.dart';
 import 'file_action_runner.dart';
 
-/// The single-file actions [item] gets with [port] (null: nothing can leave the app).
-List<FileAction> fileMenuActions(MediaItem item, FileOutPort? port) {
+/// The single-file actions [item] gets with [port] (null: nothing can leave the app);
+/// [canCompress] adds "Compress…" for a PDF (HOM-31).
+List<FileAction> fileMenuActions(MediaItem item, FileOutPort? port, {bool canCompress = false}) {
   final caps = port?.capabilities ?? FileOutCapabilities.none;
   return fileActionsFor(
     FileActionTarget.of(item),
@@ -22,6 +23,7 @@ List<FileAction> fileMenuActions(MediaItem item, FileOutPort? port) {
     canOpenIn: caps.canOpenIn,
     canSaveOut: caps.primarySaveTarget != null,
     canSaveToPhotos: caps.canSaveToPhotos,
+    canCompress: canCompress,
   );
 }
 
@@ -34,7 +36,7 @@ Future<void> showFileActionsMenu(BuildContext context, WidgetRef ref, MediaItem 
     title: item.name,
     builder: (sheetContext) => Consumer(builder: (context, ref, _) {
       final port = ref.watch(fileOutPortProvider);
-      final actions = fileMenuActions(item, port);
+      final actions = fileMenuActions(item, port, canCompress: ref.watch(compressPdfHandlerProvider) != null);
       final favourite = ref.watch(libraryFileActionsProvider)?.liveEntry(item.id)?.isFavourite ?? false;
       return SingleChildScrollView(
         child: Column(

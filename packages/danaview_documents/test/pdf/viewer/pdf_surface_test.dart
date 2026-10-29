@@ -17,7 +17,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 const _pkg = '../danaview_pdf';
 
-const _hostApis = ['PdfDocumentHostApi', 'PdfViewHostApi', 'PdfTextHostApi', 'PdfToolsHostApi'];
+// PdfCompressHostApi: HOM-31's additive estimate block ([INTEGRATION] amendment).
+const _hostApis = ['PdfDocumentHostApi', 'PdfViewHostApi', 'PdfTextHostApi', 'PdfToolsHostApi', 'PdfCompressHostApi'];
 
 const _outputs = [
   'lib/src/pigeon/pdf_api.g.dart',
@@ -25,12 +26,11 @@ const _outputs = [
   'android/src/main/kotlin/com/vecvel/danaview/pdf/pigeon/PdfApi.g.kt',
 ];
 
-/// Tool placeholders of later tickets: file → owner.
+/// Tool placeholders of later tickets: file → owner (HOM-31's compressor has landed).
 const _placeholders = {
   'darwin/Classes/Tools/PdfPageTools.swift': 'HOM-28',
   'darwin/Classes/Annotate/PdfAnnotator.swift': 'HOM-29',
   'darwin/Classes/Sign/PdfSigner.swift': 'HOM-30',
-  'darwin/Classes/Compress/PdfCompressor.swift': 'HOM-31',
 };
 
 final _socket = RegExp(
@@ -179,7 +179,7 @@ void main() {
   });
 
   test('the viewer and text cores are Flutter-free (XCTest runs them without an app host)', () {
-    for (final path in ['darwin/Classes/Viewer/PdfCore.swift', 'darwin/Classes/Text/PdfTextCore.swift']) {
+    for (final path in ['darwin/Classes/Viewer/PdfCore.swift', 'darwin/Classes/Text/PdfTextCore.swift', 'darwin/Classes/Compress/PdfCompressCore.swift']) {
       expect(_f(path).readAsStringSync(), isNot(matches(RegExp(r'^import Flutter', multiLine: true))), reason: path);
     }
   });

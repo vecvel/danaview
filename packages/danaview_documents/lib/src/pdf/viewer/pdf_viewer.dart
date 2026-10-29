@@ -4,7 +4,8 @@
 // read-only through danaview_pdf (rule 27), asks for the password of an encrypted file in a kit
 // sheet, then shows the native view (PDFKit on Apple, the PdfRenderer texture on Android) under the
 // documents top bar with search (result list), page thumbnails (wrapping grid), the outline, copy
-// of the selected text and "Open in another app". Panels dock on the right on wide windows and
+// of the selected text, "Compress…" (HOM-31, when the app passes [PdfViewer.onCompress]) and
+// "Open in another app". Panels dock on the right on wide windows and
 // below the pages on narrow ones. A file the platform can't open calls [PdfViewer.onUnavailable]
 // so the router falls back (Quick Look, then the file card). Nothing here logs a name, a path, a
 // query, a password or document text (rule 30).
@@ -32,6 +33,10 @@ typedef PdfViewBuilder = Widget Function(BuildContext context, PdfDocumentInfo d
 /// Shows the password sheet (tests replace it).
 typedef PdfPasswordPrompt = Future<bool> Function(BuildContext context, PdfPasswordAttempt tryPassword);
 
+/// Opens the compress sheet for the open file (HOM-31); [password] is the one it was unlocked
+/// with, if any (never logged).
+typedef PdfCompressLauncher = Future<void> Function(BuildContext context, ViewerFile file, {String? password});
+
 enum _Panel { none, search, pages, outline }
 
 /// Windows at least this wide dock panels on the right.
@@ -50,6 +55,7 @@ class PdfViewer extends StatefulWidget {
     this.onUnavailable,
     this.viewBuilder,
     this.passwordPrompt,
+    this.onCompress,
   });
 
   /// The file.
@@ -76,6 +82,9 @@ class PdfViewer extends StatefulWidget {
   /// The password prompt (default [showPdfPasswordSheet]).
   final PdfPasswordPrompt? passwordPrompt;
 
+  /// Opens the compress sheet (HOM-31); null hides "Compress…" in the menu.
+  final PdfCompressLauncher? onCompress;
+
   @override
   State<PdfViewer> createState() => _PdfViewerState();
 }
@@ -84,6 +93,9 @@ class _PdfViewerState extends State<PdfViewer> {
   PdfCapabilities _caps = PdfCapabilities.none;
   PdfDocumentInfo? _doc;
   bool _needsPassword = false;
+
+  /// The password the document was unlocked with, for Compress (HOM-31); never logged.
+  String? _password;
   bool _failed = false;
   PdfViewController? _view;
   StreamSubscription<PdfViewState>? _stateSub;
@@ -127,6 +139,7 @@ class _PdfViewerState extends State<PdfViewer> {
         _outline = null;
         _failed = false;
         _needsPassword = false;
+        _password = null;
         _panel = _Panel.none;
         _hits = const [];
         _currentHit = -1;
@@ -195,6 +208,7 @@ class _PdfViewerState extends State<PdfViewer> {
     if (doc == null) return false;
     final unlocked = await widget.documents.unlock(doc.handle, password);
     if (unlocked == null || unlocked.locked) return false;
+    _password = password;
     if (mounted) {
       setState(() {
         _doc = unlocked;
@@ -337,6 +351,15 @@ class _PdfViewerState extends State<PdfViewer> {
           (PdfDisplayMode.twoUpContinuous, 'Two pages'),
         ])
           DanaviewMenuItem(label: label, selected: mode == m, enabled: open, onTap: () => pdfIgnore(_view!.setDisplayMode(m))),
+      ],
+      if (widget.onCompress case final compress? when _caps.tools.contains(PdfTool.compress)) ...[
+        const DanaviewMenuDivider(),
+        DanaviewMenuItem(
+          label: 'Compress…',
+          icon: Icons.compress_rounded,
+          enabled: doc != null && !doc.locked,
+          onTap: () => unawaited(compress(_menuKey.currentContext ?? context, widget.file, password: _password)),
+        ),
       ],
       if (port != null && port.capabilities.canOpenIn) ...[
         const DanaviewMenuDivider(),

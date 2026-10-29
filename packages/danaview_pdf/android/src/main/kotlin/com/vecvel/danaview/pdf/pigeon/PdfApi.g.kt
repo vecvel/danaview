@@ -2229,6 +2229,71 @@ data class PdfEventMsg (
     return "PdfEventMsg(kind=$kind, viewState=$viewState, toolProgress=$toolProgress)"
   }
 }
+
+/**
+ * The sizes each compression preset would give for one file.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PdfCompressEstimateMsg (
+  /** Size of the file now. */
+  val sourceBytes: Long,
+  /** Expected size with [PdfCompressPresetMsg.high]. */
+  val highBytes: Long,
+  /** Expected size with [PdfCompressPresetMsg.medium]. */
+  val mediumBytes: Long,
+  /** Expected size with [PdfCompressPresetMsg.small]. */
+  val smallBytes: Long,
+  /**
+   * True when the sizes are extrapolated from a sample of pages (long files); false when every
+   * page was compressed in memory (the sizes are then what a run writes).
+   */
+  val sampled: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PdfCompressEstimateMsg {
+      val sourceBytes = pigeonVar_list[0] as Long
+      val highBytes = pigeonVar_list[1] as Long
+      val mediumBytes = pigeonVar_list[2] as Long
+      val smallBytes = pigeonVar_list[3] as Long
+      val sampled = pigeonVar_list[4] as Boolean
+      return PdfCompressEstimateMsg(sourceBytes, highBytes, mediumBytes, smallBytes, sampled)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      sourceBytes,
+      highBytes,
+      mediumBytes,
+      smallBytes,
+      sampled,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as PdfCompressEstimateMsg
+    return PdfApiPigeonUtils.deepEquals(this.sourceBytes, other.sourceBytes) && PdfApiPigeonUtils.deepEquals(this.highBytes, other.highBytes) && PdfApiPigeonUtils.deepEquals(this.mediumBytes, other.mediumBytes) && PdfApiPigeonUtils.deepEquals(this.smallBytes, other.smallBytes) && PdfApiPigeonUtils.deepEquals(this.sampled, other.sampled)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.sourceBytes)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.highBytes)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.mediumBytes)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.smallBytes)
+    result = 31 * result + PdfApiPigeonUtils.deepHash(this.sampled)
+    return result
+  }
+  override fun toString(): String {
+    return "PdfCompressEstimateMsg(sourceBytes=$sourceBytes, highBytes=$highBytes, mediumBytes=$mediumBytes, smallBytes=$smallBytes, sampled=$sampled)"
+  }
+}
 private open class PdfApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -2432,6 +2497,11 @@ private open class PdfApiPigeonCodec : StandardMessageCodec() {
           PdfEventMsg.fromList(it)
         }
       }
+      169.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PdfCompressEstimateMsg.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -2595,6 +2665,10 @@ private open class PdfApiPigeonCodec : StandardMessageCodec() {
       }
       is PdfEventMsg -> {
         stream.write(168)
+        writeValue(stream, value.toList())
+      }
+      is PdfCompressEstimateMsg -> {
+        stream.write(169)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -3401,3 +3475,44 @@ override fun onListen(p0: Any?, sink: PigeonEventSink<PdfEventMsg>) {}
 override fun onCancel(p0: Any?) {}
 }
       
+/**
+ * Estimates for the compress sheet (HOM-31 Apple, HOM-31A Android).
+ *
+ * Generated interface from Pigeon that represents a handler of messages from Flutter.
+ */
+interface PdfCompressHostApi {
+  /** What each preset would give for [input], off the main thread; nothing is written. */
+  fun estimate(input: PdfToolInputMsg, callback: (Result<PdfCompressEstimateMsg>) -> Unit)
+
+  companion object {
+    /** The codec used by PdfCompressHostApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      PdfApiPigeonCodec()
+    }
+    /** Sets up an instance of `PdfCompressHostApi` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: PdfCompressHostApi?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.danaview_pdf.PdfCompressHostApi.estimate$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val inputArg = args[0] as PdfToolInputMsg
+            api.estimate(inputArg) { result: Result<PdfCompressEstimateMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PdfApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PdfApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
