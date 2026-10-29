@@ -19,6 +19,9 @@
 // f is the row's host factor: this run's calibration p50 of the row's kind ([rowKinds]) over the
 // baseline run's (src/calibration.dart), so the gate holds the baseline host's numbers on a slower
 // or faster CI host; on the baseline host f ≈ 1. A kind missing from the baseline uses f = 1.
+// Rows in [medianGatedRows] compare p50 instead of p90 (and p90 as well with DV_PERF_STRICT=1):
+// their p90 is set by old-generation GC pauses, whose share differs between hosts (ubuntu x64 vs
+// the arm64 dev Mac) in a way no p50 calibration tracks.
 // Probe rule (always on): a probe kind's factor may not exceed the codec factor × [probeDriftLimit]
 // (a probe runs the row's own encoder, so this catches an encoder slowdown the probe would hide).
 // Budget rule (only with DV_PERF_STRICT=1, the dev-Mac / device check): a gated row fails when its
@@ -50,6 +53,13 @@ const int noiseFloorUs = 50;
 
 /// How far a probe kind's host factor may exceed the codec factor (see the probe rule above).
 const double probeDriftLimit = 1.6;
+
+/// Rows whose regression gate uses p50 off the baseline host. The autosave row allocates a
+/// multi-MB String and byte buffer per sample, so its p90 is old-generation GC: p90/p50 is ≈ 1.16
+/// on the dev Mac but ≈ 1.3-1.4 on ubuntu runners, which put its p90 14-31 % over baseline × f
+/// on every CI run while its p50 stayed within the probe factor (0.93-1.15×). The probe is a p50,
+/// so the row is gated on its p50; DV_PERF_STRICT=1 (the baseline host) gates its p90 too.
+const Set<String> medianGatedRows = {'autosave_block_2000'};
 
 /// DV_PERF_STRICT=1 also fails on absolute ARCH §18.2 budget misses (dev Mac / devices).
 final bool perfStrict = Platform.environment['DV_PERF_STRICT'] == '1';
@@ -182,7 +192,7 @@ Future<int> _run(String root, List<String> args) async {
       print('Re-measuring ${failing.join(', ')} (attempt ${attempt + 2} of 3)');
       for (final id in failing) {
         for (final r in rerun(id).where((r) => r.id == id)) {
-          if (r.p90 < results[id]!.p90) results[id] = r;
+          if (_gateStat(r) < _gateStat(results[id]!)) results[id] = r;
         }
       }
     }
@@ -192,10 +202,13 @@ Future<int> _run(String root, List<String> args) async {
   for (final r in results.values) {
     final base = baseline[r.id];
     final f = factorOf(r.id);
-    final delta = base == null
+    final median = medianGatedRows.contains(r.id);
+    final stat = median ? 'p50' : 'p90';
+    final b = base == null ? null : (median ? base.p50 : base.p90);
+    final delta = b == null
         ? ''
-        : '  (baseline p90 ${(base / 1000).toStringAsFixed(3)} ms × f = ${(base * f / 1000).toStringAsFixed(3)} ms, '
-            '${(100 * (r.p90 - base * f) / (base * f)).toStringAsFixed(0)}%)';
+        : '  (baseline $stat ${(b / 1000).toStringAsFixed(3)} ms × f = ${(b * f / 1000).toStringAsFixed(3)} ms, '
+            '${(100 * (_gateStat(r) - b * f) / (b * f)).toStringAsFixed(0)}%)';
     print('${r.describe(gated: perfStrict)}$delta');
   }
 
@@ -241,16 +254,24 @@ Future<int> _run(String root, List<String> args) async {
   return 1;
 }
 
+/// The statistic [r] is regression-gated on off the baseline host (see [medianGatedRows]).
+int _gateStat(MetricResult r) => medianGatedRows.contains(r.id) ? r.p50 : r.p90;
+
 /// Why [r] fails the gate on a host [f] times as slow as the baseline host, or null.
-String? _failure(MetricResult r, int? baselineP90, double f) {
+String? _failure(MetricResult r, ({int p50, int p90})? base, double f) {
   if (perfStrict && r.budgetGated && r.p90 > r.budgetUs) {
     return '${r.id}: p90 ${r.p90} µs is over the ARCH §18.2 budget of ${r.budgetUs} µs (DV_PERF_STRICT=1)';
   }
-  if (baselineP90 != null && r.p90 > baselineP90 * f * regressionFactor && r.p90 - baselineP90 * f > noiseFloorUs) {
-    return '${r.id}: p90 ${r.p90} µs regressed more than ${((regressionFactor - 1) * 100).round()}% over the baseline '
-        '$baselineP90 µs × host factor ${f.toStringAsFixed(2)}';
+  if (base == null) return null;
+  String? regressed(String stat, int now, int was) {
+    if (now <= was * f * regressionFactor || now - was * f <= noiseFloorUs) return null;
+    return '${r.id}: $stat $now µs regressed more than ${((regressionFactor - 1) * 100).round()}% over the baseline '
+        '$was µs × host factor ${f.toStringAsFixed(2)}';
   }
-  return null;
+
+  final median = medianGatedRows.contains(r.id);
+  return (median ? regressed('p50', r.p50, base.p50) : null) ??
+      (!median || perfStrict ? regressed('p90', r.p90, base.p90) : null);
 }
 
 /// The baseline run's calibration p50s (µs) by kind (empty without a calibration).
@@ -272,12 +293,18 @@ String _readBaselineHost(File f) {
   return host == null ? '(unknown host)' : '${host['os']} (${host['cpus']} CPUs)';
 }
 
-/// Baseline p90s by metric id (empty when there is no baseline file).
-Map<String, int> _readBaseline(File f) {
+/// Baseline p50s and p90s by metric id (empty when there is no baseline file).
+Map<String, ({int p50, int p90})> _readBaseline(File f) {
   if (!f.existsSync()) return const {};
   final j = jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
   final metrics = (j['metrics'] as Map<String, Object?>?) ?? const {};
-  return {for (final e in metrics.entries) e.key: ((e.value! as Map<String, Object?>)['p90Us']! as num).toInt()};
+  return {
+    for (final e in metrics.entries)
+      e.key: (
+        p50: ((e.value! as Map<String, Object?>)['p50Us']! as num).toInt(),
+        p90: ((e.value! as Map<String, Object?>)['p90Us']! as num).toInt(),
+      ),
+  };
 }
 
 /// The fixture body line (without the trailing newline).
