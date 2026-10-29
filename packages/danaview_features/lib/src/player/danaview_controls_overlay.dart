@@ -935,20 +935,28 @@ class _SeekIndicator extends StatelessWidget {
   final int seconds;
   final bool visible;
 
-  /// Changes on every seek so the bubble bumps again.
+  /// Changes on every seek so the bubble slides in again.
   final int pulse;
+
+  /// How far the bubble slides in, towards the side it seeks to (§11: a plain slide, no bounce).
+  static const double _slide = 8;
 
   @override
   Widget build(BuildContext context) {
     final back = side == _SeekSide.back;
+    // §11: with Reduce Motion on, the bubble only crossfades.
+    final slide = MediaQuery.disableAnimationsOf(context) ? 0.0 : _slide;
     return LayoutBuilder(
       builder: (context, constraints) {
         final bubble = TweenAnimationBuilder<double>(
           key: ValueKey(pulse),
-          tween: Tween(begin: 0.9, end: 1.0),
+          tween: Tween(begin: 0.0, end: 1.0),
           duration: DanaviewMotion.fast,
-          curve: Curves.easeOutBack,
-          builder: (context, scale, child) => Transform.scale(scale: scale, child: child),
+          curve: DanaviewMotion.curve,
+          builder: (context, t, child) => Opacity(
+            opacity: 0.5 + 0.5 * t,
+            child: Transform.translate(offset: Offset((back ? slide : -slide) * (1 - t), 0), child: child),
+          ),
           child: Semantics(
             liveRegion: true,
             label: back ? 'Back $seconds seconds' : 'Forward $seconds seconds',
