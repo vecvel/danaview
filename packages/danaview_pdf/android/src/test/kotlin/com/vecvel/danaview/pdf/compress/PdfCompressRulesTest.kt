@@ -9,6 +9,7 @@
 package com.vecvel.danaview.pdf.compress
 
 import com.vecvel.danaview.pdf.glue.PdfFailure
+import com.vecvel.danaview.pdf.glue.PdfThreads
 import com.vecvel.danaview.pdf.glue.PdfToolsHostApiImpl
 import com.vecvel.danaview.pdf.pigeon.PdfCompressPresetMsg
 import com.vecvel.danaview.pdf.pigeon.PdfCompressRequestMsg
@@ -158,10 +159,13 @@ class PdfCompressRulesTest {
     @Test
     fun toolsApiWithoutCompressorAnswersNotSupported() {
         var result: Result<PdfToolResultMsg>? = null
-        PdfToolsHostApiImpl().compress(
+        val threads = PdfThreads() // android.jar stubs (isReturnDefaultValues); compress never reaches it
+        val tools = PdfToolsHostApiImpl(threads, {})
+        tools.compress(
             PdfCompressRequestMsg("j1", PdfToolInputMsg("/x.pdf", null, false), PdfCompressPresetMsg.SMALL, "/y.pdf"),
         ) { result = it }
         assertEquals("notSupportedOnDevice", (result!!.exceptionOrNull() as PdfPigeonError).code)
-        PdfToolsHostApiImpl().cancel("j1") // no compressor: ignored
+        tools.cancel("j1") // no compressor, no job: ignored
+        threads.shutdown()
     }
 }
