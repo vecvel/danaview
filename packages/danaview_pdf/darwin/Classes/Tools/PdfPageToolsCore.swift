@@ -1,4 +1,7 @@
 // OWNER: HOM-28
+// EXTENDED: S4-W (outputs are created exclusively through PdfNewFiles (Tools/PdfNewFiles.swift) and
+// only files this job created are deleted on failure; a file that appears at an output path after
+// the early check is left alone.)
 // EXTENDED: HOM-29 (an output made from an encrypted PDF is written encrypted with the password the
 // source was opened with, [PdfOutputEncryption]: merge takes its first encrypted input's, split
 // and organise their input's. Owner-approved, as HOM-31's compress does.)
@@ -6,8 +9,9 @@
 // The Flutter-free core of the PDF page tools on iOS and macOS (HOM plan §8.5, D-98j; ARCH v1.2
 // rule 27): merge (PDFs and images), split, and organise (reorder, rotate, delete, extract) with
 // PDFKit. Sources are opened read-only and only ever changed in memory; each tool writes only the
-// new file(s) it is given, which must not exist yet, and deletes them again on cancel or failure
-// (no partial file). Pages keep their content streams, so text stays text (selectable, searchable).
+// new file(s) it is given, which must not exist yet (created exclusively, [PdfNewFiles]), and
+// deletes the ones it created again on cancel or failure (no partial file; never a file that
+// appeared at an output path from elsewhere, S4-W). Pages keep their content streams, so text stays text (selectable, searchable).
 // Callers run these off the main thread with their own PDFDocument instances; every page step
 // polls `control.isCancelled` and reports progress. XCTest runs this file without Flutter
 // (Tests/Tools/, run_xctests.sh: macOS and the iOS Simulator). Nothing here logs a name, a path or
@@ -98,7 +102,7 @@ enum PdfPageToolsCore {
   static func merge(_ inputs: [PdfToolSource], outPath: String, control: PdfToolControl) throws -> PdfWrittenFile {
     guard inputs.count >= 2 else { throw PdfFailure(.invalidArgument, "merge needs at least two inputs") }
     try checkNewFile(outPath, inputs: inputs.map(\.path))
-    return try writingNewFiles([outPath]) {
+    return try writingNewFiles { files in
       // Open everything first, so a bad input fails before any work and the totals are known.
       var parts: [(document: PDFDocument?, image: PDFDocument?)] = []
       var total = 0
@@ -135,7 +139,7 @@ enum PdfPageToolsCore {
         }
       }
       // Keep every source alive until the write: the inserted pages draw from them.
-      return try write(output, to: outPath, control: control, keepAlive: parts, encryption: encryption)
+      return try write(output, to: outPath, control: control, keepAlive: parts, encryption: encryption, files: files)
     }
   }
 
@@ -155,7 +159,7 @@ enum PdfPageToolsCore {
       throw PdfFailure(.invalidArgument, "range out of bounds")
     }
     let total = ranges.reduce(0) { $0 + $1.count }
-    return try writingNewFiles(outPaths) {
+    return try writingNewFiles { files in
       var done = 0
       var out: [PdfWrittenFile] = []
       control.progress(done: 0, total: total)
@@ -170,7 +174,7 @@ enum PdfPageToolsCore {
           done += 1
           control.progress(done: done, total: total)
         }
-        out.append(try write(part, to: path, control: control, keepAlive: source, encryption: encryption))
+        out.append(try write(part, to: path, control: control, keepAlive: source, encryption: encryption, files: files))
       }
       return out
     }
@@ -203,7 +207,7 @@ enum PdfPageToolsCore {
     }
     let pages = (0..<count).compactMap { document.page(at: $0) }
     guard pages.count == count else { throw PdfFailure(.damaged, "unreadable page") }
-    return try writingNewFiles([outPath]) {
+    return try writingNewFiles { files in
       let removals = count - plan.count
       let total = removals + plan.count
       var done = 0
@@ -227,7 +231,7 @@ enum PdfPageToolsCore {
         done += 1
         control.progress(done: done, total: total)
       }
-      return try write(document, to: outPath, control: control, keepAlive: nil, encryption: encryption)
+      return try write(document, to: outPath, control: control, keepAlive: nil, encryption: encryption, files: files)
     }
   }
 
@@ -354,28 +358,33 @@ enum PdfPageToolsCore {
     if control.isCancelled { throw PdfFailure(.cancelled, "cancelled") }
   }
 
-  /// Runs [body]; when it throws, deletes whichever of [paths] it created, then rethrows.
-  static func writingNewFiles<T>(_ paths: [String], _ body: () throws -> T) throws -> T {
+  /// Runs [body] with a fresh [PdfNewFiles]; when it throws, deletes the files [body] created
+  /// through it (and only those), then rethrows.
+  static func writingNewFiles<T>(_ body: (PdfNewFiles) throws -> T) throws -> T {
+    let files = PdfNewFiles()
     do {
-      return try body()
+      return try body(files)
     } catch {
-      for path in paths { try? FileManager.default.removeItem(atPath: path) }
+      files.removeAll()
       throw error
     }
   }
 
-  /// Writes [document] to the new file [path] (exclusive: never over an existing file), encrypted
-  /// with [encryption] when given.
+  /// Writes [document] to the new file [path], encrypted with [encryption] when given. The file is
+  /// created exclusively through [files] first (never over an existing file: one that appeared
+  /// since the early check fails with `invalidArgument` and is left untouched), so a failure
+  /// deletes only what this job created.
   static func write(
-    _ document: PDFDocument, to path: String, control: PdfToolControl, keepAlive: Any?, encryption: PdfOutputEncryption? = nil
+    _ document: PDFDocument, to path: String, control: PdfToolControl, keepAlive: Any?, encryption: PdfOutputEncryption? = nil,
+    files: PdfNewFiles
   ) throws -> PdfWrittenFile {
     try checkCancelled(control)
-    guard !FileManager.default.fileExists(atPath: path) else { throw PdfFailure(.invalidArgument, "output exists") }
+    try files.claim(path)
     let url = URL(fileURLWithPath: path)
     let ok = encryption.map { document.write(to: url, withOptions: $0.options) } ?? document.write(to: url)
     withExtendedLifetime(keepAlive) {}
     guard ok, let attributes = try? FileManager.default.attributesOfItem(atPath: path) else {
-      try? FileManager.default.removeItem(atPath: path)
+      files.remove(path)
       if let free = try? URL(fileURLWithPath: path).deletingLastPathComponent()
         .resourceValues(forKeys: [.volumeAvailableCapacityKey]).volumeAvailableCapacity, free < 1_048_576 {
         throw PdfFailure(.noSpace, "out of space")
