@@ -194,7 +194,9 @@ final class PastSourceEndTests: XCTestCase {
         let copy = try XCTUnwrap(built.composition.mutableCopy() as? AVMutableComposition)
         try ExportSpacer.anchor(copy, built: built, at: start)
         let reader = try AVAssetReader(asset: copy)
-        reader.timeRange = CMTimeRange(start: start, duration: CMTime(seconds: seconds, preferredTimescale: 600))
+        // Never past the grid end (a reader past the last instruction does not start, ExportTime).
+        let end = CMTimeMinimum(CMTimeAdd(start, CMTime(seconds: seconds, preferredTimescale: 600)), ExportTime.gridEnd(built.plan))
+        reader.timeRange = CMTimeRange(start: start, end: end)
         let out = AVAssetReaderVideoCompositionOutput(
             videoTracks: copy.tracks(withMediaType: .video), videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
         out.videoComposition = built.videoComposition

@@ -405,7 +405,10 @@ enum CompositionBuilder {
         guard reader.startReading() else { return nil }
         defer { reader.cancelReading() }
         var best: CMTime?
-        while let sample = output.copyNextSampleBuffer() {
+        var samples = 0
+        // Bounded: 2 s of compressed samples (the cap only guards against a runaway source).
+        while samples < 10_000, let sample = output.copyNextSampleBuffer() {
+            samples += 1
             guard CMSampleBufferGetNumSamples(sample) > 0 else { continue }
             let pts = CMSampleBufferGetPresentationTimeStamp(sample)
             guard pts.isNumeric, CMTimeCompare(pts, trackRange.end) < 0 else { continue }
