@@ -11,10 +11,12 @@
 //               plays 108…179, holds 179 from 5.2 s; the third segment starts past the end.
 // Audio: A (keep pitch, 1×) and B (varispeed) on the same maps: the 4.0 s click lands at 1.0 s and
 // 4.2 s. tone_under_video.mp4 (8 s 1 kHz) checks that the tone stops at the source end.
-// Checked: the composition has media at every output frame; composed frames (AVAssetReader + DVCompositor,
-// the preview item's composition) at 24/30/60 fps over the 30 fps grid; exact preview seeks
-// (AVPlayer); the export file (frames and audio); the mix read (clicks in sync, silent tail, a
-// keep-pitch piece running far past its source keeps its latency compensation).
+// Checked: the composition has media at every output frame and holds the whole last sample at
+// integral scales; composed frames (AVAssetReader + DVCompositor, the preview item's composition)
+// at 24/30/60 fps over the 30 fps grid; readers opening inside the holds (segmented export,
+// ExportSpacer anchoring); exact preview seeks (AVPlayer); the export file (frames, clicks in sync,
+// silent tail written to the end); the mix read (clicks in sync, silent tail, a keep-pitch piece
+// running far past its source keeps its latency compensation).
 
 import AVFoundation
 import XCTest
