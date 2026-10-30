@@ -1,4 +1,6 @@
 // OWNER: HOM-24
+// EXTENDED: HOM-29A (Android annotate input: the texture view turns its gestures into the annotate
+// events while its view is in annotate mode, pdf_texture_annotate.dart).
 //
 // The PDF viewer view (ARCH v1.2 §8 "PDF viewer", V2-120) and its controller over the frozen Pigeon
 // surface (pigeons/pdf_api.dart):
@@ -22,6 +24,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'pdf_document.dart';
+import 'pdf_texture_annotate.dart';
 import 'pigeon/pdf_api.g.dart';
 import 'pigeon/pdf_channels.dart';
 
@@ -508,9 +511,19 @@ class _PdfTextureViewState extends State<PdfTextureView> {
   /// Logical px per point.
   double get _scale => _fit * _zoom;
 
+  // HOM-29A: annotate mode of this view (set by the annotate engine) and the gesture in progress.
+  ValueListenable<PdfTextureAnnotateState?>? _annotateSource;
+  PdfTextureAnnotateState? _annotate;
+  int _pointers = 0;
+  Offset? _downAt;
+  List<Offset>? _stroke; // local logical px
+  _StampDrag? _drag;
+
   @override
   void dispose() {
     final id = _controller?.viewId;
+    _annotateSource?.removeListener(_onAnnotate);
+    if (id != null) PdfTextureAnnotateInput.instance.forget(id);
     if (id != null) unawaited(guardPdf(() => _api.disposeTextureView(id)).catchError((Object _) {}));
     unawaited(_states.close());
     super.dispose();
@@ -536,6 +549,8 @@ class _PdfTextureViewState extends State<PdfTextureView> {
         return;
       }
       final controller = _TextureController(this, created.viewId, _api);
+      _annotateSource = PdfTextureAnnotateInput.instance.watch(created.viewId)..addListener(_onAnnotate);
+      _annotate = _annotateSource!.value;
       setState(() {
         _textureId = created.textureId;
         _controller = controller;
@@ -593,6 +608,145 @@ class _PdfTextureViewState extends State<PdfTextureView> {
     _push();
   }
 
+  // ---- HOM-29A / HOM-30A: annotate input (pdf_texture_annotate.dart) ----
+
+  void _onAnnotate() {
+    if (!mounted) return;
+    setState(() {
+      _annotate = _annotateSource?.value;
+      _stroke = null;
+      _drag = null;
+    });
+  }
+
+  /// [local] (logical px) in column points.
+  Offset _column(Offset local) => Offset(_offsetX + local.dx / _scale, _offsetY + local.dy / _scale);
+
+  /// Page [index]'s displayed rect in column points.
+  Rect _pageRect(int index) {
+    final p = widget.document.pageSizes[index];
+    return Rect.fromLTWH((_layout.width - p.displayWidth) / 2, _layout.topOf(index), p.displayWidth, p.displayHeight);
+  }
+
+  /// The page under [local] and the page-space point there (on [page] when given), or null
+  /// between pages.
+  (int, Offset)? _pagePoint(Offset local, {int? page}) {
+    if (widget.document.pageSizes.isEmpty) return null;
+    final c = _column(local);
+    final index = page ?? _layout.pageAt(c.dy);
+    final r = _pageRect(index);
+    if (page == null && !r.contains(c)) return null;
+    return (index, PdfPageSpace.fromDisplay(widget.document.pageSizes[index], c - r.topLeft));
+  }
+
+  void _annotateTap(Offset local) {
+    final a = _annotate;
+    final id = _controller?.viewId;
+    if (a == null || id == null) return;
+    final hit = _pagePoint(local);
+    if (hit == null) return;
+    final (page, p) = hit;
+    if (a.mode.input == PdfAnnotateInputMsg.ink) {
+      a.events.inkStroke(id, page, [p.dx, p.dy]);
+      return;
+    }
+    final item = PdfTextureAnnotateRules.hitTest(a.items, page, p, PdfTextureAnnotateRules.tapReach / _scale);
+    a.events.tapped(id, page, p.dx, p.dy, item);
+  }
+
+  void _beginAnnotateDrag(Offset local) {
+    final a = _annotate;
+    if (a == null) return;
+    final start = _downAt ?? local;
+    if (a.mode.input == PdfAnnotateInputMsg.ink) {
+      if (_pagePoint(start) == null) return;
+      setState(() => _stroke = [start, if (local != start) local]);
+      return;
+    }
+    if (a.mode.input != PdfAnnotateInputMsg.place) return;
+    final selected = a.items.where((i) => i.id == a.selectedId && i.stamp != null).firstOrNull;
+    final stamp = selected?.stamp;
+    if (selected == null || stamp == null || stamp.pageIndex < 0 || stamp.pageIndex >= widget.document.pageSizes.length) return;
+    final page = stamp.pageIndex;
+    final pageRect = _pageRect(page);
+    final rect = PdfPageSpace.rectToDisplay(widget.document.pageSizes[page], stamp.rect).shift(pageRect.topLeft);
+    final onScreen = Rect.fromLTRB(
+      (rect.left - _offsetX) * _scale,
+      (rect.top - _offsetY) * _scale,
+      (rect.right - _offsetX) * _scale,
+      (rect.bottom - _offsetY) * _scale,
+    );
+    final onHandle = (start - onScreen.bottomRight).distance <= PdfTextureAnnotateRules.handleReach;
+    if (!onHandle && !onScreen.contains(start)) return;
+    _drag = _StampDrag(selected, page, start, rect, pageRect, resize: onHandle);
+  }
+
+  void _updateAnnotateDrag(Offset local) {
+    final stroke = _stroke;
+    if (stroke != null) {
+      setState(() => stroke.add(local));
+      return;
+    }
+    final d = _drag;
+    final a = _annotate;
+    final id = _controller?.viewId;
+    if (d == null || a == null || id == null) return;
+    final next = d.resize
+        ? PdfTextureAnnotateRules.resize(d.startRect, _column(local), d.pageRect)
+        : PdfTextureAnnotateRules.move(d.startRect, (local - d.start) / _scale, d.pageRect);
+    final rect = PdfPageSpace.rectFromDisplay(widget.document.pageSizes[d.page], next.shift(-d.pageRect.topLeft));
+    d.rect = rect;
+    final s = d.item.stamp!;
+    final moved = PdfAnnotateItemMsg(
+      id: d.item.id,
+      stamp: PdfSignatureStampMsg(pageIndex: s.pageIndex, rect: rect, imagePath: s.imagePath, rotationDegrees: s.rotationDegrees),
+    );
+    final items = [for (final i in a.items) i.id == d.item.id ? moved : i];
+    unawaited(guardPdf(() => a.api.showAnnotations(id, items, a.selectedId)).catchError((Object _) {}));
+  }
+
+  void _endAnnotateDrag() {
+    if (_pointers > 0) {
+      // A second finger joined: the gesture becomes a scroll / zoom; nothing is drawn or moved.
+      _cancelAnnotateDrag();
+      return;
+    }
+    final a = _annotate;
+    final id = _controller?.viewId;
+    final stroke = _stroke;
+    final drag = _drag;
+    _drag = null;
+    if (stroke != null) setState(() => _stroke = null);
+    if (a == null || id == null) return;
+    if (stroke != null) {
+      final first = _pagePoint(stroke.first);
+      if (first == null) return;
+      final page = first.$1;
+      final points = <double>[];
+      for (final p in stroke) {
+        final q = _pagePoint(p, page: page)!.$2;
+        points
+          ..add(q.dx)
+          ..add(q.dy);
+      }
+      a.events.inkStroke(id, page, points);
+    } else if (drag != null && drag.rect != null) {
+      a.events.itemMoved(id, drag.item.id, drag.page, drag.rect!);
+    }
+  }
+
+  void _cancelAnnotateDrag() {
+    final drag = _drag;
+    final a = _annotate;
+    final id = _controller?.viewId;
+    _drag = null;
+    if (_stroke != null) setState(() => _stroke = null);
+    if (drag != null && drag.rect != null && a != null && id != null) {
+      // Put the stamp back where it was.
+      unawaited(guardPdf(() => a.api.showAnnotations(id, a.items, a.selectedId)).catchError((Object _) {}));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     _dpr = MediaQuery.devicePixelRatioOf(context);
@@ -608,9 +762,19 @@ class _PdfTextureViewState extends State<PdfTextureView> {
           }
         }
         final id = _textureId;
+        final annotating = _annotate != null;
+        final stroke = _stroke;
+        final mode = _annotate?.mode;
         return GestureDetector(
-          onScaleStart: (_) => _startZoom = _zoom,
+          onScaleStart: (d) {
+            _startZoom = _zoom;
+            if (annotating && d.pointerCount == 1) _beginAnnotateDrag(d.localFocalPoint);
+          },
           onScaleUpdate: (d) {
+            if (_stroke != null || _drag != null) {
+              if (d.pointerCount == 1) return _updateAnnotateDrag(d.localFocalPoint);
+              _cancelAnnotateDrag();
+            }
             if (d.pointerCount > 1) {
               _setZoom(_startZoom * d.scale);
             } else {
@@ -619,12 +783,75 @@ class _PdfTextureViewState extends State<PdfTextureView> {
               _push();
             }
           },
-          onDoubleTap: () => _setZoom(_zoom > 1 ? 1 : 2),
-          child: ClipRect(child: id == null ? const SizedBox.expand() : Texture(textureId: id)),
+          onScaleEnd: (_) => _endAnnotateDrag(),
+          onTapUp: annotating ? (d) => _annotateTap(d.localPosition) : null,
+          onDoubleTap: annotating ? null : () => _setZoom(_zoom > 1 ? 1 : 2),
+          child: Listener(
+            onPointerDown: (e) {
+              _pointers++;
+              if (_pointers == 1) _downAt = e.localPosition;
+            },
+            onPointerUp: (_) => _pointers = math.max(0, _pointers - 1),
+            onPointerCancel: (_) => _pointers = math.max(0, _pointers - 1),
+            child: ClipRect(
+              child: CustomPaint(
+                foregroundPainter:
+                    stroke == null || mode == null ? null : _LiveInkPainter(stroke, Color(mode.inkColorArgb), mode.inkWidth * _scale),
+                child: id == null ? const SizedBox.expand() : Texture(textureId: id),
+              ),
+            ),
+          ),
         );
       },
     );
   }
+}
+
+/// A one-finger drag of the selected stamp in `place` mode (HOM-30A).
+final class _StampDrag {
+  _StampDrag(this.item, this.page, this.start, this.startRect, this.pageRect, {required this.resize});
+
+  final PdfAnnotateItemMsg item;
+  final int page;
+
+  /// Where the drag started (local logical px).
+  final Offset start;
+
+  /// The stamp's and its page's displayed rects in column points when the drag started.
+  final Rect startRect;
+  final Rect pageRect;
+  final bool resize;
+
+  /// The stamp's rect now (page space), once it moved.
+  PdfRectMsg? rect;
+}
+
+/// The stroke being drawn, over the texture (HOM-29A).
+class _LiveInkPainter extends CustomPainter {
+  _LiveInkPainter(this.points, this.color, this.width);
+
+  final List<Offset> points;
+  final Color color;
+  final double width;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(width, 1)
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (final p in points.skip(1)) {
+      path.lineTo(p.dx, p.dy);
+    }
+    if (points.length == 1) path.lineTo(points.first.dx + 0.01, points.first.dy);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_LiveInkPainter old) => true;
 }
 
 /// A texture view's controller: navigation and zoom are Dart's, the rest goes to the plugin.

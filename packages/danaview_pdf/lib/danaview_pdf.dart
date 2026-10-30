@@ -10,5 +10,7 @@ export 'src/pdf_annotate.dart';
 export 'src/pdf_compress.dart';
 export 'src/pdf_document.dart';
 export 'src/pdf_text.dart';
+// HOM-29A: the texture view's annotate geometry (the registry and the rules stay internal).
+export 'src/pdf_texture_annotate.dart' show PdfPageSpace;
 export 'src/pdf_tools.dart';
 export 'src/pdf_view.dart';
