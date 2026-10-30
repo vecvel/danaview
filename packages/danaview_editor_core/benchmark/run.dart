@@ -67,11 +67,19 @@ final bool perfStrict = Platform.environment['DV_PERF_STRICT'] == '1';
 const bool _aot = bool.fromEnvironment('dart.vm.product');
 
 /// The calibration each row is normalized by.
+///
+/// The compile rows build thousands of plan layers per sample, so like the plan encoder they are
+/// allocation- and GC-bound, which the compute probe (a few thousand small objects, young
+/// generation only) is not. Across 21 ubuntu-latest gate runs (2026-10-28..30) their p50 and p90
+/// over baseline ran 0.97-1.40× the compute factor (incremental p50 excess over compute tracked the
+/// planEncode/compute ratio with slope ≈ 1.0) but 0.83-1.19× the planEncode factor, so they are
+/// normalized by [CalibrationKind.planEncode]. That probe times only the plan encoder on a
+/// pre-compiled plan, so a compile slowdown does not move it and still fails the row.
 const Map<String, CalibrationKind> rowKinds = {
   'apply_1000': CalibrationKind.compute,
   'dry_run_1000': CalibrationKind.compute,
-  'incremental_compile_2000': CalibrationKind.compute,
-  'full_compile_2000': CalibrationKind.compute,
+  'incremental_compile_2000': CalibrationKind.planEncode,
+  'full_compile_2000': CalibrationKind.planEncode,
   'plan_encode_2000': CalibrationKind.planEncode,
   'autosave_block_2000': CalibrationKind.autosave,
   'open_2000': CalibrationKind.codec,
