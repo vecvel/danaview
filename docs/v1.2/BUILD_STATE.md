@@ -1,15 +1,47 @@
 # Danaview 1.2.0 build state
 
 Delivery by release slice (BUILD_PLAN §1A). Branch `v1.2-wip`; Android lane `origin/v1.2-android`.
-Last update: 2026-10-22 (S2 Mac half complete).
+Last update: 2026-10-30 (S4-W done on `s4-w`).
 
 | Slice | State | Notes |
 |---|---|---|
 | **S1** Foundations + speed test | **Done on both platforms** (owner items open) | Mac: AIS-01, INT-101, HOM-01, HOM-16, ST-01…ST-05, S1-W, S1-Q Mac half, S1-R iOS candidate. **Android (Windows, 968a10e):** S1-Q Android half green (v1.1 suite 17/18 + 4/4 extras with every 1.2 flag off; s13 only on emulator mic silence, accepted), S1-R Android candidate 1.0.0 (1) AAB 95.4 MB passes check_native_libs.sh, release APK smoke green. Device observations to confirm: OBS-S1A-1 (release player barely advanced the 1080p fixture on the emulator), OBS-S1A-2 (VIEW intent to the running app stays on Home). Windows-host test portability FIX-S1Q-A1…A5 being fixed on the Mac. Owner items: legal date, Q-S1 wording, M-Lab store answers, signing, upload (at the 1.0.0 release). Report: `qa/S1-QA.md` |
 | **S2** Photos & Files Home | **Done on both platforms** (owner items open) | Mac half as before (S2-Q green, S2-R iOS candidate, FIX-S2R-1, D-7). **Android (Windows, `f125f8c`):** D-3, HOM-02A, HOM-04A, HOM-20A, HOM-22A; D-7 verified; S2-Q Android half green (S2 E2E on API 35, full v1.1 suite with the flag 17/18 + 7/7, bmgr backup checks); S2-R Android AAB 101.0 MB (+5.5 MB), native-lib checks pass, release smoke green. Open, low: FIX-S2Q-A1 (E2E expects the platform's primary save target), FIX-S2Q-A2 (e2e_android.sh define pass-through), OBS-S2A-1 (picker names), OBS-S2A-3 (video-only album chips). Report: `qa/S2-QA.md` |
 | **S3** Documents: view and share-in | **Done on both platforms** (2026-10-23) | Mac half as recorded (S3-Q green, iOS RC 26.06 MB). **Android (Windows, 90c7a5b7):** HOM-25, HOM-21A (flag-gated alias); S3-Q Android green (S3 E2E with real intents, v1.1 suite with the flag, flag-off check, tablet grids); S3-R Android AAB 108.2 MB (+7.2 MB), native-lib checks pass. FIX-S3Q-A1 (Office MIME by extension) and A2 (PdfBox-Android + Bouncy Castle licences) fixed. Low items carried to S4. Report: `qa/S3-QA.md` |
-| **S4** Documents: PDF tools | **In progress** | Mac half: HOM-31 compress (see "S4: HOM-31 compress" below); **HOM-28 page tools built** on `s4-hom28` (see "S4: HOM-28 page tools" below); **HOM-29 annotate built** on `s4-hom29` (see "S4: HOM-29 annotate" below; also fixes HOM-28's encrypted-output open item); **HOM-30 sign built** on `s4-hom30` (see "S4: HOM-30 sign" below; closes the plan's [VERIFY: HOM-30]). Android: HOM-28A, HOM-29A, HOM-30A, HOM-31A to do (contracts below). |
+| **S4** Documents: PDF tools | **In progress** | Mac half: HOM-31 compress (see "S4: HOM-31 compress" below); **HOM-28 page tools built** on `s4-hom28` (see "S4: HOM-28 page tools" below); **HOM-29 annotate built** on `s4-hom29` (see "S4: HOM-29 annotate" below; also fixes HOM-28's encrypted-output open item); **HOM-30 sign built** on `s4-hom30` (see "S4: HOM-30 sign" below; closes the plan's [VERIFY: HOM-30]). Android: HOM-28A and HOM-31A merged; HOM-29A, HOM-30A to do (contracts below). **S4-W done** on `s4-w` (see "S4: S4-W wiring and legal" below; report `qa/S4-QA.md` §Wiring). Next: S4-Q. |
 | S5–S9 | Not started | |
+
+## S4: S4-W wiring and legal (Mac lane, 2026-10-30, branch `s4-w`)
+
+**Done.** Report: `qa/S4-QA.md` §Wiring. No feature work; flag defaults unchanged.
+- **Wiring audit** from the app root (`filesHomeOverrides` → `documentsOverrides` →
+  `pdfToolsOverrides`): the viewer's Organise pages / Annotate / Sign / Merge with… / Compress…,
+  the file menu's Organise pages / Merge with… / Compress… / Sign…, the multi-select Merge into PDF
+  and Settings › Privacy's saved signatures each appear only where `danaview_pdf` reports the tool
+  (iOS and macOS: all; Android now: page tools + compress; Android + HOM-29A/30A: all; Windows and
+  Linux: none) and never with the flag off. **Fixed:** the selection bar never offered Merge into
+  PDF (`fileSelectionGroupMerging` once the merge handler is wired). New root test
+  `test/v12/wiring/s4_wiring_test.dart` (flag off + six capability sets).
+- **Legal:** S4 privacy and terms blocks (`pdfToolsStoredBullets`, `pdfToolsPermissionBullets`,
+  `pdfToolsChoiceBullets`, terms "PDF tools and signatures"), only with the flag; PdfBox-Android's
+  licence entry carries Apache PDFBox's NOTICE and names the tools; signature fonts already listed
+  (bundled OFL content fonts). Android backup rules exclude `files/signatures` (Auto Backup, cloud,
+  device transfer; done here for HOM-30A). Store answers: no new data type. **Fixed:**
+  `danaview_pdf` now bundles a `PrivacyInfo.xcprivacy` (file timestamp C617.1, disk space E174.1).
+  Test `test/v12/legal/s4_pdf_tools_text_test.dart`.
+- **iOS fix (Windows lane report):** the PDF tools created outputs non-exclusively and their
+  cleanup deleted the output path even when another writer's file appeared there after the early
+  check. `Classes/Tools/PdfNewFiles.swift` claims each output with `O_CREAT | O_EXCL` and the
+  cleanup deletes only claimed files (page tools, annotate, sign, compress), as Android does.
+  XCTests `Tests/Tools/Core/PdfOutputOwnershipTests.swift` (6) and a compress race test; they fail
+  against the old cores.
+- **Results:** XCTests `run_xctests.sh macos` green (79 incl. the 6 new), `ios-typecheck` green,
+  `ios-sim` on iPhone 17 (iOS 26.5) green (58 incl. the 6 new); `run_compress_xctests.sh` macOS and iPhone 17 green (10 incl. the new one). Dart: wiring,
+  legal, architecture, file actions, selection, library storage plain and with the flag;
+  `home_preservation.sh` green; `flutter analyze --fatal-infos` on the touched paths clean.
+- **For Windows:** HOM-30A must not add the `signatures` backup rule again (done); report
+  `annotate` / `sign` in `PdfAnnotator.supported` / `PdfSigner.supported` only when they work: the
+  Android wiring for them is already tested with that capability set.
 
 ## S4: HOM-31 compress (Mac half, 2026-10-30, branch `s4-hom31`)
 

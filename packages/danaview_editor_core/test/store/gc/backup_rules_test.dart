@@ -9,8 +9,10 @@
 // (`files/library`) leaves cloud backup and Auto Backup on API ≤ 30, and stays in device transfer
 // except its import part files (`files/library/imports`). The library rules have their own test,
 // test/v12/library_storage/android_backup_rules_test.dart at the app root.
-// EXTENDED: HOM-30A, Windows lane: saved signatures (`files/signatures`) leave every backup (cloud,
-// device transfer, API <= 30); tested there too.
+//
+// EXTENDED: S4-W (the PDF sign tool's saved signatures, `files/signatures`, are in no backup and no
+// device transfer: HOM-30 / HOM-30A and the S4 privacy text; checked again by
+// test/v12/legal/s4_pdf_tools_text_test.dart at the app root.)
 
 import 'dart:io';
 
@@ -34,10 +36,12 @@ String _section(String xml, String tag) {
 
 const _editor = [('exclude', 'file', 'danaview/editor'), ('exclude', 'file', 'danaview/speech')];
 
+const _signatures = ('exclude', 'file', 'signatures');
+
 const _expected = {
-  'cloud-backup': [..._editor, ('exclude', 'file', 'library'), ('exclude', 'file', 'signatures')],
-  'device-transfer': [..._editor, ('exclude', 'file', 'library/imports'), ('exclude', 'file', 'signatures')],
-  'full-backup-content': [..._editor, ('exclude', 'file', 'library'), ('exclude', 'file', 'signatures')],
+  'cloud-backup': [..._editor, ('exclude', 'file', 'library'), _signatures],
+  'device-transfer': [..._editor, ('exclude', 'file', 'library/imports'), _signatures],
+  'full-backup-content': [..._editor, ('exclude', 'file', 'library'), _signatures],
 };
 
 void main() {

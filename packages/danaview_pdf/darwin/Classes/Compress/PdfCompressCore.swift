@@ -1,4 +1,6 @@
 // OWNER: HOM-31
+// EXTENDED: S4-W (outPath is created exclusively through PdfNewFiles (Tools/PdfNewFiles.swift); a
+// failed write deletes it only when this job created it, never a file that appeared there.)
 //
 // PDF compress on iOS and macOS (HOM plan §8.5, D-98j; BUILD_PLAN HOM-31), Flutter-free so its
 // XCTests run on the iOS Simulator and macOS without the app (Tests/Compress/). Two stages:
@@ -16,8 +18,8 @@
 //    PDFKit write and stage 2 does all the work (scale 0.75 / 0.5 stands in for the screen step).
 //
 // The source is opened read-only (rule 27); intermediate files live in a private temporary
-// directory that is always removed; only `outPath` is written, once, at the end, and never on
-// cancel or failure. An encrypted source is written back encrypted with the password it was
+// directory that is always removed; only `outPath` is written, once, at the end (created
+// exclusively), and never left on cancel or failure. An encrypted source is written back encrypted with the password it was
 // opened with. Nothing is logged (rule 30).
 
 import CoreGraphics
@@ -112,10 +114,14 @@ enum PdfCompressCore {
       data = try reencrypt(data, password: password)
     }
     if isCancelled() { throw PdfFailure(.cancelled, "cancelled") }
+    // Created exclusively first (S4-W): a file that appeared at outPath since the check above is
+    // never written over or deleted; on a failed write only the file this job created is removed.
+    let files = PdfNewFiles()
+    try files.claim(outPath)
     do {
-      try data.write(to: out, options: .withoutOverwriting)
+      try data.write(to: out)
     } catch {
-      try? FileManager.default.removeItem(at: out)
+      files.removeAll()
       throw writeFailure(error)
     }
     progress(1)

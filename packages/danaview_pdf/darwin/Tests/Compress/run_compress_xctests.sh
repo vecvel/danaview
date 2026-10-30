@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # OWNER: HOM-31
+# EXTENDED: S4-W (compiles Classes/Tools/PdfNewFiles.swift, the shared exclusive-create output helper.)
 #
 # XCTests of the Flutter-free compress core (Classes/Compress/PdfCompressCore.swift over
 # Classes/Viewer/PdfCore.swift) without the Danaview app, assembled in a temporary Swift package
@@ -24,7 +25,7 @@ cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
 
 mkdir -p "$work/Sources/DanaviewPdfCompress" "$work/Tests/DanaviewPdfCompressTests"
-for f in "$darwin/Classes/Viewer/PdfCore.swift" "$darwin/Classes/Compress/PdfCompressCore.swift"; do
+for f in "$darwin/Classes/Viewer/PdfCore.swift" "$darwin/Classes/Tools/PdfNewFiles.swift" "$darwin/Classes/Compress/PdfCompressCore.swift"; do
   ln -s "$f" "$work/Sources/DanaviewPdfCompress/$(basename "$f")"
 done
 ln -s "$here/CompressFixtures.swift" "$work/Tests/DanaviewPdfCompressTests/CompressFixtures.swift"

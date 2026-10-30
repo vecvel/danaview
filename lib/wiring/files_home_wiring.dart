@@ -5,6 +5,9 @@
 // nothing with DANAVIEW_FILES_HOME off.)
 // EXTENDED: HOM-30 (Settings › Privacy also lists the saved signatures of the PDF sign tool, with
 // "Delete all", where the platform reports the sign tool.)
+// EXTENDED: S4-W (the selection bar's file group offers "Merge into PDF" once the S4 merge handler
+// is wired, [fileSelectionGroupMerging]; before, the bar always used the group without it, so the
+// S4 entry point was never reached.)
 //
 // S2 wiring (BUILD_PLAN v1.2 §1A, slice S2 "Photos & Files Home"; the slice's share of INT-103):
 // the Files & Media Home behind DANAVIEW_FILES_HOME. With the flag off (the default, never flipped
@@ -29,8 +32,11 @@
 // * (S3) opens documents and other files in HOM-23's viewer router and adds the S3 overrides
 //   (viewers, linked documents, Share Extension inbox; documents_wiring.dart).
 //
+// * (S4) the PDF tools: the selection bar's "Merge into PDF" here; the rest through
+//   documents_wiring.dart and pdf_tools_wiring.dart.
+//
 // Not wired yet (later slices): Edit photo, Batch edit and Make video montage (INT-105, the
-// editor bridges), Search with AI (S7), the PDF tools (S4).
+// editor bridges), Search with AI (S7).
 //
 // Nothing here logs a name or a path (ARCH v1.2 rule 30).
 
@@ -88,6 +94,10 @@ import 'pdf_tools_wiring.dart' show pdfToolsSupportedProvider, signatureStorePro
 
 /// Whether this build wires the Files & Media Home (`DANAVIEW_FILES_HOME`, default false).
 bool get filesHomeWired => FeatureFlags.filesHomeEnabled;
+
+/// The selection bar's file group with "Merge into PDF" (S4; one instance, so the provider's list
+/// compares equal across rebuilds).
+final SelectionGroupBuilder fileSelectionGroupMerging = fileSelectionGroupWith(canMerge: true);
 
 // ---------------------------------------------------------------------------------------------
 // Start-up: the library, thumbnails, import and the app-side ports.
@@ -315,7 +325,12 @@ Future<FilesHomeRuntime> filesHomeOverrides({
         : CallbackImportPicker(() async => [for (final f in await file_selector.openFiles()) f.path])),
     if (native) importExtraCopiersProvider.overrideWithValue([NativeImportCopier()]),
     if (desktopOut != null) fileOutPortProvider.overrideWithValue(desktopOut),
-    selectionActionGroupsProvider.overrideWithValue(const [mediaSelectionGroup, fileSelectionGroup]),
+    // The file group gains "Merge into PDF" (PDFs and photos only) once S4's merge handler is wired
+    // (pdf_tools_wiring.dart: the platform reports merge).
+    selectionActionGroupsProvider.overrideWith((ref) => [
+          mediaSelectionGroup,
+          if (ref.watch(mergeIntoPdfHandlerProvider) != null) fileSelectionGroupMerging else fileSelectionGroup,
+        ]),
     photoViewerHooksProvider.overrideWith((ref) {
       final port = ref.watch(fileOutPortProvider);
       if (port == null || !port.capabilities.canShare) return PhotoViewerHooks.none;

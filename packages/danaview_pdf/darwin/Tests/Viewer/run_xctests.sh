@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # OWNER: HOM-24
+# EXTENDED: S4-W (Classes/Tools/PdfNewFiles.swift, the tools' exclusive-create output helper, joins
+# the core target; Tests/Tools/Core/PdfOutputOwnershipTests.swift runs with the page tools' tests.)
 # EXTENDED: HOM-30 (sign: Classes/Sign/PdfSignCore.swift and Tests/Sign/Core/ join the core target,
 # Tests/Sign/Glue/ the glue target; ios-sim runs the sign core too.)
 # EXTENDED: HOM-29 (annotate: Tests/Annotate/Core/ joins the core target with
@@ -38,6 +40,7 @@ ios_fw="$flutter_root/bin/cache/artifacts/engine/ios/Flutter.xcframework/ios-arm
 all_sources=()
 while IFS= read -r f; do all_sources+=("$f"); done < <(find "$darwin/Classes" -name '*.swift' | sort)
 core_sources=("$darwin/Classes/Viewer/PdfCore.swift" "$darwin/Classes/Text/PdfTextCore.swift" "$darwin/Classes/Tools/PdfPageToolsCore.swift"
+  "$darwin/Classes/Tools/PdfNewFiles.swift"
   "$darwin/Classes/Annotate/PdfAnnotateCore.swift" "$darwin/Classes/Sign/PdfSignCore.swift")
 tools="$darwin/Tests/Tools"
 annotate="$darwin/Tests/Annotate"

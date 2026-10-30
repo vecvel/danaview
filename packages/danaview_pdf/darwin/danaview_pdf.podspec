@@ -1,4 +1,6 @@
 # OWNER: HOM-24
+# EXTENDED: S4-W (the pod bundles its privacy manifest: the S4 tools read file attributes and the
+# free disk space; see Resources/PrivacyInfo.xcprivacy.)
 #
 # The CocoaPods spec of danaview_pdf (ARCH v1.2 §4.3, §8): one pod for iOS and macOS (shared darwin/
 # sources), at the app's deployment targets (iOS 15.0, macOS 10.15). Classes/Glue/ holds the
@@ -25,4 +27,9 @@ Pod::Spec.new do |s|
   s.osx.frameworks   = 'Cocoa'
   s.swift_version    = '5.0'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
+  # Required-reason API declarations (file timestamps C617.1, disk space E174.1) in its own
+  # resource bundle, as danaview_library_native does (FIX-S2R-1).
+  s.resource_bundles = {
+    'danaview_pdf_privacy' => ['Resources/PrivacyInfo.xcprivacy'],
+  }
 end
