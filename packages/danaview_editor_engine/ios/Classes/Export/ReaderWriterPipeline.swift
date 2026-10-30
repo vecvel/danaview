@@ -55,7 +55,9 @@
 //   CI round 6 shipped a 9.95 s audio track under a 39 s video). For the same reason a source opened
 //   on a range that starts after 0 reads from 0 and drops the frames before its start (the export
 //   itself always reads [0, end)). A read that still ends more than `maxShortfallUs` early is
-//   rejected and never shipped (`shortRead`);
+//   rejected and never shipped (`shortRead`), unless it ended where the composition's audio media
+//   ends (audio past its source end, ARCH §11.5, or segments ending before the timeline end): the
+//   mix output stops there, and the rest of the range is written as silence (`silentTail`);
 // - each export segment reads its own anchored copy of the composition (no composition is mutated
 //   while a reader uses it), every audio read gets a fresh composition (never the video phase's),
 //   and each phase's readers are torn down, and their compositions released, before the next phase
@@ -144,8 +146,9 @@ enum ExportTime {
 ///
 /// Before a reader opens at time T > 0, the spacer track is re-laid as [0, T) and [T, end), each
 /// with the same integral-scale-plus-unscaled-remainder layout as IOS-08, so a spacer sample starts
-/// exactly at T. Nothing visible changes (the spacer is black and never drawn: the compositor only
-/// needs it to run for every output frame).
+/// exactly at T. A last-frame hold (ARCH §11.5) that T falls inside is split at T the same way.
+/// Nothing visible changes (the spacer is black and never drawn: the compositor only needs it to
+/// run for every output frame; a split hold shows the same frame).
 enum ExportSpacer {
     /// Test hook: false reproduces the soak's hang (the reader then opens inside the one sample).
     static var isEnabled = true
@@ -160,6 +163,7 @@ enum ExportSpacer {
     /// itself) so that a sample starts at [start] (FIX-IOS-D7: each export segment anchors its
     /// own copy, so no composition a reader still uses is ever mutated).
     static func anchor(_ composition: AVMutableComposition, built: BuiltComposition, at start: CMTime) throws {
+        try anchorHolds(composition, built: built, at: start)
         guard let id = built.spacerTrackID, let source = built.sources.spacerTrack, let unit = built.sources.spacerRange,
               let track = composition.track(withTrackID: id) else { return }
         let end = track.timeRange.end
@@ -167,6 +171,43 @@ enum ExportSpacer {
         track.removeTimeRange(CMTimeRange(start: .zero, end: end))
         try lay(track, source: source, unit: unit, at: .zero, duration: start)
         try lay(track, source: source, unit: unit, at: start, duration: CMTimeSubtract(end, start))
+    }
+
+    /// Re-lays every last-frame hold (ARCH §11.5, `CompositionBuilder.layFrozen`) that [start] falls
+    /// strictly inside as two holds split at [start], so a sample of that track starts exactly where
+    /// the reader starts: a reader opening inside the one frozen sample stalled like the spacer did
+    /// (iOS 26.5 simulator: readers from some frames inside a 1 s hold never got a frame).
+    static func anchorHolds(_ composition: AVMutableComposition, built: BuiltComposition, at start: CMTime) throws {
+        guard start.isNumeric, CMTimeCompare(start, .zero) > 0 else { return }
+        let held = built.sources.media.values.compactMap { m -> (URL, AVAssetTrack, CMTimeRange)? in
+            guard let unit = m.lastVideoSample, let video = m.video else { return nil }
+            return (m.asset.url, video, unit)
+        }
+        guard !held.isEmpty else { return }
+        for id in built.trackIDBySeq.values {
+            guard let track = composition.track(withTrackID: id) else { continue }
+            let segments: [AVCompositionTrackSegment] = track.segments ?? []
+            func hold(_ i: Int) -> (AVAssetTrack, CMTimeRange)? {
+                let seg = segments[i]
+                guard !seg.isEmpty else { return nil }
+                return held.first { url, _, unit in
+                    seg.sourceURL == url && CMTimeCompare(seg.timeMapping.source.start, unit.start) == 0
+                        && CMTimeCompare(seg.timeMapping.source.duration, unit.duration) <= 0
+                }.map { ($0.1, $0.2) }
+            }
+            guard let i = segments.firstIndex(where: { CMTimeRangeContainsTime($0.timeMapping.target, time: start) }),
+                  let (source, unit) = hold(i) else { continue }
+            var a = i
+            while a > 0, hold(a - 1)?.1 == unit { a -= 1 }
+            var b = i
+            while b + 1 < segments.count, hold(b + 1)?.1 == unit { b += 1 }
+            let runStart = segments[a].timeMapping.target.start
+            let runEnd = segments[b].timeMapping.target.end
+            guard CMTimeCompare(runStart, start) < 0 else { continue }
+            track.removeTimeRange(CMTimeRange(start: runStart, end: runEnd))
+            try CompositionBuilder.layFrozen(track, unit: unit, of: source, at: runStart, duration: CMTimeSubtract(start, runStart))
+            try CompositionBuilder.layFrozen(track, unit: unit, of: source, at: start, duration: CMTimeSubtract(runEnd, start))
+        }
     }
 
     /// The spacer across [at, at + duration): n whole units as one integrally scaled edit, then an
@@ -1219,6 +1260,7 @@ final class MixAudioSource: SegmentAudioSource {
                 let skip = realigns ? Int(max(0, nextFrame - first)) : 0
                 return try sanitized(sample, skip: skip)
             case .end:
+                if let silence = try silentTail(after: current) { return silence }
                 try finishValidation()
                 return nil
             case .failed(let error):
@@ -1247,6 +1289,21 @@ final class MixAudioSource: SegmentAudioSource {
     }
 
     private var resumeTime: CMTime { CMTime(value: nextFrame, timescale: CMTimeScale(ExportPCM.sampleRate)) }
+
+    /// Silence from where [session]'s mix output ended to the range end, when it ended at the end
+    /// of the composition's audio media (within `maxShortfallUs`): the mix output stops there while
+    /// the timeline goes on silent (audio past its source end, ARCH §11.5, or audio segments ending
+    /// before the timeline end). Nil at the range end or when the read stopped inside the media (a
+    /// short read, rejected by the validation).
+    private func silentTail(after session: MixReadSession) throws -> CMSampleBuffer? {
+        let end = MixAudioSource.frame(rangeEnd)
+        guard nextFrame < end else { return nil }
+        let mediaEnd = MixAudioSource.frame(session.composition.built.audioMediaEnd)
+        guard (nextFrame + MixAudioSource.maxShortfallUs * Int64(ExportPCM.sampleRate) / 1_000_000) >= mediaEnd else { return nil }
+        let n = Int(min(end - nextFrame, Int64(ExportPCM.sampleRate)))
+        let silence = try ExportPCM.makeBuffer(frames: n, pts: resumeTime) { _ in }
+        return try sanitized(silence, skip: 0, real: false)
+    }
 
     /// Waits for [ticket] in short slices: at most `watchdog` seconds (then `.hung`), and never
     /// past a stop request (a cancel or background interruption ends the read at once, typed as
