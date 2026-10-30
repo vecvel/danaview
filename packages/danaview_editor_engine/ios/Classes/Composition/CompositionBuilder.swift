@@ -11,8 +11,14 @@
 // composition video track named by their `seq` (CORE-36 packing). Per map segment:
 // `insertTimeRange(source shifted by +500 µs (ε, D-04), at: CMTime(k0, gridFps))`, then
 // `scaleTimeRange` of that range to `CMTime(k1 − k0, gridFps)`. Grid times are never converted to µs
-// CMTimes (D-35); source ranges stay `CMTime(µs, 1_000_000)`. `hold` layers insert a 100 µs source
-// range at `map[0].s0 + ε` scaled across the whole layer (the compositor sees that one frame).
+// CMTimes (D-35); source ranges stay `CMTime(µs, 1_000_000)`. `hold` (freeze-frame) layers show the
+// rule frame at `map[0].s0` (greatest PTS ≤ s0 + ε) for the whole layer: that whole sample
+// [PTS, next PTS) (read once per hold time without decoding, `sampleRange`) is frozen across
+// [k0, k1) like the spacer (one edit at an integral scale plus an unscaled remainder; the same
+// `layFrozen` as the past-source-end hold below, and `ExportSpacer` splits both at a reader's
+// start). Never a 100 µs range inside the sample scaled across the layer: a reader opening inside
+// that edit stalled (a 10 s freeze, segmented export). Only when the sample cannot be read is
+// that 100 µs range used.
 // Past the source end (ARCH §11.5: the rule frame there is the LAST source frame): the segment
 // that runs past the video track's end plays at its own rate up to the last sample's PTS (read
 // once per such asset, `lastSampleRange`), and that whole sample, frozen like the spacer (one edit
@@ -85,8 +91,20 @@ struct CompositionSources {
         /// The last video sample [PTS, track end) in track time, read only for assets a layer plays
         /// past the end of (ARCH §11.5 hold); nil otherwise or when it could not be read.
         var lastVideoSample: CMTimeRange? = nil
+        /// The sample [PTS, next PTS) a `hold` layer freezes, in track time, by the layer's
+        /// `map[0].s0` (µs); a hold time whose sample could not be read is missing.
+        var heldSamples: [Int64: CMTimeRange] = [:]
         let audio: [AVAssetTrack]
         let audioRanges: [CMTimeRange]
+
+        /// Every sample frozen across a range of the composition (holds and the last-frame hold).
+        var frozenSamples: [CMTimeRange] {
+            var units = lastVideoSample.map { [$0] } ?? []
+            for unit in heldSamples.values.sorted(by: { CMTimeCompare($0.start, $1.start) < 0 }) where !units.contains(unit) {
+                units.append(unit)
+            }
+            return units
+        }
     }
 
     let media: [String: Media]
@@ -235,7 +253,7 @@ final class CompositionValidationCollector: NSObject, AVVideoCompositionValidati
 enum CompositionBuilder {
     /// ε of D-04: displayed frame = greatest PTS ≤ s + 500 µs.
     static let epsilonUs: Int64 = 500
-    /// Source length inserted for a `hold` layer (scaled across the layer).
+    /// Source length of the fallback hold range (scaled across the layer) when a sample is unread.
     static let holdSourceUs: Int64 = 100
     /// Timescale of the composition: exact for every v1 grid (lcm 1200) and for µs.
     static let compositionTimeScale: CMTimeScale = 3_000_000
@@ -340,11 +358,18 @@ enum CompositionBuilder {
                 throw EngineError(.mediaOffline, "asset \(id) could not be opened", mediaFingerprint: fpOf(planAsset), retryable: true)
             }
             var last: CMTimeRange?
-            if let v = video, let range = videoRange, layersRunPastTheEnd(plan, asset: id, videoEnd: range.end) {
-                last = lastSampleRange(asset: asset, track: v, trackRange: range)
+            var held: [Int64: CMTimeRange] = [:]
+            if let v = video, let range = videoRange {
+                if layersRunPastTheEnd(plan, asset: id, videoEnd: range.end) {
+                    last = lastSampleRange(asset: asset, track: v, trackRange: range)
+                }
+                for s0 in holdTimes(plan, asset: id) {
+                    held[s0] = sampleRange(asset: asset, track: v, trackRange: range, at: FrameGrid.cmTime(us: s0 + epsilonUs))
+                }
             }
             media[id] = CompositionSources.Media(
-                asset: asset, video: video, videoRange: videoRange, lastVideoSample: last, audio: audio, audioRanges: audioRanges)
+                asset: asset, video: video, videoRange: videoRange, lastVideoSample: last, heldSamples: held, audio: audio,
+                audioRanges: audioRanges)
         }
         let lease = options.access.flatMap { scopedURLs.isEmpty ? nil : $0.lease(scopedURLs) }
 
@@ -389,33 +414,56 @@ enum CompositionBuilder {
         }
     }
 
+    /// The distinct `map[0].s0` (µs) of the `hold` layers of [plan] on [asset] that show a frame.
+    static func holdTimes(_ plan: RenderPlan, asset: String) -> [Int64] {
+        let grid = plan.canvas.editGrid
+        let times = plan.layers.compactMap { l -> Int64? in
+            guard l.kind == .media, l.hold, l.asset == asset, grid.frameIndexOf(l.t1) > grid.frameIndexOf(l.t0) else { return nil }
+            return l.map.first?.s0
+        }
+        return Set(times).sorted()
+    }
+
     /// The presentation range [PTS, track end) of [track]'s last sample in track time (edit lists
-    /// applied), read without decoding (compressed samples of the last 2 s); nil when unreadable.
-    /// The hold edit inserts exactly this range: an edit whose source starts inside a sample (the
-    /// old 100 µs range) stalls an AVAssetReader that starts inside it (segmented export).
+    /// applied); nil when unreadable (see `sampleRange`).
     static func lastSampleRange(asset: AVAsset, track: AVAssetTrack, trackRange: CMTimeRange) -> CMTimeRange? {
-        guard trackRange.end.isNumeric, let reader = try? AVAssetReader(asset: asset) else { return nil }
-        let window = CMTime(value: 2, timescale: 1)
-        let start = CMTimeMaximum(trackRange.start, CMTimeSubtract(trackRange.end, window))
-        reader.timeRange = CMTimeRange(start: start, end: trackRange.end)
+        sampleRange(asset: asset, track: track, trackRange: trackRange, at: trackRange.end)
+    }
+
+    /// The presentation range [PTS, next PTS) in track time (edit lists applied) of the sample of
+    /// [track] shown at track time [time]: the greatest PTS ≤ [time] before the track end (so the
+    /// last sample at or past the end), up to the next sample's PTS (the track end for the last
+    /// sample). Read without decoding (compressed samples of [time − 2 s, time + 1 s]); nil when
+    /// unreadable or when no sample starts at or before [time]. A frozen-frame edit inserts exactly
+    /// this range: an edit whose source starts inside a sample (the old 100 µs range) stalls an
+    /// AVAssetReader that starts inside it (segmented export).
+    static func sampleRange(asset: AVAsset, track: AVAssetTrack, trackRange: CMTimeRange, at time: CMTime) -> CMTimeRange? {
+        guard trackRange.end.isNumeric, time.isNumeric, let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let t = CMTimeMinimum(time, trackRange.end)
+        let start = CMTimeMaximum(trackRange.start, CMTimeSubtract(t, CMTime(value: 2, timescale: 1)))
+        let end = CMTimeMinimum(trackRange.end, CMTimeAdd(t, CMTime(value: 1, timescale: 1)))
+        guard CMTimeCompare(start, end) < 0 else { return nil }
+        reader.timeRange = CMTimeRange(start: start, end: end)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
         output.alwaysCopiesSampleData = false
         guard reader.canAdd(output) else { return nil }
         reader.add(output)
         guard reader.startReading() else { return nil }
         defer { reader.cancelReading() }
-        var best: CMTime?
-        var samples = 0
-        // Bounded: 2 s of compressed samples (the cap only guards against a runaway source).
-        while samples < 10_000, let sample = output.copyNextSampleBuffer() {
-            samples += 1
+        var stamps: [CMTime] = []
+        // Bounded: 3 s of compressed samples (the cap only guards against a runaway source).
+        while stamps.count < 10_000, let sample = output.copyNextSampleBuffer() {
             guard CMSampleBufferGetNumSamples(sample) > 0 else { continue }
             let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-            guard pts.isNumeric, CMTimeCompare(pts, trackRange.end) < 0 else { continue }
-            if best.map({ CMTimeCompare(pts, $0) > 0 }) ?? true { best = pts }
+            if pts.isNumeric, CMTimeCompare(pts, trackRange.end) < 0 { stamps.append(pts) }
         }
-        guard let pts = best, CMTimeCompare(pts, trackRange.start) >= 0 else { return nil }
-        return CMTimeRange(start: pts, end: trackRange.end)
+        guard let pts = stamps.filter({ CMTimeCompare($0, t) <= 0 }).max(by: { CMTimeCompare($0, $1) < 0 }),
+              CMTimeCompare(pts, trackRange.start) >= 0 else { return nil }
+        // Every sample with a PTS inside the window was delivered (decode order does not matter).
+        let next = stamps.filter { CMTimeCompare($0, pts) > 0 && CMTimeCompare($0, end) <= 0 }.min { CMTimeCompare($0, $1) < 0 }
+        if let next { return CMTimeRange(start: pts, end: next) }
+        // No later sample in the window: the last sample (ends at the track end), else unknown.
+        return CMTimeCompare(end, trackRange.end) == 0 ? CMTimeRange(start: pts, end: trackRange.end) : nil
     }
 
     // MARK: Assembly
@@ -455,6 +503,15 @@ enum CompositionBuilder {
                     guard let m0 = layer.map.first else { continue }
                     let k0 = grid.frameIndexOf(layer.t0)
                     let k1 = grid.frameIndexOf(layer.t1)
+                    guard k1 > k0 else { continue }
+                    if let unit = src.heldSamples[m0.s0] {
+                        // The rule sample at s0, frozen across the layer (see the file header).
+                        try insertFrozen(
+                            track: track, unit: unit, of: video, at: grid.cmTime(frame: k0), duration: grid.cmTime(frame: k1 - k0),
+                            ends: &ends)
+                        continue
+                    }
+                    warnings.append("hold sample unread on \(layer.id): sub-sample hold")
                     var start = FrameGrid.cmTime(us: m0.s0 + epsilonUs)
                     let maxStart = CMTimeSubtract(range.end, FrameGrid.cmTime(us: holdSourceUs))
                     if CMTimeCompare(start, maxStart) > 0 {
