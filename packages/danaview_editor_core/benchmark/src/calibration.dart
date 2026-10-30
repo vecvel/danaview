@@ -21,9 +21,10 @@ final class _Cue {
   final String text;
 }
 
-/// Which calibration a row is normalized by: the model/ops/compile rows by [compute] (object
-/// churn, maps, sorting), the open row by [codec] (JSON parse, string and byte building), the
-/// plan encode row by [planEncode] and the autosave row by [autosave]. Kinds slow down by
+/// Which calibration a row is normalized by: the model/ops rows by [compute] (object churn, maps,
+/// sorting), the open row by [codec] (JSON parse, string and byte building), the plan encode and
+/// compile rows by [planEncode] (allocation-heavy; see `rowKinds` in run.dart) and the autosave row
+/// by [autosave]. Kinds slow down by
 /// different amounts between hosts (ubuntu-latest vs the arm64 dev Mac: ≈ 1.2× for compute and
 /// codec, ≈ 1.5× for the project and plan encoders), so one factor would either loosen some rows
 /// or fail others.
