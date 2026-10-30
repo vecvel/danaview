@@ -4,6 +4,8 @@
 // DANAVIEW_FILES_HOME off.)
 // EXTENDED: HOM-21A (Android Open with / Share to Danaview: the NativeIncoming batches are
 // imported by IncomingIntentImporter and shown by the same opener and toasts as HOM-21's paths.)
+// EXTENDED: S4-W (S4 wiring audit: [documentViewerSetupFor] takes the PDF view as a test seam for
+// test/v12/wiring/s4_wiring_test.dart; no behaviour change.)
 // EXTENDED: HOM-31 (PDF compress: "Compress…" in the PDF viewer's menu and in HOM-22's file menu
 // of a PDF, shown when the platform lists the compress tool; the result is imported as a NEW
 // library file "<name> (compressed).pdf" next to the original, which is never modified.)
@@ -103,16 +105,23 @@ final class DocumentViewerSetup {
 }
 
 /// The viewers of [platform] (ARCH v1.2 §3): PDF on iOS, macOS and Android, Quick Look on iOS and
-/// macOS; Windows and Linux have only the built-in viewers. [pdf] and [quickLook] are test seams;
-/// [compress] adds "Compress…" to the PDF viewer's menu (HOM-31).
-DocumentViewerSetup documentViewerSetupFor(TargetPlatform platform, {PdfDocuments? pdf, QuickLookPort? quickLook, PdfCompressLauncher? compress}) {
+/// macOS; Windows and Linux have only the built-in viewers. [pdf], [quickLook] and [pdfView] (the
+/// PDF viewer's native view; S4-W's root wiring test) are test seams; [compress] adds "Compress…"
+/// to the PDF viewer's menu (HOM-31).
+DocumentViewerSetup documentViewerSetupFor(
+  TargetPlatform platform, {
+  PdfDocuments? pdf,
+  QuickLookPort? quickLook,
+  PdfCompressLauncher? compress,
+  PdfViewBuilder? pdfView,
+}) {
   final apple = platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
   final android = platform == TargetPlatform.android;
   final pdfDocs = apple || android ? (pdf ?? PlatformPdfDocuments()) : null;
   final ql = apple ? (quickLook ?? NativeQuickLookPort()) : null;
   return DocumentViewerSetup(
     viewers: {
-      if (pdfDocs != null) ViewerKind.pdf: pdfViewerBuilder(pdfDocs, onCompress: compress),
+      if (pdfDocs != null) ViewerKind.pdf: pdfViewerBuilder(pdfDocs, viewBuilder: pdfView, onCompress: compress),
       if (ql != null) ViewerKind.quickLook: quickLookViewerBuilder(ql),
     },
     probes: FunctionProbes({
