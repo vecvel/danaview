@@ -2,8 +2,9 @@
 //
 // BUILD_PLAN HOM-08 acceptance ("goldens as HOM-06"): the 1.1 Folders section (P-5: header, the
 // device storage root and user-added folder rows) is pixel-equal between DANAVIEW_FILES_HOME off,
-// the `Home` tab with it on, the `Folders` tab's 1.1 fallback, and HOM-18's real Folders tab
-// (rows only: that tab titles the group "Linked folders", HOM plan §5.2), and the folder screen (breadcrumbs, Play all, Shuffle,
+// the `Home` tab with it on (rows only: its header has "See all", DESIGN_SYSTEM §10.3), the Folders
+// screen's 1.1 fallback, and HOM-18's real Folders body on that screen (rows only: it titles the
+// group "Linked folders", HOM plan §5.2), and the folder screen (breadcrumbs, Play all, Shuffle,
 // naturally sorted rows) is pixel-equal with the flag off and on, at three widths.
 //
 // The goldens in goldens/ are written from the flag-off runs only:
@@ -106,9 +107,10 @@ Future<Map<String, Uint8List>> _captureHome(
   await seedGoldenRoots(env);
   await pumpFoldersHome(tester, env, host: host, surface: _surface(width));
   final sections = <String, Finder>{
-    // HOM-18's Folders tab titles the group "Linked folders" (HOM plan §5.2), so only its rows
-    // must match; every other host draws the 1.1 "Folders" header pixel-equal.
-    if (host != FoldersHost.linkedFolders) 'folders_header': foldersHeader(host),
+    // HOM-18's Folders tab titles the group "Linked folders" (HOM plan §5.2), and the Files Home's
+    // `Home` tab puts "See all" (the Folders screen) in the header (DESIGN_SYSTEM §10.3), so only
+    // their rows must match; the other hosts draw the 1.1 "Folders" header pixel-equal.
+    if (host != FoldersHost.linkedFolders && host != FoldersHost.homeTab) 'folders_header': foldersHeader(host),
     'folders_rows': foldersGroup(host, '/Volumes/Media/Movies'),
   };
   await scrollToFolders(tester, host, foldersHeader(host));
@@ -117,6 +119,9 @@ Future<Map<String, Uint8List>> _captureHome(
     findsOneWidget,
     reason: host.label,
   );
+  if (host == FoldersHost.homeTab) {
+    expect(find.descendant(of: foldersHeader(host), matching: find.text('See all')), findsOneWidget);
+  }
   final pixels = <String, Uint8List>{};
   for (final MapEntry(key: name, value: finder) in sections.entries) {
     await scrollToFolders(tester, host, finder);
@@ -180,7 +185,7 @@ void main() {
       await _captureFolder(tester, tree, width, filesHome: false);
     });
 
-    for (final host in [FoldersHost.homeTab, FoldersHost.foldersTab, FoldersHost.linkedFolders]) {
+    for (final host in [FoldersHost.homeTab, FoldersHost.foldersScreen, FoldersHost.linkedFolders]) {
       testWidgets('${host.label}: the Folders section is pixel-equal to flag off at ${width.toInt()} px',
           (tester) async {
         final off = await _captureHome(tester, device, width, FoldersHost.flagOff);

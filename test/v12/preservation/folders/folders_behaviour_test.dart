@@ -1,12 +1,12 @@
 // OWNER: HOM-08
 //
 // BUILD_PLAN HOM-08 (FILES_MEDIA_HOME_PLAN P-5, P-8; ARCH v1.2 V2-32, G-R2): linked folders behave
-// exactly as in 1.1 with DANAVIEW_FILES_HOME off, in the `Home` tab with it on, and in the
-// `Folders` tab with it on: the device storage root first, user-added folders, their menu (Open,
-// Play all, Remove from library), the folder screen (natural sort, breadcrumbs, Play all,
-// Shuffle, Add to queue, Play next), desktop drag-and-drop onto the player and `danaview://`
-// links. Each script runs under every host and must produce the same transcript, and the 1.1
-// values themselves are pinned once.
+// exactly as in 1.1 with DANAVIEW_FILES_HOME off, in the `Home` tab with it on, and on the Folders
+// screen with it on (the Home tab's Folders "See all"): the device storage root first, user-added
+// folders, their menu (Open, Play all, Remove from library), the folder screen (natural sort,
+// breadcrumbs, Play all, Shuffle, Add to queue, Play next), desktop drag-and-drop onto the player
+// and `danaview://` links. Each script runs under every host and must produce the same transcript,
+// and the 1.1 values themselves are pinned once.
 
 import 'dart:io';
 
@@ -306,7 +306,7 @@ void main() {
 
   testWidgets('Home folders: device root, user folders and the folder menu match 1.1 in every host', (tester) async {
     final off = await _homeScript(tester, tree, device, FoldersHost.flagOff);
-    for (final host in [FoldersHost.homeTab, FoldersHost.foldersTab, FoldersHost.linkedFolders]) {
+    for (final host in [FoldersHost.homeTab, FoldersHost.foldersScreen, FoldersHost.linkedFolders]) {
       expect(await _homeScript(tester, tree, device, host), off, reason: host.label);
     }
 

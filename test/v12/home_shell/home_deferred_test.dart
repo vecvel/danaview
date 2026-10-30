@@ -2,7 +2,8 @@
 // * the collapsing large title (§10.1): the "Danaview" title shrinks into the inline title as the
 //   content scrolls, iOS style; the bar and the search row stay pinned; Reduce Motion shows only
 //   the end state; one "Danaview" header for screen readers throughout;
-// * the Projects section (§10.3 #3) and the Projects tab (§10.4), editor only;
+// * the Recent projects section (§10.3) and the Projects screen its See all opens (§10.4), editor
+//   only;
 // * the §10.4 grids' column counts at 320 / 820 / 1280 pt;
 // * the empty-state rule: every content type counts, so a library of photos alone isn't "empty".
 
@@ -96,6 +97,12 @@ void _expectTitleHeader(WidgetTester tester) =>
 Finder _pageScrollable(HomeTab tab) =>
     find.descendant(of: find.byKey(ValueKey('home-tab-page-${tab.name}')), matching: find.byType(Scrollable)).first;
 
+/// Asks the shell for the screen [destination] (a section's See all does the same).
+Future<void> _openScreen(WidgetTester tester, HomeDestination destination) async {
+  HomeDestinationRequestNotification(destination).dispatch(tester.element(find.byKey(const ValueKey('home-tab-strip'))));
+  await pumpFrames(tester, count: 8);
+}
+
 Future<void> _openTab(WidgetTester tester, HomeTab tab) async {
   await tester.ensureVisible(find.byKey(homeTabKey(tab)));
   await tester.pump(const Duration(milliseconds: 300));
@@ -173,7 +180,7 @@ void main() {
       expect(tester.getRect(find.byKey(const ValueKey('home-slot-search'))), search, reason: 'pinned under the bar');
 
       // Each tab keeps its own collapse: a fresh tab shows the large title, Home its collapsed one.
-      await _openTab(tester, HomeTab.playlists);
+      await _openTab(tester, HomeTab.videos);
       expect(_bar(tester).collapse, 0);
       await _openTab(tester, HomeTab.home);
       expect(_bar(tester).collapse, 1);
@@ -200,7 +207,7 @@ void main() {
     }
   });
 
-  group('Projects (§10.3 #3, §10.4)', () {
+  group('Recent projects and the Projects screen (§10.3, §10.4)', () {
     final opened = <String>[];
     var created = 0;
     HomeCallbacks callbacks({bool open = true}) => HomeCallbacks(
@@ -210,7 +217,7 @@ void main() {
         );
     final slots = HomeTabSlots(
       projectsOverview: (_) => const HomeProjectsSection(),
-      projects: (_) => const HomeProjectsTab(),
+      projects: (_) => const HomeProjectsTab(showHeader: false),
     );
     List<Override> projects(int count) => [
           homeProjectsProvider.overrideWithValue(_projects(count)),
@@ -222,7 +229,7 @@ void main() {
       created = 0;
     });
 
-    testWidgets('the section shows the newest cards with Open projects; a card opens its project', (tester) async {
+    testWidgets('the section shows the newest two cards with See all; a card opens its project', (tester) async {
       final env = await _pump(
         tester,
         _home(callbacks: callbacks(), slots: slots),
@@ -231,7 +238,10 @@ void main() {
         overrides: projects(8),
       );
       expect(find.byKey(const ValueKey('home-projects')), findsOneWidget);
-      expect(find.byKey(const ValueKey('home-projects-open-all')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('home-projects')), matching: find.text('Recent projects')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('home-projects-see-all')), findsOneWidget);
+      expect(homeProjectsOverviewLimit, 2);
       expect(find.byType(HomeProjectCard), findsNWidgets(homeProjectsOverviewLimit));
       expect(find.text('Edited 2 h ago'), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp(r'^Project Project 0, Edited 2 h ago')), findsOneWidget);
@@ -261,10 +271,16 @@ void main() {
       await finishHome(tester, env);
     });
 
-    testWidgets('the Projects tab: every project, New project as the one primary button', (tester) async {
+    testWidgets('See all opens the Projects screen: every project, New project as the one primary button',
+        (tester) async {
       final env = await _pump(tester, _home(callbacks: callbacks(), slots: slots), filesHome: true, size: const Size(402, 2400), overrides: projects(3));
-      await _openTab(tester, HomeTab.projects);
-      final page = find.byKey(const ValueKey('home-tab-page-projects'));
+      await tester.tap(find.byKey(const ValueKey('home-projects-see-all')));
+      await pumpFrames(tester, count: 8);
+      final page = find.byKey(homeDestinationScreenKey(HomeDestination.projects));
+      expect(page, findsOneWidget);
+      // Manage (the editor's own list) sits in the screen's top bar, not in a second header.
+      expect(find.descendant(of: page, matching: find.byKey(const ValueKey('home-projects-manage'))), findsOneWidget);
+      expect(find.descendant(of: page, matching: find.text('Projects')), findsOneWidget, reason: 'the title only');
       expect(find.descendant(of: page, matching: find.byType(HomeProjectCard)), findsNWidgets(3));
       expect(find.descendant(of: page, matching: find.byWidgetPredicate((w) => w is DanaviewButton && w.variant == DanaviewButtonVariant.primary)), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('home-projects-new')));
@@ -303,15 +319,15 @@ void main() {
     });
 
     for (final (width, columns) in [(320.0, 2), (820.0, 4), (1280.0, 6)]) {
-      testWidgets('${width.toInt()} pt Projects tab: $columns cards a row, equal heights, no overflow', (tester) async {
+      testWidgets('${width.toInt()} pt Projects screen: $columns cards a row, equal heights, no overflow', (tester) async {
         final env = await _pump(
           tester,
-          _home(callbacks: HomeCallbacks(onOpenProjects: () {}, onOpenProject: (_) {}), slots: HomeTabSlots(projects: (_) => const HomeProjectsTab())),
+          _home(callbacks: HomeCallbacks(onOpenProjects: () {}, onOpenProject: (_) {}), slots: HomeTabSlots(projects: (_) => const HomeProjectsTab(showHeader: false))),
           filesHome: true,
           size: Size(width, 1600),
           overrides: [homeProjectsProvider.overrideWithValue(_projects(7)), homeProjectsClockProvider.overrideWithValue(() => _now)],
         );
-        await _openTab(tester, HomeTab.projects);
+        await _openScreen(tester, HomeDestination.projects);
         final cards = [for (final e in find.byType(HomeProjectCard).evaluate()) tester.getRect(find.byWidget(e.widget))];
         final first = cards.where((c) => c.top == cards.first.top).toList();
         expect(first, hasLength(columns));

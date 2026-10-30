@@ -24,10 +24,12 @@
 // * installs the import picker and copier (HOM-20; `file_selector` on Windows and Linux), the
 //   named-sort store (HOM-19), the file group of the selection bar (HOM-22), the photo viewer's
 //   share hook (HOM-11 over HOM-22's port) and, on Windows and Linux, the save-dialog file-out port;
-// * fills the Home's tab slots: All, Videos, Folders (HOM-18), Photos (HOM-10), the Overview's
-//   top-bar search field (HOM-19; Import is the top bar's menu, HOM-20), Recent photos tray (HOM-09), favourites and recents
-//   (HOM-19) and the selection bar (HOM-12, HOM-22); from S3 also the Documents tab (HOM-18,
-//   [s3DocumentsShown]);
+// * fills the Home's slots (DESIGN_SYSTEM §10.2–10.4: tabs Home · Videos · Photos · Documents):
+//   the Videos tab, the filter's "Show: All" view of every file and the Folders screen (HOM-18),
+//   Photos (HOM-10), the Projects screen and the Overview's Recent projects (the editor's, where
+//   it is wired), the top-bar search field ("Search everything", HOM-19; Import is the top bar's
+//   menu, HOM-20), Recent photos tray (HOM-09), favourites and recents (HOM-19) and the selection
+//   bar (HOM-12, HOM-22); from S3 also the Documents tab (HOM-18, [s3DocumentsShown]);
 // * shows Settings › Library storage (HOM-17) after Settings › Privacy;
 // * (S3) opens documents and other files in HOM-23's viewer router and adds the S3 overrides
 //   (viewers, linked documents, Share Extension inbox; documents_wiring.dart).
@@ -565,14 +567,16 @@ class FilesHome extends StatefulWidget {
   /// The header's editor button (null hides it).
   final VoidCallback? onOpenEditor;
 
-  /// The Projects tab (null hides it; the editor's platforms only).
+  /// The Projects screen's Manage (null hides it; with [onOpenProject] null, the Projects screen is
+  /// one Open projects pane; the editor's platforms only).
   final VoidCallback? onOpenProjects;
 
-  /// Opens a project in the editor by id: the Overview's Projects section and the Projects tab's
-  /// cards (null hides the section and keeps the tab's single Open projects pane).
+  /// Opens a project in the editor by id: the cards of the Overview's Recent projects, the Videos
+  /// tab's Projects row and the Projects screen (null hides the section and the row).
   final ValueChanged<String>? onOpenProject;
 
-  /// Opens the New project sheet: the Projects tab's primary button (null hides it).
+  /// Opens the New project sheet: the Videos tab's New project card and the Projects screen's
+  /// primary button (null hides both).
   final VoidCallback? onNewProject;
 
   @override
@@ -586,6 +590,11 @@ class FilesHomeState extends State<FilesHome> {
   /// tabs keep their scroll and folder positions.
   static void showTab(BuildContext context, HomeTab tab) => HomeTabRequestNotification(tab).dispatch(context);
 
+  /// Asks the Home shell to push the full screen [destination] from [context] (inside the shell:
+  /// its pages or its top bar).
+  static void showScreen(BuildContext context, HomeDestination destination) =>
+      HomeDestinationRequestNotification(destination).dispatch(context);
+
   void _openEntry(BuildContext context, WidgetRef ref, FileEntry entry) =>
       unawaited(openLibraryEntry(context, ref, entry, onOpenPlayer: widget.onOpenPlayer));
 
@@ -597,14 +606,14 @@ class FilesHomeState extends State<FilesHome> {
 
   void _openFavourite(BuildContext context, WidgetRef ref, FavouriteItem item) => switch (item) {
         FavouriteEntry(:final entry) => _openEntry(context, ref, entry),
-        FavouriteFolder() => showTab(context, HomeTab.folders),
+        FavouriteFolder() => showScreen(context, HomeDestination.folders),
       };
 
   void _openHit(BuildContext context, WidgetRef ref, SearchHit hit) {
     final item = hit.item;
     switch (item.origin) {
       case SearchOrigin.danaview:
-        if (item.isFolder) return showTab(context, HomeTab.folders);
+        if (item.isFolder) return showScreen(context, HomeDestination.folders);
         final id = EntryId.tryParse(item.id.value);
         final entry = id == null ? null : ref.read(libraryStoreProvider)?.reader.entry(id);
         if (entry != null) _openEntry(context, ref, entry);
@@ -662,7 +671,7 @@ class FilesHomeState extends State<FilesHome> {
         base: HomeTabSlots(
           // The editor's projects (§10.3 #3, §10.4), only where the editor runs and was wired;
           // the list comes from homeProjectsProvider (lib/wiring/projects_wiring.dart).
-          projects: widget.onOpenProject == null ? null : (_) => const HomeProjectsTab(),
+          projects: widget.onOpenProject == null ? null : (_) => const HomeProjectsTab(showHeader: false),
           projectsOverview: widget.onOpenProject == null ? null : (_) => const HomeProjectsSection(),
           photos: _consumer((context, ref) => FilesHomePhotosPane(
                 photos: PhotosTab(
@@ -685,7 +694,7 @@ class FilesHomeState extends State<FilesHome> {
           // Import is the top bar's (+) menu.
           search: _consumer((context, ref) => LibrarySearchField(
                 key: const ValueKey('s2-search'),
-                hint: 'Search videos, photos, docs',
+                hint: 'Search everything',
                 onOpen: (hit) => _openHit(context, ref, hit),
               )),
           // See all bubbles a tab request up to the shell (HOM-09, HOM-05).

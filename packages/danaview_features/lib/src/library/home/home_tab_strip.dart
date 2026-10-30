@@ -1,4 +1,5 @@
 // OWNER: HOM-05
+// EXTENDED: Home four tabs (no pill is selected while the filter shows every file)
 //
 // The Home's tab strip (ARCH v1.2 V2-101, §1.4): a row of pill tabs built from kit primitives
 // (DanaviewPressable, kit colours and Figtree through the kit theme; no Material tab chrome). It
@@ -33,7 +34,8 @@ abstract final class HomeTabStripColors {
 
 /// The tab strip of the Files & Media Home (DESIGN_SYSTEM §10.2): capsule pills that scroll sideways.
 class HomeTabStrip extends StatefulWidget {
-  /// A strip of [tabs] with [selected] highlighted; [onSelected] gets the tapped or keyed tab.
+  /// A strip of [tabs] with [selected] highlighted (none while null, the filter's "Show: All"
+  /// view); [onSelected] gets the tapped or keyed tab.
   const HomeTabStrip({
     super.key,
     required this.tabs,
@@ -45,8 +47,8 @@ class HomeTabStrip extends StatefulWidget {
   /// The visible tabs, in order.
   final List<HomeTab> tabs;
 
-  /// The current tab.
-  final HomeTab selected;
+  /// The current tab, or null when the Home shows a view that is no tab (every file).
+  final HomeTab? selected;
 
   /// Called with the tab the user picked.
   final ValueChanged<HomeTab> onSelected;
@@ -75,14 +77,17 @@ class _HomeTabStripState extends State<HomeTabStrip> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(widget.selected, animate: false));
+    if (widget.selected case final selected?) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(selected, animate: false));
+    }
   }
 
   @override
   void didUpdateWidget(HomeTabStrip oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.selected != widget.selected) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(widget.selected, animate: true));
+    if (oldWidget.selected != widget.selected && widget.selected != null) {
+      final selected = widget.selected!;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(selected, animate: true));
     }
   }
 
@@ -109,8 +114,11 @@ class _HomeTabStripState extends State<HomeTabStrip> {
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
     final tabs = widget.tabs;
-    final current = tabs.indexOf(widget.selected);
-    if (current < 0 || tabs.isEmpty) return KeyEventResult.ignored;
+    if (tabs.isEmpty) return KeyEventResult.ignored;
+    // With no selected tab (every file shown) the keys start from the focused pill.
+    final focused = tabs.indexWhere((tab) => _focus[tab]?.hasFocus ?? false);
+    final current = widget.selected == null ? focused : tabs.indexOf(widget.selected!);
+    if (current < 0) return KeyEventResult.ignored;
     final rtl = Directionality.of(context) == TextDirection.rtl;
     final key = event.logicalKey;
     final int target;

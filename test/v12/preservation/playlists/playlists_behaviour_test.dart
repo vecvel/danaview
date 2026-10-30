@@ -2,9 +2,11 @@
 //
 // BUILD_PLAN HOM-07 (FILES_MEDIA_HOME_PLAN P-4, P-6; ARCH v1.2 V2-32): the 1.1 Playlists section,
 // the playlist screen, the add-to-playlist sheet and the queue they feed behave exactly as in 1.1
-// with DANAVIEW_FILES_HOME off, in the `Home` tab with it on and in the `Playlists` tab with it on.
-// The transcript test replays one script of playlist actions in every host and requires the same
-// result (same callbacks, same queue, same library), and pins the 1.1 values themselves.
+// with DANAVIEW_FILES_HOME off and, with it on, on the Playlists screen (the Videos tab's See all,
+// DESIGN_SYSTEM §10.4) and in the `Home` tab (Continue watching's add-to-playlist sheet). The
+// transcript test replays one script of playlist actions in every host with a Playlists section
+// and requires the same result (same callbacks, same queue, same library), and pins the 1.1
+// values themselves.
 
 import 'dart:io';
 
@@ -98,10 +100,8 @@ void main() {
 
   testWidgets('one script of playlist actions gives the 1.1 result in every host', (tester) async {
     final off = await _runScript(tester, tree, PlaylistsHost.flagOff);
-    final homeTab = await _runScript(tester, tree, PlaylistsHost.homeTab);
-    final playlistsTab = await _runScript(tester, tree, PlaylistsHost.playlistsTab);
-    expect(homeTab, off, reason: 'Home tab differs from flag off');
-    expect(playlistsTab, off, reason: 'Playlists tab differs from flag off');
+    final screen = await _runScript(tester, tree, PlaylistsHost.playlistsScreen);
+    expect(screen, off, reason: 'Playlists screen differs from flag off');
 
     // And the 1.1 values themselves.
     List<Object?> step(String name) => off.cast<List<Object?>>().firstWhere((e) => e.first == name);
@@ -124,9 +124,10 @@ void main() {
 
   group('overflow matrix 280-1280 px x 0.85-1.35', () {
     for (final surface in homeShellSurfaces) {
-      testWidgets('Playlists tab and playlist screen at $surface', (tester) async {
-        var env = await pumpPlaylistsHome(tester, host: PlaylistsHost.playlistsTab, tree: tree, surface: surface);
-        await scrollToInHost(tester, PlaylistsHost.playlistsTab, inHost(PlaylistsHost.playlistsTab, find.text('Empty')));
+      testWidgets('Playlists screen and playlist screen at $surface', (tester) async {
+        var env = await pumpPlaylistsHome(tester, host: PlaylistsHost.playlistsScreen, tree: tree, surface: surface);
+        await scrollToInHost(
+            tester, PlaylistsHost.playlistsScreen, inHost(PlaylistsHost.playlistsScreen, find.text('Empty')));
         expect(tester.takeException(), isNull);
         await finishHome(tester, env);
         env = await pumpPlaylistScreen(tester, filesHome: true, tree: tree, surface: surface, name: longPlaylistName);
@@ -138,7 +139,7 @@ void main() {
     }
   });
 
-  for (final host in PlaylistsHost.values) {
+  for (final host in PlaylistsHost.withSection) {
     group(host.label, () {
       testWidgets('P-4: rows in creation order with counts; empty and single disable Play/Shuffle', (tester) async {
         final calls = PlaylistCalls();
@@ -182,7 +183,7 @@ void main() {
       testWidgets('P-4: with no playlists the empty state creates the first one', (tester) async {
         final calls = PlaylistCalls();
         final env = await pumpPlaylistsHome(tester, host: host, tree: tree, calls: calls, seed: false);
-        if (host == PlaylistsHost.playlistsTab) {
+        if (host == PlaylistsHost.playlistsScreen) {
           await scrollToInHost(tester, host, playlistsEmpty(host));
           expect(
               find.descendant(of: playlistsEmpty(host), matching: find.text('Collect videos and links to play them in order.')),

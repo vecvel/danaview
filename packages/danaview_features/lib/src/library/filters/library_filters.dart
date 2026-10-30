@@ -53,9 +53,9 @@ enum LibraryFilter {
     return entry.kind == FileKind.document && entry.docKind == subFilter;
   }
 
-  /// The Home tab of this filter.
-  HomeTab get tab => switch (this) {
-        LibraryFilter.all => HomeTab.all,
+  /// The Home tab of this filter; `All` is no tab but the filter's "Show: All" view (null).
+  HomeTab? get tab => switch (this) {
+        LibraryFilter.all => null,
         LibraryFilter.videos => HomeTab.videos,
         LibraryFilter.photos => HomeTab.photos,
         LibraryFilter.documents => HomeTab.documents,

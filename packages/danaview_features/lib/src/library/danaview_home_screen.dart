@@ -1,5 +1,7 @@
 // EXTENDED: HOM-05 (Files & Media Home tab shell behind DANAVIEW_FILES_HOME; ARCH v1.2 V2-101, V2-32)
 // EXTENDED: UI pivot (DESIGN_SYSTEM §10: Cinema B Home structure)
+// EXTENDED: Home four tabs (DESIGN_SYSTEM §10.2–10.4: Home · Videos · Photos · Documents; See all
+// pushes the Projects, Playlists and Folders screens; the filter's "Show: All" lists every file)
 //
 // [DanaviewHomeScreen] builds the §10 Home. The top bar holds the logo tile, the "Danaview" large
 // title and the round toolbar buttons (Import on phones; Video editor, Import and Settings on
@@ -11,8 +13,11 @@
 //
 // With DANAVIEW_FILES_HOME off the header scrolls with the sections and there are no tabs (pinned
 // by test/home_screen_test.dart and the goldens of test/v12/home_shell/). With it on, the header,
-// the search row and a tab strip sit in the top bar and a tab host shows one tab: `Home` holds the
-// same sections plus the Files Home slots; the other tabs come from [HomeTabSlots].
+// the search row and a tab strip (Home · Videos · Photos · Documents) sit in the top bar and a tab
+// host shows one tab: `Home` holds Continue watching, Recent photos, Recent projects, Documents and
+// Folders; `Videos` holds Continue watching, Projects, Playlists and every video; the other tabs
+// come from [HomeTabSlots]. A section's "See all" pushes the Projects, Playlists or Folders screen
+// ([HomeDestination]); the filter's "Show: All" swaps the tab for the view of every file.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -28,6 +33,7 @@ import 'add_to_playlist_sheet.dart';
 import 'home/home_callbacks.dart';
 import 'home/home_chrome.dart';
 import 'home/home_content.dart';
+import 'home/home_destination_screen.dart';
 import 'home/home_grid.dart';
 import 'home/home_media_card.dart';
 import 'home/home_playlists.dart';
@@ -44,27 +50,44 @@ import 'library_providers.dart';
 import 'library_widgets.dart';
 import 'media_picker.dart';
 import 'open_link_dialog.dart';
+import 'tabs/videos_tab.dart';
 
 export 'home/home_callbacks.dart' show HomeCallbacks, HomeCallbacksScope;
 export 'home/home_chrome.dart'
     show HomeChromeLabels, HomePhoneTabBar, HomeTopBar, homeIsCompact, homeTitleCollapseFor, homeTitleCollapseDistance;
 export 'home/home_content.dart' show homeHasFilesContentProvider;
+export 'home/home_destination_screen.dart' show HomeDestinationScreen, homeDestinationScreenKey;
 export 'home/home_grid.dart' show HomeCardGrid, homeAdaptiveColumns, homeCardGridGap;
-export 'home/home_playlists.dart' show HomePlaylistCard, homePlaylistColumns;
+export 'home/home_playlists.dart' show HomePlaylistActions, HomePlaylistCard, HomePlaylistsRow, homePlaylistColumns;
 export 'home/home_projects.dart'
     show
         HomeProject,
         HomeProjectCard,
+        HomeProjectsManageButton,
+        HomeProjectsRow,
         HomeProjectsSection,
         HomeProjectsTab,
+        homeOpenProjectsScreen,
         homeProjectColumns,
+        homeProjectsRowShown,
         homeProjectEditedLabel,
         homeProjectsOverviewLimit,
         homeProjectsClockProvider,
         homeProjectsProvider;
 export 'home/home_media_card.dart' show HomeMediaCard, HomeMediaCardGrid, HomeMediaCardRow;
+export 'home/home_tab_host.dart' show homeAllPageKey, homeTabPageKey;
 export 'home/home_tab_strip.dart' show homeTabKey;
-export 'home/home_tabs.dart' show HomeSlotBuilder, HomeTab, HomeTabSlots, homeEditorPlatform, visibleHomeTabs;
+export 'home/home_tabs.dart'
+    show
+        HomeDestination,
+        HomeDestinationRequestNotification,
+        HomeSlotBuilder,
+        HomeTab,
+        HomeTabRequestNotification,
+        HomeTabSlots,
+        homeEditorPlatform,
+        homeProjectsShown,
+        visibleHomeTabs;
 
 /// The content width from which the Home splits into two columns (iPad landscape, desktop).
 const double homeTwoColumnMinWidth = 1100;
@@ -120,13 +143,22 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
   /// The selected tab with DANAVIEW_FILES_HOME on.
   late HomeTab _tab = widget.initialTab;
 
+  /// The filter's "Show: All" view (every file) is shown in place of [_tab].
+  bool _showAll = false;
+
+  /// The page whose scroll drives the top bar: the selected tab, or [_allPage].
+  Object get _page => _showAll ? _allPage : _tab;
+
+  /// The "Show: All" page's id in [_tabCollapse].
+  static const Object _allPage = 'all';
+
   /// How far the top bar's large title has collapsed (0 to 1) with DANAVIEW_FILES_HOME on: the
   /// visible page's scroll drives it, and only the top bar listens, so a scroll frame rebuilds
   /// nothing else (§10.1).
   final ValueNotifier<double> _titleCollapse = ValueNotifier(0);
 
-  /// The last collapse of each tab's page, restored when the tab is shown again.
-  final Map<HomeTab, double> _tabCollapse = {};
+  /// The last collapse of each page (a tab or [_allPage]), restored when it is shown again.
+  final Map<Object, double> _tabCollapse = {};
 
   @override
   void dispose() {
@@ -134,8 +166,9 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
     super.dispose();
   }
 
-  /// Records [tab]'s page scroll; the top bar follows the visible page only.
-  bool _onPageScroll(HomeTab tab, ScrollNotification notification) {
+  /// Records the scroll of page [tab] (a tab or [_allPage]); the top bar follows the visible page
+  /// only.
+  bool _onPageScroll(Object tab, ScrollNotification notification) {
     if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) return false;
     final metrics = notification.metrics;
     final collapse = homeTitleCollapseFor(
@@ -143,7 +176,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
       reduceMotion: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
     );
     _tabCollapse[tab] = collapse;
-    if (tab == _tab) _titleCollapse.value = collapse;
+    if (tab == _page) _titleCollapse.value = collapse;
     return false;
   }
 
@@ -234,30 +267,16 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
     if (mounted) setState(() => _showAllRecent = false);
   }
 
-  Future<void> _newPlaylist() async {
-    final name = await promptNewPlaylist(context, ref);
-    if (name != null && mounted) widget.onOpenPlaylist(name);
-  }
+  /// New, Play, Shuffle, Rename and Delete of a playlist (shared with the Videos tab's row and the
+  /// Playlists screen).
+  HomePlaylistActions get _playlists => HomePlaylistActions(
+        context,
+        ref,
+        onOpenPlayer: widget.onOpenPlayer,
+        onOpenPlaylist: widget.onOpenPlaylist,
+      );
 
-  void _playPlaylist(String name, {bool shuffle = false}) {
-    final items = _library.playlistItems(name);
-    if (items.isEmpty) {
-      DanaviewToast.show(context, '"$name" is empty. Add videos to play it.', icon: Icons.info_outline_rounded);
-      return;
-    }
-    _play(items, shuffle: shuffle);
-  }
-
-  Future<void> _renamePlaylist(String name) async {
-    final renamed = await promptRenamePlaylist(context, ref, name);
-    if (renamed != null && mounted) showDanaviewSuccess(context, 'Renamed to "$renamed"');
-  }
-
-  Future<void> _deletePlaylist(String name) async {
-    if (!await confirmDeletePlaylist(context, name)) return;
-    await _library.deletePlaylist(name);
-    if (mounted) showDanaviewSuccess(context, 'Deleted "$name"');
-  }
+  Future<void> _newPlaylist() => _playlists.create();
 
   Future<void> _playFolder(LibraryFolder folder) async {
     final listing = await LibraryRepository.browseDirectory(folder.path);
@@ -461,6 +480,11 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
   /// Lays the sections out for [width]: one column on phones, the grouped lists 2-up on tablets
   /// in portrait, and two columns (media ≈ 60 %, lists ≈ 40 %) from [homeTwoColumnMinWidth].
   ///
+  /// With [slots] (the Files Home's `Home` tab) the sections are Continue watching, Recent photos,
+  /// Recent projects, Documents and Folders (with "See all" opening the Folders screen); the
+  /// playlists live on the Videos tab and the Playlists screen. Without (flag off) they are the
+  /// 1.1 sections: Continue watching, Playlists and Folders.
+  ///
   /// The one empty state shows only when every content type is empty: the 1.1 history, playlists
   /// and folders and, with the Files Home ([filesContent], see [homeHasFilesContentProvider]),
   /// its videos, photos, documents, Danaview folders and projects.
@@ -477,11 +501,15 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
         KeyedSubtree(key: const ValueKey('home-slot-projects'), child: Builder(builder: projects)),
     ];
     final lists = <Widget>[
-      if (_playlistSection(state.playlists, hideEmpty: true) case final playlists?) playlists,
-      if (_folderSection(state.roots, hideEmpty: true) case final folders?) folders,
-      if (slots != null && slots.showDocuments)
-        if (slots.documentsOverview case final documents?)
-          KeyedSubtree(key: const ValueKey('home-slot-documents'), child: Builder(builder: documents)),
+      if (slots == null) ...[
+        if (_playlistSection(state.playlists, hideEmpty: true) case final playlists?) playlists,
+        if (_folderSection(state.roots, hideEmpty: true) case final folders?) folders,
+      ] else ...[
+        if (slots.showDocuments)
+          if (slots.documentsOverview case final documents?)
+            KeyedSubtree(key: const ValueKey('home-slot-documents'), child: Builder(builder: documents)),
+        if (_folderSection(state.roots, hideEmpty: true, seeAll: true) case final folders?) folders,
+      ],
     ];
     Widget column(List<Widget> children) => Column(
           mainAxisSize: MainAxisSize.min,
@@ -518,122 +546,238 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
 
   // ---- DANAVIEW_FILES_HOME on (HOM-05) ----
 
-  List<HomeTab> _visibleTabs(BuildContext context) => visibleHomeTabs(
-        platform: Theme.of(context).platform,
-        projectsAvailable: widget.callbacks.onOpenProjects != null || widget.tabSlots.projects != null,
-        showDocuments: widget.tabSlots.showDocuments,
-      );
+  List<HomeTab> _visibleTabs() => visibleHomeTabs(showDocuments: widget.tabSlots.showDocuments);
 
   void _selectTab(HomeTab tab) {
-    if (tab == _tab) return;
-    setState(() => _tab = tab);
+    if (tab == _tab && !_showAll) return;
+    setState(() {
+      _tab = tab;
+      _showAll = false;
+    });
     _titleCollapse.value = _tabCollapse[tab] ?? 0;
   }
 
-  /// The filter menu: one row per visible tab, the selected one checked.
+  /// The filter's "Show: All": every file, in place of the selected tab.
+  void _showEverything() {
+    if (_showAll) return;
+    setState(() => _showAll = true);
+    _titleCollapse.value = _tabCollapse[_allPage] ?? 0;
+  }
+
+  /// The filter menu: Show All (every file), then one row per visible library tab (Videos,
+  /// Photos, Documents); the shown one is checked.
   List<DanaviewMenuEntry> _filterEntries(List<HomeTab> tabs, HomeTab selected) => [
         const DanaviewMenuHeader('Show'),
+        DanaviewMenuItem(label: 'All', selected: _showAll, onTap: _showEverything),
         for (final tab in tabs)
-          DanaviewMenuItem(label: tab.label, selected: tab == selected, onTap: () => _selectTab(tab)),
+          if (tab != HomeTab.home)
+            DanaviewMenuItem(label: tab.label, selected: !_showAll && tab == selected, onTap: () => _selectTab(tab)),
       ];
 
+  /// Whether the Projects screen exists: the app opens projects (or gave a projects body) and the
+  /// platform runs the editor.
+  bool get _projectsShown => homeProjectsShown(
+        platform: Theme.of(context).platform,
+        projectsAvailable: widget.callbacks.onOpenProjects != null ||
+            widget.callbacks.onOpenProject != null ||
+            widget.tabSlots.projects != null,
+      );
+
+  /// Pushes the full screen [destination] (a section's "See all").
+  void _openDestination(HomeDestination destination) {
+    if (destination == HomeDestination.projects && !_projectsShown) return;
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        settings: RouteSettings(name: 'home-${destination.name}'),
+        builder: (context) => HomeCallbacksScope(
+          callbacks: widget.callbacks,
+          child: HomeDestinationScreen(
+            key: homeDestinationScreenKey(destination),
+            destination: destination,
+            actions: _destinationActions(destination),
+            selectionBar: widget.tabSlots.selectionBar,
+            body: Builder(builder: (context) => _destinationBody(context, destination)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The top bar actions of the screen [destination]: New (Playlists, once there is one) and
+  /// Manage (Projects).
+  List<Widget> _destinationActions(HomeDestination destination) => switch (destination) {
+        HomeDestination.playlists => [
+            Consumer(
+              builder: (context, ref, _) {
+                final none = ref.watch(libraryControllerProvider.select((s) => s.playlists.isEmpty));
+                if (none) return const SizedBox.shrink();
+                return DanaviewButton.text(
+                  key: const ValueKey('home-playlists-new'),
+                  label: 'New',
+                  size: DanaviewButtonSize.sm,
+                  onPressed: _newPlaylist,
+                );
+              },
+            ),
+          ],
+        HomeDestination.projects => const [HomeProjectsManageButton()],
+        HomeDestination.folders => const [],
+      };
+
+  /// The body of the screen [destination]: the supplied body, else the shell's own (the
+  /// Playlists cards, the 1.1 Folders section, the project grid or the Open projects pane).
+  Widget _destinationBody(BuildContext context, HomeDestination destination) {
+    if (widget.tabSlots.screenOf(destination) case final body?) return body(context);
+    if (destination == HomeDestination.projects) {
+      if (widget.callbacks.onOpenProject == null && widget.callbacks.onOpenProjects != null) {
+        return LayoutBuilder(
+          builder: (context, constraints) => HomeProjectsPane(
+            onOpenProjects: widget.callbacks.onOpenProjects!,
+            padding: danaviewLibraryInsets(constraints.maxWidth).copyWith(
+              top: DanaviewSpacing.lg,
+              bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
+            ),
+          ),
+        );
+      }
+      return const HomeProjectsTab(showHeader: false);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final insets = danaviewLibraryInsets(constraints.maxWidth);
+        final padding = insets.copyWith(
+          top: destination == HomeDestination.playlists ? DanaviewSpacing.lg : DanaviewSpacing.xs,
+          bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
+        );
+        // The screen reads the latest library state itself (it lives on its own route).
+        return Consumer(
+          builder: (context, ref, _) {
+            final state = ref.watch(libraryControllerProvider);
+            final sections = !state.hasLoaded
+                ? const <Widget>[]
+                : switch (destination) {
+                    HomeDestination.playlists => [_playlistScreenSection(state.playlists)],
+                    _ => [_folderSection(state.roots)!],
+                  };
+            return CustomScrollView(
+              key: PageStorageKey('home-screen-scroll-${destination.name}'),
+              slivers: [SliverPadding(padding: padding, sliver: SliverList.list(children: sections))],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildFilesHome(BuildContext context, {required bool compact}) {
-    final tabs = _visibleTabs(context);
+    final tabs = _visibleTabs();
     final selected = tabs.contains(_tab) ? _tab : HomeTab.home;
     final selectionBar = widget.tabSlots.selectionBar;
     final search = widget.tabSlots.search;
     return HomeCallbacksScope(
       callbacks: widget.callbacks,
-      child: DanaviewRefreshOnReturn(
-        onReturn: () => _library.refresh(),
-        child: Scaffold(
-          backgroundColor: DanaviewColors.background,
-          bottomNavigationBar: _phoneTabBar(context, compact: compact),
-          body: DanaviewLibraryFrame(
-            topBar: LayoutBuilder(
-              builder: (context, constraints) {
-                final insets = danaviewLibraryInsets(constraints.maxWidth);
-                return Column(
-                  key: const ValueKey('home-files-top-bar'),
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: insets.copyWith(top: DanaviewSpacing.md),
-                      child: ValueListenableBuilder<double>(
-                        valueListenable: _titleCollapse,
-                        builder: (context, collapse, _) => _topBar(context, compact: compact, collapse: collapse),
-                      ),
-                    ),
-                    if (search != null)
-                      Padding(
-                        padding: insets.copyWith(top: DanaviewSpacing.md),
-                        child: HomeSearchRow(
-                          search: KeyedSubtree(key: const ValueKey('home-slot-search'), child: Builder(builder: search)),
-                          filter: HomeFilterButton(
-                            entries: _filterEntries(tabs, selected),
-                            active: selected != HomeTab.home,
-                            semanticLabel: 'Filter: showing ${selected.label}',
+      // A page, slot or the search row asks for a tab (See all of the Recent photos tray) or a
+      // screen (See all of Folders, a folder hit in search). Tabs are selected here and the
+      // request keeps bubbling to any app shell above (false); screens are pushed here (true).
+      child: NotificationListener<HomeDestinationRequestNotification>(
+        onNotification: (request) {
+          _openDestination(request.destination);
+          return true;
+        },
+        child: NotificationListener<HomeTabRequestNotification>(
+          onNotification: (request) {
+            if (_visibleTabs().contains(request.tab)) _selectTab(request.tab);
+            return false;
+          },
+          child: DanaviewRefreshOnReturn(
+            onReturn: () => _library.refresh(),
+            child: Scaffold(
+              backgroundColor: DanaviewColors.background,
+              bottomNavigationBar: _phoneTabBar(context, compact: compact),
+              body: DanaviewLibraryFrame(
+                topBar: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final insets = danaviewLibraryInsets(constraints.maxWidth);
+                    return Column(
+                      key: const ValueKey('home-files-top-bar'),
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: insets.copyWith(top: DanaviewSpacing.md),
+                          child: ValueListenableBuilder<double>(
+                            valueListenable: _titleCollapse,
+                            builder: (context, collapse, _) => _topBar(context, compact: compact, collapse: collapse),
                           ),
                         ),
-                      ),
-                    const SizedBox(height: DanaviewSpacing.xs),
-                    HomeTabStrip(
-                      key: const ValueKey('home-tab-strip'),
-                      tabs: tabs,
-                      selected: selected,
-                      onSelected: _selectTab,
-                      padding: insets,
-                    ),
-                  ],
-                );
-              },
-            ),
-            body: Stack(
-              children: [
-                Positioned.fill(
-                  // A page or slot asks for a tab (See all of the Recent photos tray): select it
-                  // here, and let the request keep bubbling to any app shell above (false).
-                  child: NotificationListener<HomeTabRequestNotification>(
-                    onNotification: (request) {
-                      if (_visibleTabs(context).contains(request.tab)) _selectTab(request.tab);
-                      return false;
-                    },
-                    child: Builder(
-                      builder: (context) {
-                        final host = HomeTabHost(
-                          tabs: tabs,
-                          selected: selected,
-                          pageBuilder: (context, tab) => NotificationListener<ScrollNotification>(
-                            onNotification: (notification) => _onPageScroll(tab, notification),
-                            child: _tabPage(context, tab),
+                        if (search != null)
+                          Padding(
+                            padding: insets.copyWith(top: DanaviewSpacing.md),
+                            child: HomeSearchRow(
+                              search: KeyedSubtree(key: const ValueKey('home-slot-search'), child: Builder(builder: search)),
+                              filter: HomeFilterButton(
+                                entries: _filterEntries(tabs, selected),
+                                active: _showAll || selected != HomeTab.home,
+                                semanticLabel: 'Filter: showing ${_showAll ? 'All' : selected.label}',
+                              ),
+                            ),
                           ),
-                        );
-                        final barHeight = selectionBar == null ? 0.0 : _selectionBarHeight;
-                        // Always wrapped (same tree shape) so the tab pages keep their state when
-                        // the bar appears. The bar already includes the bottom safe area, so it
-                        // replaces that inset rather than adding to it.
-                        final media = MediaQuery.of(context);
-                        final bottom = barHeight > media.padding.bottom ? barHeight : media.padding.bottom;
-                        return MediaQuery(
-                          data: media.copyWith(padding: media.padding.copyWith(bottom: bottom)),
-                          child: host,
-                        );
-                      },
-                    ),
-                  ),
+                        const SizedBox(height: DanaviewSpacing.xs),
+                        HomeTabStrip(
+                          key: const ValueKey('home-tab-strip'),
+                          tabs: tabs,
+                          selected: _showAll ? null : selected,
+                          onSelected: _selectTab,
+                          padding: insets,
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                if (selectionBar != null)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: _SizeReporter(
-                      onSize: _onSelectionBarSize,
-                      child: KeyedSubtree(key: const ValueKey('home-slot-selection-bar'), child: Builder(builder: selectionBar)),
+                body: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Builder(
+                        builder: (context) {
+                          final host = HomeTabHost(
+                            tabs: tabs,
+                            selected: selected,
+                            showAll: _showAll,
+                            pageBuilder: (context, tab) => NotificationListener<ScrollNotification>(
+                              onNotification: (notification) => _onPageScroll(tab, notification),
+                              child: _tabPage(context, tab),
+                            ),
+                            allPageBuilder: (context) => NotificationListener<ScrollNotification>(
+                              onNotification: (notification) => _onPageScroll(_allPage, notification),
+                              child: _allPageBody(context),
+                            ),
+                          );
+                          final barHeight = selectionBar == null ? 0.0 : _selectionBarHeight;
+                          // Always wrapped (same tree shape) so the tab pages keep their state when
+                          // the bar appears. The bar already includes the bottom safe area, so it
+                          // replaces that inset rather than adding to it.
+                          final media = MediaQuery.of(context);
+                          final bottom = barHeight > media.padding.bottom ? barHeight : media.padding.bottom;
+                          return MediaQuery(
+                            data: media.copyWith(padding: media.padding.copyWith(bottom: bottom)),
+                            child: host,
+                          );
+                        },
+                      ),
                     ),
-                  ),
-              ],
+                    if (selectionBar != null)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: _SizeReporter(
+                          onSize: _onSelectionBarSize,
+                          child: KeyedSubtree(key: const ValueKey('home-slot-selection-bar'), child: Builder(builder: selectionBar)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -641,11 +785,32 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
     );
   }
 
-  /// The page of [tab]: the shell's own pages for Home and Playlists, the supplied body for the
-  /// others, and the fallbacks of home_tabs.dart when none was supplied.
+  /// The filter's "Show: All" page: every file (the supplied All grid), else the empty pane.
+  Widget _allPageBody(BuildContext context) {
+    if (widget.tabSlots.all case final all?) return all(context);
+    return LayoutBuilder(
+      builder: (context, constraints) => HomeEmptyTabPane(
+        tab: null,
+        padding: danaviewLibraryInsets(constraints.maxWidth).copyWith(
+          top: DanaviewSpacing.xs,
+          bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
+        ),
+      ),
+    );
+  }
+
+  /// The page of [tab]: the shell's own page for Home, the supplied body for the others, the
+  /// shell's Videos page when no Videos body was supplied, and the empty pane otherwise.
   Widget _tabPage(BuildContext context, HomeTab tab) {
     final body = widget.tabSlots.bodyOf(tab);
     if (body != null) return body(context);
+    if (tab == HomeTab.videos) {
+      return VideosTab(
+        onOpenPlayer: widget.onOpenPlayer,
+        onOpenPlaylist: widget.onOpenPlaylist,
+        onOpenFolder: widget.onOpenFolder,
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final insets = danaviewLibraryInsets(constraints.maxWidth);
@@ -653,29 +818,18 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
           top: DanaviewSpacing.xs,
           bottom: MediaQuery.paddingOf(context).bottom + DanaviewSpacing.xxl,
         );
+        if (tab != HomeTab.home) return HomeEmptyTabPane(tab: tab, padding: padding);
         final width = constraints.maxWidth - insets.horizontal;
         // Each page reads the latest library state itself: pages built once stay alive.
         return Consumer(
           builder: (context, ref, _) {
             final state = ref.watch(libraryControllerProvider);
-            final sections = switch (tab) {
-              HomeTab.home => _overviewSections(
-                  state,
-                  width: width,
-                  slots: widget.tabSlots,
-                  filesContent: ref.watch(homeHasFilesContentProvider),
-                ),
-              HomeTab.playlists => state.hasLoaded ? [_playlistTabSection(state.playlists)] : const <Widget>[],
-              HomeTab.folders => state.hasLoaded ? [_folderSection(state.roots)!] : const <Widget>[],
-              _ => null,
-            };
-            if (sections == null) {
-              if (tab == HomeTab.projects && widget.callbacks.onOpenProject != null) return const HomeProjectsTab();
-              if (tab == HomeTab.projects && widget.callbacks.onOpenProjects != null) {
-                return HomeProjectsPane(onOpenProjects: widget.callbacks.onOpenProjects!, padding: padding);
-              }
-              return HomeEmptyTabPane(tab: tab, padding: padding);
-            }
+            final sections = _overviewSections(
+              state,
+              width: width,
+              slots: widget.tabSlots,
+              filesContent: ref.watch(homeHasFilesContentProvider),
+            );
             return CustomScrollView(
               key: PageStorageKey('home-tab-scroll-${tab.name}'),
               slivers: [SliverPadding(padding: padding, sliver: SliverList.list(children: sections))],
@@ -765,8 +919,8 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
     );
   }
 
-  /// Playlists as a grouped list with New in the header. Empty: hidden on Home ([hideEmpty]), an
-  /// empty state with New playlist on the Playlists tab.
+  /// Playlists as a grouped list with New in the header (the 1.1 Home, flag off). Empty: hidden
+  /// with [hideEmpty], else an empty state with New playlist.
   Widget? _playlistSection(List<PlaylistSummary> playlists, {bool hideEmpty = false}) {
     if (playlists.isEmpty && hideEmpty) return null;
     return _section(key: const ValueKey('home-playlists'), [
@@ -778,17 +932,7 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
             : DanaviewButton.text(label: 'New', size: DanaviewButtonSize.sm, onPressed: _newPlaylist),
       ),
       if (playlists.isEmpty)
-        DanaviewInlineEmpty(
-          icon: Icons.queue_music_rounded,
-          title: 'No playlists yet',
-          message: 'Collect videos and links to play them in order.',
-          action: DanaviewButton.secondary(
-            label: 'New playlist',
-            icon: Icons.add_rounded,
-            size: DanaviewButtonSize.sm,
-            onPressed: _newPlaylist,
-          ),
-        )
+        _playlistsEmpty()
       else
         DanaviewLibraryCardGrid(
           children: [
@@ -796,88 +940,61 @@ class _DanaviewHomeScreenState extends ConsumerState<DanaviewHomeScreen> {
               DanaviewLibraryRow(
                 leading: const DanaviewIconTile(Icons.queue_music_rounded),
                 title: playlist.name,
-                subtitle: _playlistSubtitle(playlist),
+                subtitle: HomePlaylistActions.subtitle(playlist),
                 onTap: () => widget.onOpenPlaylist(playlist.name),
-                trailing: _playlistMenu(playlist),
+                trailing: _playlists.menu(playlist),
               ),
           ],
         ),
     ]);
   }
 
-  /// The More menu of a playlist row or card: Play, Shuffle, Rename and Delete.
-  Widget _playlistMenu(PlaylistSummary playlist) => DanaviewMenuIconTrigger(
-        icon: Icons.more_horiz_rounded,
-        tooltip: 'More',
-        entries: [
-          DanaviewMenuItem(
-            label: 'Play',
-            icon: Icons.play_arrow_rounded,
-            enabled: playlist.itemCount > 0,
-            onTap: () => _playPlaylist(playlist.name),
-          ),
-          DanaviewMenuItem(
-            label: 'Shuffle',
-            icon: Icons.shuffle_rounded,
-            enabled: playlist.itemCount > 1,
-            onTap: () => _playPlaylist(playlist.name, shuffle: true),
-          ),
-          const DanaviewMenuDivider(),
-          DanaviewMenuItem(
-            label: 'Rename',
-            icon: Icons.edit_rounded,
-            onTap: () => _renamePlaylist(playlist.name),
-          ),
-          DanaviewMenuItem(
-            label: 'Delete',
-            icon: Icons.delete_outline_rounded,
-            destructive: true,
-            onTap: () => _deletePlaylist(playlist.name),
-          ),
-        ],
+  /// The empty state of the Playlists section and screen: New playlist.
+  Widget _playlistsEmpty() => DanaviewInlineEmpty(
+        icon: Icons.queue_music_rounded,
+        title: 'No playlists yet',
+        message: 'Collect videos and links to play them in order.',
+        action: DanaviewButton.secondary(
+          label: 'New playlist',
+          icon: Icons.add_rounded,
+          size: DanaviewButtonSize.sm,
+          onPressed: _newPlaylist,
+        ),
       );
 
-  /// The Playlists tab (§10.4): playlist cards (a 2×2 mosaic, the name and the count) in the
-  /// adaptive grid, New in the header; the same empty state as the section when there are none.
-  Widget _playlistTabSection(List<PlaylistSummary> playlists) {
-    if (playlists.isEmpty) return _playlistSection(playlists)!;
+  /// The Playlists screen's body (§10.4): playlist cards (a 2×2 mosaic, the name and the count)
+  /// in the adaptive grid; the empty state when there are none. New sits in the screen's top bar.
+  Widget _playlistScreenSection(List<PlaylistSummary> playlists) {
+    if (playlists.isEmpty) return _section(key: const ValueKey('home-playlists'), [_playlistsEmpty()]);
+    final actions = _playlists;
     return _section(key: const ValueKey('home-playlists'), [
-      DanaviewLibrarySectionHeader(
-        'Playlists',
-        prominent: true,
-        action: DanaviewButton.text(label: 'New', size: DanaviewButtonSize.sm, onPressed: _newPlaylist),
-      ),
       HomeCardGrid(
         key: const ValueKey('home-playlists-grid'),
         columnsFor: homePlaylistColumns,
-        children: [
-          for (final playlist in playlists)
-            HomePlaylistCard(
-              name: playlist.name,
-              subtitle: _playlistSubtitle(playlist),
-              items: _library.playlistItems(playlist.name),
-              onOpen: () => widget.onOpenPlaylist(playlist.name),
-              trailing: _playlistMenu(playlist),
-            ),
-        ],
+        children: [for (final playlist in playlists) actions.card(playlist)],
       ),
     ]);
   }
 
-  static String _playlistSubtitle(PlaylistSummary playlist) =>
-      playlist.itemCount == 0 ? 'No videos yet' : formatCount(playlist.itemCount, 'video');
-
-  /// Folders as a grouped list with Add in the header. Empty: hidden on Home ([hideEmpty]), an
-  /// empty state with Add folder on the Folders tab.
-  Widget? _folderSection(List<LibraryFolder> roots, {bool hideEmpty = false}) {
+  /// Folders as a grouped list with Add in the header (with [seeAll], the Files Home's `Home`
+  /// tab: "See all", which opens the Folders screen; Add folder stays in the Import menu). Empty:
+  /// hidden on Home ([hideEmpty]), an empty state with Add folder on the Folders screen.
+  Widget? _folderSection(List<LibraryFolder> roots, {bool hideEmpty = false, bool seeAll = false}) {
     if (roots.isEmpty && hideEmpty) return null;
     return _section(key: const ValueKey('home-folders'), [
       DanaviewLibrarySectionHeader(
         'Folders',
         prominent: true,
-        action: canPickFolders && roots.isNotEmpty
-            ? DanaviewButton.text(label: 'Add', size: DanaviewButtonSize.sm, onPressed: _addFolder)
-            : null,
+        action: seeAll
+            ? DanaviewButton.text(
+                key: const ValueKey('home-folders-see-all'),
+                label: 'See all',
+                size: DanaviewButtonSize.sm,
+                onPressed: () => _openDestination(HomeDestination.folders),
+              )
+            : canPickFolders && roots.isNotEmpty
+                ? DanaviewButton.text(label: 'Add', size: DanaviewButtonSize.sm, onPressed: _addFolder)
+                : null,
       ),
       if (roots.isEmpty)
         DanaviewInlineEmpty(

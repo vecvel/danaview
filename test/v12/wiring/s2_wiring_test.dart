@@ -8,10 +8,11 @@
 //
 // * flag off: no override, no Files & Media Home, Settings shows only Settings › Privacy;
 // * flag on: the library opens under the support directory, the import, organise, selection,
-//   photo-viewer and thumbnail providers are installed; the Home shows Home, All, Videos, Photos,
-//   Playlists and Folders (no Documents until S3) with the 1.1 sections on Home, the Import and
-//   search row, the library tabs read the store, opening a document shows its file menu, See all
-//   and folder requests switch tabs; Settings shows Library storage after Privacy;
+//   photo-viewer and thumbnail providers are installed; the Home shows Home, Videos, Photos (and
+//   Documents from S3; DESIGN_SYSTEM §10.2) with Continue watching and Folders on Home, the Import
+//   and "Search everything" row, the filter's Show: All lists every file from the store, See all
+//   switches tabs and folder requests push the Folders screen; Settings shows Library storage
+//   after Privacy;
 // * the Home with the S2 slots and Settings with Library storage don't overflow at 280-1280 px and
 //   text scale 0.85-1.35.
 
@@ -30,7 +31,6 @@ import 'package:danaview_features/src/library/desktop/desktop_drop_target.dart';
 import 'package:danaview_features/src/library/file_actions/file_actions.dart';
 import 'package:danaview_features/src/library/files/library_store_providers.dart';
 import 'package:danaview_features/src/library/home/home_tab_host.dart' show HomeTabHost;
-import 'package:danaview_features/src/library/home/recent_photos_tray.dart' show HomeTabRequestNotification;
 import 'package:danaview_features/src/library/import/import_pickers.dart';
 import 'package:danaview_features/src/library/import/import_providers.dart';
 import 'package:danaview_features/src/library/organise/organise_providers.dart';
@@ -70,6 +70,22 @@ class _App {
   Future<void> go(String location) async {
     router.go(location);
     await pumpFrames(tester, count: 10);
+  }
+
+  /// Picks "Show: All" in the filter menu: every file, in the All grid.
+  Future<void> showAll() async {
+    await tester.tap(find.byKey(const ValueKey('home-filter')));
+    await pumpFrames(tester);
+    await tester.tap(find.text('All').hitTestable().last);
+    await pumpFrames(tester, count: 8);
+    expect(tester.takeException(), isNull);
+  }
+
+  /// Pushes the screen [destination] the way its See all does.
+  Future<void> screen(HomeDestination destination) async {
+    FilesHomeState.showScreen(tester.element(_tabStrip), destination);
+    await pumpFrames(tester, count: 8);
+    expect(tester.takeException(), isNull);
   }
 
   Future<void> tab(HomeTab tab) async {
@@ -296,22 +312,27 @@ void main() {
   });
 
   group('flag on: the Home in the app', () {
-    testWidgets('tabs are Home, All, Videos, Photos, Playlists, Folders, and Documents from S3', (tester) async {
+    testWidgets('tabs are Home, Videos, Photos, and Documents from S3', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 844), 1.0, padding: EdgeInsets.only(top: 47, bottom: 34)));
       final app = await _pumpApp(tester, filesHome: true);
       expect(find.byType(FilesHome), findsOneWidget);
       expect(_tabStrip, findsOneWidget);
-      for (final tab in [HomeTab.home, HomeTab.all, HomeTab.videos, HomeTab.photos, HomeTab.playlists, HomeTab.folders]) {
+      for (final tab in [HomeTab.home, HomeTab.videos, HomeTab.photos]) {
         expect(find.byKey(homeTabKey(tab)), findsOneWidget, reason: tab.name);
       }
       expect(find.byKey(homeTabKey(HomeTab.documents)), findsOneWidget, reason: 'S3-W shows Documents');
-      expect(find.byKey(homeTabKey(HomeTab.projects)), findsNothing, reason: 'the editor is not wired in tests');
+      expect(tester.widget<HomeTabHost>(find.byType(HomeTabHost)).tabs, HomeTab.values, reason: 'four tabs');
+      // The editor is not wired in tests: no Projects row on the Videos tab.
+      await app.tab(HomeTab.videos);
+      expect(find.byKey(const ValueKey('home-projects-row')), findsNothing);
+      await app.tab(HomeTab.home);
       expect(s2DocumentsShown, isFalse, reason: "HOM-18's package default");
       expect(s3DocumentsShown, isTrue);
       // The top bar holds Import (+) (Open file / folder / link and Import to Danaview…) and, under
       // the title, the search field with the filter button (DESIGN_SYSTEM §10.1).
       expect(find.byKey(const ValueKey('home-import')), findsOneWidget);
       expect(find.byKey(const ValueKey('s2-search')), findsOneWidget);
+      expect(find.text('Search everything'), findsOneWidget);
       expect(find.byKey(const ValueKey('home-filter')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('home-import')));
       await pumpFrames(tester);
@@ -324,10 +345,10 @@ void main() {
       await app.dispose();
     });
 
-    testWidgets('the library tabs read the store; a document opens in the viewer (S3)', (tester) async {
+    testWidgets('Show: All reads the store; a document opens in the viewer (S3)', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
       final app = await _pumpApp(tester, filesHome: true, seed: (lib) => _seedMixed(lib, tester));
-      await app.tab(HomeTab.all);
+      await app.showAll();
       expect(find.text('Beach.jpg'), findsOneWidget);
       expect(find.text('Holiday.mp4'), findsOneWidget);
       expect(find.text('Report.pdf'), findsOneWidget);
@@ -338,16 +359,18 @@ void main() {
       await app.dispose();
     });
 
-    testWidgets('the Folders tab shows the Danaview folders next to the linked ones', (tester) async {
+    testWidgets('the Folders screen shows the Danaview folders next to the linked ones', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
       final app = await _pumpApp(tester, filesHome: true, seed: (lib) => _seedMixed(lib, tester));
-      await app.tab(HomeTab.folders);
+      await app.screen(HomeDestination.folders);
+      expect(find.byKey(homeDestinationScreenKey(HomeDestination.folders)), findsOneWidget);
       expect(find.text('Danaview folders'), findsWidgets);
       expect(find.textContaining('Recently deleted'), findsWidgets);
       await app.dispose();
     });
 
-    testWidgets('a tab request (See all, a folder hit) switches the tab without re-mounting the Home', (tester) async {
+    testWidgets('a tab request (See all) switches the tab and a folder request pushes the Folders screen, '
+        'without re-mounting the Home', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 844), 1.0));
       final app = await _pumpApp(tester, filesHome: true, seed: (lib) => _seedMixed(lib, tester));
       final shell = tester.state(find.byType(DanaviewHomeScreen));
@@ -363,9 +386,13 @@ void main() {
       // A See all from the Overview (the tray's own notification) does the same.
       await app.tab(HomeTab.home);
       expect(tester.state(find.byType(DanaviewHomeScreen)), same(shell));
-      const HomeTabRequestNotification(HomeTab.folders).dispatch(tester.element(overview));
+      FilesHomeState.showScreen(tester.element(overview), HomeDestination.folders);
       await pumpFrames(tester, count: 8);
+      expect(find.byKey(homeDestinationScreenKey(HomeDestination.folders)), findsOneWidget);
       expect(find.text('Danaview folders'), findsWidgets);
+      await tester.tap(find.byTooltip('Back').last);
+      await pumpFrames(tester, count: 8);
+      expect(find.byKey(homeDestinationScreenKey(HomeDestination.folders)), findsNothing);
       expect(tester.state(find.byType(DanaviewHomeScreen)), same(shell), reason: 'no keyed re-mount');
       await app.dispose();
     });
@@ -508,7 +535,7 @@ void main() {
   group('flag on: no overflow', () {
     for (final width in [280.0, 375.0, 1280.0]) {
       for (final scale in [0.85, 1.35]) {
-        testWidgets('Home, All, Folders and Settings at ${width.toInt()} px @${scale}x', (tester) async {
+        testWidgets('Home, Show: All, Photos, Folders and Settings at ${width.toInt()} px @${scale}x', (tester) async {
           useSurface(tester, TestSurface(Size(width, width > 1000 ? 800 : 640), scale));
           final app = await _pumpApp(tester, filesHome: true, textScale: scale, seed: (lib) => _seedMixed(lib, tester));
           expect(tester.takeException(), isNull);
@@ -517,9 +544,12 @@ void main() {
           await pumpFrames(tester);
           expect(tester.getSize(import).height, greaterThanOrEqualTo(44));
           expect(tester.takeException(), isNull);
-          for (final tab in [HomeTab.all, HomeTab.folders, HomeTab.photos]) {
-            await app.tab(tab);
-          }
+          await app.showAll();
+          await app.tab(HomeTab.photos);
+          await app.screen(HomeDestination.folders);
+          await tester.tap(find.byTooltip('Back').last);
+          await pumpFrames(tester, count: 8);
+          expect(tester.takeException(), isNull);
           await app.go('/settings');
           await tester.scrollUntilVisible(_storageSection, 200, scrollable: find.byType(Scrollable).first);
           await pumpFrames(tester);

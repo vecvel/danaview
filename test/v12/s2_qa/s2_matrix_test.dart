@@ -79,6 +79,13 @@ final class _App {
     await pumpFrames(tester, count: 8);
   }
 
+  /// Picks "Show: All" in the filter menu: every file, in the All grid (the earlier All tab).
+  Future<void> showAll() async {
+    await tapKey('home-filter');
+    await tester.tap(find.text('All').hitTestable().last);
+    await pumpFrames(tester, count: 8);
+  }
+
   Future<void> tapKey(String key) async {
     final f = find.byKey(ValueKey<String>(key)).hitTestable();
     await tester.ensureVisible(f.first);
@@ -150,7 +157,7 @@ Future<void> _visit(_App app, Future<void> Function(String where) check) async {
   await app.back();
   await app.back();
 
-  await app.tab(HomeTab.all);
+  await app.showAll();
   await check('All');
   final row = find.byKey(ValueKey('library-entry-${s.doc.id.value}'));
   await tester.ensureVisible(row);
@@ -188,7 +195,18 @@ Future<void> _visit(_App app, Future<void> Function(String where) check) async {
   await app.back();
   await app.tapKey('photo-viewer-close');
 
-  await app.tab(HomeTab.folders);
+  // The Folders screen, from the Home tab's Folders section (See all) or, without linked folders,
+  // a folder request (the favourite or search hit path).
+  await app.tab(HomeTab.home);
+  final seeAll = find.byKey(const ValueKey('home-folders-see-all'));
+  if (seeAll.evaluate().isNotEmpty) {
+    await app.tapKey('home-folders-see-all');
+  } else {
+    const HomeDestinationRequestNotification(HomeDestination.folders)
+        .dispatch(tester.element(find.byKey(const ValueKey('home-tab-strip'))));
+    await pumpFrames(tester, count: 8);
+  }
+  expect(find.byKey(homeDestinationScreenKey(HomeDestination.folders)), findsOneWidget);
   await check('Folders root');
   await app.tapKey('danaview-folder-${s.trips.value}');
   await app.tapKey('danaview-folder-${s.nested.value}');

@@ -1,6 +1,8 @@
-// The Home's editor projects (DESIGN_SYSTEM §10.3 #3 and §10.4 `Projects`): the Overview's
-// Projects section (a grid of project cards with "Open projects" in the header) and the Projects
-// tab (the same cards for every project, with "New project" as the screen's one primary button).
+// The Home's editor projects (DESIGN_SYSTEM §10.3 and §10.4): the Overview's Recent projects
+// section (the newest two project cards, "See all" in the header), the Videos tab's Projects row
+// (a "New project" card, then the project cards, "See all" in the header) and the Projects screen
+// that "See all" opens (every project in a card grid, with "New project" as the screen's one
+// primary button and "Manage" opening the editor's own project list).
 //
 // This package never imports the editor (ARCH v1.2 rule 23): the app root maps the editor's
 // project list onto [HomeProject]s by overriding [homeProjectsProvider] (lib/wiring), and opens a
@@ -18,6 +20,7 @@ import '../library_widgets.dart';
 import 'home_callbacks.dart';
 import 'home_grid.dart';
 import 'home_media_card.dart';
+import 'home_tabs.dart';
 
 /// One editor project as the Home shows it.
 @immutable
@@ -74,8 +77,12 @@ String homeProjectEditedLabel(DateTime updatedAt, DateTime now) {
   return local.year == today.year ? 'Edited $date' : 'Edited $date ${local.year}';
 }
 
-/// How many project cards the Overview's Projects section shows at most.
-const int homeProjectsOverviewLimit = 6;
+/// How many project cards the Overview's Recent projects section shows at most.
+const int homeProjectsOverviewLimit = 2;
+
+/// Opens the Projects screen from [context] (inside the Home shell).
+void homeOpenProjectsScreen(BuildContext context) =>
+    const HomeDestinationRequestNotification(HomeDestination.projects).dispatch(context);
 
 /// One project card: the poster in a 16:9 media card, the name and "Edited 2 h ago".
 class HomeProjectCard extends StatelessWidget {
@@ -129,8 +136,9 @@ class _ProjectPoster extends StatelessWidget {
   }
 }
 
-/// The Overview's Projects section (§10.3 #3): a grid of the newest project cards with "Open
-/// projects" in the header. It draws nothing without projects or without an open callback.
+/// The Overview's Recent projects section (§10.3): the newest project cards ([limit]) with "See
+/// all" in the header, which opens the Projects screen. It draws nothing without projects or
+/// without an open callback.
 class HomeProjectsSection extends ConsumerWidget {
   /// The section.
   const HomeProjectsSection({super.key, this.limit = homeProjectsOverviewLimit});
@@ -145,23 +153,20 @@ class HomeProjectsSection extends ConsumerWidget {
     final open = callbacks.onOpenProject;
     if (projects.isEmpty || open == null) return const SizedBox.shrink(key: ValueKey('home-projects-hidden'));
     final now = ref.watch(homeProjectsClockProvider)();
-    final openAll = callbacks.onOpenProjects;
     return Column(
       key: const ValueKey('home-projects'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         DanaviewLibrarySectionHeader(
-          'Projects',
+          'Recent projects',
           prominent: true,
-          action: openAll == null
-              ? null
-              : DanaviewButton.text(
-                  key: const ValueKey('home-projects-open-all'),
-                  label: 'Open projects',
-                  size: DanaviewButtonSize.sm,
-                  onPressed: openAll,
-                ),
+          action: DanaviewButton.text(
+            key: const ValueKey('home-projects-see-all'),
+            label: 'See all',
+            size: DanaviewButtonSize.sm,
+            onPressed: () => homeOpenProjectsScreen(context),
+          ),
         ),
         HomeCardGrid(
           key: const ValueKey('home-projects-grid'),
@@ -182,11 +187,17 @@ double homeProjectCardExtent(double width, BuildContext context) => homeMediaCar
 /// Columns of project cards in a [width]-wide column: the adaptive 2 / 4 / 6.
 int homeProjectColumns(double width) => homeAdaptiveColumns(width);
 
-/// The Projects tab (§10.4): every project as a card grid, with "New project" as the screen's one
-/// primary button; an empty state with the same button when there are none.
+/// The Projects screen's body (§10.4): every project as a card grid, with "New project" as the
+/// screen's one primary button; an empty state with the same button when there are none.
+/// "Manage" (the editor's own project list) sits in the screen's top bar
+/// ([HomeProjectsManageButton]) or, with [showHeader], in a "Projects" header over the grid.
 class HomeProjectsTab extends ConsumerWidget {
-  /// The tab.
-  const HomeProjectsTab({super.key});
+  /// The body.
+  const HomeProjectsTab({super.key, this.showHeader = true});
+
+  /// Draws the "Projects" header with Manage (off inside the Projects screen, whose top bar has
+  /// both).
+  final bool showHeader;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -211,24 +222,13 @@ class HomeProjectsTab extends ConsumerWidget {
         return CustomScrollView(
           key: const PageStorageKey('home-projects-tab'),
           slivers: [
-            SliverPadding(
-              padding: padding.copyWith(bottom: 0),
-              sliver: SliverToBoxAdapter(
-                child: DanaviewLibrarySectionHeader(
-                  'Projects',
-                  prominent: true,
-                  topSpacing: 0,
-                  action: callbacks.onOpenProjects == null
-                      ? null
-                      : DanaviewButton.text(
-                          key: const ValueKey('home-projects-manage'),
-                          label: 'Manage',
-                          size: DanaviewButtonSize.sm,
-                          onPressed: callbacks.onOpenProjects,
-                        ),
-                ),
-              ),
-            ),
+            if (showHeader)
+              SliverPadding(
+                padding: padding.copyWith(bottom: 0),
+                sliver: const SliverToBoxAdapter(child: _ProjectsHeader()),
+              )
+            else
+              SliverToBoxAdapter(child: SizedBox(height: padding.top)),
             if (projects.isEmpty)
               SliverPadding(
                 padding: padding.copyWith(top: 0),
@@ -266,6 +266,104 @@ class HomeProjectsTab extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// The "Projects" header over the project grid, with Manage.
+class _ProjectsHeader extends StatelessWidget {
+  const _ProjectsHeader();
+
+  @override
+  Widget build(BuildContext context) => const DanaviewLibrarySectionHeader(
+        'Projects',
+        prominent: true,
+        topSpacing: 0,
+        action: HomeProjectsManageButton(),
+      );
+}
+
+/// "Manage": opens the editor's own project list (the Projects screen's top bar, or the header of
+/// [HomeProjectsTab]). Draws nothing when the app gave no `onOpenProjects`.
+class HomeProjectsManageButton extends StatelessWidget {
+  /// The button.
+  const HomeProjectsManageButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final openAll = HomeCallbacksScope.of(context).onOpenProjects;
+    if (openAll == null) return const SizedBox.shrink();
+    return DanaviewButton.text(
+      key: const ValueKey('home-projects-manage'),
+      label: 'Manage',
+      size: DanaviewButtonSize.sm,
+      onPressed: openAll,
+    );
+  }
+}
+
+/// Whether the Videos tab shows its Projects row: the app opens or creates projects (only where
+/// the editor runs and was wired) on an editor platform.
+bool homeProjectsRowShown(BuildContext context) {
+  final callbacks = HomeCallbacksScope.of(context);
+  final available = callbacks.onOpenProject != null || callbacks.onNewProject != null;
+  return homeProjectsShown(platform: Theme.of(context).platform, projectsAvailable: available);
+}
+
+/// The Videos tab's Projects section (editor only): one horizontal row whose first card is "New
+/// project", then the project cards, most recently edited first; "See all" opens the Projects
+/// screen. It draws nothing where the editor is not wired, or when it would hold no card.
+class HomeProjectsRow extends ConsumerWidget {
+  /// The row.
+  const HomeProjectsRow({super.key, this.topSpacing});
+
+  /// Space above the header (the header's default when null).
+  final double? topSpacing;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final callbacks = HomeCallbacksScope.of(context);
+    final projects = ref.watch(homeProjectsProvider);
+    final open = callbacks.onOpenProject;
+    final create = callbacks.onNewProject;
+    if (!homeProjectsRowShown(context) || (projects.isEmpty && create == null)) {
+      return const SizedBox.shrink(key: ValueKey('home-projects-row-hidden'));
+    }
+    final now = ref.watch(homeProjectsClockProvider)();
+    return Column(
+      key: const ValueKey('home-projects-row'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DanaviewLibrarySectionHeader(
+          'Projects',
+          prominent: true,
+          topSpacing: topSpacing ?? DanaviewSpacing.xl,
+          action: DanaviewButton.text(
+            key: const ValueKey('home-projects-row-see-all'),
+            label: 'See all',
+            size: DanaviewButtonSize.sm,
+            onPressed: () => homeOpenProjectsScreen(context),
+          ),
+        ),
+        HomeMediaCardRow(
+          children: [
+            if (create != null)
+              KeyedSubtree(
+                key: const ValueKey('home-projects-new-card'),
+                child: HomeMediaCard(
+                  title: 'New project',
+                  subtitle: 'Edit videos and photos',
+                  icon: Icons.add_rounded,
+                  showPlay: false,
+                  semanticLabel: 'New project',
+                  onTap: create,
+                ),
+              ),
+            for (final p in projects) HomeProjectCard(project: p, now: now, onOpen: open == null ? null : () => open(p.id)),
+          ],
+        ),
+      ],
     );
   }
 }

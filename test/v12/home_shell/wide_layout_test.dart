@@ -6,7 +6,8 @@
 //   row); phones keep the list rows;
 // * the Cinema B Home (DESIGN_SYSTEM §10.3): two columns (media ≈ 60 %, lists ≈ 40 %) from 1100 pt,
 //   the grouped lists 2-up on tablets in portrait, one column on phones; Continue watching is a row
-//   of equal-height media cards;
+//   of equal-height media cards; with the Files Home the lists are Documents and Folders, and the
+//   playlist cards live on the Playlists screen (DESIGN_SYSTEM §10.4);
 // * the tab strip has no fixed height: the pills fit their label, every tab keeps an invisible
 //   44 pt minimum target, and the strip grows with the text scale instead of clipping.
 
@@ -19,19 +20,26 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../library_test_utils.dart';
 import 'home_shell_support.dart';
 
-Widget _home() => DanaviewHomeScreen(
+Widget _home({HomeTabSlots slots = HomeTabSlots.none}) => DanaviewHomeScreen(
       onOpenPlayer: () {},
       onOpenFolder: (_) {},
       onOpenPlaylist: (_) {},
       onOpenSettings: () {},
+      tabSlots: slots,
     );
 
-Future<LibraryTestEnv> _pump(WidgetTester tester, Size size, {double textScale = 1.0, bool filesHome = true}) async {
+Future<LibraryTestEnv> _pump(
+  WidgetTester tester,
+  Size size, {
+  double textScale = 1.0,
+  bool filesHome = true,
+  HomeTabSlots slots = HomeTabSlots.none,
+}) async {
   useFilesHome(filesHome);
   useSurface(tester, TestSurface(size, textScale));
   final env = await LibraryTestEnv.create();
   await seedFixedLibrary(env);
-  await tester.pumpWidget(libraryTestApp(env, _home(), textScale: textScale));
+  await tester.pumpWidget(libraryTestApp(env, _home(slots: slots), textScale: textScale));
   await pumpFrames(tester);
   expect(tester.takeException(), isNull);
   return env;
@@ -71,7 +79,9 @@ void main() {
         expect(rect.right, moreOrLessEquals(1280 - 32));
         // Media on the left (≈ 60 %), the grouped lists on the right (≈ 40 %).
         final media = tester.getRect(find.byKey(const ValueKey('home-continue-watching')));
-        final lists = tester.getRect(find.byKey(const ValueKey('home-playlists')));
+        // The lists column: Playlists and Folders on the 1.1 Home, Documents and Folders on the
+        // Files Home's `Home` tab (no documents here, so Folders alone).
+        final lists = tester.getRect(find.byKey(ValueKey(filesHome ? 'home-folders' : 'home-playlists')));
         expect(media.left, moreOrLessEquals(32));
         expect(lists.right, moreOrLessEquals(1280 - 32));
         expect(media.width / (media.width + lists.width), closeTo(0.6, 0.01));
@@ -80,19 +90,28 @@ void main() {
       });
     }
 
-    testWidgets('768 px portrait: one column with the grouped lists 2-up', (tester) async {
-      final env = await _pump(tester, const Size(768, 1024));
-      expect(find.byKey(const ValueKey('home-two-columns')), findsNothing);
-      final media = tester.getRect(find.byKey(const ValueKey('home-continue-watching')));
-      final playlists = tester.getRect(find.byKey(const ValueKey('home-playlists')));
-      final folders = tester.getRect(find.byKey(const ValueKey('home-folders')));
-      expect(media.left, moreOrLessEquals(24));
-      expect(media.right, moreOrLessEquals(768 - 24));
-      expect(playlists.top, moreOrLessEquals(folders.top));
-      expect(playlists.left, moreOrLessEquals(24));
-      expect(folders.right, moreOrLessEquals(768 - 24));
-      await finishHome(tester, env);
-    });
+    for (final filesHome in [false, true]) {
+      testWidgets('768 px portrait (flag ${filesHome ? 'on' : 'off'}): one column with the grouped lists 2-up',
+          (tester) async {
+        final env = await _pump(
+          tester,
+          const Size(768, 1024),
+          filesHome: filesHome,
+          // The Files Home pairs Documents with Folders.
+          slots: HomeTabSlots(documentsOverview: (_) => const SizedBox(key: ValueKey('documents-probe'), height: 120)),
+        );
+        expect(find.byKey(const ValueKey('home-two-columns')), findsNothing);
+        final media = tester.getRect(find.byKey(const ValueKey('home-continue-watching')));
+        final first = tester.getRect(find.byKey(ValueKey(filesHome ? 'home-slot-documents' : 'home-playlists')));
+        final folders = tester.getRect(find.byKey(const ValueKey('home-folders')));
+        expect(media.left, moreOrLessEquals(24));
+        expect(media.right, moreOrLessEquals(768 - 24));
+        expect(first.top, moreOrLessEquals(folders.top));
+        expect(first.left, moreOrLessEquals(24));
+        expect(folders.right, moreOrLessEquals(768 - 24));
+        await finishHome(tester, env);
+      });
+    }
   });
 
   group('card grids', () {
@@ -103,12 +122,16 @@ void main() {
       expect(danaviewLibraryGridColumns(1280 - 64), 4);
     });
 
-    // The Playlists tab (DESIGN_SYSTEM §10.4): playlist cards in the adaptive 2 / 4 / 6 column
-    // grid, 10 pt gaps, every card of a row the same height.
+    // The Playlists screen (DESIGN_SYSTEM §10.4), opened by the Videos tab's See all: playlist
+    // cards in the adaptive 2 / 4 / 6 column grid, 10 pt gaps, every card of a row the same height.
     for (final (width, columns) in [(375.0, 2), (600.0, 2), (820.0, 4), (1024.0, 6), (1280.0, 6)]) {
-      testWidgets('${width.toInt()} px Playlists tab: $columns columns, 10 pt gaps, equal heights per row', (tester) async {
+      testWidgets('${width.toInt()} px Playlists screen: $columns columns, 10 pt gaps, equal heights per row',
+          (tester) async {
         final env = await _pump(tester, Size(width, 900));
-        await _openTab(tester, HomeTab.playlists);
+        await _openTab(tester, HomeTab.videos);
+        await tester.tap(find.byKey(const ValueKey('home-playlists-see-all')));
+        await pumpFrames(tester, count: 8);
+        expect(find.byKey(homeDestinationScreenKey(HomeDestination.playlists)), findsOneWidget);
         final gutter = danaviewLibraryInsets(width).left;
         final grid = tester.getRect(find.byKey(const ValueKey('home-playlists-grid')));
         expect(grid.left, moreOrLessEquals(gutter));

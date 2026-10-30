@@ -6,8 +6,9 @@
 // * the Documents filter and its tab are hidden in slice S2 behind HOM-18's switch (BUILD_PLAN
 //   §1A), and appear when the switch is on;
 // * linked-folder documents are read-only: Open only, no Rename / Move / Delete;
-// * the Videos tab keeps the player hub (Continue watching, playlists, video folders) and grids
-//   the library's videos with HOM-13's badges (duration, resolution, frame rate, HDR);
+// * the Videos tab keeps the player hub (Continue watching, the Playlists row) and grids the
+//   library's videos under "All videos" with HOM-13's badges (duration, resolution, frame rate,
+//   HDR); the video folders moved to the Home tab and the Folders screen (DESIGN_SYSTEM §10.4);
 // * a write re-reads the lists in the next frame;
 // * the matrix 280–1280 px × text scale 0.85–1.35 with no overflow, ≥ 44 px targets, semantics
 //   labels (ARCH §1.4).
@@ -15,14 +16,13 @@
 // The root package reaches danaview_library through danaview_features.
 // ignore_for_file: depend_on_referenced_packages
 
-import 'dart:io';
-
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/library/badges/media_badges.dart';
 import 'package:danaview_features/src/library/filters/entry_widgets.dart';
 import 'package:danaview_features/src/library/filters/filter_providers.dart';
 import 'package:danaview_features/src/library/filters/library_filters.dart';
 import 'package:danaview_features/src/library/files/library_store_providers.dart';
+import 'package:danaview_features/src/library/home/home_tab_strip.dart' show HomeTabStrip;
 import 'package:danaview_features/src/library/tabs/all_tab.dart';
 import 'package:danaview_features/src/library/tabs/documents_tab.dart';
 import 'package:danaview_features/src/library/tabs/videos_tab.dart';
@@ -57,10 +57,10 @@ void main() {
       final hidden = libraryFilterTabSlots(all: body, videos: body, documents: body, folders: body);
       expect(hidden.showDocuments, isFalse);
       expect(hidden.documents, isNull);
-      expect(hidden.bodyOf(HomeTab.all), isNotNull);
-      expect(hidden.bodyOf(HomeTab.folders), isNotNull);
-      expect(visibleHomeTabs(platform: TargetPlatform.iOS, projectsAvailable: false, showDocuments: hidden.showDocuments),
-          isNot(contains(HomeTab.documents)));
+      expect(hidden.all, isNotNull, reason: "the filter's Show: All view");
+      expect(hidden.bodyOf(HomeTab.videos), isNotNull);
+      expect(hidden.screenOf(HomeDestination.folders), isNotNull);
+      expect(visibleHomeTabs(showDocuments: hidden.showDocuments), isNot(contains(HomeTab.documents)));
 
       final shown = libraryFilterTabSlots(documents: body, showDocuments: true);
       expect(shown.showDocuments, isTrue);
@@ -94,9 +94,8 @@ void main() {
       }
 
       await pumpHome(libraryFilterTabSlots(all: body, videos: body, documents: body, folders: body));
-      expect(find.byKey(homeTabKey(HomeTab.all)), findsOneWidget);
+      expect(tester.widget<HomeTabStrip>(find.byType(HomeTabStrip)).tabs, [HomeTab.home, HomeTab.videos, HomeTab.photos]);
       expect(find.byKey(homeTabKey(HomeTab.videos)), findsOneWidget);
-      expect(find.byKey(homeTabKey(HomeTab.folders)), findsOneWidget);
       expect(find.byKey(homeTabKey(HomeTab.documents)), findsNothing);
 
       await pumpHome(libraryFilterTabSlots(documents: body, showDocuments: true));
@@ -231,7 +230,8 @@ void main() {
       }
       await tester.pumpWidget(filtersApp(env, VideosTab(onOpenPlayer: () {})));
       await pumpFrames(tester);
-      expect(find.text('Danaview videos'), findsOneWidget);
+      expect(find.text('All videos'), findsOneWidget);
+      expect(find.text('Nothing here yet'), findsOneWidget);
       await finishHome(tester, env);
     });
   });
@@ -298,7 +298,7 @@ void main() {
   });
 
   group('Videos tab', () {
-    testWidgets('keeps the hub sections and labels each video', (tester) async {
+    testWidgets('keeps the hub sections (Playlists row, All videos) and labels each video', (tester) async {
       useSurface(tester, const TestSurface(Size(1280, 2000), 1.0));
       final env = await LibraryTestEnv.create();
       final media = createMediaTree();
@@ -326,8 +326,9 @@ void main() {
       ));
       await pumpFrames(tester);
       expect(find.text('Playlists'), findsOneWidget);
-      expect(find.text('Video folders'), findsOneWidget);
-      expect(find.text('Danaview videos'), findsOneWidget);
+      expect(find.byKey(const ValueKey('home-playlists-row')), findsOneWidget);
+      expect(find.text('Video folders'), findsNothing, reason: 'folders live on the Home tab and the Folders screen');
+      expect(find.text('All videos'), findsOneWidget);
       final tile = find.byKey(ValueKey('library-video-${clip.id.value}'));
       expect(tile, findsOneWidget);
       expect(find.descendant(of: tile, matching: find.text('4K')), findsOneWidget);
@@ -337,11 +338,10 @@ void main() {
 
       await tester.tap(tile);
       await tester.tap(find.text('Road trip'));
-      await tester.tap(find.text(media.path.split(Platform.pathSeparator).last));
       await pumpFrames(tester);
       expect(opened, ['Drone.mp4']);
       expect(playlists, ['Road trip']);
-      expect(folders, [media.path]);
+      expect(folders, isEmpty);
       await lib.close(tester);
       await env.dispose();
     });

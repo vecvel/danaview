@@ -400,7 +400,7 @@ void main() {
       await finishHome(tester, env);
     });
 
-    testWidgets('flag on: the tray sits below Continue watching, above Playlists', (tester) async {
+    testWidgets('flag on: the tray sits below Continue watching, above Folders', (tester) async {
       useFilesHome(true);
       final env = await pumpHome(tester);
       expect(find.byKey(const ValueKey('recent-photos-tray')), findsOneWidget);
@@ -408,7 +408,9 @@ void main() {
           .getTopLeft(find.descendant(of: find.byKey(const ValueKey('home-tab-page-home')), matching: find.text(text)).first)
           .dy;
       expect(y('Continue watching'), lessThan(y('Recent photos')));
-      expect(y('Recent photos'), lessThan(y('Playlists')));
+      // The Files Home's Home tab keeps the grouped lists below (Folders; the playlists moved to the
+      // Videos tab, DESIGN_SYSTEM §10.3).
+      expect(y('Recent photos'), lessThan(y('Folders')));
       await finishHome(tester, env);
     });
 

@@ -78,12 +78,13 @@ class HubCalls {
   final List<String> folders = [];
   final List<String> playlists = [];
 
-  DanaviewHomeScreen home() => DanaviewHomeScreen(
+  DanaviewHomeScreen home({HomeTabSlots tabSlots = HomeTabSlots.none}) => DanaviewHomeScreen(
         onOpenPlayer: () => playerOpens++,
         onOpenFolder: folders.add,
         onOpenPlaylist: playlists.add,
         onOpenSettings: () {},
         onOpenEditor: () {},
+        tabSlots: tabSlots,
       );
 }
 
@@ -95,12 +96,13 @@ Future<LibraryTestEnv> pumpHub(
   HubCalls? calls,
   TestSurface surface = const TestSurface(Size(402, 1600), 1.0, padding: EdgeInsets.only(top: 47, bottom: 34)),
   bool seed = true,
+  HomeTabSlots tabSlots = HomeTabSlots.none,
 }) async {
   useFilesHome(filesHome);
   useSurface(tester, surface);
   final env = await LibraryTestEnv.create();
   if (seed) await seedHub(env, tree);
-  await tester.pumpWidget(libraryTestApp(env, (calls ?? HubCalls()).home(), textScale: surface.textScale));
+  await tester.pumpWidget(libraryTestApp(env, (calls ?? HubCalls()).home(tabSlots: tabSlots), textScale: surface.textScale));
   await pumpFrames(tester);
   expect(tester.takeException(), isNull);
   return env;

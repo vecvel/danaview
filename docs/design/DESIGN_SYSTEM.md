@@ -250,39 +250,48 @@ equal heights.
 ### 10.2 Tab strip
 
 A row of capsules that scrolls sideways when the tabs don't fit:
-**Home · All · Videos · Photos · Documents · Playlists · Folders · Projects**. Tabs behind an
-off flag are hidden. Arrow keys, Home and End move the selection, and the selected tab
-scrolls into view.
+**Home · Videos · Photos · Documents**. Documents is hidden until its slice ships (S3). Arrow
+keys, Home and End move the selection, and the selected tab scrolls into view. Projects, Playlists
+and Folders are not tabs: they are full screens that a section's **See all** pushes (§10.4).
+
+The search field reads **Search everything**. The filter button's **Show** menu offers
+**All / Videos / Photos / Documents**: Videos, Photos and Documents select that tab; **All** (with
+an empty search) lists every file in the All grid in place of the tab, and no capsule is selected
+until a tab is picked again.
 
 ### 10.3 Home tab sections (in order)
 
 | # | Section | Header action | Layout |
 |---|---|---|---|
-| 1 | **Continue watching** | Show all / Clear (menu) | A horizontal row of 16:9 media cards with progress |
-| 2 | **Recent photos** | See all | An edge-to-edge square strip (4 on phone, 8 on iPad) |
-| 3 | **Projects** (editor flag) | Open projects | A grid of project cards (thumbnail, name, "Edited 2h ago") |
-| 4 | **Playlists** | New | A grouped list: icon tile, name, count |
-| 5 | **Folders** | Add | A grouped list: "On this iPad/phone", Downloads, cloud folders |
-| 6 | **Documents** (Files Home flag) | See all | A grouped list: type tile, name, size |
+| 1 | **Continue watching** | Clear, with Show all under the row | A horizontal row of 16:9 media cards with progress (the 1.1 section) |
+| 2 | **Recent photos** | See all (Photos tab) | An edge-to-edge square strip (4 on phone, 8 on iPad) |
+| 3 | **Recent projects** (editor flag) | See all (Projects screen) | The newest 2 project cards (thumbnail, name, "Edited 2h ago") |
+| 4 | **Documents** (Files Home flag) | See all (Documents tab) | A grouped list: type tile, name, size |
+| 5 | **Folders** | See all (Folders screen) | A grouped list: "On this iPad/phone", Downloads, cloud folders |
 
-- A section with no items is **hidden**. Home never shows six empty states.
+- A section with no items is **hidden**. Home never shows five empty states.
 - If everything is empty, Home shows one empty state with **Open file / Open folder / Open link**.
-- **Phone:** the six sections stack in one column.
+- **Phone:** the sections stack in one column.
 - **iPad landscape / desktop:** two columns. The left column (≈ 60 %) holds Continue watching,
-  Recent photos and Projects; the right column (≈ 40 %) holds Playlists, Folders and Documents.
+  Recent photos and Recent projects; the right column (≈ 40 %) holds Documents and Folders.
 - **iPad portrait:** one column, with grouped lists side by side in a 2-up grid.
+- With the Files Home flag off, the 1.1 Home is unchanged: Continue watching, Playlists (New) and
+  Folders (Add), with no tabs.
 
-### 10.4 Other tabs
+### 10.4 Other tabs and screens
 
-| Tab | Layout |
+| Tab / screen | Layout |
 |---|---|
-| **All** | Sort and type chips, then a mixed adaptive grid (2 / 4 / 6 columns by width) with media cards and document tiles. |
-| **Videos** | Continue watching at the top, then a grid of 16:9 media cards. |
-| **Photos** | A full-width square grid with 2 pt gaps (3 / 5 / 8 columns), grouped by month with sticky month headers. |
-| **Documents** | A grouped list (or a 2-up grid on tablets): type tile, name, size, date. |
-| **Playlists** | A grid of playlist cards (a 2×2 thumbnail mosaic, name and count); **New** is in the header. |
-| **Folders** | A grouped list of sources; tapping a source opens a folder screen with the same grid as All. |
-| **Projects** | A grid of project cards; **New project** is the screen's one primary button. |
+| **Videos** tab | 1. **Continue watching** (row, **Clear**); 2. **Projects** (editor flag): a horizontal row whose first card is **New project**, then the project cards, **See all**; 3. **Playlists**: a horizontal row of mosaic cards, **See all**; 4. **All videos**: a grid of 16:9 media cards with **Sort** (Newest, Oldest, Name). Empty sections are hidden. |
+| **Photos** tab | A full-width square grid with 2 pt gaps (3 / 5 / 8 columns), grouped by month with sticky month headers. |
+| **Documents** tab | A grouped list (or a 2-up grid on tablets): type tile, name, size, date. |
+| **All** (filter, Show: All) | Sort and type chips, then a mixed adaptive grid (2 / 4 / 6 columns by width) with media cards and document tiles. |
+| **Projects** screen | Back, the title and **Manage** in the top bar; a grid of project cards; **New project** is the screen's one primary button. |
+| **Playlists** screen | Back, the title and **New** in the top bar; a grid of playlist cards (a 2×2 thumbnail mosaic, name and count) with **Play / Shuffle / Rename / Delete** in each card's menu. |
+| **Folders** screen | Back and the title in the top bar; a grouped list of sources; tapping a source opens a folder screen with the same grid as All. |
+
+The screens are pushed on the navigator (Back pops them) with the library's pushed-screen top
+bar, and keep the selection bar under them.
 
 ### 10.5 Phone tab bar
 

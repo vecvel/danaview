@@ -1,13 +1,15 @@
 // OWNER: HOM-07
 //
-// BUILD_PLAN HOM-07 acceptance ("goldens as HOM-06"): the Playlists section (header, rows), the
-// add-to-playlist sheet and the playlist screen are pixel-equal between DANAVIEW_FILES_HOME off
-// and the flag on (the `Home` tab for the section and the sheet), at three widths.
+// BUILD_PLAN HOM-07 acceptance ("goldens as HOM-06"): the add-to-playlist sheet and the playlist
+// screen are pixel-equal between DANAVIEW_FILES_HOME off and the flag on (the `Home` tab for the
+// sheet), at three widths; the 1.1 Playlists section (header, rows) matches its goldens with the
+// flag off.
 //
 // Since the Cinema B Home (DESIGN_SYSTEM §10.3) the Home hides an empty Playlists section and, on
-// wide screens, puts the grouped lists in a right-hand column, so the `Playlists` tab (full width,
-// with the empty state, each part in its own sliver layer) has goldens of its own
-// (`playlists_tab_*`).
+// wide screens, puts the grouped lists in a right-hand column. Since the four-tab Home (§10.2–10.4)
+// the flag-on Home tab has no Playlists section: the playlists live on the Playlists screen (the
+// Videos tab's See all; full width, with the empty state), which has goldens of its own
+// (`playlists_screen_*`: its top bar with New, the card grid and the empty state).
 //
 // The goldens in goldens/ are written with:
 //   flutter test test/v12/preservation/playlists/playlists_golden_test.dart --update-goldens
@@ -55,7 +57,7 @@ Finder get _sheet => find.byWidgetPredicate((w) => w.runtimeType.toString() == '
 /// one, the header and empty state on the Playlists tab (the Home hides the empty section).
 Future<Map<String, Uint8List>> _captureSection(WidgetTester tester, Directory tree, double width, PlaylistsHost host) async {
   final w = width.toInt();
-  final prefix = host == PlaylistsHost.playlistsTab ? 'playlists_tab' : 'playlists';
+  final prefix = host == PlaylistsHost.playlistsScreen ? 'playlists_screen' : 'playlists';
   var env = await pumpPlaylistsHome(tester, host: host, tree: tree, surface: _surface(width));
   final pixels = <String, Uint8List>{
     'playlists_header': await _check(tester, playlistsHeader(host), '${prefix}_header_$w'),
@@ -65,7 +67,7 @@ Future<Map<String, Uint8List>> _captureSection(WidgetTester tester, Directory tr
   await finishHome(tester, env);
 
   env = await pumpPlaylistsHome(tester, host: host, tree: tree, surface: _surface(width), seed: false);
-  if (host == PlaylistsHost.playlistsTab) {
+  if (host == PlaylistsHost.playlistsScreen) {
     pixels['playlists_empty_header'] = await _check(tester, playlistsHeader(host), '${prefix}_empty_header_$w');
     pixels['playlists_empty'] = await _check(tester, playlistsEmpty(host), '${prefix}_empty_$w');
   } else {
@@ -125,17 +127,16 @@ void main() {
       await _captureScreen(tester, tree, width, filesHome: false);
     });
 
-    testWidgets('flag on: the Playlists section in the Home tab is pixel-equal to flag off at $w px', (tester) async {
-      final off = await _captureSection(tester, tree, width, PlaylistsHost.flagOff);
-      final on = await _captureSection(tester, tree, width, PlaylistsHost.homeTab);
-      expect(on.keys, off.keys);
-      for (final name in off.keys) {
-        expect(on[name], off[name], reason: '$name differs between flag off and the Home tab');
-      }
+    testWidgets('flag on: the Home tab has no Playlists section (they moved to the Playlists screen) at $w px',
+        (tester) async {
+      final env = await pumpPlaylistsHome(tester, host: PlaylistsHost.homeTab, tree: tree, surface: _surface(width));
+      expect(inHost(PlaylistsHost.homeTab, find.text('Playlists')), findsNothing);
+      expect(inHost(PlaylistsHost.homeTab, find.byKey(const ValueKey('home-playlists'))), findsNothing);
+      await finishHome(tester, env);
     });
 
-    testWidgets('flag on: the Playlists tab matches its goldens at $w px', (tester) async {
-      await _captureSection(tester, tree, width, PlaylistsHost.playlistsTab);
+    testWidgets('flag on: the Playlists screen matches its goldens at $w px', (tester) async {
+      await _captureSection(tester, tree, width, PlaylistsHost.playlistsScreen);
     });
 
     testWidgets('flag on: the add-to-playlist sheet is pixel-equal to flag off at $w px', (tester) async {

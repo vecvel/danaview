@@ -214,20 +214,34 @@ void main() {
       ],
       child: const DanaviewApp(),
     ));
-    await E2eApp.pumpUntil(tester, () => find.byKey(homeTabKey(HomeTab.all)).evaluate().isNotEmpty, what: 'Home tabs');
+    await E2eApp.pumpUntil(tester, () => find.byKey(homeTabKey(HomeTab.videos)).evaluate().isNotEmpty, what: 'Home tabs');
     openWatch.stop();
     _report('Home with tabs after ${openWatch.elapsedMilliseconds} ms (debug build, store already open); '
         'RSS ${_mb(ProcessInfo.currentRss)} MB');
 
     binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
     final failures = <String>[];
-    for (final tab in [HomeTab.all, HomeTab.videos, HomeTab.photos, HomeTab.folders]) {
+    // The views of the four-tab Home (DESIGN_SYSTEM §10.2–10.4): the filter's Show: All (every
+    // file), the Videos and Photos tabs, and the Folders screen (the Home tab's Folders See all).
+    for (final view in ['all', 'videos', 'photos', 'folders']) {
       final switchWatch = Stopwatch()..start();
-      await E2eApp.tap(tester, find.byKey(homeTabKey(tab)), what: '${tab.name} tab');
+      switch (view) {
+        case 'all':
+          await E2eApp.tap(tester, find.byKey(const ValueKey<String>('home-filter')), what: 'filter');
+          await tester.pump(const Duration(milliseconds: 300));
+          await E2eApp.tap(tester, find.text('All').hitTestable().last, what: 'Show: All');
+        case 'folders':
+          await E2eApp.tap(tester, find.byKey(homeTabKey(HomeTab.home)), what: 'home tab');
+          await tester.pump(const Duration(milliseconds: 300));
+          const HomeDestinationRequestNotification(HomeDestination.folders)
+              .dispatch(tester.element(find.byKey(const ValueKey<String>('home-tab-strip'))));
+        default:
+          await E2eApp.tap(tester, find.byKey(homeTabKey(view == 'videos' ? HomeTab.videos : HomeTab.photos)), what: '$view tab');
+      }
       await tester.pump();
       switchWatch.stop();
       await _run(tester, const Duration(milliseconds: 600));
-      if (tab == HomeTab.folders) {
+      if (view == 'folders') {
         await E2eApp.tap(tester, find.byKey(ValueKey<String>('danaview-folder-${root.value}')), what: 'S2 Stress folder');
         await _run(tester, const Duration(milliseconds: 500));
         await E2eApp.tap(tester, find.byKey(ValueKey<String>('danaview-folder-${bulk.value}')), what: 'Bulk folder');
@@ -257,17 +271,17 @@ void main() {
       SchedulerBinding.instance.removeTimingsCallback(collect);
       final dragFrames = List<FrameTiming>.of(timings);
       final exception = tester.takeException();
-      if (exception != null) failures.add('${tab.name}: $exception');
+      if (exception != null) failures.add('$view: $exception');
       final st = thumbs.stats;
-      _report('${tab.name}: first frame after tap ${switchWatch.elapsedMilliseconds} ms');
-      _report('${tab.name} fling: ${_summary(flingFrames)}');
-      _report('${tab.name} drag: ${_summary(dragFrames)}');
-      _report('${tab.name} memory: RSS ${_mb(rss0)} → ${_mb(ProcessInfo.currentRss)} MB (max ${_mb(ProcessInfo.maxRss)} MB); '
+      _report('$view: first frame after tap ${switchWatch.elapsedMilliseconds} ms');
+      _report('$view fling: ${_summary(flingFrames)}');
+      _report('$view drag: ${_summary(dragFrames)}');
+      _report('$view memory: RSS ${_mb(rss0)} → ${_mb(ProcessInfo.currentRss)} MB (max ${_mb(ProcessInfo.maxRss)} MB); '
           'thumb LRU ${_mb(thumbs.memory.bytes)} MB in ${thumbs.memory.length} (peak ${_mb(thumbs.memory.peakBytes)} MB, cap ${_mb(thumbs.memory.maxBytes)} MB), '
           'evictions +${thumbs.memory.evictions - evict0}; generated +${st.generated - s0.$1}, disk hits +${st.diskHits - s0.$2}, '
           'memory hits +${st.memoryHits - s0.$3}, coalesced +${st.coalesced - s0.$4}, cancels +${st.nativeCancels - s0.$5}, '
           'failures +${st.failures - s0.$6}; queued ${thumbs.queued}, running ${thumbs.running}');
-      await E2eApp.screenshot(tester, 's2-stress-${tab.name}');
+      await E2eApp.screenshot(tester, 's2-stress-$view');
       expect(thumbs.memory.peakBytes, lessThanOrEqualTo(64 * 1024 * 1024), reason: 'HOM-04 LRU ≤ 64 MB (§10.1)');
     }
     binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fadePointers;

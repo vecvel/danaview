@@ -259,8 +259,21 @@ final class _App {
     await pumpFrames(tester);
   }
 
-  Future<void> open(String name, {HomeTab tab = HomeTab.documents}) async {
-    await this.tab(tab);
+  /// Picks "Show: All" in the filter menu: every file, in the All grid (the earlier All tab).
+  Future<void> showAll() async {
+    await tester.tap(find.byKey(const ValueKey('home-filter')));
+    await pumpFrames(tester);
+    await tester.tap(find.text('All').hitTestable().last);
+    await pumpFrames(tester, count: 8);
+  }
+
+  /// Opens [name] from the Documents tab, or with [all] from the filter's Show: All view.
+  Future<void> open(String name, {bool all = false}) async {
+    if (all) {
+      await showAll();
+    } else {
+      await tab(HomeTab.documents);
+    }
     final row = find.byKey(ValueKey('library-entry-${entries[name]!.id.value}'));
     await reveal(row);
     await tapFinder(row);
@@ -392,7 +405,7 @@ Future<void> _visit(_App app, Future<void> Function(String where) check) async {
   await check('CSV grid');
   await app.back();
 
-  await app.open(_longZip, tab: HomeTab.all);
+  await app.open(_longZip, all: true);
   expect(find.byType(FileCard), findsOneWidget);
   await check('file card');
   await app.back();

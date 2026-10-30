@@ -240,7 +240,25 @@ Finder _key(String k) => find.byKey(ValueKey<String>(k));
 Finder _entryRow(EntryId id) => _key('library-entry-${id.value}');
 
 Future<void> _tab(WidgetTester tester, HomeTab tab) async {
+  await _closeHomeScreen(tester);
   await E2eApp.tap(tester, find.byKey(homeTabKey(tab)), what: '${tab.name} tab');
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
+/// Pops a Home screen (Folders, Playlists, Projects; DESIGN_SYSTEM §10.4) if one is on top.
+Future<void> _closeHomeScreen(WidgetTester tester) async {
+  final screen = find.byType(HomeDestinationScreen);
+  if (screen.evaluate().isEmpty) return;
+  await E2eApp.tap(tester, find.descendant(of: screen, matching: find.byTooltip('Back')).first, what: 'Back');
+  await tester.pump(const Duration(milliseconds: 500));
+}
+
+/// The filter's "Show: All": every file in the All grid (the earlier All tab).
+Future<void> _showAll(WidgetTester tester) async {
+  await _closeHomeScreen(tester);
+  await E2eApp.tap(tester, find.byKey(const ValueKey<String>('home-filter')), what: 'filter');
+  await tester.pump(const Duration(milliseconds: 300));
+  await E2eApp.tap(tester, find.text('All').hitTestable().last, what: 'Show: All');
   await tester.pump(const Duration(milliseconds: 300));
 }
 
@@ -312,8 +330,12 @@ Future<void> _reveal(WidgetTester tester, Finder target, {required String what})
 }
 
 /// Opens [entry] from the Documents tab (or All for other files) and waits for the viewer host.
-Future<void> _openRow(WidgetTester tester, FileEntry entry, {HomeTab tab = HomeTab.documents}) async {
-  await _tab(tester, tab);
+Future<void> _openRow(WidgetTester tester, FileEntry entry, {bool all = false}) async {
+  if (all) {
+    await _showAll(tester);
+  } else {
+    await _tab(tester, HomeTab.documents);
+  }
   final row = _entryRow(entry.id);
   await _reveal(tester, row, what: 'the row of ${entry.displayName}');
   await E2eApp.tap(tester, row, what: 'row ${entry.displayName}');
@@ -369,7 +391,7 @@ void main() {
     // ---- 1. Home with the Documents tab ----
     await world.launch(tester);
     final store = world.store;
-    for (final tab in [HomeTab.home, HomeTab.all, HomeTab.videos, HomeTab.photos, HomeTab.documents, HomeTab.folders]) {
+    for (final tab in HomeTab.values) {
       expect(find.byKey(homeTabKey(tab)), findsOneWidget, reason: '${tab.name} tab');
     }
     expect(IncomingMediaBridge.interceptor, isNotNull, reason: 'Open with Danaview is installed');
@@ -522,7 +544,7 @@ void main() {
     _report('Word: file card (Android Office, V2-121); Open in another app handed over ${world.out.openedIn.last.mime}');
     await _viewerBack(tester);
 
-    await _openRow(tester, imported[_zip]!, tab: HomeTab.all);
+    await _openRow(tester, imported[_zip]!, all: true);
     await E2eApp.pumpUntil(tester, () => find.byType(FileCard).evaluate().isNotEmpty, what: 'the file card');
     await E2eApp.screenshot(tester, 's3a-11-file-card');
     final sharedBeforeZip = world.out.shared.length;

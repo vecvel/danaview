@@ -96,6 +96,15 @@ class _App {
   final FixtureLibrary lib;
   final Map<String, FileEntry> entries;
 
+  /// Picks "Show: All" in the filter menu: every file, in the All grid (the earlier All tab).
+  Future<void> showAll() async {
+    await tester.tap(find.byKey(const ValueKey('home-filter')));
+    await pumpFrames(tester);
+    await tester.tap(find.text('All').hitTestable().last);
+    await pumpFrames(tester, count: 8);
+    expect(tester.takeException(), isNull);
+  }
+
   Future<void> tab(HomeTab tab) async {
     await tester.ensureVisible(find.byKey(homeTabKey(tab)));
     await tester.pump();
@@ -371,7 +380,7 @@ void main() {
     testWidgets('an unknown type gets the file card; audio plays in the player', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
       final app = await _pumpApp(tester);
-      await app.tab(HomeTab.all);
+      await app.showAll();
       await tester.tap(_row('Archive.zip'));
       await pumpFrames(tester, count: 8);
       expect(find.byKey(const ValueKey(ViewerKind.fileCard)), findsOneWidget);
@@ -442,7 +451,7 @@ void main() {
     testWidgets('the viewer route gives every text the kit style (no fallback underline, FIX-S3Q-2)', (tester) async {
       useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
       final app = await _pumpApp(tester);
-      await app.tab(HomeTab.all);
+      await app.showAll();
       await tester.tap(_row('Archive.zip'));
       await pumpFrames(tester, count: 8);
       expect(find.byKey(const ValueKey(ViewerKind.fileCard)), findsOneWidget);
@@ -524,7 +533,7 @@ void main() {
     testWidgets("the viewer's top bar opens Share, Save out and File info", (tester) async {
       useSurface(tester, const TestSurface(Size(390, 1400), 1.0));
       final app = await _pumpApp(tester);
-      await app.tab(HomeTab.all);
+      await app.showAll();
       await tester.tap(_row('Archive.zip'));
       await pumpFrames(tester, count: 8);
       expect(find.byKey(const ValueKey(ViewerKind.fileCard)), findsOneWidget);

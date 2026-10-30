@@ -233,8 +233,41 @@ Finder _folderRow(FolderId id) => _key('danaview-folder-${id.value}');
 Finder _entryRow(EntryId id) => _key('library-entry-${id.value}');
 
 Future<void> _tab(WidgetTester tester, HomeTab tab) async {
+  await _closeHomeScreen(tester);
   await E2eApp.tap(tester, find.byKey(homeTabKey(tab)), what: '${tab.name} tab');
   await tester.pump(const Duration(milliseconds: 300));
+}
+
+/// Pops a Home screen (Folders, Playlists, Projects; DESIGN_SYSTEM §10.4) if one is on top.
+Future<void> _closeHomeScreen(WidgetTester tester) async {
+  final screen = find.byType(HomeDestinationScreen);
+  if (screen.evaluate().isEmpty) return;
+  await E2eApp.tap(tester, find.descendant(of: screen, matching: find.byTooltip('Back')).first, what: 'Back');
+  await tester.pump(const Duration(milliseconds: 500));
+}
+
+/// The filter's "Show: All": every file in the All grid (the earlier All tab).
+Future<void> _showAll(WidgetTester tester) async {
+  await _closeHomeScreen(tester);
+  await E2eApp.tap(tester, find.byKey(const ValueKey<String>('home-filter')), what: 'filter');
+  await tester.pump(const Duration(milliseconds: 300));
+  await E2eApp.tap(tester, find.text('All').hitTestable().last, what: 'Show: All');
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
+/// The Folders screen: the Home tab's Folders "See all", or (no linked folders, so no section)
+/// the same request the See all sends.
+Future<void> _openFolders(WidgetTester tester) async {
+  if (find.byType(HomeDestinationScreen).evaluate().isNotEmpty) return;
+  await _tab(tester, HomeTab.home);
+  final seeAll = find.byKey(const ValueKey<String>('home-folders-see-all'));
+  if (seeAll.evaluate().isNotEmpty) {
+    await E2eApp.tap(tester, seeAll, what: 'Folders See all');
+  } else {
+    const HomeDestinationRequestNotification(HomeDestination.folders)
+        .dispatch(tester.element(find.byKey(const ValueKey<String>('home-tab-strip'))));
+  }
+  await tester.pump(const Duration(milliseconds: 600));
 }
 
 Future<void> _longPress(WidgetTester tester, Finder finder, {required String what}) async {
@@ -340,7 +373,7 @@ void main() {
     // ---- 1. Home with the S2 tabs ----
     await world.launch(tester);
     final store = world.store;
-    for (final tab in [HomeTab.home, HomeTab.all, HomeTab.videos, HomeTab.photos, HomeTab.folders]) {
+    for (final tab in [HomeTab.home, HomeTab.videos, HomeTab.photos]) {
       expect(find.byKey(homeTabKey(tab)), findsOneWidget, reason: '${tab.name} tab');
     }
     expect(find.byKey(homeTabKey(HomeTab.documents)), findsNothing, reason: 'Documents waits for S3');
@@ -349,7 +382,7 @@ void main() {
     await E2eApp.screenshot(tester, 's2-01-home');
 
     // ---- 2. Nested Danaview folders ----
-    await _tab(tester, HomeTab.folders);
+    await _openFolders(tester);
     final tripsFolder = await _createFolder(tester, store, 'folders-new-root', 'Trips');
     final trips = tripsFolder.id;
     await E2eApp.tap(tester, _folderRow(trips), what: 'Trips row');
@@ -395,7 +428,7 @@ void main() {
     _report('imported photo ${photoBytes.length} B into Trips/Japan, video ${videoBytes.length} B into Imported; copies byte-equal; staged copies removed');
 
     // Move the video to Trips from the All tab.
-    await _tab(tester, HomeTab.all);
+    await _showAll(tester);
     await _menu(tester, _entryRow(video.id), 'Move to…');
     await E2eApp.tapKey(tester, 'file-folder-${trips.value}');
     await E2eApp.pumpUntil(tester, () => store.reader.entry(video.id)!.folderId == trips, what: 'the video in Trips');
@@ -435,7 +468,7 @@ void main() {
     _report('viewer: opened; Share handed over ${photo.displayName} (${sharedPhoto.mime})');
     await E2eApp.tapKey(tester, 'photo-viewer-close');
 
-    await _tab(tester, HomeTab.all);
+    await _showAll(tester);
     await E2eApp.tap(tester, _entryRow(video.id), what: 'video row');
     await E2eApp.pumpUntil(tester, () => find.byType(DanaviewPlayerScreen).evaluate().isNotEmpty, what: 'the player');
     await E2eApp.pumpUntil(tester, () => c.read(playerControllerProvider).duration > Duration.zero, what: 'the player to open the video');
@@ -475,14 +508,14 @@ void main() {
     }
 
     // ---- 6. Delete both, restore the photo ----
-    await _tab(tester, HomeTab.all);
+    await _showAll(tester);
     for (final id in [photo.id, video.id]) {
       await _menu(tester, _entryRow(id), 'Delete');
       await E2eApp.tap(tester, find.text('Delete').hitTestable().last, what: 'confirm Delete');
       await E2eApp.pumpUntil(tester, () => store.reader.entry(id)!.isTrashed, what: 'entry trashed');
     }
     expect(store.reader.recentlyDeleted().map((t) => t.id.value), containsAll([photo.id.value, video.id.value]));
-    await _tab(tester, HomeTab.folders);
+    await _openFolders(tester);
     await E2eApp.tapKey(tester, 'recently-deleted-row');
     // By id: a used install may list same-named rows of earlier runs.
     final photoTrashRow = _key('trashed-${photo.id.value}');
@@ -504,7 +537,7 @@ void main() {
     expect(reopened.reader.entry(video.id)!.isTrashed, isTrue, reason: 'Recently deleted persists');
     expect(reopened.reader.recentlyDeleted().map((t) => t.id.value), contains(video.id.value));
     expect(reopened.reader.recents().map((e) => e.id), contains(photo.id), reason: 'Recents persist (a deleted entry leaves Recents)');
-    await _tab(tester, HomeTab.folders);
+    await _openFolders(tester);
     await E2eApp.tapKey(tester, 'recently-deleted-row');
     final videoTrashRow = _key('trashed-${video.id.value}');
     await E2eApp.tap(tester, find.descendant(of: videoTrashRow, matching: find.text('Restore')), what: 'Restore video');

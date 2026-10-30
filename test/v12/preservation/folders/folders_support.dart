@@ -1,9 +1,11 @@
 // OWNER: HOM-08
+// EXTENDED: Home four tabs (with the flag on the Folders list is the Folders screen, pushed by the
+// Home tab's Folders "See all", DESIGN_SYSTEM §10.4)
 //
 // Shared fixtures of the folder preservation tests (BUILD_PLAN HOM-08; FILES_MEDIA_HOME_PLAN
 // P-5, P-8): a media tree on disk whose names only sort right naturally (`Clip 2` before
-// `Clip 10`), a phone "device storage" folder, the three places the 1.1 Folders section lives
-// (the Home with DANAVIEW_FILES_HOME off, the `Home` tab and the `Folders` tab with it on), pump
+// `Clip 10`), a phone "device storage" folder, the places the 1.1 Folders section lives (the
+// Home with DANAVIEW_FILES_HOME off, the `Home` tab and the Folders screen with it on), pump
 // helpers for the Home, the folder screen and the whole app (for drag-and-drop and `danaview://`
 // links), and a fake of the desktop_drop channel that delivers a drop the way the native side does.
 
@@ -36,13 +38,13 @@ enum FoldersHost {
   /// DANAVIEW_FILES_HOME on: the `Home` tab (Overview).
   homeTab('flag on (Home tab)'),
 
-  /// DANAVIEW_FILES_HOME on: the `Folders` tab with no body slot (the shell's 1.1 fallback).
-  foldersTab('flag on (Folders tab)'),
+  /// DANAVIEW_FILES_HOME on: the Folders screen with no body slot (the shell's 1.1 fallback).
+  foldersScreen('flag on (Folders screen)'),
 
-  /// DANAVIEW_FILES_HOME on: the `Folders` tab with HOM-18's [FoldersTab] in its slot, as the app
-  /// wires it (`lib/wiring/files_home_wiring.dart`); the 1.1 rows sit under "Linked folders"
+  /// DANAVIEW_FILES_HOME on: the Folders screen with HOM-18's [FoldersTab] in its slot, as the
+  /// app wires it (`lib/wiring/files_home_wiring.dart`); the 1.1 rows sit under "Linked folders"
   /// (HOM plan §5.2).
-  linkedFolders('flag on (Folders tab, Linked folders)');
+  linkedFolders('flag on (Folders screen, Linked folders)');
 
   const FoldersHost(this.label);
 
@@ -50,12 +52,11 @@ enum FoldersHost {
 
   bool get filesHome => this != FoldersHost.flagOff;
 
-  /// The tab whose page holds the section with the flag on.
-  HomeTab? get tab => switch (this) {
-        FoldersHost.flagOff => null,
-        FoldersHost.homeTab => HomeTab.home,
-        FoldersHost.foldersTab || FoldersHost.linkedFolders => HomeTab.folders,
-      };
+  /// The tab whose page holds the section with the flag on (null: the 1.1 list or the screen).
+  HomeTab? get tab => this == FoldersHost.homeTab ? HomeTab.home : null;
+
+  /// Whether the section is on the Folders screen.
+  bool get onScreen => this == FoldersHost.foldersScreen || this == FoldersHost.linkedFolders;
 
   /// The header title this host draws over the 1.1 rows.
   String get headerTitle => this == FoldersHost.linkedFolders ? 'Linked folders' : 'Folders';
@@ -196,18 +197,37 @@ Future<void> pumpFoldersHome(
     ));
   });
   await settleDisk(tester);
-  if (host.tab case final tab? when tab != HomeTab.home) {
-    await tester.ensureVisible(find.byKey(homeTabKey(tab)));
-    await tester.pump();
-    await tester.tap(find.byKey(homeTabKey(tab)));
-    await pumpFrames(tester);
-  }
+  if (host.onScreen) await openFoldersScreen(tester);
   expect(tester.takeException(), isNull);
 }
 
+/// The Folders screen.
+final Finder foldersScreen = find.byKey(homeDestinationScreenKey(HomeDestination.folders));
+
+/// Opens the Folders screen the way a user does: the Home tab's Folders "See all". Without
+/// folders the section is hidden, so the screen is requested the same way See all does.
+Future<void> openFoldersScreen(WidgetTester tester) async {
+  final seeAll = find.byKey(const ValueKey('home-folders-see-all'));
+  if (seeAll.evaluate().isNotEmpty) {
+    await tester.ensureVisible(seeAll);
+    await tester.pump();
+    await tester.tap(seeAll);
+  } else {
+    const HomeDestinationRequestNotification(HomeDestination.folders)
+        .dispatch(tester.element(find.byKey(const ValueKey('home-tab-strip'))));
+  }
+  await pumpFrames(tester, count: 8);
+  await settleDisk(tester);
+  expect(foldersScreen, findsOneWidget);
+  await repaintGlyphs(tester);
+}
+
 /// The part of the tree that holds the host's Folders section.
-Finder foldersScope(FoldersHost host) =>
-    host.tab == null ? find.byType(DanaviewHomeScreen) : find.byKey(ValueKey('home-tab-page-${host.tab!.name}'));
+Finder foldersScope(FoldersHost host) => switch (host) {
+      FoldersHost.flagOff => find.byType(DanaviewHomeScreen),
+      FoldersHost.homeTab => find.byKey(const ValueKey('home-tab-page-home')),
+      FoldersHost.foldersScreen || FoldersHost.linkedFolders => foldersScreen,
+    };
 
 Finder _private(String type) => find.byWidgetPredicate((w) => w.runtimeType.toString() == type);
 
@@ -258,7 +278,8 @@ Future<void> scrollToFolders(WidgetTester tester, FoldersHost host, Finder finde
 
 /// The queue the player was handed last, read through any widget under the app's scope.
 QueueState queueOf(WidgetTester tester, Type under) =>
-    ProviderScope.containerOf(tester.element(find.byType(under).first)).read(queueControllerProvider);
+    ProviderScope.containerOf(tester.element(find.byType(under, skipOffstage: false).first))
+        .read(queueControllerProvider);
 
 /// Installs [DanaviewFolderScreen] on [path] with DANAVIEW_FILES_HOME = [filesHome]; records
 /// opened and jumped-to folders and player opens in [log].

@@ -1,15 +1,19 @@
 // OWNER: HOM-05
+// EXTENDED: Home four tabs (DESIGN_SYSTEM §10.2–10.4: Home · Videos · Photos · Documents; the
+// Projects, Playlists and Folders screens; the filter's "Show: All"; home_four_tabs_test.dart
+// covers the new sections and destinations)
 //
 // BUILD_PLAN HOM-05 acceptance (ARCH v1.2 V2-101, V2-32, §1.4, §3):
 // * flag off: no tab shell (the 1.1 tree; pixel-equal goldens in flag_off_golden_test.dart and the
 //   unchanged test/home_screen_test.dart);
 // * flag on: every tab reachable by tap and by keyboard (Tab/Enter, Left/Right, Home/End);
-// * the `Home` tab hosts the 1.1 sections plus the Recent photos and Favourites slots;
-// * tab bodies come from HomeTabSlots, with the 1.1 Playlists/Folders sections and neutral panes
-//   as fallbacks; visited tabs keep their state;
+// * the `Home` tab hosts Continue watching, the Recent photos and Favourites slots and Folders;
+// * tab and screen bodies come from HomeTabSlots, with the shell's Videos page, the 1.1 Folders
+//   section and neutral panes as fallbacks; visited tabs keep their state;
 // * semantics labels and selected state on tabs, ≥ 44 px targets, computed contrast ≥ 4.5:1;
-// * `Projects` only where the editor runs: desktop shows no editor tab;
-// * the matrix 280–1280 px × text scale 0.85–1.35 with no overflow on every tab.
+// * the Projects screen only where the editor runs: desktop never pushes it;
+// * the matrix 280–1280 px × text scale 0.85–1.35 with no overflow on every tab, the "Show: All"
+//   view and every screen.
 
 import 'package:danaview_features/danaview_features.dart';
 import 'package:danaview_features/src/library/home/home_tab_host.dart';
@@ -23,15 +27,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../library_test_utils.dart';
 import 'home_shell_support.dart';
 
-const _libraryTabs = [
-  HomeTab.home,
-  HomeTab.all,
-  HomeTab.videos,
-  HomeTab.photos,
-  HomeTab.documents,
-  HomeTab.playlists,
-  HomeTab.folders,
-];
+const _libraryTabs = [HomeTab.home, HomeTab.videos, HomeTab.photos, HomeTab.documents];
 
 Widget _home({
   HomeCallbacks callbacks = HomeCallbacks.none,
@@ -73,7 +69,7 @@ List<HomeTab> _stripTabs(WidgetTester tester) {
   return strip.tabs;
 }
 
-HomeTab _selectedTab(WidgetTester tester) =>
+HomeTab? _selectedTab(WidgetTester tester) =>
     tester.widget<HomeTabStrip>(find.byKey(const ValueKey('home-tab-strip'))).selected;
 
 Future<void> _tapTab(WidgetTester tester, HomeTab tab) async {
@@ -87,6 +83,30 @@ Future<void> _tapTab(WidgetTester tester, HomeTab tab) async {
 
 /// The page of [tab] on screen (hidden pages are kept but not hit-testable).
 Finder _page(HomeTab tab) => find.byKey(ValueKey('home-tab-page-${tab.name}'));
+
+/// The pushed screen of [destination].
+Finder _screen(HomeDestination destination) => find.byKey(homeDestinationScreenKey(destination));
+
+/// Asks the shell for the screen [destination] the way a section's See all does.
+Future<void> _openScreen(WidgetTester tester, HomeDestination destination) async {
+  HomeDestinationRequestNotification(destination).dispatch(tester.element(find.byKey(const ValueKey('home-tab-strip'))));
+  await pumpFrames(tester, count: 8);
+  expect(tester.takeException(), isNull);
+}
+
+/// Pops the screen on top with its Back button.
+Future<void> _back(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Back').last);
+  await pumpFrames(tester, count: 8);
+}
+
+/// Picks "Show: All" in the filter menu.
+Future<void> _showAll(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('home-filter')));
+  await pumpFrames(tester);
+  await tester.tap(find.text('All').hitTestable().last);
+  await pumpFrames(tester, count: 6);
+}
 
 FocusNode _focusOfTab(WidgetTester tester, HomeTab tab) => Focus.of(
       tester.element(find.descendant(of: find.byKey(homeTabKey(tab)), matching: find.text(tab.label))),
@@ -127,11 +147,11 @@ void main() {
       for (final tab in _libraryTabs) {
         expect(find.byKey(homeTabKey(tab)), findsOneWidget);
       }
-      expect(find.byKey(homeTabKey(HomeTab.projects)), findsNothing);
+      expect(tester.widgetList(find.byType(HomeTabStrip)).single, isA<HomeTabStrip>());
       await finishHome(tester, env);
     });
 
-    testWidgets('the Home tab hosts the 1.1 sections with the Recent photos and Favourites slots', (tester) async {
+    testWidgets('the Home tab hosts Continue watching, the slots and Folders; Playlists moved to Videos', (tester) async {
       useFilesHome(true);
       final env = await _pump(
         tester,
@@ -143,9 +163,11 @@ void main() {
         ),
         surface: const TestSurface(Size(402, 2400), 1.0),
       );
-      for (final label in ['Continue watching', 'Playlists', 'Folders']) {
+      for (final label in ['Continue watching', 'Folders']) {
         expect(find.descendant(of: _page(HomeTab.home), matching: find.text(label)), findsWidgets, reason: label);
       }
+      expect(find.descendant(of: _page(HomeTab.home), matching: find.text('Playlists')), findsNothing);
+      expect(find.byKey(const ValueKey('home-folders-see-all')), findsOneWidget);
       // The header stays in the top bar, with Open file / folder / link in its Import (+) menu.
       expect(find.text('Danaview'), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('home-files-top-bar')), matching: find.byTooltip('Import')),
@@ -154,7 +176,7 @@ void main() {
           tester.getTopLeft(find.descendant(of: _page(HomeTab.home), matching: find.text(text)).first).dy;
       expect(y('Continue watching'), lessThan(y('TRAY')));
       expect(y('TRAY'), lessThan(y('FAVS')));
-      expect(y('FAVS'), lessThan(y('Playlists')));
+      expect(y('FAVS'), lessThan(y('Folders')));
       await finishHome(tester, env);
     });
 
@@ -162,17 +184,19 @@ void main() {
       useFilesHome(true);
       final env = await _pump(tester, _home(callbacks: HomeCallbacks(onOpenProjects: () {})));
       final tabs = _stripTabs(tester);
-      expect(tabs, [..._libraryTabs, HomeTab.projects]);
+      expect(tabs, _libraryTabs, reason: 'the editor adds a screen, never a tab');
       for (final tab in tabs.reversed) {
         await _tapTab(tester, tab);
         expect(_selectedTab(tester), tab);
         expect(_page(tab).hitTestable(), findsOneWidget, reason: '$tab');
       }
-      // Fallbacks: the 1.1 sections for Playlists and Folders, neutral panes for the others.
-      await _tapTab(tester, HomeTab.playlists);
-      expect(find.descendant(of: _page(HomeTab.playlists), matching: find.text('Docs')), findsOneWidget);
-      await _tapTab(tester, HomeTab.folders);
-      expect(find.descendant(of: _page(HomeTab.folders), matching: find.text('Movies')), findsOneWidget);
+      // Fallbacks: the shell's Videos page (its Playlists row), the 1.1 Folders section on the
+      // Folders screen, neutral panes for the others.
+      await _tapTab(tester, HomeTab.videos);
+      expect(find.descendant(of: _page(HomeTab.videos), matching: find.text('Docs')), findsOneWidget);
+      await _openScreen(tester, HomeDestination.folders);
+      expect(find.descendant(of: _screen(HomeDestination.folders), matching: find.text('Movies')), findsOneWidget);
+      await _back(tester);
       await _tapTab(tester, HomeTab.photos);
       expect(find.descendant(of: _page(HomeTab.photos), matching: find.text('Nothing here yet')), findsOneWidget);
       await finishHome(tester, env);
@@ -193,13 +217,14 @@ void main() {
       expect(reached, isTrue, reason: 'Tab never reached the Home tab');
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
-      expect(_focusOfTab(tester, HomeTab.all).hasFocus, isTrue);
+      expect(_focusOfTab(tester, HomeTab.videos).hasFocus, isTrue);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await pumpFrames(tester, count: 3);
-      expect(_selectedTab(tester), HomeTab.all);
+      expect(_selectedTab(tester), HomeTab.videos);
 
       // Right walks the whole strip, selecting and focusing each tab; Home/End jump to the ends.
-      for (var i = tabs.indexOf(HomeTab.all) + 1; i < tabs.length; i++) {
+      expect(tabs, _libraryTabs);
+      for (var i = tabs.indexOf(HomeTab.videos) + 1; i < tabs.length; i++) {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
         await pumpFrames(tester, count: 3);
         expect(_selectedTab(tester), tabs[i]);
@@ -303,22 +328,37 @@ void main() {
             documents: (_) => body('DOCS BODY'),
             folders: (_) => body('FOLDERS BODY'),
             projects: (_) => body('PROJECTS BODY'),
+            search: (_) => const SizedBox(height: 44),
             selectionBar: (_) => const SizedBox(height: 56, child: Text('SELECTION BAR')),
           ),
         ),
       );
       for (final (tab, text) in [
-        (HomeTab.all, 'ALL BODY'),
         (HomeTab.videos, 'VIDEOS BODY'),
         (HomeTab.photos, 'PHOTOS BODY'),
         (HomeTab.documents, 'DOCS BODY'),
-        (HomeTab.folders, 'FOLDERS BODY'),
-        (HomeTab.projects, 'PROJECTS BODY'),
       ]) {
         await _tapTab(tester, tab);
         expect(find.descendant(of: _page(tab), matching: find.text(text)), findsOneWidget);
       }
       expect(seen, same(callbacks));
+      // The "Show: All" view of the filter.
+      await _showAll(tester);
+      expect(find.descendant(of: find.byKey(homeAllPageKey), matching: find.text('ALL BODY')), findsOneWidget);
+      expect(seen, same(callbacks));
+      // The screens, with the callbacks in scope on their own route and the selection bar under them.
+      for (final (destination, text) in [
+        (HomeDestination.folders, 'FOLDERS BODY'),
+        (HomeDestination.projects, 'PROJECTS BODY'),
+      ]) {
+        seen = null;
+        await _openScreen(tester, destination);
+        expect(find.descendant(of: _screen(destination), matching: find.text(text)), findsOneWidget);
+        expect(seen, same(callbacks));
+        expect(find.byKey(const ValueKey('home-screen-selection-bar')), findsOneWidget);
+        await _back(tester);
+        expect(_screen(destination), findsNothing);
+      }
       expect(find.text('SELECTION BAR'), findsOneWidget);
       expect(find.byKey(const ValueKey('home-slot-selection-bar')), findsOneWidget);
       await finishHome(tester, env);
@@ -348,7 +388,8 @@ void main() {
       await _tapTab(tester, HomeTab.photos);
       controller.jumpTo(1800);
       await tester.pump();
-      await _tapTab(tester, HomeTab.playlists);
+      // Videos sits before Photos in the strip: visiting it later must not move the Photos page.
+      await _tapTab(tester, HomeTab.videos);
       expect(find.text('photo row 30').hitTestable(), findsNothing);
       await _tapTab(tester, HomeTab.photos);
       expect(controller.offset, 1800);
@@ -384,9 +425,9 @@ void main() {
 
     testWidgets('initialTab opens that tab', (tester) async {
       useFilesHome(true);
-      final env = await _pump(tester, _home(initialTab: HomeTab.folders));
-      expect(_selectedTab(tester), HomeTab.folders);
-      expect(_page(HomeTab.folders).hitTestable(), findsOneWidget);
+      final env = await _pump(tester, _home(initialTab: HomeTab.videos));
+      expect(_selectedTab(tester), HomeTab.videos);
+      expect(_page(HomeTab.videos).hitTestable(), findsOneWidget);
       await finishHome(tester, env);
     });
 
@@ -394,7 +435,7 @@ void main() {
       useFilesHome(true);
       var opened = 0;
       final env = await _pump(tester, _home(callbacks: HomeCallbacks(onOpenProjects: () => opened++)));
-      await _tapTab(tester, HomeTab.projects);
+      await _openScreen(tester, HomeDestination.projects);
       await tester.tap(find.text('Open projects'));
       await tester.pump();
       expect(opened, 1);
@@ -402,16 +443,18 @@ void main() {
     });
 
     for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
-      testWidgets('Projects is shown on ${platform.name} when the editor is wired', (tester) async {
+      testWidgets('the Projects screen opens on ${platform.name} when the editor is wired', (tester) async {
         useFilesHome(true);
         final env = await _pump(tester, _home(callbacks: HomeCallbacks(onOpenProjects: () {})), platform: platform);
-        expect(_stripTabs(tester).last, HomeTab.projects);
+        expect(_stripTabs(tester), _libraryTabs);
+        await _openScreen(tester, HomeDestination.projects);
+        expect(_screen(HomeDestination.projects), findsOneWidget);
         await finishHome(tester, env);
       });
     }
 
     for (final platform in [TargetPlatform.macOS, TargetPlatform.windows, TargetPlatform.linux]) {
-      testWidgets('desktop (${platform.name}) shows no editor tab', (tester) async {
+      testWidgets('desktop (${platform.name}) never opens the Projects screen', (tester) async {
         useFilesHome(true);
         final env = await _pump(
           tester,
@@ -423,28 +466,38 @@ void main() {
           surface: const TestSurface(Size(1280, 800), 1.0),
         );
         expect(_stripTabs(tester), _libraryTabs);
-        expect(find.byKey(homeTabKey(HomeTab.projects)), findsNothing);
+        await _openScreen(tester, HomeDestination.projects);
+        expect(_screen(HomeDestination.projects), findsNothing);
         expect(find.text('PROJECTS BODY'), findsNothing);
         await finishHome(tester, env);
       });
     }
 
-    testWidgets('mobile without the editor wired shows no Projects tab', (tester) async {
+    testWidgets('mobile without the editor wired never opens the Projects screen', (tester) async {
       useFilesHome(true);
       final env = await _pump(tester, _home(), platform: TargetPlatform.android);
       expect(_stripTabs(tester), _libraryTabs);
+      await _openScreen(tester, HomeDestination.projects);
+      expect(_screen(HomeDestination.projects), findsNothing);
       await finishHome(tester, env);
     });
 
-    testWidgets('pure helpers: visibleHomeTabs and homeEditorPlatform', (tester) async {
-      expect(visibleHomeTabs(platform: TargetPlatform.iOS, projectsAvailable: true).last, HomeTab.projects);
-      expect(visibleHomeTabs(platform: TargetPlatform.macOS, projectsAvailable: true), _libraryTabs);
-      expect(
-        visibleHomeTabs(platform: TargetPlatform.android, projectsAvailable: false, showDocuments: false),
-        [HomeTab.home, HomeTab.all, HomeTab.videos, HomeTab.photos, HomeTab.playlists, HomeTab.folders],
-      );
+    testWidgets('pure helpers: visibleHomeTabs, homeProjectsShown and homeEditorPlatform', (tester) async {
+      expect(visibleHomeTabs(), _libraryTabs);
+      expect(visibleHomeTabs(showDocuments: false), [HomeTab.home, HomeTab.videos, HomeTab.photos]);
+      expect(HomeTab.values, _libraryTabs, reason: 'four tabs (DESIGN_SYSTEM §10.2)');
+      expect(HomeDestination.values.map((d) => d.label), ['Projects', 'Playlists', 'Folders']);
+      expect(homeProjectsShown(platform: TargetPlatform.iOS, projectsAvailable: true), isTrue);
+      expect(homeProjectsShown(platform: TargetPlatform.android, projectsAvailable: false), isFalse);
+      expect(homeProjectsShown(platform: TargetPlatform.macOS, projectsAvailable: true), isFalse);
       expect(homeEditorPlatform(TargetPlatform.fuchsia), isFalse);
       expect(HomeTabSlots.none.bodyOf(HomeTab.home), isNull);
+      expect(HomeTabSlots.none.screenOf(HomeDestination.playlists), isNull);
+      Widget body(BuildContext _) => const SizedBox();
+      final slots = HomeTabSlots(folders: body, projects: body, videos: body);
+      expect(slots.screenOf(HomeDestination.folders), same(body));
+      expect(slots.screenOf(HomeDestination.projects), same(body));
+      expect(slots.bodyOf(HomeTab.videos), same(body));
       expect(HomeCallbacks.none.onOpenProjects, isNull);
     });
   });
@@ -488,7 +541,7 @@ void main() {
       final env = await LibraryTestEnv.create();
       await seedFixedLibrary(env);
       for (var i = 0; i < 30; i++) {
-        await env.library.createPlaylist('Inset playlist $i');
+        await env.library.addFolder('/Volumes/Inset/Folder $i');
       }
       await tester.pumpWidget(libraryTestApp(
         env,
@@ -505,7 +558,7 @@ void main() {
       await pumpFrames(tester);
       expect(tester.takeException(), isNull);
 
-      for (final tab in [HomeTab.playlists, HomeTab.photos]) {
+      for (final tab in [HomeTab.home, HomeTab.photos]) {
         await _tapTab(tester, tab);
         await scrollToEnd(tester, tab);
         final offsetBefore = tester
@@ -553,15 +606,27 @@ void main() {
           ),
           surface: surface,
         );
-        for (final tab in _stripTabs(tester)) {
-          await _tapTab(tester, tab);
-          expect(_selectedTab(tester), tab);
-          final scrollables = find.descendant(of: _page(tab), matching: find.byType(Scrollable));
+        Future<void> scroll(Finder page) async {
+          final scrollables = find.descendant(of: page, matching: find.byType(Scrollable));
           if (scrollables.evaluate().isNotEmpty) {
             await tester.drag(scrollables.first, const Offset(0, -2000));
             await pumpFrames(tester, count: 3);
           }
+        }
+
+        for (final tab in _stripTabs(tester)) {
+          await _tapTab(tester, tab);
+          expect(_selectedTab(tester), tab);
+          await scroll(_page(tab));
           expect(tester.takeException(), isNull, reason: '$tab at $surface');
+        }
+        await _tapTab(tester, HomeTab.home);
+        for (final destination in HomeDestination.values) {
+          await _openScreen(tester, destination);
+          expect(_screen(destination), findsOneWidget, reason: '$destination');
+          await scroll(_screen(destination));
+          expect(tester.takeException(), isNull, reason: '$destination at $surface');
+          await _back(tester);
         }
         await finishHome(tester, env);
       });

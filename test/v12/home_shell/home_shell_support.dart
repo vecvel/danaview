@@ -57,3 +57,17 @@ Future<void> finishHome(WidgetTester tester, LibraryTestEnv env) async {
   await tester.pumpWidget(const SizedBox());
   await env.dispose();
 }
+
+/// Repaints every kit glyph once a pushed screen (a section's See all) has finished sliding in.
+///
+/// A glyph snaps its edges to the device pixel grid from where it paints; one painted while its
+/// route slides keeps the sub-pixel phase of that frame until its next paint (DanaviewGlyph's
+/// docs), so pixel comparisons with the Home would see a half-pixel anti-aliasing shift. This is
+/// the "next paint" the glyph waits for.
+Future<void> repaintGlyphs(WidgetTester tester) async {
+  for (final element in find.byType(DanaviewGlyph).evaluate()) {
+    final RenderObject? box = element.renderObject;
+    box?.markNeedsPaint();
+  }
+  await tester.pump();
+}
