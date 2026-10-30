@@ -1,4 +1,5 @@
 // OWNER: UX-42 (restored by FIX-LICENSES, owner decision 2026-10-16)
+// EXTENDED: S4-W (PdfBox-Android's entry names the S4 PDF tools and carries Apache PDFBox's NOTICE.)
 //
 // Settings › About › Open-source licences (ARCH §17.1, §20.3, §20.4): a plain, custom page (no
 // Material LicensePage) listing
@@ -66,6 +67,24 @@ const String _apacheTerms = 'Licensed under the Apache License, Version 2.0 (the
     'Unless required by applicable law or agreed to in writing, software distributed under the License is '
     'distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See '
     'the License for the specific language governing permissions and limitations under the License.';
+
+/// The NOTICE of Apache PDFBox that PdfBox-Android carries (github.com/TomRoush/PdfBox-Android,
+/// NOTICE.txt), shown with its entry as Apache-2.0 §4 (d) asks; the AAR's bundled resources follow.
+const String _pdfBoxNotice = 'Apache PDFBox\n'
+    'Copyright 2014 The Apache Software Foundation\n\n'
+    'This product includes software developed at The Apache Software Foundation (http://www.apache.org/).\n\n'
+    'Based on source code originally developed in the PDFBox and FontBox projects.\n'
+    'Copyright (c) 2002-2007, www.pdfbox.org\n\n'
+    'Based on source code originally developed in the PaDaF project.\n'
+    'Copyright (c) 2010 Atos Worldline SAS\n\n'
+    'Includes the Adobe Glyph List\n'
+    'Copyright 1997, 1998, 2002, 2007, 2010 Adobe Systems Incorporated.\n\n'
+    'Includes the Zapf Dingbats Glyph List\n'
+    'Copyright 2002, 2010 Adobe Systems Incorporated.\n\n'
+    'Includes the Script Property (Scripts-10.0.0.txt)\n'
+    'Copyright 2017 Unicode, Inc.\n\n'
+    'PdfBox-Android also bundles the Liberation Sans fallback font (SIL Open Font License 1.1) and Adobe '
+    'CMap and AFM resources (BSD-style Adobe licences), as Apache PDFBox ships them.';
 
 const String _playerLibraries = 'Video player (libmpv build of media_kit)';
 const String _playerSource = 'Builds and their sources: https://github.com/media-kit/libmpv-darwin-build and '
@@ -212,16 +231,19 @@ const List<BundledLicenseNotice> danaviewBundledNotices = [
         'https://sqlite.org/copyright.html',
   ),
   // FIX-S3Q-A2: HOM-25 ships PdfBox-Android (and its Bouncy Castle dependency) in the Android app.
+  // S4-W: the S4 PDF tools (HOM-28A…HOM-31A) write with it; its NOTICE (Apache-2.0 §4 d) is shown.
   BundledLicenseNotice(
     name: 'PdfBox-Android',
     licence: 'Apache-2.0',
-    usedFor: 'Documents on Android: PDF text and search',
-    text: 'Copyright © The Apache Software Foundation and Tom Roush. https://github.com/TomRoush/PdfBox-Android\n\n$_apacheTerms',
+    usedFor: 'Documents on Android: PDF text and search, and the PDF tools (organise pages, merge, annotate, '
+        'sign, compress)',
+    text: 'Copyright © The Apache Software Foundation and Tom Roush. https://github.com/TomRoush/PdfBox-Android\n\n'
+        '$_apacheTerms\n\nNOTICE\n\n$_pdfBoxNotice',
   ),
   BundledLicenseNotice(
     name: 'Bouncy Castle',
     licence: 'MIT',
-    usedFor: 'Documents on Android: opening protected PDFs (used by PdfBox-Android)',
+    usedFor: 'Documents on Android: opening protected PDFs and keeping PDF tool results protected (used by PdfBox-Android)',
     text: 'Copyright © 2000-2026 The Legion of the Bouncy Castle Inc. (https://www.bouncycastle.org)\n\n$_mitPermission',
   ),
 ];

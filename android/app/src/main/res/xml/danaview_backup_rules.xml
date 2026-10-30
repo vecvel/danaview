@@ -12,4 +12,7 @@
          tell cloud backup from device transfer, so the Danaview library (files/library: library.db,
          files/, imports/) is left out entirely here. -->
     <exclude domain="file" path="library" />
+    <!-- EXTENDED: S4-W (HOM-30 / HOM-30A contract, privacy text). Saved signatures of the PDF sign
+         tool (files/signatures) stay on this device only: never in a backup. -->
+    <exclude domain="file" path="signatures" />
 </full-backup-content>

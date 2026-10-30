@@ -2,11 +2,13 @@
 // DANAVIEW_FILES_HOME, BUILD_PLAN v1.2 §1A)
 // EXTENDED: S3-W (slice S3 share of INT-106: documents, Open with Danaview and the iOS Share
 // Extension, in the same builds; ARCH v1.2 §5.2, §5.6, §9.3)
+// EXTENDED: S4-W (slice S4 share of INT-106: the PDF tools and saved signatures, in the same builds;
+// HOM plan §8.5, ARCH v1.2 §5.2, §9.1)
 
 /// The Privacy Policy and Terms of Use as structured data, rendered by the legal screen.
 ///
 /// Edited in order UX-42 (v1.1) → ST-05 (speed-test providers, V2-406) → S2-W (Files & Media Home)
-/// → S3-W (documents, share-in) → AIS-36 → INT-106 (ARCH §9.5).
+/// → S3-W (documents, share-in) → S4-W (PDF tools, saved signatures) → AIS-36 → INT-106 (ARCH §9.5).
 library;
 
 import '../flags.dart';
@@ -197,8 +199,54 @@ const List<LegalBullet> documentsPermissionBullets = [
 /// The Terms of Use section on documents.
 const LegalSection documentsTermsSection = LegalSection('Documents', [
   LegalBlock.paragraph(
-    'Danaview shows documents for reading only and never changes them. A document can look different from the '
-    'app that made it; to edit one, use Open in another app.',
+    'Danaview shows documents for reading only, and viewing never changes them. A document can look different '
+    'from the app that made it; to edit one, use Open in another app.',
+  ),
+]);
+
+// ---- PDF tools and saved signatures (S4-W; HOM plan §8.5, ARCH v1.2 §5.2, §9.1) ----
+//
+// Same builds as the blocks above (DANAVIEW_FILES_HOME). The tools run where the platform's PDF
+// engine offers them (iPhone, iPad, Mac, Android); the text names no platform so it stays true as
+// the Android annotate and sign tools arrive. INT-106 folds them into the final 1.2.0 text.
+
+/// Saved signatures ("What Danaview stores on your device").
+const List<LegalBullet> pdfToolsStoredBullets = [
+  LegalBullet(
+    lead: 'Saved signatures',
+    'If you save a signature to sign PDFs (drawn, typed or made from a photo), Danaview keeps it as a picture '
+    "only on this device, in the app's private storage. Saved signatures are not in your Danaview folders, are "
+    'not shown in other apps, and are not included in backups or moved to a new device. You can keep up to '
+    '10; delete one while signing, or all of them in Settings › Privacy. A photo you pick for a signature is '
+    'used only to make that picture and is then deleted.',
+  ),
+];
+
+/// The PDF tools ("Files and permissions").
+const List<LegalBullet> pdfToolsPermissionBullets = [
+  LegalBullet(
+    lead: 'PDF tools',
+    'Organise pages, Merge, Annotate, Sign and Compress run entirely on your device; nothing is uploaded. '
+    'Each saves its result as a new file next to the original, or in Imported for a file from another app or '
+    'folder, and the original is never changed. Only if you choose Replace for a PDF in your Danaview folders '
+    'is that file overwritten by the new version. Signing places a picture of your signature on the page; it '
+    'is not a certificate-based digital signature. Importing a signature from a photo uses the system photo '
+    'picker (the file picker on Mac), so Danaview receives only the photo you pick.',
+  ),
+];
+
+/// The saved-signature choice ("Your choices").
+const List<LegalBullet> pdfToolsChoiceBullets = [
+  LegalBullet('Delete saved signatures one by one while signing, or all at once in Settings › Privacy.'),
+];
+
+/// The Terms of Use section on the PDF tools.
+const LegalSection pdfToolsTermsSection = LegalSection('PDF tools and signatures', [
+  LegalBlock.paragraph(
+    'The PDF tools save new files and leave the original as it was, unless you choose Replace for a file in '
+    'your Danaview folders. A signature you place with Danaview is a picture of your signature, not a '
+    'certificate-based digital signature, and Danaview does not verify who signed. Sign only documents you '
+    'are entitled to sign, and check the result before you share it.',
   ),
 ]);
 
@@ -250,6 +298,7 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
         ),
         if (FeatureFlags.filesHome) ...filesHomeStoredBullets,
         if (FeatureFlags.filesHome) ...documentsStoredBullets,
+        if (FeatureFlags.filesHome) ...pdfToolsStoredBullets,
       ]),
       if (FeatureFlags.filesHome) LegalBlock.paragraph(filesHomeBackupText),
       LegalBlock.paragraph(
@@ -337,6 +386,7 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
         ),
         if (FeatureFlags.filesHome) ...filesHomePermissionBullets,
         if (FeatureFlags.filesHome) ...documentsPermissionBullets,
+        if (FeatureFlags.filesHome) ...pdfToolsPermissionBullets,
       ]),
     ]),
     LegalSection('Your choices', [
@@ -364,6 +414,7 @@ const LegalDocumentText privacyPolicyText = LegalDocumentText(
           'Profile and your history in Settings › Storage & history first.',
         ),
         if (FeatureFlags.filesHome) ...filesHomeChoiceBullets,
+        if (FeatureFlags.filesHome) ...pdfToolsChoiceBullets,
       ]),
     ]),
     LegalSection("Children's privacy", [
@@ -426,6 +477,7 @@ const LegalDocumentText termsOfUseText = LegalDocumentText(
     ]),
     if (FeatureFlags.filesHome) filesHomeTermsSection,
     if (FeatureFlags.filesHome) documentsTermsSection,
+    if (FeatureFlags.filesHome) pdfToolsTermsSection,
     LegalSection('Auto captions', [
       LegalBlock.paragraph(
         'On iPhone, iPad and Android, automatically created captions may contain mistakes. Review them before you '
