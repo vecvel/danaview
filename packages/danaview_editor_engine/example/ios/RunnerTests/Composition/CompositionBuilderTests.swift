@@ -64,9 +64,31 @@ final class CompositionBuilderTests: XCTestCase {
             XCTAssertNil(built.spacerTrackID)
         }
         // Every media layer map segment: target at CMTime(k0, grid) for CMTime(k1 − k0, grid); source = µs + ε.
+        // A hold freezes the whole rule sample at s0 across [k0, k1) (integral scale + unscaled remainder).
         for layer in plan.layers where layer.kind == .media {
             let track = try XCTUnwrap(built.composition.track(withTrackID: try XCTUnwrap(built.trackIDBySeq[layer.seq!])), name)
             let segs = segments(track)
+            if layer.hold, let unit = built.sources.media[layer.asset!]?.heldSamples[layer.map[0].s0] {
+                let k0 = grid.frameIndexOf(layer.t0)
+                let k1 = grid.frameIndexOf(layer.t1)
+                guard k1 > k0 else { continue }
+                let run = segs.filter {
+                    CMTimeCompare($0.timeMapping.target.start, grid.cmTime(frame: k0)) >= 0
+                        && CMTimeCompare($0.timeMapping.target.end, grid.cmTime(frame: k1)) <= 0
+                }
+                XCTAssertEqual(CMTimeCompare(run.first?.timeMapping.target.start ?? .invalid, grid.cmTime(frame: k0)), 0, "\(name) \(layer.id): hold start")
+                XCTAssertEqual(CMTimeCompare(run.last?.timeMapping.target.end ?? .invalid, grid.cmTime(frame: k1)), 0, "\(name) \(layer.id): hold end")
+                for seg in run {
+                    XCTAssertEqual(CMTimeCompare(seg.timeMapping.source.start, unit.start), 0, "\(name) \(layer.id): hold sample start")
+                    XCTAssertLessThanOrEqual(CMTimeCompare(seg.timeMapping.source.duration, unit.duration), 0, "\(name) \(layer.id): one sample")
+                    let scale = CMTimeGetSeconds(seg.timeMapping.target.duration) / CMTimeGetSeconds(seg.timeMapping.source.duration)
+                    XCTAssertEqual(scale, scale.rounded(), accuracy: 1e-6, "\(name) \(layer.id): integral scale")
+                }
+                // The rule frame: greatest PTS ≤ s0 + ε.
+                let at = FrameGrid.cmTime(us: layer.map[0].s0 + CompositionBuilder.epsilonUs)
+                XCTAssertLessThanOrEqual(CMTimeCompare(unit.start, at), 0, "\(name) \(layer.id): sample at or before s0 + ε")
+                continue
+            }
             let pieces = layer.hold ? [layer.map[0]] : layer.map
             for (i, m) in pieces.enumerated() {
                 let k0 = grid.frameIndexOf(layer.hold ? layer.t0 : m.t0)
@@ -86,11 +108,20 @@ final class CompositionBuilderTests: XCTestCase {
                 }
             }
         }
-        // Every video edit point on every track is a grid frame.
+        // Every video edit point on every track is a grid frame, but for the seams inside a frozen
+        // sample's run (the integral-scale edit and its unscaled remainder show the same frame).
+        let frozen = built.sources.media.values.flatMap(\.frozenSamples)
+        func isFrozen(_ seg: AVCompositionTrackSegment?) -> CMTimeRange? {
+            guard let seg, !seg.isEmpty else { return nil }
+            return frozen.first { CMTimeCompare($0.start, seg.timeMapping.source.start) == 0 }
+        }
         for track in videoTracks(built) {
-            for seg in track.segments {
-                XCTAssertNotNil(Support.gridFrame(seg.timeMapping.target.start, fps: grid.fps), "\(name): video edit point off grid")
-                XCTAssertNotNil(Support.gridFrame(seg.timeMapping.target.end, fps: grid.fps), "\(name): video edit end off grid")
+            let all: [AVCompositionTrackSegment] = track.segments ?? []
+            for (i, seg) in all.enumerated() {
+                let inner = isFrozen(seg).map { $0 == isFrozen(i > 0 ? all[i - 1] : nil) } ?? false
+                let innerEnd = isFrozen(seg).map { $0 == isFrozen(i + 1 < all.count ? all[i + 1] : nil) } ?? false
+                if !inner { XCTAssertNotNil(Support.gridFrame(seg.timeMapping.target.start, fps: grid.fps), "\(name): video edit point off grid") }
+                if !innerEnd { XCTAssertNotNil(Support.gridFrame(seg.timeMapping.target.end, fps: grid.fps), "\(name): video edit end off grid") }
             }
         }
         // Plain (non-ramp) audio pieces start and end on the grid; their sources start at the plan µs.
