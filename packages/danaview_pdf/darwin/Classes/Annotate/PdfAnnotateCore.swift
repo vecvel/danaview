@@ -1,4 +1,6 @@
 // OWNER: HOM-29
+// EXTENDED: S4-W (the output is created exclusively through PdfPageToolsCore.write / PdfNewFiles;
+// a failure deletes it only if this job created it.)
 // EXTENDED: HOM-30 (a stamp turned a quarter (90° or 270°) still fills its rect: the image is drawn
 // with its sides swapped before the turn, so a signature placed upright on a rotated page covers
 // exactly the rect the viewer hit-tests, moves and resizes.)
@@ -8,7 +10,8 @@
 // per text line; ink with one path per stroke; freeText; a text note) and image stamps (HOM-30's
 // signatures), writes them into a NEW file, or burns them into the page content (`burnIn`). The
 // source is opened read-only and only changed in memory; only `outPath` is written, once, at the
-// end, and deleted again on cancel or failure (no partial file). Page content streams are kept, so
+// end (created exclusively), and deleted again on cancel or failure only if this job created it (no
+// partial file, never someone else's). Page content streams are kept, so
 // text stays text; existing annotations stay as they are. An encrypted source gives an encrypted
 // output with the password it was opened with (PdfPageToolsCore.write). The viewer's annotate
 // mode (PdfAnnotateView.swift) builds its preview with the same functions, so what the user sees
@@ -366,7 +369,7 @@ enum PdfAnnotateCore {
     let encryption = PdfOutputEncryption.of(document, password: input.password)
     let pages = Array(Set(annotations.map(\.pageIndex) + stamps.map(\.pageIndex))).sorted()
     let total = pages.count + 1
-    return try PdfPageToolsCore.writingNewFiles([outPath]) {
+    return try PdfPageToolsCore.writingNewFiles { files in
       var done = 0
       control.progress(done: 0, total: total)
       for index in pages {
@@ -392,7 +395,7 @@ enum PdfAnnotateCore {
         done += 1
         control.progress(done: done, total: total)
       }
-      let written = try PdfPageToolsCore.write(document, to: outPath, control: control, keepAlive: nil, encryption: encryption)
+      let written = try PdfPageToolsCore.write(document, to: outPath, control: control, keepAlive: nil, encryption: encryption, files: files)
       control.progress(done: total, total: total)
       return written
     }

@@ -1,4 +1,6 @@
 // OWNER: HOM-31
+// EXTENDED: S4-W (a file that appears at the output path after the early check is never
+// overwritten or deleted: the run fails with invalidArgument and the file keeps its bytes.)
 //
 // XCTests of Compress/PdfCompressCore.swift (BUILD_PLAN HOM-31), run on the iOS Simulator and on
 // macOS by Tests/Compress/run_compress_xctests.sh: an image-heavy file shrinks with every preset
@@ -207,6 +209,27 @@ final class PdfCompressCoreTests: XCTestCase {
       XCTAssertFalse(FileManager.default.fileExists(atPath: out.path), "no partial file after a cancel at poll \(cancelAfterPolls)")
     }
     XCTAssertEqual(scratch(), scratchBefore, "no temporary directory left behind")
+  }
+
+  func testAFileThatAppearsAtTheOutputIsNeverDeleted() throws {
+    let source = CompressFixtures.writeImagePdf(to: url("race.pdf"), pages: 1, jpeg: false, pixelsPerInch: 150)
+    var polls = 0
+    _ = try PdfCompressCore.compress(path: source.path, password: nil, preset: .medium, outPath: url("plain.pdf").path, isCancelled: {
+      polls += 1
+      return false
+    })
+    // The last poll is right before the write: another writer's file appears at the output then.
+    let out = url("raced.pdf")
+    let theirs = Data("someone else's file".utf8)
+    var seen = 0
+    XCTAssertThrowsError(try PdfCompressCore.compress(path: source.path, password: nil, preset: .medium, outPath: out.path, isCancelled: {
+      seen += 1
+      if seen == polls { XCTAssertTrue(FileManager.default.createFile(atPath: out.path, contents: theirs)) }
+      return false
+    })) { error in
+      XCTAssertEqual(error as? PdfFailure, PdfFailure(.invalidArgument, "output exists"))
+    }
+    XCTAssertEqual(FileManager.default.contents(atPath: out.path), theirs, "the other file is kept as it was")
   }
 
   func testBadRequestsFailTyped() throws {
