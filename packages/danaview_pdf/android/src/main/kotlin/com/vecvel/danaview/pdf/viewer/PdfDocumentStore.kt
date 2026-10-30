@@ -1,4 +1,5 @@
 // OWNER: HOM-25
+// EXTENDED: HOM-29A (the appearance layer of the file's own annotations, viewer/PdfAppearanceLayer.kt).
 //
 // The open documents of one plugin instance, by handle (the Android twin of HOM-24's
 // PdfDocumentStore). Each [OpenPdf] holds, for one file opened read-only (rule 27):
@@ -68,6 +69,24 @@ class OpenPdf internal constructor(val handle: Long, val file: File) {
 
     @Volatile var closed = false
         private set
+
+    /** The password the file was opened with (the appearance layer opens its own PdfBox copy; HOM-29A). */
+    @Volatile private var password: String? = null
+
+    /** Pages with annotations PdfRenderer doesn't draw (HOM-29A; from PdfFacts). */
+    @Volatile private var annotationPages: Map<Int, Set<String>> = emptyMap()
+
+    // Render thread only (HOM-29A).
+    private var appearanceLayer: PdfAppearanceLayer? = null
+
+    /**
+     * The layer that draws the file's own Ink / FreeText / Stamp (and other) appearances over the
+     * tiles, or null when no page has any (render thread only; HOM-29A).
+     */
+    fun appearances(): PdfAppearanceLayer? {
+        if (closed || annotationPages.isEmpty()) return null
+        return appearanceLayer ?: PdfAppearanceLayer(file, password, annotationPages).also { appearanceLayer = it }
+    }
 
     val locked: Boolean get() = platform == null
 
@@ -147,6 +166,8 @@ class OpenPdf internal constructor(val handle: Long, val file: File) {
                 }
                 this.platform = platform
                 this.text = document
+                this.password = password
+                this.annotationPages = facts?.annotationPages.orEmpty()
                 summary = PdfSummary(
                     handle = handle,
                     pageCount = pageCount,
@@ -176,6 +197,8 @@ class OpenPdf internal constructor(val handle: Long, val file: File) {
             text = null
         }
         p?.close()
+        appearanceLayer?.close()
+        appearanceLayer = null
         if (d != null) textLock.withLock {
             textCache = null
             closeQuietly(d)
