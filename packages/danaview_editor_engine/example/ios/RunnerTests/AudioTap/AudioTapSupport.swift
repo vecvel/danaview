@@ -183,19 +183,26 @@ enum AudioTapSupport {
         DispatchQueue.global(qos: .userInitiated).async {
             while let sample = output.copyNextSampleBuffer() {
                 guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
-                let length = CMBlockBufferGetDataLength(block)
-                var floats = [Float](repeating: 0, count: length / MemoryLayout<Float>.size)
-                floats.withUnsafeMutableBytes { raw in
-                    _ = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: raw.baseAddress!)
+                // Whole Float32 values only: never copy more bytes than the destination holds.
+                let count = CMBlockBufferGetDataLength(block) / MemoryLayout<Float>.size
+                guard count > 0 else { continue }
+                var floats = [Float](repeating: 0, count: count)
+                let status = floats.withUnsafeMutableBytes { raw -> OSStatus in
+                    guard let base = raw.baseAddress else { return kCMBlockBufferBadPointerParameterErr }
+                    return CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: raw.count, destination: base)
                 }
-                acc.append(floats)
+                if status == kCMBlockBufferNoErr { acc.append(floats) }
             }
             withExtendedLifetime(reader) { done.signal() }
         }
         if done.wait(timeout: .now() + timeout) == .timedOut {
-            reader.cancelReading()
-            _ = done.wait(timeout: .now() + 5)
-            return MixRead(interleaved: acc.snapshot, status: reader.status, hung: true)
+            // FIX-IOS-D7: never cancel or release a reader while copyNextSampleBuffer is blocked
+            // inside it. cancelReading() tore the reader down under the blocked call (CI: SIGSEGV in
+            // FigSimpleMutexUnlock under assetReader_ExtractAndRetainNextSampleBuffer). The blocked
+            // read is left alone with everything it uses kept alive for the rest of the process, and
+            // the caller (readValidated) redoes the read on a fresh composition.
+            SegmentedWriter.keepAbandoned([reader, output, composition, mix])
+            return MixRead(interleaved: acc.snapshot, status: .unknown, hung: true)
         }
         return MixRead(interleaved: acc.snapshot, status: reader.status, hung: false)
     }

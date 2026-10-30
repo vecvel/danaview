@@ -132,7 +132,8 @@ final class SpacerLayoutTests: XCTestCase {
             done.signal()
         }
         if done.wait(timeout: .now() + timeout) == .timedOut {
-            reader.cancelReading()
+            // Never cancel or release a reader under a blocked copyNextSampleBuffer (FIX-IOS-D7).
+            SegmentedWriter.keepAbandoned([reader, output, built])
             return .hung
         }
         reader.cancelReading()
@@ -211,7 +212,8 @@ final class SpacerLayoutTests: XCTestCase {
                 done.signal()
             }
             if done.wait(timeout: .now() + 60) == .timedOut {
-                reader.cancelReading()
+                // Never cancel or release a reader under a blocked copyNextSampleBuffer (FIX-IOS-D7).
+                SegmentedWriter.keepAbandoned([reader, output, built, session])
                 XCTFail("\(fps)×\(k): full read hung after \(frames.value.count) frames")
                 continue
             }

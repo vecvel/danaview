@@ -214,8 +214,13 @@ final class PastSourceEndTests: XCTestCase {
             }
             done.signal()
         }
-        // A stalled reader is left blocked (cancelling it under a blocked call crashes, FIX-IOS-D7).
-        guard done.wait(timeout: .now() + 8) == .success else { return nil }
+        // A stalled reader is left blocked (cancelling it under a blocked call crashes, FIX-IOS-D7),
+        // and kept alive: the worker holds only the output, which does not keep its reader alive, so
+        // releasing the reader here would tear it down under the blocked call just the same.
+        guard done.wait(timeout: .now() + 8) == .success else {
+            SegmentedWriter.keepAbandoned([reader, out, copy, built])
+            return nil
+        }
         reader.cancelReading()
         return got.value
     }
@@ -276,7 +281,13 @@ final class PastSourceEndTests: XCTestCase {
     private func mixRead(_ plan: RenderPlan) async throws -> [Float] {
         let options = try Self.buildOptions(session: nil)
         let frames = Int(Double(plan.durUs) * 0.048)
-        let (read, _) = try await AudioTapSupport.readValidated(expectFrames: frames - 4_800) {
+        // A good read ends where the audio media ends (past the source end the output stops), not
+        // at the timeline end: expecting the timeline end made every read "short", so each mix
+        // read was redone four times (more chances to hit the iOS 26 blocked read).
+        let probe = try await CompositionBuilder.build(plan: plan, options: options)
+        keep.append(probe)
+        let mediaFrames = Int((CMTimeGetSeconds(probe.audioMediaEnd) * 48_000).rounded(.down))
+        let (read, _) = try await AudioTapSupport.readValidated(expectFrames: max(0, min(frames, mediaFrames) - 4_800)) {
             let built = try await CompositionBuilder.build(plan: plan, options: options)
             keep.append(built)
             return (built.composition, try XCTUnwrap(built.audioMix), [], built.gainTaps)
