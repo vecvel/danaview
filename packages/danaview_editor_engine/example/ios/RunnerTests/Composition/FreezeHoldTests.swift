@@ -165,8 +165,13 @@ final class FreezeHoldTests: XCTestCase {
             }
             done.signal()
         }
-        // A stalled reader is left blocked (cancelling it under a blocked call crashes, FIX-IOS-D7).
-        guard done.wait(timeout: .now() + 8) == .success else { return nil }
+        // A stalled reader is left blocked (cancelling it under a blocked call crashes, FIX-IOS-D7),
+        // and kept alive: the worker holds only the output, which does not keep its reader alive, so
+        // releasing the reader here would tear it down under the blocked call just the same.
+        guard done.wait(timeout: .now() + 8) == .success else {
+            SegmentedWriter.keepAbandoned([reader, out, copy, built])
+            return nil
+        }
         reader.cancelReading()
         return got.value
     }
