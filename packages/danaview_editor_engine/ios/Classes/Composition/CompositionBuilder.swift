@@ -13,6 +13,15 @@
 // `scaleTimeRange` of that range to `CMTime(k1 − k0, gridFps)`. Grid times are never converted to µs
 // CMTimes (D-35); source ranges stay `CMTime(µs, 1_000_000)`. `hold` layers insert a 100 µs source
 // range at `map[0].s0 + ε` scaled across the whole layer (the compositor sees that one frame).
+// Past the source end (ARCH §11.5: the rule frame there is the LAST source frame): the segment
+// that runs past the video track's end plays at its own rate up to the last sample's PTS (read
+// once per such asset, `lastSampleRange`), and that whole sample, frozen like the spacer (one edit
+// at an integral scale plus an unscaled remainder), holds the last frame from there to the layer end; a segment starting past it is all hold. Never
+// a clamped range stretched over the segment (that slowed the remaining source down and dropped
+// later segments). The hold's source starts at the sample's PTS: an edit whose source starts
+// inside a sample stalls an AVAssetReader that opens inside it (segmented export). A part that
+// holds no output frame time is left out (no extra edit at a clip that ends exactly at its
+// source end), so the only edit points off the grid are such play → hold seams.
 // A runtime-generated 16×16 spacer (SpacerVideo) covers `CMTime(0…K, gridFps)` so the compositor
 // runs for every output frame, gaps included. It is laid as n whole spacer durations (one edit at an
 // integral scale) plus an unscaled remainder edit shorter than one spacer duration, never as one
@@ -23,7 +32,9 @@
 // Audio. Segments are laid out by AudioMixLayout (interval colouring × pitch, ramp-seam pairs).
 // Audio is sample-accurate (no ε): a unity-rate piece inserts its source start with the GRID
 // duration (no time-pitch pass at a rate of 1 ± 10⁻⁶); other pieces insert the exact source µs and
-// are scaled to the grid duration. Each track's AVMutableAudioMixInputParameters uses `.timeDomain`
+// are scaled to the grid duration. A piece running past its source end plays at its own rate up
+// to the end and the track is empty (silent) after it (ARCH §11.5), never stretched; a piece
+// starting past the end is left out. Each track's AVMutableAudioMixInputParameters uses `.timeDomain`
 // (pitch kept) or `.varispeed` and an IOS-18 GainTap carrying the plan envelope.
 //
 // Threading: `loadSources` is async (AVFoundation loading); `assemble` is synchronous and runs on
@@ -71,6 +82,9 @@ struct CompositionSources {
         let asset: AVURLAsset
         let video: AVAssetTrack?
         let videoRange: CMTimeRange?
+        /// The last video sample [PTS, track end) in track time, read only for assets a layer plays
+        /// past the end of (ARCH §11.5 hold); nil otherwise or when it could not be read.
+        var lastVideoSample: CMTimeRange? = nil
         let audio: [AVAssetTrack]
         let audioRanges: [CMTimeRange]
     }
@@ -126,6 +140,15 @@ final class BuiltComposition {
 
     /// The instruction covering [time].
     func instruction(at time: CMTime) -> InstructionSpec? { InstructionBuilder.lookup(instructions, at: time) }
+
+    /// Where the last audio media of the composition ends (zero without audio). A mix reader ends
+    /// there even when the timeline goes on (audio past its source end, ARCH §11.5, or audio
+    /// segments ending before the timeline end); the export fills the rest with silence.
+    var audioMediaEnd: CMTime {
+        composition.tracks(withMediaType: .audio)
+            .compactMap { $0.segments.last(where: { !$0.isEmpty })?.timeMapping.target.end }
+            .max { CMTimeCompare($0, $1) < 0 } ?? .zero
+    }
 
     /// Gain-only patch (ARCH §11.2): swaps every tap's envelope for [plan]'s gains. Returns false
     /// (nothing swapped) when [plan]'s audio no longer matches the layout (rebuild instead).
@@ -316,7 +339,12 @@ enum CompositionBuilder {
             } catch {
                 throw EngineError(.mediaOffline, "asset \(id) could not be opened", mediaFingerprint: fpOf(planAsset), retryable: true)
             }
-            media[id] = CompositionSources.Media(asset: asset, video: video, videoRange: videoRange, audio: audio, audioRanges: audioRanges)
+            var last: CMTimeRange?
+            if let v = video, let range = videoRange, layersRunPastTheEnd(plan, asset: id, videoEnd: range.end) {
+                last = lastSampleRange(asset: asset, track: v, trackRange: range)
+            }
+            media[id] = CompositionSources.Media(
+                asset: asset, video: video, videoRange: videoRange, lastVideoSample: last, audio: audio, audioRanges: audioRanges)
         }
         let lease = options.access.flatMap { scopedURLs.isEmpty ? nil : $0.lease(scopedURLs) }
 
@@ -337,6 +365,58 @@ enum CompositionBuilder {
     }
 
     private static func fpOf(_ a: PlanAsset) -> String? { a.fp.isEmpty ? nil : a.fp }
+
+    /// Whether a (non-`hold`) media layer of [plan] on [asset] shows an output frame past the video
+    /// track's end [videoEnd] (it then holds the last sample, whose range `lastSampleRange` reads).
+    static func layersRunPastTheEnd(_ plan: RenderPlan, asset: String, videoEnd: CMTime) -> Bool {
+        let grid = plan.canvas.editGrid
+        return plan.layers.contains { l in
+            guard l.kind == .media, !l.hold, l.asset == asset else { return false }
+            let layerEnd = grid.cmTime(frame: grid.frameIndexOf(l.t1))
+            for seg in l.map {
+                let k0 = grid.frameIndexOf(seg.t0)
+                let k1 = grid.frameIndexOf(seg.t1)
+                guard k1 > k0 else { continue }
+                let start = FrameGrid.cmTime(us: seg.s0 + epsilonUs)
+                let whole = FrameGrid.cmTime(us: seg.s1 - seg.s0)
+                guard CMTimeCompare(CMTimeAdd(start, whole), videoEnd) > 0 else { continue }
+                let at = grid.cmTime(frame: k0)
+                let through = CMTimeCompare(start, videoEnd) < 0
+                    ? scaled(grid.cmTime(frame: k1 - k0), part: CMTimeSubtract(videoEnd, start), whole: whole) : .zero
+                return hasOutputFrame(in: CMTimeAdd(at, through), layerEnd, grid: plan.canvas.outputGrid)
+            }
+            return false
+        }
+    }
+
+    /// The presentation range [PTS, track end) of [track]'s last sample in track time (edit lists
+    /// applied), read without decoding (compressed samples of the last 2 s); nil when unreadable.
+    /// The hold edit inserts exactly this range: an edit whose source starts inside a sample (the
+    /// old 100 µs range) stalls an AVAssetReader that starts inside it (segmented export).
+    static func lastSampleRange(asset: AVAsset, track: AVAssetTrack, trackRange: CMTimeRange) -> CMTimeRange? {
+        guard trackRange.end.isNumeric, let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let window = CMTime(value: 2, timescale: 1)
+        let start = CMTimeMaximum(trackRange.start, CMTimeSubtract(trackRange.end, window))
+        reader.timeRange = CMTimeRange(start: start, end: trackRange.end)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { return nil }
+        reader.add(output)
+        guard reader.startReading() else { return nil }
+        defer { reader.cancelReading() }
+        var best: CMTime?
+        var samples = 0
+        // Bounded: 2 s of compressed samples (the cap only guards against a runaway source).
+        while samples < 10_000, let sample = output.copyNextSampleBuffer() {
+            samples += 1
+            guard CMSampleBufferGetNumSamples(sample) > 0 else { continue }
+            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+            guard pts.isNumeric, CMTimeCompare(pts, trackRange.end) < 0 else { continue }
+            if best.map({ CMTimeCompare(pts, $0) > 0 }) ?? true { best = pts }
+        }
+        guard let pts = best, CMTimeCompare(pts, trackRange.start) >= 0 else { return nil }
+        return CMTimeRange(start: pts, end: trackRange.end)
+    }
 
     // MARK: Assembly
 
@@ -386,25 +466,29 @@ enum CompositionBuilder {
                         of: video, at: grid.cmTime(frame: k0), target: grid.cmTime(frame: k1 - k0), ends: &ends)
                     continue
                 }
+                let layerEnd = grid.cmTime(frame: grid.frameIndexOf(layer.t1))
                 for seg in layer.map {
                     let k0 = grid.frameIndexOf(seg.t0)
                     let k1 = grid.frameIndexOf(seg.t1)
                     guard k1 > k0 else { continue }
-                    var source = CMTimeRange(
+                    let at = grid.cmTime(frame: k0)
+                    let target = grid.cmTime(frame: k1 - k0)
+                    let source = CMTimeRange(
                         start: FrameGrid.cmTime(us: seg.s0 + epsilonUs), duration: FrameGrid.cmTime(us: seg.s1 - seg.s0))
-                    if CMTimeCompare(source.end, range.end) > 0 {
-                        // Asset slightly shorter than the plan says: read to its end and scale that.
-                        let end = range.end
-                        guard CMTimeCompare(source.start, end) < 0 else {
-                            warnings.append("source range beyond the asset on \(layer.id)")
-                            continue
-                        }
-                        source = CMTimeRange(start: source.start, end: end)
-                        warnings.append("source range clamped on \(layer.id)")
+                    if CMTimeCompare(source.end, range.end) <= 0 {
+                        try insertVideo(track: track, source: source, of: video, at: at, target: target, ends: &ends)
+                        continue
                     }
-                    try insertVideo(
-                        track: track, source: source, of: video, at: grid.cmTime(frame: k0), target: grid.cmTime(frame: k1 - k0),
-                        ends: &ends)
+                    // The map runs past the source end (ARCH §11.5): this segment plays at its rate
+                    // up to the last sample, then the layer holds the last frame to its end (rates
+                    // are positive, so every later segment is past the end too). Never stretched.
+                    if src.lastVideoSample == nil, layersRunPastTheEnd(plan, asset: id, videoEnd: range.end) {
+                        warnings.append("last sample unread on \(layer.id): sub-sample hold")
+                    }
+                    try insertPastSourceEnd(
+                        track: track, source: source, of: video, lastSample: src.lastVideoSample ?? lastFrameRange(sourceEnd: range.end),
+                        at: at, target: target, layerEnd: layerEnd, outputGrid: plan.canvas.outputGrid, ends: &ends)
+                    break
                 }
             }
         }
@@ -528,6 +612,109 @@ enum CompositionBuilder {
         }
     }
 
+    /// [target] × [part] / [whole] (composition timescale): the composition length of [part] of a
+    /// source range of length [whole] laid over [target].
+    static func scaled(_ target: CMTime, part: CMTime, whole: CMTime) -> CMTime {
+        guard CMTimeCompare(whole, .zero) > 0 else { return .zero }
+        let seconds = CMTimeGetSeconds(target) * CMTimeGetSeconds(part) / CMTimeGetSeconds(whole)
+        return CMTime(value: CMTimeValue((seconds * Double(compositionTimeScale)).rounded()), timescale: compositionTimeScale)
+    }
+
+    /// Whether an output frame time `CMTime(m, fps)` lies in [from, to): the only composition times
+    /// the compositor is asked for (a range without one never shows).
+    static func hasOutputFrame(in from: CMTime, _ to: CMTime, grid: FrameGrid) -> Bool {
+        guard from.isNumeric, to.isNumeric, CMTimeCompare(from, to) < 0 else { return false }
+        // m = ceil(from × fps), exact on the rational.
+        let ts = Int64(from.timescale)
+        let (product, overflow) = from.value.multipliedReportingOverflow(by: grid.fps)
+        let m = overflow
+            ? Int64((Double(from.value) * Double(grid.fps) / Double(ts)).rounded(.up))
+            : FrameGrid.ceilDiv(product, ts)
+        return CMTimeCompare(grid.cmTime(frame: m), to) < 0
+    }
+
+    /// Fallback hold range when the last sample could not be read: [end − holdSourceUs, end), inside
+    /// the last sample (shows the right frame; a reader starting inside it may stall).
+    static func lastFrameRange(sourceEnd end: CMTime) -> CMTimeRange {
+        let d = FrameGrid.cmTime(us: holdSourceUs)
+        return CMTimeRange(start: CMTimeSubtract(end, d), duration: d)
+    }
+
+    /// Lays the map segment at [at] (grid length [target], [source] ending past the video track's
+    /// end) and the rest of the layer up to [layerEnd] (ARCH §11.5, rule frame = greatest PTS ≤
+    /// s + ε): the segment's source at its own rate up to the PTS of the last sample, then a
+    /// frozen-frame edit of [lastSample] (that whole sample, scaled) from there to the layer end:
+    /// from that point the rule frame is the last one. A part that holds no output frame of
+    /// [outputGrid] is left out (it would never be shown, and an extra edit makes the decoder re-read
+    /// the last GOP); a segment starting at or past the last sample is all hold.
+    private static func insertPastSourceEnd(
+        track: AVMutableCompositionTrack, source: CMTimeRange, of sourceTrack: AVAssetTrack, lastSample: CMTimeRange,
+        at: CMTime, target: CMTime, layerEnd: CMTime, outputGrid: FrameGrid, ends: inout [CMPersistentTrackID: CMTime]
+    ) throws {
+        // Nothing shown past the track end (a clip ending at its source end, ε past it): one edit
+        // to the track end, no hold.
+        if CMTimeCompare(source.start, lastSample.end) < 0 {
+            let throughEnd = scaled(target, part: CMTimeSubtract(lastSample.end, source.start), whole: source.duration)
+            if !hasOutputFrame(in: CMTimeAdd(at, throughEnd), layerEnd, grid: outputGrid) {
+                guard CMTimeCompare(throughEnd, .zero) > 0 else { return }
+                try insertVideo(
+                    track: track, source: CMTimeRange(start: source.start, end: lastSample.end), of: sourceTrack, at: at,
+                    target: throughEnd, ends: &ends)
+                return
+            }
+        }
+        var heldFrom = at
+        let sourceEnd = lastSample.start
+        if CMTimeCompare(source.start, sourceEnd) < 0 {
+            let played = CMTimeRange(start: source.start, end: sourceEnd)
+            let playedTarget = scaled(target, part: played.duration, whole: source.duration)
+            let playedEnd = CMTimeAdd(at, playedTarget)
+            if CMTimeCompare(playedTarget, .zero) > 0,
+               hasOutputFrame(in: at, playedEnd, grid: outputGrid) || !hasOutputFrame(in: playedEnd, layerEnd, grid: outputGrid) {
+                try insertVideo(track: track, source: played, of: sourceTrack, at: at, target: playedTarget, ends: &ends)
+                heldFrom = playedEnd
+            }
+        }
+        guard hasOutputFrame(in: heldFrom, layerEnd, grid: outputGrid) else { return }
+        try insertFrozen(track: track, unit: lastSample, of: sourceTrack, at: heldFrom, duration: CMTimeSubtract(layerEnd, heldFrom), ends: &ends)
+    }
+
+    /// One source sample [unit] frozen across [at, at + duration) the way the spacer is laid
+    /// (`spacerLayout`, FIX-IOS-SPACER): n whole unit durations as one edit at the integral scale n,
+    /// then an unscaled remainder shorter than one unit. An AVAssetReader opening inside a
+    /// fractionally scaled one-sample edit may never get a sample (a reader from 3.33 s inside a
+    /// 33 ms sample scaled to 1.034 s stalled).
+    private static func insertFrozen(
+        track: AVMutableCompositionTrack, unit: CMTimeRange, of sourceTrack: AVAssetTrack, at: CMTime, duration: CMTime,
+        ends: inout [CMPersistentTrackID: CMTime]
+    ) throws {
+        padTrack(track, to: at, ends: &ends)
+        try layFrozen(track, unit: unit, of: sourceTrack, at: at, duration: duration)
+        ends[track.trackID] = CMTimeAdd(at, duration)
+    }
+
+    /// Inserts [unit] frozen across [at, at + duration) (see `insertFrozen`; later edits move by
+    /// [duration]). Also used by `ExportSpacer` to re-lay a hold so a sample starts at a reader's start.
+    static func layFrozen(_ track: AVMutableCompositionTrack, unit: CMTimeRange, of sourceTrack: AVAssetTrack, at: CMTime, duration: CMTime) throws {
+        guard CMTimeCompare(duration, .zero) > 0 else { return }
+        do {
+            guard let layout = spacerLayout(end: duration, unit: unit.duration) else {
+                try track.insertTimeRange(unit, of: sourceTrack, at: at)
+                track.scaleTimeRange(CMTimeRange(start: at, duration: unit.duration), toDuration: duration)
+                return
+            }
+            if layout.n > 0 {
+                try track.insertTimeRange(unit, of: sourceTrack, at: at)
+                if layout.n > 1 { track.scaleTimeRange(CMTimeRange(start: at, duration: unit.duration), toDuration: layout.whole) }
+            }
+            if layout.remainder > .zero {
+                try track.insertTimeRange(CMTimeRange(start: unit.start, duration: layout.remainder), of: sourceTrack, at: CMTimeAdd(at, layout.whole))
+            }
+        } catch {
+            throw EngineError(.decodeFailed, "insertTimeRange failed (\((error as NSError).code))")
+        }
+    }
+
     private static func insertVideo(
         track: AVMutableCompositionTrack, source: CMTimeRange, of sourceTrack: AVAssetTrack, at: CMTime, target: CMTime,
         ends: inout [CMPersistentTrackID: CMTime]
@@ -554,7 +741,8 @@ enum CompositionBuilder {
         let pre = FrameGrid.cmTime(us: piece.preUs)
         let extra = FrameGrid.cmTime(us: piece.preUs + piece.postUs)
         let at = CMTimeSubtract(grid.cmTime(frame: k0), pre)
-        let target = CMTimeAdd(grid.cmTime(frame: k1 - k0), extra)
+        var target = CMTimeAdd(grid.cmTime(frame: k1 - k0), extra)
+        guard CMTimeCompare(target, .zero) > 0 else { return true }
         let unity = m.s1 - m.s0 == m.t1 - m.t0
         let rate = m.rate
         let s0 = max(0, m.s0 - Int64((Double(piece.preUs) * rate).rounded()))
@@ -567,8 +755,12 @@ enum CompositionBuilder {
         }
         var exact = true
         if CMTimeCompare(source.end, sourceRange.end) > 0 {
+            // Past its source end audio is silent (ARCH §11.5): the piece plays at its own rate up to
+            // the source end and the track stays empty after it. Never stretched over the piece.
             guard CMTimeCompare(source.start, sourceRange.end) < 0 else { return false }
+            let whole = source.duration
             source = CMTimeRange(start: source.start, end: sourceRange.end)
+            target = unity ? source.duration : scaled(target, part: source.duration, whole: whole)
             exact = false
         }
         padTrack(track, to: at, ends: &ends)
@@ -577,7 +769,7 @@ enum CompositionBuilder {
         } catch {
             throw EngineError(.decodeFailed, "audio insertTimeRange failed (\((error as NSError).code))")
         }
-        if !unity || !exact {
+        if !unity {
             track.scaleTimeRange(CMTimeRange(start: at, duration: source.duration), toDuration: target)
         }
         ends[track.trackID] = CMTimeAdd(at, target)

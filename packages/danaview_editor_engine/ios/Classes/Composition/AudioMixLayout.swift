@@ -29,8 +29,9 @@
 //   Where the shifted range (with its ramp-seam extensions) would leave [0, asset duration], the
 //   piece is trimmed at that edge by the missing source time / r (negative `preUs`/`postUs`; at
 //   most a few tens of ms of what is silence-before-the-source anyway) rather than read with a
-//   changed rate. Pieces of `.varispeed` tracks and of keep-pitch tracks without a scaled edit are
-//   not shifted.
+//   changed rate; a piece whose plan map already runs past its source end (silent there, ARCH
+//   §11.5) is trimmed to the end the same way and keeps its shift. Pieces of `.varispeed` tracks
+//   and of keep-pitch tracks without a scaled edit are not shifted.
 //
 // This file is the pure part (which segment and piece goes where, the envelopes); the
 // AVFoundation insertion is in CompositionBuilder.
@@ -162,7 +163,14 @@ struct AudioMixLayout: Equatable {
                 if last > dur { post -= Int64((Double(last - dur) / rate).rounded(.up)) }
             }
             // Never trim a piece away (a piece shorter than twice the shift keeps its plain read).
-            guard span + pre + post > span / 2 else { continue }
+            // The span that counts is the part inside the source: past its source end a piece is
+            // silent anyway (ARCH §11.5; CompositionBuilder plays it at its rate up to the end), so
+            // a piece running far past its source keeps its compensation (its audible part in sync).
+            var audible = span
+            if let dur = assetBySeg[p.segmentId].flatMap({ plan.assets[$0]?.durUs }), m.s1 > dur {
+                audible = min(span, max(0, Int64(Double(dur - m.s0) / rate)))
+            }
+            guard audible > 0, span + pre + post > audible / 2 else { continue }
             pieces[i] = Piece(
                 track: p.track, segmentId: p.segmentId, mapIndex: p.mapIndex,
                 segment: MapSegment(m.t0, m.t1, m.s0 + delta, m.s1 + delta), preUs: pre, postUs: post)
