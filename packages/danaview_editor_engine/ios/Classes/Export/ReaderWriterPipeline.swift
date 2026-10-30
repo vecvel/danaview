@@ -146,7 +146,8 @@ enum ExportTime {
 ///
 /// Before a reader opens at time T > 0, the spacer track is re-laid as [0, T) and [T, end), each
 /// with the same integral-scale-plus-unscaled-remainder layout as IOS-08, so a spacer sample starts
-/// exactly at T. A last-frame hold (ARCH §11.5) that T falls inside is split at T the same way.
+/// exactly at T. A frozen-frame hold (a `hold` layer, or the last frame past the source end, ARCH
+/// §11.5) that T falls inside is split at T the same way.
 /// Nothing visible changes (the spacer is black and never drawn: the compositor only needs it to
 /// run for every output frame; a split hold shows the same frame).
 enum ExportSpacer {
@@ -173,15 +174,17 @@ enum ExportSpacer {
         try lay(track, source: source, unit: unit, at: start, duration: CMTimeSubtract(end, start))
     }
 
-    /// Re-lays every last-frame hold (ARCH §11.5, `CompositionBuilder.layFrozen`) that [start] falls
-    /// strictly inside as two holds split at [start], so a sample of that track starts exactly where
-    /// the reader starts: a reader opening inside the one frozen sample stalled like the spacer did
-    /// (iOS 26.5 simulator: readers from some frames inside a 1 s hold never got a frame).
+    /// Re-lays every frozen-frame hold (`hold` layers and the last frame past the source end, ARCH
+    /// §11.5, `CompositionBuilder.layFrozen`) that [start] falls strictly inside as two holds split
+    /// at [start], so a sample of that track starts exactly where the reader starts: a reader
+    /// opening inside the one frozen sample stalled like the spacer did (iOS 26.5 simulator: readers
+    /// from some frames inside a 1 s hold never got a frame; a 10 s freeze stalled a 1 s segmented
+    /// export at its 7th segment).
     static func anchorHolds(_ composition: AVMutableComposition, built: BuiltComposition, at start: CMTime) throws {
         guard start.isNumeric, CMTimeCompare(start, .zero) > 0 else { return }
-        let held = built.sources.media.values.compactMap { m -> (URL, AVAssetTrack, CMTimeRange)? in
-            guard let unit = m.lastVideoSample, let video = m.video else { return nil }
-            return (m.asset.url, video, unit)
+        let held = built.sources.media.values.flatMap { m -> [(URL, AVAssetTrack, CMTimeRange)] in
+            guard let video = m.video else { return [] }
+            return m.frozenSamples.map { (m.asset.url, video, $0) }
         }
         guard !held.isEmpty else { return }
         for id in built.trackIDBySeq.values {
