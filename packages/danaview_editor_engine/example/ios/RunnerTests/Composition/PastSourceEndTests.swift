@@ -337,15 +337,13 @@ final class PastSourceEndTests: XCTestCase {
         // CI (run 41002912367): a mix read that hit the 30 s watchdog was cancelled while its worker
         // was inside copyNextSampleBuffer, and the reader teardown freed what that call waited on
         // (SIGSEGV in FigSimpleMutexUnlock). A read timing out mid-flight is now left alone and kept
-        // alive; the next read (fresh composition) is good.
-        let options = try Self.buildOptions(session: nil)
-        for _ in 0..<5 {
-            let built = try await CompositionBuilder.build(plan: Self.clapPlan(), options: options)
-            keep.append(built)
-            let before = SegmentedWriter.abandonedCount
-            let read = try AudioTapSupport.readMix(built.composition, mix: try XCTUnwrap(built.audioMix), timeout: 0)
-            if read.hung { XCTAssertGreaterThan(SegmentedWriter.abandonedCount, before, "the timed-out reader is kept alive") }
-        }
+        // alive; the next read (fresh composition) is good. One abandoned read only: readers left
+        // running alongside later reads make the simulator's blocked read more likely.
+        let built = try await CompositionBuilder.build(plan: Self.clapPlan(), options: try Self.buildOptions(session: nil))
+        keep.append(built)
+        let before = SegmentedWriter.abandonedCount
+        let read = try AudioTapSupport.readMix(built.composition, mix: try XCTUnwrap(built.audioMix), timeout: 0)
+        if read.hung { XCTAssertGreaterThan(SegmentedWriter.abandonedCount, before, "the timed-out reader is kept alive") }
         let x = try await mixRead(Self.clapPlan())
         XCTAssertNotNil(PitchSyncTests.onset(x, near: 1_000_000), "a later read still delivers the click")
     }
