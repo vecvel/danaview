@@ -1,4 +1,5 @@
-// OWNER: S4-W
+// OWNER: HOM-28
+// EXTENDED: S4-W
 //
 // XCTests of the PDF tools' output ownership (Tools/PdfNewFiles.swift `PdfNewFiles`, used by
 // Tools/PdfPageToolsCore.swift `write` and Annotate/PdfAnnotateCore.swift, so sign too) on macOS

@@ -1,4 +1,5 @@
-// OWNER: S4-W
+// OWNER: HOM-28
+// EXTENDED: S4-W
 //
 // The PDF tools' shared output helper (page tools, annotate, sign, compress; reported by the
 // Windows lane). Each output is created exclusively (`O_CREAT | O_EXCL`) before anything is
